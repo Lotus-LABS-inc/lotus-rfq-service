@@ -10,6 +10,7 @@ import {
   disconnectRedis,
   type RedisClient
 } from "./db/redis.js";
+import { initializeTracing, shutdownTracing } from "./observability/tracing.js";
 import { loadEnv, type EnvConfig } from "./utils/env.js";
 import { createLogger } from "./utils/logger.js";
 
@@ -117,6 +118,7 @@ const registerSignals = (runtime: ServiceRuntime): void => {
   const onSignal = async (signal: NodeJS.Signals): Promise<void> => {
     runtime.logger.info({ signal }, "Signal received.");
     await runtime.shutdown();
+    await shutdownTracing();
     process.exit(0);
   };
 
@@ -131,9 +133,11 @@ const registerSignals = (runtime: ServiceRuntime): void => {
 
 export const run = async (): Promise<void> => {
   try {
+    await initializeTracing();
     const runtime = await startService();
     registerSignals(runtime);
   } catch (error) {
+    await shutdownTracing();
     const startupLogger = createLogger("error");
     startupLogger.error({ err: error }, "Service failed to start.");
     process.exit(1);

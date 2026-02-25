@@ -5,6 +5,8 @@ import { RFQSessionManager } from "./rfq-session-manager.js";
 import { RFQStateMachine, type RFQStateMachineLogger } from "./rfq-state-machine.js";
 import type { CanonicalMarketClient } from "./canonical-market-client.js";
 import type { RFQEventEmitter } from "./rfq-domain-events.js";
+import { activeRFQSessions, rfqCreatedTotal } from "../../observability/metrics.js";
+import { withSpan } from "../../observability/tracing.js";
 
 export interface CreateRFQCommand {
   canonicalMarketId: string;
@@ -49,100 +51,113 @@ export class CreateRFQService {
   }
 
   public async execute(command: CreateRFQCommand): Promise<CreateRFQResult> {
-    const market = await this.deps.canonicalMarketClient.fetchMarketById(command.canonicalMarketId);
-    if (!market.isActive) {
-      throw new MarketInactiveError(command.canonicalMarketId);
-    }
-
-    const expiresAt = new Date(this.now().getTime() + command.ttlSeconds * 1000);
-    const stateMachine = new RFQStateMachine({
-      initialState: "CREATED",
-      logger: this.deps.logger
-    });
-
-    const session = await this.deps.sessionRepository.create({
-      requestId: this.createRequestId(),
-      canonicalMarketId: command.canonicalMarketId,
-      takerId: command.takerId,
-      side: command.side,
-      quantity: command.quantity,
-      status: stateMachine.getState(),
-      idempotencyKey: command.idempotencyKey,
-      expiresAt,
-      metadata: {
-        source: "post_rfq_endpoint"
-      }
-    });
-
-    await this.deps.sessionManager.setSessionMetadata(
-      session.id,
+    return withSpan(
+      "rfq.lifecycle.create",
       {
-        id: session.id,
-        state: stateMachine.getState(),
-        expiresAt: expiresAt.toISOString(),
-        metadata: {
-          canonicalMarketId: command.canonicalMarketId,
-          takerId: command.takerId
-        }
+        rfq_id: "pending",
+        lp_id: "n/a",
+        state: "CREATED"
       },
-      command.ttlSeconds
-    );
-
-    const nextState = stateMachine.transitionTo("BROADCAST", {
-      reason: "rfq_created",
-      metadata: {
-        sessionId: session.id
-      }
-    });
-    this.deps.eventEmitter.emitEvent({
-      type: "STATE_TRANSITION",
-      sessionId: session.id,
-      occurredAt: this.now().toISOString(),
-      payload: {
-        from: "CREATED",
-        to: nextState
-      }
-    });
-
-    await this.deps.sessionRepository.updateStatus(session.id, nextState);
-    await this.deps.sessionManager.setSessionMetadata(
-      session.id,
-      {
-        id: session.id,
-        state: nextState,
-        expiresAt: expiresAt.toISOString(),
-        metadata: {
-          canonicalMarketId: command.canonicalMarketId,
-          takerId: command.takerId
+      async () => {
+        const market = await this.deps.canonicalMarketClient.fetchMarketById(command.canonicalMarketId);
+        if (!market.isActive) {
+          throw new MarketInactiveError(command.canonicalMarketId);
         }
-      },
-      command.ttlSeconds
+
+        const expiresAt = new Date(this.now().getTime() + command.ttlSeconds * 1000);
+        const stateMachine = new RFQStateMachine({
+          initialState: "CREATED",
+          logger: this.deps.logger
+        });
+
+        const session = await this.deps.sessionRepository.create({
+          requestId: this.createRequestId(),
+          canonicalMarketId: command.canonicalMarketId,
+          takerId: command.takerId,
+          side: command.side,
+          quantity: command.quantity,
+          status: stateMachine.getState(),
+          idempotencyKey: command.idempotencyKey,
+          expiresAt,
+          metadata: {
+            source: "post_rfq_endpoint"
+          }
+        });
+
+        await this.deps.sessionManager.setSessionMetadata(
+          session.id,
+          {
+            id: session.id,
+            state: stateMachine.getState(),
+            expiresAt: expiresAt.toISOString(),
+            metadata: {
+              canonicalMarketId: command.canonicalMarketId,
+              takerId: command.takerId
+            }
+          },
+          command.ttlSeconds
+        );
+
+        const nextState = stateMachine.transitionTo("BROADCAST", {
+          reason: "rfq_created",
+          metadata: {
+            sessionId: session.id
+          }
+        });
+        this.deps.eventEmitter.emitEvent({
+          type: "STATE_TRANSITION",
+          sessionId: session.id,
+          occurredAt: this.now().toISOString(),
+          payload: {
+            from: "CREATED",
+            to: nextState
+          }
+        });
+
+        await this.deps.sessionRepository.updateStatus(session.id, nextState);
+        await this.deps.sessionManager.setSessionMetadata(
+          session.id,
+          {
+            id: session.id,
+            state: nextState,
+            expiresAt: expiresAt.toISOString(),
+            metadata: {
+              canonicalMarketId: command.canonicalMarketId,
+              takerId: command.takerId
+            }
+          },
+          command.ttlSeconds
+        );
+
+        const eventPayload = {
+          canonicalMarketId: command.canonicalMarketId,
+          takerId: command.takerId,
+          side: command.side,
+          quantity: command.quantity
+        };
+
+        await this.deps.eventRepository.append({
+          sessionId: session.id,
+          eventType: "RFQ_CREATED",
+          eventPayload: eventPayload
+        });
+
+        this.deps.eventEmitter.emitEvent({
+          type: "RFQ_CREATED",
+          sessionId: session.id,
+          occurredAt: this.now().toISOString(),
+          payload: eventPayload
+        });
+
+        rfqCreatedTotal.inc();
+        activeRFQSessions.inc();
+
+        return {
+          sessionId: session.id,
+          state: "BROADCAST",
+          expiresAt: expiresAt.toISOString()
+        };
+      }
     );
-
-    const eventPayload = {
-      canonicalMarketId: command.canonicalMarketId,
-      takerId: command.takerId,
-      side: command.side,
-      quantity: command.quantity
-    };
-
-    await this.deps.eventRepository.append({
-      sessionId: session.id,
-      eventType: "RFQ_CREATED",
-      eventPayload: eventPayload
-    });
-
-    this.deps.eventEmitter.emitEvent({
-      type: "RFQ_CREATED",
-      sessionId: session.id,
-      occurredAt: this.now().toISOString(),
-      payload: eventPayload
-    });
-
-    return {
-      sessionId: session.id,
-      state: "BROADCAST",
-      expiresAt: expiresAt.toISOString()
-    };
   }
 }

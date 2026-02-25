@@ -7,6 +7,7 @@ import type { RFQQuoteRepository } from "../src/db/repositories/rfq-quote-reposi
 import type { RFQSessionRepository } from "../src/db/repositories/rfq-session-repository.js";
 import {
   ExecutionRouterService,
+  NoValidQuotesError,
   RFQLockError
 } from "../src/core/execution-router/execution-router.js";
 
@@ -19,6 +20,9 @@ const rankedQuote = (quoteId: string): RankedQuote => ({
   slippageEstimate: 1,
   reliabilityScore: 100,
   latencyScore: 100,
+  expires_at: "2026-02-25T11:00:00.000Z",
+  firm_until: "2026-02-25T10:30:00.000Z",
+  soft_refresh_flag: false,
   effectiveCost: 104,
   rank: 1
 });
@@ -26,7 +30,7 @@ const rankedQuote = (quoteId: string): RankedQuote => ({
 describe("ExecutionRouterService", () => {
   it("locks rfq, executes valid quote, persists success, and emits execution update", async () => {
     const sessionRepository = {
-      findById: vi.fn(async () => ({ id: "session-1" }))
+      findById: vi.fn(async () => ({ id: "session-1", status: "EXECUTING" }))
     } as unknown as RFQSessionRepository;
     const quoteRepository = {
       findByExternalQuoteId: vi.fn(async () => ({
@@ -91,7 +95,7 @@ describe("ExecutionRouterService", () => {
   it("fails when lock cannot be acquired", async () => {
     const service = new ExecutionRouterService({
       sessionRepository: {
-        findById: vi.fn(async () => ({ id: "session-2" }))
+        findById: vi.fn(async () => ({ id: "session-2", status: "EXECUTING" }))
       } as unknown as RFQSessionRepository,
       quoteRepository: {
         findByExternalQuoteId: vi.fn()
@@ -125,7 +129,7 @@ describe("ExecutionRouterService", () => {
     const executionCreate = vi.fn(async () => ({ id: "exec" }));
     const service = new ExecutionRouterService({
       sessionRepository: {
-        findById: vi.fn(async () => ({ id: "session-3" }))
+        findById: vi.fn(async () => ({ id: "session-3", status: "EXECUTING" }))
       } as unknown as RFQSessionRepository,
       quoteRepository: {
         findByExternalQuoteId: vi
@@ -183,11 +187,13 @@ describe("ExecutionRouterService", () => {
     ]);
   });
 
-  it("rejects expired quote and returns failure when fallback is disabled", async () => {
+  it("rejects stale quote, marks session failed, and throws when no valid quotes remain", async () => {
     const executionCreate = vi.fn(async () => ({ id: "exec-expired" }));
+    const sessionUpdateStatus = vi.fn(async () => ({ id: "session-4", status: "FAILED" }));
     const service = new ExecutionRouterService({
       sessionRepository: {
-        findById: vi.fn(async () => ({ id: "session-4" }))
+        findById: vi.fn(async () => ({ id: "session-4", status: "EXECUTING" })),
+        updateStatus: sessionUpdateStatus
       } as unknown as RFQSessionRepository,
       quoteRepository: {
         findByExternalQuoteId: vi.fn(async () => ({
@@ -214,23 +220,19 @@ describe("ExecutionRouterService", () => {
       now: () => new Date("2026-02-25T10:00:00.000Z")
     });
 
-    const result = await service.execute({
-      sessionId: "session-4",
-      rankedQuotes: [rankedQuote("expired-q")],
-      fallbackToNextQuote: false
-    });
+    await expect(
+      service.execute({
+        sessionId: "session-4",
+        rankedQuotes: [rankedQuote("expired-q")],
+        fallbackToNextQuote: false
+      })
+    ).rejects.toBeInstanceOf(NoValidQuotesError);
 
-    expect(result.ok).toBe(false);
-    expect(result.attempts[0]).toEqual({
-      quoteId: "expired-q",
-      status: "FAILED",
-      reason: "QUOTE_EXPIRED"
-    });
     expect(executionCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         executionStatus: "FAILED"
       })
     );
+    expect(sessionUpdateStatus).toHaveBeenCalledWith("session-4", "FAILED");
   });
 });
-

@@ -12,6 +12,7 @@ import { LPKeyRepository } from "../db/repositories/lp-key-repository.js";
 import { RFQQuoteRepository } from "../db/repositories/rfq-quote-repository.js";
 import { RFQSessionRepository } from "../db/repositories/rfq-session-repository.js";
 import { registerHealthRoute } from "./routes/health.js";
+import { registerMetricsRoute } from "./routes/metrics.js";
 import { registerRFQRoute } from "./routes/rfq.js";
 import { createLPAuthMiddleware } from "../lp/lp-auth-middleware.js";
 import { registerLPQuotesRoute } from "../lp/routes/lp-quotes-route.js";
@@ -72,6 +73,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     logger: dependencies.logger
   });
   await registerHealthRoute(app);
+  await registerMetricsRoute(app);
   await registerRFQRoute(app, {
     createRFQ: (request) => createRFQService.execute(request)
   });

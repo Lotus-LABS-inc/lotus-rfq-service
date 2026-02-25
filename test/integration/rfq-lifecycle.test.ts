@@ -132,7 +132,6 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
   let app: Awaited<ReturnType<typeof buildServer>> | undefined;
   let pool: Pool | undefined;
   let redisClient: ReturnType<typeof createRedisClient> | undefined;
-  let redisRawPublisher: ReturnType<typeof createRedisClient> | undefined;
   let sessionRepository: RFQSessionRepository | undefined;
   let quoteRepository: RFQQuoteRepository | undefined;
   let executionRepository: RFQExecutionRepository | undefined;
@@ -163,6 +162,10 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
     trackedRedisKeys.add(`lp:nonce:${apiKey}:${nonce}`);
   };
 
+  const isConnectionClosedError = (error: unknown): boolean => {
+    return error instanceof Error && error.message.includes("Connection is closed");
+  };
+
   const cleanupTrackedRedisKeys = async (): Promise<void> => {
     const redis = redisClient;
     if (!redis) {
@@ -183,7 +186,14 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
       const chunkSize = 200;
       for (let index = 0; index < keyArray.length; index += chunkSize) {
         const chunk = keyArray.slice(index, index + chunkSize);
-        await redis.del(...chunk);
+        try {
+          await redis.del(...chunk);
+        } catch (error) {
+          if (!isConnectionClosedError(error)) {
+            throw error;
+          }
+          break;
+        }
       }
     }
 
@@ -211,11 +221,6 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
       logger
     });
     await connectRedis(redisClient);
-    redisRawPublisher = createRedisClient({
-      redisUrl: TEST_REDIS_URL as string,
-      logger
-    });
-    await connectRedis(redisRawPublisher);
 
     app = await buildServer({
       logger,
@@ -235,7 +240,13 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
   beforeEach(async () => {
     const pg = must(pool, "pool");
     await clearPersistentState(pg);
-    await cleanupTrackedRedisKeys();
+    try {
+      await cleanupTrackedRedisKeys();
+    } catch (error) {
+      if (!isConnectionClosedError(error)) {
+        throw error;
+      }
+    }
   });
 
   afterAll(async () => {
@@ -245,13 +256,22 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
       // best-effort cleanup for managed redis
     }
     if (app) {
-      await app.close();
-    }
-    if (redisRawPublisher) {
-      await disconnectRedis(redisRawPublisher);
+      try {
+        await app.close();
+      } catch (error) {
+        if (!isConnectionClosedError(error)) {
+          throw error;
+        }
+      }
     }
     if (redisClient) {
-      await disconnectRedis(redisClient);
+      try {
+        await disconnectRedis(redisClient);
+      } catch (error) {
+        if (!isConnectionClosedError(error)) {
+          throw error;
+        }
+      }
     }
     if (pool) {
       await pool.end();
@@ -359,7 +379,16 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
         gasCost: 0,
         slippageEstimate: 0,
         reliabilityScore: 100,
-        latencyScore: 100
+        latencyScore: 100,
+        expires_at: quote.valid_until.toISOString(),
+        firm_until:
+          typeof quote.quote_payload.firm_until === "string"
+            ? quote.quote_payload.firm_until
+            : undefined,
+        soft_refresh_flag:
+          typeof quote.quote_payload.soft_refresh_flag === "boolean"
+            ? quote.quote_payload.soft_refresh_flag
+            : false
       }))
     );
 
@@ -554,7 +583,10 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
         gasCost: 0,
         slippageEstimate: 0,
         reliabilityScore: 100,
-        latencyScore: 100
+        latencyScore: 100,
+        expires_at: new Date(Date.now() + 300000).toISOString(),
+        firm_until: new Date(Date.now() + 240000).toISOString(),
+        soft_refresh_flag: false
       }
     ])[0] as RankedQuote;
 

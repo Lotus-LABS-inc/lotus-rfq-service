@@ -1,4 +1,6 @@
 import { EventEmitter } from "node:events";
+import { activeRFQSessions, rfqExpiredTotal } from "../../observability/metrics.js";
+import { withSpanSync } from "../../observability/tracing.js";
 
 export interface SessionExpiredEvent {
   sessionId: string;
@@ -191,19 +193,31 @@ export class RFQSessionManager extends EventEmitter {
   }
 
   private handleExpiredKey(expiredKey: string): void {
-    const sessionId = this.parseSessionIdFromMetaKey(expiredKey);
-    if (!sessionId) {
-      return;
-    }
+    withSpanSync(
+      "rfq.lifecycle.expiration",
+      {
+        rfq_id: this.parseSessionIdFromMetaKey(expiredKey) ?? "unknown",
+        lp_id: "n/a",
+        state: "EXPIRED"
+      },
+      () => {
+        const sessionId = this.parseSessionIdFromMetaKey(expiredKey);
+        if (!sessionId) {
+          return;
+        }
 
-    const event: SessionExpiredEvent = {
-      sessionId,
-      expiredKey,
-      observedAt: this.now()
-    };
+        const event: SessionExpiredEvent = {
+          sessionId,
+          expiredKey,
+          observedAt: this.now()
+        };
 
-    this.emit("sessionExpired", event);
-    this.onSessionExpired?.(event);
+        rfqExpiredTotal.inc();
+        activeRFQSessions.dec();
+        this.emit("sessionExpired", event);
+        this.onSessionExpired?.(event);
+      }
+    );
   }
 
   private parseSessionIdFromMetaKey(key: string): string | null {

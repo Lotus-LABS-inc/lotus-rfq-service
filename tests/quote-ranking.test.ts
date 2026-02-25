@@ -6,6 +6,12 @@ import {
 } from "../src/core/ranking/quote-ranking.js";
 
 describe("quote ranking", () => {
+  const liveWindow = {
+    expires_at: "2099-12-31T23:59:59.000Z",
+    firm_until: "2099-12-31T23:00:00.000Z",
+    soft_refresh_flag: false
+  } as const;
+
   it("calculates effective cost using all fee and impact components", () => {
     const quote: NormalizedQuote = {
       quoteId: "q1",
@@ -15,7 +21,8 @@ describe("quote ranking", () => {
       gasCost: 0.75,
       slippageEstimate: 1.05,
       reliabilityScore: 90,
-      latencyScore: 80
+      latencyScore: 80,
+      ...liveWindow
     };
 
     expect(calculateEffectiveCost(quote)).toBe(103.5);
@@ -31,7 +38,8 @@ describe("quote ranking", () => {
         gasCost: 0.5,
         slippageEstimate: 1,
         reliabilityScore: 99,
-        latencyScore: 99
+        latencyScore: 99,
+        ...liveWindow
       },
       {
         quoteId: "q-cheap",
@@ -41,7 +49,8 @@ describe("quote ranking", () => {
         gasCost: 0.5,
         slippageEstimate: 1,
         reliabilityScore: 50,
-        latencyScore: 50
+        latencyScore: 50,
+        ...liveWindow
       }
     ]);
 
@@ -60,7 +69,8 @@ describe("quote ranking", () => {
         gasCost: 1,
         slippageEstimate: 1,
         reliabilityScore: 70,
-        latencyScore: 99
+        latencyScore: 99,
+        ...liveWindow
       },
       {
         quoteId: "q-rel-high-lat-low",
@@ -70,7 +80,8 @@ describe("quote ranking", () => {
         gasCost: 1,
         slippageEstimate: 1,
         reliabilityScore: 90,
-        latencyScore: 40
+        latencyScore: 40,
+        ...liveWindow
       },
       {
         quoteId: "q-rel-high-lat-high",
@@ -80,7 +91,8 @@ describe("quote ranking", () => {
         gasCost: 1,
         slippageEstimate: 1,
         reliabilityScore: 90,
-        latencyScore: 95
+        latencyScore: 95,
+        ...liveWindow
       }
     ];
 
@@ -102,7 +114,8 @@ describe("quote ranking", () => {
         gasCost: 1,
         slippageEstimate: 1,
         reliabilityScore: 1,
-        latencyScore: 1
+        latencyScore: 1,
+        ...liveWindow
       },
       {
         quoteId: "a",
@@ -112,7 +125,8 @@ describe("quote ranking", () => {
         gasCost: 1,
         slippageEstimate: 1,
         reliabilityScore: 1,
-        latencyScore: 1
+        latencyScore: 1,
+        ...liveWindow
       }
     ];
 
@@ -121,5 +135,35 @@ describe("quote ranking", () => {
 
     expect(quotes.map((quote) => quote.quoteId)).toEqual(originalOrder);
   });
-});
 
+  it("excludes expired and non-firm quotes from ranking", () => {
+    const ranked = rankQuotesByEffectiveCost([
+      {
+        quoteId: "q-expired",
+        basePrice: 1,
+        venueFee: 0,
+        protocolFee: 0,
+        gasCost: 0,
+        slippageEstimate: 0,
+        reliabilityScore: 100,
+        latencyScore: 100,
+        expires_at: "2020-01-01T00:00:00.000Z",
+        firm_until: "2020-01-01T00:00:00.000Z",
+        soft_refresh_flag: false
+      },
+      {
+        quoteId: "q-valid",
+        basePrice: 2,
+        venueFee: 0,
+        protocolFee: 0,
+        gasCost: 0,
+        slippageEstimate: 0,
+        reliabilityScore: 100,
+        latencyScore: 100,
+        ...liveWindow
+      }
+    ]);
+
+    expect(ranked.map((quote) => quote.quoteId)).toEqual(["q-valid"]);
+  });
+});

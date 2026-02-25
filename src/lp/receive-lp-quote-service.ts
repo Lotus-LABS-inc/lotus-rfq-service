@@ -5,6 +5,8 @@ import { RFQSessionManager } from "../core/rfq-engine/rfq-session-manager.js";
 import type { RFQEventEmitter } from "../core/rfq-engine/rfq-domain-events.js";
 import type { Logger } from "pino";
 import type { RedisClient } from "../db/redis.js";
+import { quoteLatencyMs, quoteReceivedTotal } from "../observability/metrics.js";
+import { withSpan } from "../observability/tracing.js";
 
 export interface ReceiveLPQuoteCommand {
   routeLpId: string;
@@ -73,94 +75,108 @@ export class ReceiveLPQuoteService {
   }
 
   public async execute(command: ReceiveLPQuoteCommand): Promise<ReceiveLPQuoteResult> {
-    if (command.routeLpId !== command.authenticatedLpId) {
-      throw new LPIdentityMismatchError();
-    }
-
-    const session = await this.deps.sessionRepository.findById(command.sessionId);
-    if (!session) {
-      throw new RFQSessionNotFoundError(command.sessionId);
-    }
-
-    if (session.status !== "COLLECTING_QUOTES") {
-      throw new InvalidRFQSessionStateError(command.sessionId, session.status);
-    }
-
-    const idempotencyKey = `rfq:${command.sessionId}:quote_id:${command.quoteId}`;
-    const nonceResult = await this.deps.redisClient.set(idempotencyKey, "1", "EX", 3600, "NX");
-    if (nonceResult !== "OK") {
-      throw new DuplicateQuoteIdError(command.quoteId);
-    }
-
-    const numericPrice = Number.parseFloat(command.price);
-    const quoteScore = Number.isFinite(numericPrice) ? numericPrice : 0;
-    const sessionTtl = await this.deps.sessionManager.getSessionTtl(command.sessionId);
-    const quoteTtl = sessionTtl > 0 ? sessionTtl : 300;
-
-    const eventPayload = {
-      quoteId: command.quoteId,
-      lpId: command.authenticatedLpId,
-      lpKeyId: command.authenticatedLpKeyId,
-      price: command.price,
-      quantity: command.quantity,
-      feeBps: command.feeBps,
-      validUntil: command.validUntil,
-      payload: command.payload ?? {}
-    };
-
-    await this.deps.sessionManager.addQuote(
-      command.sessionId,
+    return withSpan(
+      "rfq.lifecycle.quote_received",
       {
-        quoteId: command.quoteId,
-        score: quoteScore,
-        payload: eventPayload
+        rfq_id: command.sessionId,
+        lp_id: command.authenticatedLpId,
+        state: "COLLECTING_QUOTES"
       },
-      quoteTtl
-    );
+      async () => {
+        const startedAt = performance.now();
 
-    await this.deps.eventRepository.append({
-      sessionId: command.sessionId,
-      eventType: "QUOTE_RECEIVED",
-      eventPayload
-    });
-
-    this.deps.eventEmitter.emitEvent({
-      type: "QUOTE_RECEIVED",
-      sessionId: command.sessionId,
-      occurredAt: this.now().toISOString(),
-      payload: eventPayload
-    });
-
-    void this.deps.quoteRepository
-      .create({
-        sessionId: command.sessionId,
-        lpKeyId: command.authenticatedLpKeyDbId,
-        quoteStatus: "RECEIVED",
-        price: command.price,
-        quantity: command.quantity,
-        feeBps: command.feeBps,
-        validUntil: new Date(command.validUntil),
-        quotePayload: {
-          quoteId: command.quoteId,
-          payload: command.payload ?? {}
+        if (command.routeLpId !== command.authenticatedLpId) {
+          throw new LPIdentityMismatchError();
         }
-      })
-      .catch((error: unknown) => {
-        this.deps.logger.error(
-          {
-            err: error,
-            sessionId: command.sessionId,
-            quoteId: command.quoteId
-          },
-          "Async quote persistence failed."
-        );
-      });
 
-    return {
-      accepted: true,
-      sessionId: command.sessionId,
-      quoteId: command.quoteId
-    };
+        const session = await this.deps.sessionRepository.findById(command.sessionId);
+        if (!session) {
+          throw new RFQSessionNotFoundError(command.sessionId);
+        }
+
+        if (session.status !== "COLLECTING_QUOTES") {
+          throw new InvalidRFQSessionStateError(command.sessionId, session.status);
+        }
+
+        const idempotencyKey = `rfq:${command.sessionId}:quote_id:${command.quoteId}`;
+        const nonceResult = await this.deps.redisClient.set(idempotencyKey, "1", "EX", 3600, "NX");
+        if (nonceResult !== "OK") {
+          throw new DuplicateQuoteIdError(command.quoteId);
+        }
+
+        const numericPrice = Number.parseFloat(command.price);
+        const quoteScore = Number.isFinite(numericPrice) ? numericPrice : 0;
+        const sessionTtl = await this.deps.sessionManager.getSessionTtl(command.sessionId);
+        const quoteTtl = sessionTtl > 0 ? sessionTtl : 300;
+
+        const eventPayload = {
+          quoteId: command.quoteId,
+          lpId: command.authenticatedLpId,
+          lpKeyId: command.authenticatedLpKeyId,
+          price: command.price,
+          quantity: command.quantity,
+          feeBps: command.feeBps,
+          validUntil: command.validUntil,
+          payload: command.payload ?? {}
+        };
+
+        await this.deps.sessionManager.addQuote(
+          command.sessionId,
+          {
+            quoteId: command.quoteId,
+            score: quoteScore,
+            payload: eventPayload
+          },
+          quoteTtl
+        );
+
+        await this.deps.eventRepository.append({
+          sessionId: command.sessionId,
+          eventType: "QUOTE_RECEIVED",
+          eventPayload
+        });
+
+        this.deps.eventEmitter.emitEvent({
+          type: "QUOTE_RECEIVED",
+          sessionId: command.sessionId,
+          occurredAt: this.now().toISOString(),
+          payload: eventPayload
+        });
+
+        quoteReceivedTotal.inc();
+        quoteLatencyMs.observe(performance.now() - startedAt);
+
+        void this.deps.quoteRepository
+          .create({
+            sessionId: command.sessionId,
+            lpKeyId: command.authenticatedLpKeyDbId,
+            quoteStatus: "RECEIVED",
+            price: command.price,
+            quantity: command.quantity,
+            feeBps: command.feeBps,
+            validUntil: new Date(command.validUntil),
+            quotePayload: {
+              quoteId: command.quoteId,
+              payload: command.payload ?? {}
+            }
+          })
+          .catch((error: unknown) => {
+            this.deps.logger.error(
+              {
+                err: error,
+                sessionId: command.sessionId,
+                quoteId: command.quoteId
+              },
+              "Async quote persistence failed."
+            );
+          });
+
+        return {
+          accepted: true,
+          sessionId: command.sessionId,
+          quoteId: command.quoteId
+        };
+      }
+    );
   }
 }
-

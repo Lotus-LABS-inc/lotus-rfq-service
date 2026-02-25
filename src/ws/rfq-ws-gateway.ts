@@ -1,6 +1,7 @@
 import type { Logger } from "pino";
 import { z } from "zod";
 import type { RedisClient } from "../db/redis.js";
+import { wsConnectionsActive } from "../observability/metrics.js";
 
 const SUBSCRIPTION_MESSAGE_SCHEMA = z.object({
   action: z.enum(["subscribe", "unsubscribe"]),
@@ -103,6 +104,7 @@ export class RFQWebSocketGateway {
       isAlive: true,
       topics: new Set<string>()
     });
+    wsConnectionsActive.inc();
 
     socket.on("pong", () => {
       const state = this.socketState.get(socket);
@@ -305,6 +307,7 @@ export class RFQWebSocketGateway {
     }
 
     this.socketState.delete(socket);
+    wsConnectionsActive.dec();
   }
 
   private sendJson(socket: GatewaySocket, payload: Record<string, unknown>): void {
