@@ -194,4 +194,71 @@ export const riskLockWaitTimeMs = new Histogram({
   ...histogramConfig
 });
 
+// ─── Combo Engine Counters ────────────────────────────────────────────────────
+
+export const comboCreatedTotal = new Counter({
+  name: "combo_created_total",
+  help: "Total number of Combo RFQs created.",
+  labelNames: ["acceptance_policy"],
+  ...counterConfig
+});
+
+export const comboQuoteReceivedTotal = new Counter({
+  name: "combo_quote_received_total",
+  help: "Total number of LP combo quotes received and normalized.",
+  labelNames: ["lp_id", "is_combo_quote"],
+  ...counterConfig
+});
+
+export const comboExecutionSuccessTotal = new Counter({
+  name: "combo_execution_success_total",
+  help: "Total number of fully successful combo executions.",
+  labelNames: ["acceptance_policy"],
+  ...counterConfig
+});
+
+export const comboExecutionFailureTotal = new Counter({
+  name: "combo_execution_failure_total",
+  help: "Total number of failed combo executions (including unwound ALL_OR_NONE).",
+  labelNames: ["acceptance_policy", "reason"],
+  ...counterConfig
+});
+
+export const comboPartialFillTotal = new Counter({
+  name: "combo_partial_fill_total",
+  help: "Total number of combos that settled with a partial fill (PARTIAL_ALLOWED policy).",
+  ...counterConfig
+});
+
+export const comboUnwindAttemptsTotal = new Counter({
+  name: "combo_unwind_attempts_total",
+  help: "Total number of combo leg unwind attempts triggered after ALL_OR_NONE failure.",
+  labelNames: ["outcome"],  // "success" | "failed"
+  ...counterConfig
+});
+
+// ─── Combo Engine Histograms ──────────────────────────────────────────────────
+
+export const comboRankingDurationMs = new Histogram({
+  name: "combo_ranking_duration_ms",
+  help: "Time taken to rank incoming LP combo quotes in milliseconds.",
+  buckets: [0.5, 1, 2, 5, 10, 25, 50, 100, 250],
+  ...histogramConfig
+});
+
+export const comboExecutionDurationMs = new Histogram({
+  name: "combo_execution_duration_ms",
+  help: "Total end-to-end execution duration for a combo plan in milliseconds.",
+  labelNames: ["acceptance_policy"],
+  buckets: [10, 50, 100, 250, 500, 1000, 2500, 5000, 10000],
+  ...histogramConfig
+});
+
+export const comboPriceComputeMs = new Histogram({
+  name: "combo_price_compute_ms",
+  help: "Time to compute theoretical combo price (payout-vector or linear approx) in milliseconds.",
+  buckets: [0.1, 0.5, 1, 2, 5, 10, 25, 50],
+  ...histogramConfig
+});
+
 export const metricsRegistry = registry;
