@@ -7,6 +7,7 @@ import type { Logger } from "pino";
 import type { RedisClient } from "../db/redis.js";
 import { quoteLatencyMs, quoteReceivedTotal } from "../observability/metrics.js";
 import { withSpan } from "../observability/tracing.js";
+import type { LPStatsRepository } from "../repositories/lp-stats.repository.js";
 
 export interface ReceiveLPQuoteCommand {
   routeLpId: string;
@@ -36,6 +37,7 @@ export interface ReceiveLPQuoteServiceDependencies {
   redisClient: RedisClient;
   eventEmitter: RFQEventEmitter;
   logger: Pick<Logger, "error">;
+  lpStatsRepository?: LPStatsRepository;
   now?: () => Date;
 }
 
@@ -144,7 +146,8 @@ export class ReceiveLPQuoteService {
         });
 
         quoteReceivedTotal.inc();
-        quoteLatencyMs.observe(performance.now() - startedAt);
+        const responseTimeMs = performance.now() - startedAt;
+        quoteLatencyMs.observe(responseTimeMs);
 
         void this.deps.quoteRepository
           .create({
@@ -170,6 +173,22 @@ export class ReceiveLPQuoteService {
               "Async quote persistence failed."
             );
           });
+
+        if (this.deps.lpStatsRepository) {
+          void this.deps.lpStatsRepository
+            .recordQuoteSubmission(command.authenticatedLpId, responseTimeMs)
+            .catch((error: unknown) => {
+              this.deps.logger.error(
+                {
+                  err: error,
+                  sessionId: command.sessionId,
+                  quoteId: command.quoteId,
+                  lpId: command.authenticatedLpId
+                },
+                "Async LP quote stats update failed."
+              );
+            });
+        }
 
         return {
           accepted: true,

@@ -5,6 +5,7 @@ import { RFQSessionManager } from "./rfq-session-manager.js";
 import { RFQStateMachine, type RFQStateMachineLogger } from "./rfq-state-machine.js";
 import type { CanonicalMarketClient } from "./canonical-market-client.js";
 import type { RFQEventEmitter } from "./rfq-domain-events.js";
+import type { ReliabilityWeights } from "../lp-reliability-engine.js";
 import { activeRFQSessions, rfqCreatedTotal } from "../../observability/metrics.js";
 import { withSpan } from "../../observability/tracing.js";
 
@@ -50,7 +51,10 @@ export class CreateRFQService {
     this.createRequestId = deps.createRequestId ?? (() => randomUUID());
   }
 
-  public async execute(command: CreateRFQCommand): Promise<CreateRFQResult> {
+  public async execute(
+    command: CreateRFQCommand,
+    options?: { weights?: Partial<ReliabilityWeights> }
+  ): Promise<CreateRFQResult> {
     return withSpan(
       "rfq.lifecycle.create",
       {

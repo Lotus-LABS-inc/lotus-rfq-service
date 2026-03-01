@@ -166,4 +166,67 @@ describe("quote ranking", () => {
 
     expect(ranked.map((quote) => quote.quoteId)).toEqual(["q-valid"]);
   });
+
+  it("applies reliability scoring impact while keeping lower price dominant", () => {
+    const ranked = rankQuotesByEffectiveCost(
+      [
+        {
+          quoteId: "price-best",
+          lpId: "lp-best-price",
+          basePrice: 100,
+          venueFee: 0,
+          protocolFee: 0,
+          gasCost: 0,
+          slippageEstimate: 0,
+          reliabilityScore: 10,
+          latencyScore: 10,
+          ...liveWindow
+        },
+        {
+          quoteId: "price-high-reliable",
+          lpId: "lp-reliable",
+          basePrice: 108,
+          venueFee: 0,
+          protocolFee: 0,
+          gasCost: 0,
+          slippageEstimate: 0,
+          reliabilityScore: 100,
+          latencyScore: 100,
+          ...liveWindow
+        }
+      ],
+      {
+        reliabilityProfiles: {
+          "lp-best-price": {
+            lpId: "lp-best-price",
+            avgResponseTimeMs: 3000,
+            quoteHitRate: 0.2,
+            rejectRate: 0.2,
+            executionFailRate: 0.2,
+            competitivenessScore: 0.2,
+            totalQuotes: 100,
+            totalExecutions: 30
+          },
+          "lp-reliable": {
+            lpId: "lp-reliable",
+            avgResponseTimeMs: 30,
+            quoteHitRate: 1,
+            rejectRate: 0,
+            executionFailRate: 0,
+            competitivenessScore: 1,
+            totalQuotes: 100,
+            totalExecutions: 30
+          }
+        },
+        weights: {
+          reliabilityWeight: 0.02,
+          latencyWeight: 0.02,
+          failureWeight: 0
+        }
+      }
+    );
+
+    expect(ranked[0]?.quoteId).toBe("price-best");
+    expect(ranked[1]?.reliabilityBonus).toBeGreaterThan(ranked[0]?.reliabilityBonus ?? 0);
+  });
 });

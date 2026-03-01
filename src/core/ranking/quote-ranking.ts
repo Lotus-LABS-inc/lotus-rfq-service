@@ -1,9 +1,15 @@
 import { rankingDurationMs } from "../../observability/metrics.js";
 import { withSpanSync } from "../../observability/tracing.js";
 import { QuoteStalenessGuard, type StalenessAwareQuote } from "../quote-staleness-guard.js";
+import {
+  computeReliabilityScore,
+  type LPReliabilityProfile,
+  type ReliabilityWeights
+} from "../lp-reliability-engine.js";
 
 export interface NormalizedQuote extends StalenessAwareQuote {
   quoteId: string;
+  lpId?: string;
   basePrice: number;
   venueFee: number;
   protocolFee: number;
@@ -16,7 +22,16 @@ export interface NormalizedQuote extends StalenessAwareQuote {
 
 export interface RankedQuote extends NormalizedQuote {
   effectiveCost: number;
+  score: number;
+  reliabilityBonus: number;
+  latencyBonus: number;
+  failurePenalty: number;
   rank: number;
+}
+
+export interface QuoteRankingInput {
+  reliabilityProfiles?: Readonly<Record<string, LPReliabilityProfile>>;
+  weights?: Partial<ReliabilityWeights>;
 }
 
 export const calculateEffectiveCost = (quote: NormalizedQuote): number => {
@@ -29,7 +44,10 @@ export const calculateEffectiveCost = (quote: NormalizedQuote): number => {
   );
 };
 
-export const rankQuotesByEffectiveCost = (quotes: readonly NormalizedQuote[]): RankedQuote[] => {
+export const rankQuotesByEffectiveCost = (
+  quotes: readonly NormalizedQuote[],
+  input?: QuoteRankingInput
+): RankedQuote[] => {
   const startedAt = performance.now();
   const stalenessGuard = new QuoteStalenessGuard();
 
@@ -47,9 +65,28 @@ export const rankQuotesByEffectiveCost = (quotes: readonly NormalizedQuote[]): R
           ...quote,
           effectiveCost: calculateEffectiveCost(quote)
         }))
+        .map((quote) => {
+          const profile =
+            quote.lpId && input?.reliabilityProfiles
+              ? input.reliabilityProfiles[quote.lpId]
+              : undefined;
+          const reliabilityScore = computeReliabilityScore({
+            effectivePrice: quote.effectiveCost,
+            profile,
+            weights: input?.weights
+          });
+
+          return {
+            ...quote,
+            score: reliabilityScore.score,
+            reliabilityBonus: reliabilityScore.reliabilityBonus,
+            latencyBonus: reliabilityScore.latencyBonus,
+            failurePenalty: reliabilityScore.failurePenalty
+          };
+        })
         .sort((left, right) => {
-          if (left.effectiveCost !== right.effectiveCost) {
-            return left.effectiveCost - right.effectiveCost;
+          if (left.score !== right.score) {
+            return left.score - right.score;
           }
 
           if (left.reliabilityScore !== right.reliabilityScore) {

@@ -12,7 +12,11 @@ const envSchema = z
     REDIS_URL: z.string().url(),
     CANONICAL_SERVICE_BASE_URL: z.string().url().default("http://localhost:4001"),
     DATABASE_URL: z.string().url().optional(),
-    SUPABASE_DB_URL: z.string().url().optional()
+    SUPABASE_DB_URL: z.string().url().optional(),
+    JWT_SECRET: z.string().min(32),
+    RELIABILITY_WEIGHT: z.coerce.number().min(0).max(1).default(0.05),
+    LATENCY_WEIGHT: z.coerce.number().min(0).max(1).default(0.03),
+    FAILURE_WEIGHT: z.coerce.number().min(0).max(1).default(0.08)
   })
   .superRefine((value, ctx) => {
     if (!value.DATABASE_URL && !value.SUPABASE_DB_URL) {

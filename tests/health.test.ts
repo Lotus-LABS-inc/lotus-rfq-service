@@ -57,7 +57,8 @@ describe("infrastructure scaffold", () => {
       redisClient: createRedisStub(),
       pgPool: {} as unknown as Pool,
       db: {} as AppDb,
-      canonicalServiceBaseUrl: "http://localhost:4001"
+      canonicalServiceBaseUrl: "http://localhost:4001",
+      jwtSecret: "test-secret-at-least-thirty-two-chars"
     });
 
     const response = await app.inject({
@@ -81,7 +82,8 @@ describe("infrastructure scaffold", () => {
       LOG_LEVEL: "info",
       REDIS_URL: "redis://localhost:6379",
       CANONICAL_SERVICE_BASE_URL: "http://localhost:4001",
-      DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_rfq"
+      DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_rfq",
+      JWT_SECRET: "test-secret-at-least-thirty-two-chars"
     });
 
     expect(env.PORT).toBe(3030);
@@ -106,7 +108,8 @@ describe("infrastructure scaffold", () => {
       redisClient: createRedisStub(),
       pgPool: {} as unknown as Pool,
       db: {} as AppDb,
-      canonicalServiceBaseUrl: "http://localhost:4001"
+      canonicalServiceBaseUrl: "http://localhost:4001",
+      jwtSecret: "test-secret-at-least-thirty-two-chars"
     });
 
     expect(app.server.listening).toBe(false);
@@ -141,7 +144,8 @@ describe("bootstrap lifecycle", () => {
           LOG_LEVEL: "info",
           REDIS_URL: "redis://localhost:6379",
           CANONICAL_SERVICE_BASE_URL: "http://localhost:4001",
-          DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_rfq"
+          DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_rfq",
+          JWT_SECRET: "test-secret-at-least-thirty-two-chars"
         };
       },
       createLogger: () => {
@@ -191,7 +195,7 @@ describe("bootstrap lifecycle", () => {
 
   it("shutdown closes app, redis, and postgres", async () => {
     const mockApp = {
-      listen: vi.fn(async () => {}),
+      listen: vi.fn(async () => { }),
       close: vi.fn(async () => {
         callOrder.push("app.close");
       })
@@ -205,11 +209,12 @@ describe("bootstrap lifecycle", () => {
         LOG_LEVEL: "info",
         REDIS_URL: "redis://localhost:6379",
         CANONICAL_SERVICE_BASE_URL: "http://localhost:4001",
-        DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_rfq"
+        DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_rfq",
+        JWT_SECRET: "test-secret-at-least-thirty-two-chars"
       }),
       createLogger: () => createTestLogger(),
       createRedisClient: () => ({} as unknown as RedisClient),
-      connectRedis: async () => {},
+      connectRedis: async () => { },
       createPgPool: () => ({} as unknown as Pool),
       createDrizzleDb: () => ({} as AppDb),
       buildServer: async () => mockApp,

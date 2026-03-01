@@ -24,6 +24,10 @@ const rankedQuote = (quoteId: string): RankedQuote => ({
   firm_until: "2026-02-25T10:30:00.000Z",
   soft_refresh_flag: false,
   effectiveCost: 104,
+  score: 104,
+  reliabilityBonus: 0,
+  latencyBonus: 0,
+  failurePenalty: 0,
   rank: 1
 });
 

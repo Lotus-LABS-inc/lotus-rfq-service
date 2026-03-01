@@ -19,6 +19,9 @@ import { registerLPQuotesRoute } from "../lp/routes/lp-quotes-route.js";
 import { ReceiveLPQuoteService } from "../lp/receive-lp-quote-service.js";
 import { registerWebSocketPlugin } from "../ws/plugin.js";
 import type { RFQDomainEvent } from "../core/rfq-engine/rfq-domain-events.js";
+import { LPStatsRepository } from "../repositories/lp-stats.repository.js";
+import fastifyJwt from "@fastify/jwt";
+import { createUserAuthMiddleware } from "./user-auth-middleware.js";
 
 export interface ServerDependencies {
   logger: Logger;
@@ -26,11 +29,19 @@ export interface ServerDependencies {
   pgPool: Pool;
   db: AppDb;
   canonicalServiceBaseUrl: string;
+  jwtSecret: string;
+  reliabilityWeight: number;
+  latencyWeight: number;
+  failureWeight: number;
 }
 
 export const buildServer = async (dependencies: ServerDependencies): Promise<FastifyInstance> => {
   const app = Fastify({
     logger: false
+  });
+
+  await app.register(fastifyJwt, {
+    secret: dependencies.jwtSecret
   });
 
   app.decorate("infraLogger", dependencies.logger);
@@ -39,6 +50,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const eventRepository = new RFQEventRepository(dependencies.pgPool);
   const quoteRepository = new RFQQuoteRepository(dependencies.pgPool);
   const lpKeyRepository = new LPKeyRepository(dependencies.pgPool);
+  const lpStatsRepository = new LPStatsRepository(dependencies.pgPool);
   const sessionManager = new RFQSessionManager({
     redis: dependencies.redisClient
   });
@@ -58,6 +70,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     lpKeyRepository,
     logger: dependencies.logger
   });
+  const userAuthMiddleware = createUserAuthMiddleware();
   const receiveLPQuoteService = new ReceiveLPQuoteService({
     sessionRepository,
     quoteRepository,
@@ -65,6 +78,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     sessionManager,
     redisClient: dependencies.redisClient,
     eventEmitter: domainEventEmitter,
+    lpStatsRepository,
     logger: dependencies.logger
   });
 
@@ -74,8 +88,15 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   });
   await registerHealthRoute(app);
   await registerMetricsRoute(app);
-  await registerRFQRoute(app, {
-    createRFQ: (request) => createRFQService.execute(request)
+  await registerRFQRoute(app, userAuthMiddleware, {
+    createRFQ: (request) =>
+      createRFQService.execute(request, {
+        weights: {
+          reliabilityWeight: dependencies.reliabilityWeight,
+          latencyWeight: dependencies.latencyWeight,
+          failureWeight: dependencies.failureWeight
+        }
+      })
   });
   await registerLPQuotesRoute(app, lpAuthMiddleware, receiveLPQuoteService);
 

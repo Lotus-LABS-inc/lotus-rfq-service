@@ -23,6 +23,7 @@ import {
   lockWaitTimeMs
 } from "../../observability/metrics.js";
 import { withSpan } from "../../observability/tracing.js";
+import type { LPStatsRepository } from "../../repositories/lp-stats.repository.js";
 
 export interface ExecutionGatewayRequest {
   sessionId: string;
@@ -76,6 +77,7 @@ export interface ExecutionRouterDependencies {
   executionGateway: ExecutionGateway;
   eventEmitter: RFQEventEmitter;
   logger: Pick<Logger, "warn" | "error">;
+  lpStatsRepository?: LPStatsRepository;
   now?: () => Date;
   lockOwnerFactory?: () => string;
   lockTtlMs?: number;
@@ -187,10 +189,12 @@ export class ExecutionRouterService {
               if (!(error instanceof QuoteStaleError)) {
                 throw error;
               }
+              const lpId = this.extractLpId(rankedQuote, quoteRecord.quote_payload);
 
               await this.persistExecutionFailure({
                 sessionId: command.sessionId,
                 quoteRecordId: quoteRecord.id,
+                ...(lpId ? { lpId } : {}),
                 quoteId: rankedQuote.quoteId,
                 price: quoteRecord.price,
                 quantity: quoteRecord.quantity,
@@ -251,6 +255,7 @@ export class ExecutionRouterService {
                 }
               });
               executionSuccessTotal.inc();
+              this.updateExecutionSuccessStats(this.extractLpId(rankedQuote, quoteRecord.quote_payload));
 
               attempts.push({
                 quoteId: rankedQuote.quoteId,
@@ -264,9 +269,11 @@ export class ExecutionRouterService {
               };
             }
 
+            const lpId = this.extractLpId(rankedQuote, quoteRecord.quote_payload);
             await this.persistExecutionFailure({
               sessionId: command.sessionId,
               quoteRecordId: quoteRecord.id,
+              ...(lpId ? { lpId } : {}),
               quoteId: rankedQuote.quoteId,
               price: quoteRecord.price,
               quantity: quoteRecord.quantity,
@@ -355,6 +362,7 @@ export class ExecutionRouterService {
   private async persistExecutionFailure(input: {
     sessionId: string;
     quoteRecordId: string;
+    lpId?: string;
     quoteId: string;
     price: string;
     quantity: string;
@@ -385,5 +393,63 @@ export class ExecutionRouterService {
       }
     });
     executionFailureTotal.inc();
+    if (input.lpId) {
+      void this.deps.lpStatsRepository
+        ?.recordExecutionFailure(input.lpId)
+        .catch((error: unknown) => {
+          this.deps.logger.error(
+            { err: error, sessionId: input.sessionId, quoteId: input.quoteId, lpId: input.lpId },
+            "Async LP execution failure stats update failed."
+          );
+        });
+    }
+  }
+
+  private extractLpId(
+    rankedQuote: RankedQuote,
+    quotePayload: unknown
+  ): string | null {
+    if (typeof rankedQuote.lpId === "string" && rankedQuote.lpId.length > 0) {
+      return rankedQuote.lpId;
+    }
+
+    if (typeof quotePayload !== "object" || quotePayload === null) {
+      return null;
+    }
+
+    const quotePayloadRecord = quotePayload as Record<string, unknown>;
+
+    const directLpId = quotePayloadRecord.lpId;
+    if (typeof directLpId === "string" && directLpId.length > 0) {
+      return directLpId;
+    }
+
+    const nestedPayload = quotePayloadRecord.payload;
+    if (
+      typeof nestedPayload === "object" &&
+      nestedPayload !== null &&
+      "lpId" in nestedPayload &&
+      typeof nestedPayload.lpId === "string" &&
+      nestedPayload.lpId.length > 0
+    ) {
+      return nestedPayload.lpId;
+    }
+
+    return null;
+  }
+
+  private updateExecutionSuccessStats(lpId: string | null): void {
+    if (!lpId) {
+      return;
+    }
+
+    void this.deps.lpStatsRepository
+      ?.recordExecutionSuccess(lpId)
+      .catch((error: unknown) => {
+        this.deps.logger.error(
+          { err: error, lpId },
+          "Async LP execution success stats update failed."
+        );
+      });
   }
 }

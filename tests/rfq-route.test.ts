@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import Fastify, { type preHandlerHookHandler } from "fastify";
 import { describe, expect, it, vi } from "vitest";
 import { CanonicalMarketFetchError } from "../src/core/rfq-engine/canonical-market-client.js";
 import { MarketInactiveError } from "../src/core/rfq-engine/create-rfq-service.js";
@@ -7,7 +7,8 @@ import { registerRFQRoute } from "../src/api/routes/rfq.js";
 describe("POST /rfq", () => {
   it("returns 400 on invalid request payload", async () => {
     const app = Fastify({ logger: false });
-    await registerRFQRoute(app, {
+    const passThroughAuth: preHandlerHookHandler = async () => { };
+    await registerRFQRoute(app, passThroughAuth, {
       createRFQ: vi.fn()
     });
 
@@ -32,7 +33,8 @@ describe("POST /rfq", () => {
       expiresAt: "2026-02-25T12:00:00.000Z"
     }));
 
-    await registerRFQRoute(app, { createRFQ });
+    const passThroughAuth: preHandlerHookHandler = async () => { };
+    await registerRFQRoute(app, passThroughAuth, { createRFQ });
 
     const response = await app.inject({
       method: "POST",
@@ -58,7 +60,8 @@ describe("POST /rfq", () => {
 
   it("maps inactive market errors to 409", async () => {
     const app = Fastify({ logger: false });
-    await registerRFQRoute(app, {
+    const passThroughAuth: preHandlerHookHandler = async () => { };
+    await registerRFQRoute(app, passThroughAuth, {
       createRFQ: vi.fn(async () => {
         throw new MarketInactiveError("mkt-closed");
       })
@@ -83,7 +86,8 @@ describe("POST /rfq", () => {
 
   it("maps canonical service failures to 502", async () => {
     const app = Fastify({ logger: false });
-    await registerRFQRoute(app, {
+    const passThroughAuth: preHandlerHookHandler = async () => { };
+    await registerRFQRoute(app, passThroughAuth, {
       createRFQ: vi.fn(async () => {
         throw new CanonicalMarketFetchError("canonical service unavailable");
       })

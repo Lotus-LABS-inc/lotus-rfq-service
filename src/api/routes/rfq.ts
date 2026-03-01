@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import { z } from "zod";
 import { CanonicalMarketFetchError } from "../../core/rfq-engine/canonical-market-client.js";
 import { MarketInactiveError, type CreateRFQResult } from "../../core/rfq-engine/create-rfq-service.js";
@@ -20,9 +20,10 @@ export interface RFQRouteHandlers {
 
 export const registerRFQRoute = async (
   app: FastifyInstance,
+  authMiddleware: preHandlerHookHandler,
   handlers: RFQRouteHandlers
 ): Promise<void> => {
-  app.post("/rfq", async (request, reply) => {
+  app.post("/rfq", { preHandler: authMiddleware }, async (request, reply) => {
     const parsed = createRFQRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({

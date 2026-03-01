@@ -222,12 +222,14 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
     });
     await connectRedis(redisClient);
 
+    const jwtSecret = "test-secret-at-least-thirty-two-chars";
     app = await buildServer({
       logger,
       redisClient,
       pgPool: pool,
       db: createDrizzleDb(pool),
-      canonicalServiceBaseUrl: "http://127.0.0.1:4101"
+      canonicalServiceBaseUrl: "http://127.0.0.1:4101",
+      jwtSecret
     });
 
     sessionRepository = new RFQSessionRepository(pool);
@@ -301,6 +303,9 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
         quantity: "10",
         idempotencyKey: `${RUN_PREFIX}${randomUUID()}`,
         ttlSeconds: 120
+      },
+      headers: {
+        authorization: `Bearer ${testApp.jwt.sign({ userId: "test-taker" })}`
       }
     });
     if (createResponse.statusCode !== 201) {
@@ -474,6 +479,9 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
         quantity: "5",
         idempotencyKey: `${RUN_PREFIX}${randomUUID()}`,
         ttlSeconds: 1
+      },
+      headers: {
+        authorization: `Bearer ${testApp.jwt.sign({ userId: "test-taker-exp" })}`
       }
     });
     if (createResponse.statusCode !== 201) {
@@ -653,6 +661,9 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
         quantity: "4",
         idempotencyKey: `${RUN_PREFIX}${randomUUID()}`,
         ttlSeconds: 120
+      },
+      headers: {
+        authorization: `Bearer ${testApp.jwt.sign({ userId: "test-taker-dup" })}`
       }
     });
     if (createResponse.statusCode !== 201) {

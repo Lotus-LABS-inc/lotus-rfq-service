@@ -1,0 +1,36 @@
+﻿
+> lotus-rfq-service@0.1.0 test
+> vitest run
+
+
+[1m[46m RUN [49m[22m [36mv3.2.4 [39m[90mC:/Users/Admin/Documents/lotus-RFQ-service/lotus-rfq-service[39m
+
+ [32mΓ£ô[39m tests/lp-auth-middleware.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 410[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m LP auth middleware[2m > [22mauthorizes request with valid headers, signature, timestamp, and nonce [33m 355[2mms[22m[39m
+ [32mΓ£ô[39m tests/rfq-ws-gateway.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32mΓ£ô[39m tests/create-rfq-service.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+ [32mΓ£ô[39m tests/execution-router.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 37[2mms[22m[39m
+ [32mΓ£ô[39m tests/receive-lp-quote-service.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32mΓ£ô[39m tests/rfq-state-machine.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32mΓ£ô[39m tests/quote-ranking.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 37[2mms[22m[39m
+ [32mΓ£ô[39m tests/lp-reliability-engine.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32mΓ£ô[39m test/unit/quote-staleness-guard.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32mΓ£ô[39m tests/user-auth-integration.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 508[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m RFQ Route JWT Integration[2m > [22mreturns 401 when no token is provided [33m 447[2mms[22m[39m
+ [32mΓ£ô[39m tests/rfq-route.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 400[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m POST /rfq[2m > [22mreturns 400 on invalid request payload [33m 361[2mms[22m[39m
+ [32mΓ£ô[39m tests/lp-quotes-route.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 408[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m POST /lp/:id/quotes[2m > [22mreturns 400 for invalid payload [33m 365[2mms[22m[39m
+ [32mΓ£ô[39m tests/rfq-session-manager.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32mΓ£ô[39m tests/health.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 163[2mms[22m[39m
+ [32mΓ£ô[39m test/integration/rfq-lifecycle.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 26530[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m RFQ lifecycle integration harness[2m > [22mScenario 1: Happy Path [33m 8845[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m RFQ lifecycle integration harness[2m > [22mScenario 2: Expired Session [33m 4863[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m RFQ lifecycle integration harness[2m > [22mScenario 3: Concurrent Accept [33m 5079[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m RFQ lifecycle integration harness[2m > [22mScenario 4: Duplicate Quote ID [33m 4171[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m15 passed[39m[22m[90m (15)[39m
+[2m      Tests [22m [1m[32m58 passed[39m[22m[90m (58)[39m
+[2m   Start at [22m 00:27:44
+[2m   Duration [22m 31.47s[2m (transform 2.23s, setup 684ms, collect 23.97s, tests 28.62s, environment 7ms, prepare 6.28s)[22m
+

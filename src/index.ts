@@ -37,6 +37,10 @@ export interface BootstrapModules {
     pgPool: Pool;
     db: AppDb;
     canonicalServiceBaseUrl: string;
+    jwtSecret: string;
+    reliabilityWeight: number;
+    latencyWeight: number;
+    failureWeight: number;
   }) => Promise<FastifyInstance>;
   disconnectRedis: (client: RedisClient) => Promise<void>;
   closePgPool: (pool: Pool) => Promise<void>;
@@ -79,7 +83,11 @@ export const startService = async (
     redisClient,
     pgPool,
     db,
-    canonicalServiceBaseUrl: env.CANONICAL_SERVICE_BASE_URL
+    canonicalServiceBaseUrl: env.CANONICAL_SERVICE_BASE_URL,
+    jwtSecret: env.JWT_SECRET,
+    reliabilityWeight: env.RELIABILITY_WEIGHT,
+    latencyWeight: env.LATENCY_WEIGHT,
+    failureWeight: env.FAILURE_WEIGHT
   });
 
   await app.listen({

@@ -1,0 +1,19 @@
+﻿{"level":30,"time":1772323176554,"pid":17476,"hostname":"Macofweb3","msg":"Redis connection established."}
+--- STAGE 1: LOCK CONTENTION (100 CONCURRENT SETTLEMENT ATTEMPTS) ---
+
+Lock Results:
+- Total Attempts: 100
+- Success: 1
+- Failed Lock Attempts (Contention): 99
+- Avg Lock Acquisition Time: 157.74ms
+- Total Execution Wall Time: 2582.23ms
+- DB Execution Records: 1
+- Final Session Status in DB: COLLECTING_QUOTES
+
+--- STAGE 2: QUOTE IDEMPOTENCY (20 CONCURRENT SUBMISSIONS) ---
+Idempotency Results:
+- Unique Quotes: 5
+- Accepted: 5
+
+--- STRESS TEST PASSED SUCCESSFULLY ---
+{"level":40,"time":1772323182124,"pid":17476,"hostname":"Macofweb3","msg":"Redis connection closed."}
