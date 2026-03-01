@@ -21,6 +21,8 @@ export interface RedisClient {
     condition?: "NX"
   ): Promise<"OK" | null>;
   get(key: string): Promise<string | null>;
+  incrbyfloat(key: string, increment: number): Promise<string>;
+  eval(script: string, numKeys: number, ...args: string[]): Promise<unknown>;
   expire(key: string, seconds: number): Promise<number>;
   ttl(key: string): Promise<number>;
   del(...keys: string[]): Promise<number>;
@@ -48,7 +50,7 @@ interface RedisOptions {
 }
 
 interface RedisConstructor {
-  new (url: string, options?: RedisOptions): RedisClient;
+  new(url: string, options?: RedisOptions): RedisClient;
 }
 
 const require = createRequire(import.meta.url);

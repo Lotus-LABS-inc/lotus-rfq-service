@@ -1,0 +1,19 @@
+﻿{"level":50,"time":1772326906334,"pid":16940,"hostname":"Macofweb3","err":{"type":"Error","message":"getaddrinfo ENOTFOUND redis.railway.internal","stack":"Error: getaddrinfo ENOTFOUND redis.railway.internal\n    at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:122:26)","errno":-3008,"code":"ENOTFOUND","syscall":"getaddrinfo","hostname":"redis.railway.internal"},"msg":"Redis connection error."}
+node.exe : Stress test failed with error: Error: Connection is 
+closed.
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program 
+Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Stress test fai.. 
+   .tion is closed.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    at EventEmitter.connectionCloseHandler (C:\Users\Admin\Docu
+ments\lotus-RFQ-service\lotus-rfq-service\node_modules\ioredis\
+built\Redis.js:208:28)
+    at Object.onceWrapper (node:events:623:26)
+    at EventEmitter.emit (node:events:508:28)
+    at process.processTicksAndRejections 
+(node:internal/process/task_queues:84:11)

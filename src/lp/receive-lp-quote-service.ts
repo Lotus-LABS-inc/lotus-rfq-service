@@ -36,7 +36,7 @@ export interface ReceiveLPQuoteServiceDependencies {
   sessionManager: RFQSessionManager;
   redisClient: RedisClient;
   eventEmitter: RFQEventEmitter;
-  logger: Pick<Logger, "error">;
+  logger: Logger;
   lpStatsRepository?: LPStatsRepository;
   now?: () => Date;
 }

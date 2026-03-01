@@ -1,0 +1,11 @@
+﻿{"level":30,"time":1772326983217,"pid":16620,"hostname":"Macofweb3","msg":"Redis connection established."}
+Starting Stress Test: Taker=afe01a63-d103-45f2-b9e6-6ff824083a03, RFQ=dff7e049-be31-476e-93ca-82319c60ad53
+Reservations finished. Successes: 0, Failures: 200
+node.exe : CRITICAL FAILURE: Expected exactly 1 reservation success, but got 0
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (CRITICAL FAILUR...cess, but got 0 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

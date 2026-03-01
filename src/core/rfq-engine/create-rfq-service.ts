@@ -8,6 +8,7 @@ import type { RFQEventEmitter } from "./rfq-domain-events.js";
 import type { ReliabilityWeights } from "../lp-reliability-engine.js";
 import { activeRFQSessions, rfqCreatedTotal } from "../../observability/metrics.js";
 import { withSpan } from "../../observability/tracing.js";
+import type { IRiskEngine } from "../risk-engine.js";
 
 export interface CreateRFQCommand {
   canonicalMarketId: string;
@@ -33,6 +34,7 @@ export interface CreateRFQServiceDependencies {
   logger: RFQStateMachineLogger;
   now?: () => Date;
   createRequestId?: () => string;
+  riskEngine: IRiskEngine;
 }
 
 export class MarketInactiveError extends Error {
@@ -66,6 +68,27 @@ export class CreateRFQService {
         const market = await this.deps.canonicalMarketClient.fetchMarketById(command.canonicalMarketId);
         if (!market.isActive) {
           throw new MarketInactiveError(command.canonicalMarketId);
+        }
+
+        try {
+          await this.deps.riskEngine.validateRFQCreation({
+            taker_id: command.takerId,
+            canonical_market_id: command.canonicalMarketId,
+            side: command.side,
+            quantity: command.quantity
+          });
+        } catch (error) {
+          this.deps.eventEmitter.emitEvent({
+            type: "RISK_REJECTED",
+            sessionId: "pending",
+            occurredAt: this.now().toISOString(),
+            payload: {
+              takerId: command.takerId,
+              marketId: command.canonicalMarketId,
+              reason: error instanceof Error ? error.message : "unknown_risk_error"
+            }
+          });
+          throw error;
         }
 
         const expiresAt = new Date(this.now().getTime() + command.ttlSeconds * 1000);

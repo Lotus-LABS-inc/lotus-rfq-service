@@ -1,0 +1,19 @@
+﻿{"level":50,"time":1772326665631,"pid":5912,"hostname":"Macofweb3","err":{"type":"AggregateError","message":"","stack":"AggregateError [ECONNREFUSED]: \n    at internalConnectMultiple (node:net:1134:18)\n    at afterConnectMultiple (node:net:1715:7)","aggregateErrors":[{"type":"Error","message":"connect ECONNREFUSED ::1:6379","stack":"Error: connect ECONNREFUSED ::1:6379\n    at createConnectionError (node:net:1678:14)\n    at afterConnectMultiple (node:net:1708:16)","errno":-4078,"code":"ECONNREFUSED","syscall":"connect","address":"::1","port":6379},{"type":"Error","message":"connect ECONNREFUSED 127.0.0.1:6379","stack":"Error: connect ECONNREFUSED 127.0.0.1:6379\n    at createConnectionError (node:net:1678:14)\n    at afterConnectMultiple (node:net:1708:16)","errno":-4078,"code":"ECONNREFUSED","syscall":"connect","address":"127.0.0.1","port":6379}],"code":"ECONNREFUSED"},"msg":"Redis connection error."}
+node.exe : Stress test failed with error: Error: Connection is 
+closed.
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program 
+Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Stress test fai.. 
+   .tion is closed.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    at EventEmitter.connectionCloseHandler (C:\Users\Admin\Docu
+ments\lotus-RFQ-service\lotus-rfq-service\node_modules\ioredis\
+built\Redis.js:208:28)
+    at Object.onceWrapper (node:events:623:26)
+    at EventEmitter.emit (node:events:508:28)
+    at process.processTicksAndRejections 
+(node:internal/process/task_queues:84:11)

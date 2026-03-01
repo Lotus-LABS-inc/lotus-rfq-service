@@ -1,5 +1,7 @@
 import type { Pool } from "pg";
 import type { LPReliabilityProfile } from "../core/lp-reliability-engine.js";
+import { lpStatsUpdateTotal } from "../observability/metrics.js";
+import type { Logger } from "pino";
 
 export type LPStatsProfile = LPReliabilityProfile;
 
@@ -15,7 +17,10 @@ interface LPStatsRow {
 }
 
 export class LPStatsRepository {
-  public constructor(private readonly pool: Pool) { }
+  public constructor(
+    private readonly pool: Pool,
+    private readonly logger: Logger
+  ) { }
 
   public async recordQuoteSubmission(lpId: string, responseTimeMs: number): Promise<void> {
     const safeResponseMs = Math.max(0, responseTimeMs);
@@ -45,6 +50,9 @@ export class LPStatsRepository {
         END`,
       [lpId, safeResponseMs]
     );
+
+    lpStatsUpdateTotal.inc({ update_type: "quote_submission" });
+    this.logger.info({ lpId, responseTimeMs: safeResponseMs }, "Recorded LP quote submission stats.");
   }
 
   public async recordExecutionSuccess(lpId: string): Promise<void> {
@@ -73,6 +81,9 @@ export class LPStatsRepository {
         END`,
       [lpId]
     );
+
+    lpStatsUpdateTotal.inc({ update_type: "execution_success" });
+    this.logger.info({ lpId }, "Recorded LP execution success stats.");
   }
 
   public async recordExecutionFailure(lpId: string): Promise<void> {
@@ -97,6 +108,9 @@ export class LPStatsRepository {
         updated_at = NOW()`,
       [lpId]
     );
+
+    lpStatsUpdateTotal.inc({ update_type: "execution_failure" });
+    this.logger.warn({ lpId }, "Recorded LP execution failure stats.");
   }
 
   public async getProfilesByLpIds(lpIds: readonly string[]): Promise<Record<string, LPStatsProfile>> {

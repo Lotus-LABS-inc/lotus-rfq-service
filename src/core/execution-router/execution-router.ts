@@ -24,6 +24,7 @@ import {
 } from "../../observability/metrics.js";
 import { withSpan } from "../../observability/tracing.js";
 import type { LPStatsRepository } from "../../repositories/lp-stats.repository.js";
+import type { IRiskEngine, ReservationToken } from "../risk-engine.js";
 
 export interface ExecutionGatewayRequest {
   sessionId: string;
@@ -55,6 +56,7 @@ export interface ExecuteRFQCommand {
   sessionId: string;
   rankedQuotes: readonly RankedQuote[];
   fallbackToNextQuote: boolean;
+  reservationToken?: ReservationToken;
 }
 
 export interface ExecutionAttemptResult {
@@ -76,11 +78,12 @@ export interface ExecutionRouterDependencies {
   sessionManager: RFQSessionManager;
   executionGateway: ExecutionGateway;
   eventEmitter: RFQEventEmitter;
-  logger: Pick<Logger, "warn" | "error">;
+  logger: Logger;
   lpStatsRepository?: LPStatsRepository;
   now?: () => Date;
   lockOwnerFactory?: () => string;
   lockTtlMs?: number;
+  riskEngine: IRiskEngine;
 }
 
 export class RFQLockError extends Error {
@@ -152,6 +155,9 @@ export class ExecutionRouterService {
         const attempts: ExecutionAttemptResult[] = [];
 
         try {
+          // Transition to EXECUTING before starting quote iteration
+          await this.transitionSessionToState(command.sessionId, session.status, "EXECUTING");
+
           let sawStaleQuote = false;
 
           for (const rankedQuote of command.rankedQuotes) {
@@ -225,7 +231,13 @@ export class ExecutionRouterService {
             executionLatencyMs.observe(performance.now() - executionStartedAt);
 
             if (gatewayResult.ok) {
-              await this.deps.executionRepository.create({
+              attempts.push({
+                quoteId: rankedQuote.quoteId,
+                status: "SUCCESS"
+              });
+
+              // Update exposure after successful execution
+              const executionRecord = await this.deps.executionRepository.create({
                 sessionId: command.sessionId,
                 quoteId: quoteRecord.id,
                 executionStatus: "SUCCESS",
@@ -243,6 +255,20 @@ export class ExecutionRouterService {
                 }
               });
 
+              try {
+                await this.deps.riskEngine.updateExposureAfterExecution({
+                  id: executionRecord.id,
+                  sessionId: command.sessionId,
+                  takerId: session.taker_id,
+                  canonicalMarketId: session.canonical_market_id,
+                  side: session.side,
+                  executedQuantity: executionRecord.executed_quantity,
+                  executedPrice: executionRecord.executed_price
+                });
+              } catch (error) {
+                this.deps.logger.error({ err: error, executionId: executionRecord.id }, "Failed to update exposure after execution success.");
+              }
+
               this.deps.eventEmitter.emitEvent({
                 type: "EXECUTION_UPDATE",
                 sessionId: command.sessionId,
@@ -257,10 +283,8 @@ export class ExecutionRouterService {
               executionSuccessTotal.inc();
               this.updateExecutionSuccessStats(this.extractLpId(rankedQuote, quoteRecord.quote_payload));
 
-              attempts.push({
-                quoteId: rankedQuote.quoteId,
-                status: "SUCCESS"
-              });
+              // Transition to SETTLED on success (using EXECUTING as fromState)
+              await this.transitionSessionToState(command.sessionId, "EXECUTING", "SETTLED");
 
               return {
                 ok: true,
@@ -313,30 +337,25 @@ export class ExecutionRouterService {
     );
   }
 
-  private async transitionSessionToFailed(sessionId: string, currentStatus: string): Promise<void> {
+  private async transitionSessionToState(sessionId: string, currentStatus: string, targetState: RFQState): Promise<void> {
     const fromState = this.asRFQState(currentStatus);
     if (!fromState) {
-      this.deps.logger.warn({ sessionId, currentStatus }, "RFQ status not recognized for transition.");
+      this.deps.logger.warn({ sessionId, currentStatus, targetState }, "RFQ status not recognized for transition.");
       return;
     }
 
     const stateMachine = new RFQStateMachine({
       initialState: fromState,
-      logger: {
-        info: (payload, message) => this.deps.logger.warn(payload, message),
-        error: (payload, message) => this.deps.logger.error(payload, message)
-      },
+      logger: this.deps.logger,
       now: this.now
     });
 
-    if (!stateMachine.canTransitionTo("FAILED")) {
-      this.deps.logger.warn({ sessionId, currentStatus }, "RFQ status cannot transition to FAILED.");
-      return;
+    if (!stateMachine.canTransitionTo(targetState)) {
+      this.deps.logger.error({ sessionId, currentStatus, targetState }, "RFQ status cannot transition to requested state.");
+      throw new Error(`Invalid RFQ transition from ${currentStatus} to ${targetState}`);
     }
 
-    const nextState = stateMachine.transitionTo("FAILED", {
-      reason: "no_valid_quotes"
-    });
+    const nextState = stateMachine.transitionTo(targetState);
 
     await this.deps.sessionRepository.updateStatus(sessionId, nextState);
     this.deps.eventEmitter.emitEvent({
@@ -348,6 +367,10 @@ export class ExecutionRouterService {
         to: nextState
       }
     });
+  }
+
+  private async transitionSessionToFailed(sessionId: string, currentStatus: string): Promise<void> {
+    await this.transitionSessionToState(sessionId, currentStatus, "FAILED");
   }
 
   private asRFQState(value: string): RFQState | null {

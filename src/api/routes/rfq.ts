@@ -2,6 +2,7 @@ import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import { z } from "zod";
 import { CanonicalMarketFetchError } from "../../core/rfq-engine/canonical-market-client.js";
 import { MarketInactiveError, type CreateRFQResult } from "../../core/rfq-engine/create-rfq-service.js";
+import { RiskRejectedError } from "../../core/risk-engine.js";
 
 const createRFQRequestSchema = z.object({
   canonicalMarketId: z.string().min(1),
@@ -14,8 +15,15 @@ const createRFQRequestSchema = z.object({
 
 type CreateRFQRequest = z.infer<typeof createRFQRequestSchema>;
 
+const acceptRFQRequestSchema = z.object({
+  quoteId: z.string().min(1)
+});
+
+type AcceptRFQRequest = z.infer<typeof acceptRFQRequestSchema>;
+
 export interface RFQRouteHandlers {
   createRFQ(request: CreateRFQRequest): Promise<CreateRFQResult>;
+  acceptRFQ(sessionId: string, request: AcceptRFQRequest): Promise<unknown>;
 }
 
 export const registerRFQRoute = async (
@@ -37,6 +45,14 @@ export const registerRFQRoute = async (
       const result = await handlers.createRFQ(parsed.data);
       return reply.status(201).send(result);
     } catch (error) {
+      if (error instanceof RiskRejectedError) {
+        return reply.status(403).send({
+          error: "risk_rejected",
+          reason: "quota_exceeded",
+          message: error.message
+        });
+      }
+
       if (error instanceof MarketInactiveError) {
         return reply.status(409).send({
           code: "MARKET_INACTIVE",
@@ -51,6 +67,33 @@ export const registerRFQRoute = async (
         });
       }
 
+      throw error;
+    }
+  });
+
+  app.post("/rfq/:id/accept", { preHandler: authMiddleware }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = acceptRFQRequestSchema.safeParse(request.body);
+
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "Accept RFQ request validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+
+    try {
+      const result = await handlers.acceptRFQ(id, parsed.data);
+      return reply.send(result);
+    } catch (error) {
+      if (error instanceof RiskRejectedError) {
+        return reply.status(403).send({
+          error: "risk_rejected",
+          reason: "quota_exceeded",
+          message: error.message
+        });
+      }
       throw error;
     }
   });

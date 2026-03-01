@@ -4,7 +4,9 @@ export type RFQDomainEventType =
   | "RFQ_CREATED"
   | "QUOTE_RECEIVED"
   | "STATE_TRANSITION"
-  | "EXECUTION_UPDATE";
+  | "EXECUTION_UPDATE"
+  | "RISK_REJECTED"
+  | "RISK_EXECUTION_REJECTED";
 
 export interface RFQDomainEvent {
   type: RFQDomainEventType;
