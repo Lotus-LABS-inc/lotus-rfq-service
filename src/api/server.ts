@@ -14,7 +14,6 @@ import { RFQSessionRepository } from "../db/repositories/rfq-session-repository.
 import { registerHealthRoute } from "./routes/health.js";
 import { registerMetricsRoute } from "./routes/metrics.js";
 import { registerRFQRoute } from "./routes/rfq.js";
-import { ExecutionRouterService } from "../core/execution-router/execution-router.js";
 import { createLPAuthMiddleware } from "../lp/lp-auth-middleware.js";
 import { registerLPQuotesRoute } from "../lp/routes/lp-quotes-route.js";
 import { ReceiveLPQuoteService } from "../lp/receive-lp-quote-service.js";
@@ -27,6 +26,12 @@ import { ExposureRepository } from "../repositories/exposure.repository.js";
 import { ExposureRedisCache } from "../repositories/exposure-redis-cache.js";
 import { RiskEngine } from "../core/risk-engine.js";
 import { registerAdminRiskRoutes } from "./admin/risk.routes.js";
+import { ComboRepository } from "../repositories/combo.repository.js";
+import { registerAdminComboRoutes } from "./admin/combo.routes.js";
+import { registerAdminSORRoutes } from "./admin/sor.routes.js";
+import { SORAdminService } from "./admin/sor-admin-service.js";
+import { CostModel, OrderRouter, PlanComposer, PlanRunner, RouteScout, Splitter, type SORAcceptancePolicy } from "../core/sor/index.js";
+import { RFQStateMachine, type RFQState } from "../core/rfq-engine/rfq-state-machine.js";
 
 export interface ServerDependencies {
   logger: Logger;
@@ -38,6 +43,8 @@ export interface ServerDependencies {
   reliabilityWeight: number;
   latencyWeight: number;
   failureWeight: number;
+  sorAcceptAonAwait: boolean;
+  sorAcceptNonAonBackground: boolean;
 }
 
 export const buildServer = async (dependencies: ServerDependencies): Promise<FastifyInstance> => {
@@ -62,6 +69,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
 
   const exposureRepository = new ExposureRepository(dependencies.pgPool, dependencies.logger);
   const exposureCache = new ExposureRedisCache(dependencies.redisClient);
+  const comboRepository = new ComboRepository(dependencies.pgPool);
   const riskEngine = new RiskEngine(
     exposureRepository,
     exposureCache,
@@ -105,22 +113,103 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     logger: dependencies.logger
   });
 
-  const executionRouterService = new ExecutionRouterService({
-    sessionRepository,
-    quoteRepository,
-    executionRepository: new (await import("../db/repositories/rfq-execution-repository.js")).RFQExecutionRepository(dependencies.pgPool),
-    sessionManager,
-    executionGateway: {
-      execute: async (req) => {
-        dependencies.logger.info({ sessionId: req.sessionId }, "Execution gateway placeholder called.");
-        return { ok: false, reason: "GATEWAY_NOT_CONFIGURED" };
+  const sorRouteScout = new RouteScout({
+    redis: dependencies.redisClient,
+    lpSource: {
+      getWholeComboQuotes: async () => [],
+      getPerLegQuotes: async (rfq) => {
+        const dbQuotes = await quoteRepository.listBySessionId(rfq.rfqId, 50);
+        return dbQuotes.map((quote) => ({
+          quoteId: String(quote.quote_payload.quoteId ?? quote.id),
+          providerId:
+            typeof quote.quote_payload.lpId === "string"
+              ? quote.quote_payload.lpId
+              : quote.lp_key_id,
+          providerType: "LP" as const,
+          legId: rfq.rfqId,
+          availableSize: Number.parseFloat(quote.quantity),
+          quotedPrice: Number.parseFloat(quote.price),
+          fees: {
+            provider_fee: quote.fee_bps / 10000
+          },
+          latencyMs: 0,
+          fillProb: 0.95,
+          metadata: {
+            quote_status: quote.quote_status
+          }
+        }));
       }
     },
-    eventEmitter: domainEventEmitter,
-    logger: dependencies.logger,
-    lpStatsRepository,
-    riskEngine
+    canonicalClient: {
+      getOrderbookSnapshot: async () => null
+    }
   });
+  const orderRouter = new OrderRouter({
+    routeScout: sorRouteScout,
+    costModel: new CostModel(),
+    splitter: new Splitter(),
+    planComposer: new PlanComposer({
+      pool: dependencies.pgPool,
+      logger: dependencies.logger
+    })
+  });
+
+  const sorExecutionRouter = {
+    executeStep: async () => ({
+      ok: true as const,
+      executionRef: `sor-exec-${Date.now()}`
+    })
+  };
+
+  const planRunner = new PlanRunner({
+    pool: dependencies.pgPool,
+    redis: dependencies.redisClient,
+    executionRouter: sorExecutionRouter,
+    riskEngine,
+    logger: dependencies.logger
+  });
+
+  const transitionRFQState = async (
+    sessionId: string,
+    targetState: RFQState,
+    reason: string
+  ): Promise<void> => {
+    const session = await sessionRepository.findById(sessionId);
+    if (!session) {
+      throw new Error(`Session ${sessionId} not found for transition.`);
+    }
+
+    const current = asRFQState(session.status);
+    if (!current) {
+      throw new Error(`Unknown RFQ state ${session.status} for session ${sessionId}.`);
+    }
+    if (current === targetState) {
+      return;
+    }
+
+    const stateMachine = new RFQStateMachine({
+      initialState: current,
+      logger: dependencies.logger
+    });
+    if (!stateMachine.canTransitionTo(targetState)) {
+      throw new Error(`Invalid RFQ transition ${current} -> ${targetState}`);
+    }
+
+    const next = stateMachine.transitionTo(targetState, {
+      reason,
+      metadata: { sessionId }
+    });
+    await sessionRepository.updateStatus(sessionId, next);
+    domainEventEmitter.emitEvent({
+      type: "STATE_TRANSITION",
+      sessionId,
+      occurredAt: new Date().toISOString(),
+      payload: {
+        from: current,
+        to: next
+      }
+    });
+  };
 
   const wsGateway = await registerWebSocketPlugin(app, {
     redisClient: dependencies.redisClient,
@@ -144,31 +233,77 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       const quote = await quoteRepository.findByExternalQuoteId(sessionId, request.quoteId);
       if (!quote) throw new Error("Quote not found");
 
+      const acceptancePolicy = readAcceptancePolicy(session.metadata);
       const reservationToken = await riskEngine.validateBeforeExecution(session, quote);
+      const rfqInput = {
+        rfqId: session.id,
+        canonicalMarketId: session.canonical_market_id,
+        takerId: session.taker_id,
+        side: session.side,
+        quantity: session.quantity,
+        metadata: {
+          reservation_token: reservationToken,
+          legs: [
+            {
+              leg_id: session.id,
+              canonical_market_id: session.canonical_market_id,
+              side: session.side,
+              quantity: Number.parseFloat(session.quantity)
+            }
+          ]
+        }
+      } as const;
+      const selectedQuoteInput = {
+        quoteId: request.quoteId,
+        ...(typeof quote.quote_payload.lpId === "string"
+          ? { lpId: quote.quote_payload.lpId }
+          : {}),
+        price: Number.parseFloat(quote.price),
+        quantity: Number.parseFloat(quote.quantity),
+        feeBps: quote.fee_bps,
+        validUntil: quote.valid_until.toISOString(),
+        payload: quote.quote_payload
+      } as const;
 
-      return executionRouterService.execute({
-        sessionId,
-        rankedQuotes: [{
-          quoteId: request.quoteId,
-          basePrice: Number.parseFloat(quote.price),
-          venueFee: 0,
-          protocolFee: 0,
-          gasCost: 0,
-          slippageEstimate: 0,
-          reliabilityScore: 0,
-          latencyScore: 0,
-          expires_at: quote.valid_until.toISOString(),
-          effectiveCost: Number.parseFloat(quote.price),
-          score: 1,
-          reliabilityBonus: 0,
-          latencyBonus: 0,
-          failurePenalty: 0,
-          rank: 1,
-          soft_refresh_flag: false
-        }],
-        fallbackToNextQuote: false,
-        reservationToken
+      const plan = await orderRouter.buildPlan(rfqInput, selectedQuoteInput, acceptancePolicy);
+
+      const runPlanAndTransition = async (): Promise<"COMPLETED" | "PARTIAL" | "FAILED" | "UNWOUND"> => {
+        await transitionRFQState(sessionId, "ACCEPTED", "sor_plan_created");
+        await transitionRFQState(sessionId, "EXECUTING", "sor_plan_running");
+
+        const result = await planRunner.run(plan);
+        if (result.status === "COMPLETED" || result.status === "PARTIAL") {
+          await transitionRFQState(sessionId, "SETTLED", "sor_plan_completed");
+        } else {
+          await transitionRFQState(sessionId, "FAILED", "sor_plan_failed");
+        }
+        return result.status;
+      };
+
+      const shouldAwait =
+        acceptancePolicy === "ALL_OR_NONE" ? dependencies.sorAcceptAonAwait : !dependencies.sorAcceptNonAonBackground;
+
+      if (shouldAwait) {
+        const finalStatus = await runPlanAndTransition();
+        return {
+          status: "PLAN_ACCEPTED" as const,
+          plan_id: plan.id,
+          plan_state: "DRAFT" as const,
+          dispatch_mode: "awaited" as const,
+          final_status: finalStatus
+        };
+      }
+
+      void runPlanAndTransition().catch((error: unknown) => {
+        dependencies.logger.error({ err: error, sessionId, planId: plan.id }, "Background SOR plan execution failed.");
       });
+
+      return {
+        status: "PLAN_ACCEPTED" as const,
+        plan_id: plan.id,
+        plan_state: "DRAFT" as const,
+        dispatch_mode: "background" as const
+      };
     }
   });
   const adminAuthMiddleware = createAdminAuthMiddleware();
@@ -176,6 +311,18 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     riskEngine,
     exposureRepo: exposureRepository,
     exposureCache,
+  });
+  await registerAdminComboRoutes(app, adminAuthMiddleware, {
+    comboRepo: comboRepository,
+    exposureRepo: exposureRepository,
+    exposureCache
+  });
+  await registerAdminSORRoutes(app, adminAuthMiddleware, {
+    sorAdminService: new SORAdminService({
+      pool: dependencies.pgPool,
+      planRunner,
+      logger: dependencies.logger
+    })
   });
   await registerLPQuotesRoute(app, lpAuthMiddleware, receiveLPQuoteService);
 
@@ -209,4 +356,30 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   }
 
   return app;
+};
+
+const readAcceptancePolicy = (metadata: Record<string, unknown>): SORAcceptancePolicy => {
+  const value = metadata.acceptance_policy;
+  if (value === "ALL_OR_NONE" || value === "PARTIAL_ALLOWED" || value === "BEST_EFFORT") {
+    return value;
+  }
+  return "ALL_OR_NONE";
+};
+
+const asRFQState = (value: string): RFQState | null => {
+  if (
+    value === "CREATED" ||
+    value === "BROADCAST" ||
+    value === "COLLECTING_QUOTES" ||
+    value === "RANKING" ||
+    value === "AWAITING_USER" ||
+    value === "ACCEPTED" ||
+    value === "EXECUTING" ||
+    value === "SETTLED" ||
+    value === "FAILED" ||
+    value === "EXPIRED"
+  ) {
+    return value;
+  }
+  return null;
 };
