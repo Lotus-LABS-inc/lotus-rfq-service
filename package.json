@@ -11,7 +11,15 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:unit": "vitest run tests test/unit --maxWorkers=1",
+    "test:integration": "vitest run test/integration --maxWorkers=1",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" \"tests/**/*.ts\"",
+    "metrics:check": "node scripts/check-metrics.mjs",
+    "db:migrate:test": "node scripts/db-migrate-test.mjs",
+    "db:schema:validate": "node scripts/db-schema-validate.mjs",
+    "stress:sor": "tsx scripts/stress-sor.ts"
   },
   "dependencies": {
     "@fastify/jwt": "^10.0.0",
@@ -28,6 +36,9 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "eslint": "^9.15.0",
     "@types/decimal.js": "^0.0.32",
     "@types/node": "^24.6.0",
     "@types/pg": "^8.15.5",

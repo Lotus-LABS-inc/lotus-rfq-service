@@ -41,6 +41,8 @@ export interface BootstrapModules {
     reliabilityWeight: number;
     latencyWeight: number;
     failureWeight: number;
+    sorAcceptAonAwait: boolean;
+    sorAcceptNonAonBackground: boolean;
   }) => Promise<FastifyInstance>;
   disconnectRedis: (client: RedisClient) => Promise<void>;
   closePgPool: (pool: Pool) => Promise<void>;
@@ -87,7 +89,9 @@ export const startService = async (
     jwtSecret: env.JWT_SECRET,
     reliabilityWeight: env.RELIABILITY_WEIGHT,
     latencyWeight: env.LATENCY_WEIGHT,
-    failureWeight: env.FAILURE_WEIGHT
+    failureWeight: env.FAILURE_WEIGHT,
+    sorAcceptAonAwait: env.SOR_ACCEPT_AON_AWAIT,
+    sorAcceptNonAonBackground: env.SOR_ACCEPT_NON_AON_BACKGROUND
   });
 
   await app.listen({

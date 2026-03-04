@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeEach, beforeAll, afterAll, vi } from "vitest";
 import { Pool } from "pg";
 import pino from "pino";
 import { RiskEngine, RiskRejectedError } from "../../src/core/risk-engine.js";
@@ -6,6 +6,7 @@ import { ExposureRepository } from "../../src/repositories/exposure.repository.j
 import { ExposureRedisCache } from "../../src/repositories/exposure-redis-cache.js";
 import { createRedisClient, connectRedis, disconnectRedis } from "../../src/db/redis.js";
 import { randomUUID } from "node:crypto";
+import { deleteRedisKeysByPrefix } from "../helpers/redis-test-utils.js";
 
 const TEST_DB_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 const TEST_REDIS_URL = process.env.TEST_REDIS_URL || process.env.REDIS_URL;
@@ -51,13 +52,17 @@ describe.skipIf(!ENV_READY)("RiskEngine Unit Tests", () => {
     });
 
     afterAll(async () => {
-        await pool.end();
-        await disconnectRedis(redis);
+        if (pool) {
+            await pool.end();
+        }
+        if (redis) {
+            await disconnectRedis(redis);
+        }
     });
 
     beforeEach(async () => {
         await pool.query("TRUNCATE TABLE exposure, exposure_journal, exposure_idempotency CASCADE");
-        await redis.flushdb();
+        await deleteRedisKeysByPrefix(redis, ["risk:rolling:user:", "risk:lock:exec:"]);
     });
 
     it("rejects when single order cap exceeded", async () => {
@@ -77,9 +82,6 @@ describe.skipIf(!ENV_READY)("RiskEngine Unit Tests", () => {
         const marketId = randomUUID();
 
         // Setup existing exposure in DB
-        await exposureRepo.createExposure(userId, marketId, "buy", 8000, 8000, await pool.connect().then(c => { c.release(); return c; }));
-        // Note: The above repo call needs a client from a transaction or just a pool client. 
-        // Simplification for test:
         const client = await pool.connect();
         try {
             await exposureRepo.createExposure(userId, marketId, "buy", 8000, 8000, client);
@@ -147,27 +149,29 @@ describe.skipIf(!ENV_READY)("RiskEngine Unit Tests", () => {
         await riskEngine.updateExposureAfterExecution(exec);
 
         const exposure = await exposureRepo.getExposure(exec.takerId, exec.canonicalMarketId, "buy");
-        expect(exposure).toBeDefined();
+        expect(exposure).not.toBeNull();
         expect(exposure?.gross_notional).toBe("1000");
 
         // Second update (idempotent)
         await riskEngine.updateExposureAfterExecution(exec);
 
         const exposureAgain = await exposureRepo.getExposure(exec.takerId, exec.canonicalMarketId, "buy");
+        expect(exposureAgain).not.toBeNull();
         expect(exposureAgain?.gross_notional).toBe("1000"); // No change
     });
 
     it("handles lock timeout behavior", async () => {
         const sessionId = randomUUID();
-        const lockKey = `risk:lock:exec:${sessionId}`;
-
-        // Manually acquire lock
-        await exposureCache.lockExposureKey(lockKey, 1000);
+        const lockSpy = vi
+            .spyOn(exposureCache, "lockExposureKey")
+            .mockResolvedValue(null);
 
         const rfq = { id: sessionId, taker_id: randomUUID(), canonical_market_id: randomUUID() } as any;
         const quote = { id: randomUUID(), quantity: "100", price: "10" } as any;
 
         // Should fail to acquire lock
         await expect(riskEngine.validateBeforeExecution(rfq, quote)).rejects.toThrow("Unable to acquire risk lock for execution");
+
+        lockSpy.mockRestore();
     });
 });

@@ -261,4 +261,67 @@ export const comboPriceComputeMs = new Histogram({
   ...histogramConfig
 });
 
+export const sorPlanBuildLatencyMs = new Histogram({
+  name: "sor_plan_build_latency_ms",
+  help: "Time spent building SOR execution plans in milliseconds.",
+  labelNames: ["acceptance_policy"],
+  buckets: [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000],
+  ...histogramConfig
+});
+
+export const sorCandidatesEvaluatedCount = new Gauge({
+  name: "sor_candidates_evaluated_count",
+  help: "Number of candidates evaluated during SOR plan build.",
+  labelNames: ["rfq_id"],
+  ...gaugeConfig
+});
+
+export const sorAvgSplitsPerLeg = new Gauge({
+  name: "sor_avg_splits_per_leg",
+  help: "Average number of splits allocated per leg in SOR plan build.",
+  labelNames: ["rfq_id"],
+  ...gaugeConfig
+});
+
+export const sorPlanSuccessTotal = new Counter({
+  name: "sor_plan_success_total",
+  help: "Total number of successful SOR plans.",
+  labelNames: ["status"],
+  ...counterConfig
+});
+
+export const sorPlanFailureTotal = new Counter({
+  name: "sor_plan_failure_total",
+  help: "Total number of failed or unwound SOR plans.",
+  labelNames: ["status", "reason"],
+  ...counterConfig
+});
+
+export const sorStepRetriesTotal = new Counter({
+  name: "sor_step_retries_total",
+  help: "Total number of SOR step retries.",
+  labelNames: ["provider_type", "provider_id"],
+  ...counterConfig
+});
+
+export const sorStepFallbackTotal = new Counter({
+  name: "sor_step_fallback_total",
+  help: "Total number of SOR fallback step creations.",
+  labelNames: ["from_provider_id", "to_provider_id", "leg_id"],
+  ...counterConfig
+});
+
+export const sorPlanUnwindTotal = new Counter({
+  name: "sor_plan_unwind_total",
+  help: "Total number of SOR unwind operations.",
+  labelNames: ["reason"],
+  ...counterConfig
+});
+
+export const sorAvgFillRate5mSnapshot = new Gauge({
+  name: "sor_avg_fill_rate_5m_snapshot",
+  help: "Approximate rolling fill rate snapshot for SOR plans.",
+  ...gaugeConfig
+});
+
 export const metricsRegistry = registry;

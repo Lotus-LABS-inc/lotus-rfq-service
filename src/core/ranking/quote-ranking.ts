@@ -70,11 +70,12 @@ export const rankQuotesByEffectiveCost = (
             quote.lpId && input?.reliabilityProfiles
               ? input.reliabilityProfiles[quote.lpId]
               : undefined;
-          const reliabilityScore = computeReliabilityScore({
+          const reliabilityInput = {
             effectivePrice: quote.effectiveCost,
-            profile,
-            weights: input?.weights
-          });
+            ...(profile ? { profile } : {}),
+            ...(input?.weights ? { weights: input.weights } : {})
+          };
+          const reliabilityScore = computeReliabilityScore(reliabilityInput);
 
           return {
             ...quote,

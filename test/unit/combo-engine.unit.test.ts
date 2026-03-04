@@ -45,9 +45,11 @@ describe("ComboEngine Core Behaviors", () => {
             executePlan: vi.fn().mockResolvedValue({ status: "COMPLETED" })
         };
         redisMock = {
-            hSet: vi.fn(),
-            expireAt: vi.fn(),
-            zAdd: vi.fn()
+            hset: vi.fn(),
+            expireat: vi.fn(),
+            expire: vi.fn(),
+            zadd: vi.fn(),
+            incr: vi.fn().mockResolvedValue(1)
         };
 
         engine = new ComboEngine(
@@ -75,15 +77,20 @@ describe("ComboEngine Core Behaviors", () => {
         };
 
         const eventSpy = vi.fn();
-        engine.events.on("COMBO_CREATED", eventSpy);
+        engine.events.on("COMBO_STATE_UPDATE", eventSpy);
 
         const session = await engine.createComboRFQ(req);
 
         expect(session).toBeDefined();
         expect(session.state).toBe("OPEN");
         expect(comboRepoMock.createSession).toHaveBeenCalledWith(session);
-        expect(redisMock.hSet).toHaveBeenCalled();
-        expect(eventSpy).toHaveBeenCalledWith(session);
+        expect(redisMock.hset).toHaveBeenCalled();
+        expect(eventSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+                combo_id: session.id,
+                state: "OPEN"
+            })
+        );
         expect(riskEngineMock.validateRFQCreation).toHaveBeenCalled();
     });
 
@@ -103,14 +110,19 @@ describe("ComboEngine Core Behaviors", () => {
         };
 
         const eventSpy = vi.fn();
-        engine.events.on("COMBO_QUOTE_RECEIVED", eventSpy);
+        engine.events.on("COMBO_QUOTE_UPDATE", eventSpy);
 
         await engine.collectLPQuote(lpReq);
 
         expect(normalizerMock.normalizeLPQuote).toHaveBeenCalled();
-        expect(redisMock.zAdd).toHaveBeenCalledWith("combo:session-1:quotes", { score: 50, value: JSON.stringify(mockNormalized) });
+        expect(redisMock.zadd).toHaveBeenCalledWith("combo:session-1:quotes", 50, JSON.stringify(mockNormalized));
         expect(quoteRepoMock.saveQuote).toHaveBeenCalledWith(mockNormalized);
-        expect(eventSpy).toHaveBeenCalledWith(mockNormalized);
+        expect(eventSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+                combo_id: "session-1",
+                quoteId: "quote-1"
+            })
+        );
     });
 
     it("should accept combo, reserve risk, and execute execution plan", async () => {
@@ -125,7 +137,7 @@ describe("ComboEngine Core Behaviors", () => {
         const mockQuote = { id: "quote-1", effectiveCost: "50" };
         quoteRepoMock.getQuotesForSession.mockResolvedValue([mockQuote]);
 
-        const mockPlan = { id: "plan-1" };
+        const mockPlan = { id: "plan-1", steps: [] };
         planBuilderMock.buildExecutionPlan.mockResolvedValue(mockPlan);
 
         const execEventSpy = vi.fn();
@@ -137,7 +149,9 @@ describe("ComboEngine Core Behaviors", () => {
         expect(planBuilderMock.buildExecutionPlan).toHaveBeenCalled();
         expect(executionRouterMock.executePlan).toHaveBeenCalledWith(mockPlan);
         expect(riskEngineMock.updateExposureAfterExecution).toHaveBeenCalled();
-        expect(execEventSpy).toHaveBeenCalledWith({ sessionId: "session-1", status: "SETTLED" });
+        expect(execEventSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ combo_id: "session-1", status: "SETTLED" })
+        );
         expect(comboRepoMock.updateSessionState).toHaveBeenCalledWith("session-1", "EXECUTED");
     });
 
@@ -184,16 +198,19 @@ describe("ComboEngine Core Behaviors", () => {
             }
         });
 
-        planBuilderMock.buildExecutionPlan.mockResolvedValue({ id: "plan-1" });
+        planBuilderMock.buildExecutionPlan.mockResolvedValue({ id: "plan-1", steps: [] });
 
         const req1 = engine.acceptCombo("session-1", "quote-1");
         const req2 = engine.acceptCombo("session-1", "quote-1");
 
         const results = await Promise.allSettled([req1, req2]);
 
-        expect(results[0].status).toBe("fulfilled");
-        expect(results[1].status).toBe("rejected");
-        expect((results[1] as any).reason.message).toContain("Overlapping exposure");
+        const fulfilled = results.filter((result) => result.status === "fulfilled");
+        const rejected = results.filter((result) => result.status === "rejected");
+
+        expect(fulfilled.length).toBe(1);
+        expect(rejected.length).toBe(1);
+        expect((rejected[0] as PromiseRejectedResult).reason.message).toContain("Overlapping exposure");
     });
 
     it("should rollback reservation when execution fails downstream", async () => {

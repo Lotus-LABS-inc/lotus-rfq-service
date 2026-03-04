@@ -98,9 +98,9 @@ describe("Combo Lifecycle Integration Tests", () => {
         };
 
         const redisMock = {
-            hSet: vi.fn(),
-            expireAt: vi.fn(),
-            zAdd: vi.fn(),
+            hset: vi.fn(),
+            expireat: vi.fn(),
+            zadd: vi.fn(),
             incr: vi.fn().mockResolvedValue(1),
             expire: vi.fn()
         };
@@ -140,8 +140,8 @@ describe("Combo Lifecycle Integration Tests", () => {
             comboSessionId: session.id,
             isComboQuote: false,
             perLegPrices: [
-                { legId: session.legs[0].id, price: "0.12", size: "100" },
-                { legId: session.legs[1].id, price: "0.13", size: "50" }
+                { legId: session.legs[0]!.id, price: "0.12", size: "100" },
+                { legId: session.legs[1]!.id, price: "0.13", size: "50" }
             ],
             validUntil: new Date(Date.now() + 60_000).toISOString()
         });
@@ -152,8 +152,8 @@ describe("Combo Lifecycle Integration Tests", () => {
             comboSessionId: session.id,
             isComboQuote: false,
             perLegPrices: [
-                { legId: session.legs[0].id, price: "0.50", size: "100" },
-                { legId: session.legs[1].id, price: "0.60", size: "50" }
+                { legId: session.legs[0]!.id, price: "0.50", size: "100" },
+                { legId: session.legs[1]!.id, price: "0.60", size: "50" }
             ],
             validUntil: new Date(Date.now() + 60_000).toISOString()
         });
@@ -189,7 +189,7 @@ describe("Combo Lifecycle Integration Tests", () => {
 
         // Make leg[0] fail
         executionClientMock.executeTrade.mockImplementation(async (step: any) => {
-            if (step.legId === session.legs[0].id) return { status: "REJECTED", filledQuantity: "0" };
+            if (step.legId === session.legs[0]!.id) return { status: "REJECTED", filledQuantity: "0" };
             return { status: "FILLED", filledQuantity: "50" };
         });
 
@@ -210,7 +210,7 @@ describe("Combo Lifecycle Integration Tests", () => {
 
         // leg[0] rejected, leg[1] filled
         executionClientMock.executeTrade.mockImplementation(async (step: any) => {
-            if (step.legId === session.legs[0].id) return { status: "REJECTED", filledQuantity: "0" };
+            if (step.legId === session.legs[0]!.id) return { status: "REJECTED", filledQuantity: "0" };
             return { status: "FILLED", filledQuantity: "50" };
         });
 

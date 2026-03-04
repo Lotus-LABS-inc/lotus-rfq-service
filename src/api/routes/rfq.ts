@@ -3,6 +3,8 @@ import { z } from "zod";
 import { CanonicalMarketFetchError } from "../../core/rfq-engine/canonical-market-client.js";
 import { MarketInactiveError, type CreateRFQResult } from "../../core/rfq-engine/create-rfq-service.js";
 import { RiskRejectedError } from "../../core/risk-engine.js";
+import { InsufficientLiquidityError } from "../../core/sor/splitter.js";
+import { MissingReservationTokenError } from "../../core/sor/order-router.js";
 
 const createRFQRequestSchema = z.object({
   canonicalMarketId: z.string().min(1),
@@ -21,9 +23,17 @@ const acceptRFQRequestSchema = z.object({
 
 type AcceptRFQRequest = z.infer<typeof acceptRFQRequestSchema>;
 
+interface AcceptRFQResponse {
+  status: "PLAN_ACCEPTED";
+  plan_id: string;
+  plan_state: string;
+  dispatch_mode: "awaited" | "background";
+  final_status?: "COMPLETED" | "PARTIAL" | "FAILED" | "UNWOUND";
+}
+
 export interface RFQRouteHandlers {
   createRFQ(request: CreateRFQRequest): Promise<CreateRFQResult>;
-  acceptRFQ(sessionId: string, request: AcceptRFQRequest): Promise<unknown>;
+  acceptRFQ(sessionId: string, request: AcceptRFQRequest): Promise<AcceptRFQResponse>;
 }
 
 export const registerRFQRoute = async (
@@ -85,12 +95,32 @@ export const registerRFQRoute = async (
 
     try {
       const result = await handlers.acceptRFQ(id, parsed.data);
-      return reply.send(result);
+      return reply.status(202).send(result);
     } catch (error) {
+      if (error instanceof InsufficientLiquidityError) {
+        return reply.status(409).send({
+          code: "PLAN_REJECTED",
+          reason: "insufficient_liquidity",
+          message: error.message,
+          details: {
+            legId: error.legId,
+            remainingSize: error.remainingSize
+          }
+        });
+      }
+
       if (error instanceof RiskRejectedError) {
-        return reply.status(403).send({
-          error: "risk_rejected",
-          reason: "quota_exceeded",
+        return reply.status(409).send({
+          code: "PLAN_REJECTED",
+          reason: "risk_rejected",
+          message: error.message
+        });
+      }
+
+      if (error instanceof MissingReservationTokenError) {
+        return reply.status(409).send({
+          code: "PLAN_REJECTED",
+          reason: "risk_rejected",
           message: error.message
         });
       }
@@ -98,4 +128,3 @@ export const registerRFQRoute = async (
     }
   });
 };
-

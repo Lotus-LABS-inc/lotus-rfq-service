@@ -32,9 +32,17 @@ const rankedQuote = (quoteId: string): RankedQuote => ({
 });
 
 describe("ExecutionRouterService", () => {
+  const riskEngineStub = {
+    validateRFQCreation: vi.fn(async () => undefined),
+    validateBeforeExecution: vi.fn(async () => "reservation-token"),
+    updateExposureAfterExecution: vi.fn(async () => undefined),
+    reconcileExposureSnapshot: vi.fn(async () => undefined)
+  };
+
   it("locks rfq, executes valid quote, persists success, and emits execution update", async () => {
     const sessionRepository = {
-      findById: vi.fn(async () => ({ id: "session-1", status: "EXECUTING" }))
+      findById: vi.fn(async () => ({ id: "session-1", status: "ACCEPTED" })),
+      updateStatus: vi.fn(async () => ({ id: "session-1", status: "SETTLED" }))
     } as unknown as RFQSessionRepository;
     const quoteRepository = {
       findByExternalQuoteId: vi.fn(async () => ({
@@ -70,6 +78,7 @@ describe("ExecutionRouterService", () => {
       },
       eventEmitter,
       logger: { warn: vi.fn(), error: vi.fn() },
+      riskEngine: riskEngineStub,
       now: () => new Date("2026-02-25T10:00:00.000Z")
     });
 
@@ -99,7 +108,8 @@ describe("ExecutionRouterService", () => {
   it("fails when lock cannot be acquired", async () => {
     const service = new ExecutionRouterService({
       sessionRepository: {
-        findById: vi.fn(async () => ({ id: "session-2", status: "EXECUTING" }))
+        findById: vi.fn(async () => ({ id: "session-2", status: "ACCEPTED" })),
+        updateStatus: vi.fn(async () => ({ id: "session-2", status: "EXECUTING" }))
       } as unknown as RFQSessionRepository,
       quoteRepository: {
         findByExternalQuoteId: vi.fn()
@@ -117,7 +127,8 @@ describe("ExecutionRouterService", () => {
       eventEmitter: {
         emitEvent: vi.fn()
       } as RFQEventEmitter,
-      logger: { warn: vi.fn(), error: vi.fn() }
+      logger: { warn: vi.fn(), error: vi.fn() },
+      riskEngine: riskEngineStub
     });
 
     await expect(
@@ -133,7 +144,8 @@ describe("ExecutionRouterService", () => {
     const executionCreate = vi.fn(async () => ({ id: "exec" }));
     const service = new ExecutionRouterService({
       sessionRepository: {
-        findById: vi.fn(async () => ({ id: "session-3", status: "EXECUTING" }))
+        findById: vi.fn(async () => ({ id: "session-3", status: "ACCEPTED" })),
+        updateStatus: vi.fn(async () => ({ id: "session-3", status: "EXECUTING" }))
       } as unknown as RFQSessionRepository,
       quoteRepository: {
         findByExternalQuoteId: vi
@@ -173,6 +185,7 @@ describe("ExecutionRouterService", () => {
         emitEvent: vi.fn()
       } as RFQEventEmitter,
       logger: { warn: vi.fn(), error: vi.fn() },
+      riskEngine: riskEngineStub,
       now: () => new Date("2026-02-25T10:00:00.000Z")
     });
 
@@ -196,7 +209,7 @@ describe("ExecutionRouterService", () => {
     const sessionUpdateStatus = vi.fn(async () => ({ id: "session-4", status: "FAILED" }));
     const service = new ExecutionRouterService({
       sessionRepository: {
-        findById: vi.fn(async () => ({ id: "session-4", status: "EXECUTING" })),
+        findById: vi.fn(async () => ({ id: "session-4", status: "ACCEPTED" })),
         updateStatus: sessionUpdateStatus
       } as unknown as RFQSessionRepository,
       quoteRepository: {
@@ -221,6 +234,7 @@ describe("ExecutionRouterService", () => {
         emitEvent: vi.fn()
       } as RFQEventEmitter,
       logger: { warn: vi.fn(), error: vi.fn() },
+      riskEngine: riskEngineStub,
       now: () => new Date("2026-02-25T10:00:00.000Z")
     });
 

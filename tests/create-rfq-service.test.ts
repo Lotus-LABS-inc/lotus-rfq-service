@@ -55,6 +55,12 @@ describe("CreateRFQService", () => {
     const eventEmitter = {
       emitEvent: vi.fn()
     } as RFQEventEmitter;
+    const riskEngine = {
+      validateRFQCreation: vi.fn(async () => undefined),
+      validateBeforeExecution: vi.fn(async () => "reservation-token"),
+      updateExposureAfterExecution: vi.fn(async () => undefined),
+      reconcileExposureSnapshot: vi.fn(async () => undefined)
+    };
 
     const service = new CreateRFQService({
       sessionRepository,
@@ -63,6 +69,7 @@ describe("CreateRFQService", () => {
       canonicalMarketClient,
       eventEmitter,
       logger: loggerStub,
+      riskEngine,
       now: () => new Date("2026-02-25T12:00:00.000Z"),
       createRequestId: () => "req-1"
     });
@@ -114,7 +121,13 @@ describe("CreateRFQService", () => {
       eventEmitter: {
         emitEvent: vi.fn()
       } as RFQEventEmitter,
-      logger: loggerStub
+      logger: loggerStub,
+      riskEngine: {
+        validateRFQCreation: vi.fn(async () => undefined),
+        validateBeforeExecution: vi.fn(async () => "reservation-token"),
+        updateExposureAfterExecution: vi.fn(async () => undefined),
+        reconcileExposureSnapshot: vi.fn(async () => undefined)
+      }
     });
 
     await expect(

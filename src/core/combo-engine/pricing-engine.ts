@@ -1,4 +1,4 @@
-import { Decimal } from "decimal.js";
+import Decimal from "decimal.js";
 import { ComboRFQSession, ComboQuote } from "./types.js";
 
 interface CanonicalMarketProbabilities {
@@ -8,7 +8,7 @@ interface CanonicalMarketProbabilities {
 /**
  * Ensures a value is a valid numeric string, falling back to 0.
  */
-function safeDecimal(val: string | number | undefined | null): Decimal {
+function safeDecimal(val: string | number | undefined | null): InstanceType<typeof Decimal> {
     if (!val) return new Decimal(0);
     try {
         const d = new Decimal(val);

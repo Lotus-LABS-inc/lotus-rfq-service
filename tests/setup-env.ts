@@ -12,5 +12,4 @@ for (const envPath of envCandidates) {
   }
 
   process.loadEnvFile(envPath);
-  break;
 }

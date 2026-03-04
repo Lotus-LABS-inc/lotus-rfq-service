@@ -49,17 +49,17 @@ describe("ExecutionPlanBuilder", () => {
         expect(plan.steps.length).toBe(2);
 
         // Verify composite routing logic
-        expect(plan.steps[0].connector).toBe("BINANCE_COMBO_ENDPOINT");
-        expect(plan.steps[1].connector).toBe("BINANCE_COMBO_ENDPOINT");
+        expect(plan.steps[0]!.connector).toBe("BINANCE_COMBO_ENDPOINT");
+        expect(plan.steps[1]!.connector).toBe("BINANCE_COMBO_ENDPOINT");
 
         // FOK enforcement for composite overrides
-        expect(plan.steps[0].retryPolicy.maxRetries).toBe(0);
+        expect(plan.steps[0]!.retryPolicy.maxRetries).toBe(0);
 
         // Idempotency tests
-        expect(plan.steps[0].clientOrderId).toBeDefined();
-        expect(plan.steps[0].idempotencyKey).toBeDefined();
+        expect(plan.steps[0]!.clientOrderId).toBeDefined();
+        expect(plan.steps[0]!.idempotencyKey).toBeDefined();
         // Keys must not collide
-        expect(plan.steps[0].idempotencyKey).not.toBe(plan.steps[1].idempotencyKey);
+        expect(plan.steps[0]!.idempotencyKey).not.toBe(plan.steps[1]!.idempotencyKey);
 
         expect(repoMock.savePlan).toHaveBeenCalledWith(plan);
     });
@@ -85,10 +85,10 @@ describe("ExecutionPlanBuilder", () => {
         expect(plan.steps.length).toBe(2);
 
         // Without connector defaults to DEFAULT_SOR
-        expect(plan.steps[0].connector).toBe("DEFAULT_SOR");
-        expect(plan.steps[0].price).toBe("0.50");
-        expect(plan.steps[0].unwindStrategy).toBe("MARKET_SELL"); // Mapped to Policy correctly
-        expect(plan.steps[0].retryPolicy.maxRetries).toBe(2); // Regular SOR legs should allow transparent retry loops
+        expect(plan.steps[0]!.connector).toBe("DEFAULT_SOR");
+        expect(plan.steps[0]!.price).toBe("0.50");
+        expect(plan.steps[0]!.unwindStrategy).toBe("MARKET_SELL"); // Mapped to Policy correctly
+        expect(plan.steps[0]!.retryPolicy.maxRetries).toBe(2); // Regular SOR legs should allow transparent retry loops
     });
 
     it("should gracefully finalize DRAFT plans to READY", async () => {

@@ -1,4 +1,4 @@
-import { pino } from "pino";
+import type { Logger } from "pino";
 import crypto from "crypto";
 import { ComboRFQSession, ComboQuote, AcceptancePolicy } from "../combo-engine/types.js";
 
@@ -48,7 +48,7 @@ export interface IExecutionPlanRepository {
 export class ExecutionPlanBuilder implements IExecutionPlanBuilder {
     public constructor(
         private readonly repository: IExecutionPlanRepository,
-        private readonly logger: pino.Logger
+        private readonly logger: Logger
     ) { }
 
     /**

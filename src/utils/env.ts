@@ -14,6 +14,9 @@ const envSchema = z
     DATABASE_URL: z.string().url().optional(),
     SUPABASE_DB_URL: z.string().url().optional(),
     JWT_SECRET: z.string().min(32),
+    COMBO_RFQ_ENABLED: z.coerce.boolean().default(false),
+    SOR_ACCEPT_AON_AWAIT: z.coerce.boolean().default(true),
+    SOR_ACCEPT_NON_AON_BACKGROUND: z.coerce.boolean().default(true),
     RELIABILITY_WEIGHT: z.coerce.number().min(0).max(1).default(0.05),
     LATENCY_WEIGHT: z.coerce.number().min(0).max(1).default(0.03),
     FAILURE_WEIGHT: z.coerce.number().min(0).max(1).default(0.08)

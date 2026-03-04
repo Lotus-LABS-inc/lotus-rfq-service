@@ -1,4 +1,4 @@
-import { pino } from "pino";
+import type { Logger } from "pino";
 import { ExecutionPlan, ExecutionStep } from "../execution-plan/execution-plan-builder.js";
 import { AcceptancePolicy } from "./types.js";
 import { IComboRiskEngine } from "./combo-engine.js";
@@ -20,7 +20,7 @@ export class ExecutePlanRunner {
         private readonly executionClient: IExecutionClient,
         private readonly repository: IExecutionRepository,
         private readonly riskEngine: IComboRiskEngine,
-        private readonly logger: pino.Logger
+        private readonly logger: Logger
     ) { }
 
     /**
@@ -50,7 +50,11 @@ export class ExecutePlanRunner {
         const failures: string[] = [];
 
         results.forEach((res, index) => {
-            const legId = stepsToExecute[index].legId;
+            const step = stepsToExecute[index];
+            if (!step) {
+                return;
+            }
+            const legId = step.legId;
             if (res.status === "fulfilled" && res.value.status === "FILLED") {
                 successes.push(legId);
             } else {

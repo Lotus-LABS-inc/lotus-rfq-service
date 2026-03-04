@@ -78,7 +78,7 @@ export interface ExecutionRouterDependencies {
   sessionManager: RFQSessionManager;
   executionGateway: ExecutionGateway;
   eventEmitter: RFQEventEmitter;
-  logger: Logger;
+  logger: Pick<Logger, "warn" | "error">;
   lpStatsRepository?: LPStatsRepository;
   now?: () => Date;
   lockOwnerFactory?: () => string;
@@ -346,7 +346,10 @@ export class ExecutionRouterService {
 
     const stateMachine = new RFQStateMachine({
       initialState: fromState,
-      logger: this.deps.logger,
+      logger: {
+        info: (payload, message) => this.deps.logger.warn(payload, message),
+        error: (payload, message) => this.deps.logger.error(payload, message)
+      },
       now: this.now
     });
 

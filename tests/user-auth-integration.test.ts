@@ -17,6 +17,12 @@ describe("RFQ Route JWT Integration", () => {
                 sessionId: "session-1",
                 state: "BROADCAST" as const,
                 expiresAt: new Date().toISOString()
+            })),
+            acceptRFQ: vi.fn(async () => ({
+                status: "PLAN_ACCEPTED" as const,
+                plan_id: "plan-1",
+                plan_state: "DRAFT",
+                dispatch_mode: "background" as const
             }))
         });
 

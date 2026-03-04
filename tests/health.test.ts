@@ -24,6 +24,8 @@ const createRedisStub = (): RedisClient => {
     unsubscribe: async () => 1,
     set: async () => "OK",
     get: async () => null,
+    incrbyfloat: async () => "0",
+    eval: async () => 1,
     expire: async () => 1,
     ttl: async () => 60,
     del: async () => 1,
@@ -58,7 +60,12 @@ describe("infrastructure scaffold", () => {
       pgPool: {} as unknown as Pool,
       db: {} as AppDb,
       canonicalServiceBaseUrl: "http://localhost:4001",
-      jwtSecret: "test-secret-at-least-thirty-two-chars"
+      jwtSecret: "test-secret-at-least-thirty-two-chars",
+      reliabilityWeight: 0.05,
+      latencyWeight: 0.03,
+      failureWeight: 0.08,
+      sorAcceptAonAwait: true,
+      sorAcceptNonAonBackground: true
     });
 
     const response = await app.inject({
@@ -83,7 +90,13 @@ describe("infrastructure scaffold", () => {
       REDIS_URL: "redis://localhost:6379",
       CANONICAL_SERVICE_BASE_URL: "http://localhost:4001",
       DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_rfq",
-      JWT_SECRET: "test-secret-at-least-thirty-two-chars"
+      JWT_SECRET: "test-secret-at-least-thirty-two-chars",
+      COMBO_RFQ_ENABLED: "false",
+      SOR_ACCEPT_AON_AWAIT: "true",
+      SOR_ACCEPT_NON_AON_BACKGROUND: "true",
+      RELIABILITY_WEIGHT: "0.05",
+      LATENCY_WEIGHT: "0.03",
+      FAILURE_WEIGHT: "0.08"
     });
 
     expect(env.PORT).toBe(3030);
@@ -109,7 +122,12 @@ describe("infrastructure scaffold", () => {
       pgPool: {} as unknown as Pool,
       db: {} as AppDb,
       canonicalServiceBaseUrl: "http://localhost:4001",
-      jwtSecret: "test-secret-at-least-thirty-two-chars"
+      jwtSecret: "test-secret-at-least-thirty-two-chars",
+      reliabilityWeight: 0.05,
+      latencyWeight: 0.03,
+      failureWeight: 0.08,
+      sorAcceptAonAwait: true,
+      sorAcceptNonAonBackground: true
     });
 
     expect(app.server.listening).toBe(false);
@@ -145,7 +163,13 @@ describe("bootstrap lifecycle", () => {
           REDIS_URL: "redis://localhost:6379",
           CANONICAL_SERVICE_BASE_URL: "http://localhost:4001",
           DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_rfq",
-          JWT_SECRET: "test-secret-at-least-thirty-two-chars"
+          JWT_SECRET: "test-secret-at-least-thirty-two-chars",
+          COMBO_RFQ_ENABLED: false,
+          SOR_ACCEPT_AON_AWAIT: true,
+          SOR_ACCEPT_NON_AON_BACKGROUND: true,
+          RELIABILITY_WEIGHT: 0.05,
+          LATENCY_WEIGHT: 0.03,
+          FAILURE_WEIGHT: 0.08
         };
       },
       createLogger: () => {
@@ -210,7 +234,13 @@ describe("bootstrap lifecycle", () => {
         REDIS_URL: "redis://localhost:6379",
         CANONICAL_SERVICE_BASE_URL: "http://localhost:4001",
         DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_rfq",
-        JWT_SECRET: "test-secret-at-least-thirty-two-chars"
+        JWT_SECRET: "test-secret-at-least-thirty-two-chars",
+        COMBO_RFQ_ENABLED: false,
+        SOR_ACCEPT_AON_AWAIT: true,
+        SOR_ACCEPT_NON_AON_BACKGROUND: true,
+        RELIABILITY_WEIGHT: 0.05,
+        LATENCY_WEIGHT: 0.03,
+        FAILURE_WEIGHT: 0.08
       }),
       createLogger: () => createTestLogger(),
       createRedisClient: () => ({} as unknown as RedisClient),

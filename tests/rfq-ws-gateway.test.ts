@@ -90,6 +90,14 @@ class FakeRedisClient implements RedisClient {
     return null;
   }
 
+  public async incrbyfloat(): Promise<string> {
+    return "0";
+  }
+
+  public async eval(): Promise<unknown> {
+    return 1;
+  }
+
   public async expire(): Promise<number> {
     return 1;
   }

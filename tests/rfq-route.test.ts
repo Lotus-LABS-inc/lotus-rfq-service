@@ -2,6 +2,8 @@ import Fastify, { type preHandlerHookHandler } from "fastify";
 import { describe, expect, it, vi } from "vitest";
 import { CanonicalMarketFetchError } from "../src/core/rfq-engine/canonical-market-client.js";
 import { MarketInactiveError } from "../src/core/rfq-engine/create-rfq-service.js";
+import { RiskRejectedError } from "../src/core/risk-engine.js";
+import { InsufficientLiquidityError } from "../src/core/sor/splitter.js";
 import { registerRFQRoute } from "../src/api/routes/rfq.js";
 
 describe("POST /rfq", () => {
@@ -9,7 +11,8 @@ describe("POST /rfq", () => {
     const app = Fastify({ logger: false });
     const passThroughAuth: preHandlerHookHandler = async () => { };
     await registerRFQRoute(app, passThroughAuth, {
-      createRFQ: vi.fn()
+      createRFQ: vi.fn(),
+      acceptRFQ: vi.fn()
     });
 
     const response = await app.inject({
@@ -34,7 +37,10 @@ describe("POST /rfq", () => {
     }));
 
     const passThroughAuth: preHandlerHookHandler = async () => { };
-    await registerRFQRoute(app, passThroughAuth, { createRFQ });
+    await registerRFQRoute(app, passThroughAuth, {
+      createRFQ,
+      acceptRFQ: vi.fn()
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -64,7 +70,8 @@ describe("POST /rfq", () => {
     await registerRFQRoute(app, passThroughAuth, {
       createRFQ: vi.fn(async () => {
         throw new MarketInactiveError("mkt-closed");
-      })
+      }),
+      acceptRFQ: vi.fn()
     });
 
     const response = await app.inject({
@@ -90,7 +97,8 @@ describe("POST /rfq", () => {
     await registerRFQRoute(app, passThroughAuth, {
       createRFQ: vi.fn(async () => {
         throw new CanonicalMarketFetchError("canonical service unavailable");
-      })
+      }),
+      acceptRFQ: vi.fn()
     });
 
     const response = await app.inject({
@@ -111,3 +119,85 @@ describe("POST /rfq", () => {
   });
 });
 
+describe("POST /rfq/:id/accept", () => {
+  it("returns 202 with plan response when accepted", async () => {
+    const app = Fastify({ logger: false });
+    const passThroughAuth: preHandlerHookHandler = async () => { };
+    await registerRFQRoute(app, passThroughAuth, {
+      createRFQ: vi.fn(),
+      acceptRFQ: vi.fn(async () => ({
+        status: "PLAN_ACCEPTED" as const,
+        plan_id: "plan-1",
+        plan_state: "DRAFT",
+        dispatch_mode: "background" as const
+      }))
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/rfq/session-1/accept",
+      payload: {
+        quoteId: "quote-1"
+      }
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      status: "PLAN_ACCEPTED",
+      plan_id: "plan-1"
+    });
+    await app.close();
+  });
+
+  it("maps insufficient liquidity to structured 409", async () => {
+    const app = Fastify({ logger: false });
+    const passThroughAuth: preHandlerHookHandler = async () => { };
+    await registerRFQRoute(app, passThroughAuth, {
+      createRFQ: vi.fn(),
+      acceptRFQ: vi.fn(async () => {
+        throw new InsufficientLiquidityError("a0eb58b9-a89c-48a7-bda8-b08a050ad95e", 2);
+      })
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/rfq/session-1/accept",
+      payload: {
+        quoteId: "quote-1"
+      }
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      code: "PLAN_REJECTED",
+      reason: "insufficient_liquidity"
+    });
+    await app.close();
+  });
+
+  it("maps risk rejection to structured 409", async () => {
+    const app = Fastify({ logger: false });
+    const passThroughAuth: preHandlerHookHandler = async () => { };
+    await registerRFQRoute(app, passThroughAuth, {
+      createRFQ: vi.fn(),
+      acceptRFQ: vi.fn(async () => {
+        throw new RiskRejectedError("quota_exceeded");
+      })
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/rfq/session-1/accept",
+      payload: {
+        quoteId: "quote-1"
+      }
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      code: "PLAN_REJECTED",
+      reason: "risk_rejected"
+    });
+    await app.close();
+  });
+});

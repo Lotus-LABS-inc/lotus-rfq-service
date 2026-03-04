@@ -2,6 +2,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import Fastify from "fastify";
+import type { FastifyRequest } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { buildServer } from "../../src/api/server.js";
 import { ExecutionRouterService } from "../../src/core/execution-router/execution-router.js";
@@ -24,6 +25,7 @@ const ENV_READY = Boolean(TEST_DB_URL && TEST_REDIS_URL);
 
 const logger = pino({ level: "silent" });
 const RUN_PREFIX = `it:${Date.now()}:${randomUUID()}:`;
+const makeUuid = (): string => randomUUID();
 
 interface LPKeyFixture {
   lpId: string;
@@ -58,20 +60,40 @@ const createSignedHeaders = (
 };
 
 const applyMigrations = async (pool: Pool): Promise<void> => {
-  const migrationsDir = path.resolve(process.cwd(), "infra", "migrations");
-  const files = (await readdir(migrationsDir))
-    .filter((name) => name.endsWith(".sql"))
-    .sort((left, right) => left.localeCompare(right));
+  const migrationDirs = [
+    path.resolve(process.cwd(), "infra", "migrations"),
+    path.resolve(process.cwd(), "sql", "migrations")
+  ];
 
-  for (const file of files) {
-    const sql = await readFile(path.join(migrationsDir, file), "utf8");
-    await pool.query(sql);
+  for (const migrationsDir of migrationDirs) {
+    const files = (await readdir(migrationsDir))
+      .filter((name) => name.endsWith(".sql"))
+      .sort((left, right) => left.localeCompare(right));
+
+    for (const file of files) {
+      const sql = await readFile(path.join(migrationsDir, file), "utf8");
+      try {
+        await pool.query(sql);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          ("code" in error && (error as { code?: string }).code === "42P07")
+        ) {
+          continue;
+        }
+        throw error;
+      }
+    }
   }
 };
 
 const clearPersistentState = async (pool: Pool): Promise<void> => {
   await pool.query(
     `TRUNCATE TABLE
+      route_history,
+      route_steps,
+      route_candidates,
+      routing_plans,
       rfq_executions,
       rfq_events,
       rfq_quotes,
@@ -203,7 +225,7 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
 
   beforeAll(async () => {
     canonicalService = Fastify({ logger: false });
-    canonicalService.get("/markets/:id", async (request) => {
+    canonicalService.get("/markets/:id", async (request: FastifyRequest<{ Params: { id: string } }>) => {
       const params = request.params as { id: string };
       return {
         id: params.id,
@@ -229,7 +251,12 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
       pgPool: pool,
       db: createDrizzleDb(pool),
       canonicalServiceBaseUrl: "http://127.0.0.1:4101",
-      jwtSecret
+      jwtSecret,
+      reliabilityWeight: 0.05,
+      latencyWeight: 0.03,
+      failureWeight: 0.08,
+      sorAcceptAonAwait: true,
+      sorAcceptNonAonBackground: true
     });
 
     sessionRepository = new RFQSessionRepository(pool);
@@ -283,6 +310,141 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
     }
   }, 60000);
 
+  it("SOR handoff: accept creates plan, persists reservation token, and runs plan", async () => {
+    const testApp = must(app, "app");
+    const sessions = must(sessionRepository, "sessionRepository");
+    const pg = must(pool, "pool");
+    const [lp] = await createLPKeys(pg);
+
+    const sessionId = randomUUID();
+    const quoteId = `${RUN_PREFIX}sor-quote-1`;
+
+    await pg.query(
+      `INSERT INTO rfq_sessions
+      (id, request_id, canonical_market_id, taker_id, side, quantity, status, idempotency_key, expires_at, metadata)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW() + INTERVAL '5 minutes', $9::jsonb)`,
+      [
+        sessionId,
+        `${RUN_PREFIX}${randomUUID()}`,
+        TEST_CANONICAL_MARKET_ID,
+        makeUuid(),
+        "buy",
+        "10",
+        "AWAITING_USER",
+        `${RUN_PREFIX}${randomUUID()}`,
+        JSON.stringify({ acceptance_policy: "ALL_OR_NONE" })
+      ]
+    );
+    trackSessionKeys(sessionId);
+
+    await pg.query(
+      `INSERT INTO rfq_quotes
+      (id, session_id, lp_key_id, quote_status, price, quantity, fee_bps, valid_until, quote_payload)
+      VALUES ($1, $2, $3, 'RECEIVED', '1.10', '10', 1, NOW() + INTERVAL '5 minutes', $4::jsonb)`,
+      [
+        randomUUID(),
+        sessionId,
+        lp?.keyDbId ?? "",
+        JSON.stringify({ quoteId, lpId: lp?.lpId ?? "" })
+      ]
+    );
+
+    const acceptResponse = await testApp.inject({
+      method: "POST",
+      url: `/rfq/${sessionId}/accept`,
+      payload: { quoteId },
+      headers: {
+        authorization: `Bearer ${testApp.jwt.sign({ userId: "test-taker-sor" })}`
+      }
+    });
+
+    expect(acceptResponse.statusCode).toBe(202);
+    const body = acceptResponse.json() as {
+      status: string;
+      plan_id: string;
+    };
+    expect(body.status).toBe("PLAN_ACCEPTED");
+    expect(body.plan_id).toBeTruthy();
+
+    const plan = await pg.query<{ id: string; reservation_token: string | null }>(
+      "SELECT id, reservation_token FROM routing_plans WHERE id = $1 LIMIT 1",
+      [body.plan_id]
+    );
+    expect(plan.rows[0]?.reservation_token).toBeTruthy();
+
+    const stepCount = await pg.query<{ count: string }>(
+      "SELECT COUNT(*)::text AS count FROM route_steps WHERE routing_plan_id = $1",
+      [body.plan_id]
+    );
+    expect(Number.parseInt(stepCount.rows[0]?.count ?? "0", 10)).toBeGreaterThan(0);
+
+    const runnerContextCount = await pg.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+       FROM route_history
+       WHERE routing_plan_id = $1
+         AND event_type = 'ROUTE_RUN_CONTEXT'
+         AND payload->>'reservation_token' IS NOT NULL`,
+      [body.plan_id]
+    );
+    expect(Number.parseInt(runnerContextCount.rows[0]?.count ?? "0", 10)).toBeGreaterThan(0);
+
+    const finalSession = await sessions.findById(sessionId);
+    expect(finalSession?.status).toBe("SETTLED");
+  }, 60000);
+
+  it("SOR handoff: risk rejection returns structured 409", async () => {
+    const testApp = must(app, "app");
+    const pg = must(pool, "pool");
+    const [lp] = await createLPKeys(pg);
+
+    const sessionId = randomUUID();
+    const quoteId = `${RUN_PREFIX}risk-reject-quote`;
+
+    await pg.query(
+      `INSERT INTO rfq_sessions
+      (id, request_id, canonical_market_id, taker_id, side, quantity, status, idempotency_key, expires_at, metadata)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW() + INTERVAL '5 minutes', $9::jsonb)`,
+      [
+        sessionId,
+        `${RUN_PREFIX}${randomUUID()}`,
+        TEST_CANONICAL_MARKET_ID,
+        makeUuid(),
+        "buy",
+        "2000000",
+        "AWAITING_USER",
+        `${RUN_PREFIX}${randomUUID()}`,
+        JSON.stringify({ acceptance_policy: "ALL_OR_NONE" })
+      ]
+    );
+
+    await pg.query(
+      `INSERT INTO rfq_quotes
+      (id, session_id, lp_key_id, quote_status, price, quantity, fee_bps, valid_until, quote_payload)
+      VALUES ($1, $2, $3, 'RECEIVED', '1.00', '2000000', 1, NOW() + INTERVAL '5 minutes', $4::jsonb)`,
+      [
+        randomUUID(),
+        sessionId,
+        lp?.keyDbId ?? "",
+        JSON.stringify({ quoteId, lpId: lp?.lpId ?? "" })
+      ]
+    );
+
+    const acceptResponse = await testApp.inject({
+      method: "POST",
+      url: `/rfq/${sessionId}/accept`,
+      payload: { quoteId },
+      headers: {
+        authorization: `Bearer ${testApp.jwt.sign({ userId: "test-taker-risk" })}`
+      }
+    });
+
+    expect(acceptResponse.statusCode).toBe(409);
+    expect(acceptResponse.json()).toMatchObject({
+      code: "PLAN_REJECTED",
+      reason: "risk_rejected"
+    });
+  }, 60000);
+
   it("Scenario 1: Happy Path", async () => {
     const testApp = must(app, "app");
     const sessions = must(sessionRepository, "sessionRepository");
@@ -298,7 +460,7 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
       url: "/rfq",
       payload: {
         canonicalMarketId: TEST_CANONICAL_MARKET_ID,
-        takerId: `${RUN_PREFIX}taker-1`,
+        takerId: makeUuid(),
         side: "buy",
         quantity: "10",
         idempotencyKey: `${RUN_PREFIX}${randomUUID()}`,
@@ -376,25 +538,27 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
 
     const dbQuotes = await quotes.listBySessionId(sessionId, 10);
     const ranked = rankQuotesByEffectiveCost(
-      dbQuotes.map((quote) => ({
-        quoteId: String(quote.quote_payload.quoteId),
-        basePrice: Number.parseFloat(quote.price),
-        venueFee: quote.fee_bps / 10000,
-        protocolFee: 0,
-        gasCost: 0,
-        slippageEstimate: 0,
-        reliabilityScore: 100,
-        latencyScore: 100,
-        expires_at: quote.valid_until.toISOString(),
-        firm_until:
-          typeof quote.quote_payload.firm_until === "string"
-            ? quote.quote_payload.firm_until
-            : undefined,
-        soft_refresh_flag:
-          typeof quote.quote_payload.soft_refresh_flag === "boolean"
-            ? quote.quote_payload.soft_refresh_flag
-            : false
-      }))
+      dbQuotes.map((quote) => {
+        const base = {
+          quoteId: String(quote.quote_payload.quoteId),
+          basePrice: Number.parseFloat(quote.price),
+          venueFee: quote.fee_bps / 10000,
+          protocolFee: 0,
+          gasCost: 0,
+          slippageEstimate: 0,
+          reliabilityScore: 100,
+          latencyScore: 100,
+          expires_at: quote.valid_until.toISOString(),
+          soft_refresh_flag:
+            typeof quote.quote_payload.soft_refresh_flag === "boolean"
+              ? quote.quote_payload.soft_refresh_flag
+              : false
+        };
+
+        return typeof quote.quote_payload.firm_until === "string"
+          ? { ...base, firm_until: quote.quote_payload.firm_until }
+          : base;
+      })
     );
 
     const executionRouter = new ExecutionRouterService({
@@ -406,8 +570,15 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
         execute: async () => ({ ok: true, venueExecutionRef: `${RUN_PREFIX}exec-ref-1`, transactionHash: "0x1" })
       },
       eventEmitter: emitter,
-      logger
+      logger,
+      riskEngine: {
+        validateRFQCreation: async () => undefined,
+        validateBeforeExecution: async () => "reservation-token",
+        updateExposureAfterExecution: async () => undefined,
+        reconcileExposureSnapshot: async () => undefined
+      }
     });
+    await sessions.updateStatus(sessionId, "ACCEPTED");
 
     const executionResult = await executionRouter.execute({
       sessionId,
@@ -474,7 +645,7 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
       url: "/rfq",
       payload: {
         canonicalMarketId: TEST_CANONICAL_MARKET_ID,
-        takerId: `${RUN_PREFIX}taker-exp`,
+        takerId: makeUuid(),
         side: "buy",
         quantity: "5",
         idempotencyKey: `${RUN_PREFIX}${randomUUID()}`,
@@ -558,10 +729,10 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
         sessionId,
         `${RUN_PREFIX}${randomUUID()}`,
         TEST_CANONICAL_MARKET_ID,
-        `${RUN_PREFIX}taker-cc`,
+        makeUuid(),
         "buy",
         "10",
-        "COLLECTING_QUOTES",
+        "ACCEPTED",
         `${RUN_PREFIX}${randomUUID()}`
       ]
     );
@@ -610,7 +781,13 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
         }
       },
       eventEmitter: emitter,
-      logger
+      logger,
+      riskEngine: {
+        validateRFQCreation: async () => undefined,
+        validateBeforeExecution: async () => "reservation-token",
+        updateExposureAfterExecution: async () => undefined,
+        reconcileExposureSnapshot: async () => undefined
+      }
     });
 
     let releaseStart = (): void => undefined;
@@ -656,7 +833,7 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
       url: "/rfq",
       payload: {
         canonicalMarketId: TEST_CANONICAL_MARKET_ID,
-        takerId: `${RUN_PREFIX}taker-dup`,
+        takerId: makeUuid(),
         side: "buy",
         quantity: "4",
         idempotencyKey: `${RUN_PREFIX}${randomUUID()}`,

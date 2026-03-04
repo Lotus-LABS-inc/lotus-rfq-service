@@ -50,10 +50,10 @@ describe("WebSocket streaming and REST endpoints", () => {
 
         let seqMap: Record<string, number> = {};
         redisMock = {
-            hSet: vi.fn(),
-            expireAt: vi.fn(),
+            hset: vi.fn(),
+            expireat: vi.fn(),
             expire: vi.fn(),
-            zAdd: vi.fn(),
+            zadd: vi.fn(),
             incr: vi.fn(async (key: string) => {
                 if (!seqMap[key]) seqMap[key] = 0;
                 seqMap[key]++;
@@ -106,7 +106,7 @@ describe("WebSocket streaming and REST endpoints", () => {
 
         // Accept
         quoteRepoMock.getQuotesForSession.mockResolvedValue([{ id: "q1", effectiveCost: "0.85" }]);
-        planBuilderMock.buildExecutionPlan.mockResolvedValue({ id: "plan-1" });
+        planBuilderMock.buildExecutionPlan.mockResolvedValue({ id: "plan-1", steps: [] });
         await engine.acceptCombo(session.id, "q1");
 
         expect(emittedPayloads.length).toBe(3);
@@ -117,7 +117,7 @@ describe("WebSocket streaming and REST endpoints", () => {
         expect(emittedPayloads[0].state).toBe("OPEN"); // COMBO_STATE_UPDATE
 
         expect(emittedPayloads[1].event_seq).toBe(2);
-        expect(emittedPayloads[1].quote.id).toBe("q1"); // COMBO_QUOTE_UPDATE
+        expect(emittedPayloads[1].quoteId).toBe("q1"); // COMBO_QUOTE_UPDATE
 
         expect(emittedPayloads[2].event_seq).toBe(3);
         expect(emittedPayloads[2].status).toBe("SETTLED"); // COMBO_EXECUTION_UPDATE 
