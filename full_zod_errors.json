@@ -1,0 +1,6 @@
+[
+  {
+    "test": "SOR build and run integration multi-candidate flow executes across two providers",
+    "message": "AssertionError: expected 1 to be greater than or equal to 2\n    at C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\test\\integration\\sor-build-and-run.integration.test.ts:384:31\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file:///C:/Users/Admin/Documents/lotus-RFQ-service/lotus-rfq-service/node_modules/@vitest/runner/dist/chunk-hooks.js:752:20"
+  }
+]

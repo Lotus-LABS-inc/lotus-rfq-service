@@ -88,19 +88,33 @@ const applyMigrations = async (pool: Pool): Promise<void> => {
 };
 
 const clearPersistentState = async (pool: Pool): Promise<void> => {
-  await pool.query(
-    `TRUNCATE TABLE
-      route_history,
-      route_steps,
-      route_candidates,
-      routing_plans,
-      rfq_executions,
-      rfq_events,
-      rfq_quotes,
-      rfq_sessions,
-      lp_keys
-    RESTART IDENTITY CASCADE`
-  );
+  let attempts = 0;
+  while (attempts < 5) {
+    try {
+      await pool.query(
+        `TRUNCATE TABLE
+          route_history,
+          route_steps,
+          route_candidates,
+          routing_plans,
+          rfq_executions,
+          rfq_events,
+          rfq_quotes,
+          rfq_sessions,
+          lp_keys
+        RESTART IDENTITY CASCADE`
+      );
+      return;
+    } catch (error) {
+      const code = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
+      if (code !== "40P01") {
+        throw error;
+      }
+      attempts += 1;
+      await sleep(100 * attempts);
+    }
+  }
+  throw new Error("Unable to clear persistent integration state due to repeated deadlocks.");
 };
 
 const createLPKeys = async (pool: Pool): Promise<LPKeyFixture[]> => {
@@ -252,6 +266,9 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
       db: createDrizzleDb(pool),
       canonicalServiceBaseUrl: "http://127.0.0.1:4101",
       jwtSecret,
+      sorEnabled: true,
+      sorCanaryShadowEnabled: false,
+      sorCanaryPercent: 0,
       reliabilityWeight: 0.05,
       latencyWeight: 0.03,
       failureWeight: 0.08,
@@ -445,6 +462,81 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
     });
   }, 60000);
 
+  it("SOR feature flag disabled: accept uses legacy path and keeps 202 plan envelope", async () => {
+    const pg = must(pool, "pool");
+    const redis = must(redisClient, "redisClient");
+    const [lp] = await createLPKeys(pg);
+
+    const legacyApp = await buildServer({
+      logger,
+      redisClient: redis,
+      pgPool: pg,
+      db: createDrizzleDb(pg),
+      canonicalServiceBaseUrl: "http://127.0.0.1:4101",
+      jwtSecret: "test-secret-at-least-thirty-two-chars",
+      sorEnabled: false,
+      sorCanaryShadowEnabled: false,
+      sorCanaryPercent: 0,
+      reliabilityWeight: 0.05,
+      latencyWeight: 0.03,
+      failureWeight: 0.08,
+      sorAcceptAonAwait: true,
+      sorAcceptNonAonBackground: true
+    });
+
+    try {
+      const sessionId = randomUUID();
+      const quoteId = `${RUN_PREFIX}legacy-quote-1`;
+
+      await pg.query(
+        `INSERT INTO rfq_sessions
+        (id, request_id, canonical_market_id, taker_id, side, quantity, status, idempotency_key, expires_at, metadata)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW() + INTERVAL '5 minutes', $9::jsonb)`,
+        [
+          sessionId,
+          `${RUN_PREFIX}${randomUUID()}`,
+          TEST_CANONICAL_MARKET_ID,
+          makeUuid(),
+          "buy",
+          "10",
+          "AWAITING_USER",
+          `${RUN_PREFIX}${randomUUID()}`,
+          JSON.stringify({ acceptance_policy: "ALL_OR_NONE" })
+        ]
+      );
+
+      await pg.query(
+        `INSERT INTO rfq_quotes
+        (id, session_id, lp_key_id, quote_status, price, quantity, fee_bps, valid_until, quote_payload)
+        VALUES ($1, $2, $3, 'RECEIVED', '1.05', '10', 1, NOW() + INTERVAL '5 minutes', $4::jsonb)`,
+        [randomUUID(), sessionId, lp?.keyDbId ?? "", JSON.stringify({ quoteId, lpId: lp?.lpId ?? "" })]
+      );
+
+      const acceptResponse = await legacyApp.inject({
+        method: "POST",
+        url: `/rfq/${sessionId}/accept`,
+        payload: { quoteId },
+        headers: {
+          authorization: `Bearer ${legacyApp.jwt.sign({ userId: "test-taker-legacy" })}`
+        }
+      });
+
+      expect(acceptResponse.statusCode).toBe(202);
+      expect(acceptResponse.json()).toMatchObject({
+        status: "PLAN_ACCEPTED",
+        plan_state: "LEGACY_EXECUTED"
+      });
+
+      const routingPlanCount = await pg.query<{ count: string }>(
+        "SELECT COUNT(*)::text AS count FROM routing_plans WHERE rfq_id = $1",
+        [sessionId]
+      );
+      expect(Number.parseInt(routingPlanCount.rows[0]?.count ?? "0", 10)).toBe(0);
+    } finally {
+      await legacyApp.close();
+    }
+  }, 60000);
+
   it("Scenario 1: Happy Path", async () => {
     const testApp = must(app, "app");
     const sessions = must(sessionRepository, "sessionRepository");
@@ -574,7 +666,7 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
       riskEngine: {
         validateRFQCreation: async () => undefined,
         validateBeforeExecution: async () => "reservation-token",
-        updateExposureAfterExecution: async () => undefined,
+        updateExposureAfterExecution: async (_exec: Record<string, unknown>, _isInternal = false) => undefined,
         reconcileExposureSnapshot: async () => undefined
       }
     });
@@ -785,7 +877,7 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
       riskEngine: {
         validateRFQCreation: async () => undefined,
         validateBeforeExecution: async () => "reservation-token",
-        updateExposureAfterExecution: async () => undefined,
+        updateExposureAfterExecution: async (_exec: any, _isInternal = false) => undefined,
         reconcileExposureSnapshot: async () => undefined
       }
     });

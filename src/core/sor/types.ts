@@ -3,6 +3,7 @@ import { z } from "zod";
 export type UUID = string;
 export type CanonicalSide = "buy" | "sell";
 export type SORAcceptancePolicy = "ALL_OR_NONE" | "PARTIAL_ALLOWED" | "BEST_EFFORT";
+export type STPMode = "CANCEL_NEWEST" | "CANCEL_OLDEST" | "CANCEL_BOTH" | "NONE";
 
 export type RoutingPlanStatus =
   | "DRAFT"
@@ -22,11 +23,13 @@ export type PlanStepStatus =
 
 export const CanonicalRFQInputSchema = z.object({
   rfqId: z.string().uuid(),
+  idempotencyKey: z.string().min(1),
   canonicalMarketId: z.string(),
   canonicalOutcomeId: z.string().optional(),
   takerId: z.string().uuid(),
   side: z.enum(["buy", "sell"]),
   quantity: z.string(),
+  stpMode: z.enum(["CANCEL_NEWEST", "CANCEL_OLDEST", "CANCEL_BOTH", "NONE"]).default("CANCEL_NEWEST"),
   metadata: z.record(z.string(), z.unknown()).optional()
 });
 
@@ -68,7 +71,7 @@ export const PlanStepSchema = z.object({
   targetSize: z.number().nonnegative(),
   roundedSize: z.number().nonnegative(),
   targetPrice: z.number(),
-  idempotencyKey: z.string().optional(),
+  idempotencyKey: z.string().min(1),
   state: z.enum(["PENDING", "EXECUTING", "FILLED", "FAILED", "SKIPPED", "UNWOUND"]),
   metadata: z.record(z.string(), z.unknown()).optional()
 });
@@ -208,7 +211,19 @@ export interface ISplitter {
 }
 
 export interface IPlanComposer {
-  composePlan(input: PlanComposerInput): Promise<ExecutionPlan>;
+  /**
+   * Composes an execution plan based on the provided RFQ, candidates, scores, and policy.
+   *
+   * PERSISTENCE: This method MUST be implemented idempotently.
+   * If a plan with the derived deterministic ID already exists, it should return the existing plan.
+   */
+  composePlan(
+    rfq: CanonicalRFQInput,
+    candidates: readonly RouteCandidate[],
+    scores: readonly CandidateScore[],
+    allocations: readonly SplitAllocation[],
+    policy: SORAcceptancePolicy
+  ): Promise<ExecutionPlan>;
 }
 
 export interface IPlanRunner {
@@ -227,7 +242,3 @@ export interface IExecutionRouter {
 // Compatibility aliases retained for existing imports during scaffold stage.
 export type RouteStep = PlanStep;
 export type RoutingPlan = ExecutionPlan;
-
-// TODO(sor): Thread idempotency semantics through plan creation and step-level keys.
-// TODO(sor): Thread riskEngine reservation token through phase-0 reservation state.
-// TODO(sor): Wire handoff contract to execution router abstraction with tracing + metrics.

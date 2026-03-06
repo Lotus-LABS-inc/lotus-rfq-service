@@ -247,7 +247,7 @@ describe("SOR PlanRunner", () => {
     const { pool } = createPool(store);
 
     const executeStep = vi.fn(async () => ({ ok: true as const, executionRef: "exec-1" }));
-    const updateExposureAfterExecution = vi.fn(async () => {});
+    const updateExposureAfterExecution = vi.fn(async (_exec: any, _isInternal = false) => { });
     const redisSet = vi.fn(async () => "OK" as const);
     const redisDel = vi.fn(async () => 1);
 
@@ -294,7 +294,7 @@ describe("SOR PlanRunner", () => {
       .fn()
       .mockResolvedValueOnce({ ok: false as const, error: "provider_down" })
       .mockResolvedValueOnce({ ok: true as const, executionRef: "fallback-exec" });
-    const updateExposureAfterExecution = vi.fn(async () => {});
+    const updateExposureAfterExecution = vi.fn(async (_exec: any, _isInternal = false) => { });
 
     const runner = new PlanRunner({
       pool: pool as never,
@@ -343,7 +343,7 @@ describe("SOR PlanRunner", () => {
         del: vi.fn(async () => 1)
       } as never,
       executionRouter: { executeStep } as never,
-      riskEngine: { updateExposureAfterExecution: vi.fn(async () => {}) } as never,
+      riskEngine: { updateExposureAfterExecution: vi.fn(async (_exec: any, _isInternal = false) => { }) } as never,
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       config: {
         concurrency: 1,
@@ -365,7 +365,7 @@ describe("SOR PlanRunner", () => {
     const { pool } = createPool(store);
 
     const executeStep = vi.fn(async () => ({ ok: true as const, executionRef: "exec-retry" }));
-    const updateExposureAfterExecution = vi.fn(async () => {});
+    const updateExposureAfterExecution = vi.fn(async (_exec: any, _isInternal = false) => { });
 
     const runner = new PlanRunner({
       pool: pool as never,
@@ -406,7 +406,7 @@ describe("SOR PlanRunner", () => {
         del: vi.fn(async () => 1)
       } as never,
       executionRouter: { executeStep } as never,
-      riskEngine: { updateExposureAfterExecution: vi.fn(async () => {}) } as never,
+      riskEngine: { updateExposureAfterExecution: vi.fn(async (_exec: any, _isInternal = false) => { }) } as never,
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       config: {
         concurrency: 1,

@@ -11,6 +11,7 @@ import { RFQEventRepository } from "../db/repositories/rfq-event-repository.js";
 import { LPKeyRepository } from "../db/repositories/lp-key-repository.js";
 import { RFQQuoteRepository } from "../db/repositories/rfq-quote-repository.js";
 import { RFQSessionRepository } from "../db/repositories/rfq-session-repository.js";
+import { RFQExecutionRepository } from "../db/repositories/rfq-execution-repository.js";
 import { registerHealthRoute } from "./routes/health.js";
 import { registerMetricsRoute } from "./routes/metrics.js";
 import { registerRFQRoute } from "./routes/rfq.js";
@@ -30,8 +31,24 @@ import { ComboRepository } from "../repositories/combo.repository.js";
 import { registerAdminComboRoutes } from "./admin/combo.routes.js";
 import { registerAdminSORRoutes } from "./admin/sor.routes.js";
 import { SORAdminService } from "./admin/sor-admin-service.js";
-import { CostModel, OrderRouter, PlanComposer, PlanRunner, RouteScout, Splitter, type SORAcceptancePolicy } from "../core/sor/index.js";
+import { CostModel, OrderRouter, PlanComposer, PlanRunner, RouteScout, Splitter, type SORAcceptancePolicy, type CanonicalRFQInput } from "../core/sor/index.js";
+import {
+  compareShadowDecisions,
+  isCanarySampled,
+  isCanaryWindowActive,
+  type ShadowMode
+} from "../core/sor/canary-shadow.js";
 import { RFQStateMachine, type RFQState } from "../core/rfq-engine/rfq-state-machine.js";
+import { rankQuotesByEffectiveCost } from "../core/ranking/quote-ranking.js";
+import { ExecutionRouterService } from "../core/execution-router/execution-router.js";
+import {
+  sorEnabledState,
+  sorShadowDivergenceTotal,
+  sorShadowMatchTotal,
+  sorShadowPriceDeltaBps,
+  sorShadowTotal
+} from "../observability/metrics.js";
+import { withSpan } from "../observability/tracing.js";
 
 export interface ServerDependencies {
   logger: Logger;
@@ -40,6 +57,11 @@ export interface ServerDependencies {
   db: AppDb;
   canonicalServiceBaseUrl: string;
   jwtSecret: string;
+  sorEnabled?: boolean;
+  sorCanaryShadowEnabled?: boolean;
+  sorCanaryPercent?: number;
+  sorCanaryStartAt?: string;
+  sorCanaryEndAt?: string;
   reliabilityWeight: number;
   latencyWeight: number;
   failureWeight: number;
@@ -51,6 +73,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const app = Fastify({
     logger: false
   });
+  const sorEnabled = dependencies.sorEnabled ?? false;
+  const sorCanaryShadowEnabled = dependencies.sorCanaryShadowEnabled ?? false;
+  const sorCanaryPercent = dependencies.sorCanaryPercent ?? 0;
 
   await app.register(fastifyJwt, {
     secret: dependencies.jwtSecret
@@ -61,6 +86,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const sessionRepository = new RFQSessionRepository(dependencies.pgPool);
   const eventRepository = new RFQEventRepository(dependencies.pgPool);
   const quoteRepository = new RFQQuoteRepository(dependencies.pgPool);
+  const executionRepository = new RFQExecutionRepository(dependencies.pgPool);
   const lpKeyRepository = new LPKeyRepository(dependencies.pgPool);
   const lpStatsRepository = new LPStatsRepository(dependencies.pgPool, dependencies.logger);
   const sessionManager = new RFQSessionManager({
@@ -151,7 +177,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     planComposer: new PlanComposer({
       pool: dependencies.pgPool,
       logger: dependencies.logger
-    })
+    }),
+    logger: dependencies.logger
   });
 
   const sorExecutionRouter = {
@@ -167,6 +194,24 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     executionRouter: sorExecutionRouter,
     riskEngine,
     logger: dependencies.logger
+  });
+  sorEnabledState.set(sorEnabled ? 1 : 0);
+
+  const legacyExecutionRouter = new ExecutionRouterService({
+    sessionRepository,
+    quoteRepository,
+    executionRepository,
+    sessionManager,
+    executionGateway: {
+      execute: async () => ({
+        ok: true as const,
+        venueExecutionRef: `legacy-exec-${Date.now()}`
+      })
+    },
+    eventEmitter: domainEventEmitter,
+    logger: dependencies.logger,
+    lpStatsRepository,
+    riskEngine
   });
 
   const transitionRFQState = async (
@@ -234,25 +279,27 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       if (!quote) throw new Error("Quote not found");
 
       const acceptancePolicy = readAcceptancePolicy(session.metadata);
+
       const reservationToken = await riskEngine.validateBeforeExecution(session, quote);
-      const rfqInput = {
+      const rfqInput: CanonicalRFQInput = {
         rfqId: session.id,
-        canonicalMarketId: session.canonical_market_id,
-        takerId: session.taker_id,
-        side: session.side,
+        idempotencyKey: session.idempotency_key,
         quantity: session.quantity,
+        side: session.side,
+        canonicalMarketId: session.canonical_market_id,
+        stpMode: (session.metadata as any)?.stp_mode ?? "CANCEL_NEWEST",
+        takerId: session.taker_id,
         metadata: {
           reservation_token: reservationToken,
           legs: [
             {
-              leg_id: session.id,
-              canonical_market_id: session.canonical_market_id,
-              side: session.side,
-              quantity: Number.parseFloat(session.quantity)
+              leg_id: "00000000-0000-0000-0000-000000000000",
+              symbol: session.canonical_market_id,
+              target_quantity: session.quantity
             }
           ]
         }
-      } as const;
+      };
       const selectedQuoteInput = {
         quoteId: request.quoteId,
         ...(typeof quote.quote_payload.lpId === "string"
@@ -265,45 +312,269 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         payload: quote.quote_payload
       } as const;
 
-      const plan = await orderRouter.buildPlan(rfqInput, selectedQuoteInput, acceptancePolicy);
+      const executeSORAccept = async () => {
+        const plan = await orderRouter.buildPlan(rfqInput, selectedQuoteInput, acceptancePolicy);
 
-      const runPlanAndTransition = async (): Promise<"COMPLETED" | "PARTIAL" | "FAILED" | "UNWOUND"> => {
-        await transitionRFQState(sessionId, "ACCEPTED", "sor_plan_created");
-        await transitionRFQState(sessionId, "EXECUTING", "sor_plan_running");
+        const runPlanAndTransition = async (): Promise<"COMPLETED" | "PARTIAL" | "FAILED" | "UNWOUND"> => {
+          await transitionRFQState(sessionId, "ACCEPTED", "sor_plan_created");
+          await transitionRFQState(sessionId, "EXECUTING", "sor_plan_running");
 
-        const result = await planRunner.run(plan);
-        if (result.status === "COMPLETED" || result.status === "PARTIAL") {
-          await transitionRFQState(sessionId, "SETTLED", "sor_plan_completed");
-        } else {
-          await transitionRFQState(sessionId, "FAILED", "sor_plan_failed");
+          const result = await planRunner.run(plan);
+          if (result.status === "COMPLETED" || result.status === "PARTIAL") {
+            await transitionRFQState(sessionId, "SETTLED", "sor_plan_completed");
+          } else {
+            await transitionRFQState(sessionId, "FAILED", "sor_plan_failed");
+          }
+          return result.status;
+        };
+
+        const shouldAwait =
+          acceptancePolicy === "ALL_OR_NONE"
+            ? dependencies.sorAcceptAonAwait
+            : !dependencies.sorAcceptNonAonBackground;
+
+        if (shouldAwait) {
+          const finalStatus = await runPlanAndTransition();
+          return {
+            status: "PLAN_ACCEPTED" as const,
+            plan_id: plan.id,
+            plan_state: "DRAFT" as const,
+            dispatch_mode: "awaited" as const,
+            final_status: finalStatus
+          };
         }
-        return result.status;
-      };
 
-      const shouldAwait =
-        acceptancePolicy === "ALL_OR_NONE" ? dependencies.sorAcceptAonAwait : !dependencies.sorAcceptNonAonBackground;
+        void runPlanAndTransition().catch((error: unknown) => {
+          dependencies.logger.error(
+            { err: error, sessionId, planId: plan.id },
+            "Background SOR plan execution failed."
+          );
+        });
 
-      if (shouldAwait) {
-        const finalStatus = await runPlanAndTransition();
         return {
           status: "PLAN_ACCEPTED" as const,
           plan_id: plan.id,
           plan_state: "DRAFT" as const,
-          dispatch_mode: "awaited" as const,
-          final_status: finalStatus
+          dispatch_mode: "background" as const
         };
+      };
+
+      const executeLegacyAccept = async () => {
+        const rawQuotes = await quoteRepository.listBySessionId(sessionId, 100);
+        const rankedQuotes = rankQuotesByEffectiveCost(
+          rawQuotes.map((row) => ({
+            quoteId: String(row.quote_payload.quoteId ?? row.id),
+            ...(typeof row.quote_payload.lpId === "string" ? { lpId: row.quote_payload.lpId } : {}),
+            basePrice: Number.parseFloat(row.price),
+            venueFee: row.fee_bps / 10000,
+            protocolFee: 0,
+            gasCost: 0,
+            slippageEstimate: 0,
+            reliabilityScore: 100,
+            latencyScore: 100,
+            expires_at: row.valid_until.toISOString(),
+            soft_refresh_flag: false
+          }))
+        );
+
+        await transitionRFQState(sessionId, "ACCEPTED", "legacy_execution_requested");
+        const legacyResult = await legacyExecutionRouter.execute({
+          sessionId,
+          rankedQuotes,
+          fallbackToNextQuote: true,
+          reservationToken
+        });
+
+        if (legacyResult.ok) {
+          await transitionRFQState(sessionId, "SETTLED", "legacy_execution_success");
+          return {
+            status: "PLAN_ACCEPTED" as const,
+            plan_id: `legacy-${sessionId}`,
+            plan_state: "LEGACY_EXECUTED" as const,
+            dispatch_mode: "awaited" as const,
+            final_status: "COMPLETED" as const
+          };
+        }
+
+        await transitionRFQState(sessionId, "FAILED", "legacy_execution_failed");
+        return {
+          status: "PLAN_ACCEPTED" as const,
+          plan_id: `legacy-${sessionId}`,
+          plan_state: "LEGACY_EXECUTED" as const,
+          dispatch_mode: "awaited" as const,
+          final_status: "FAILED" as const
+        };
+      };
+
+      const isShadowSampled = isCanaryWindowActive({
+        enabled: sorCanaryShadowEnabled,
+        ...(dependencies.sorCanaryStartAt ? { startAt: dependencies.sorCanaryStartAt } : {}),
+        ...(dependencies.sorCanaryEndAt ? { endAt: dependencies.sorCanaryEndAt } : {})
+      }) && isCanarySampled(sessionId, sorCanaryPercent);
+
+      const runShadowComparison = async (mode: ShadowMode): Promise<void> => {
+        await withSpan(
+          "sor.canary.evaluate",
+          {
+            rfq_id: sessionId,
+            session_id: sessionId,
+            sor_enabled: sorEnabled,
+            canary_sampled: isShadowSampled,
+            state: "CANARY_EVALUATE"
+          },
+          async () => {
+            sorShadowTotal.labels(mode, String(isShadowSampled)).inc();
+            if (!isShadowSampled) {
+              return;
+            }
+
+            try {
+              const allQuotes = await quoteRepository.listBySessionId(sessionId, 100);
+              const legacyTop = rankQuotesByEffectiveCost(
+                allQuotes.map((row) => ({
+                  quoteId: String(row.quote_payload.quoteId ?? row.id),
+                  ...(typeof row.quote_payload.lpId === "string" ? { lpId: row.quote_payload.lpId } : {}),
+                  basePrice: Number.parseFloat(row.price),
+                  venueFee: row.fee_bps / 10000,
+                  protocolFee: 0,
+                  gasCost: 0,
+                  slippageEstimate: 0,
+                  reliabilityScore: 100,
+                  latencyScore: 100,
+                  expires_at: row.valid_until.toISOString(),
+                  soft_refresh_flag: false
+                }))
+              )[0];
+
+              const shadowRfqInput: CanonicalRFQInput = {
+                rfqId: session.id,
+                idempotencyKey: session.idempotency_key,
+                quantity: session.quantity,
+                side: session.side,
+                canonicalMarketId: session.canonical_market_id,
+                stpMode: (session.metadata as any)?.stp_mode ?? "CANCEL_NEWEST",
+                takerId: session.taker_id,
+                metadata: {
+                  reservation_token: reservationToken,
+                  legs: [
+                    {
+                      leg_id: "00000000-0000-0000-0000-000000000000",
+                      symbol: session.canonical_market_id,
+                      target_quantity: session.quantity
+                    }
+                  ]
+                }
+              };
+              const sorCandidates = await sorRouteScout.discoverCandidates(
+                shadowRfqInput,
+                selectedQuoteInput,
+                acceptancePolicy
+              );
+              const sorScores = await orderRouter.evaluateCandidates(
+                shadowRfqInput,
+                selectedQuoteInput,
+                acceptancePolicy
+              );
+
+              const bestSORScore = [...sorScores].sort(
+                (left, right) => left.effectiveUnitCost - right.effectiveUnitCost
+              )[0];
+              const sorCandidate = sorCandidates.find(
+                (candidate) => candidate.id === bestSORScore?.candidateId
+              );
+
+              const authoritativeDecision =
+                mode === "legacy_authoritative"
+                  ? ({
+                    quoteId: legacyTop?.quoteId ?? request.quoteId,
+                    ...(legacyTop?.lpId ? { providerId: legacyTop.lpId } : {}),
+                    ...(typeof legacyTop?.basePrice === "number" ? { price: legacyTop.basePrice } : {})
+                  } as const)
+                  : ({
+                    quoteId: request.quoteId,
+                    ...(typeof quote.quote_payload.lpId === "string"
+                      ? { providerId: quote.quote_payload.lpId }
+                      : {}),
+                    price: Number.parseFloat(quote.price)
+                  } as const);
+
+              const shadowDecision =
+                mode === "legacy_authoritative"
+                  ? ({
+                    quoteId: bestSORScore?.candidateId ?? request.quoteId,
+                    ...(sorCandidate?.provider_id ? { providerId: sorCandidate.provider_id } : {}),
+                    ...(typeof sorCandidate?.quoted_price === "number"
+                      ? { price: sorCandidate.quoted_price }
+                      : {})
+                  } as const)
+                  : ({
+                    quoteId: legacyTop?.quoteId ?? request.quoteId,
+                    ...(legacyTop?.lpId ? { providerId: legacyTop.lpId } : {}),
+                    ...(typeof legacyTop?.basePrice === "number" ? { price: legacyTop.basePrice } : {})
+                  } as const);
+
+              const comparison = compareShadowDecisions(authoritativeDecision, shadowDecision);
+
+              await withSpan(
+                "sor.canary.compare",
+                {
+                  rfq_id: sessionId,
+                  session_id: sessionId,
+                  sor_enabled: sorEnabled,
+                  canary_sampled: isShadowSampled,
+                  decision_match: comparison.match,
+                  price_delta_bps: comparison.priceDeltaBps,
+                  state: "CANARY_COMPARE"
+                },
+                async () => {
+                  if (comparison.match) {
+                    sorShadowMatchTotal.labels(comparison.dimension).inc();
+                  } else {
+                    sorShadowDivergenceTotal.labels(comparison.reason ?? "error").inc();
+                  }
+                  sorShadowPriceDeltaBps.observe(comparison.priceDeltaBps);
+
+                  await eventRepository.append({
+                    sessionId,
+                    ...(quote ? { quoteId: quote.id } : {}),
+                    eventType: "SOR_CANARY_DECISION",
+                    eventPayload: {
+                      mode,
+                      sampled: true,
+                      match: comparison.match,
+                      dimension: comparison.dimension,
+                      reason: comparison.reason ?? null,
+                      price_delta_bps: comparison.priceDeltaBps,
+                      authoritative_decision: authoritativeDecision,
+                      shadow_decision: shadowDecision
+                    }
+                  });
+                }
+              );
+            } catch (error) {
+              sorShadowDivergenceTotal.labels("error").inc();
+              dependencies.logger.error(
+                { err: error, sessionId, mode },
+                "SOR canary shadow comparison failed."
+              );
+            }
+          }
+        );
+      };
+
+      if (sorEnabled) {
+        const response = await executeSORAccept();
+        if (isShadowSampled) {
+          void runShadowComparison("sor_authoritative");
+        }
+        return response;
       }
 
-      void runPlanAndTransition().catch((error: unknown) => {
-        dependencies.logger.error({ err: error, sessionId, planId: plan.id }, "Background SOR plan execution failed.");
-      });
-
-      return {
-        status: "PLAN_ACCEPTED" as const,
-        plan_id: plan.id,
-        plan_state: "DRAFT" as const,
-        dispatch_mode: "background" as const
-      };
+      const legacyResponse = await executeLegacyAccept();
+      if (isShadowSampled) {
+        void runShadowComparison("legacy_authoritative");
+      }
+      return legacyResponse;
     }
   });
   const adminAuthMiddleware = createAdminAuthMiddleware();
@@ -320,6 +591,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   await registerAdminSORRoutes(app, adminAuthMiddleware, {
     sorAdminService: new SORAdminService({
       pool: dependencies.pgPool,
+      redis: dependencies.redisClient,
       planRunner,
       logger: dependencies.logger
     })

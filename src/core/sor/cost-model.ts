@@ -10,11 +10,6 @@ import {
 } from "./types.js";
 import { withSpan } from "../../observability/tracing.js";
 
-export const CostModelInputSchema = z.object({
-  policy: z.enum(["ALL_OR_NONE", "PARTIAL_ALLOWED", "BEST_EFFORT"]),
-  candidateCount: z.number().int().nonnegative()
-});
-
 export const CostModelConfigSchema = z.object({
   slippageAlpha: z.number().positive().default(0.001),
   slippageBeta: z.number().positive().default(1.1),
@@ -29,6 +24,7 @@ export interface CandidateScoreBreakdown {
   effective_cost: InstanceType<typeof Decimal>;
   expected_slippage: InstanceType<typeof Decimal>;
   failure_cost: InstanceType<typeof Decimal>;
+  latency_penalty: InstanceType<typeof Decimal>;
   total_score: InstanceType<typeof Decimal>;
   fill_prob: number;
 }
@@ -43,7 +39,7 @@ export class CostModel implements ICostModel {
   public scoreCandidate(candidate: RouteCandidate, size: number): CandidateScoreBreakdown {
     const tradeSize = new Decimal(Math.max(size, 0));
     const quotedPrice = new Decimal(candidate.quoted_price);
-    const availableSize = new Decimal(Math.max(candidate.available_size, 0.00000001));
+    const availableSize = new Decimal(Math.max(candidate.available_size, 1e-9));
 
     const notional = quotedPrice.times(tradeSize);
     const slippageRatio = new Decimal(this.config.slippageAlpha).times(
@@ -52,26 +48,32 @@ export class CostModel implements ICostModel {
     const expectedSlippage = notional.times(slippageRatio);
 
     const feeTotal = Object.values(candidate.fees).reduce(
-      (accumulator, current) => accumulator.plus(new Decimal(current)),
+      (acc, current) => acc.plus(new Decimal(current)),
       new Decimal(0)
     );
 
     const effectiveCost = notional.plus(expectedSlippage).plus(feeTotal);
 
+    // Cross Isolation Strategy: INTERNAL candidates have 0 penalty
+    const isInternal = candidate.provider_type === "INTERNAL";
+
     const fillProb = Math.max(0, Math.min(1, candidate.fill_prob));
     const failureProb = new Decimal(1).minus(fillProb);
-    const recoveryAndTimeCost = new Decimal(this.config.expectedRecoveryCost).plus(
-      this.config.timeValueOfMoneyCost
-    );
-    const failureCost = failureProb.times(recoveryAndTimeCost);
+    const failureCost = isInternal
+      ? new Decimal(0)
+      : failureProb.times(new Decimal(this.config.expectedRecoveryCost).plus(this.config.timeValueOfMoneyCost));
 
-    const latencyPenalty = new Decimal(candidate.latency_ms).times(this.config.latencyPenaltyPerMs);
+    const latencyPenalty = isInternal
+      ? new Decimal(0)
+      : new Decimal(candidate.latency_ms).times(this.config.latencyPenaltyPerMs);
+
     const totalScore = effectiveCost.plus(failureCost).plus(latencyPenalty);
 
     return {
       effective_cost: effectiveCost,
       expected_slippage: expectedSlippage,
       failure_cost: failureCost,
+      latency_penalty: latencyPenalty,
       total_score: totalScore,
       fill_prob: fillProb
     };
@@ -85,17 +87,14 @@ export class CostModel implements ICostModel {
   ): Promise<readonly CandidateScore[]> {
     return withSpan(
       "sor.cost_model.evaluate",
-      {
-        rfq_id: rfq.rfqId,
-        acceptance_policy: policy,
-        state: "EVALUATING_COST"
-      },
+      { rfq_id: rfq.rfqId, acceptance_policy: policy },
       async () =>
         candidates
           .map((candidate) => {
             const scored = this.scoreCandidate(candidate, selectedQuote.quantity);
-            const size = Math.max(selectedQuote.quantity, 0.00000001);
+            const size = Math.max(selectedQuote.quantity, 1e-9);
             const effectiveUnitCost = scored.total_score.div(size);
+
             return {
               candidateId: candidate.id,
               providerId: candidate.provider_id,
@@ -107,14 +106,12 @@ export class CostModel implements ICostModel {
                 providerFee: candidate.fees.provider_fee ?? 0,
                 protocolFee: candidate.fees.protocol_fee ?? 0,
                 gasCost: candidate.fees.gas_cost ?? 0,
-                latencyPenalty: new Decimal(candidate.latency_ms)
-                  .times(this.config.latencyPenaltyPerMs)
-                  .toNumber(),
+                latencyPenalty: scored.latency_penalty.toNumber(),
                 failurePenalty: scored.failure_cost.toNumber()
               }
             } satisfies CandidateScore;
           })
-          .sort((left, right) => left.totalExpectedCost - right.totalExpectedCost)
+          .sort((a, b) => a.totalExpectedCost - b.totalExpectedCost)
     );
   }
 }

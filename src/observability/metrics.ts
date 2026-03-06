@@ -324,4 +324,38 @@ export const sorAvgFillRate5mSnapshot = new Gauge({
   ...gaugeConfig
 });
 
+export const sorShadowTotal = new Counter({
+  name: "sor_shadow_total",
+  help: "Total shadow comparison evaluations for SOR canary mode.",
+  labelNames: ["mode", "sampled"],
+  ...counterConfig
+});
+
+export const sorShadowMatchTotal = new Counter({
+  name: "sor_shadow_match_total",
+  help: "Total matches between SOR and legacy shadow decisions.",
+  labelNames: ["dimension"],
+  ...counterConfig
+});
+
+export const sorShadowDivergenceTotal = new Counter({
+  name: "sor_shadow_divergence_total",
+  help: "Total divergences between SOR and legacy shadow decisions.",
+  labelNames: ["reason"],
+  ...counterConfig
+});
+
+export const sorShadowPriceDeltaBps = new Histogram({
+  name: "sor_shadow_price_delta_bps",
+  help: "Absolute price delta between SOR and legacy decisions in basis points.",
+  buckets: [0, 0.5, 1, 2, 5, 10, 25, 50, 100, 250, 500],
+  ...histogramConfig
+});
+
+export const sorEnabledState = new Gauge({
+  name: "sor_enabled_state",
+  help: "Current runtime SOR enablement state (1 enabled, 0 disabled).",
+  ...gaugeConfig
+});
+
 export const metricsRegistry = registry;

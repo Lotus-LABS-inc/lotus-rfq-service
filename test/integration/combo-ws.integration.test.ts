@@ -38,7 +38,7 @@ describe("WebSocket streaming and REST endpoints", () => {
         riskEngineMock = {
             validateRFQCreation: vi.fn().mockResolvedValue(true),
             validateBeforeExecution: vi.fn().mockResolvedValue("reservation-token-123"),
-            updateExposureAfterExecution: vi.fn().mockResolvedValue(true),
+            updateExposureAfterExecution: vi.fn(async (_exec, _isInternal = false) => true),
             rollbackReservation: vi.fn().mockResolvedValue(true)
         };
         canonicalClientMock = {

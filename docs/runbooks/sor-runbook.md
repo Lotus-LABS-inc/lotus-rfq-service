@@ -88,3 +88,48 @@ Required audit items:
 - unwind counters.
 7. Incident summary and prevention actions recorded in incident tracker.
 
+## Feature Flag Operations
+### Enable/Disable SOR
+Use environment configuration:
+- `SOR_ENABLED=true` to route authoritative accept flow through SOR.
+- `SOR_ENABLED=false` to route authoritative accept flow through legacy execution path.
+
+### Canary Shadow Start/Stop
+For shadow-only comparison:
+- `SOR_CANARY_SHADOW_ENABLED=true`
+- `SOR_CANARY_PERCENT` in `[0,1]`
+- set optional window:
+  - `SOR_CANARY_START_AT` (ISO)
+  - `SOR_CANARY_END_AT` (ISO)
+
+Stop canary safely:
+1. Set `SOR_CANARY_SHADOW_ENABLED=false`.
+2. Verify `sor_shadow_total{sampled="true"}` returns to zero.
+
+### Interpreting Shadow Metrics
+- `sor_shadow_match_total`: agreement between shadow and authoritative decisions.
+- `sor_shadow_divergence_total`: divergence reason breakdown.
+- `sor_shadow_price_delta_bps`: economic spread distribution.
+- `sor_enabled_state`: confirms authoritative mode per runtime.
+
+### Canary Rollback Steps
+1. Disable authoritative SOR: `SOR_ENABLED=false`.
+2. Disable shadow: `SOR_CANARY_SHADOW_ENABLED=false`.
+3. Confirm no new `SOR_CANARY_DECISION` events for active sessions.
+4. Review recent divergence/error spikes and file incident summary.
+
+## Postmortem Ownership
+Every SOR incident requires a postmortem within 24 hours with:
+- Incident commander (owner) and backup owner.
+- Start/end timestamps (UTC), blast radius, and affected partners.
+- Timeline anchored to `routing_plans`, `route_steps`, and `route_history`.
+- Root cause, contributing factors, and concrete prevention items.
+- Linked evidence: traces, metrics snapshots, and admin-action audit logs.
+
+## Escalation Contacts
+Use role-based escalation (do not rely on personal-only contacts):
+1. Primary On-Call Backend Engineer (`#oncall-exchange`, pager duty primary).
+2. Secondary On-Call SRE (`#oncall-sre`, pager duty secondary).
+3. Risk Operations Lead (`#risk-ops`, escalation for exposure mismatch/unwind incidents).
+4. Security On-Call (`#security-oncall`, required for auth abuse/admin endpoint misuse).
+5. Engineering Manager (final escalation owner for prolonged degradation > 30 minutes).

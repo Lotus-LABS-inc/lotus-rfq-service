@@ -39,12 +39,15 @@ CREATE TABLE route_steps (
   provider_type TEXT,
   provider_id TEXT,
   target_size NUMERIC,
+  rounded_size NUMERIC,
+  target_price NUMERIC,
   client_order_id TEXT,
   idempotency_key TEXT,
   state TEXT,
   submitted_at TIMESTAMPTZ,
   completed_at TIMESTAMPTZ,
-  result JSONB
+  result JSONB,
+  metadata JSONB
 );
 CREATE INDEX idx_route_steps_plan ON route_steps(routing_plan_id);
 

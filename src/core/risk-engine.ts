@@ -39,7 +39,7 @@ export interface RiskConfig {
 export interface IRiskEngine {
     validateRFQCreation(rfq: { taker_id: string; canonical_market_id: string; side: "buy" | "sell"; quantity: string; id?: string }): Promise<void>;
     validateBeforeExecution(rfq: RFQSessionRecord, quote: RFQQuoteRecord): Promise<ReservationToken>;
-    updateExposureAfterExecution(executionResult: Record<string, unknown>): Promise<void>;
+    updateExposureAfterExecution(executionResult: Record<string, unknown>, isInternal?: boolean): Promise<void>;
     reconcileExposureSnapshot(): Promise<void>;
 }
 
@@ -162,6 +162,9 @@ export class RiskEngine implements IRiskEngine {
 
             const notional = Number.parseFloat(quote.quantity) * Number.parseFloat(quote.price);
 
+            // Self-Trade Prevention (STP) check
+            this.checkSTP(rfq, quote);
+
             // Select for update on exposure rows
             const exposure = await this.exposureRepository.getExposureForUpdate(rfq.taker_id, rfq.canonical_market_id, rfq.side, client);
 
@@ -197,7 +200,7 @@ export class RiskEngine implements IRiskEngine {
         }
     }
 
-    public async updateExposureAfterExecution(exec: Record<string, unknown>): Promise<void> {
+    public async updateExposureAfterExecution(exec: Record<string, unknown>, isInternal = false): Promise<void> {
         const rfqId = exec.sessionId as string;
         const executionId = exec.id as string;
         const userId = exec.takerId as string;
@@ -232,10 +235,17 @@ export class RiskEngine implements IRiskEngine {
 
             riskExposureCurrent.set({ user_id: userId, market_id: marketId, side }, deltaGross); // Simple gauge update
 
-            // Updating totals
+            // Updating totals - LOOPHOLE FIX: Internal crosses are risk-neutral at the systemic level
             const totalRes = await this.pool.query("SELECT SUM(gross_notional) as gross, SUM(net_notional) as net FROM exposure");
-            riskTotalGrossExposure.set(Number.parseFloat(totalRes.rows[0].gross || "0"));
-            riskTotalNetExposure.set(Number.parseFloat(totalRes.rows[0].net || "0"));
+            const newGlobalGross = Number.parseFloat(totalRes.rows[0].gross || "0");
+            const newGlobalNet = Number.parseFloat(totalRes.rows[0].net || "0");
+
+            if (!isInternal) {
+                riskTotalGrossExposure.set(newGlobalGross);
+                riskTotalNetExposure.set(newGlobalNet);
+            } else {
+                this.logger.info({ rfqId, executionId, isInternal }, "Internal cross detected; skipping global systemic exposure increment.");
+            }
 
             this.logger.info({ rfqId, executionId, deltaGross }, "Exposure successfully updated after execution.");
         } catch (error) {
@@ -273,6 +283,23 @@ export class RiskEngine implements IRiskEngine {
             }
 
             offset += BATCH_SIZE;
+        }
+    }
+
+    private checkSTP(rfq: RFQSessionRecord, quote: RFQQuoteRecord): void {
+        const takerId = rfq.taker_id;
+        const providerId = quote.lp_key_id;
+
+        // Note: In RFQSessionRecord/RFQQuoteRecord, taker_id and provider_id are the relevant identities.
+        // We assume rfq.metadata contains stp_mode or default to CANCEL_NEWEST.
+        const stpMode = (rfq.metadata as any)?.stp_mode || "CANCEL_NEWEST";
+
+        if (stpMode === "NONE") return;
+
+        if (takerId === providerId) {
+            riskValidationRejectedTotal.inc({ reason: "SELF_TRADE_PREVENTION" });
+            this.logger.warn({ rfqId: rfq.id, takerId, providerId, stpMode }, "Self-trade detected in RiskEngine.");
+            throw new RiskRejectedError("Self-trade prevention triggered");
         }
     }
 }

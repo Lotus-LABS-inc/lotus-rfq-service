@@ -60,7 +60,7 @@ describe("ExecutePlanRunner", () => {
             recordFailure: vi.fn().mockResolvedValue(true)
         };
         riskMock = {
-            updateExposureAfterExecution: vi.fn().mockResolvedValue(true),
+            updateExposureAfterExecution: vi.fn(async (_exec: any, _isInternal = false) => true),
             validateRFQCreation: vi.fn(),
             validateBeforeExecution: vi.fn()
         };

@@ -67,13 +67,12 @@ describe("Combo Lifecycle Integration Tests", () => {
 
         executionClientMock = {
             executeTrade: vi.fn().mockResolvedValue({ status: "FILLED", filledQuantity: "100" }),
-            cancelOrder: vi.fn().mockResolvedValue(undefined)
         };
 
         riskEngineMock = {
             validateRFQCreation: vi.fn().mockResolvedValue(undefined),
             validateBeforeExecution: vi.fn().mockResolvedValue("resv-token-abc"),
-            updateExposureAfterExecution: vi.fn().mockResolvedValue(undefined),
+            updateExposureAfterExecution: vi.fn(async (_exec, _isInternal = false) => undefined),
             rollbackReservation: vi.fn().mockResolvedValue(undefined)
         };
 

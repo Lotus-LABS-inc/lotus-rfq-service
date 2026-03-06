@@ -64,6 +64,12 @@ export interface ForceUnwindInput {
   requestedBy: string;
 }
 
+export interface SORConfigInput {
+  sorEnabled?: boolean | undefined;
+  sorCanaryShadowEnabled?: boolean | undefined;
+  sorCanaryPercent?: number | undefined;
+}
+
 export class PlanNotFoundError extends Error {
   public constructor(planId: string) {
     super(`Routing plan ${planId} not found.`);
@@ -87,12 +93,13 @@ export class ProviderCandidateNotFoundError extends Error {
 
 export interface SORAdminServiceDeps {
   pool: Pool;
+  redis: import("../../db/redis.js").RedisClient;
   planRunner: IPlanRunner;
   logger: Pick<Logger, "info" | "warn" | "error">;
 }
 
 export class SORAdminService {
-  public constructor(private readonly deps: SORAdminServiceDeps) {}
+  public constructor(private readonly deps: SORAdminServiceDeps) { }
 
   public async getPlanSnapshot(planId: string): Promise<SORPlanSnapshot> {
     const plan = await this.loadPlan(planId);
@@ -282,6 +289,23 @@ export class SORAdminService {
       throw new PlanNotFoundError(planId);
     }
     return plan;
+  }
+
+  public async updateConfig(input: SORConfigInput): Promise<void> {
+    const updates: Record<string, string> = {};
+    if (input.sorEnabled !== undefined) updates["sor_enabled"] = String(input.sorEnabled);
+    if (input.sorCanaryShadowEnabled !== undefined) updates["sor_canary_shadow_enabled"] = String(input.sorCanaryShadowEnabled);
+    if (input.sorCanaryPercent !== undefined) updates["sor_canary_percent"] = String(input.sorCanaryPercent);
+
+    if (Object.keys(updates).length > 0) {
+      // RedisClient.set requires: key, value, mode, duration, condition?
+      // Setting a 1-year expiration (approx) or something long if we want it "permanent"
+      // or we can add a 'permanent' set if the interface allows.
+      // Interface shows: set(key, value, mode, duration, condition?)
+      await this.deps.redis.set("sor:config:runtime", JSON.stringify(updates), "EX", 31536000);
+    }
+
+    this.deps.logger.info({ updates }, "SOR runtime configuration updated.");
   }
 }
 

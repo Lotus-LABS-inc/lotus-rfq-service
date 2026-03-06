@@ -125,7 +125,15 @@ export class PlanRunner implements IPlanRunner {
         });
 
         const finalSteps = await this.loadPlanSteps(parsedPlan.id);
-        return this.resolvePlanResult(plan, persistedPlan.acceptance_policy, finalSteps);
+        const result = await this.resolvePlanResult(plan, persistedPlan.acceptance_policy, finalSteps);
+
+        if (result.status === "COMPLETED" || result.status === "PARTIAL") {
+          sorPlanSuccessTotal.labels(result.status).inc();
+        } else {
+          sorPlanFailureTotal.labels(result.status, "execution_failure").inc();
+        }
+
+        return result;
       }
     );
   }
@@ -413,7 +421,7 @@ export class PlanRunner implements IPlanRunner {
       providerId: step.provider_id,
       legId: step.leg_id,
       quantity: step.target_size
-    });
+    }, step.provider_type === "INTERNAL");
   }
 
   private async createFallbackStep(

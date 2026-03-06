@@ -63,6 +63,8 @@ describe("SOR RouteScout", () => {
     const candidates = await scout.discoverCandidates(
       {
         rfqId: "743463b6-d96e-4f57-a9cb-0df01f0b2837",
+        idempotencyKey: "idem-743463b6-d96e-4f57-a9cb-0df01f0b2837",
+        stpMode: "CANCEL_NEWEST",
         canonicalMarketId: "market-1",
         takerId: "fddf7aa6-11ce-4039-836f-6f7e5ca77011",
         side: "buy",
@@ -144,6 +146,8 @@ describe("SOR RouteScout", () => {
 
     const rfq = {
       rfqId: "743463b6-d96e-4f57-a9cb-0df01f0b2837",
+      idempotencyKey: "idem-743463b6-d96e-4f57-a9cb-0df01f0b2837",
+      stpMode: "CANCEL_NEWEST" as const,
       canonicalMarketId: "market-1",
       takerId: "fddf7aa6-11ce-4039-836f-6f7e5ca77011",
       side: "buy" as const,

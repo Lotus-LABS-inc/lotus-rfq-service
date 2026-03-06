@@ -39,6 +39,11 @@ interface ScenarioFixtures {
   perLegQuotes: Readonly<Record<string, readonly CandidateFixture[]>>;
 }
 
+const sleep = async (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
 const applyMigrations = async (pool: Pool): Promise<void> => {
   const migrationDirs = [
     path.resolve(process.cwd(), "infra", "migrations"),
@@ -66,19 +71,33 @@ const applyMigrations = async (pool: Pool): Promise<void> => {
 };
 
 const clearState = async (pool: Pool): Promise<void> => {
-  await pool.query(
-    `TRUNCATE TABLE
-      route_history,
-      route_steps,
-      route_candidates,
-      routing_plans,
-      rfq_executions,
-      rfq_events,
-      rfq_quotes,
-      lp_keys,
-      rfq_sessions
-    RESTART IDENTITY CASCADE`
-  );
+  let attempts = 0;
+  while (attempts < 5) {
+    try {
+      await pool.query(
+        `TRUNCATE TABLE
+          route_history,
+          route_steps,
+          route_candidates,
+          routing_plans,
+          rfq_executions,
+          rfq_events,
+          rfq_quotes,
+          lp_keys,
+          rfq_sessions
+        RESTART IDENTITY CASCADE`
+      );
+      return;
+    } catch (error) {
+      const code = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
+      if (code !== "40P01") {
+        throw error;
+      }
+      attempts += 1;
+      await sleep(100 * attempts);
+    }
+  }
+  throw new Error("Unable to clear SOR integration state due to repeated deadlocks.");
 };
 
 const buildRouteScout = (redis: RedisClient, fixtures: ScenarioFixtures): RouteScout => {
@@ -121,12 +140,14 @@ const makeRFQInput = (
   legs: Array<{ leg_id: string; canonical_market_id: string; side: "buy" | "sell"; quantity: number }>
 ): CanonicalRFQInput => ({
   rfqId,
+  idempotencyKey: `idem-${rfqId}`,
+  stpMode: "CANCEL_NEWEST",
   canonicalMarketId: legs[0]?.canonical_market_id ?? "market-default",
   takerId,
   side: "buy",
   quantity,
   metadata: {
-    reservation_token: `${RUN_PREFIX}res-${rfqId}`,
+    reservation_token: `res-${rfqId}`,
     legs
   }
 });
@@ -151,19 +172,19 @@ const insertRFQSession = async (
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW() + INTERVAL '10 minutes', $9::jsonb)`,
     [
       sessionId,
-      `${RUN_PREFIX}${randomUUID()}`,
-      `${RUN_PREFIX}market-1`,
+      randomUUID(),
+      "market-1",
       takerId,
       "buy",
       quantity,
       "ACCEPTED",
-      `${RUN_PREFIX}${randomUUID()}`,
+      randomUUID(),
       JSON.stringify({ acceptance_policy: policy })
     ]
   );
 };
 
-describe.skipIf(!ENV_READY)("SOR build and run integration", () => {
+describe("SOR build and run integration", () => {
   let pool: Pool | undefined;
   let redis: RedisClient | undefined;
 
@@ -223,14 +244,15 @@ describe.skipIf(!ENV_READY)("SOR build and run integration", () => {
       planComposer: new PlanComposer({
         pool: pg,
         logger
-      })
+      }),
+      logger
     });
 
     const riskUpdates = new Set<string>();
     const riskEngine = {
       validateRFQCreation: async () => undefined,
       validateBeforeExecution: async () => `${RUN_PREFIX}unused`,
-      updateExposureAfterExecution: async (payload: Record<string, unknown>) => {
+      updateExposureAfterExecution: async (payload: Record<string, unknown>, _isInternal = false) => {
         const executionId = String(payload.executionId);
         if (riskUpdates.has(executionId)) {
           throw new Error(`duplicate exposure update ${executionId}`);
@@ -316,7 +338,8 @@ describe.skipIf(!ENV_READY)("SOR build and run integration", () => {
       planComposer: new PlanComposer({
         pool: pg,
         logger
-      })
+      }),
+      logger
     });
 
     const executionRouter: IExecutionRouter = {
@@ -333,7 +356,7 @@ describe.skipIf(!ENV_READY)("SOR build and run integration", () => {
       riskEngine: {
         validateRFQCreation: async () => undefined,
         validateBeforeExecution: async () => `${RUN_PREFIX}unused`,
-        updateExposureAfterExecution: async () => undefined,
+        updateExposureAfterExecution: async (_exec: Record<string, unknown>, _isInternal = false) => undefined,
         reconcileExposureSnapshot: async () => undefined
       },
       logger,
@@ -387,7 +410,8 @@ describe.skipIf(!ENV_READY)("SOR build and run integration", () => {
       planComposer: new PlanComposer({
         pool: pg,
         logger
-      })
+      }),
+      logger
     });
 
     await expect(
@@ -437,7 +461,8 @@ describe.skipIf(!ENV_READY)("SOR build and run integration", () => {
       planComposer: new PlanComposer({
         pool: pg,
         logger
-      })
+      }),
+      logger
     });
 
     const executionRouter: IExecutionRouter = {
@@ -456,7 +481,7 @@ describe.skipIf(!ENV_READY)("SOR build and run integration", () => {
       riskEngine: {
         validateRFQCreation: async () => undefined,
         validateBeforeExecution: async () => `${RUN_PREFIX}unused`,
-        updateExposureAfterExecution: async () => undefined,
+        updateExposureAfterExecution: async (_exec: Record<string, unknown>, _isInternal = false) => undefined,
         reconcileExposureSnapshot: async () => undefined
       },
       logger,
@@ -502,4 +527,3 @@ describe.skipIf(!ENV_READY)("SOR build and run integration", () => {
     expect(fallbackStep.rows[0]?.state).toBe("FILLED");
   }, 60000);
 });
-

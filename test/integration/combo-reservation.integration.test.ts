@@ -28,7 +28,7 @@ class ConcurrencyRiskEngine {
         return "token-" + lockId;
     }
 
-    async updateExposureAfterExecution() { return; }
+    async updateExposureAfterExecution(_exec: Record<string, unknown>, _isInternal = false) { return; }
     async rollbackReservation(token: string) {
         const lockId = token.replace("token-", "");
         this.inFlightLocks.delete(lockId);

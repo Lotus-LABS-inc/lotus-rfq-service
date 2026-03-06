@@ -38,6 +38,11 @@ export interface BootstrapModules {
     db: AppDb;
     canonicalServiceBaseUrl: string;
     jwtSecret: string;
+    sorEnabled?: boolean;
+    sorCanaryShadowEnabled?: boolean;
+    sorCanaryPercent?: number;
+    sorCanaryStartAt?: string;
+    sorCanaryEndAt?: string;
     reliabilityWeight: number;
     latencyWeight: number;
     failureWeight: number;
@@ -87,6 +92,11 @@ export const startService = async (
     db,
     canonicalServiceBaseUrl: env.CANONICAL_SERVICE_BASE_URL,
     jwtSecret: env.JWT_SECRET,
+    sorEnabled: env.SOR_ENABLED,
+    sorCanaryShadowEnabled: env.SOR_CANARY_SHADOW_ENABLED,
+    sorCanaryPercent: env.SOR_CANARY_PERCENT,
+    ...(env.SOR_CANARY_START_AT ? { sorCanaryStartAt: env.SOR_CANARY_START_AT } : {}),
+    ...(env.SOR_CANARY_END_AT ? { sorCanaryEndAt: env.SOR_CANARY_END_AT } : {}),
     reliabilityWeight: env.RELIABILITY_WEIGHT,
     latencyWeight: env.LATENCY_WEIGHT,
     failureWeight: env.FAILURE_WEIGHT,

@@ -34,10 +34,11 @@ export interface OrderRouterDependencies {
   costModel: ICostModel;
   splitter: ISplitter;
   planComposer: IPlanComposer;
+  logger: Pick<import("pino").Logger, "info" | "warn" | "error">;
 }
 
 export class OrderRouter implements IOrderRouter {
-  public constructor(private readonly deps: OrderRouterDependencies) {}
+  public constructor(private readonly deps: OrderRouterDependencies) { }
 
   public async buildPlan(
     rfq: CanonicalRFQInput,
@@ -54,7 +55,10 @@ export class OrderRouter implements IOrderRouter {
       async () => {
         const startedAt = performance.now();
         const reservationToken = this.readReservationToken(rfq);
-        const routeCandidates = await this.deps.routeScout.discoverCandidates(rfq, selectedQuote, policy);
+        const allCandidates = await this.deps.routeScout.discoverCandidates(rfq, selectedQuote, policy);
+
+        const routeCandidates = this.filterSTPViolations(rfq, allCandidates);
+
         if (routeCandidates.length === 0) {
           throw new InsufficientLiquidityError("00000000-0000-0000-0000-000000000000", selectedQuote.quantity);
         }
@@ -70,7 +74,8 @@ export class OrderRouter implements IOrderRouter {
         );
 
         sorPlanBuildLatencyMs.labels(policy).observe(performance.now() - startedAt);
-        sorAvgSplitsPerLeg.labels(rfq.rfqId).set(this.calculateAvgSplitsPerLeg(routeCandidates, allocations));
+        const avgSplits = this.calculateAvgSplitsPerLeg(routeCandidates, allocations);
+        sorAvgSplitsPerLeg.labels(rfq.rfqId).set(avgSplits);
 
         return this.composePlan(rfq, selectedQuote, policy, scoredCandidates, allocations, {
           reservationToken,
@@ -80,13 +85,43 @@ export class OrderRouter implements IOrderRouter {
     );
   }
 
+
   public async evaluateCandidates(
     rfq: CanonicalRFQInput,
     selectedQuote: SelectedQuoteInput,
     policy: SORAcceptancePolicy
   ): Promise<readonly CandidateScore[]> {
-    const candidates = await this.deps.routeScout.discoverCandidates(rfq, selectedQuote, policy);
+    const allCandidates = await this.deps.routeScout.discoverCandidates(rfq, selectedQuote, policy);
+    const candidates = this.filterSTPViolations(rfq, allCandidates);
     return this.deps.costModel.evaluateCandidates(rfq, candidates, selectedQuote, policy);
+  }
+
+  private filterSTPViolations(
+    rfq: CanonicalRFQInput,
+    candidates: readonly import("./types.js").RouteCandidate[]
+  ): readonly import("./types.js").RouteCandidate[] {
+    const stpMode = rfq.stpMode ?? "CANCEL_NEWEST";
+    if (stpMode === "NONE") return candidates;
+
+    return candidates.filter((candidate) => {
+      // In this system, provider_id is the unique identifier for the LP/Venue
+      // and takerId is the unique identifier for the user.
+      // If they match, it's a potential self-trade.
+      if (candidate.provider_id === rfq.takerId) {
+        // Log STP event
+        this.deps.logger.warn(
+          {
+            rfqId: rfq.rfqId,
+            takerId: rfq.takerId,
+            providerId: candidate.provider_id,
+            stpMode
+          },
+          "Self-trade violation detected; filtering candidate."
+        );
+        return false;
+      }
+      return true;
+    });
   }
 
   public async composePlan(
@@ -104,16 +139,16 @@ export class OrderRouter implements IOrderRouter {
     const routeCandidates =
       options?.routeCandidates ?? (await this.deps.routeScout.discoverCandidates(rfq, selectedQuote, policy));
 
-    return this.deps.planComposer.composePlan({
+    // The instruction implies idempotencyKey should be part of rfq,
+    // so we pass the rfq object directly to the plan composer.
+    // If CanonicalRFQInput is updated to include idempotencyKey, it will be available here.
+    return this.deps.planComposer.composePlan(
       rfq,
-      selectedQuote,
-      policy,
-      reservationToken,
-      createdBy: rfq.takerId,
       routeCandidates,
       scoredCandidates,
-      allocations
-    });
+      allocations,
+      policy
+    );
   }
 
   private readReservationToken(rfq: CanonicalRFQInput): string {
@@ -156,10 +191,15 @@ export class OrderRouter implements IOrderRouter {
         );
       }
 
+      const perProviderCapacity: Record<string, number> = {};
+      for (const candidate of legCandidates) {
+        perProviderCapacity[candidate.provider_id] = candidate.available_size;
+      }
+
       const splitResult = await this.deps.splitter.split(targetSize, legScored, {
         minChunkSize: DEFAULT_MIN_CHUNK,
         tickSize: DEFAULT_TICK_SIZE,
-        perProviderCapacity: {}
+        perProviderCapacity
       });
 
       const allocated = splitResult.reduce((total, split) => total + split.roundedSize, 0);

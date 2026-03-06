@@ -18,6 +18,8 @@ import {
 
 const rfqInput: CanonicalRFQInput = {
   rfqId: "d39689d9-ac70-4e34-bc07-d3bfb9f4e440",
+  idempotencyKey: "idem-d39689d9-ac70-4e34-bc07-d3bfb9f4e440",
+  stpMode: "CANCEL_NEWEST",
   canonicalMarketId: "market-1",
   takerId: "2e1f2680-b6aa-43c2-9f35-b17cdd67309f",
   side: "buy",
@@ -99,7 +101,8 @@ describe("SOR OrderRouter", () => {
       routeScout: { discoverCandidates } as never,
       costModel: { evaluateCandidates } as never,
       splitter: { split } as never,
-      planComposer: { composePlan } as never
+      planComposer: { composePlan } as never,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never
     });
 
     const plan = await router.buildPlan(rfqInput, selectedQuoteInput, "ALL_OR_NONE");
@@ -177,7 +180,8 @@ describe("SOR OrderRouter", () => {
           }
         ])
       } as never,
-      planComposer: { composePlan: vi.fn() } as never
+      planComposer: { composePlan: vi.fn() } as never,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never
     });
 
     await expect(router.buildPlan(rfqInput, selectedQuoteInput, "ALL_OR_NONE")).rejects.toBeInstanceOf(

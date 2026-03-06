@@ -137,5 +137,27 @@ export const registerAdminSORRoutes = async (
       return reply.status(500).send({ code: "INTERNAL_ERROR", message: "Failed to retry SOR step." });
     }
   });
+
+  app.post("/admin/sor/config", { preHandler: adminMiddleware }, async (request, reply) => {
+    const bodySchema = z.object({
+      sorEnabled: z.boolean().optional(),
+      sorCanaryShadowEnabled: z.boolean().optional(),
+      sorCanaryPercent: z.number().min(0).max(100).optional(),
+      twoFactorToken: z.string().min(6, "twoFactorToken is required for ADMIN+2FA operations")
+    });
+
+    const parsedBody = bodySchema.safeParse(request.body);
+    if (!parsedBody.success) {
+      return reply.status(400).send(parsedBody.error.flatten());
+    }
+
+    try {
+      await deps.sorAdminService.updateConfig(parsedBody.data);
+      return reply.send({ ok: true });
+    } catch (error) {
+      app.log.error({ err: error }, "Failed to update SOR runtime configuration.");
+      return reply.status(500).send({ code: "INTERNAL_ERROR", message: "Failed to update SOR configuration." });
+    }
+  });
 };
 
