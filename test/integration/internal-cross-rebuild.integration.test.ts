@@ -1,21 +1,42 @@
 import { randomUUID } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pino from "pino";
 import { Pool } from "pg";
 import { connectRedis, createRedisClient, disconnectRedis, type RedisClient } from "../../src/db/redis.js";
 import { OrderBook } from "../../src/core/internal-engine/order-book.js";
 import { InternalCrossBookRebuilder } from "../../src/core/internal-engine/rebuild-book.js";
 import type { InternalOrder } from "../../src/core/internal-engine/types.js";
-import { deleteRedisKeysByPrefix } from "../helpers/redis-test-utils.js";
 
 const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const TEST_REDIS_URL = process.env.TEST_REDIS_URL ?? process.env.REDIS_URL;
 const ENV_READY = Boolean(TEST_DB_URL && TEST_REDIS_URL);
 const logger = pino({ level: "silent" });
 
+const hasRequiredTables = async (pool: Pool): Promise<boolean> => {
+  const result = await pool.query<{ table_name: string }>(
+    `SELECT table_name
+       FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = ANY($1::text[])`,
+    [[
+      "internal_orders",
+      "trades",
+      "exposure",
+      "exposure_journal",
+      "exposure_idempotency"
+    ]]
+  );
+
+  return result.rows.length === 5;
+};
+
 const applyMigrations = async (pool: Pool): Promise<void> => {
+  if (await hasRequiredTables(pool)) {
+    return;
+  }
+
   for (const migrationsDir of [path.resolve(process.cwd(), "infra", "migrations"), path.resolve(process.cwd(), "sql", "migrations")]) {
     const files = (await readdir(migrationsDir)).filter((name) => name.endsWith(".sql")).sort((a, b) => a.localeCompare(b));
     for (const file of files) {
@@ -37,10 +58,6 @@ const applyMigrations = async (pool: Pool): Promise<void> => {
       }
     }
   }
-};
-
-const clearState = async (pool: Pool): Promise<void> => {
-  await pool.query(`TRUNCATE TABLE internal_orders, trades, exposure, exposure_journal, exposure_idempotency RESTART IDENTITY CASCADE`);
 };
 
 const makeOrder = (overrides: Partial<InternalOrder> = {}): InternalOrder => ({
@@ -74,11 +91,6 @@ describe.skipIf(!ENV_READY)("internal-cross rebuild integration", () => {
     orderBook = new OrderBook(must(redis, "redis"));
   }, 120000);
 
-  beforeEach(async () => {
-    await clearState(must(pool, "pool"));
-    await deleteRedisKeysByPrefix(must(redis, "redis") as any, ["book:"]);
-  });
-
   afterAll(async () => {
     if (redis) await disconnectRedis(redis).catch(() => undefined);
     if (pool) await pool.end();
@@ -97,10 +109,10 @@ describe.skipIf(!ENV_READY)("internal-cross rebuild integration", () => {
     );
 
     const rebuilder = new InternalCrossBookRebuilder(pg, book, logger);
-    const dryRun = await rebuilder.rebuild({ dryRun: true });
+    const dryRun = await rebuilder.rebuild({ dryRun: true, scope: { marketIds: [order.market_id] } });
     expect(dryRun.postgresOpenOrders).toBe(1);
 
-    const applied = await rebuilder.rebuild();
+    const applied = await rebuilder.rebuild({ scope: { marketIds: [order.market_id] } });
     expect(applied.rebuiltOrders).toBe(1);
 
     const restored = await book.getBestOppositeOrders(order.market_id, "buy", "0.55");

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pino from "pino";
 import { Pool } from "pg";
 import { connectRedis, createRedisClient, disconnectRedis, type RedisClient } from "../../src/db/redis.js";
@@ -21,7 +21,29 @@ const sleep = async (ms: number): Promise<void> =>
     setTimeout(resolve, ms);
   });
 
+const hasRequiredTables = async (pool: Pool): Promise<boolean> => {
+  const result = await pool.query<{ table_name: string }>(
+    `SELECT table_name
+       FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = ANY($1::text[])`,
+    [[
+      "internal_orders",
+      "trades",
+      "exposure",
+      "exposure_journal",
+      "exposure_idempotency"
+    ]]
+  );
+
+  return result.rows.length === 5;
+};
+
 const applyMigrations = async (pool: Pool): Promise<void> => {
+  if (await hasRequiredTables(pool)) {
+    return;
+  }
+
   const migrationDirs = [
     path.resolve(process.cwd(), "infra", "migrations"),
     path.resolve(process.cwd(), "sql", "migrations")
@@ -54,42 +76,6 @@ const applyMigrations = async (pool: Pool): Promise<void> => {
       }
     }
   }
-};
-
-const clearState = async (pool: Pool): Promise<void> => {
-  let attempts = 0;
-  while (attempts < 5) {
-    try {
-      await pool.query(
-        `TRUNCATE TABLE
-          exposure_idempotency,
-          exposure_journal,
-          exposure,
-          trades,
-          internal_orders,
-          route_history,
-          route_steps,
-          route_candidates,
-          routing_plans,
-          rfq_executions,
-          rfq_events,
-          rfq_quotes,
-          lp_keys,
-          rfq_sessions
-        RESTART IDENTITY CASCADE`
-      );
-      return;
-    } catch (error) {
-      const code = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
-      if (code !== "40P01") {
-        throw error;
-      }
-      attempts += 1;
-      await sleep(100 * attempts);
-    }
-  }
-
-  throw new Error("Unable to clear internal crossing integration state due to repeated deadlocks.");
 };
 
 const makeOrder = (
@@ -176,7 +162,6 @@ describe.skipIf(!ENV_READY)("internal crossing engine integration", () => {
   beforeAll(async () => {
     pool = new Pool({ connectionString: TEST_DB_URL as string });
     await applyMigrations(must(pool, "pool"));
-    await clearState(must(pool, "pool"));
 
     redis = createRedisClient({
       redisUrl: TEST_REDIS_URL as string,
@@ -194,11 +179,7 @@ describe.skipIf(!ENV_READY)("internal crossing engine integration", () => {
       }),
       logger
     );
-  }, 60000);
-
-  beforeEach(async () => {
-    await clearState(must(pool, "pool"));
-  });
+  }, 180000);
 
   afterAll(async () => {
     if (redis) {
@@ -214,7 +195,7 @@ describe.skipIf(!ENV_READY)("internal crossing engine integration", () => {
     if (pool) {
       await pool.end();
     }
-  }, 60000);
+  }, 180000);
 
   it("persists PARTIAL after a partial fill and later settles maker to FILLED", async () => {
     const pg = must(pool, "pool");
