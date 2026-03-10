@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
   CanonicalRFQInputSchema,
+  LiquiditySource,
   RouteCandidateSchema,
   SelectedQuoteInputSchema,
   type CanonicalRFQInput,
@@ -254,7 +255,7 @@ export class RouteScout implements IRouteScout {
 
           for (const hint of internalHints) {
             const internalInputBase = {
-              providerType: "INTERNAL" as const,
+              providerType: LiquiditySource.INTERNAL_CROSS,
               providerId: hint.providerId,
               availableSize: hint.availableSize,
               quotedPrice: hint.quotedPrice,
@@ -284,7 +285,7 @@ export class RouteScout implements IRouteScout {
   private normalizeCandidate(
     legId: string,
     input: {
-      providerType: "LP" | "VENUE" | "INTERNAL";
+      providerType: import("./types.js").LiquiditySourceValue;
       providerId: string;
       availableSize: number;
       quotedPrice: number;

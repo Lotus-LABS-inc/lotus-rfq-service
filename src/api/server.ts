@@ -31,6 +31,8 @@ import { ComboRepository } from "../repositories/combo.repository.js";
 import { registerAdminComboRoutes } from "./admin/combo.routes.js";
 import { registerAdminSORRoutes } from "./admin/sor.routes.js";
 import { SORAdminService } from "./admin/sor-admin-service.js";
+import { registerAdminInternalCrossRoutes } from "./admin/internal-cross.routes.js";
+import { InternalCrossAdminService } from "./admin/internal-cross-admin-service.js";
 import { CostModel, OrderRouter, PlanComposer, PlanRunner, RouteScout, Splitter, type SORAcceptancePolicy, type CanonicalRFQInput } from "../core/sor/index.js";
 import {
   compareShadowDecisions,
@@ -52,7 +54,7 @@ import { withSpan } from "../observability/tracing.js";
 import { InternalCrossingEngine } from "../core/internal-engine/engine.js";
 import { OrderBook } from "../core/internal-engine/order-book.js";
 import { OrderLocker } from "../core/internal-engine/locker.js";
-import { internalCrossingFilledSizeTotal, internalCrossingTotal } from "../observability/metrics.js";
+import { isInternalCrossKillSwitchActive } from "../core/internal-engine/runtime-controls.js";
 
 export interface ServerDependencies {
   logger: Logger;
@@ -66,6 +68,11 @@ export interface ServerDependencies {
   sorCanaryPercent?: number;
   sorCanaryStartAt?: string;
   sorCanaryEndAt?: string;
+  internalCrossEnabled?: boolean;
+  internalCrossShadowEnabled?: boolean;
+  internalCrossShadowPercent?: number;
+  internalCrossShadowStartAt?: string;
+  internalCrossShadowEndAt?: string;
   reliabilityWeight: number;
   latencyWeight: number;
   failureWeight: number;
@@ -80,6 +87,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const sorEnabled = dependencies.sorEnabled ?? false;
   const sorCanaryShadowEnabled = dependencies.sorCanaryShadowEnabled ?? false;
   const sorCanaryPercent = dependencies.sorCanaryPercent ?? 0;
+  const internalCrossEnabled = dependencies.internalCrossEnabled ?? false;
 
   await app.register(fastifyJwt, {
     secret: dependencies.jwtSecret
@@ -174,6 +182,14 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       getOrderbookSnapshot: async () => null
     }
   });
+  const internalOrderBook = new OrderBook(dependencies.redisClient);
+  const internalOrderLocker = new OrderLocker(dependencies.redisClient);
+  const internalEngine = new InternalCrossingEngine(
+    dependencies.pgPool,
+    internalOrderBook,
+    internalOrderLocker,
+    dependencies.logger
+  );
   const orderRouter = new OrderRouter({
     routeScout: sorRouteScout,
     costModel: new CostModel(),
@@ -182,17 +198,19 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       pool: dependencies.pgPool,
       logger: dependencies.logger
     }),
-    logger: dependencies.logger
+    internalEngine,
+    logger: dependencies.logger,
+    internalCrossingEnabled: internalCrossEnabled,
+    ...(dependencies.internalCrossShadowEnabled !== undefined
+      ? { internalCrossingShadowEnabled: dependencies.internalCrossShadowEnabled }
+      : {}),
+    ...(dependencies.internalCrossShadowPercent !== undefined
+      ? { internalCrossingShadowPercent: dependencies.internalCrossShadowPercent }
+      : {}),
+    ...(dependencies.internalCrossShadowStartAt ? { internalCrossingShadowStartAt: dependencies.internalCrossShadowStartAt } : {}),
+    ...(dependencies.internalCrossShadowEndAt ? { internalCrossingShadowEndAt: dependencies.internalCrossShadowEndAt } : {}),
+    isKillSwitchActive: async () => isInternalCrossKillSwitchActive(dependencies.redisClient)
   });
-
-  const internalOrderBook = new OrderBook(dependencies.redisClient); // Fixed: removed logger
-  const internalOrderLocker = new OrderLocker(dependencies.redisClient); // Fixed: removed logger
-  const internalEngine = new InternalCrossingEngine(
-    dependencies.pgPool,
-    internalOrderBook,
-    internalOrderLocker,
-    dependencies.logger
-  );
 
   const sorExecutionRouter = {
     executeStep: async () => ({
@@ -295,57 +313,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
 
       const reservationToken = await riskEngine.validateBeforeExecution(session, quote);
 
-      // --- INTERNAL CROSSING ATTEMPT ---
-      const takerOrder = {
-        id: session.id,
-        user_id: session.taker_id,
-        market_id: session.canonical_market_id,
-        side: session.side,
-        price: quote.price,
-        initial_size: session.quantity,
-        remaining_size: session.quantity,
-        status: "OPEN" as const,
-        created_at: session.created_at,
-        updated_at: new Date()
-      };
-
-      const crossResult = await internalEngine.attemptCross(takerOrder);
-
-      if (crossResult.filledSize > 0) {
-        internalCrossingTotal.inc({
-          market_id: session.canonical_market_id,
-          side: session.side,
-          status: crossResult.remainingSize === 0 ? "FILLED" : "PARTIAL"
-        });
-        internalCrossingFilledSizeTotal.inc(
-          { market_id: session.canonical_market_id, side: session.side },
-          crossResult.filledSize
-        );
-      } else {
-        internalCrossingTotal.inc({
-          market_id: session.canonical_market_id,
-          side: session.side,
-          status: "NONE"
-        });
-      }
-
-      if (crossResult.remainingSize <= 0) {
-        await transitionRFQState(sessionId, "ACCEPTED", "internal_match_full");
-        await transitionRFQState(sessionId, "SETTLED", "internal_match_full");
-        return {
-          status: "PLAN_ACCEPTED" as const,
-          plan_id: `internal-${sessionId}`,
-          plan_state: "COMPLETED" as const,
-          dispatch_mode: "awaited" as const,
-          final_status: "COMPLETED" as const
-        };
-      }
-      // --- END INTERNAL CROSSING ---
-
       const rfqInput: CanonicalRFQInput = {
         rfqId: session.id,
         idempotencyKey: session.idempotency_key,
-        quantity: crossResult.remainingSize.toString(),
+        quantity: session.quantity,
         side: session.side,
         canonicalMarketId: session.canonical_market_id,
         stpMode: (session.metadata as any)?.stp_mode ?? "CANCEL_NEWEST",
@@ -356,7 +327,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
             {
               leg_id: "00000000-0000-0000-0000-000000000000",
               symbol: session.canonical_market_id,
-              target_quantity: crossResult.remainingSize.toString()
+              target_quantity: session.quantity
             }
           ]
         }
@@ -367,14 +338,44 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           ? { lpId: quote.quote_payload.lpId }
           : {}),
         price: Number.parseFloat(quote.price),
-        quantity: crossResult.remainingSize,
+        quantity: Number.parseFloat(session.quantity),
         feeBps: quote.fee_bps,
         validUntil: quote.valid_until.toISOString(),
         payload: quote.quote_payload
       } as const;
 
+      let buildResult;
+      try {
+        buildResult = await orderRouter.buildPlan(rfqInput, selectedQuoteInput, acceptancePolicy);
+      } catch (error) {
+        if (riskEngine.rollbackReservation) {
+          await riskEngine.rollbackReservation(reservationToken).catch((rollbackError: unknown) => {
+            dependencies.logger.error(
+              { err: rollbackError, sessionId, reservationToken },
+              "Failed to rollback risk reservation after internal-cross/SOR build failure."
+            );
+          });
+        }
+        throw error;
+      }
+
+      if (buildResult.kind === "internal_filled") {
+        if (riskEngine.rollbackReservation) {
+          await riskEngine.rollbackReservation(reservationToken);
+        }
+        await transitionRFQState(sessionId, "ACCEPTED", "internal_match_full");
+        await transitionRFQState(sessionId, "SETTLED", "internal_match_full");
+        return {
+          status: "PLAN_ACCEPTED" as const,
+          plan_id: `internal-${sessionId}`,
+          plan_state: "COMPLETED" as const,
+          dispatch_mode: "awaited" as const,
+          final_status: "COMPLETED" as const
+        };
+      }
+
       const executeSORAccept = async () => {
-        const plan = await orderRouter.buildPlan(rfqInput, selectedQuoteInput, acceptancePolicy);
+        const plan = buildResult.plan;
 
         const runPlanAndTransition = async (): Promise<"COMPLETED" | "PARTIAL" | "FAILED" | "UNWOUND"> => {
           await transitionRFQState(sessionId, "ACCEPTED", "sor_plan_created");
@@ -654,6 +655,13 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       pool: dependencies.pgPool,
       redis: dependencies.redisClient,
       planRunner,
+      logger: dependencies.logger
+    })
+  });
+  await registerAdminInternalCrossRoutes(app, adminAuthMiddleware, {
+    internalCrossAdminService: new InternalCrossAdminService({
+      pool: dependencies.pgPool,
+      redis: dependencies.redisClient,
       logger: dependencies.logger
     })
   });

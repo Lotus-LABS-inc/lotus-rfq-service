@@ -5,6 +5,14 @@ import type { RedisClient } from "../../db/redis.js";
 export class OrderBook {
     constructor(private readonly redis: RedisClient) { }
 
+    async getOrderSnapshot(orderId: string): Promise<{ key: string; raw: string | null }> {
+        const key = this.orderKey(orderId);
+        return {
+            key,
+            raw: await this.redis.get(key)
+        };
+    }
+
     async addOrder(order: InternalOrder): Promise<RedisBookOrder> {
         const bookOrder = this.toBookOrder(order);
 

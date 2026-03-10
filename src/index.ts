@@ -43,6 +43,11 @@ export interface BootstrapModules {
     sorCanaryPercent?: number;
     sorCanaryStartAt?: string;
     sorCanaryEndAt?: string;
+    internalCrossEnabled?: boolean;
+    internalCrossShadowEnabled?: boolean;
+    internalCrossShadowPercent?: number;
+    internalCrossShadowStartAt?: string;
+    internalCrossShadowEndAt?: string;
     reliabilityWeight: number;
     latencyWeight: number;
     failureWeight: number;
@@ -97,6 +102,11 @@ export const startService = async (
     sorCanaryPercent: env.SOR_CANARY_PERCENT,
     ...(env.SOR_CANARY_START_AT ? { sorCanaryStartAt: env.SOR_CANARY_START_AT } : {}),
     ...(env.SOR_CANARY_END_AT ? { sorCanaryEndAt: env.SOR_CANARY_END_AT } : {}),
+    internalCrossEnabled: env.INTERNAL_CROSS_ENABLED,
+    internalCrossShadowEnabled: env.INTERNAL_CROSS_SHADOW_ENABLED,
+    internalCrossShadowPercent: env.INTERNAL_CROSS_SHADOW_PERCENT,
+    ...(env.INTERNAL_CROSS_SHADOW_START_AT ? { internalCrossShadowStartAt: env.INTERNAL_CROSS_SHADOW_START_AT } : {}),
+    ...(env.INTERNAL_CROSS_SHADOW_END_AT ? { internalCrossShadowEndAt: env.INTERNAL_CROSS_SHADOW_END_AT } : {}),
     reliabilityWeight: env.RELIABILITY_WEIGHT,
     latencyWeight: env.LATENCY_WEIGHT,
     failureWeight: env.FAILURE_WEIGHT,

@@ -19,7 +19,10 @@
     "metrics:check": "node scripts/check-metrics.mjs",
     "db:migrate:test": "node scripts/db-migrate-test.mjs",
     "db:schema:validate": "node scripts/db-schema-validate.mjs",
-    "stress:sor": "tsx scripts/stress-sor.ts"
+    "stress:sor": "tsx scripts/stress-sor.ts",
+    "stress:internal-cross": "tsx scripts/stress-internal-cross.ts",
+    "chaos:internal-cross": "tsx scripts/chaos-internal-cross.ts",
+    "rebuild:internal-cross-book": "tsx scripts/rebuild-internal-cross-book.ts"
   },
   "dependencies": {
     "@fastify/jwt": "^10.0.0",

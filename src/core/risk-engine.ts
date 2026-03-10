@@ -40,6 +40,7 @@ export interface IRiskEngine {
     validateRFQCreation(rfq: { taker_id: string; canonical_market_id: string; side: "buy" | "sell"; quantity: string; id?: string }): Promise<void>;
     validateBeforeExecution(rfq: RFQSessionRecord, quote: RFQQuoteRecord): Promise<ReservationToken>;
     updateExposureAfterExecution(executionResult: Record<string, unknown>, isInternal?: boolean): Promise<void>;
+    rollbackReservation?(reservationToken: ReservationToken): Promise<void>;
     reconcileExposureSnapshot(): Promise<void>;
 }
 
@@ -176,9 +177,19 @@ export class RiskEngine implements IRiskEngine {
             // Record reservation in journal
             const exposureId = exposure?.id || "00000000-0000-0000-0000-000000000000";
             await client.query(
-                `INSERT INTO exposure_journal (exposure_id, change, prev_gross, prev_net, new_gross, new_net, source, reference_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-                [exposureId, 0, currentGross, 0, currentGross, 0, "pre-exec-reserve", rfq.id]
+                `INSERT INTO exposure_journal (exposure_id, change, prev_gross, prev_net, new_gross, new_net, source, reference_id, payload)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
+                [
+                    exposureId,
+                    0,
+                    currentGross,
+                    0,
+                    currentGross,
+                    0,
+                    "pre-exec-reserve",
+                    rfq.id,
+                    JSON.stringify({ reservationToken: lockToken, rfqId: rfq.id })
+                ]
             );
 
             await client.query("COMMIT");
@@ -208,10 +219,15 @@ export class RiskEngine implements IRiskEngine {
         const side = exec.side as "buy" | "sell";
         const deltaGross = Number.parseFloat(exec.executedQuantity as string) * Number.parseFloat(exec.executedPrice as string);
         const deltaNet = side === "buy" ? deltaGross : -deltaGross;
+        const reservationToken =
+            typeof exec.reservationToken === "string" ? (exec.reservationToken as ReservationToken) : undefined;
 
         const isFirstTime = await this.exposureRepository.applyExecutionIdempotent(executionId);
         if (!isFirstTime) {
             this.logger.info({ executionId }, "Exposure already updated for this execution (idempotent).");
+            if (reservationToken) {
+                await this.rollbackReservation(reservationToken).catch(() => undefined);
+            }
             return;
         }
 
@@ -230,7 +246,11 @@ export class RiskEngine implements IRiskEngine {
             // Update Redis rolling
             await this.redisCache.incRollingExposure(userId, marketId, deltaGross, 3600000); // 1 hour TTL for rolling
 
-            riskReservationsActive.dec();
+            if (reservationToken) {
+                await this.rollbackReservation(reservationToken);
+            } else {
+                riskReservationsActive.dec();
+            }
             riskExposureUpdatesTotal.inc();
 
             riskExposureCurrent.set({ user_id: userId, market_id: marketId, side }, deltaGross); // Simple gauge update
@@ -252,6 +272,42 @@ export class RiskEngine implements IRiskEngine {
             riskInternalErrorTotal.inc({ operation: "update_exposure_after_execution" });
             this.logger.error({ err: error, rfqId, executionId }, "Failed to update exposure after execution.");
             throw error;
+        }
+    }
+
+    public async rollbackReservation(reservationToken: ReservationToken): Promise<void> {
+        const client = await this.pool.connect();
+        try {
+            await client.query("BEGIN");
+            const reservationResult = await client.query<{ reference_id: string }>(
+                `DELETE FROM exposure_journal
+                 WHERE id = (
+                   SELECT id
+                   FROM exposure_journal
+                   WHERE source = 'pre-exec-reserve'
+                     AND payload->>'reservationToken' = $1
+                   ORDER BY id DESC
+                   LIMIT 1
+                 )
+                 RETURNING reference_id`,
+                [reservationToken]
+            );
+
+            await client.query("COMMIT");
+
+            const rfqId = reservationResult.rows[0]?.reference_id;
+            if (rfqId) {
+                await this.redisCache.unlockExposureKey(`risk:lock:exec:${rfqId}`, reservationToken);
+                riskReservationsActive.dec();
+                this.logger.info({ reservationToken, rfqId }, "Risk reservation rolled back.");
+            }
+        } catch (error) {
+            await client.query("ROLLBACK");
+            riskInternalErrorTotal.inc({ operation: "rollback_reservation" });
+            this.logger.error({ err: error, reservationToken }, "Failed to rollback reservation.");
+            throw error;
+        } finally {
+            client.release();
         }
     }
 

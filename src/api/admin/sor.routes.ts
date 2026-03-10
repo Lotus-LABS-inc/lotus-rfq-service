@@ -19,7 +19,7 @@ const forceUnwindBodySchema = z.object({
 const retryStepBodySchema = z.object({
   stepId: z.string().uuid(),
   newProviderId: z.string().min(1),
-  newProviderType: z.enum(["LP", "VENUE", "INTERNAL"]).default("LP"),
+  newProviderType: z.enum(["LP", "VENUE", "INTERNAL_CROSS"]).default("LP"),
   reason: z.string().min(1, "reason is required"),
   twoFactorToken: z.string().min(6, "twoFactorToken is required for ADMIN+2FA operations")
 });
@@ -160,4 +160,3 @@ export const registerAdminSORRoutes = async (
     }
   });
 };
-

@@ -18,7 +18,7 @@ interface RouteStepRow {
   routing_plan_id: string;
   leg_id: string;
   step_index: number;
-  provider_type: "LP" | "VENUE" | "INTERNAL";
+  provider_type: "LP" | "VENUE" | "INTERNAL_CROSS";
   provider_id: string;
   target_size: string;
   client_order_id: string;
@@ -33,7 +33,7 @@ interface RouteCandidateRow {
   id: string;
   routing_plan_id: string;
   leg_id: string;
-  provider_type: "LP" | "VENUE" | "INTERNAL";
+  provider_type: "LP" | "VENUE" | "INTERNAL_CROSS";
   provider_id: string;
   available_size: string;
   quoted_price: string;
@@ -53,7 +53,7 @@ export interface RetryStepInput {
   planId: string;
   stepId: string;
   newProviderId: string;
-  newProviderType: "LP" | "VENUE" | "INTERNAL";
+  newProviderType: "LP" | "VENUE" | "INTERNAL_CROSS";
   reason: string;
   requestedBy: string;
 }
@@ -308,4 +308,3 @@ export class SORAdminService {
     this.deps.logger.info({ updates }, "SOR runtime configuration updated.");
   }
 }
-

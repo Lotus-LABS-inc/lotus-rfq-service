@@ -37,7 +37,7 @@ export interface RedisBookOrder {
     createdAtMs: number;
 }
 
-export type InternalOrderStatus = 'OPEN' | 'FILLED' | 'CANCELLED';
+export type InternalOrderStatus = 'OPEN' | 'PARTIAL' | 'FILLED' | 'CANCELLED';
 
 /**
  * Represents a resting maker order in the Internal Crossing Engine.

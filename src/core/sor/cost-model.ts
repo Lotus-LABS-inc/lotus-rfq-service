@@ -4,6 +4,7 @@ import {
   type CanonicalRFQInput,
   type CandidateScore,
   type ICostModel,
+  LiquiditySource,
   type RouteCandidate,
   type SORAcceptancePolicy,
   type SelectedQuoteInput
@@ -54,8 +55,8 @@ export class CostModel implements ICostModel {
 
     const effectiveCost = notional.plus(expectedSlippage).plus(feeTotal);
 
-    // Cross Isolation Strategy: INTERNAL candidates have 0 penalty
-    const isInternal = candidate.provider_type === "INTERNAL";
+    // Cross isolation: internally crossed residual candidates carry no external failure/latency penalty.
+    const isInternal = candidate.provider_type === LiquiditySource.INTERNAL_CROSS;
 
     const fillProb = Math.max(0, Math.min(1, candidate.fill_prob));
     const failureProb = new Decimal(1).minus(fillProb);

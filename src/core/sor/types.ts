@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Trade } from "../internal-engine/types.js";
 
 export type UUID = string;
 export type CanonicalSide = "buy" | "sell";
@@ -9,6 +10,10 @@ export enum LiquiditySource {
   VENUE = "VENUE",
   INTERNAL_CROSS = "INTERNAL_CROSS"
 }
+
+export const LiquiditySourceValues = ["LP", "VENUE", "INTERNAL_CROSS"] as const;
+export const LiquiditySourceSchema = z.enum(LiquiditySourceValues);
+export type LiquiditySourceValue = z.infer<typeof LiquiditySourceSchema>;
 
 export type RoutingPlanStatus =
   | "DRAFT"
@@ -55,7 +60,7 @@ export type SelectedQuoteInput = z.infer<typeof SelectedQuoteInputSchema>;
 export const RouteCandidateSchema = z.object({
   id: z.string().uuid(),
   leg_id: z.string().uuid(),
-  provider_type: z.enum(["LP", "VENUE", "INTERNAL"]),
+  provider_type: LiquiditySourceSchema,
   provider_id: z.string().min(1),
   available_size: z.number().nonnegative(),
   quoted_price: z.number().nonnegative(),
@@ -70,7 +75,7 @@ export type RouteCandidate = z.infer<typeof RouteCandidateSchema>;
 export const PlanStepSchema = z.object({
   id: z.string().uuid(),
   stepIndex: z.number().int().nonnegative(),
-  providerType: z.enum(["LP", "VENUE", "INTERNAL"]),
+  providerType: LiquiditySourceSchema,
   providerId: z.string().min(1),
   candidateId: z.string().uuid().optional(),
   targetSize: z.number().nonnegative(),
@@ -93,6 +98,21 @@ export const ExecutionPlanSchema = z.object({
 });
 
 export type ExecutionPlan = z.infer<typeof ExecutionPlanSchema>;
+
+export interface InternalCrossBuildResult {
+  kind: "internal_filled";
+  filledSize: string;
+  trades: readonly Trade[];
+}
+
+export interface ExternalPlanBuildResult {
+  kind: "plan_created";
+  crossingFilledSize: string;
+  remainingSize: string;
+  plan: ExecutionPlan;
+}
+
+export type OrderRouterBuildResult = InternalCrossBuildResult | ExternalPlanBuildResult;
 
 export interface CostBreakdown {
   effectiveUnitCost: number;
@@ -152,7 +172,7 @@ export interface PersistedRouteStep {
   routing_plan_id: string;
   leg_id: string;
   step_index: number;
-  provider_type: "LP" | "VENUE" | "INTERNAL";
+  provider_type: LiquiditySourceValue;
   provider_id: string;
   target_size: string;
   client_order_id: string;
@@ -167,7 +187,7 @@ export interface PersistedRouteCandidate {
   id: string;
   routing_plan_id: string;
   leg_id: string;
-  provider_type: "LP" | "VENUE" | "INTERNAL";
+  provider_type: LiquiditySourceValue;
   provider_id: string;
   available_size: string;
   quoted_price: string;
@@ -182,7 +202,7 @@ export interface IOrderRouter {
     rfq: CanonicalRFQInput,
     selectedQuote: SelectedQuoteInput,
     policy: SORAcceptancePolicy
-  ): Promise<ExecutionPlan>;
+  ): Promise<OrderRouterBuildResult>;
 }
 
 export interface IRouteScout {

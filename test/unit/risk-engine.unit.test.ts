@@ -56,7 +56,14 @@ describe.skipIf(!ENV_READY)("RiskEngine Unit Tests", () => {
             await pool.end();
         }
         if (redis) {
-            await disconnectRedis(redis);
+            try {
+                await disconnectRedis(redis);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : "";
+                if (!message.includes("Connection is closed")) {
+                    throw error;
+                }
+            }
         }
     });
 
@@ -173,5 +180,37 @@ describe.skipIf(!ENV_READY)("RiskEngine Unit Tests", () => {
         await expect(riskEngine.validateBeforeExecution(rfq, quote)).rejects.toThrow("Unable to acquire risk lock for execution");
 
         lockSpy.mockRestore();
+    });
+
+    it("rolls back reservations by token and clears the lock", async () => {
+        const rfqId = randomUUID();
+        const rfq = {
+            id: rfqId,
+            taker_id: randomUUID(),
+            canonical_market_id: randomUUID(),
+            side: "buy" as const,
+            metadata: {}
+        } as any;
+        const quote = {
+            id: randomUUID(),
+            quantity: "10",
+            price: "0.5",
+            lp_key_id: randomUUID()
+        } as any;
+
+        const reservationToken = await riskEngine.validateBeforeExecution(rfq, quote);
+        const lockValueBefore = await redis.get(`risk:lock:exec:${rfqId}`);
+        expect(lockValueBefore).toBe(reservationToken);
+
+        await riskEngine.rollbackReservation?.(reservationToken);
+
+        const reservationRow = await pool.query(
+            `SELECT id FROM exposure_journal WHERE source = 'pre-exec-reserve' AND reference_id = $1`,
+            [rfqId]
+        );
+        const lockValueAfter = await redis.get(`risk:lock:exec:${rfqId}`);
+
+        expect(reservationRow.rowCount).toBe(0);
+        expect(lockValueAfter).toBeNull();
     });
 });

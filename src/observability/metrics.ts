@@ -372,4 +372,53 @@ export const internalCrossingFilledSizeTotal = new Counter({
   ...counterConfig
 });
 
+export const sorInternalCrossResultTotal = new Counter({
+  name: "sor_internal_cross_result_total",
+  help: "Total SOR internal crossing outcomes before external routing.",
+  labelNames: ["status"],
+  ...counterConfig
+});
+
+export const internalCrossKillSwitchTotal = new Counter({
+  name: "internal_cross_kill_switch_total",
+  help: "Total number of internal crossing suppressions due to kill switch.",
+  labelNames: ["mode"],
+  ...counterConfig
+});
+
+export const internalCrossShadowTotal = new Counter({
+  name: "internal_cross_shadow_total",
+  help: "Total internal-cross shadow evaluations.",
+  labelNames: ["status"],
+  ...counterConfig
+});
+
+export const internalCrossShadowMatchTotal = new Counter({
+  name: "internal_cross_shadow_match_total",
+  help: "Total internal-cross shadow evaluations that matched no-action expectations.",
+  labelNames: ["dimension"],
+  ...counterConfig
+});
+
+export const internalCrossShadowDivergenceTotal = new Counter({
+  name: "internal_cross_shadow_divergence_total",
+  help: "Total internal-cross shadow divergences against external-only routing.",
+  labelNames: ["reason"],
+  ...counterConfig
+});
+
+export const internalCrossRebuildTotal = new Counter({
+  name: "internal_cross_rebuild_total",
+  help: "Total internal-cross Redis rebuild runs.",
+  labelNames: ["result"],
+  ...counterConfig
+});
+
+export const internalCrossRebuildDiscrepancyTotal = new Counter({
+  name: "internal_cross_rebuild_discrepancy_total",
+  help: "Total discrepancies found during internal-cross Redis rebuild validation.",
+  labelNames: ["discrepancy_type"],
+  ...counterConfig
+});
+
 export const metricsRegistry = registry;

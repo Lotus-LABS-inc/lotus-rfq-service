@@ -211,7 +211,21 @@ const run = async (): Promise<void> => {
     planComposer: new PlanComposer({
       pool,
       logger
-    })
+    }),
+    internalEngine: {
+      attemptCross: async (order: { remaining_size: string }) => ({
+        filledSize: 0,
+        remainingSize: Number.parseFloat(order.remaining_size),
+        trades: []
+      }),
+      previewCross: async (order: { remaining_size: string }) => ({
+        fillableSize: 0,
+        remainingSize: Number.parseFloat(order.remaining_size),
+        matchedOrderIds: [],
+        wouldSelfTrade: false
+      })
+    },
+    logger
   });
 
   const planRunner = new PlanRunner({
@@ -244,15 +258,18 @@ const run = async (): Promise<void> => {
     }));
 
     await insertRFQSession(pool, rfqId, takerId, size.toString(), policy);
-    const plan = await orderRouter.buildPlan(
+    const buildResult = await orderRouter.buildPlan(
       buildRFQ(rfqId, takerId, size, legDefs),
       buildSelectedQuote(size),
       policy
     );
-    executedPlanIds.push(plan.id);
+    if (buildResult.kind !== "plan_created") {
+      return { planId: `internal-${rfqId}`, status: "COMPLETED" as const };
+    }
+    executedPlanIds.push(buildResult.plan.id);
 
-    const result = await planRunner.run(plan);
-    return { planId: plan.id, status: result.status };
+    const result = await planRunner.run(buildResult.plan);
+    return { planId: buildResult.plan.id, status: result.status };
   });
 
   const settled = await Promise.allSettled(scenarios);

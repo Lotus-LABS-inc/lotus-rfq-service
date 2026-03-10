@@ -14,6 +14,7 @@ import { InsufficientLiquidityError, Splitter } from "../../src/core/sor/splitte
 import type {
   CanonicalRFQInput,
   IExecutionRouter,
+  OrderRouterBuildResult,
   PlanStep,
   SORAcceptancePolicy,
   SelectedQuoteInput
@@ -133,6 +134,28 @@ const buildRouteScout = (redis: RedisClient, fixtures: ScenarioFixtures): RouteS
   });
 };
 
+const buildNoFillInternalEngine = () => ({
+  attemptCross: async (order: { remaining_size: string }) => ({
+    filledSize: 0,
+    remainingSize: Number.parseFloat(order.remaining_size),
+    trades: []
+  }),
+  previewCross: async (order: { remaining_size: string }) => ({
+    fillableSize: 0,
+    remainingSize: Number.parseFloat(order.remaining_size),
+    matchedOrderIds: [],
+    wouldSelfTrade: false
+  })
+});
+
+const expectPlanCreated = (result: OrderRouterBuildResult) => {
+  expect(result.kind).toBe("plan_created");
+  if (result.kind !== "plan_created") {
+    throw new Error("Expected plan_created result.");
+  }
+  return result.plan;
+};
+
 const makeRFQInput = (
   rfqId: string,
   takerId: string,
@@ -196,6 +219,9 @@ describe("SOR build and run integration", () => {
   };
 
   beforeAll(async () => {
+    if (!ENV_READY) {
+      return;
+    }
     pool = new Pool({ connectionString: TEST_DB_URL as string });
     await applyMigrations(must(pool, "pool"));
     await clearState(must(pool, "pool"));
@@ -208,12 +234,22 @@ describe("SOR build and run integration", () => {
   }, 60000);
 
   beforeEach(async () => {
+    if (!ENV_READY) {
+      return;
+    }
     await clearState(must(pool, "pool"));
   });
 
   afterAll(async () => {
     if (redis) {
-      await disconnectRedis(redis);
+      try {
+        await disconnectRedis(redis);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (!message.includes("Connection is closed")) {
+          throw error;
+        }
+      }
     }
     if (pool) {
       await pool.end();
@@ -245,6 +281,7 @@ describe("SOR build and run integration", () => {
         pool: pg,
         logger
       }),
+      internalEngine: buildNoFillInternalEngine(),
       logger
     });
 
@@ -280,7 +317,7 @@ describe("SOR build and run integration", () => {
       }
     });
 
-    const plan = await router.buildPlan(
+    const plan = expectPlanCreated(await router.buildPlan(
       makeRFQInput(rfqId, takerId, "10", [
         {
           leg_id: legId,
@@ -291,7 +328,7 @@ describe("SOR build and run integration", () => {
       ]),
       makeSelectedQuote(10),
       "ALL_OR_NONE"
-    );
+    ));
     const result = await runner.run(plan);
 
     expect(result.status).toBe("COMPLETED");
@@ -339,6 +376,7 @@ describe("SOR build and run integration", () => {
         pool: pg,
         logger
       }),
+      internalEngine: buildNoFillInternalEngine(),
       logger
     });
 
@@ -365,14 +403,14 @@ describe("SOR build and run integration", () => {
       }
     });
 
-    const plan = await router.buildPlan(
+    const plan = expectPlanCreated(await router.buildPlan(
       makeRFQInput(rfqId, takerId, "10", [
         { leg_id: legA, canonical_market_id: `${RUN_PREFIX}market-a`, side: "buy", quantity: 10 },
         { leg_id: legB, canonical_market_id: `${RUN_PREFIX}market-b`, side: "buy", quantity: 10 }
       ]),
       makeSelectedQuote(10),
       "PARTIAL_ALLOWED"
-    );
+    ));
     const result = await runner.run(plan);
 
     expect(result.status).toBe("COMPLETED");
@@ -411,6 +449,7 @@ describe("SOR build and run integration", () => {
         pool: pg,
         logger
       }),
+      internalEngine: buildNoFillInternalEngine(),
       logger
     });
 
@@ -462,6 +501,7 @@ describe("SOR build and run integration", () => {
         pool: pg,
         logger
       }),
+      internalEngine: buildNoFillInternalEngine(),
       logger
     });
 
@@ -490,7 +530,7 @@ describe("SOR build and run integration", () => {
       }
     });
 
-    const plan = await router.buildPlan(
+    const plan = expectPlanCreated(await router.buildPlan(
       makeRFQInput(rfqId, takerId, "10", [
         {
           leg_id: legId,
@@ -501,7 +541,7 @@ describe("SOR build and run integration", () => {
       ]),
       makeSelectedQuote(10),
       "BEST_EFFORT"
-    );
+    ));
     const result = await runner.run(plan);
 
     expect(["COMPLETED", "PARTIAL"]).toContain(result.status);

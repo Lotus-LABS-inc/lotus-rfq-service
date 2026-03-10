@@ -24,6 +24,11 @@ const envSchema = z
     SOR_CANARY_PERCENT: z.coerce.number().min(0).max(1).default(0),
     SOR_CANARY_START_AT: optionalIsoDateSchema,
     SOR_CANARY_END_AT: optionalIsoDateSchema,
+    INTERNAL_CROSS_ENABLED: z.coerce.boolean().default(false),
+    INTERNAL_CROSS_SHADOW_ENABLED: z.coerce.boolean().default(false),
+    INTERNAL_CROSS_SHADOW_PERCENT: z.coerce.number().min(0).max(1).default(0),
+    INTERNAL_CROSS_SHADOW_START_AT: optionalIsoDateSchema,
+    INTERNAL_CROSS_SHADOW_END_AT: optionalIsoDateSchema,
     SOR_ACCEPT_AON_AWAIT: z.coerce.boolean().default(true),
     SOR_ACCEPT_NON_AON_BACKGROUND: z.coerce.boolean().default(true),
     RELIABILITY_WEIGHT: z.coerce.number().min(0).max(1).default(0.05),
@@ -47,6 +52,14 @@ const envSchema = z
       });
     }
 
+    if (value.INTERNAL_CROSS_SHADOW_ENABLED && value.INTERNAL_CROSS_SHADOW_PERCENT <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["INTERNAL_CROSS_SHADOW_PERCENT"],
+        message: "INTERNAL_CROSS_SHADOW_PERCENT must be > 0 when INTERNAL_CROSS_SHADOW_ENABLED is true."
+      });
+    }
+
     if (value.SOR_CANARY_START_AT && value.SOR_CANARY_END_AT) {
       const start = Date.parse(value.SOR_CANARY_START_AT);
       const end = Date.parse(value.SOR_CANARY_END_AT);
@@ -55,6 +68,18 @@ const envSchema = z
           code: z.ZodIssueCode.custom,
           path: ["SOR_CANARY_END_AT"],
           message: "SOR_CANARY_END_AT must be later than SOR_CANARY_START_AT."
+        });
+      }
+    }
+
+    if (value.INTERNAL_CROSS_SHADOW_START_AT && value.INTERNAL_CROSS_SHADOW_END_AT) {
+      const start = Date.parse(value.INTERNAL_CROSS_SHADOW_START_AT);
+      const end = Date.parse(value.INTERNAL_CROSS_SHADOW_END_AT);
+      if (Number.isFinite(start) && Number.isFinite(end) && start >= end) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["INTERNAL_CROSS_SHADOW_END_AT"],
+          message: "INTERNAL_CROSS_SHADOW_END_AT must be later than INTERNAL_CROSS_SHADOW_START_AT."
         });
       }
     }

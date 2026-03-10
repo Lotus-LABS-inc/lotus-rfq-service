@@ -122,6 +122,19 @@ describe.skipIf(!ENV_READY)("internal trades schema integration", () => {
     expect(indexNames.has("idx_trades_sell_order_id")).toBe(true);
   });
 
+  it("extends internal_order_status enum with PARTIAL", async () => {
+    const db = must(pool, "pool");
+    const enumResult = await db.query<{ enumlabel: string }>(
+      `SELECT enumlabel
+       FROM pg_enum
+       JOIN pg_type ON pg_enum.enumtypid = pg_type.oid
+       WHERE pg_type.typname = 'internal_order_status'
+       ORDER BY enumsortorder`
+    );
+
+    expect(enumResult.rows.map((row) => row.enumlabel)).toContain("PARTIAL");
+  });
+
   it("prevents duplicate match insertion via the unique constraint", async () => {
     const db = must(pool, "pool");
     const marketId = `market-${randomUUID()}`;

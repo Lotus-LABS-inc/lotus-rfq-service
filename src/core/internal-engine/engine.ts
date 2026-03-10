@@ -1,9 +1,40 @@
+import Decimal from "decimal.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import type { Logger } from "pino";
-import type { InternalOrder, Trade } from "./types.js";
+import { calculateExposureDelta } from "./risk-utils.js";
+import type { InternalOrder, RedisBookOrder, Trade } from "./types.js";
 import type { OrderBook } from "./order-book.js";
 import type { OrderLocker } from "./locker.js";
+import { withSpan } from "../../observability/tracing.js";
+
+type DecimalValue = InstanceType<typeof Decimal>;
+
+interface MatchResult {
+    trade: Trade | null;
+    matchSize: DecimalValue;
+    newMakerRemaining: DecimalValue;
+    newMakerStatus: "PARTIAL" | "FILLED";
+    makerOrderId: string;
+}
+
+interface MakerOrderRow {
+    id: string;
+    user_id: string;
+    market_id: string;
+    side: "buy" | "sell";
+    price: string;
+    remaining_size: string;
+    status: "OPEN" | "PARTIAL" | "FILLED" | "CANCELLED";
+    created_at: Date;
+}
+
+export interface InternalCrossPreviewResult {
+    fillableSize: number;
+    remainingSize: number;
+    matchedOrderIds: readonly string[];
+    wouldSelfTrade: boolean;
+}
 
 export class InternalCrossingEngine {
     constructor(
@@ -22,202 +53,429 @@ export class InternalCrossingEngine {
         remainingSize: number;
         trades: Trade[];
     }> {
-        let remainingTakerSize = Number(incomingOrder.remaining_size);
-        let filledTakerSize = 0;
-        const trades: Trade[] = [];
+        return withSpan(
+            "internal_cross.attempt",
+            {
+                market_id: incomingOrder.market_id,
+                incoming_order_id: incomingOrder.id,
+                state: "ATTEMPTING"
+            },
+            async () => {
+                let remainingTakerSize = new Decimal(incomingOrder.remaining_size);
+                let filledTakerSize = new Decimal(0);
+                const trades: Trade[] = [];
 
-        this.logger.info({
-            orderId: incomingOrder.id,
-            marketId: incomingOrder.market_id,
-            side: incomingOrder.side,
-            size: remainingTakerSize
-        }, "Starting internal cross attempt.");
+                this.logger.info({
+                    orderId: incomingOrder.id,
+                    marketId: incomingOrder.market_id,
+                    side: incomingOrder.side,
+                    size: remainingTakerSize.toString()
+                }, "Starting internal cross attempt.");
 
-        while (remainingTakerSize > 0) {
-            // 1. Identify compatible resting orders from the Redis book
-            // We fetch a small batch to minimize lock contention
-            const candidates = await this.orderBook.getBestOppositeOrders(
-                incomingOrder.market_id,
-                incomingOrder.side,
-                Number(incomingOrder.price),
-                10
-            );
+                while (remainingTakerSize.gt(0)) {
+                    const candidates = await this.orderBook.getBestOppositeOrders(
+                        incomingOrder.market_id,
+                        incomingOrder.side,
+                        incomingOrder.price,
+                        10
+                    );
 
-            if (candidates.length === 0) {
-                this.logger.info({ orderId: incomingOrder.id }, "No more compatible resting orders found.");
-                break;
-            }
-
-            for (const makerEntry of candidates) {
-                if (remainingTakerSize <= 0) break;
-
-                // 2. Self-Trade Prevention (CANCEL_NEWEST)
-                // If the taker matches their own maker order, we cancel the incoming order.
-                if (makerEntry.userId === incomingOrder.user_id) {
-                    this.logger.warn({
-                        takerId: incomingOrder.user_id,
-                        makerOrderId: makerEntry.orderId
-                    }, "Self-trade detected (CANCEL_NEWEST). Cancelling incoming order.");
-
-                    remainingTakerSize = 0;
-                    break;
-                }
-
-                // 3. Acquire dual locks deterministically (Deadlock-safe)
-                const lockHandle = await this.orderLocker.acquireDualOrderLocks(incomingOrder.id, makerEntry.orderId);
-
-                try {
-                    // 4. Atomic matching within a single Postgres transaction
-                    const client = await this.pool.connect();
-                    try {
-                        await client.query("BEGIN");
-
-                        // Re-validate maker state in Postgres using SELECT FOR UPDATE
-                        const makerRes = await client.query(
-                            `SELECT id, user_id, market_id, side, price, remaining_size::text, status, created_at
-               FROM internal_orders 
-               WHERE id = $1 FOR UPDATE`,
-                            [makerEntry.orderId]
-                        );
-                        const maker = makerRes.rows[0];
-
-                        if (!maker || maker.status !== 'OPEN' || Number(maker.remaining_size) <= 0) {
-                            this.logger.info({ makerOrderId: makerEntry.orderId }, "Maker order no longer available or filled. Skipping.");
-                            await client.query("ROLLBACK");
-                            continue;
-                        }
-
-                        // Calculate exact match size
-                        const matchSize = Math.min(remainingTakerSize, Number(maker.remaining_size));
-                        const matchPrice = Number(maker.price);
-
-                        // Insert Trade record
-                        const tradeId = randomUUID();
-                        const buyOrderId = incomingOrder.side === 'buy' ? incomingOrder.id : maker.id;
-                        const sellOrderId = incomingOrder.side === 'sell' ? incomingOrder.id : maker.id;
-
-                        await client.query(
-                            `INSERT INTO trades (id, market_id, buy_order_id, sell_order_id, price, size)
-               VALUES ($1, $2, $3, $4, $5, $6)`,
-                            [tradeId, incomingOrder.market_id, buyOrderId, sellOrderId, matchPrice, matchSize]
-                        );
-
-                        // Update maker order state
-                        const newMakerRemaining = Number(maker.remaining_size) - matchSize;
-                        const newMakerStatus = newMakerRemaining === 0 ? 'FILLED' : 'OPEN';
-                        await client.query(
-                            "UPDATE internal_orders SET remaining_size = $1, status = $2, updated_at = NOW() WHERE id = $3",
-                            [newMakerRemaining, newMakerStatus, maker.id]
-                        );
-
-                        // Update Exposure for both users
-                        // We implement the delta math here to ensure atomicity within THIS transaction.
-                        const takerDeltaGross = matchSize * matchPrice;
-                        const takerDeltaNet = incomingOrder.side === 'buy' ? takerDeltaGross : -takerDeltaGross;
-
-                        const makerDeltaGross = matchSize * matchPrice;
-                        const makerDeltaNet = maker.side === 'buy' ? makerDeltaGross : -makerDeltaGross;
-
-                        await this.atomicUpdateExposure(client, incomingOrder.user_id, incomingOrder.market_id, incomingOrder.side, takerDeltaGross, takerDeltaNet, tradeId);
-                        await this.atomicUpdateExposure(client, maker.user_id, incomingOrder.market_id, maker.side, makerDeltaGross, makerDeltaNet, tradeId);
-
-                        await client.query("COMMIT");
-
-                        // 5. Update Redis book state AFTER commit
-                        if (newMakerStatus === 'FILLED') {
-                            await this.orderBook.removeOrder(maker.id);
-                        } else {
-                            await this.orderBook.updateRemaining(maker.id, newMakerRemaining.toString());
-                        }
-
-                        filledTakerSize += matchSize;
-                        remainingTakerSize -= matchSize;
-                        trades.push({
-                            id: tradeId,
-                            market_id: incomingOrder.market_id,
-                            buy_order_id: buyOrderId,
-                            sell_order_id: sellOrderId,
-                            price: matchPrice.toString(),
-                            size: matchSize.toString(),
-                            created_at: new Date()
-                        });
-
-                        this.logger.info({ tradeId, matchSize, matchPrice }, "Match successful.");
-
-                    } catch (e) {
-                        await client.query("ROLLBACK");
-                        this.logger.error({ err: e, takerId: incomingOrder.id, makerId: makerEntry.orderId }, "Transaction failed during matching.");
-                        throw e;
-                    } finally {
-                        client.release();
+                    if (candidates.length === 0) {
+                        this.logger.info({ orderId: incomingOrder.id }, "No more compatible resting orders found.");
+                        break;
                     }
-                } finally {
-                    // 6. Release order-level locks
-                    await this.orderLocker.releaseLocks(lockHandle);
+
+                    let progressedInBatch = false;
+                    for (const makerEntry of candidates) {
+                        if (remainingTakerSize.lte(0)) {
+                            break;
+                        }
+                        if (makerEntry.userId === incomingOrder.user_id) {
+                            this.logger.warn({
+                                takerId: incomingOrder.user_id,
+                                makerOrderId: makerEntry.orderId
+                            }, "Self-trade detected (CANCEL_NEWEST). Cancelling incoming order.");
+
+                            remainingTakerSize = new Decimal(0);
+                            break;
+                        }
+
+                        const lockHandle = await withSpan(
+                            "internal_cross.lock_pair",
+                            {
+                                incoming_order_id: incomingOrder.id,
+                                maker_order_id: makerEntry.orderId,
+                                market_id: incomingOrder.market_id
+                            },
+                            async () => this.orderLocker.acquireDualOrderLocks(incomingOrder.id, makerEntry.orderId)
+                        );
+                        try {
+                            const result = await withSpan(
+                                "internal_cross.match_transaction",
+                                {
+                                    incoming_order_id: incomingOrder.id,
+                                    maker_order_id: makerEntry.orderId,
+                                    market_id: incomingOrder.market_id
+                                },
+                                async () => this.matchMakerOrder(incomingOrder, makerEntry, remainingTakerSize)
+                            );
+                            if (result === null) {
+                                continue;
+                            }
+
+                            progressedInBatch = true;
+                            remainingTakerSize = remainingTakerSize.minus(result.matchSize);
+                            filledTakerSize = filledTakerSize.plus(result.matchSize);
+                            if (result.trade !== null) {
+                                trades.push(result.trade);
+                            }
+
+                            await this.syncRedisBook(result.makerOrderId, result.newMakerRemaining, result.newMakerStatus);
+                        } finally {
+                            await this.orderLocker.releaseLocks(lockHandle);
+                        }
+                    }
+
+                    if (!progressedInBatch) {
+                        this.logger.warn({ orderId: incomingOrder.id }, "No progress made against compatible candidates; stopping to avoid retry loop.");
+                        break;
+                    }
                 }
+
+                return {
+                    filledSize: Number(filledTakerSize.toString()),
+                    remainingSize: Number(remainingTakerSize.toString()),
+                    trades
+                };
             }
+        );
+    }
+
+    async previewCross(incomingOrder: InternalOrder): Promise<InternalCrossPreviewResult> {
+        return withSpan(
+            "internal_cross.shadow_evaluate",
+            {
+                market_id: incomingOrder.market_id,
+                incoming_order_id: incomingOrder.id,
+                shadow_mode: true
+            },
+            async () => {
+                let remainingTakerSize = new Decimal(incomingOrder.remaining_size);
+                let fillableSize = new Decimal(0);
+                const matchedOrderIds: string[] = [];
+
+                const candidates = await this.orderBook.getBestOppositeOrders(
+                    incomingOrder.market_id,
+                    incomingOrder.side,
+                    incomingOrder.price,
+                    10
+                );
+
+                for (const makerEntry of candidates) {
+                    if (remainingTakerSize.lte(0)) {
+                        break;
+                    }
+                    if (makerEntry.userId === incomingOrder.user_id) {
+                        return {
+                            fillableSize: Number(fillableSize.toString()),
+                            remainingSize: Number(remainingTakerSize.toString()),
+                            matchedOrderIds,
+                            wouldSelfTrade: true
+                        };
+                    }
+
+                    const makerRemaining = new Decimal(makerEntry.remaining);
+                    const matched = Decimal.min(remainingTakerSize, makerRemaining);
+                    if (matched.lte(0)) {
+                        continue;
+                    }
+
+                    fillableSize = fillableSize.plus(matched);
+                    remainingTakerSize = remainingTakerSize.minus(matched);
+                    matchedOrderIds.push(makerEntry.orderId);
+                }
+
+                return {
+                    fillableSize: Number(fillableSize.toString()),
+                    remainingSize: Number(remainingTakerSize.toString()),
+                    matchedOrderIds,
+                    wouldSelfTrade: false
+                };
+            }
+        );
+    }
+
+    private async matchMakerOrder(
+        incomingOrder: InternalOrder,
+        makerEntry: RedisBookOrder,
+        remainingTakerSize: DecimalValue
+    ): Promise<MatchResult | null> {
+        const client = await this.pool.connect();
+        let clientConnectionErrored = false;
+        const onClientError = (error: Error): void => {
+            clientConnectionErrored = true;
+            this.logger.error(
+                { err: error, takerId: incomingOrder.id, makerId: makerEntry.orderId },
+                "Checked-out Postgres client emitted an error during internal crossing."
+            );
+        };
+        if ("on" in client && typeof client.on === "function") {
+            client.on("error", onClientError);
+        }
+        try {
+            await client.query("BEGIN");
+
+            const maker = await this.loadMakerForUpdate(client, makerEntry.orderId);
+            if (maker === null) {
+                await client.query("ROLLBACK");
+                await this.safeRemoveStaleMaker(makerEntry.orderId);
+                return null;
+            }
+
+            const matchSize = Decimal.min(remainingTakerSize, new Decimal(maker.remaining_size));
+            const trade = await this.insertTradeIfNeeded(client, incomingOrder, maker, matchSize);
+            if (trade === null) {
+                await client.query("ROLLBACK");
+                await this.syncRedisBook(maker.id, new Decimal(maker.remaining_size), maker.status === "FILLED" ? "FILLED" : "PARTIAL");
+                return null;
+            }
+
+            const newMakerRemaining = new Decimal(maker.remaining_size).minus(matchSize);
+            const newMakerStatus: "PARTIAL" | "FILLED" = newMakerRemaining.eq(0) ? "FILLED" : "PARTIAL";
+            await this.updateMakerState(client, maker.id, newMakerRemaining, newMakerStatus);
+            await this.atomicUpdateExposure(client, incomingOrder.user_id, incomingOrder.market_id, incomingOrder.side, trade.id, trade.price, trade.size, incomingOrder.id, maker.id);
+            await this.atomicUpdateExposure(client, maker.user_id, incomingOrder.market_id, maker.side, trade.id, trade.price, trade.size, incomingOrder.id, maker.id);
+
+            await client.query("COMMIT");
+
+            this.logger.info({
+                tradeId: trade.id,
+                takerOrderId: incomingOrder.id,
+                makerOrderId: maker.id,
+                matchSize: trade.size,
+                matchPrice: trade.price
+            }, "Match successful.");
+
+            return {
+                trade,
+                matchSize,
+                newMakerRemaining,
+                newMakerStatus,
+                makerOrderId: maker.id
+            };
+        } catch (error) {
+            await this.safeRollback(client);
+            this.logger.error({ err: error, takerId: incomingOrder.id, makerId: makerEntry.orderId }, "Transaction failed during matching.");
+            throw error;
+        } finally {
+            if ("off" in client && typeof client.off === "function") {
+                client.off("error", onClientError);
+            }
+            client.release(clientConnectionErrored);
+        }
+    }
+
+    private async loadMakerForUpdate(client: PoolClient, makerOrderId: string): Promise<MakerOrderRow | null> {
+        const makerRes = await client.query<MakerOrderRow>(
+            `SELECT id, user_id, market_id, side, price::text, remaining_size::text, status, created_at
+             FROM internal_orders
+             WHERE id = $1
+             FOR UPDATE`,
+            [makerOrderId]
+        );
+        const maker = makerRes.rows[0] ?? null;
+        if (
+            maker === null ||
+            (maker.status !== "OPEN" && maker.status !== "PARTIAL") ||
+            new Decimal(maker.remaining_size).lte(0)
+        ) {
+            this.logger.info({ makerOrderId }, "Maker order no longer available or open. Removing stale book entry.");
+            return null;
+        }
+
+        return maker;
+    }
+
+    private async insertTradeIfNeeded(
+        client: PoolClient,
+        incomingOrder: InternalOrder,
+        maker: MakerOrderRow,
+        matchSize: DecimalValue
+    ): Promise<Trade | null> {
+        const tradeId = randomUUID();
+        const buyOrderId = incomingOrder.side === "buy" ? incomingOrder.id : maker.id;
+        const sellOrderId = incomingOrder.side === "sell" ? incomingOrder.id : maker.id;
+        const tradeResult = await client.query<{ id: string; created_at: Date }>(
+            `INSERT INTO trades (id, market_id, buy_order_id, sell_order_id, price, size)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT ON CONSTRAINT uq_trades_match DO NOTHING
+             RETURNING id, created_at`,
+            [tradeId, incomingOrder.market_id, buyOrderId, sellOrderId, maker.price, matchSize.toString()]
+        );
+
+        if (tradeResult.rows.length === 0) {
+            this.logger.warn({ buyOrderId, sellOrderId }, "Skipping duplicate internal trade replay.");
+            return null;
         }
 
         return {
-            filledSize: filledTakerSize,
-            remainingSize: remainingTakerSize,
-            trades
+            id: tradeResult.rows[0]?.id ?? tradeId,
+            market_id: incomingOrder.market_id,
+            buy_order_id: buyOrderId,
+            sell_order_id: sellOrderId,
+            price: maker.price,
+            size: matchSize.toString(),
+            created_at: tradeResult.rows[0]?.created_at ?? new Date()
         };
     }
 
-    /**
-     * Performs an atomic exposure update within an existing transaction.
-     * Includes journal insertion for auditability.
-     */
+    private async updateMakerState(
+        client: PoolClient,
+        makerOrderId: string,
+        remaining: DecimalValue,
+        status: "PARTIAL" | "FILLED"
+    ): Promise<void> {
+        await client.query(
+            `UPDATE internal_orders
+             SET remaining_size = $1, status = $2, updated_at = NOW()
+             WHERE id = $3`,
+            [remaining.toString(), status, makerOrderId]
+        );
+    }
+
     private async atomicUpdateExposure(
         client: PoolClient,
         userId: string,
         marketId: string,
         side: "buy" | "sell",
-        deltaGross: number,
-        deltaNet: number,
-        tradeId: string
+        tradeId: string,
+        price: string,
+        size: string,
+        takerOrderId: string,
+        makerOrderId: string
     ): Promise<void> {
-        // 1. Get/Lock exposure row
-        const expRes = await client.query(
+        const { grossDelta, netDelta, payload } = this.buildExposureDeltaPayload(side, price, size, takerOrderId, makerOrderId);
+        const expRes = await client.query<{ id: string; gross_notional: string; net_notional: string }>(
             `SELECT id, gross_notional::text, net_notional::text 
-       FROM exposure 
-       WHERE user_id = $1 AND canonical_market_id = $2 AND side = $3
-       FOR UPDATE`,
+             FROM exposure 
+             WHERE user_id = $1 AND canonical_market_id = $2 AND side = $3
+             FOR UPDATE`,
             [userId, marketId, side]
         );
 
-        let exposure = expRes.rows[0];
-        const prevGross = exposure ? Number.parseFloat(exposure.gross_notional) : 0;
-        const prevNet = exposure ? Number.parseFloat(exposure.net_notional) : 0;
-        const newGross = prevGross + deltaGross;
-        const newNet = prevNet + deltaNet;
+        const exposure = expRes.rows[0];
+        const prevGross = exposure ? new Decimal(exposure.gross_notional) : new Decimal(0);
+        const prevNet = exposure ? new Decimal(exposure.net_notional) : new Decimal(0);
+        const newGross = prevGross.plus(grossDelta);
+        const newNet = prevNet.plus(netDelta);
 
         let exposureId: string;
 
         if (!exposure) {
             const createRes = await client.query(
                 `INSERT INTO exposure (user_id, canonical_market_id, side, gross_notional, net_notional)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id`,
-                [userId, marketId, side, newGross, newNet]
+                 VALUES ($1, $2, $3, $4, $5)
+                 RETURNING id`,
+                [userId, marketId, side, newGross.toString(), newNet.toString()]
             );
-            exposureId = createRes.rows[0].id;
+            exposureId = createRes.rows[0]?.id ?? "";
         } else {
             exposureId = exposure.id;
             await client.query(
                 `UPDATE exposure 
-         SET gross_notional = $1, net_notional = $2, last_updated = NOW(), version = version + 1
-         WHERE id = $3`,
-                [newGross, newNet, exposureId]
+                 SET gross_notional = $1, net_notional = $2, last_updated = NOW(), version = version + 1
+                 WHERE id = $3`,
+                [newGross.toString(), newNet.toString(), exposureId]
             );
         }
 
-        // 2. Insert into journal
         await client.query(
-            `INSERT INTO exposure_journal (exposure_id, change, prev_gross, prev_net, new_gross, new_net, source, reference_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-            [exposureId, deltaNet, prevGross, prevNet, newGross, newNet, "internal-match", tradeId]
+            `INSERT INTO exposure_journal (exposure_id, change, prev_gross, prev_net, new_gross, new_net, source, reference_id, payload)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
+            [
+                exposureId,
+                netDelta.toString(),
+                prevGross.toString(),
+                prevNet.toString(),
+                newGross.toString(),
+                newNet.toString(),
+                "internal-match",
+                tradeId,
+                JSON.stringify(payload)
+            ]
         );
+    }
+
+    private buildExposureDeltaPayload(
+        side: "buy" | "sell",
+        price: string,
+        size: string,
+        takerOrderId: string,
+        makerOrderId: string
+    ): {
+        grossDelta: DecimalValue;
+        netDelta: DecimalValue;
+        payload: Record<string, string>;
+    } {
+        const delta = calculateExposureDelta(side, price, size);
+        const grossDelta = new Decimal(delta.maxLossDelta);
+        const netDelta = new Decimal(delta.maxGainDelta).minus(delta.maxLossDelta);
+
+        return {
+            grossDelta,
+            netDelta,
+            payload: {
+                price,
+                size,
+                maxLossDelta: delta.maxLossDelta,
+                maxGainDelta: delta.maxGainDelta,
+                takerOrderId,
+                makerOrderId,
+                side
+            }
+        };
+    }
+
+    private async syncRedisBook(
+        makerOrderId: string,
+        newMakerRemaining: DecimalValue,
+        newMakerStatus: "PARTIAL" | "FILLED"
+    ): Promise<void> {
+        await withSpan(
+            "internal_cross.redis_sync",
+            {
+                maker_order_id: makerOrderId,
+                remaining_size: newMakerRemaining.toString(),
+                state: newMakerStatus
+            },
+            async () => {
+                try {
+                    if (newMakerStatus === "FILLED") {
+                        await this.orderBook.removeOrder(makerOrderId);
+                        return;
+                    }
+
+                    await this.orderBook.updateRemaining(makerOrderId, newMakerRemaining.toString());
+                } catch (error) {
+                    this.logger.error({ err: error, makerOrderId, newMakerStatus }, "Failed to synchronize Redis order book after committed internal trade.");
+                }
+            }
+        );
+    }
+
+    private async safeRemoveStaleMaker(makerOrderId: string): Promise<void> {
+        try {
+            await this.orderBook.removeOrder(makerOrderId);
+        } catch (error) {
+            this.logger.error({ err: error, makerOrderId }, "Failed to remove stale maker order from Redis book.");
+        }
+    }
+
+    private async safeRollback(client: PoolClient): Promise<void> {
+        try {
+            await client.query("ROLLBACK");
+        } catch (error) {
+            this.logger.warn({ err: error }, "Rollback failed on internal crossing transaction.");
+        }
     }
 }

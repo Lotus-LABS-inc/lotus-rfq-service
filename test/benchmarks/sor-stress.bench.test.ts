@@ -61,6 +61,19 @@ describe("SOR Performance Benchmarks", () => {
             costModel: mockCostModel,
             splitter,
             planComposer,
+            internalEngine: {
+                attemptCross: vi.fn(async (order: { remaining_size: string }) => ({
+                    filledSize: 0,
+                    remainingSize: Number.parseFloat(order.remaining_size),
+                    trades: []
+                })),
+                previewCross: vi.fn(async (order: { remaining_size: string }) => ({
+                    fillableSize: 0,
+                    remainingSize: Number.parseFloat(order.remaining_size),
+                    matchedOrderIds: [],
+                    wouldSelfTrade: false
+                }))
+            },
             logger: mockLogger
         });
     });
@@ -125,12 +138,16 @@ describe("SOR Performance Benchmarks", () => {
         });
 
         const start = performance.now();
-        const plan = await orderRouter.buildPlan(rfq, selectedQuote, "ALL_OR_NONE");
+        const result = await orderRouter.buildPlan(rfq, selectedQuote, "ALL_OR_NONE");
         const duration = performance.now() - start;
 
         console.log(`[BENCHMARK] Build plan with 100 candidates took ${duration.toFixed(2)}ms`);
 
-        expect(plan.steps.length).toBeGreaterThan(0);
+        expect(result.kind).toBe("plan_created");
+        if (result.kind !== "plan_created") {
+            throw new Error("expected external plan");
+        }
+        expect(result.plan.steps.length).toBeGreaterThan(0);
         expect(duration).toBeLessThan(100);
     });
 
@@ -179,12 +196,16 @@ describe("SOR Performance Benchmarks", () => {
         });
 
         const start = performance.now();
-        const plan = await orderRouter.buildPlan(rfq, selectedQuote, "ALL_OR_NONE");
+        const result = await orderRouter.buildPlan(rfq, selectedQuote, "ALL_OR_NONE");
         const duration = performance.now() - start;
 
         console.log(`[BENCHMARK] Deep split (10 layers) took ${duration.toFixed(2)}ms`);
 
-        expect(plan.steps.length).toBe(10);
+        expect(result.kind).toBe("plan_created");
+        if (result.kind !== "plan_created") {
+            throw new Error("expected external plan");
+        }
+        expect(result.plan.steps.length).toBe(10);
         expect(duration).toBeLessThan(50);
     });
 });

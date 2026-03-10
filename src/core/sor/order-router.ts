@@ -7,6 +7,8 @@ import {
   type IPlanComposer,
   type IRouteScout,
   type ISplitter,
+  LiquiditySource,
+  type OrderRouterBuildResult,
   type SORAcceptancePolicy,
   type SelectedQuoteInput,
   type SplitAllocation
@@ -14,10 +16,23 @@ import {
 import { InsufficientLiquidityError } from "./splitter.js";
 import { withSpan } from "../../observability/tracing.js";
 import {
+  internalCrossKillSwitchTotal,
+  internalCrossingFilledSizeTotal,
+  internalCrossingTotal,
+  internalCrossShadowDivergenceTotal,
+  internalCrossShadowMatchTotal,
+  internalCrossShadowTotal,
   sorAvgSplitsPerLeg,
   sorCandidatesEvaluatedCount,
+  sorInternalCrossResultTotal,
   sorPlanBuildLatencyMs
 } from "../../observability/metrics.js";
+import type { InternalCrossPreviewResult, InternalCrossingEngine } from "../internal-engine/engine.js";
+import type { InternalOrder } from "../internal-engine/types.js";
+import {
+  isInternalCrossShadowSampled,
+  isInternalCrossShadowWindowActive
+} from "../internal-engine/runtime-controls.js";
 
 const DEFAULT_MIN_CHUNK = 0.000001;
 const DEFAULT_TICK_SIZE = 0.000001;
@@ -34,7 +49,15 @@ export interface OrderRouterDependencies {
   costModel: ICostModel;
   splitter: ISplitter;
   planComposer: IPlanComposer;
+  internalEngine: Pick<InternalCrossingEngine, "attemptCross" | "previewCross">;
   logger: Pick<import("pino").Logger, "info" | "warn" | "error">;
+  internalCrossingEnabled?: boolean;
+  internalCrossingShadowEnabled?: boolean;
+  internalCrossingShadowPercent?: number;
+  internalCrossingShadowStartAt?: string;
+  internalCrossingShadowEndAt?: string;
+  isKillSwitchActive?: () => Promise<boolean>;
+  now?: () => Date;
 }
 
 export class OrderRouter implements IOrderRouter {
@@ -44,7 +67,7 @@ export class OrderRouter implements IOrderRouter {
     rfq: CanonicalRFQInput,
     selectedQuote: SelectedQuoteInput,
     policy: SORAcceptancePolicy
-  ): Promise<ExecutionPlan> {
+  ): Promise<OrderRouterBuildResult> {
     return withSpan(
       "sor.build_plan",
       {
@@ -55,32 +78,57 @@ export class OrderRouter implements IOrderRouter {
       async () => {
         const startedAt = performance.now();
         const reservationToken = this.readReservationToken(rfq);
-        const allCandidates = await this.deps.routeScout.discoverCandidates(rfq, selectedQuote, policy);
+        const internalCrossOrder = this.buildInternalTakerOrder(rfq, selectedQuote);
+        const crossResult = await this.evaluateInternalCross(rfq, internalCrossOrder);
 
-        const routeCandidates = this.filterSTPViolations(rfq, allCandidates);
-
-        if (routeCandidates.length === 0) {
-          throw new InsufficientLiquidityError("00000000-0000-0000-0000-000000000000", selectedQuote.quantity);
+        if (crossResult.kind === "internal_filled") {
+          return {
+            kind: "internal_filled",
+            filledSize: crossResult.filledSize,
+            trades: crossResult.trades
+          };
         }
 
-        const scoredCandidates = await this.evaluateCandidates(rfq, selectedQuote, policy);
-        sorCandidatesEvaluatedCount.labels(rfq.rfqId).set(scoredCandidates.length);
+        const residualRFQ = this.buildResidualRFQ(rfq, crossResult.remainingSize);
+        const residualQuote = this.buildResidualQuote(selectedQuote, Number.parseFloat(crossResult.remainingSize));
+        const allCandidates = await this.deps.routeScout.discoverCandidates(residualRFQ, residualQuote, policy);
+
+        const routeCandidates = this.filterSTPViolations(residualRFQ, allCandidates);
+
+        if (routeCandidates.length === 0) {
+          throw new InsufficientLiquidityError("00000000-0000-0000-0000-000000000000", residualQuote.quantity);
+        }
+
+        const scoredCandidates = await this.deps.costModel.evaluateCandidates(
+          residualRFQ,
+          routeCandidates,
+          residualQuote,
+          policy
+        );
+        sorCandidatesEvaluatedCount.labels(residualRFQ.rfqId).set(scoredCandidates.length);
 
         const allocations = await this.buildAllocationsByLeg(
           routeCandidates,
           scoredCandidates,
-          selectedQuote.quantity,
+          residualQuote.quantity,
           policy
         );
 
         sorPlanBuildLatencyMs.labels(policy).observe(performance.now() - startedAt);
         const avgSplits = this.calculateAvgSplitsPerLeg(routeCandidates, allocations);
-        sorAvgSplitsPerLeg.labels(rfq.rfqId).set(avgSplits);
+        sorAvgSplitsPerLeg.labels(residualRFQ.rfqId).set(avgSplits);
 
-        return this.composePlan(rfq, selectedQuote, policy, scoredCandidates, allocations, {
+        const plan = await this.composePlan(residualRFQ, residualQuote, policy, scoredCandidates, allocations, {
           reservationToken,
           routeCandidates
         });
+
+        return {
+          kind: "plan_created",
+          crossingFilledSize: crossResult.crossingFilledSize,
+          remainingSize: crossResult.remainingSize,
+          plan
+        };
       }
     );
   }
@@ -157,6 +205,174 @@ export class OrderRouter implements IOrderRouter {
       throw new MissingReservationTokenError();
     }
     return token;
+  }
+
+  private buildInternalTakerOrder(rfq: CanonicalRFQInput, selectedQuote: SelectedQuoteInput): InternalOrder {
+    return {
+      id: rfq.rfqId,
+      user_id: rfq.takerId,
+      market_id: rfq.canonicalMarketId,
+      side: rfq.side,
+      price: selectedQuote.price.toString(),
+      initial_size: rfq.quantity,
+      remaining_size: rfq.quantity,
+      status: "OPEN",
+      created_at: new Date(),
+      updated_at: new Date()
+    };
+  }
+
+  private buildResidualRFQ(rfq: CanonicalRFQInput, remainingSize: string): CanonicalRFQInput {
+    const metadata = rfq.metadata ? { ...rfq.metadata } : undefined;
+    const legs = metadata?.legs;
+    if (Array.isArray(legs)) {
+      const updatedLegs = legs.map((leg) => {
+        if (typeof leg !== "object" || leg === null) {
+          return leg;
+        }
+        return {
+          ...leg,
+          quantity: remainingSize,
+          target_quantity: remainingSize
+        };
+      });
+      if (metadata) {
+        metadata.legs = updatedLegs;
+      }
+    }
+
+    return {
+      ...rfq,
+      quantity: remainingSize,
+      ...(metadata ? { metadata } : {})
+    };
+  }
+
+  private buildResidualQuote(selectedQuote: SelectedQuoteInput, remainingSize: number): SelectedQuoteInput {
+    return {
+      ...selectedQuote,
+      quantity: remainingSize
+    };
+  }
+
+  private async evaluateInternalCross(
+    rfq: CanonicalRFQInput,
+    internalOrder: InternalOrder
+  ): Promise<
+    | { kind: "internal_filled"; filledSize: string; trades: readonly import("../internal-engine/types.js").Trade[] }
+    | { kind: "external_only"; crossingFilledSize: string; remainingSize: string }
+  > {
+    const killSwitchActive = await (this.deps.isKillSwitchActive?.() ?? Promise.resolve(false));
+    const shouldShadowEvaluate =
+      !this.deps.internalCrossingEnabled &&
+      isInternalCrossShadowWindowActive({
+        enabled: this.deps.internalCrossingShadowEnabled ?? false,
+        percent: this.deps.internalCrossingShadowPercent ?? 0,
+        ...(this.deps.internalCrossingShadowStartAt ? { startAt: this.deps.internalCrossingShadowStartAt } : {}),
+        ...(this.deps.internalCrossingShadowEndAt ? { endAt: this.deps.internalCrossingShadowEndAt } : {}),
+        ...(this.deps.now ? { now: this.deps.now } : {})
+      }) &&
+      isInternalCrossShadowSampled(rfq.rfqId, this.deps.internalCrossingShadowPercent ?? 0);
+
+    if (killSwitchActive) {
+      internalCrossKillSwitchTotal.labels(this.deps.internalCrossingEnabled ? "authoritative" : "shadow").inc();
+      sorInternalCrossResultTotal.labels("KILL_SWITCH").inc();
+      internalCrossingTotal.inc({
+        market_id: rfq.canonicalMarketId,
+        side: rfq.side,
+        status: "KILL_SWITCH"
+      });
+      if (shouldShadowEvaluate) {
+        await this.evaluateShadowInternalCross(internalOrder);
+      }
+      return {
+        kind: "external_only",
+        crossingFilledSize: "0",
+        remainingSize: internalOrder.remaining_size
+      };
+    }
+
+    if (!this.deps.internalCrossingEnabled) {
+      sorInternalCrossResultTotal.labels("DISABLED").inc();
+      if (shouldShadowEvaluate) {
+        await this.evaluateShadowInternalCross(internalOrder);
+      }
+      return {
+        kind: "external_only",
+        crossingFilledSize: "0",
+        remainingSize: internalOrder.remaining_size
+      };
+    }
+
+    const crossResult = await withSpan(
+      "sor.internal_cross",
+      {
+        rfq_id: rfq.rfqId,
+        state: "INTERNAL_CROSSING",
+        market_id: rfq.canonicalMarketId
+      },
+      async () => this.deps.internalEngine.attemptCross(internalOrder)
+    );
+
+    const crossingFilledSize = crossResult.filledSize.toString();
+    const remainingSize = crossResult.remainingSize.toString();
+    const crossingStatus =
+      crossResult.remainingSize <= 0 ? "FILLED" : crossResult.filledSize > 0 ? "PARTIAL" : "NONE";
+
+    sorInternalCrossResultTotal.labels(crossingStatus).inc();
+    internalCrossingTotal.inc({
+      market_id: rfq.canonicalMarketId,
+      side: rfq.side,
+      status: crossingStatus
+    });
+    if (crossResult.filledSize > 0) {
+      internalCrossingFilledSizeTotal.inc(
+        { market_id: rfq.canonicalMarketId, side: rfq.side },
+        crossResult.filledSize
+      );
+    }
+
+    if (crossResult.remainingSize <= 0) {
+      return {
+        kind: "internal_filled",
+        filledSize: crossingFilledSize,
+        trades: crossResult.trades
+      };
+    }
+
+    return {
+      kind: "external_only",
+      crossingFilledSize,
+      remainingSize
+    };
+  }
+
+  private async evaluateShadowInternalCross(internalOrder: InternalOrder): Promise<void> {
+    const preview = await this.deps.internalEngine.previewCross(internalOrder);
+    const status = this.readShadowStatus(preview);
+    internalCrossShadowTotal.labels(status).inc();
+
+    if (status === "NONE") {
+      internalCrossShadowMatchTotal.labels("no_internal_liquidity").inc();
+      return;
+    }
+
+    internalCrossShadowDivergenceTotal.labels(
+      preview.wouldSelfTrade ? "self_trade" : "internal_liquidity_bypassed"
+    ).inc();
+  }
+
+  private readShadowStatus(preview: InternalCrossPreviewResult): "NONE" | "PARTIAL" | "FILLED" | "SELF_TRADE" {
+    if (preview.wouldSelfTrade) {
+      return "SELF_TRADE";
+    }
+    if (preview.fillableSize <= 0) {
+      return "NONE";
+    }
+    if (preview.remainingSize <= 0) {
+      return "FILLED";
+    }
+    return "PARTIAL";
   }
 
   private async buildAllocationsByLeg(

@@ -414,7 +414,7 @@ export class PlanRunner implements IPlanRunner {
       providerId: step.provider_id,
       legId: step.leg_id,
       quantity: step.target_size
-    }, step.provider_type === "INTERNAL");
+    }, step.provider_type === "INTERNAL_CROSS");
   }
 
   private async createFallbackStep(
