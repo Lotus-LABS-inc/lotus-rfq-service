@@ -125,15 +125,9 @@ export class InternalCrossingEngine {
 
                         // 5. Update Redis book state AFTER commit
                         if (newMakerStatus === 'FILLED') {
-                            // Note: maker.created_at is required to calculate the exact member string score
-                            await this.orderBook.removeOrder({
-                                id: maker.id,
-                                market_id: maker.market_id,
-                                side: maker.side,
-                                created_at: new Date(maker.created_at)
-                            } as any);
+                            await this.orderBook.removeOrder(maker.id);
                         } else {
-                            await this.orderBook.updateRemaining(incomingOrder.market_id, maker.id, newMakerRemaining);
+                            await this.orderBook.updateRemaining(maker.id, newMakerRemaining.toString());
                         }
 
                         filledTakerSize += matchSize;
