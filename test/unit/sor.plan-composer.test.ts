@@ -114,6 +114,7 @@ describe("SOR PlanComposer", () => {
       input.rfq,
       input.routeCandidates,
       input.scoredCandidates,
+      input.allocations,
       input.policy
     );
 
@@ -142,6 +143,7 @@ describe("SOR PlanComposer", () => {
       input.rfq,
       input.routeCandidates,
       input.scoredCandidates,
+      input.allocations,
       input.policy
     );
 
@@ -158,6 +160,7 @@ describe("SOR PlanComposer", () => {
       input.rfq,
       input.routeCandidates,
       input.scoredCandidates,
+      input.allocations,
       input.policy
     )).rejects.toThrow("forced_failure");
 

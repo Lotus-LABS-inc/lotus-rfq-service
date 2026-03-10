@@ -91,9 +91,9 @@ describe("SOR OrderRouter", () => {
         targetPrice: 1.11
       }
     ]);
-    const composePlan = vi.fn(async (input: PlanComposerInput) => {
-      expect(input.reservationToken).toBe("reservation-token-1");
-      expect(input.createdBy).toBe(rfqInput.takerId);
+    const composePlan = vi.fn(async (rfq: CanonicalRFQInput) => {
+      expect(rfq.metadata?.reservation_token).toBe("reservation-token-1");
+      expect(rfq.takerId).toBe(rfqInput.takerId);
       return composedPlan;
     });
 

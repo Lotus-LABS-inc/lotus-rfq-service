@@ -125,15 +125,8 @@ export class PlanRunner implements IPlanRunner {
         });
 
         const finalSteps = await this.loadPlanSteps(parsedPlan.id);
-        const result = await this.resolvePlanResult(plan, persistedPlan.acceptance_policy, finalSteps);
 
-        if (result.status === "COMPLETED" || result.status === "PARTIAL") {
-          sorPlanSuccessTotal.labels(result.status).inc();
-        } else {
-          sorPlanFailureTotal.labels(result.status, "execution_failure").inc();
-        }
-
-        return result;
+        return this.resolvePlanResult(plan, persistedPlan.acceptance_policy, finalSteps);
       }
     );
   }

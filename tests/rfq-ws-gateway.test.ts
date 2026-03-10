@@ -114,8 +114,28 @@ class FakeRedisClient implements RedisClient {
     return 1;
   }
 
+  public async zrem(): Promise<number> {
+    return 1;
+  }
+
+  public async zrangebyscore(key: string, min: number | string, max: number | string, limitLiteral?: "LIMIT", offset?: number, count?: number): Promise<string[]> {
+    return [];
+  }
+
   public async zrevrange(): Promise<string[]> {
     return [];
+  }
+
+  public async hset(): Promise<number> {
+    return 1;
+  }
+
+  public async hget(): Promise<string | null> {
+    return null;
+  }
+
+  public async hdel(): Promise<number> {
+    return 1;
   }
 
   public async psubscribe(): Promise<number> {

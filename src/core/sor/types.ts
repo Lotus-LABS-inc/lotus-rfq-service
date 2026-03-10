@@ -4,6 +4,11 @@ export type UUID = string;
 export type CanonicalSide = "buy" | "sell";
 export type SORAcceptancePolicy = "ALL_OR_NONE" | "PARTIAL_ALLOWED" | "BEST_EFFORT";
 export type STPMode = "CANCEL_NEWEST" | "CANCEL_OLDEST" | "CANCEL_BOTH" | "NONE";
+export enum LiquiditySource {
+  LP = "LP",
+  VENUE = "VENUE",
+  INTERNAL_CROSS = "INTERNAL_CROSS"
+}
 
 export type RoutingPlanStatus =
   | "DRAFT"

@@ -27,7 +27,12 @@ export interface RedisClient {
   ttl(key: string): Promise<number>;
   del(...keys: string[]): Promise<number>;
   zadd(key: string, score: number, member: string): Promise<number>;
+  zrem(key: string, member: string): Promise<number>;
+  zrangebyscore(key: string, min: number | string, max: number | string, limitLiteral?: "LIMIT", offset?: number, count?: number): Promise<string[]>;
   zrevrange(key: string, start: number, stop: number): Promise<string[]>;
+  hset(key: string, field: string, value: string): Promise<number>;
+  hget(key: string, field: string): Promise<string | null>;
+  hdel(key: string, field: string): Promise<number>;
   psubscribe(pattern: string): Promise<number>;
   punsubscribe(pattern: string): Promise<number>;
   on(event: "connect", listener: () => void): RedisClient;

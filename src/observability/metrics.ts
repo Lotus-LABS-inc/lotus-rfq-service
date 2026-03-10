@@ -358,4 +358,18 @@ export const sorEnabledState = new Gauge({
   ...gaugeConfig
 });
 
+export const internalCrossingTotal = new Counter({
+  name: "internal_crossing_total",
+  help: "Total number of internal crossing attempts.",
+  labelNames: ["market_id", "side", "status"],
+  ...counterConfig
+});
+
+export const internalCrossingFilledSizeTotal = new Counter({
+  name: "internal_crossing_filled_size_total",
+  help: "Total filled size from internal crossing.",
+  labelNames: ["market_id", "side"],
+  ...counterConfig
+});
+
 export const metricsRegistry = registry;

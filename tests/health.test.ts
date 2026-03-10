@@ -30,7 +30,12 @@ const createRedisStub = (): RedisClient => {
     ttl: async () => 60,
     del: async () => 1,
     zadd: async () => 1,
+    zrem: async () => 1,
+    zrangebyscore: async (key: string, min: number | string, max: number | string, limitLiteral?: "LIMIT", offset?: number, count?: number) => [],
     zrevrange: async () => [],
+    hset: async () => 1,
+    hget: async () => null,
+    hdel: async () => 1,
     psubscribe: async () => 1,
     punsubscribe: async () => 1,
     on: ((event: string, listener: (...args: unknown[]) => void) => {

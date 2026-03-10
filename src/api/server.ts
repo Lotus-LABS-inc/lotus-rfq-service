@@ -49,6 +49,10 @@ import {
   sorShadowTotal
 } from "../observability/metrics.js";
 import { withSpan } from "../observability/tracing.js";
+import { InternalCrossingEngine } from "../core/internal-engine/engine.js";
+import { OrderBook } from "../core/internal-engine/order-book.js";
+import { OrderLocker } from "../core/internal-engine/locker.js";
+import { internalCrossingFilledSizeTotal, internalCrossingTotal } from "../observability/metrics.js";
 
 export interface ServerDependencies {
   logger: Logger;
@@ -181,6 +185,15 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     logger: dependencies.logger
   });
 
+  const internalOrderBook = new OrderBook(dependencies.redisClient); // Fixed: removed logger
+  const internalOrderLocker = new OrderLocker(dependencies.redisClient); // Fixed: removed logger
+  const internalEngine = new InternalCrossingEngine(
+    dependencies.pgPool,
+    internalOrderBook,
+    internalOrderLocker,
+    dependencies.logger
+  );
+
   const sorExecutionRouter = {
     executeStep: async () => ({
       ok: true as const,
@@ -281,10 +294,58 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       const acceptancePolicy = readAcceptancePolicy(session.metadata);
 
       const reservationToken = await riskEngine.validateBeforeExecution(session, quote);
+
+      // --- INTERNAL CROSSING ATTEMPT ---
+      const takerOrder = {
+        id: session.id,
+        user_id: session.taker_id,
+        market_id: session.canonical_market_id,
+        side: session.side,
+        price: quote.price,
+        initial_size: session.quantity,
+        remaining_size: session.quantity,
+        status: "OPEN" as const,
+        created_at: session.created_at,
+        updated_at: new Date()
+      };
+
+      const crossResult = await internalEngine.attemptCross(takerOrder);
+
+      if (crossResult.filledSize > 0) {
+        internalCrossingTotal.inc({
+          market_id: session.canonical_market_id,
+          side: session.side,
+          status: crossResult.remainingSize === 0 ? "FILLED" : "PARTIAL"
+        });
+        internalCrossingFilledSizeTotal.inc(
+          { market_id: session.canonical_market_id, side: session.side },
+          crossResult.filledSize
+        );
+      } else {
+        internalCrossingTotal.inc({
+          market_id: session.canonical_market_id,
+          side: session.side,
+          status: "NONE"
+        });
+      }
+
+      if (crossResult.remainingSize <= 0) {
+        await transitionRFQState(sessionId, "ACCEPTED", "internal_match_full");
+        await transitionRFQState(sessionId, "SETTLED", "internal_match_full");
+        return {
+          status: "PLAN_ACCEPTED" as const,
+          plan_id: `internal-${sessionId}`,
+          plan_state: "COMPLETED" as const,
+          dispatch_mode: "awaited" as const,
+          final_status: "COMPLETED" as const
+        };
+      }
+      // --- END INTERNAL CROSSING ---
+
       const rfqInput: CanonicalRFQInput = {
         rfqId: session.id,
         idempotencyKey: session.idempotency_key,
-        quantity: session.quantity,
+        quantity: crossResult.remainingSize.toString(),
         side: session.side,
         canonicalMarketId: session.canonical_market_id,
         stpMode: (session.metadata as any)?.stp_mode ?? "CANCEL_NEWEST",
@@ -295,7 +356,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
             {
               leg_id: "00000000-0000-0000-0000-000000000000",
               symbol: session.canonical_market_id,
-              target_quantity: session.quantity
+              target_quantity: crossResult.remainingSize.toString()
             }
           ]
         }
@@ -306,7 +367,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           ? { lpId: quote.quote_payload.lpId }
           : {}),
         price: Number.parseFloat(quote.price),
-        quantity: Number.parseFloat(quote.quantity),
+        quantity: crossResult.remainingSize,
         feeBps: quote.fee_bps,
         validUntil: quote.valid_until.toISOString(),
         payload: quote.quote_payload
