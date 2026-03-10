@@ -12,23 +12,24 @@ const { Pool } = pg;
 const repoRoot = resolveRepoRoot(import.meta.url);
 loadRepoEnv(repoRoot);
 
-const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
+const databaseUrl = process.env.SUPABASE_DB_URL;
 if (!databaseUrl) {
-  console.error("[db:migrate:test] TEST_DATABASE_URL or DATABASE_URL must be set.");
+  console.error("[db:migrate:supabase] SUPABASE_DB_URL must be set.");
   process.exit(1);
 }
 
 const pool = new Pool({ connectionString: databaseUrl });
 
 const run = async () => {
+  const target = new URL(databaseUrl);
   const summary = await applyMigrationsWithLedger({
     pool,
     migrationDirs: migrationDirsForRepo(repoRoot),
-    logPrefix: "db:migrate:test",
-    appliedBy: "db-migrate-test"
+    logPrefix: "db:migrate:supabase",
+    appliedBy: "db-migrate-supabase"
   });
   console.log(
-    `[db:migrate:test] migration run complete. applied=${summary.applied} skipped=${summary.skipped} total=${summary.total}`
+    `[db:migrate:supabase] target=${target.host}${target.pathname} applied=${summary.applied} skipped=${summary.skipped} total=${summary.total}`
   );
 };
 
@@ -37,7 +38,7 @@ run()
     await pool.end();
   })
   .catch(async (error) => {
-    console.error("[db:migrate:test] migration failed.", error);
+    console.error("[db:migrate:supabase] migration failed.", error);
     await pool.end();
     process.exit(1);
   });

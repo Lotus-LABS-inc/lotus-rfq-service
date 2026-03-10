@@ -41,9 +41,23 @@ export const comboRoutes = (engine: IComboEngine): FastifyPluginAsync => async (
             const quoteId = request.body.quoteId;
 
             // Trigger internal combo acceptance loop involving risk evaluation
-            const plan = await engine.acceptCombo(comboId, quoteId);
+            const result = await engine.acceptCombo(comboId, quoteId);
 
-            return reply.status(200).send({ status: "ACCEPTED", planId: plan.id });
+            if (result.kind === "internal_filled") {
+                return reply.status(200).send({
+                    status: "INTERNALLY_FILLED",
+                    comboId: result.comboId,
+                    nettedSize: result.nettedSize,
+                    nettingGroupIds: result.nettingGroupIds
+                });
+            }
+
+            return reply.status(200).send({
+                status: "ACCEPTED",
+                planId: result.plan.id,
+                nettedSize: result.nettedSize,
+                residualLegCount: result.residualLegCount
+            });
         } catch (e: any) {
             return reply.status(400).send({ error: e.message });
         }

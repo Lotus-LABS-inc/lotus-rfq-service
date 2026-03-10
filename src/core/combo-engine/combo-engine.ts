@@ -5,16 +5,30 @@ import type { IComboRepository } from "../../repositories/combo.repository.js";
 import type { IComboQuoteRepository } from "../../repositories/combo-quote.repository.js";
 import type { IComboQuoteNormalizer } from "../../services/combo-quote-normalizer.js";
 import type { IExecutionPlanBuilder, ExecutionPlan } from "../execution-plan/execution-plan-builder.js";
+import type { IMultiLegInternalNettingEngine } from "./multi-leg-internal-netting-engine.js";
 import {
   ComboRFQRequest,
+  ComboAcceptResult,
   ComboRFQSession,
   ComboQuote,
   ComboRFQRequestSchema,
-  LPComboQuoteRequest
+  LPComboQuoteRequest,
+  type MultiLegInternalNettingInput,
+  type ResidualComboLeg
 } from "./types.js";
 import { computePayoutVector } from "./pricing-engine.js";
 import {
   comboCreatedTotal,
+  comboInternalNetEnabledState,
+  comboInternalNetAttemptTotal,
+  comboInternalNetKillSwitchTotal,
+  comboInternalNetPartialTotal,
+  comboInternalNetResidualRoutedTotal,
+  comboInternalNetShadowDivergenceTotal,
+  comboInternalNetShadowMatchTotal,
+  comboInternalNetShadowNettedSize,
+  comboInternalNetShadowTotal,
+  comboInternalNetSuccessTotal,
   comboQuoteReceivedTotal,
   comboExecutionSuccessTotal,
   comboExecutionFailureTotal,
@@ -24,10 +38,21 @@ import {
   comboPriceComputeMs
 } from "../../observability/metrics.js";
 import {
+  withSpan,
   traceComboCreate,
   traceComboRank,
   traceCombosBuildPlan
 } from "../../observability/combo-tracer.js";
+import { LiquiditySource } from "../sor/types.js";
+import {
+  compareInternalNettingShadowDecision,
+  isInternalNettingKillSwitchActive,
+  isInternalNettingRolloutWindowActive,
+  isInternalNettingSampled,
+  type InternalNettingPreviewOutcome,
+  type InternalNettingShadowDecision,
+  type InternalNettingShadowReason
+} from "./runtime-controls.js";
 
 export interface IComboRiskEngine {
   validateRFQCreation(rfq: {
@@ -53,6 +78,7 @@ export interface IExecutionRouter {
 
 export interface ComboRedisClient {
   incr(key: string): Promise<number>;
+  get?(key: string): Promise<string | null>;
   expire(key: string, seconds: number): Promise<number>;
   hset(key: string, ...args: string[]): Promise<number>;
   zadd(key: string, score: number, member: string): Promise<number>;
@@ -62,7 +88,20 @@ export interface ComboRedisClient {
 export interface IComboEngine {
   createComboRFQ(req: ComboRFQRequest): Promise<ComboRFQSession>;
   collectLPQuote(lpPayload: LPComboQuoteRequest): Promise<void>;
-  acceptCombo(sessionId: string, quoteId: string): Promise<ExecutionPlan>;
+  acceptCombo(sessionId: string, quoteId: string): Promise<ComboAcceptResult>;
+}
+
+export interface ComboEngineRolloutConfig {
+  internalNettingEnabled?: boolean;
+  internalNettingShadowEnabled?: boolean;
+  internalNettingShadowPercent?: number;
+  internalNettingShadowStartAt?: string;
+  internalNettingShadowEndAt?: string;
+  internalNettingCanaryEnabled?: boolean;
+  internalNettingCanaryPercent?: number;
+  internalNettingCanaryStartAt?: string;
+  internalNettingCanaryEndAt?: string;
+  now?: () => Date;
 }
 
 export class ComboEngine implements IComboEngine {
@@ -73,12 +112,18 @@ export class ComboEngine implements IComboEngine {
     private readonly quoteRepo: IComboQuoteRepository,
     private readonly normalizer: IComboQuoteNormalizer,
     private readonly planBuilder: IExecutionPlanBuilder,
+    private readonly multiLegInternalNettingEngine: IMultiLegInternalNettingEngine,
     private readonly riskEngine: IComboRiskEngine,
     private readonly canonicalClient: ICanonicalClient,
     private readonly executionRouter: IExecutionRouter,
     private readonly redisClient: ComboRedisClient,
-    private readonly logger: Logger
-  ) {}
+    private readonly logger: Logger,
+    private readonly rolloutConfig: ComboEngineRolloutConfig = {}
+  ) {
+    comboInternalNetEnabledState.set(
+      this.rolloutConfig.internalNettingEnabled || this.rolloutConfig.internalNettingCanaryEnabled ? 1 : 0
+    );
+  }
 
   private async emitSequencedEvent(
     comboId: string,
@@ -208,7 +253,7 @@ export class ComboEngine implements IComboEngine {
     });
   }
 
-  public async acceptCombo(sessionId: string, quoteId: string): Promise<ExecutionPlan> {
+  public async acceptCombo(sessionId: string, quoteId: string): Promise<ComboAcceptResult> {
     const session = await this.comboRepo.getSession(sessionId);
     if (!session) {
       throw new Error("Session not found");
@@ -234,46 +279,130 @@ export class ComboEngine implements IComboEngine {
     return traceCombosBuildPlan(sessionId, reservationToken, session.acceptancePolicy, async (span) => {
       const execStart = Date.now();
       try {
+        const internalNetKillSwitchActive =
+          typeof this.redisClient.get === "function"
+            ? await isInternalNettingKillSwitchActive(this.redisClient as Required<Pick<ComboRedisClient, "get">>)
+            : false;
+        const rolloutMode = this.resolveInternalNettingMode(session.id, internalNetKillSwitchActive);
+
+        span.setAttribute("combo.internal_net.kill_switch_active", internalNetKillSwitchActive);
+        span.setAttribute("combo.internal_net.mode", rolloutMode.mode);
+        span.setAttribute("combo.internal_net.shadow_sampled", rolloutMode.shadowSampled);
+        span.setAttribute("combo.internal_net.canary_sampled", rolloutMode.canarySampled);
+
+        if (rolloutMode.shadowSampled) {
+          try {
+            await this.runInternalNetShadowComparison(session, internalNetKillSwitchActive, rolloutMode.mode);
+          } catch (error) {
+            comboInternalNetShadowDivergenceTotal.inc({ reason: "error" });
+            this.logger.error({ comboId: session.id, err: error }, "Combo internal-net shadow comparison failed.");
+          }
+        }
+
+        const nettingResult = rolloutMode.authoritativeInternalNetting
+          ? await this.runAuthoritativeInternalNet(session, internalNetKillSwitchActive)
+          : this.zeroNettingResult(session);
+
+        const refreshedSession = await this.comboRepo.getSession(sessionId);
+        if (!refreshedSession) {
+          throw new Error("Session disappeared after internal netting.");
+        }
+
+        if (!nettingResult.residualRemaining) {
+          await this.comboRepo.updateSessionState(sessionId, "EXECUTED");
+          comboInternalNetSuccessTotal.inc();
+          comboExecutionSuccessTotal.inc({ acceptance_policy: session.acceptancePolicy });
+          comboExecutionDurationMs.observe({ acceptance_policy: session.acceptancePolicy }, Date.now() - execStart);
+
+          if (this.riskEngine.rollbackReservation) {
+            await this.riskEngine.rollbackReservation(reservationToken);
+          }
+
+          await this.emitSequencedEvent(sessionId, "COMBO_EXECUTION_UPDATE", {
+            status: "SETTLED",
+            liquiditySource: LiquiditySource.INTERNAL_NETTING,
+            nettedSize: nettingResult.nettedSize,
+            nettingGroupIds: nettingResult.nettingGroupIds
+          });
+
+          return {
+            kind: "internal_filled",
+            comboId: sessionId,
+            nettingGroupIds: nettingResult.nettingGroupIds,
+            nettedSize: nettingResult.nettedSize
+          };
+        }
+
+        const residualSession = this.applyResidualLegsToSession(refreshedSession, nettingResult.residualLegs);
+        if (Number(nettingResult.nettedSize) > 0) {
+          comboInternalNetPartialTotal.inc();
+        }
+
         const plan = await this.planBuilder.buildExecutionPlan(
-          session,
+          residualSession,
           selectedQuote,
           reservationToken,
-          session.acceptancePolicy
+          residualSession.acceptancePolicy
         );
 
         span.setAttribute("combo.plan_id", plan.id);
         span.setAttribute("combo.num_steps", plan.steps.length);
+        span.setAttribute("combo.internal_netted_size", nettingResult.nettedSize);
+        span.setAttribute("combo.residual_leg_count", nettingResult.residualLegs.length);
 
         await this.comboRepo.updateSessionState(sessionId, "ACCEPTED");
+        if (Number(nettingResult.nettedSize) > 0) {
+          comboInternalNetResidualRoutedTotal.inc();
+        }
         const result = await this.executionRouter.executePlan(plan);
 
-        comboExecutionDurationMs.observe({ acceptance_policy: session.acceptancePolicy }, Date.now() - execStart);
+        comboExecutionDurationMs.observe({ acceptance_policy: residualSession.acceptancePolicy }, Date.now() - execStart);
 
         if (result.status === "COMPLETED") {
           await this.comboRepo.updateSessionState(sessionId, "EXECUTED");
-          comboExecutionSuccessTotal.inc({ acceptance_policy: session.acceptancePolicy });
+          comboExecutionSuccessTotal.inc({ acceptance_policy: residualSession.acceptancePolicy });
 
-          for (const leg of session.legs) {
+          for (const leg of residualSession.legs.filter((candidate) => Number(candidate.remainingSize ?? candidate.quantity) > 0)) {
             await this.riskEngine.updateExposureAfterExecution(
               reservationToken,
               leg.canonicalMarketId,
               leg.side,
-              Number(leg.quantity)
+              Number(leg.remainingSize ?? leg.quantity)
             );
           }
 
-          await this.emitSequencedEvent(sessionId, "COMBO_EXECUTION_UPDATE", { status: "SETTLED" });
-          return plan;
+          await this.emitSequencedEvent(sessionId, "COMBO_EXECUTION_UPDATE", {
+            status: "SETTLED",
+            liquiditySource: Number(nettingResult.nettedSize) > 0 ? LiquiditySource.INTERNAL_NETTING : LiquiditySource.LP,
+            nettedSize: nettingResult.nettedSize,
+            residualLegCount: nettingResult.residualLegs.length
+          });
+          return {
+            kind: "external_plan",
+            plan,
+            nettedSize: nettingResult.nettedSize,
+            residualLegCount: nettingResult.residualLegs.length
+          };
         }
 
         await this.comboRepo.updateSessionState(sessionId, "FAILED");
         comboExecutionFailureTotal.inc({
-          acceptance_policy: session.acceptancePolicy,
+          acceptance_policy: residualSession.acceptancePolicy,
           reason: "execution_failed"
         });
         comboUnwindAttemptsTotal.inc({ outcome: "success" });
-        await this.emitSequencedEvent(sessionId, "COMBO_EXECUTION_UPDATE", { status: "FAILED" });
-        return plan;
+        await this.emitSequencedEvent(sessionId, "COMBO_EXECUTION_UPDATE", {
+          status: "FAILED",
+          liquiditySource: Number(nettingResult.nettedSize) > 0 ? LiquiditySource.INTERNAL_NETTING : LiquiditySource.LP,
+          nettedSize: nettingResult.nettedSize,
+          residualLegCount: nettingResult.residualLegs.length
+        });
+        return {
+          kind: "external_plan",
+          plan,
+          nettedSize: nettingResult.nettedSize,
+          residualLegCount: nettingResult.residualLegs.length
+        };
       } catch (error) {
         comboExecutionDurationMs.observe({ acceptance_policy: session.acceptancePolicy }, Date.now() - execStart);
         comboExecutionFailureTotal.inc({
@@ -297,5 +426,225 @@ export class ComboEngine implements IComboEngine {
         throw error;
       }
     });
+  }
+
+  private toInternalNettingInput(session: ComboRFQSession): MultiLegInternalNettingInput {
+    return {
+      id: session.id,
+      userId: session.userId,
+      state: session.state,
+      legs: session.legs.map((leg) => ({
+        id: leg.id,
+        canonicalMarketId: leg.canonicalMarketId,
+        canonicalOutcomeId: leg.canonicalOutcomeId,
+        side: leg.side,
+        remainingSize: leg.remainingSize ?? leg.quantity,
+        ...(leg.priceHint ? { priceHint: leg.priceHint } : {})
+      }))
+    };
+  }
+
+  private resolveInternalNettingMode(
+    stableId: string,
+    killSwitchActive: boolean
+  ): {
+    mode: "disabled" | "shadow" | "canary" | "enabled";
+    authoritativeInternalNetting: boolean;
+    shadowSampled: boolean;
+    canarySampled: boolean;
+  } {
+    const now = this.rolloutConfig.now;
+    const shadowWindowActive = isInternalNettingRolloutWindowActive({
+      enabled: this.rolloutConfig.internalNettingShadowEnabled ?? false,
+      percent: this.rolloutConfig.internalNettingShadowPercent ?? 0,
+      ...(this.rolloutConfig.internalNettingShadowStartAt ? { startAt: this.rolloutConfig.internalNettingShadowStartAt } : {}),
+      ...(this.rolloutConfig.internalNettingShadowEndAt ? { endAt: this.rolloutConfig.internalNettingShadowEndAt } : {}),
+      ...(now ? { now } : {})
+    });
+    const canaryWindowActive = isInternalNettingRolloutWindowActive({
+      enabled: this.rolloutConfig.internalNettingCanaryEnabled ?? false,
+      percent: this.rolloutConfig.internalNettingCanaryPercent ?? 0,
+      ...(this.rolloutConfig.internalNettingCanaryStartAt ? { startAt: this.rolloutConfig.internalNettingCanaryStartAt } : {}),
+      ...(this.rolloutConfig.internalNettingCanaryEndAt ? { endAt: this.rolloutConfig.internalNettingCanaryEndAt } : {}),
+      ...(now ? { now } : {})
+    });
+
+    const shadowSampled =
+      shadowWindowActive &&
+      isInternalNettingSampled(stableId, this.rolloutConfig.internalNettingShadowPercent ?? 0);
+    const canarySampled =
+      canaryWindowActive &&
+      isInternalNettingSampled(stableId, this.rolloutConfig.internalNettingCanaryPercent ?? 0);
+
+    const authoritativeInternalNetting =
+      !killSwitchActive && ((this.rolloutConfig.internalNettingEnabled ?? false) || canarySampled);
+
+    if (authoritativeInternalNetting && canarySampled) {
+      return { mode: "canary", authoritativeInternalNetting: true, shadowSampled, canarySampled };
+    }
+    if (authoritativeInternalNetting) {
+      return { mode: "enabled", authoritativeInternalNetting: true, shadowSampled, canarySampled };
+    }
+    if (shadowSampled) {
+      return { mode: "shadow", authoritativeInternalNetting: false, shadowSampled, canarySampled };
+    }
+    return { mode: "disabled", authoritativeInternalNetting: false, shadowSampled, canarySampled };
+  }
+
+  private async runAuthoritativeInternalNet(
+    session: ComboRFQSession,
+    killSwitchActive: boolean
+  ): Promise<Awaited<ReturnType<IMultiLegInternalNettingEngine["attemptNet"]>>> {
+    if (killSwitchActive) {
+      comboInternalNetKillSwitchTotal.inc({ mode: "authoritative" });
+      this.logger.warn({ comboId: session.id }, "Skipped combo internal netting because kill switch is active.");
+      return this.zeroNettingResult(session);
+    }
+
+    return withSpan(
+      "combo.internal_net",
+      {
+        "combo.id": session.id,
+        "combo.acceptance_policy": session.acceptancePolicy,
+        "combo.internal_net.kill_switch_active": false,
+        "liquidity_source": LiquiditySource.INTERNAL_NETTING
+      },
+      async (netSpan) => {
+        comboInternalNetAttemptTotal.inc();
+        const result = await this.multiLegInternalNettingEngine.attemptNet(this.toInternalNettingInput(session));
+        netSpan.setAttribute("internal_netted_size", result.nettedSize);
+        netSpan.setAttribute("residual_leg_count", result.residualLegs.length);
+        netSpan.setAttribute("liquidity_source", LiquiditySource.INTERNAL_NETTING);
+        return result;
+      }
+    );
+  }
+
+  private async runInternalNetShadowComparison(
+    session: ComboRFQSession,
+    killSwitchActive: boolean,
+    mode: "disabled" | "shadow" | "canary" | "enabled"
+  ): Promise<void> {
+    const sampled = true;
+    comboInternalNetShadowTotal.inc({ mode, sampled: String(sampled) });
+
+    const authoritative = this.buildAuthoritativeExternalDecision(session);
+    let reason: InternalNettingShadowReason | undefined;
+
+    const shadowDecision = await withSpan(
+      "combo.internal_net.shadow_evaluate",
+      {
+        "combo.id": session.id,
+        "combo.acceptance_policy": session.acceptancePolicy,
+        "combo.internal_net.kill_switch_active": killSwitchActive,
+        "shadow_mode": true
+      },
+      async () => {
+        if (killSwitchActive) {
+          reason = "kill_switch";
+          return this.buildShadowDecision(this.zeroNettingResult(session));
+        }
+
+        const result = await this.multiLegInternalNettingEngine.previewNet(this.toInternalNettingInput(session));
+        comboInternalNetShadowNettedSize.observe(Number(result.nettedSize));
+        return this.buildShadowDecision(result);
+      }
+    );
+
+    await withSpan(
+      "combo.internal_net.shadow_compare",
+      {
+        "combo.id": session.id,
+        "combo.acceptance_policy": session.acceptancePolicy,
+        "combo.internal_net.kill_switch_active": killSwitchActive,
+        "shadow_mode": true
+      },
+      async (compareSpan) => {
+        const comparison =
+          reason === "kill_switch" || reason === "disabled"
+            ? {
+              match: false,
+              dimension: "netted_outcome" as const,
+              reason
+            }
+            : compareInternalNettingShadowDecision(authoritative, shadowDecision);
+
+        compareSpan.setAttribute("combo.internal_net.shadow.match", comparison.match);
+        compareSpan.setAttribute("combo.internal_net.shadow.dimension", comparison.dimension);
+        if (comparison.reason) {
+          compareSpan.setAttribute("combo.internal_net.shadow.reason", comparison.reason);
+        }
+
+        if (comparison.match) {
+          comboInternalNetShadowMatchTotal.inc({ dimension: comparison.dimension });
+          return;
+        }
+
+        comboInternalNetShadowDivergenceTotal.inc({
+          reason: comparison.reason ?? "error"
+        });
+      }
+    );
+  }
+
+  private buildAuthoritativeExternalDecision(session: ComboRFQSession): InternalNettingShadowDecision {
+    return {
+      outcome: "no_net",
+      residualLegCount: session.legs.length,
+      nettedSize: 0
+    };
+  }
+
+  private buildShadowDecision(
+    result: Awaited<ReturnType<IMultiLegInternalNettingEngine["attemptNet"]>>
+  ): InternalNettingShadowDecision {
+    return {
+      outcome: this.toPreviewOutcome(result),
+      residualLegCount: result.residualLegs.length,
+      nettedSize: Number(result.nettedSize)
+    };
+  }
+
+  private toPreviewOutcome(
+    result: Awaited<ReturnType<IMultiLegInternalNettingEngine["attemptNet"]>>
+  ): InternalNettingPreviewOutcome {
+    if (Number(result.nettedSize) <= 0) {
+      return "no_net";
+    }
+    return result.residualRemaining ? "partial_net" : "full_net";
+  }
+
+  private zeroNettingResult(
+    session: ComboRFQSession
+  ): Awaited<ReturnType<IMultiLegInternalNettingEngine["attemptNet"]>> {
+    return {
+      nettedSize: "0",
+      residualLegs: this.toInternalNettingInput(session).legs,
+      residualRemaining: true,
+      nettingGroupIds: [],
+      eventsWritten: 0
+    };
+  }
+
+  private applyResidualLegsToSession(
+    session: ComboRFQSession,
+    residualLegs: readonly ResidualComboLeg[]
+  ): ComboRFQSession {
+    const residualByLegId = new Map(residualLegs.map((leg) => [leg.id, leg] as const));
+
+    return {
+      ...session,
+      legs: session.legs
+        .map((leg) => {
+          const residual = residualByLegId.get(leg.id);
+          const remainingSize = residual?.remainingSize ?? "0";
+          return {
+            ...leg,
+            remainingSize,
+            ...(residual?.priceHint ? { priceHint: residual.priceHint } : leg.priceHint ? { priceHint: leg.priceHint } : {})
+          };
+        })
+        .filter((leg) => Number(leg.remainingSize ?? leg.quantity) > 0)
+    };
   }
 }

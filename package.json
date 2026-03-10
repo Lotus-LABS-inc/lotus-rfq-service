@@ -18,9 +18,12 @@
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" \"tests/**/*.ts\"",
     "metrics:check": "node scripts/check-metrics.mjs",
     "db:migrate:test": "node scripts/db-migrate-test.mjs",
+    "db:migrate:supabase": "node scripts/db-migrate-supabase.mjs",
+    "db:verify:supabase": "node scripts/db-verify-supabase.mjs",
     "db:schema:validate": "node scripts/db-schema-validate.mjs",
     "stress:sor": "tsx scripts/stress-sor.ts",
     "stress:internal-cross": "tsx scripts/stress-internal-cross.ts",
+    "stress:internal-netting": "tsx scripts/stress-internal-netting.ts",
     "chaos:internal-cross": "tsx scripts/chaos-internal-cross.ts",
     "rebuild:internal-cross-book": "tsx scripts/rebuild-internal-cross-book.ts"
   },

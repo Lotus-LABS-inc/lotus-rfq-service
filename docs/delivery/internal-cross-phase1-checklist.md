@@ -12,6 +12,14 @@ Status legend:
 
 - [x] `trades` table migration applied
   Evidence: `sql/migrations/2026_03_06_create_internal_trades.sql`
+- [x] Supabase migration command exists
+  Evidence: `npm run db:migrate:supabase`
+- [x] migration ledger exists
+  Evidence: `sql/migrations/2026_03_10_create_schema_migrations.sql`
+- [x] Supabase verification command exists
+  Evidence: `npm run db:verify:supabase`
+- [x] latest repo migrations verified on Supabase
+  Evidence: `npm run db:migrate:test`, `npm run db:schema:validate`, and `npm run db:verify:supabase` passed against the current Supabase target on 2026-03-10
 - [x] indexes verified
   Evidence: `test/integration/internal-trades-schema.integration.test.ts`
 - [x] unique match protection verified

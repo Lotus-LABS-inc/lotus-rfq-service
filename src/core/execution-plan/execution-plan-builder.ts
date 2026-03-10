@@ -1,6 +1,7 @@
 import type { Logger } from "pino";
 import crypto from "crypto";
 import { ComboRFQSession, ComboQuote, AcceptancePolicy } from "../combo-engine/types.js";
+import { LiquiditySource } from "../sor/types.js";
 
 // Ensure local typings match the rigorous request output constraints
 export interface ExecutionStep {
@@ -16,6 +17,7 @@ export interface ExecutionStep {
     retryPolicy: { maxRetries: number; backoffMs: number };
     unwindStrategy: "REVERT_FILL" | "HOLD_POSITION" | "MARKET_SELL"; // Defines response to a broken ALL_OR_NONE execution
     fallbackProviders?: Array<{ lpId: string; price: string }>;
+    metadata?: Record<string, unknown>;
 }
 
 export interface ExecutionPlan {
@@ -75,6 +77,10 @@ export class ExecutionPlanBuilder implements IExecutionPlanBuilder {
         const canUseCompositeRouting = comboQuote.isComboQuote && comboQuote.rawPayload?.connector;
 
         for (const leg of combo.legs) {
+            const targetSize = leg.remainingSize ?? leg.quantity;
+            if (Number(targetSize) <= 0) {
+                continue;
+            }
             let stepPrice = "0";
             let fallbackProviders: Array<{ lpId: string; price: string }> = [];
 
@@ -102,7 +108,7 @@ export class ExecutionPlanBuilder implements IExecutionPlanBuilder {
             steps.push({
                 id: crypto.randomUUID(),
                 legId: leg.id,
-                targetSize: leg.quantity,
+                targetSize,
                 price: stepPrice,
                 lpId: comboQuote.lpId,
                 connector: comboQuote.rawPayload?.connector ?? "DEFAULT_SOR",
@@ -114,7 +120,12 @@ export class ExecutionPlanBuilder implements IExecutionPlanBuilder {
                     backoffMs: 250
                 },
                 unwindStrategy,
-                fallbackProviders
+                fallbackProviders,
+                metadata: {
+                    liquiditySource: LiquiditySource.LP,
+                    originalQuantity: leg.quantity,
+                    ...(leg.remainingSize !== undefined ? { residualQuantity: leg.remainingSize } : {})
+                }
             });
         }
 

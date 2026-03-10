@@ -14,6 +14,7 @@ describe("WebSocket streaming and REST endpoints", () => {
     let quoteRepoMock: any;
     let normalizerMock: any;
     let planBuilderMock: any;
+    let multiLegInternalNettingEngineMock: any;
     let riskEngineMock: any;
     let canonicalClientMock: any;
     let executionRouterMock: any;
@@ -34,6 +35,22 @@ describe("WebSocket streaming and REST endpoints", () => {
         };
         planBuilderMock = {
             buildExecutionPlan: vi.fn()
+        };
+        multiLegInternalNettingEngineMock = {
+            attemptNet: vi.fn(async (incoming: any) => ({
+                nettedSize: "0",
+                residualLegs: incoming.legs,
+                residualRemaining: true,
+                nettingGroupIds: [],
+                eventsWritten: 0
+            })),
+            previewNet: vi.fn(async (incoming: any) => ({
+                nettedSize: "0",
+                residualLegs: incoming.legs,
+                residualRemaining: true,
+                nettingGroupIds: [],
+                eventsWritten: 0
+            }))
         };
         riskEngineMock = {
             validateRFQCreation: vi.fn().mockResolvedValue(true),
@@ -66,11 +83,13 @@ describe("WebSocket streaming and REST endpoints", () => {
             quoteRepoMock,
             normalizerMock,
             planBuilderMock,
+            multiLegInternalNettingEngineMock,
             riskEngineMock,
             canonicalClientMock,
             executionRouterMock,
             redisMock,
-            mockLogger
+            mockLogger,
+            { internalNettingEnabled: true }
         );
     });
 

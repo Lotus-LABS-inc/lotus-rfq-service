@@ -26,6 +26,10 @@ export interface RedisClient {
   expire(key: string, seconds: number): Promise<number>;
   ttl(key: string): Promise<number>;
   del(...keys: string[]): Promise<number>;
+  sadd?(key: string, ...members: string[]): Promise<number>;
+  srem?(key: string, ...members: string[]): Promise<number>;
+  smembers?(key: string): Promise<string[]>;
+  sinter?(...keys: string[]): Promise<string[]>;
   zadd(key: string, score: number, member: string): Promise<number>;
   zrem(key: string, member: string): Promise<number>;
   zrangebyscore(key: string, min: number | string, max: number | string, limitLiteral?: "LIMIT", offset?: number, count?: number): Promise<string[]>;

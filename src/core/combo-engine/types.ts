@@ -39,6 +39,7 @@ export interface ComboLeg {
     canonicalOutcomeId: string;
     side: "buy" | "sell";
     quantity: string;
+    remainingSize?: string;
     priceHint?: string;
     metadata?: Record<string, any>;
 }
@@ -84,4 +85,162 @@ export interface ComboQuote {
     expiresAt: Date;
     rawPayload: Record<string, any>;
     createdAt: Date;
+}
+
+export interface ComboAcceptInternalFilledResult {
+    kind: "internal_filled";
+    comboId: string;
+    nettingGroupIds: readonly string[];
+    nettedSize: string;
+}
+
+export interface ComboAcceptExternalPlanResult {
+    kind: "external_plan";
+    plan: import("../execution-plan/execution-plan-builder.js").ExecutionPlan;
+    nettedSize: string;
+    residualLegCount: number;
+}
+
+export type ComboAcceptResult = ComboAcceptInternalFilledResult | ComboAcceptExternalPlanResult;
+
+export type ComboNettingGroupState = "PENDING" | "MATCHED" | "SETTLED" | "FAILED" | "UNWOUND";
+
+export interface ComboNettingGroup {
+    id: string;
+    incomingComboId: string;
+    matchedComboId: string;
+    state: ComboNettingGroupState;
+    matchedSize: string;
+    createdAt: Date;
+}
+
+export interface CreateComboNettingGroupInput {
+    id?: string;
+    incomingComboId: string;
+    matchedComboId: string;
+    state: ComboNettingGroupState;
+    matchedSize: string;
+    createdAt?: Date;
+}
+
+export interface ComboNettingMatchLeg {
+    id: string;
+    nettingGroupId: string;
+    incomingLegId: string;
+    matchedLegId: string;
+    marketId: string;
+    outcomeId: string;
+    matchedSize: string;
+    price: string;
+    createdAt: Date;
+}
+
+export interface CreateComboNettingMatchLegInput {
+    id?: string;
+    nettingGroupId: string;
+    incomingLegId: string;
+    matchedLegId: string;
+    marketId: string;
+    outcomeId: string;
+    matchedSize: string;
+    price: string;
+    createdAt?: Date;
+}
+
+export interface ComboNettingEvent {
+    id: string;
+    nettingGroupId: string;
+    eventType: string;
+    payload: Record<string, unknown>;
+    createdAt: Date;
+}
+
+export interface ComboNettingAttempt {
+    attemptId: string;
+    incomingComboId: string;
+    matchedComboId: string;
+    nettingGroupId?: string | null;
+    status: "APPLIED";
+    createdAt: Date;
+}
+
+export interface CreateComboNettingEventInput {
+    id?: string;
+    nettingGroupId: string;
+    eventType: string;
+    payload: Record<string, unknown>;
+    createdAt?: Date;
+}
+
+export interface ResidualComboLeg {
+    id: string;
+    canonicalMarketId: string;
+    canonicalOutcomeId: string;
+    side: "buy" | "sell";
+    remainingSize: string;
+    priceHint?: string;
+}
+
+export interface MultiLegInternalNettingInput {
+    id: string;
+    userId: string;
+    state?: ComboRFQSession["state"];
+    legs: readonly ResidualComboLeg[];
+}
+
+export interface NettingAttemptSnapshot {
+    incomingComboId: string;
+    candidateComboId: string;
+    matchedLegPairs: ReadonlyArray<{
+        incomingLegId: string;
+        candidateLegId: string;
+        matchedSize: string;
+    }>;
+    maxNettableSize: string;
+    attemptId: string;
+}
+
+export interface MultiLegInternalNettingResult {
+    nettedSize: string;
+    residualLegs: readonly ResidualComboLeg[];
+    residualRemaining: boolean;
+    nettingGroupIds: readonly string[];
+    eventsWritten: number;
+}
+
+export interface ComboNettingExposureAggregationLeg {
+    incomingLegId: string;
+    incomingSide: "buy" | "sell";
+    candidateLegId: string;
+    candidateSide: "buy" | "sell";
+    marketId: string;
+    outcomeId: string;
+    matchedSize: string;
+    price: string;
+}
+
+export interface ComboNettingExposureAggregationInput {
+    matchedLegs: readonly ComboNettingExposureAggregationLeg[];
+}
+
+export interface ComboNettingPerLegExposureDelta {
+    legId: string;
+    marketId: string;
+    outcomeId: string;
+    side: "buy" | "sell";
+    price: string;
+    matchedSize: string;
+    maxLossDelta: string;
+    maxGainDelta: string;
+}
+
+export interface ComboNettingUserExposureAggregate {
+    maxLossDelta: string;
+    maxGainDelta: string;
+    perLeg: readonly ComboNettingPerLegExposureDelta[];
+}
+
+export interface ComboNettingExposureAggregationResult {
+    userA: ComboNettingUserExposureAggregate;
+    userB: ComboNettingUserExposureAggregate;
 }

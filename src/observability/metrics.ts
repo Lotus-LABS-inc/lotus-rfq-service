@@ -237,6 +237,71 @@ export const comboUnwindAttemptsTotal = new Counter({
   ...counterConfig
 });
 
+export const comboInternalNetAttemptTotal = new Counter({
+  name: "combo_internal_net_attempt_total",
+  help: "Total number of combo internal netting attempts before external execution.",
+  ...counterConfig
+});
+
+export const comboInternalNetSuccessTotal = new Counter({
+  name: "combo_internal_net_success_total",
+  help: "Total number of combos fully filled by internal netting.",
+  ...counterConfig
+});
+
+export const comboInternalNetPartialTotal = new Counter({
+  name: "combo_internal_net_partial_total",
+  help: "Total number of combos partially filled by internal netting before residual external routing.",
+  ...counterConfig
+});
+
+export const comboInternalNetResidualRoutedTotal = new Counter({
+  name: "combo_internal_net_residual_routed_total",
+  help: "Total number of internally netted combos whose residual was routed externally.",
+  ...counterConfig
+});
+
+export const comboInternalNetKillSwitchTotal = new Counter({
+  name: "combo_internal_net_kill_switch_total",
+  help: "Total number of combo internal-netting suppressions due to kill switch.",
+  labelNames: ["mode"],
+  ...counterConfig
+});
+
+export const comboInternalNetShadowTotal = new Counter({
+  name: "combo_internal_net_shadow_total",
+  help: "Total combo internal-netting shadow or canary evaluations.",
+  labelNames: ["mode", "sampled"],
+  ...counterConfig
+});
+
+export const comboInternalNetShadowMatchTotal = new Counter({
+  name: "combo_internal_net_shadow_match_total",
+  help: "Total matching combo internal-netting shadow comparisons.",
+  labelNames: ["dimension"],
+  ...counterConfig
+});
+
+export const comboInternalNetShadowDivergenceTotal = new Counter({
+  name: "combo_internal_net_shadow_divergence_total",
+  help: "Total divergent combo internal-netting shadow comparisons.",
+  labelNames: ["reason"],
+  ...counterConfig
+});
+
+export const comboInternalNetShadowNettedSize = new Histogram({
+  name: "combo_internal_net_shadow_netted_size",
+  help: "Shadow-evaluated combo internal-netting size distribution.",
+  buckets: [0, 1, 5, 10, 25, 50, 100, 250, 500, 1000],
+  ...histogramConfig
+});
+
+export const comboInternalNetEnabledState = new Gauge({
+  name: "combo_internal_net_enabled_state",
+  help: "Current runtime combo internal-netting enablement state (1 enabled, 0 disabled).",
+  ...gaugeConfig
+});
+
 // ─── Combo Engine Histograms ──────────────────────────────────────────────────
 
 export const comboRankingDurationMs = new Histogram({

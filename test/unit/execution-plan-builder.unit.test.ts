@@ -95,4 +95,40 @@ describe("ExecutionPlanBuilder", () => {
         await builder.finalizePlan("plan-uuid");
         expect(repoMock.updatePlanStatus).toHaveBeenCalledWith("plan-uuid", "READY");
     });
+
+    it("should build steps from residual quantities only", async () => {
+        const residualSession: ComboRFQSession = {
+            ...mockSession,
+            legs: [
+                { ...mockSession.legs[0]!, remainingSize: "40" },
+                { ...mockSession.legs[1]!, remainingSize: "0" }
+            ]
+        };
+        const mockQuote: ComboQuote = {
+            id: "quote-1",
+            comboSessionId: "combo-123",
+            lpId: "lp-uuid",
+            isComboQuote: false,
+            perLegPrices: [
+                { legId: "leg-1", price: "0.50", size: "100" },
+                { legId: "leg-2", price: "0.50", size: "50" }
+            ],
+            effectiveCost: "25.00",
+            expiresAt: new Date(),
+            createdAt: new Date(),
+            rawPayload: {}
+        };
+
+        const plan = await builder.buildExecutionPlan(residualSession, mockQuote, "token-123", AcceptancePolicy.PARTIAL_ALLOWED);
+
+        expect(plan.steps).toHaveLength(1);
+        expect(plan.steps[0]!.legId).toBe("leg-1");
+        expect(plan.steps[0]!.targetSize).toBe("40");
+        expect(plan.steps[0]!.metadata).toEqual(
+            expect.objectContaining({
+                originalQuantity: "100",
+                residualQuantity: "40"
+            })
+        );
+    });
 });

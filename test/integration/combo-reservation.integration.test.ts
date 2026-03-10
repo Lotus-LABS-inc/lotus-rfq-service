@@ -42,6 +42,7 @@ describe("Combo Reservation Concurrency Analysis", () => {
     let planBuilderMock: any;
     let executionRouterMock: any;
     let concurrencyRiskEngine: ConcurrencyRiskEngine;
+    let multiLegInternalNettingEngineMock: any;
 
     beforeEach(() => {
         comboRepoMock = {
@@ -79,6 +80,22 @@ describe("Combo Reservation Concurrency Analysis", () => {
         executionRouterMock = {
             executePlan: vi.fn().mockResolvedValue({ status: "COMPLETED" })
         };
+        multiLegInternalNettingEngineMock = {
+            attemptNet: vi.fn(async (incoming: any) => ({
+                nettedSize: "0",
+                residualLegs: incoming.legs,
+                residualRemaining: true,
+                nettingGroupIds: [],
+                eventsWritten: 0
+            })),
+            previewNet: vi.fn(async (incoming: any) => ({
+                nettedSize: "0",
+                residualLegs: incoming.legs,
+                residualRemaining: true,
+                nettingGroupIds: [],
+                eventsWritten: 0
+            }))
+        };
 
         const canonicalClientMock = {
             getMarketOutcomeProbabilities: vi.fn().mockResolvedValue(new Map([
@@ -95,11 +112,13 @@ describe("Combo Reservation Concurrency Analysis", () => {
             quoteRepoMock,
             normalizer as any,
             planBuilderMock,
+            multiLegInternalNettingEngineMock as any,
             concurrencyRiskEngine as any,
             canonicalClientMock as any,
             executionRouterMock,
             redisMock as any,
-            mockLogger
+            mockLogger,
+            { internalNettingEnabled: true }
         );
     });
 

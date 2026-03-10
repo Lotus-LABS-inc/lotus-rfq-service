@@ -174,6 +174,23 @@ Rules:
 - only `OPEN` and `PARTIAL` orders with `remaining_size > 0` are restored
 - do not use `FLUSHDB`
 
+## Supabase Schema Verification
+Schema application to Supabase is explicit. MCP connectivity is not evidence that repo migrations were applied.
+
+Run:
+
+```bash
+npm run db:migrate:supabase
+npm run db:verify:supabase
+```
+
+Then verify:
+1. `schema_migrations` contains the latest `infra/migrations` and `sql/migrations` filenames.
+2. Latest internal-cross migrations are present, including:
+   - `sql/migrations/2026_03_06_create_internal_trades.sql`
+   - `sql/migrations/2026_03_10_create_internal_cross_admin_tables.sql`
+3. Treat any missing ledger row or missing table/index as an operational stop.
+
 ## Reservation Verification
 Internal crossing happens after RFQ risk reservation.
 

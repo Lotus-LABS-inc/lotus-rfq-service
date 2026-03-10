@@ -8,10 +8,11 @@ export type STPMode = "CANCEL_NEWEST" | "CANCEL_OLDEST" | "CANCEL_BOTH" | "NONE"
 export enum LiquiditySource {
   LP = "LP",
   VENUE = "VENUE",
-  INTERNAL_CROSS = "INTERNAL_CROSS"
+  INTERNAL_CROSS = "INTERNAL_CROSS",
+  INTERNAL_NETTING = "INTERNAL_NETTING"
 }
 
-export const LiquiditySourceValues = ["LP", "VENUE", "INTERNAL_CROSS"] as const;
+export const LiquiditySourceValues = ["LP", "VENUE", "INTERNAL_CROSS", "INTERNAL_NETTING"] as const;
 export const LiquiditySourceSchema = z.enum(LiquiditySourceValues);
 export type LiquiditySourceValue = z.infer<typeof LiquiditySourceSchema>;
 

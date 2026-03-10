@@ -54,6 +54,7 @@ describe("Combo Lifecycle Integration Tests", () => {
     let execRepo: InMemoryExecRepo;
     let riskEngineMock: any;
     let executionClientMock: any;
+    let multiLegInternalNettingEngineMock: any;
     let engine: ComboEngine;
 
     /**
@@ -67,6 +68,22 @@ describe("Combo Lifecycle Integration Tests", () => {
 
         executionClientMock = {
             executeTrade: vi.fn().mockResolvedValue({ status: "FILLED", filledQuantity: "100" }),
+        };
+        multiLegInternalNettingEngineMock = {
+            attemptNet: vi.fn(async (incoming: any) => ({
+                nettedSize: "0",
+                residualLegs: incoming.legs,
+                residualRemaining: true,
+                nettingGroupIds: [],
+                eventsWritten: 0
+            })),
+            previewNet: vi.fn(async (incoming: any) => ({
+                nettedSize: "0",
+                residualLegs: incoming.legs,
+                residualRemaining: true,
+                nettingGroupIds: [],
+                eventsWritten: 0
+            }))
         };
 
         riskEngineMock = {
@@ -109,11 +126,13 @@ describe("Combo Lifecycle Integration Tests", () => {
             quoteRepo as any,
             normalizer as any,
             planBuilder as any,
+            multiLegInternalNettingEngineMock as any,
             riskEngineMock,
             canonicalClientMock as any,
             executionRouterMock,
             redisMock as any,
-            mockLogger
+            mockLogger,
+            { internalNettingEnabled: true }
         );
     });
 
@@ -170,9 +189,12 @@ describe("Combo Lifecycle Integration Tests", () => {
         expect(bestQuote).toBeDefined();
 
         // executionClientMock already returns FILLED for all legs
-        const plan = await engine.acceptCombo(session.id, bestQuote.id);
+        const result = await engine.acceptCombo(session.id, bestQuote.id);
 
-        expect(plan.status).toBe("DRAFT");
+        expect(result.kind).toBe("external_plan");
+        if (result.kind === "external_plan") {
+            expect(result.plan.status).toBe("DRAFT");
+        }
         const finalSession = await comboRepo.getSession(session.id);
         expect(finalSession!.state).toBe("EXECUTED");
         // updateExposureAfterExecution is called once per filled step (2 legs per quote submitted)

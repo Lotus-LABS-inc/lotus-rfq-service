@@ -12,7 +12,28 @@ const sleep = async (ms: number): Promise<void> =>
     setTimeout(resolve, ms);
   });
 
+const hasTradeTables = async (pool: Pool): Promise<boolean> => {
+  const result = await pool.query<{ table_name: string }>(
+    `SELECT table_name
+       FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = ANY($1::text[])`,
+    [[
+      "trades",
+      "internal_orders",
+      "combo_rfqs",
+      "combo_legs"
+    ]]
+  );
+
+  return result.rows.length === 4;
+};
+
 const applyMigrations = async (pool: Pool): Promise<void> => {
+  if (await hasTradeTables(pool)) {
+    return;
+  }
+
   const migrationDirs = [
     path.resolve(process.cwd(), "infra", "migrations"),
     path.resolve(process.cwd(), "sql", "migrations")
@@ -38,37 +59,70 @@ const applyMigrations = async (pool: Pool): Promise<void> => {
   }
 };
 
-const clearState = async (pool: Pool): Promise<void> => {
-  let attempts = 0;
-  while (attempts < 5) {
-    try {
-      await pool.query(
-        `TRUNCATE TABLE
-          trades,
-          internal_orders,
-          route_history,
-          route_steps,
-          route_candidates,
-          routing_plans,
-          rfq_executions,
-          rfq_events,
-          rfq_quotes,
-          lp_keys,
-          rfq_sessions
-        RESTART IDENTITY CASCADE`
-      );
-      return;
-    } catch (error) {
-      const code = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
-      if (code !== "40P01") {
-        throw error;
-      }
-      attempts += 1;
-      await sleep(100 * attempts);
-    }
+const hasComboNettingTables = async (pool: Pool): Promise<boolean> => {
+  const result = await pool.query<{ table_name: string }>(
+    `SELECT table_name
+       FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = ANY($1::text[])`,
+    [[
+      "combo_netting_groups",
+      "combo_netting_match_legs",
+      "combo_netting_events",
+      "combo_netting_attempts"
+    ]]
+  );
+
+  return result.rows.length === 4;
+};
+
+const applyComboNettingMigrationIfNeeded = async (pool: Pool): Promise<void> => {
+  if (await hasComboNettingTables(pool)) {
+    return;
   }
 
-  throw new Error("Unable to clear internal trade schema integration state due to repeated deadlocks.");
+  const migrationPath = path.resolve(process.cwd(), "sql", "migrations", "2026_03_10_create_combo_netting_tables.sql");
+  const sql = await readFile(migrationPath, "utf8");
+  try {
+    await pool.query(sql);
+  } catch (error) {
+    const code = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
+    if (code !== "42P07" && code !== "42710") {
+      throw error;
+    }
+  }
+  const attemptsPath = path.resolve(process.cwd(), "sql", "migrations", "2026_03_10_create_combo_netting_attempts.sql");
+  const attemptsSql = await readFile(attemptsPath, "utf8");
+  try {
+    await pool.query(attemptsSql);
+  } catch (error) {
+    const code = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
+    if (code !== "42P07" && code !== "42710") {
+      throw error;
+    }
+  }
+};
+
+const hasComboLegRemainingSize = async (pool: Pool): Promise<boolean> => {
+  const result = await pool.query<{ column_name: string }>(
+    `SELECT column_name
+       FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'combo_legs'
+        AND column_name = 'remaining_size'`
+  );
+
+  return result.rows.length === 1;
+};
+
+const applyComboLegRemainingMigrationIfNeeded = async (pool: Pool): Promise<void> => {
+  if (await hasComboLegRemainingSize(pool)) {
+    return;
+  }
+
+  const migrationPath = path.resolve(process.cwd(), "sql", "migrations", "2026_03_10_add_combo_leg_remaining_size.sql");
+  const sql = await readFile(migrationPath, "utf8");
+  await pool.query(sql);
 };
 
 describe.skipIf(!ENV_READY)("internal trades schema integration", () => {
@@ -84,18 +138,15 @@ describe.skipIf(!ENV_READY)("internal trades schema integration", () => {
   beforeAll(async () => {
     pool = new Pool({ connectionString: TEST_DB_URL as string });
     await applyMigrations(must(pool, "pool"));
-    await clearState(must(pool, "pool"));
-  }, 60000);
-
-  beforeEach(async () => {
-    await clearState(must(pool, "pool"));
-  });
+    await applyComboNettingMigrationIfNeeded(must(pool, "pool"));
+    await applyComboLegRemainingMigrationIfNeeded(must(pool, "pool"));
+  }, 180000);
 
   afterAll(async () => {
     if (pool) {
       await pool.end();
     }
-  }, 60000);
+  }, 180000);
 
   it("creates the trades table with the required indexes", async () => {
     const db = must(pool, "pool");
@@ -156,6 +207,187 @@ describe.skipIf(!ENV_READY)("internal trades schema integration", () => {
     ).rejects.toMatchObject({
       code: "23505",
       constraint: "uq_trades_match"
+    });
+  });
+
+  it("creates combo netting tables with required indexes and foreign keys", async () => {
+    const db = must(pool, "pool");
+
+    expect(await hasComboNettingTables(db)).toBe(true);
+
+    const tables = await db.query<{ table_name: string }>(
+      `SELECT table_name
+         FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = ANY($1::text[])`,
+      [[
+        "combo_netting_groups",
+        "combo_netting_match_legs",
+        "combo_netting_events",
+        "combo_netting_attempts"
+      ]]
+    );
+
+    const indexes = await db.query<{ tablename: string; indexname: string }>(
+      `SELECT tablename, indexname
+         FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND tablename = ANY($1::text[])`,
+      [[
+        "combo_netting_groups",
+        "combo_netting_match_legs",
+        "combo_netting_events",
+        "combo_netting_attempts"
+      ]]
+    );
+
+    const constraints = await db.query<{ conname: string; pg_get_constraintdef: string }>(
+      `SELECT conname, pg_get_constraintdef(pg_constraint.oid)
+         FROM pg_constraint
+        WHERE conname = ANY($1::text[])`,
+      [[
+        "uq_combo_netting_group_pair",
+        "uq_combo_netting_match_leg_pair"
+      ]]
+    );
+
+    const foreignKeys = await db.query<{ table_name: string; constraint_name: string }>(
+      `SELECT tc.table_name, tc.constraint_name
+         FROM information_schema.table_constraints tc
+        WHERE tc.table_schema = 'public'
+          AND tc.constraint_type = 'FOREIGN KEY'
+          AND tc.table_name = ANY($1::text[])`,
+      [[
+        "combo_netting_groups",
+        "combo_netting_match_legs",
+        "combo_netting_events",
+        "combo_netting_attempts"
+      ]]
+    );
+
+    const tableNames = new Set(tables.rows.map((row) => row.table_name));
+    const indexNames = new Set(indexes.rows.map((row) => row.indexname));
+    const constraintNames = new Set(constraints.rows.map((row) => row.conname));
+
+    expect(tableNames.has("combo_netting_groups")).toBe(true);
+    expect(tableNames.has("combo_netting_match_legs")).toBe(true);
+    expect(tableNames.has("combo_netting_events")).toBe(true);
+    expect(tableNames.has("combo_netting_attempts")).toBe(true);
+
+    expect(indexNames.has("idx_combo_netting_groups_incoming_combo_id")).toBe(true);
+    expect(indexNames.has("idx_combo_netting_groups_matched_combo_id")).toBe(true);
+    expect(indexNames.has("idx_combo_netting_groups_created_at")).toBe(true);
+    expect(indexNames.has("idx_combo_netting_match_legs_group_id")).toBe(true);
+    expect(indexNames.has("idx_combo_netting_match_legs_incoming_leg_id")).toBe(true);
+    expect(indexNames.has("idx_combo_netting_match_legs_matched_leg_id")).toBe(true);
+    expect(indexNames.has("idx_combo_netting_match_legs_market_outcome")).toBe(true);
+    expect(indexNames.has("idx_combo_netting_events_group_id")).toBe(true);
+    expect(indexNames.has("idx_combo_netting_events_event_type_created_at")).toBe(true);
+    expect(indexNames.has("idx_combo_netting_attempts_incoming_combo_id")).toBe(true);
+    expect(indexNames.has("idx_combo_netting_attempts_matched_combo_id")).toBe(true);
+    expect(indexNames.has("idx_combo_netting_attempts_group_id")).toBe(true);
+
+    expect(constraintNames.has("uq_combo_netting_group_pair")).toBe(true);
+    expect(constraintNames.has("uq_combo_netting_match_leg_pair")).toBe(true);
+
+    expect(foreignKeys.rows.some((row) => row.table_name === "combo_netting_groups")).toBe(true);
+    expect(foreignKeys.rows.some((row) => row.table_name === "combo_netting_match_legs")).toBe(true);
+    expect(foreignKeys.rows.some((row) => row.table_name === "combo_netting_events")).toBe(true);
+    expect(foreignKeys.rows.some((row) => row.table_name === "combo_netting_attempts")).toBe(true);
+  });
+
+  it("adds combo_legs.remaining_size with supporting index", async () => {
+    const db = must(pool, "pool");
+
+    expect(await hasComboLegRemainingSize(db)).toBe(true);
+
+    const columnResult = await db.query<{ column_name: string; is_nullable: string }>(
+      `SELECT column_name, is_nullable
+         FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'combo_legs'
+          AND column_name = 'remaining_size'`
+    );
+
+    const indexResult = await db.query<{ indexname: string }>(
+      `SELECT indexname
+         FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND tablename = 'combo_legs'`
+    );
+
+    expect(columnResult.rows[0]?.column_name).toBe("remaining_size");
+    expect(columnResult.rows[0]?.is_nullable).toBe("NO");
+    expect(indexResult.rows.some((row) => row.indexname === "idx_combo_legs_combo_remaining")).toBe(true);
+  });
+
+  it("prevents duplicate combo netting pair matching via unique constraints", async () => {
+    const db = must(pool, "pool");
+    const comboA = randomUUID();
+    const comboB = randomUUID();
+    const legA = randomUUID();
+    const legB = randomUUID();
+    const legC = randomUUID();
+    const legD = randomUUID();
+    const nettingGroupId = randomUUID();
+
+    await db.query(
+      `INSERT INTO combo_rfqs (id, user_id, acceptance_policy, state, expires_at, metadata)
+       VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 hour', '{}'::jsonb),
+              ($5, $6, $7, $8, NOW() + INTERVAL '1 hour', '{}'::jsonb)`,
+      [comboA, randomUUID(), "ALL_OR_NONE", "OPEN", comboB, randomUUID(), "ALL_OR_NONE", "OPEN"]
+    );
+
+    await db.query(
+      `INSERT INTO combo_legs
+        (id, combo_rfq_id, canonical_market_id, canonical_outcome_id, side, size, remaining_size, price_hint, metadata)
+       VALUES
+        ($1, $2, $3, $4, 'buy', 10, 10, 0.4, '{}'::jsonb),
+        ($5, $6, $7, $8, 'sell', 10, 10, 0.4, '{}'::jsonb),
+        ($9, $10, $11, $12, 'buy', 10, 10, 0.4, '{}'::jsonb),
+        ($13, $14, $15, $16, 'sell', 10, 10, 0.4, '{}'::jsonb)`,
+      [
+        legA, comboA, randomUUID(), randomUUID(),
+        legB, comboA, randomUUID(), randomUUID(),
+        legC, comboB, randomUUID(), randomUUID(),
+        legD, comboB, randomUUID(), randomUUID()
+      ]
+    );
+
+    await db.query(
+      `INSERT INTO combo_netting_groups (id, incoming_combo_id, matched_combo_id, state, matched_size)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [nettingGroupId, comboA, comboB, "MATCHED", "5"]
+    );
+
+    await expect(
+      db.query(
+        `INSERT INTO combo_netting_groups (id, incoming_combo_id, matched_combo_id, state, matched_size)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [randomUUID(), comboA, comboB, "MATCHED", "5"]
+      )
+    ).rejects.toMatchObject({
+      code: "23505",
+      constraint: "uq_combo_netting_group_pair"
+    });
+
+    await db.query(
+      `INSERT INTO combo_netting_match_legs
+        (id, netting_group_id, incoming_leg_id, matched_leg_id, market_id, outcome_id, matched_size, price)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [randomUUID(), nettingGroupId, legA, legC, "market-a", "outcome-yes", "5", "0.40"]
+    );
+
+    await expect(
+      db.query(
+        `INSERT INTO combo_netting_match_legs
+          (id, netting_group_id, incoming_leg_id, matched_leg_id, market_id, outcome_id, matched_size, price)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [randomUUID(), nettingGroupId, legA, legC, "market-a", "outcome-yes", "5", "0.40"]
+      )
+    ).rejects.toMatchObject({
+      code: "23505",
+      constraint: "uq_combo_netting_match_leg_pair"
     });
   });
 });

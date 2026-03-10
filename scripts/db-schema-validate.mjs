@@ -1,52 +1,16 @@
 import pg from "pg";
-import { existsSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { requiredIndexes, requiredTables } from "./db-schema-targets.mjs";
+import { loadRepoEnv, resolveRepoRoot } from "./db-migration-lib.mjs";
 
 const { Pool } = pg;
-
-const scriptPath = fileURLToPath(import.meta.url);
-const scriptDir = path.dirname(scriptPath);
-const repoRoot = path.resolve(scriptDir, "..");
-const envCandidates = [
-  path.resolve(repoRoot, ".env"),
-  path.resolve(repoRoot, "..", ".env")
-];
-
-for (const envPath of envCandidates) {
-  if (existsSync(envPath)) {
-    process.loadEnvFile(envPath);
-  }
-}
+const repoRoot = resolveRepoRoot(import.meta.url);
+loadRepoEnv(repoRoot);
 
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 if (!databaseUrl) {
   console.error("[db:schema:validate] TEST_DATABASE_URL or DATABASE_URL must be set.");
   process.exit(1);
 }
-
-const requiredTables = [
-  "rfq_sessions",
-  "rfq_quotes",
-  "rfq_events",
-  "rfq_executions",
-  "lp_keys",
-  "lp_stats",
-  "routing_plans",
-  "route_candidates",
-  "route_steps",
-  "route_history"
-];
-
-const requiredIndexes = [
-  "idx_rfq_sessions_taker_created",
-  "idx_rfq_quotes_session_created",
-  "idx_rfq_events_session_created",
-  "idx_lp_stats_lp_id",
-  "idx_routing_plans_rfq",
-  "idx_route_candidates_plan",
-  "idx_route_steps_plan"
-];
 
 const pool = new Pool({ connectionString: databaseUrl });
 

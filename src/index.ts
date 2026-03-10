@@ -48,6 +48,15 @@ export interface BootstrapModules {
     internalCrossShadowPercent?: number;
     internalCrossShadowStartAt?: string;
     internalCrossShadowEndAt?: string;
+    internalNettingEnabled?: boolean;
+    internalNettingShadowEnabled?: boolean;
+    internalNettingShadowPercent?: number;
+    internalNettingShadowStartAt?: string;
+    internalNettingShadowEndAt?: string;
+    internalNettingCanaryEnabled?: boolean;
+    internalNettingCanaryPercent?: number;
+    internalNettingCanaryStartAt?: string;
+    internalNettingCanaryEndAt?: string;
     reliabilityWeight: number;
     latencyWeight: number;
     failureWeight: number;
@@ -107,6 +116,15 @@ export const startService = async (
     internalCrossShadowPercent: env.INTERNAL_CROSS_SHADOW_PERCENT,
     ...(env.INTERNAL_CROSS_SHADOW_START_AT ? { internalCrossShadowStartAt: env.INTERNAL_CROSS_SHADOW_START_AT } : {}),
     ...(env.INTERNAL_CROSS_SHADOW_END_AT ? { internalCrossShadowEndAt: env.INTERNAL_CROSS_SHADOW_END_AT } : {}),
+    internalNettingEnabled: env.INTERNAL_NETTING_ENABLED,
+    internalNettingShadowEnabled: env.INTERNAL_NETTING_SHADOW_ENABLED,
+    internalNettingShadowPercent: env.INTERNAL_NETTING_SHADOW_PERCENT,
+    ...(env.INTERNAL_NETTING_SHADOW_START_AT ? { internalNettingShadowStartAt: env.INTERNAL_NETTING_SHADOW_START_AT } : {}),
+    ...(env.INTERNAL_NETTING_SHADOW_END_AT ? { internalNettingShadowEndAt: env.INTERNAL_NETTING_SHADOW_END_AT } : {}),
+    internalNettingCanaryEnabled: env.INTERNAL_NETTING_CANARY_ENABLED,
+    internalNettingCanaryPercent: env.INTERNAL_NETTING_CANARY_PERCENT,
+    ...(env.INTERNAL_NETTING_CANARY_START_AT ? { internalNettingCanaryStartAt: env.INTERNAL_NETTING_CANARY_START_AT } : {}),
+    ...(env.INTERNAL_NETTING_CANARY_END_AT ? { internalNettingCanaryEndAt: env.INTERNAL_NETTING_CANARY_END_AT } : {}),
     reliabilityWeight: env.RELIABILITY_WEIGHT,
     latencyWeight: env.LATENCY_WEIGHT,
     failureWeight: env.FAILURE_WEIGHT,
