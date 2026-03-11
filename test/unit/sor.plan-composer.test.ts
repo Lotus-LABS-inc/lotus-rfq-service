@@ -52,7 +52,8 @@ const baseInput = (): PlanComposerInput => ({
         protocolFee: 0,
         gasCost: 0,
         latencyPenalty: 0,
-        failurePenalty: 0
+        failurePenalty: 0,
+        resolutionRiskPenalty: 0
       }
     }
   ],

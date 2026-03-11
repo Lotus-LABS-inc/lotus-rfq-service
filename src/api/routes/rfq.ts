@@ -1,7 +1,12 @@
 import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import { z } from "zod";
 import { CanonicalMarketFetchError } from "../../core/rfq-engine/canonical-market-client.js";
-import { MarketInactiveError, type CreateRFQResult } from "../../core/rfq-engine/create-rfq-service.js";
+import {
+  CanonicalMarketResolutionMetadataError,
+  MarketInactiveError,
+  type CreateRFQResult
+} from "../../core/rfq-engine/create-rfq-service.js";
+import { ResolutionRiskGroupingError } from "../../core/rfq-engine/resolution-risk-grouping-service.js";
 import { RiskRejectedError } from "../../core/risk-engine.js";
 import { InsufficientLiquidityError } from "../../core/sor/splitter.js";
 import { MissingReservationTokenError } from "../../core/sor/order-router.js";
@@ -73,6 +78,16 @@ export const registerRFQRoute = async (
       if (error instanceof CanonicalMarketFetchError) {
         return reply.status(502).send({
           code: "CANONICAL_SERVICE_ERROR",
+          message: error.message
+        });
+      }
+
+      if (
+        error instanceof CanonicalMarketResolutionMetadataError ||
+        error instanceof ResolutionRiskGroupingError
+      ) {
+        return reply.status(409).send({
+          code: "RESOLUTION_RISK_GROUPING_FAILED",
           message: error.message
         });
       }

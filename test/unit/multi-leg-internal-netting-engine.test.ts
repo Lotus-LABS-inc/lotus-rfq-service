@@ -17,6 +17,7 @@ interface AuthoritativeComboLegRow {
   size: string;
   remaining_size: string;
   price_hint: string | null;
+  metadata: Record<string, unknown> | null;
 }
 
 interface AuthoritativeComboRow {
@@ -37,6 +38,7 @@ const createCombo = (
     size: string;
     remaining: string;
     priceHint?: string;
+    metadata?: Record<string, unknown>;
   }>,
   state: string = "OPEN"
 ): AuthoritativeComboRow => ({
@@ -51,7 +53,8 @@ const createCombo = (
     side: leg.side,
     size: leg.size,
     remaining_size: leg.remaining,
-    price_hint: leg.priceHint ?? null
+    price_hint: leg.priceHint ?? null,
+    metadata: leg.metadata ?? null
   }))
 });
 
@@ -220,6 +223,143 @@ describe("MultiLegInternalNettingEngine", () => {
     expect(result.eventsWritten).toBe(1);
     expect(resourceLocker.releaseLocks).toHaveBeenCalledTimes(1);
     expect(candidateRegistry.unregisterComboCandidate).toHaveBeenCalledWith("candidate");
+  });
+
+  it("allows SAFE_EQUIVALENT cross-profile candidates for internal netting", async () => {
+    const eligibilityService = {
+      isSafeForCrossVenueNetting: vi.fn().mockResolvedValue(true)
+    };
+    engine = new MultiLegInternalNettingEngine(
+      pool as never,
+      candidateRegistry,
+      compatibilityEngine as never,
+      resourceLocker as never,
+      logger,
+      eligibilityService as never
+    );
+
+    const incoming = createCombo("incoming", "user-a", [
+      {
+        id: "in-leg-1",
+        marketId: "m1",
+        outcomeId: "o1",
+        side: "buy",
+        size: "10",
+        remaining: "10",
+        priceHint: "0.6",
+        metadata: { resolution_profile_id: "profile-a" }
+      }
+    ]);
+    const candidate = createCombo("candidate", "user-b", [
+      {
+        id: "cand-leg-1",
+        marketId: "m1",
+        outcomeId: "o1",
+        side: "sell",
+        size: "10",
+        remaining: "10",
+        priceHint: "0.55",
+        metadata: { resolution_profile_id: "profile-b" }
+      }
+    ]);
+
+    candidateRegistry.findCandidateCombos.mockResolvedValue(["candidate"]);
+    compatibilityEngine.evaluate.mockReturnValue({
+      compatible: true,
+      matchedLegPairs: [
+        {
+          incomingLegId: "in-leg-1",
+          candidateLegId: "cand-leg-1",
+          marketId: "m1",
+          outcomeId: "o1",
+          matchedSize: "5"
+        }
+      ],
+      maxNettableSize: "5"
+    });
+    resourceLocker.acquireLocks.mockResolvedValue({ lockKeys: ["lock:combo:incoming"], ownerId: "owner-1" });
+    vi.spyOn(engine as never, "loadCombo").mockImplementation(async (comboId: unknown) => {
+      if (comboId === "incoming") return incoming;
+      if (comboId === "candidate") return candidate;
+      return null;
+    });
+    vi.spyOn(engine as never, "executeNettingTransaction").mockResolvedValue({
+      nettingGroupId: "group-1",
+      nettedSize: new Decimal(5),
+      eventsWritten: 1,
+      incomingResidualLegs: [],
+      exhaustedComboIds: []
+    });
+
+    await engine.attemptNet(toInput(incoming));
+
+    expect(eligibilityService.isSafeForCrossVenueNetting).toHaveBeenCalledWith("profile-a", "profile-b");
+    expect(resourceLocker.acquireLocks).toHaveBeenCalledTimes(1);
+  });
+
+  it("excludes non-safe cross-profile candidates before lock acquisition", async () => {
+    const eligibilityService = {
+      isSafeForCrossVenueNetting: vi.fn().mockResolvedValue(false)
+    };
+    engine = new MultiLegInternalNettingEngine(
+      pool as never,
+      candidateRegistry,
+      compatibilityEngine as never,
+      resourceLocker as never,
+      logger,
+      eligibilityService as never
+    );
+
+    const incoming = createCombo("incoming", "user-a", [
+      {
+        id: "in-leg-1",
+        marketId: "m1",
+        outcomeId: "o1",
+        side: "buy",
+        size: "10",
+        remaining: "10",
+        priceHint: "0.6",
+        metadata: { resolution_profile_id: "profile-a" }
+      }
+    ]);
+    const candidate = createCombo("candidate", "user-b", [
+      {
+        id: "cand-leg-1",
+        marketId: "m1",
+        outcomeId: "o1",
+        side: "sell",
+        size: "10",
+        remaining: "10",
+        priceHint: "0.55",
+        metadata: { resolution_profile_id: "profile-b" }
+      }
+    ]);
+
+    candidateRegistry.findCandidateCombos.mockResolvedValue(["candidate"]);
+    compatibilityEngine.evaluate.mockReturnValue({
+      compatible: true,
+      matchedLegPairs: [
+        {
+          incomingLegId: "in-leg-1",
+          candidateLegId: "cand-leg-1",
+          marketId: "m1",
+          outcomeId: "o1",
+          matchedSize: "5"
+        }
+      ],
+      maxNettableSize: "5"
+    });
+    vi.spyOn(engine as never, "loadCombo").mockImplementation(async (comboId: unknown) => {
+      if (comboId === "incoming") return incoming;
+      if (comboId === "candidate") return candidate;
+      return null;
+    });
+
+    const result = await engine.attemptNet(toInput(incoming));
+
+    expect(eligibilityService.isSafeForCrossVenueNetting).toHaveBeenCalledWith("profile-a", "profile-b");
+    expect(resourceLocker.acquireLocks).not.toHaveBeenCalled();
+    expect(result.nettedSize).toBe("0");
   });
 
   it("treats replayed candidate attempts as no-op", async () => {
@@ -525,7 +665,8 @@ describe("MultiLegInternalNettingEngine", () => {
             side: "buy",
             size: "5",
             remaining_size: "5",
-            price_hint: "0.6"
+            price_hint: "0.6",
+            metadata: null
           },
           candidateLeg: {
             id: "cand-leg-1",
@@ -535,7 +676,8 @@ describe("MultiLegInternalNettingEngine", () => {
             side: "sell",
             size: "5",
             remaining_size: "5",
-            price_hint: "0.55"
+            price_hint: "0.55",
+            metadata: null
           },
           nettableSize: "5",
           price: "0.55"

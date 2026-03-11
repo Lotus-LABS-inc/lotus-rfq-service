@@ -79,7 +79,8 @@ export class OverlapGraphBuilder implements IOverlapGraphBuilder {
         compatibilityBucket: vector.compatibilityBucket,
         vector: { ...vector.vector },
         legCount: vector.legCount,
-        grossAbsSize: vector.grossAbsSize
+        grossAbsSize: vector.grossAbsSize,
+        resolutionProfileId: vector.resolutionProfileId ?? null
       };
     });
   }

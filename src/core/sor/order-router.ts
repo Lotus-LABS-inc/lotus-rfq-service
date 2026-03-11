@@ -29,10 +29,19 @@ import {
 } from "../../observability/metrics.js";
 import type { InternalCrossPreviewResult, InternalCrossingEngine } from "../internal-engine/engine.js";
 import type { InternalOrder } from "../internal-engine/types.js";
+import type { IResolutionRiskReadService } from "../rfq-engine/resolution-risk-read-service.js";
+import type { IResolutionRiskPolicyService } from "../rfq-engine/resolution-risk-policy-service.js";
+import { pairKey } from "../rfq-engine/resolution-risk-read-service.js";
 import {
   isInternalCrossShadowSampled,
   isInternalCrossShadowWindowActive
 } from "../internal-engine/runtime-controls.js";
+import {
+  decisionFromEquivalenceClass,
+  getResolutionProfileId,
+  resolutionRiskCandidatePairKey,
+  type ResolutionRiskRoutingDecision
+} from "./resolution-risk-routing-policy.js";
 
 const DEFAULT_MIN_CHUNK = 0.000001;
 const DEFAULT_TICK_SIZE = 0.000001;
@@ -57,6 +66,9 @@ export interface OrderRouterDependencies {
   internalCrossingShadowStartAt?: string;
   internalCrossingShadowEndAt?: string;
   isKillSwitchActive?: () => Promise<boolean>;
+  resolutionRiskReadService?: IResolutionRiskReadService;
+  resolutionRiskPolicyService?: IResolutionRiskPolicyService;
+  resolutionRiskPenalty?: number;
   now?: () => Date;
 }
 
@@ -108,6 +120,7 @@ export class OrderRouter implements IOrderRouter {
         sorCandidatesEvaluatedCount.labels(residualRFQ.rfqId).set(scoredCandidates.length);
 
         const allocations = await this.buildAllocationsByLeg(
+          rfq.rfqId,
           routeCandidates,
           scoredCandidates,
           residualQuote.quantity,
@@ -376,6 +389,7 @@ export class OrderRouter implements IOrderRouter {
   }
 
   private async buildAllocationsByLeg(
+    stableKey: string,
     routeCandidates: readonly import("./types.js").RouteCandidate[],
     scoredCandidates: readonly CandidateScore[],
     targetSize: number,
@@ -412,10 +426,13 @@ export class OrderRouter implements IOrderRouter {
         perProviderCapacity[candidate.provider_id] = candidate.available_size;
       }
 
+      const resolutionRisk = await this.buildResolutionRiskContext(stableKey, legCandidates);
+
       const splitResult = await this.deps.splitter.split(targetSize, legScored, {
         minChunkSize: DEFAULT_MIN_CHUNK,
         tickSize: DEFAULT_TICK_SIZE,
-        perProviderCapacity
+        perProviderCapacity,
+        ...(resolutionRisk ? { resolutionRisk } : {})
       });
 
       const allocated = splitResult.reduce((total, split) => total + split.roundedSize, 0);
@@ -430,6 +447,170 @@ export class OrderRouter implements IOrderRouter {
     }
 
     return allocations;
+  }
+
+  private async buildResolutionRiskContext(
+    stableKey: string,
+    candidates: readonly import("./types.js").RouteCandidate[]
+  ): Promise<{ pairPolicies: ReadonlyMap<string, ResolutionRiskRoutingDecision> } | undefined> {
+    if (candidates.length < 2) {
+      return undefined;
+    }
+
+    const cautionPenalty = this.deps.resolutionRiskPenalty ?? 0.05;
+    const pairPolicies = new Map<string, ResolutionRiskRoutingDecision>();
+    const profilePairsToFetch: Array<{ profileAId: string; profileBId: string }> = [];
+
+    for (let index = 0; index < candidates.length; index += 1) {
+      for (let cursor = index + 1; cursor < candidates.length; cursor += 1) {
+        const left = candidates[index]!;
+        const right = candidates[cursor]!;
+        const candidatePairKey = resolutionRiskCandidatePairKey(left.id, right.id);
+        const leftProfileId = getResolutionProfileId(left);
+        const rightProfileId = getResolutionProfileId(right);
+
+        if (!leftProfileId || !rightProfileId) {
+          const rawDecision = {
+            mode: "isolated_only",
+            penalty: 0,
+            reason: "missing_resolution_profile_id"
+          } satisfies ResolutionRiskRoutingDecision;
+          pairPolicies.set(
+            candidatePairKey,
+            this.applyResolutionRiskPolicy(stableKey, rawDecision, {
+              ...(leftProfileId ? { profileAId: leftProfileId } : {}),
+              ...(rightProfileId ? { profileBId: rightProfileId } : {})
+            })
+          );
+          continue;
+        }
+
+        if (leftProfileId === rightProfileId) {
+          pairPolicies.set(candidatePairKey, {
+            mode: "normal",
+            penalty: 0,
+            equivalenceClass: "SAFE_EQUIVALENT"
+          });
+          continue;
+        }
+
+        profilePairsToFetch.push({ profileAId: leftProfileId, profileBId: rightProfileId });
+      }
+    }
+
+    const assessments = this.deps.resolutionRiskReadService
+      ? await this.deps.resolutionRiskReadService.getAssessmentsByProfilePairs(profilePairsToFetch)
+      : new Map();
+
+    for (let index = 0; index < candidates.length; index += 1) {
+      for (let cursor = index + 1; cursor < candidates.length; cursor += 1) {
+        const left = candidates[index]!;
+        const right = candidates[cursor]!;
+        const candidatePairKey = resolutionRiskCandidatePairKey(left.id, right.id);
+        if (pairPolicies.has(candidatePairKey)) {
+          continue;
+        }
+
+        const leftProfileId = getResolutionProfileId(left);
+        const rightProfileId = getResolutionProfileId(right);
+        if (!leftProfileId || !rightProfileId) {
+          const rawDecision = {
+            mode: "isolated_only",
+            penalty: 0,
+            reason: "missing_resolution_profile_id"
+          } satisfies ResolutionRiskRoutingDecision;
+          pairPolicies.set(
+            candidatePairKey,
+            this.applyResolutionRiskPolicy(stableKey, rawDecision, {
+              ...(leftProfileId ? { profileAId: leftProfileId } : {}),
+              ...(rightProfileId ? { profileBId: rightProfileId } : {})
+            })
+          );
+          continue;
+        }
+
+        const assessment = assessments.get(pairKey(leftProfileId, rightProfileId));
+        if (!assessment) {
+          const rawDecision = {
+            mode: "isolated_only",
+            penalty: 0,
+            reason: this.deps.resolutionRiskReadService
+              ? "missing_resolution_risk_assessment"
+              : "resolution_risk_unavailable"
+          } satisfies ResolutionRiskRoutingDecision;
+          pairPolicies.set(
+            candidatePairKey,
+            this.applyResolutionRiskPolicy(stableKey, rawDecision, {
+              profileAId: leftProfileId,
+              profileBId: rightProfileId
+            })
+          );
+          continue;
+        }
+
+        const rawDecision = decisionFromEquivalenceClass(assessment.equivalenceClass, cautionPenalty);
+        pairPolicies.set(
+          candidatePairKey,
+          this.applyResolutionRiskPolicy(stableKey, rawDecision, {
+            equivalenceClass: assessment.equivalenceClass,
+            profileAId: leftProfileId,
+            profileBId: rightProfileId
+          })
+        );
+      }
+    }
+
+    return pairPolicies.size > 0 ? { pairPolicies } : undefined;
+  }
+
+  private applyResolutionRiskPolicy(
+    stableKey: string,
+    decision: ResolutionRiskRoutingDecision,
+    context: {
+      equivalenceClass?: import("../rfq-engine/resolution-risk.types.js").ResolutionEquivalenceClass;
+      profileAId?: string;
+      profileBId?: string;
+    }
+  ): ResolutionRiskRoutingDecision {
+    if (!this.deps.resolutionRiskPolicyService) {
+      return decision;
+    }
+
+    const comparison = this.deps.resolutionRiskPolicyService.evaluateSORDecision({
+      stableKey,
+      intendedDecision: decision.mode,
+      reason: decision.reason ?? decision.mode,
+      ...(context.equivalenceClass ? { equivalenceClass: context.equivalenceClass } : {}),
+      ...(context.profileAId ? { profileAId: context.profileAId } : {}),
+      ...(context.profileBId ? { profileBId: context.profileBId } : {})
+    });
+
+    if (comparison.enforcedDecision === "normal") {
+      return {
+        mode: "normal",
+        penalty: 0
+      };
+    }
+
+    if (comparison.enforcedDecision === "penalty") {
+      return decision;
+    }
+
+    if (comparison.enforcedDecision === "blocked") {
+      return {
+        mode: "blocked",
+        penalty: 0,
+        ...(decision.reason ? { reason: decision.reason } : {}),
+        ...(context.equivalenceClass ? { equivalenceClass: context.equivalenceClass } : {})
+      };
+    }
+
+    return {
+      mode: "isolated_only",
+      penalty: 0,
+      ...(decision.reason ? { reason: decision.reason } : {}),
+      ...(context.equivalenceClass ? { equivalenceClass: context.equivalenceClass } : {})
+    };
   }
 
   private calculateAvgSplitsPerLeg(

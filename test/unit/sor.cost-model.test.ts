@@ -103,4 +103,24 @@ describe("SOR CostModel", () => {
     expect(scored.effective_cost.toNumber()).toBeCloseTo(6.35, 10);
     expect(scored.total_score.toNumber()).toBeCloseTo(6.35, 10);
   });
+
+  it("applies additive resolution risk penalty when provided", () => {
+    const model = new CostModel({
+      slippageAlpha: 0.0000000001,
+      slippageBeta: 1,
+      expectedRecoveryCost: 0,
+      timeValueOfMoneyCost: 0,
+      latencyPenaltyPerMs: 0
+    });
+    const candidate = baseCandidate({
+      quoted_price: 1,
+      fees: { provider_fee: 0, protocol_fee: 0, gas_cost: 0 },
+      fill_prob: 1
+    });
+
+    const scored = model.scoreCandidate(candidate, 2, { resolutionRiskPenalty: 0.05 });
+
+    expect(scored.resolution_risk_penalty.toNumber()).toBeCloseTo(0.05, 10);
+    expect(scored.total_score.toNumber()).toBeCloseTo(2.05, 10);
+  });
 });

@@ -192,6 +192,7 @@ export interface ResidualComboLeg {
     side: "buy" | "sell";
     remainingSize: string;
     priceHint?: string;
+    metadata?: Record<string, unknown>;
 }
 
 export interface MultiLegInternalNettingInput {
@@ -368,6 +369,7 @@ export interface ResidualVector {
     vector: Record<string, string>;
     legCount: number;
     grossAbsSize: string;
+    resolutionProfileId?: string | null;
 }
 
 export interface OverlapGraphNode {
@@ -377,6 +379,7 @@ export interface OverlapGraphNode {
     vector: Record<string, string>;
     legCount: number;
     grossAbsSize: string;
+    resolutionProfileId?: string | null;
 }
 
 export interface OverlapGraphOverlapLeg {

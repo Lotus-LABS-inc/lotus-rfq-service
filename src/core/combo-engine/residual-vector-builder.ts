@@ -54,7 +54,8 @@ export class ResidualVectorBuilder implements IResidualVectorBuilder {
       compatibilityBucket: this.buildBucket(bucketMetadata),
       vector,
       legCount: residualLegs.length,
-      grossAbsSize: grossAbsSize.toString()
+      grossAbsSize: grossAbsSize.toString(),
+      resolutionProfileId: this.resolveResolutionProfileId(residualLegs.map(({ leg }) => leg))
     };
   }
 
@@ -141,5 +142,27 @@ export class ResidualVectorBuilder implements IResidualVectorBuilder {
       metadata.settlementModel,
       metadata.resolutionRuleClass
     ].join("|");
+  }
+
+  private resolveResolutionProfileId(legs: readonly ResidualVectorLeg[]): string | null {
+    const profileIds = new Set<string>();
+
+    for (const leg of legs) {
+      const value = leg.metadata?.["resolution_profile_id"];
+      if (value === undefined || value === null) {
+        continue;
+      }
+      if (typeof value !== "string" || value.trim().length === 0) {
+        throw new Error("invalid_resolution_profile_id");
+      }
+      profileIds.add(value);
+    }
+
+    if (profileIds.size > 1) {
+      throw new Error("ambiguous_resolution_profile_id");
+    }
+
+    const profileId = profileIds.values().next().value;
+    return typeof profileId === "string" ? profileId : null;
   }
 }

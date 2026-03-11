@@ -4,6 +4,7 @@ import type { IPhase2BCandidateRegistry } from "./phase2b-candidate-registry.js"
 import type { IOverlapGraphBuilder } from "./overlap-graph-builder.js";
 import type { ICandidateGroupEnumerator } from "./candidate-group-enumerator.js";
 import type { IClearingCompressionScorer } from "./clearing-compression-scorer.js";
+import type { IResolutionRiskEligibilityService } from "../rfq-engine/resolution-risk-eligibility-service.js";
 import type {
   ClearingCompressionScore,
   ClearingRoundPlan,
@@ -30,7 +31,8 @@ export class ClearingRoundPlanner implements IClearingRoundPlanner {
     private readonly candidateRegistry: IPhase2BCandidateRegistry,
     private readonly overlapGraphBuilder: IOverlapGraphBuilder,
     private readonly candidateGroupEnumerator: ICandidateGroupEnumerator,
-    private readonly clearingCompressionScorer: IClearingCompressionScorer
+    private readonly clearingCompressionScorer: IClearingCompressionScorer,
+    private readonly resolutionRiskEligibilityService?: IResolutionRiskEligibilityService
   ) {}
 
   public async plan(
@@ -89,11 +91,18 @@ export class ClearingRoundPlanner implements IClearingRoundPlanner {
       stpMode: resolvedConfig.stpMode
     });
 
-    if (candidateGroups.length === 0) {
+    const eligibleGroups: typeof candidateGroups = [];
+    for (const group of candidateGroups) {
+      if (await this.isGroupResolutionEligible(group, vectors, bucketId)) {
+        eligibleGroups.push(group);
+      }
+    }
+
+    if (eligibleGroups.length === 0) {
       return null;
     }
 
-    const scored = candidateGroups.map((group) => ({
+    const scored = eligibleGroups.map((group) => ({
       group,
       score: this.clearingCompressionScorer.score(group, vectors.filter((vector) =>
         group.participantIds.includes(vector.entityId)
@@ -143,5 +152,45 @@ export class ClearingRoundPlanner implements IClearingRoundPlanner {
     }
 
     return leftParticipants.join("|").localeCompare(rightParticipants.join("|"));
+  }
+
+  private async isGroupResolutionEligible(
+    group: { participantIds: readonly string[] },
+    vectors: readonly ScorableResidualVector[],
+    stableKey: string
+  ): Promise<boolean> {
+    if (!this.resolutionRiskEligibilityService) {
+      return true;
+    }
+
+    const vectorsByEntityId = new Map(vectors.map((vector) => [vector.entityId, vector] as const));
+    const participantVectors = group.participantIds.map((participantId) => vectorsByEntityId.get(participantId));
+    if (participantVectors.some((vector) => vector === undefined)) {
+      throw new Error("ambiguous_group_nodes");
+    }
+
+    for (let leftIndex = 0; leftIndex < participantVectors.length; leftIndex += 1) {
+      const left = participantVectors[leftIndex]!;
+      for (let rightIndex = leftIndex + 1; rightIndex < participantVectors.length; rightIndex += 1) {
+        const right = participantVectors[rightIndex]!;
+        if (left.resolutionProfileId === right.resolutionProfileId && left.resolutionProfileId !== null && left.resolutionProfileId !== undefined) {
+          continue;
+        }
+        if (!left.resolutionProfileId || !right.resolutionProfileId) {
+          return false;
+        }
+
+        const safe = await this.resolutionRiskEligibilityService.isSafeForCrossVenueNetting(
+          left.resolutionProfileId,
+          right.resolutionProfileId,
+          { stableKey }
+        );
+        if (!safe) {
+          return false;
+        }
+      }
+    }
+
+    return true;
   }
 }

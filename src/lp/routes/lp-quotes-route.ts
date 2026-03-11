@@ -5,7 +5,8 @@ import {
   InvalidRFQSessionStateError,
   LPIdentityMismatchError,
   ReceiveLPQuoteService,
-  RFQSessionNotFoundError
+  RFQSessionNotFoundError,
+  ResolutionRiskQuoteRejectedError
 } from "../receive-lp-quote-service.js";
 import type { LPAuthenticatedRequest } from "../lp-auth-middleware.js";
 
@@ -88,6 +89,13 @@ export const registerLPQuotesRoute = async (
       if (error instanceof DuplicateQuoteIdError) {
         return reply.status(409).send({
           code: "QUOTE_IDEMPOTENCY_CONFLICT",
+          message: error.message
+        });
+      }
+
+      if (error instanceof ResolutionRiskQuoteRejectedError) {
+        return reply.status(409).send({
+          code: "RESOLUTION_RISK_QUOTE_REJECTED",
           message: error.message
         });
       }

@@ -35,6 +35,7 @@ export interface RedisBookOrder {
     remaining: string;
     userId: string;
     createdAtMs: number;
+    resolutionProfileId?: string | null;
 }
 
 export type InternalOrderStatus = 'OPEN' | 'PARTIAL' | 'FILLED' | 'CANCELLED';
@@ -51,6 +52,7 @@ export interface InternalOrder {
     initial_size: string;
     remaining_size: string;
     status: InternalOrderStatus;
+    resolution_profile_id?: string | null;
     created_at: Date;
     updated_at: Date;
 }

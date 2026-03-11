@@ -4,13 +4,16 @@ const canonicalMarketSchema = z.object({
   id: z.string(),
   status: z.string().optional(),
   active: z.boolean().optional(),
-  isActive: z.boolean().optional()
+  isActive: z.boolean().optional(),
+  canonicalEventId: z.string().uuid().optional(),
+  canonical_event_id: z.string().uuid().optional()
 });
 
 export interface CanonicalMarket {
   id: string;
   status?: string;
   isActive: boolean;
+  canonicalEventId?: string;
 }
 
 export interface CanonicalMarketClient {
@@ -59,12 +62,17 @@ export const createCanonicalMarketClient = (
 
       const parsed = canonicalMarketSchema.parse(await response.json());
       const isActive = parsed.isActive ?? parsed.active ?? isMarketStatusActive(parsed.status);
+      const canonicalEventId = parsed.canonicalEventId ?? parsed.canonical_event_id;
 
-      return {
+      const market: CanonicalMarket = {
         id: parsed.id,
         ...(parsed.status ? { status: parsed.status } : {}),
         isActive
       };
+      if (canonicalEventId) {
+        market.canonicalEventId = canonicalEventId;
+      }
+      return market;
     }
   };
 };

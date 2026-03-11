@@ -12,15 +12,22 @@ import type { IPhase2BCandidateRegistry } from "../../src/core/combo-engine/phas
 import type { IOverlapGraphBuilder } from "../../src/core/combo-engine/overlap-graph-builder.js";
 import type { ICandidateGroupEnumerator } from "../../src/core/combo-engine/candidate-group-enumerator.js";
 import type { IClearingCompressionScorer } from "../../src/core/combo-engine/clearing-compression-scorer.js";
+import type { IResolutionRiskEligibilityService } from "../../src/core/rfq-engine/resolution-risk-eligibility-service.js";
 
-const makeVector = (entityId: string, registeredAt: string, compatibilityBucket = "bucket-1") => ({
+const makeVector = (
+  entityId: string,
+  registeredAt: string,
+  compatibilityBucket = "bucket-1",
+  resolutionProfileId?: string | null
+) => ({
   entityId,
   userId: `user-${entityId}`,
   compatibilityBucket,
   vector: { "m1:o1": entityId === "a" ? "2" : "-2" },
   legCount: 1,
   grossAbsSize: "2",
-  registeredAt
+  registeredAt,
+  ...(resolutionProfileId !== undefined ? { resolutionProfileId } : {})
 });
 
 const makeGroup = (
@@ -74,7 +81,6 @@ describe("ClearingRoundPlanner", () => {
     clearingCompressionScorer = {
       score: vi.fn()
     };
-
     planner = new ClearingRoundPlanner(
       candidateRegistry,
       overlapGraphBuilder,
@@ -222,5 +228,70 @@ describe("ClearingRoundPlanner", () => {
     vi.mocked(candidateRegistry.getEntitySnapshot).mockRejectedValue(new Error("malformed_entity_snapshot"));
 
     await expect(planner.plan("bucket-1")).rejects.toThrow("malformed_entity_snapshot");
+  });
+
+  it("excludes mixed groups with a non-safe cross-profile pair", async () => {
+    const resolutionRiskEligibilityService: IResolutionRiskEligibilityService = {
+      isSafeForInternalPooling: vi.fn(),
+      isSafeForCrossVenueNetting: vi.fn().mockResolvedValue(false)
+    };
+    planner = new ClearingRoundPlanner(
+      candidateRegistry,
+      overlapGraphBuilder,
+      candidateGroupEnumerator,
+      clearingCompressionScorer,
+      resolutionRiskEligibilityService
+    );
+    vi.mocked(candidateRegistry.listBucketEntities).mockResolvedValue({
+      entityIds: ["a", "b"],
+      nextCursor: null
+    });
+    vi.mocked(candidateRegistry.getEntitySnapshot)
+      .mockResolvedValueOnce(makeVector("a", "2026-03-10T09:00:00.000Z", "bucket-1", "profile-a"))
+      .mockResolvedValueOnce(makeVector("b", "2026-03-10T09:10:00.000Z", "bucket-1", "profile-b"));
+    vi.mocked(overlapGraphBuilder.build).mockReturnValue({ nodes: [], edges: [] });
+    vi.mocked(candidateGroupEnumerator.enumerate).mockReturnValue([makeGroup(["a", "b"])]);
+
+    const result = await planner.plan("bucket-1");
+
+    expect(result).toBeNull();
+    expect(resolutionRiskEligibilityService.isSafeForCrossVenueNetting).toHaveBeenCalledWith("profile-a", "profile-b");
+    expect(clearingCompressionScorer.score).not.toHaveBeenCalled();
+  });
+
+  it("allows all-SAFE_EQUIVALENT cross-profile groups", async () => {
+    const resolutionRiskEligibilityService: IResolutionRiskEligibilityService = {
+      isSafeForInternalPooling: vi.fn(),
+      isSafeForCrossVenueNetting: vi.fn().mockResolvedValue(true)
+    };
+    planner = new ClearingRoundPlanner(
+      candidateRegistry,
+      overlapGraphBuilder,
+      candidateGroupEnumerator,
+      clearingCompressionScorer,
+      resolutionRiskEligibilityService
+    );
+    vi.mocked(candidateRegistry.listBucketEntities).mockResolvedValue({
+      entityIds: ["a", "b"],
+      nextCursor: null
+    });
+    vi.mocked(candidateRegistry.getEntitySnapshot)
+      .mockResolvedValueOnce(makeVector("a", "2026-03-10T09:00:00.000Z", "bucket-1", "profile-a"))
+      .mockResolvedValueOnce(makeVector("b", "2026-03-10T09:10:00.000Z", "bucket-1", "profile-b"));
+    vi.mocked(overlapGraphBuilder.build).mockReturnValue({ nodes: [], edges: [] });
+    vi.mocked(candidateGroupEnumerator.enumerate).mockReturnValue([makeGroup(["a", "b"])]);
+    vi.mocked(clearingCompressionScorer.score).mockReturnValue(
+      makeScore({
+        residualVectorByParticipant: {
+          a: { entityId: "a", vector: { "m1:o1": "2" } },
+          b: { entityId: "b", vector: { "m1:o1": "-2" } }
+        }
+      })
+    );
+
+    const result = await planner.plan("bucket-1");
+
+    expect(result?.selectedGroup.participantIds).toEqual(["a", "b"]);
+    expect(resolutionRiskEligibilityService.isSafeForCrossVenueNetting).toHaveBeenCalledWith("profile-a", "profile-b");
   });
 });

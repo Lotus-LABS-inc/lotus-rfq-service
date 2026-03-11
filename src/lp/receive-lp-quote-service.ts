@@ -5,9 +5,18 @@ import { RFQSessionManager } from "../core/rfq-engine/rfq-session-manager.js";
 import type { RFQEventEmitter } from "../core/rfq-engine/rfq-domain-events.js";
 import type { Logger } from "pino";
 import type { RedisClient } from "../db/redis.js";
-import { quoteLatencyMs, quoteReceivedTotal } from "../observability/metrics.js";
+import {
+  quoteLatencyMs,
+  quoteReceivedTotal,
+  rfqResolutionBlockedTotal
+} from "../observability/metrics.js";
 import { withSpan } from "../observability/tracing.js";
 import type { LPStatsRepository } from "../repositories/lp-stats.repository.js";
+import {
+  evaluateResolutionQuoteLane,
+  ResolutionRiskQuotePolicyError
+} from "../core/rfq-engine/resolution-risk-rfq-policy.js";
+import type { ResolutionRiskVenueGrouping } from "../core/rfq-engine/resolution-risk.types.js";
 
 export interface ReceiveLPQuoteCommand {
   routeLpId: string;
@@ -69,6 +78,13 @@ export class DuplicateQuoteIdError extends Error {
   }
 }
 
+export class ResolutionRiskQuoteRejectedError extends Error {
+  public constructor(message: string) {
+    super(message);
+    this.name = "ResolutionRiskQuoteRejectedError";
+  }
+}
+
 export class ReceiveLPQuoteService {
   private readonly now: () => Date;
 
@@ -100,6 +116,35 @@ export class ReceiveLPQuoteService {
           throw new InvalidRFQSessionStateError(command.sessionId, session.status);
         }
 
+        const sessionMetadata = await this.deps.sessionManager.getSessionMetadata(command.sessionId);
+        const grouping = readResolutionGrouping(sessionMetadata?.metadata);
+        const quotePayload = { ...(command.payload ?? {}) };
+
+        if (grouping) {
+          try {
+            const laneDecision = evaluateResolutionQuoteLane(
+              grouping,
+              typeof quotePayload.resolution_profile_id === "string"
+                ? quotePayload.resolution_profile_id
+                : undefined
+            );
+            if (!laneDecision.allowed) {
+              throw new ResolutionRiskQuotePolicyError("blocked_resolution_profile", laneDecision.reason);
+            }
+            quotePayload.resolution_lane = laneDecision.laneId;
+            quotePayload.resolution_lane_type = laneDecision.laneType;
+            if (laneDecision.reason) {
+              quotePayload.resolution_lane_reason = laneDecision.reason;
+            }
+          } catch (error) {
+            if (error instanceof ResolutionRiskQuotePolicyError) {
+              rfqResolutionBlockedTotal.inc();
+              throw new ResolutionRiskQuoteRejectedError(error.message);
+            }
+            throw error;
+          }
+        }
+
         const idempotencyKey = `rfq:${command.sessionId}:quote_id:${command.quoteId}`;
         const nonceResult = await this.deps.redisClient.set(idempotencyKey, "1", "EX", 3600, "NX");
         if (nonceResult !== "OK") {
@@ -119,7 +164,7 @@ export class ReceiveLPQuoteService {
           quantity: command.quantity,
           feeBps: command.feeBps,
           validUntil: command.validUntil,
-          payload: command.payload ?? {}
+          payload: quotePayload
         };
 
         await this.deps.sessionManager.addQuote(
@@ -160,7 +205,7 @@ export class ReceiveLPQuoteService {
             validUntil: new Date(command.validUntil),
             quotePayload: {
               quoteId: command.quoteId,
-              payload: command.payload ?? {}
+              payload: quotePayload
             }
           })
           .catch((error: unknown) => {
@@ -199,3 +244,13 @@ export class ReceiveLPQuoteService {
     );
   }
 }
+
+const readResolutionGrouping = (
+  metadata: Readonly<Record<string, unknown>> | undefined
+): ResolutionRiskVenueGrouping | null => {
+  const grouping = metadata?.["resolution_risk_grouping"];
+  if (!grouping || typeof grouping !== "object") {
+    return null;
+  }
+  return grouping as ResolutionRiskVenueGrouping;
+};

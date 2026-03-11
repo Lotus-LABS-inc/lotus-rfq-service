@@ -7,6 +7,7 @@ import type { InternalOrder, RedisBookOrder, Trade } from "./types.js";
 import type { OrderBook } from "./order-book.js";
 import type { OrderLocker } from "./locker.js";
 import { withSpan } from "../../observability/tracing.js";
+import type { IResolutionRiskEligibilityService } from "../rfq-engine/resolution-risk-eligibility-service.js";
 
 type DecimalValue = InstanceType<typeof Decimal>;
 
@@ -41,7 +42,8 @@ export class InternalCrossingEngine {
         private readonly pool: Pool,
         private readonly orderBook: OrderBook,
         private readonly orderLocker: OrderLocker,
-        private readonly logger: Logger
+        private readonly logger: Logger,
+        private readonly resolutionRiskEligibilityService?: IResolutionRiskEligibilityService
     ) { }
 
     /**
@@ -98,6 +100,16 @@ export class InternalCrossingEngine {
 
                             remainingTakerSize = new Decimal(0);
                             break;
+                        }
+
+                        if (!(await this.isMakerResolutionEligible(incomingOrder, makerEntry))) {
+                            this.logger.warn({
+                                takerOrderId: incomingOrder.id,
+                                makerOrderId: makerEntry.orderId,
+                                takerResolutionProfileId: incomingOrder.resolution_profile_id ?? null,
+                                makerResolutionProfileId: makerEntry.resolutionProfileId ?? null
+                            }, "Skipping internal crossing candidate due to non-safe resolution profile equivalence.");
+                            continue;
                         }
 
                         const lockHandle = await withSpan(
@@ -182,6 +194,10 @@ export class InternalCrossingEngine {
                             matchedOrderIds,
                             wouldSelfTrade: true
                         };
+                    }
+
+                    if (!(await this.isMakerResolutionEligible(incomingOrder, makerEntry))) {
+                        continue;
                     }
 
                     const makerRemaining = new Decimal(makerEntry.remaining);
@@ -477,5 +493,25 @@ export class InternalCrossingEngine {
         } catch (error) {
             this.logger.warn({ err: error }, "Rollback failed on internal crossing transaction.");
         }
+    }
+
+    private async isMakerResolutionEligible(
+        incomingOrder: InternalOrder,
+        makerEntry: RedisBookOrder
+    ): Promise<boolean> {
+        const takerProfileId = incomingOrder.resolution_profile_id ?? null;
+        const makerProfileId = makerEntry.resolutionProfileId ?? null;
+
+        if (!takerProfileId || !makerProfileId || takerProfileId === makerProfileId) {
+            return true;
+        }
+
+        if (!this.resolutionRiskEligibilityService) {
+            return false;
+        }
+
+        return this.resolutionRiskEligibilityService.isSafeForInternalPooling(takerProfileId, makerProfileId, {
+            stableKey: incomingOrder.id
+        });
     }
 }

@@ -66,9 +66,15 @@ export interface BootstrapModules {
     internalClearingCanaryPercent?: number;
     internalClearingCanaryStartAt?: string;
     internalClearingCanaryEndAt?: string;
+    resolutionRiskEnabled?: boolean;
+    resolutionRiskShadowEnabled?: boolean;
+    resolutionRiskShadowPercent?: number;
+    resolutionRiskShadowStartAt?: string;
+    resolutionRiskShadowEndAt?: string;
     reliabilityWeight: number;
     latencyWeight: number;
     failureWeight: number;
+    sorResolutionRiskPenalty?: number;
     sorAcceptAonAwait: boolean;
     sorAcceptNonAonBackground: boolean;
   }) => Promise<FastifyInstance>;
@@ -143,9 +149,15 @@ export const startService = async (
     internalClearingCanaryPercent: env.INTERNAL_CLEARING_CANARY_PERCENT,
     ...(env.INTERNAL_CLEARING_CANARY_START_AT ? { internalClearingCanaryStartAt: env.INTERNAL_CLEARING_CANARY_START_AT } : {}),
     ...(env.INTERNAL_CLEARING_CANARY_END_AT ? { internalClearingCanaryEndAt: env.INTERNAL_CLEARING_CANARY_END_AT } : {}),
+    resolutionRiskEnabled: env.RESOLUTION_RISK_ENABLED,
+    resolutionRiskShadowEnabled: env.RESOLUTION_RISK_SHADOW_ENABLED,
+    resolutionRiskShadowPercent: env.RESOLUTION_RISK_SHADOW_PERCENT,
+    ...(env.RESOLUTION_RISK_SHADOW_START_AT ? { resolutionRiskShadowStartAt: env.RESOLUTION_RISK_SHADOW_START_AT } : {}),
+    ...(env.RESOLUTION_RISK_SHADOW_END_AT ? { resolutionRiskShadowEndAt: env.RESOLUTION_RISK_SHADOW_END_AT } : {}),
     reliabilityWeight: env.RELIABILITY_WEIGHT,
     latencyWeight: env.LATENCY_WEIGHT,
     failureWeight: env.FAILURE_WEIGHT,
+    sorResolutionRiskPenalty: env.SOR_RESOLUTION_RISK_PENALTY,
     sorAcceptAonAwait: env.SOR_ACCEPT_AON_AWAIT,
     sorAcceptNonAonBackground: env.SOR_ACCEPT_NON_AON_BACKGROUND
   });

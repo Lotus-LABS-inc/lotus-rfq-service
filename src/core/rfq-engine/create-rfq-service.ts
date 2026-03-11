@@ -6,9 +6,18 @@ import { RFQStateMachine, type RFQStateMachineLogger } from "./rfq-state-machine
 import type { CanonicalMarketClient } from "./canonical-market-client.js";
 import type { RFQEventEmitter } from "./rfq-domain-events.js";
 import type { ReliabilityWeights } from "../lp-reliability-engine.js";
-import { activeRFQSessions, rfqCreatedTotal } from "../../observability/metrics.js";
+import {
+  activeRFQSessions,
+  rfqCreatedTotal,
+  rfqResolutionBlockedTotal,
+  rfqResolutionSafePoolTotal,
+  rfqResolutionSeparatedTotal
+} from "../../observability/metrics.js";
 import { withSpan } from "../../observability/tracing.js";
 import type { IRiskEngine } from "../risk-engine.js";
+import type { IResolutionRiskGroupingService } from "./resolution-risk-grouping-service.js";
+import type { ResolutionRiskVenueGrouping } from "./resolution-risk.types.js";
+import type { IResolutionRiskPolicyService } from "./resolution-risk-policy-service.js";
 
 export interface CreateRFQCommand {
   canonicalMarketId: string;
@@ -35,12 +44,21 @@ export interface CreateRFQServiceDependencies {
   now?: () => Date;
   createRequestId?: () => string;
   riskEngine: IRiskEngine;
+  resolutionRiskGroupingService: IResolutionRiskGroupingService;
+  resolutionRiskPolicyService?: IResolutionRiskPolicyService;
 }
 
 export class MarketInactiveError extends Error {
   public constructor(marketId: string) {
     super(`Canonical market ${marketId} is not active.`);
     this.name = "MarketInactiveError";
+  }
+}
+
+export class CanonicalMarketResolutionMetadataError extends Error {
+  public constructor(marketId: string) {
+    super(`Canonical market ${marketId} is missing canonicalEventId required for resolution risk grouping.`);
+    this.name = "CanonicalMarketResolutionMetadataError";
   }
 }
 
@@ -69,6 +87,19 @@ export class CreateRFQService {
         if (!market.isActive) {
           throw new MarketInactiveError(command.canonicalMarketId);
         }
+        if (!market.canonicalEventId) {
+          throw new CanonicalMarketResolutionMetadataError(command.canonicalMarketId);
+        }
+
+        const rawResolutionRiskGrouping = await this.deps.resolutionRiskGroupingService.groupProfilesForCanonicalEvent(
+          market.canonicalEventId
+        );
+        const resolutionRiskPolicy = this.deps.resolutionRiskPolicyService?.applyRFQGrouping(
+          rawResolutionRiskGrouping,
+          command.idempotencyKey
+        );
+        const resolutionRiskGrouping = resolutionRiskPolicy?.grouping ?? rawResolutionRiskGrouping;
+        const resolutionRiskShadowGrouping = resolutionRiskPolicy?.shadowGrouping;
 
         try {
           await this.deps.riskEngine.validateRFQCreation({
@@ -107,7 +138,17 @@ export class CreateRFQService {
           idempotencyKey: command.idempotencyKey,
           expiresAt,
           metadata: {
-            source: "post_rfq_endpoint"
+            source: "post_rfq_endpoint",
+            resolution_risk_grouping: resolutionRiskGrouping,
+            ...(resolutionRiskShadowGrouping ? { resolution_risk_shadow_grouping: resolutionRiskShadowGrouping } : {}),
+            ...(resolutionRiskPolicy
+              ? {
+                  resolution_risk_policy: {
+                    mode: resolutionRiskPolicy.mode,
+                    enforcement_active: resolutionRiskPolicy.enforcementActive
+                  }
+                }
+              : {})
           }
         });
 
@@ -119,7 +160,17 @@ export class CreateRFQService {
             expiresAt: expiresAt.toISOString(),
             metadata: {
               canonicalMarketId: command.canonicalMarketId,
-              takerId: command.takerId
+              takerId: command.takerId,
+              resolution_risk_grouping: resolutionRiskGrouping,
+              ...(resolutionRiskShadowGrouping ? { resolution_risk_shadow_grouping: resolutionRiskShadowGrouping } : {}),
+              ...(resolutionRiskPolicy
+                ? {
+                    resolution_risk_policy: {
+                      mode: resolutionRiskPolicy.mode,
+                      enforcement_active: resolutionRiskPolicy.enforcementActive
+                    }
+                  }
+                : {})
             }
           },
           command.ttlSeconds
@@ -150,17 +201,38 @@ export class CreateRFQService {
             expiresAt: expiresAt.toISOString(),
             metadata: {
               canonicalMarketId: command.canonicalMarketId,
-              takerId: command.takerId
+              takerId: command.takerId,
+              resolution_risk_grouping: resolutionRiskGrouping,
+              ...(resolutionRiskShadowGrouping ? { resolution_risk_shadow_grouping: resolutionRiskShadowGrouping } : {}),
+              ...(resolutionRiskPolicy
+                ? {
+                    resolution_risk_policy: {
+                      mode: resolutionRiskPolicy.mode,
+                      enforcement_active: resolutionRiskPolicy.enforcementActive
+                    }
+                  }
+                : {})
             }
           },
           command.ttlSeconds
         );
 
         const eventPayload = {
+          canonicalEventId: market.canonicalEventId,
           canonicalMarketId: command.canonicalMarketId,
           takerId: command.takerId,
           side: command.side,
-          quantity: command.quantity
+          quantity: command.quantity,
+          resolution_risk_grouping: resolutionRiskGrouping,
+          ...(resolutionRiskShadowGrouping ? { resolution_risk_shadow_grouping: resolutionRiskShadowGrouping } : {}),
+          ...(resolutionRiskPolicy
+            ? {
+                resolution_risk_policy: {
+                  mode: resolutionRiskPolicy.mode,
+                  enforcement_active: resolutionRiskPolicy.enforcementActive
+                }
+              }
+            : {})
         };
 
         await this.deps.eventRepository.append({
@@ -177,6 +249,9 @@ export class CreateRFQService {
         });
 
         rfqCreatedTotal.inc();
+        if (resolutionRiskPolicy?.enforcementActive ?? true) {
+          recordResolutionGroupingMetrics(resolutionRiskGrouping);
+        }
         activeRFQSessions.inc();
 
         return {
@@ -188,3 +263,15 @@ export class CreateRFQService {
     );
   }
 }
+
+const recordResolutionGroupingMetrics = (grouping: ResolutionRiskVenueGrouping): void => {
+  for (const _lane of grouping.safePools) {
+    rfqResolutionSafePoolTotal.inc();
+  }
+  for (const _lane of grouping.cautionLanes) {
+    rfqResolutionSeparatedTotal.inc();
+  }
+  for (const _profile of grouping.blockedProfiles) {
+    rfqResolutionBlockedTotal.inc();
+  }
+};

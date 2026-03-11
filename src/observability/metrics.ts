@@ -39,6 +39,24 @@ export const quoteReceivedTotal = new Counter({
   ...counterConfig
 });
 
+export const rfqResolutionSafePoolTotal = new Counter({
+  name: "rfq_resolution_safe_pool_total",
+  help: "Total number of SAFE_EQUIVALENT RFQ venue lanes created.",
+  ...counterConfig
+});
+
+export const rfqResolutionSeparatedTotal = new Counter({
+  name: "rfq_resolution_separated_total",
+  help: "Total number of RFQ venues separated into non-pooled caution lanes.",
+  ...counterConfig
+});
+
+export const rfqResolutionBlockedTotal = new Counter({
+  name: "rfq_resolution_blocked_total",
+  help: "Total number of RFQ venue profiles or quotes blocked by resolution-risk policy.",
+  ...counterConfig
+});
+
 export const executionSuccessTotal = new Counter({
   name: "execution_success_total",
   help: "Total number of successful executions.",
@@ -479,6 +497,59 @@ export const sorEnabledState = new Gauge({
   name: "sor_enabled_state",
   help: "Current runtime SOR enablement state (1 enabled, 0 disabled).",
   ...gaugeConfig
+});
+
+export const resolutionRiskPenaltyAppliedTotal = new Counter({
+  name: "resolution_risk_penalty_applied_total",
+  help: "Total number of additive resolution-risk penalties applied during pooled routing decisions.",
+  ...counterConfig
+});
+
+export const doNotPoolBlockTotal = new Counter({
+  name: "do_not_pool_block_total",
+  help: "Total number of pooled routing decisions blocked due to DO_NOT_POOL resolution risk policy.",
+  ...counterConfig
+});
+
+export const cautionRouteTotal = new Counter({
+  name: "caution_route_total",
+  help: "Total number of CAUTION-class pooled routes allowed to proceed.",
+  ...counterConfig
+});
+
+export const resolutionRiskShadowTotal = new Counter({
+  name: "resolution_risk_shadow_total",
+  help: "Total resolution-risk shadow evaluations by domain and rollout mode.",
+  labelNames: ["domain", "mode"],
+  ...counterConfig
+});
+
+export const resolutionRiskShadowMatchTotal = new Counter({
+  name: "resolution_risk_shadow_match_total",
+  help: "Total resolution-risk shadow evaluations that matched the enforced outcome.",
+  labelNames: ["domain"],
+  ...counterConfig
+});
+
+export const resolutionRiskShadowDivergenceTotal = new Counter({
+  name: "resolution_risk_shadow_divergence_total",
+  help: "Total resolution-risk shadow divergences by domain and reason.",
+  labelNames: ["domain", "reason"],
+  ...counterConfig
+});
+
+export const resolutionRiskEnforcementDisabledTotal = new Counter({
+  name: "resolution_risk_enforcement_disabled_total",
+  help: "Total times resolution-risk enforcement was disabled for a domain.",
+  labelNames: ["domain"],
+  ...counterConfig
+});
+
+export const resolutionRiskInternalExclusionTotal = new Counter({
+  name: "resolution_risk_internal_exclusion_total",
+  help: "Total internal-execution exclusions implied by resolution-risk policy.",
+  labelNames: ["domain", "equivalence_class"],
+  ...counterConfig
 });
 
 export const internalCrossingTotal = new Counter({

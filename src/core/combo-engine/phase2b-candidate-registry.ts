@@ -10,6 +10,7 @@ const phase2bCandidateSnapshotSchema = z.object({
   vector: z.record(z.string(), z.string()),
   legCount: z.number().int().positive(),
   grossAbsSize: z.string().min(1),
+  resolutionProfileId: z.string().min(1).nullable().optional(),
   registeredAt: z.string().datetime()
 });
 
@@ -42,9 +43,18 @@ export class Phase2BCandidateRegistry implements IPhase2BCandidateRegistry {
   public constructor(private readonly redis: Phase2BRegistryRedisClient) {}
 
   public async registerEntity(vector: ResidualVector): Promise<Phase2BCandidateSnapshot> {
+    const parsedVector = this.parseVector(vector);
     const snapshot: Phase2BCandidateSnapshot = {
-      ...this.parseVector(vector),
-      registeredAt: new Date().toISOString()
+      entityId: parsedVector.entityId,
+      userId: parsedVector.userId,
+      compatibilityBucket: parsedVector.compatibilityBucket,
+      vector: parsedVector.vector,
+      legCount: parsedVector.legCount,
+      grossAbsSize: parsedVector.grossAbsSize,
+      registeredAt: new Date().toISOString(),
+      ...(parsedVector.resolutionProfileId !== undefined
+        ? { resolutionProfileId: parsedVector.resolutionProfileId }
+        : {})
     };
 
     await this.redis.set(this.entityKey(snapshot.entityId), JSON.stringify(snapshot), "PX", 24 * 60 * 60 * 1000);
@@ -116,7 +126,19 @@ export class Phase2BCandidateRegistry implements IPhase2BCandidateRegistry {
     }
 
     try {
-      return phase2bCandidateSnapshotSchema.parse(parsed);
+      const snapshot = phase2bCandidateSnapshotSchema.parse(parsed);
+      return {
+        entityId: snapshot.entityId,
+        userId: snapshot.userId,
+        compatibilityBucket: snapshot.compatibilityBucket,
+        vector: snapshot.vector,
+        legCount: snapshot.legCount,
+        grossAbsSize: snapshot.grossAbsSize,
+        registeredAt: snapshot.registeredAt,
+        ...(snapshot.resolutionProfileId !== undefined
+          ? { resolutionProfileId: snapshot.resolutionProfileId }
+          : {})
+      };
     } catch {
       throw new Error("malformed_entity_snapshot");
     }

@@ -100,7 +100,8 @@ export class OrderBook {
             price: this.normalizeNumericString(order.price, "price"),
             remaining: this.normalizeNumericString(order.remaining_size, "remaining_size"),
             userId: order.user_id,
-            createdAtMs
+            createdAtMs,
+            resolutionProfileId: order.resolution_profile_id ?? null
         };
     }
 
@@ -158,7 +159,10 @@ export class OrderBook {
             typeof parsed.price !== "string" ||
             typeof parsed.remaining !== "string" ||
             typeof parsed.userId !== "string" ||
-            typeof parsed.createdAtMs !== "number"
+            typeof parsed.createdAtMs !== "number" ||
+            (parsed.resolutionProfileId !== undefined &&
+                parsed.resolutionProfileId !== null &&
+                typeof parsed.resolutionProfileId !== "string")
         ) {
             await this.redis.del(this.orderKey(orderId));
             return null;

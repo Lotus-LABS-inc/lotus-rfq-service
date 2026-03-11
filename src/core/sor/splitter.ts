@@ -3,6 +3,12 @@ import { z } from "zod";
 import { CostModel, type CostModelConfig } from "./cost-model.js";
 import type { CandidateScore, ISplitter, RouteCandidate, SORAcceptancePolicy, SplitAllocation } from "./types.js";
 import { withSpan } from "../../observability/tracing.js";
+import {
+  cautionRouteTotal,
+  doNotPoolBlockTotal,
+  resolutionRiskPenaltyAppliedTotal
+} from "../../observability/metrics.js";
+import type { ResolutionRiskRoutingDecision } from "./resolution-risk-routing-policy.js";
 
 export const SplitLegSchema = z.object({
   leg_id: z.string().uuid(),
@@ -35,6 +41,10 @@ export interface SplitLegResult {
   splits: readonly Split[];
   fallbackCandidateIds: readonly string[];
   remainingSize: number;
+}
+
+export interface SplitResolutionRiskContext {
+  pairPolicies: ReadonlyMap<string, ResolutionRiskRoutingDecision>;
 }
 
 export class InsufficientLiquidityError extends Error {
@@ -132,6 +142,7 @@ export class Splitter implements ISplitter {
       minChunkSize: number;
       tickSize: number;
       perProviderCapacity: Readonly<Record<string, number>>;
+      resolutionRisk?: SplitResolutionRiskContext;
     }
   ): Promise<readonly SplitAllocation[]> {
     return withSpan(
@@ -151,14 +162,37 @@ export class Splitter implements ISplitter {
 
         let remaining = new Decimal(targetSize);
         const allocations: SplitAllocation[] = [];
-        const sorted = [...scoredCandidates].sort(
-          (left, right) => left.totalExpectedCost - right.totalExpectedCost
-        );
+        const remainingCandidateIds = new Set(scoredCandidates.map((candidate) => candidate.candidateId));
 
-        for (const candidate of sorted) {
-          if (remaining.lessThanOrEqualTo(0)) {
+        while (remaining.greaterThan(0) && remainingCandidateIds.size > 0) {
+          const usedCandidateIds = allocations.map((allocation) => allocation.candidateId);
+          const sortableCandidates = [...scoredCandidates]
+            .filter((candidate) => remainingCandidateIds.has(candidate.candidateId))
+            .map((candidate) => {
+              const pairingDecision = this.evaluatePairingDecision(
+                candidate.candidateId,
+                usedCandidateIds,
+                options.resolutionRisk
+              );
+              return {
+                candidate,
+                pairingDecision,
+                adjustedEffectiveUnitCost: new Decimal(candidate.effectiveUnitCost).plus(pairingDecision.penalty)
+              };
+            })
+            .filter((entry) => !entry.pairingDecision.blocked)
+            .sort((left, right) => {
+              if (left.adjustedEffectiveUnitCost.equals(right.adjustedEffectiveUnitCost)) {
+                return left.candidate.candidateId.localeCompare(right.candidate.candidateId);
+              }
+              return left.adjustedEffectiveUnitCost.lessThan(right.adjustedEffectiveUnitCost) ? -1 : 1;
+            });
+
+          const nextCandidate = sortableCandidates[0];
+          if (!nextCandidate) {
             break;
           }
+          const { candidate, pairingDecision, adjustedEffectiveUnitCost } = nextCandidate;
 
           const providerCapacity = new Decimal(
             parsedOptions.perProviderCapacity[candidate.providerId] ?? Number.MAX_SAFE_INTEGER
@@ -174,9 +208,10 @@ export class Splitter implements ISplitter {
             providerId: candidate.providerId,
             targetSize: rounded.toNumber(),
             roundedSize: rounded.toNumber(),
-            targetPrice: candidate.effectiveUnitCost
+            targetPrice: adjustedEffectiveUnitCost.toNumber()
           });
           remaining = remaining.minus(rounded);
+          remainingCandidateIds.delete(candidate.candidateId);
         }
 
         return allocations;
@@ -186,15 +221,59 @@ export class Splitter implements ISplitter {
 
   private normalizedScore(
     candidate: RouteCandidate,
-    minChunkSize: number
+    minChunkSize: number,
+    resolutionRiskPenalty = 0
   ): InstanceType<typeof Decimal> {
     const fillProb = Math.max(candidate.fill_prob, 0);
     if (fillProb === 0) {
       return new Decimal(Number.MAX_SAFE_INTEGER);
     }
 
-    const score = this.costModel.scoreCandidate(candidate, minChunkSize).total_score;
+    const score = this.costModel.scoreCandidate(candidate, minChunkSize, {
+      resolutionRiskPenalty
+    }).total_score;
     return score.div(fillProb);
+  }
+
+  private evaluatePairingDecision(
+    candidateId: string,
+    usedCandidateIds: readonly string[],
+    resolutionRisk?: SplitResolutionRiskContext
+  ): { blocked: boolean; penalty: number } {
+    if (!resolutionRisk || usedCandidateIds.length === 0) {
+      return { blocked: false, penalty: 0 };
+    }
+
+    let totalPenalty = 0;
+    for (const usedCandidateId of usedCandidateIds) {
+      const key = candidateId.localeCompare(usedCandidateId) <= 0
+        ? `${candidateId}|${usedCandidateId}`
+        : `${usedCandidateId}|${candidateId}`;
+      const decision = resolutionRisk.pairPolicies.get(key);
+      if (!decision) {
+        continue;
+      }
+
+      if (decision.mode === "blocked") {
+        doNotPoolBlockTotal.inc();
+        return { blocked: true, penalty: 0 };
+      }
+
+      if (decision.mode === "isolated_only") {
+        return { blocked: true, penalty: 0 };
+      }
+
+      if (decision.mode === "penalty") {
+        totalPenalty += decision.penalty;
+      }
+    }
+
+    if (totalPenalty > 0) {
+      resolutionRiskPenaltyAppliedTotal.inc();
+      cautionRouteTotal.inc();
+    }
+
+    return { blocked: false, penalty: totalPenalty };
   }
 
   private roundDownToTick(

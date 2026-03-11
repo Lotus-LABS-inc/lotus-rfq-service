@@ -15,6 +15,7 @@ import { RFQExecutionRepository } from "../db/repositories/rfq-execution-reposit
 import { registerHealthRoute } from "./routes/health.js";
 import { registerMetricsRoute } from "./routes/metrics.js";
 import { registerRFQRoute } from "./routes/rfq.js";
+import { registerResolutionRiskRoutes } from "./routes/resolution-risk.js";
 import { createLPAuthMiddleware } from "../lp/lp-auth-middleware.js";
 import { registerLPQuotesRoute } from "../lp/routes/lp-quotes-route.js";
 import { ReceiveLPQuoteService } from "../lp/receive-lp-quote-service.js";
@@ -37,6 +38,8 @@ import { registerAdminInternalNettingRoutes } from "./admin/internal-netting.rou
 import { InternalNettingAdminService } from "./admin/internal-netting-admin-service.js";
 import { registerAdminInternalClearingRoutes } from "./admin/internal-clearing.routes.js";
 import { InternalClearingAdminService } from "./admin/internal-clearing-admin-service.js";
+import { registerAdminResolutionRiskRoutes } from "./admin/resolution-risk.routes.js";
+import { ResolutionRiskAdminService } from "./admin/resolution-risk-admin-service.js";
 import { CostModel, OrderRouter, PlanComposer, PlanRunner, RouteScout, Splitter, type SORAcceptancePolicy, type CanonicalRFQInput } from "../core/sor/index.js";
 import {
   compareShadowDecisions,
@@ -59,6 +62,14 @@ import { InternalCrossingEngine } from "../core/internal-engine/engine.js";
 import { OrderBook } from "../core/internal-engine/order-book.js";
 import { OrderLocker } from "../core/internal-engine/locker.js";
 import { isInternalCrossKillSwitchActive } from "../core/internal-engine/runtime-controls.js";
+import { ResolutionPairComparator } from "../core/rfq-engine/resolution-pair-comparator.js";
+import { ResolutionRiskScoringEngine } from "../core/rfq-engine/resolution-risk-scoring-engine.js";
+import { ResolutionRiskAssessmentService } from "../core/rfq-engine/resolution-risk-assessment-service.js";
+import { ResolutionRiskReadService } from "../core/rfq-engine/resolution-risk-read-service.js";
+import { ResolutionRiskEligibilityService } from "../core/rfq-engine/resolution-risk-eligibility-service.js";
+import { ResolutionRiskGroupingService } from "../core/rfq-engine/resolution-risk-grouping-service.js";
+import { ResolutionRiskPolicyService } from "../core/rfq-engine/resolution-risk-policy-service.js";
+import type { NormalizedResolutionProfile } from "../core/rfq-engine/resolution-risk.types.js";
 
 export interface ServerDependencies {
   logger: Logger;
@@ -95,9 +106,15 @@ export interface ServerDependencies {
   internalClearingCanaryPercent?: number;
   internalClearingCanaryStartAt?: string;
   internalClearingCanaryEndAt?: string;
+  resolutionRiskEnabled?: boolean;
+  resolutionRiskShadowEnabled?: boolean;
+  resolutionRiskShadowPercent?: number;
+  resolutionRiskShadowStartAt?: string;
+  resolutionRiskShadowEndAt?: string;
   reliabilityWeight: number;
   latencyWeight: number;
   failureWeight: number;
+  sorResolutionRiskPenalty?: number;
   sorAcceptAonAwait: boolean;
   sorAcceptNonAonBackground: boolean;
 }
@@ -145,6 +162,36 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     dependencies.logger
   );
 
+  const resolutionRiskAssessmentService = new ResolutionRiskAssessmentService({
+    pool: dependencies.pgPool,
+    comparator: new ResolutionPairComparator(),
+    scoringEngine: new ResolutionRiskScoringEngine(),
+    logger: dependencies.logger,
+    config: {
+      version: "resolution-risk-v1"
+    }
+  });
+  const resolutionRiskReadService = new ResolutionRiskReadService({
+    pool: dependencies.pgPool,
+    version: "resolution-risk-v1"
+  });
+  const resolutionRiskPolicyService = new ResolutionRiskPolicyService({
+    enabled: dependencies.resolutionRiskEnabled ?? false,
+    shadowEnabled: dependencies.resolutionRiskShadowEnabled ?? false,
+    shadowPercent: dependencies.resolutionRiskShadowPercent ?? 0,
+    ...(dependencies.resolutionRiskShadowStartAt ? { shadowStartAt: dependencies.resolutionRiskShadowStartAt } : {}),
+    ...(dependencies.resolutionRiskShadowEndAt ? { shadowEndAt: dependencies.resolutionRiskShadowEndAt } : {}),
+    logger: dependencies.logger
+  });
+  const resolutionRiskEligibilityService = new ResolutionRiskEligibilityService({
+    readService: resolutionRiskReadService,
+    policyService: resolutionRiskPolicyService
+  });
+  const resolutionRiskGroupingService = new ResolutionRiskGroupingService({
+    pool: dependencies.pgPool,
+    readService: resolutionRiskReadService,
+    logger: dependencies.logger
+  });
   const createRFQService = new CreateRFQService({
     sessionRepository,
     eventRepository,
@@ -154,7 +201,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     }),
     eventEmitter: domainEventEmitter,
     logger: dependencies.logger,
-    riskEngine
+    riskEngine,
+    resolutionRiskGroupingService,
+    resolutionRiskPolicyService
   });
   const lpAuthMiddleware = createLPAuthMiddleware({
     redisClient: dependencies.redisClient,
@@ -210,7 +259,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     dependencies.pgPool,
     internalOrderBook,
     internalOrderLocker,
-    dependencies.logger
+    dependencies.logger,
+    resolutionRiskEligibilityService
   );
   const orderRouter = new OrderRouter({
     routeScout: sorRouteScout,
@@ -231,7 +281,12 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       : {}),
     ...(dependencies.internalCrossShadowStartAt ? { internalCrossingShadowStartAt: dependencies.internalCrossShadowStartAt } : {}),
     ...(dependencies.internalCrossShadowEndAt ? { internalCrossingShadowEndAt: dependencies.internalCrossShadowEndAt } : {}),
-    isKillSwitchActive: async () => isInternalCrossKillSwitchActive(dependencies.redisClient)
+    isKillSwitchActive: async () => isInternalCrossKillSwitchActive(dependencies.redisClient),
+    resolutionRiskReadService,
+    resolutionRiskPolicyService,
+    ...(dependencies.sorResolutionRiskPenalty !== undefined
+      ? { resolutionRiskPenalty: dependencies.sorResolutionRiskPenalty }
+      : {})
   });
 
   const sorExecutionRouter = {
@@ -315,6 +370,14 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   });
   await registerHealthRoute(app);
   await registerMetricsRoute(app);
+  await registerResolutionRiskRoutes(app, {
+    buildAssessmentsForCanonicalEvent: (canonicalEventId) =>
+      resolutionRiskAssessmentService.buildAssessmentsForCanonicalEvent(canonicalEventId),
+    comparePair: (profileAId, profileBId) =>
+      resolutionRiskAssessmentService.comparePair(profileAId, profileBId),
+    resolveProfileByVenueMarket: async (venue, marketId) =>
+      findResolutionProfileByVenueMarket(dependencies.pgPool, venue, marketId)
+  });
   await registerRFQRoute(app, userAuthMiddleware, {
     createRFQ: (request) =>
       createRFQService.execute(request, {
@@ -701,6 +764,15 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       logger: dependencies.logger
     })
   });
+  await registerAdminResolutionRiskRoutes(app, adminAuthMiddleware, {
+    resolutionRiskAdminService: new ResolutionRiskAdminService({
+      pool: dependencies.pgPool,
+      redis: dependencies.redisClient,
+      assessmentService: resolutionRiskAssessmentService,
+      logger: dependencies.logger,
+      version: "resolution-risk-v1"
+    })
+  });
   await registerLPQuotesRoute(app, lpAuthMiddleware, receiveLPQuoteService);
 
   const forwardableEventTypes: ReadonlySet<string> = new Set([
@@ -759,4 +831,70 @@ const asRFQState = (value: string): RFQState | null => {
     return value;
   }
   return null;
+};
+
+interface ResolutionProfileLookupRow {
+  id: string;
+  venue: string;
+  venue_market_id: string;
+  canonical_event_id: string;
+  oracle_type: string | null;
+  oracle_name: string | null;
+  resolution_authority_type: string | null;
+  primary_resolution_text: string | null;
+  supplemental_rules_text: string | null;
+  dispute_window_hours: string | null;
+  settlement_lag_hours: string | null;
+  market_type: string | null;
+  outcome_schema: Record<string, unknown> | null;
+  has_ambiguous_time_boundary: boolean;
+  has_ambiguous_jurisdiction_boundary: boolean;
+  has_ambiguous_source_reference: boolean;
+  historical_divergence_rate: string | null;
+  metadata: Record<string, unknown>;
+  created_at: Date;
+  updated_at: Date;
+}
+
+const findResolutionProfileByVenueMarket = async (
+  pool: Pool,
+  venue: string,
+  marketId: string
+): Promise<NormalizedResolutionProfile | null> => {
+  const result = await pool.query<ResolutionProfileLookupRow>(
+    `SELECT *
+       FROM resolution_profiles
+      WHERE venue = $1
+        AND venue_market_id = $2
+      LIMIT 1`,
+    [venue, marketId]
+  );
+
+  const row = result.rows[0];
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    venue: row.venue,
+    venueMarketId: row.venue_market_id,
+    canonicalEventId: row.canonical_event_id,
+    oracleType: row.oracle_type,
+    oracleName: row.oracle_name,
+    resolutionAuthorityType: row.resolution_authority_type,
+    primaryResolutionText: row.primary_resolution_text,
+    supplementalRulesText: row.supplemental_rules_text,
+    disputeWindowHours: row.dispute_window_hours,
+    settlementLagHours: row.settlement_lag_hours,
+    marketType: row.market_type,
+    outcomeSchema: row.outcome_schema,
+    hasAmbiguousTimeBoundary: row.has_ambiguous_time_boundary,
+    hasAmbiguousJurisdictionBoundary: row.has_ambiguous_jurisdiction_boundary,
+    hasAmbiguousSourceReference: row.has_ambiguous_source_reference,
+    historicalDivergenceRate: row.historical_divergence_rate,
+    metadata: row.metadata,
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at)
+  };
 };

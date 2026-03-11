@@ -124,6 +124,7 @@ export interface CostBreakdown {
   gasCost: number;
   latencyPenalty: number;
   failurePenalty: number;
+  resolutionRiskPenalty: number;
 }
 
 export interface CandidateScore {
@@ -233,6 +234,14 @@ export interface ISplitter {
       minChunkSize: number;
       tickSize: number;
       perProviderCapacity: Readonly<Record<string, number>>;
+      resolutionRisk?: {
+        pairPolicies: ReadonlyMap<string, {
+          mode: "normal" | "penalty" | "isolated_only" | "blocked";
+          penalty: number;
+          reason?: string;
+          equivalenceClass?: "SAFE_EQUIVALENT" | "CAUTION" | "HIGH_RISK" | "DO_NOT_POOL";
+        }>;
+      };
     }
   ): Promise<readonly SplitAllocation[]>;
 }

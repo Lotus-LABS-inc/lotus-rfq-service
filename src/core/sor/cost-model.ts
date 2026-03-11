@@ -16,7 +16,8 @@ export const CostModelConfigSchema = z.object({
   slippageBeta: z.number().positive().default(1.1),
   expectedRecoveryCost: z.number().nonnegative().default(0.1),
   timeValueOfMoneyCost: z.number().nonnegative().default(0.01),
-  latencyPenaltyPerMs: z.number().nonnegative().default(0.0001)
+  latencyPenaltyPerMs: z.number().nonnegative().default(0.0001),
+  resolutionRiskPenalty: z.number().nonnegative().default(0.05)
 });
 
 export type CostModelConfig = z.infer<typeof CostModelConfigSchema>;
@@ -26,6 +27,7 @@ export interface CandidateScoreBreakdown {
   expected_slippage: InstanceType<typeof Decimal>;
   failure_cost: InstanceType<typeof Decimal>;
   latency_penalty: InstanceType<typeof Decimal>;
+  resolution_risk_penalty: InstanceType<typeof Decimal>;
   total_score: InstanceType<typeof Decimal>;
   fill_prob: number;
 }
@@ -37,7 +39,11 @@ export class CostModel implements ICostModel {
     this.config = CostModelConfigSchema.parse(config ?? {});
   }
 
-  public scoreCandidate(candidate: RouteCandidate, size: number): CandidateScoreBreakdown {
+  public scoreCandidate(
+    candidate: RouteCandidate,
+    size: number,
+    options?: { resolutionRiskPenalty?: number }
+  ): CandidateScoreBreakdown {
     const tradeSize = new Decimal(Math.max(size, 0));
     const quotedPrice = new Decimal(candidate.quoted_price);
     const availableSize = new Decimal(Math.max(candidate.available_size, 1e-9));
@@ -68,13 +74,15 @@ export class CostModel implements ICostModel {
       ? new Decimal(0)
       : new Decimal(candidate.latency_ms).times(this.config.latencyPenaltyPerMs);
 
-    const totalScore = effectiveCost.plus(failureCost).plus(latencyPenalty);
+    const resolutionRiskPenalty = new Decimal(options?.resolutionRiskPenalty ?? 0);
+    const totalScore = effectiveCost.plus(failureCost).plus(latencyPenalty).plus(resolutionRiskPenalty);
 
     return {
       effective_cost: effectiveCost,
       expected_slippage: expectedSlippage,
       failure_cost: failureCost,
       latency_penalty: latencyPenalty,
+      resolution_risk_penalty: resolutionRiskPenalty,
       total_score: totalScore,
       fill_prob: fillProb
     };
@@ -108,7 +116,8 @@ export class CostModel implements ICostModel {
                 protocolFee: candidate.fees.protocol_fee ?? 0,
                 gasCost: candidate.fees.gas_cost ?? 0,
                 latencyPenalty: scored.latency_penalty.toNumber(),
-                failurePenalty: scored.failure_cost.toNumber()
+                failurePenalty: scored.failure_cost.toNumber(),
+                resolutionRiskPenalty: scored.resolution_risk_penalty.toNumber()
               }
             } satisfies CandidateScore;
           })

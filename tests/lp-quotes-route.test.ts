@@ -5,7 +5,8 @@ import {
   InvalidRFQSessionStateError,
   LPIdentityMismatchError,
   ReceiveLPQuoteService,
-  RFQSessionNotFoundError
+  RFQSessionNotFoundError,
+  ResolutionRiskQuoteRejectedError
 } from "../src/lp/receive-lp-quote-service.js";
 import type { LPAuthenticatedRequest } from "../src/lp/lp-auth-middleware.js";
 import { registerLPQuotesRoute } from "../src/lp/routes/lp-quotes-route.js";
@@ -80,7 +81,8 @@ describe("POST /lp/:id/quotes", () => {
       .mockRejectedValueOnce(new LPIdentityMismatchError())
       .mockRejectedValueOnce(new RFQSessionNotFoundError("s1"))
       .mockRejectedValueOnce(new InvalidRFQSessionStateError("s2", "BROADCAST"))
-      .mockRejectedValueOnce(new DuplicateQuoteIdError("q1"));
+      .mockRejectedValueOnce(new DuplicateQuoteIdError("q1"))
+      .mockRejectedValueOnce(new ResolutionRiskQuoteRejectedError("blocked"));
 
     await registerLPQuotesRoute(
       app,
@@ -103,12 +105,13 @@ describe("POST /lp/:id/quotes", () => {
     const r2 = await app.inject({ method: "POST", url: "/lp/lp-1/quotes", payload });
     const r3 = await app.inject({ method: "POST", url: "/lp/lp-1/quotes", payload });
     const r4 = await app.inject({ method: "POST", url: "/lp/lp-1/quotes", payload });
+    const r5 = await app.inject({ method: "POST", url: "/lp/lp-1/quotes", payload });
 
     expect(r1.statusCode).toBe(403);
     expect(r2.statusCode).toBe(404);
     expect(r3.statusCode).toBe(409);
     expect(r4.statusCode).toBe(409);
+    expect(r5.statusCode).toBe(409);
     await app.close();
   });
 });
-

@@ -20,6 +20,9 @@ const makeIncomingOrder = (overrides: Partial<InternalOrder> = {}): InternalOrde
   initial_size: overrides.initial_size ?? "10",
   remaining_size: overrides.remaining_size ?? "10",
   status: overrides.status ?? "OPEN",
+  ...(overrides.resolution_profile_id !== undefined
+    ? { resolution_profile_id: overrides.resolution_profile_id }
+    : {}),
   created_at: overrides.created_at ?? new Date("2026-03-10T12:00:00.000Z"),
   updated_at: overrides.updated_at ?? new Date("2026-03-10T12:00:00.000Z")
 });
@@ -32,7 +35,10 @@ const makeMakerEntry = (overrides: Partial<RedisBookOrder> = {}): RedisBookOrder
   price: overrides.price ?? "0.60",
   remaining: overrides.remaining ?? "5",
   userId: overrides.userId ?? "33333333-3333-3333-3333-333333333333",
-  createdAtMs: overrides.createdAtMs ?? Date.parse("2026-03-10T11:59:00.000Z")
+  createdAtMs: overrides.createdAtMs ?? Date.parse("2026-03-10T11:59:00.000Z"),
+  ...(overrides.resolutionProfileId !== undefined
+    ? { resolutionProfileId: overrides.resolutionProfileId }
+    : {})
 });
 
 const makeLogger = (): Pick<Logger, "info" | "warn" | "error"> => ({
@@ -218,6 +224,106 @@ describe("InternalCrossingEngine", () => {
     expect(result.filledSize).toBe(0);
     expect(result.remainingSize).toBe(0);
     expect(orderLocker.acquireDualOrderLocks).not.toHaveBeenCalled();
+  });
+
+  it("allows SAFE_EQUIVALENT cross-profile crossing candidates", async () => {
+    const orderBook: Pick<OrderBook, "getBestOppositeOrders" | "removeOrder" | "updateRemaining"> = {
+      getBestOppositeOrders: vi.fn().mockResolvedValueOnce([
+        makeMakerEntry({ remaining: "10", resolutionProfileId: "profile-b" })
+      ]).mockResolvedValueOnce([]),
+      removeOrder: vi.fn().mockResolvedValue(true),
+      updateRemaining: vi.fn()
+    };
+    const lockHandle: LockHandle = {
+      lockIds: ["lock:order:maker-order-1", "lock:order:taker-order-1"],
+      ownerId: "owner-1"
+    };
+    const orderLocker: Pick<OrderLocker, "acquireDualOrderLocks" | "releaseLocks"> = {
+      acquireDualOrderLocks: vi.fn().mockResolvedValue(lockHandle),
+      releaseLocks: vi.fn().mockResolvedValue(undefined)
+    };
+    const eligibilityService = {
+      isSafeForInternalPooling: vi.fn().mockResolvedValue(true)
+    };
+
+    const query = vi.fn<
+      (sql: string, params?: unknown[]) => Promise<QueryResponse<Record<string, unknown>>>
+    >()
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "maker-order-1",
+            user_id: "33333333-3333-3333-3333-333333333333",
+            market_id: "11111111-1111-1111-1111-111111111111",
+            side: "sell",
+            price: "0.60",
+            remaining_size: "10",
+            status: "OPEN",
+            created_at: new Date("2026-03-10T11:59:00.000Z")
+          }
+        ]
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: "trade-1", created_at: new Date("2026-03-10T12:00:01.000Z") }]
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ id: "exp-taker" }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ id: "exp-maker" }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const pool: Pick<Pool, "connect"> = {
+      connect: vi.fn().mockResolvedValue(makePoolClient(query))
+    };
+    const engine = new InternalCrossingEngine(
+      pool as Pool,
+      orderBook as OrderBook,
+      orderLocker as OrderLocker,
+      makeLogger() as Logger,
+      eligibilityService as never
+    );
+
+    const result = await engine.attemptCross(
+      makeIncomingOrder({ resolution_profile_id: "profile-a", remaining_size: "10", initial_size: "10" })
+    );
+
+    expect(eligibilityService.isSafeForInternalPooling).toHaveBeenCalledWith("profile-a", "profile-b");
+    expect(result.filledSize).toBe(10);
+  });
+
+  it("rejects non-safe cross-profile crossing candidates fail-closed", async () => {
+    const orderBook: Pick<OrderBook, "getBestOppositeOrders"> = {
+      getBestOppositeOrders: vi.fn().mockResolvedValue([
+        makeMakerEntry({ resolutionProfileId: "profile-b" })
+      ])
+    };
+    const orderLocker: Pick<OrderLocker, "acquireDualOrderLocks" | "releaseLocks"> = {
+      acquireDualOrderLocks: vi.fn(),
+      releaseLocks: vi.fn()
+    };
+    const eligibilityService = {
+      isSafeForInternalPooling: vi.fn().mockResolvedValue(false)
+    };
+    const engine = new InternalCrossingEngine(
+      { connect: vi.fn() } as unknown as Pool,
+      orderBook as OrderBook,
+      orderLocker as OrderLocker,
+      makeLogger() as Logger,
+      eligibilityService as never
+    );
+
+    const result = await engine.attemptCross(
+      makeIncomingOrder({ resolution_profile_id: "profile-a" })
+    );
+
+    expect(eligibilityService.isSafeForInternalPooling).toHaveBeenCalledWith("profile-a", "profile-b");
+    expect(orderLocker.acquireDualOrderLocks).not.toHaveBeenCalled();
+    expect(result.filledSize).toBe(0);
+    expect(result.remainingSize).toBe(10);
   });
 
   it("rolls back and removes stale makers when Postgres revalidation fails", async () => {

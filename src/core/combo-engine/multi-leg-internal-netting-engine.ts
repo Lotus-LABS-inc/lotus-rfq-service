@@ -21,6 +21,7 @@ import type {
 } from "./types.js";
 import type { ResourceLocker } from "./resource-locker.js";
 import { withSpan } from "../../observability/tracing.js";
+import type { IResolutionRiskEligibilityService } from "../rfq-engine/resolution-risk-eligibility-service.js";
 
 type DecimalValue = InstanceType<typeof Decimal>;
 
@@ -33,6 +34,7 @@ interface AuthoritativeComboLegRow {
   size: string;
   remaining_size: string;
   price_hint: string | null;
+  metadata: Record<string, unknown> | null;
 }
 
 interface AuthoritativeComboRow {
@@ -74,7 +76,8 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
     private readonly candidateRegistry: IComboNettingCandidateRegistry,
     private readonly compatibilityEngine: IComboNettingCompatibilityEngine,
     private readonly resourceLocker: ResourceLocker,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly resolutionRiskEligibilityService?: IResolutionRiskEligibilityService
   ) {}
 
   public async attemptNet(incomingCombo: MultiLegInternalNettingInput): Promise<MultiLegInternalNettingResult> {
@@ -130,6 +133,10 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
           );
 
           if (!compatibility.compatible) {
+            continue;
+          }
+
+          if (!(await this.isResolutionEligible(authoritativeIncoming, candidateCombo, compatibility.matchedLegPairs))) {
             continue;
           }
 
@@ -219,6 +226,10 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
             continue;
           }
 
+          if (!(await this.isResolutionEligible(previewIncoming, candidateCombo, compatibility.matchedLegPairs))) {
+            continue;
+          }
+
           const matchedPairs = compatibility.matchedLegPairs.map((pair) => {
             const incomingLeg = previewIncoming.legs.find((leg) => leg.id === pair.incomingLegId);
             const candidateLeg = candidateCombo.legs.find((leg) => leg.id === pair.candidateLegId);
@@ -296,6 +307,11 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
       );
 
       if (!compatibility.compatible) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+
+      if (!(await this.isResolutionEligible(authoritativeIncoming, authoritativeCandidate, compatibility.matchedLegPairs))) {
         await client.query("ROLLBACK");
         return null;
       }
@@ -458,7 +474,8 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
               side,
               size::text,
               remaining_size::text,
-              price_hint::text
+              price_hint::text,
+              metadata
          FROM combo_legs
         WHERE combo_rfq_id = $1
         ORDER BY id ASC
@@ -495,7 +512,8 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
               side,
               size::text,
               remaining_size::text,
-              price_hint::text
+              price_hint::text,
+              metadata
          FROM combo_legs
         WHERE combo_rfq_id = $1
         ORDER BY id ASC`,
@@ -914,7 +932,8 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
         canonicalOutcomeId: leg.canonical_outcome_id,
         side: leg.side,
         remainingSize: leg.remaining_size,
-        ...(leg.price_hint !== null ? { priceHint: leg.price_hint } : {})
+        ...(leg.price_hint !== null ? { priceHint: leg.price_hint } : {}),
+        ...(leg.metadata ? { metadata: leg.metadata } : {})
       }));
   }
 
@@ -1029,5 +1048,61 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
     } catch (error) {
       this.logger.warn({ err: error }, "Rollback failed during combo internal netting.");
     }
+  }
+
+  private async isResolutionEligible(
+    incomingCombo: AuthoritativeComboRow,
+    candidateCombo: AuthoritativeComboRow,
+    matchedLegPairs: readonly ComboNettingMatchedLegPair[]
+  ): Promise<boolean> {
+    if (!this.resolutionRiskEligibilityService) {
+      return true;
+    }
+
+    if (matchedLegPairs.length === 0) {
+      return false;
+    }
+
+    const incomingProfileId = this.resolveComboResolutionProfileId(incomingCombo);
+    const candidateProfileId = this.resolveComboResolutionProfileId(candidateCombo);
+
+    if (incomingProfileId && candidateProfileId && incomingProfileId === candidateProfileId) {
+      return true;
+    }
+
+    if (!incomingProfileId || !candidateProfileId) {
+      return false;
+    }
+
+    return this.resolutionRiskEligibilityService.isSafeForCrossVenueNetting(
+      incomingProfileId,
+      candidateProfileId,
+      { stableKey: incomingCombo.id }
+    );
+  }
+
+  private resolveComboResolutionProfileId(combo: AuthoritativeComboRow): string | null {
+    const profileIds = new Set<string>();
+
+    for (const leg of combo.legs) {
+      if (new Decimal(leg.remaining_size).lte(0)) {
+        continue;
+      }
+      const value = leg.metadata?.["resolution_profile_id"];
+      if (value === undefined || value === null) {
+        continue;
+      }
+      if (typeof value !== "string" || value.trim().length === 0) {
+        throw new Error("invalid_resolution_profile_id");
+      }
+      profileIds.add(value);
+    }
+
+    if (profileIds.size > 1) {
+      throw new Error("ambiguous_resolution_profile_id");
+    }
+
+    const profileId = profileIds.values().next().value;
+    return typeof profileId === "string" ? profileId : null;
   }
 }

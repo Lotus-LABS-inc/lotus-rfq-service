@@ -93,6 +93,21 @@ const hasClearingRoundTables = async (pool: Pool): Promise<boolean> => {
   return result.rows.length === 4;
 };
 
+const hasResolutionRiskTables = async (pool: Pool): Promise<boolean> => {
+  const result = await pool.query<{ table_name: string }>(
+    `SELECT table_name
+       FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = ANY($1::text[])`,
+    [[
+      "resolution_profiles",
+      "resolution_risk_assessments"
+    ]]
+  );
+
+  return result.rows.length === 2;
+};
+
 const applyComboNettingMigrationIfNeeded = async (pool: Pool): Promise<void> => {
   if (await hasComboNettingTables(pool)) {
     return;
@@ -159,6 +174,23 @@ const applyClearingRoundMigrationIfNeeded = async (pool: Pool): Promise<void> =>
   }
 };
 
+const applyResolutionRiskMigrationIfNeeded = async (pool: Pool): Promise<void> => {
+  if (await hasResolutionRiskTables(pool)) {
+    return;
+  }
+
+  const migrationPath = path.resolve(process.cwd(), "sql", "migrations", "2026_03_11_create_resolution_risk_tables.sql");
+  const sql = await readFile(migrationPath, "utf8");
+  try {
+    await pool.query(sql);
+  } catch (error) {
+    const code = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
+    if (code !== "42P07" && code !== "42710") {
+      throw error;
+    }
+  }
+};
+
 describe.skipIf(!ENV_READY)("internal trades schema integration", () => {
   let pool: Pool | undefined;
 
@@ -175,6 +207,7 @@ describe.skipIf(!ENV_READY)("internal trades schema integration", () => {
     await applyComboNettingMigrationIfNeeded(must(pool, "pool"));
     await applyComboLegRemainingMigrationIfNeeded(must(pool, "pool"));
     await applyClearingRoundMigrationIfNeeded(must(pool, "pool"));
+    await applyResolutionRiskMigrationIfNeeded(must(pool, "pool"));
   }, 180000);
 
   afterAll(async () => {
@@ -515,12 +548,14 @@ describe.skipIf(!ENV_READY)("internal trades schema integration", () => {
     const db = must(pool, "pool");
     const roundId = randomUUID();
     const participantId = randomUUID();
+    const participantSetHash = `participants-hash-${randomUUID()}`;
+    const matchSignatureHash = `signature-hash-${randomUUID()}`;
 
     await db.query(
       `INSERT INTO clearing_rounds
         (id, compatibility_bucket, state, participant_count, unique_leg_count, compression_score, participant_set_hash, match_signature_hash)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [roundId, "bucket-a", "MATCHED", 3, 2, "1.50", "participants-hash-a", "signature-hash-a"]
+      [roundId, "bucket-a", "MATCHED", 3, 2, "1.50", participantSetHash, matchSignatureHash]
     );
 
     await expect(
@@ -528,7 +563,7 @@ describe.skipIf(!ENV_READY)("internal trades schema integration", () => {
         `INSERT INTO clearing_rounds
           (id, compatibility_bucket, state, participant_count, unique_leg_count, compression_score, participant_set_hash, match_signature_hash)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [randomUUID(), "bucket-a", "MATCHED", 3, 2, "1.50", "participants-hash-a", "signature-hash-a"]
+        [randomUUID(), "bucket-a", "MATCHED", 3, 2, "1.50", participantSetHash, matchSignatureHash]
       )
     ).rejects.toMatchObject({
       code: "23505",
@@ -594,6 +629,147 @@ describe.skipIf(!ENV_READY)("internal trades schema integration", () => {
     ).rejects.toMatchObject({
       code: "23505",
       constraint: "uq_clearing_round_leg_match"
+    });
+  });
+
+  it("creates resolution risk tables with required indexes and foreign keys", async () => {
+    const db = must(pool, "pool");
+
+    expect(await hasResolutionRiskTables(db)).toBe(true);
+
+    const tables = await db.query<{ table_name: string }>(
+      `SELECT table_name
+         FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = ANY($1::text[])`,
+      [[
+        "resolution_profiles",
+        "resolution_risk_assessments"
+      ]]
+    );
+
+    const indexes = await db.query<{ indexname: string }>(
+      `SELECT indexname
+         FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND tablename = ANY($1::text[])`,
+      [[
+        "resolution_profiles",
+        "resolution_risk_assessments"
+      ]]
+    );
+
+    const constraints = await db.query<{ conname: string }>(
+      `SELECT conname
+         FROM pg_constraint
+        WHERE conname = ANY($1::text[])`,
+      [[
+        "uq_resolution_profiles_venue_market",
+        "uq_resolution_risk_assessment_pair_version"
+      ]]
+    );
+
+    const foreignKeys = await db.query<{ table_name: string; constraint_name: string }>(
+      `SELECT tc.table_name, tc.constraint_name
+         FROM information_schema.table_constraints tc
+        WHERE tc.table_schema = 'public'
+          AND tc.constraint_type = 'FOREIGN KEY'
+          AND tc.table_name = 'resolution_risk_assessments'`
+    );
+
+    const tableNames = new Set(tables.rows.map((row) => row.table_name));
+    const indexNames = new Set(indexes.rows.map((row) => row.indexname));
+    const constraintNames = new Set(constraints.rows.map((row) => row.conname));
+
+    expect(tableNames.has("resolution_profiles")).toBe(true);
+    expect(tableNames.has("resolution_risk_assessments")).toBe(true);
+
+    expect(indexNames.has("idx_resolution_profiles_canonical_event_id")).toBe(true);
+    expect(indexNames.has("idx_resolution_profiles_venue")).toBe(true);
+    expect(indexNames.has("idx_resolution_profiles_updated_at")).toBe(true);
+    expect(indexNames.has("idx_resolution_risk_assessments_canonical_event_id")).toBe(true);
+    expect(indexNames.has("idx_resolution_risk_assessments_market_a_profile_id")).toBe(true);
+    expect(indexNames.has("idx_resolution_risk_assessments_market_b_profile_id")).toBe(true);
+    expect(indexNames.has("idx_resolution_risk_assessments_equivalence_class")).toBe(true);
+    expect(indexNames.has("idx_resolution_risk_assessments_computed_at")).toBe(true);
+
+    expect(constraintNames.has("uq_resolution_profiles_venue_market")).toBe(true);
+    expect(constraintNames.has("uq_resolution_risk_assessment_pair_version")).toBe(true);
+    expect(foreignKeys.rowCount).toBe(2);
+  });
+
+  it("prevents duplicate resolution profile and assessment replay insertion", async () => {
+    const db = must(pool, "pool");
+    const profileAId = randomUUID();
+    const profileBId = randomUUID();
+    const canonicalEventId = randomUUID();
+
+    await db.query(
+      `INSERT INTO resolution_profiles
+        (id, venue, venue_market_id, canonical_event_id, metadata)
+       VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      [profileAId, "venue-a", `market-${randomUUID()}`, canonicalEventId, "{}"]
+    );
+
+    const duplicateVenueMarketId = `market-${randomUUID()}`;
+    await db.query(
+      `INSERT INTO resolution_profiles
+        (id, venue, venue_market_id, canonical_event_id, metadata)
+       VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      [profileBId, "venue-b", duplicateVenueMarketId, canonicalEventId, "{}"]
+    );
+
+    await expect(
+      db.query(
+        `INSERT INTO resolution_profiles
+          (id, venue, venue_market_id, canonical_event_id, metadata)
+         VALUES ($1, $2, $3, $4, $5::jsonb)`,
+        [randomUUID(), "venue-b", duplicateVenueMarketId, canonicalEventId, "{}"]
+      )
+    ).rejects.toMatchObject({
+      code: "23505",
+      constraint: "uq_resolution_profiles_venue_market"
+    });
+
+    await db.query(
+      `INSERT INTO resolution_risk_assessments
+        (id, canonical_event_id, market_a_profile_id, market_b_profile_id, risk_score, confidence_score, equivalence_class, factor_breakdown, reasons, version)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10)`,
+      [
+        randomUUID(),
+        canonicalEventId,
+        profileAId,
+        profileBId,
+        "0.15000000",
+        "0.95000000",
+        "CAUTION",
+        JSON.stringify({ oracleDifference: "low" }),
+        JSON.stringify(["shared_oracle_family"]),
+        "v1"
+      ]
+    );
+
+    await expect(
+      db.query(
+        `INSERT INTO resolution_risk_assessments
+          (id, canonical_event_id, market_a_profile_id, market_b_profile_id, risk_score, confidence_score, equivalence_class, factor_breakdown, reasons, version)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10)`,
+        [
+          randomUUID(),
+          canonicalEventId,
+          profileAId,
+          profileBId,
+          "0.15000000",
+          "0.95000000",
+          "CAUTION",
+          JSON.stringify({ oracleDifference: "low" }),
+          JSON.stringify(["shared_oracle_family"]),
+          "v1"
+        ]
+      )
+    ).rejects.toMatchObject({
+      code: "23505",
+      constraint: "uq_resolution_risk_assessment_pair_version"
     });
   });
 });
