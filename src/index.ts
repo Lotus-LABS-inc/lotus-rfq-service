@@ -57,6 +57,15 @@ export interface BootstrapModules {
     internalNettingCanaryPercent?: number;
     internalNettingCanaryStartAt?: string;
     internalNettingCanaryEndAt?: string;
+    internalClearingEnabled?: boolean;
+    internalClearingShadowEnabled?: boolean;
+    internalClearingShadowPercent?: number;
+    internalClearingShadowStartAt?: string;
+    internalClearingShadowEndAt?: string;
+    internalClearingCanaryEnabled?: boolean;
+    internalClearingCanaryPercent?: number;
+    internalClearingCanaryStartAt?: string;
+    internalClearingCanaryEndAt?: string;
     reliabilityWeight: number;
     latencyWeight: number;
     failureWeight: number;
@@ -125,6 +134,15 @@ export const startService = async (
     internalNettingCanaryPercent: env.INTERNAL_NETTING_CANARY_PERCENT,
     ...(env.INTERNAL_NETTING_CANARY_START_AT ? { internalNettingCanaryStartAt: env.INTERNAL_NETTING_CANARY_START_AT } : {}),
     ...(env.INTERNAL_NETTING_CANARY_END_AT ? { internalNettingCanaryEndAt: env.INTERNAL_NETTING_CANARY_END_AT } : {}),
+    internalClearingEnabled: env.INTERNAL_CLEARING_ENABLED,
+    internalClearingShadowEnabled: env.INTERNAL_CLEARING_SHADOW_ENABLED,
+    internalClearingShadowPercent: env.INTERNAL_CLEARING_SHADOW_PERCENT,
+    ...(env.INTERNAL_CLEARING_SHADOW_START_AT ? { internalClearingShadowStartAt: env.INTERNAL_CLEARING_SHADOW_START_AT } : {}),
+    ...(env.INTERNAL_CLEARING_SHADOW_END_AT ? { internalClearingShadowEndAt: env.INTERNAL_CLEARING_SHADOW_END_AT } : {}),
+    internalClearingCanaryEnabled: env.INTERNAL_CLEARING_CANARY_ENABLED,
+    internalClearingCanaryPercent: env.INTERNAL_CLEARING_CANARY_PERCENT,
+    ...(env.INTERNAL_CLEARING_CANARY_START_AT ? { internalClearingCanaryStartAt: env.INTERNAL_CLEARING_CANARY_START_AT } : {}),
+    ...(env.INTERNAL_CLEARING_CANARY_END_AT ? { internalClearingCanaryEndAt: env.INTERNAL_CLEARING_CANARY_END_AT } : {}),
     reliabilityWeight: env.RELIABILITY_WEIGHT,
     latencyWeight: env.LATENCY_WEIGHT,
     failureWeight: env.FAILURE_WEIGHT,

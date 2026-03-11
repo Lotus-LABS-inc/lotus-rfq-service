@@ -32,6 +32,7 @@ export interface RedisClient {
   sinter?(...keys: string[]): Promise<string[]>;
   zadd(key: string, score: number, member: string): Promise<number>;
   zrem(key: string, member: string): Promise<number>;
+  zrange?(key: string, start: number, stop: number): Promise<string[]>;
   zrangebyscore(key: string, min: number | string, max: number | string, limitLiteral?: "LIMIT", offset?: number, count?: number): Promise<string[]>;
   zrevrange(key: string, start: number, stop: number): Promise<string[]>;
   hset(key: string, field: string, value: string): Promise<number>;

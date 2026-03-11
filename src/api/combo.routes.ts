@@ -52,6 +52,17 @@ export const comboRoutes = (engine: IComboEngine): FastifyPluginAsync => async (
                 });
             }
 
+            if (result.kind === "internal_cleared") {
+                return reply.status(200).send({
+                    status: "INTERNALLY_CLEARED",
+                    comboId: result.comboId,
+                    clearingRoundId: result.clearingRoundId,
+                    participantSetHash: result.participantSetHash,
+                    matchSignatureHash: result.matchSignatureHash,
+                    clearedParticipantCount: result.clearedParticipantCount
+                });
+            }
+
             return reply.status(200).send({
                 status: "ACCEPTED",
                 planId: result.plan.id,

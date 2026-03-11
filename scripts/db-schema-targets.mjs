@@ -23,6 +23,12 @@ export const requiredTables = [
   "combo_netting_match_legs",
   "combo_netting_events",
   "combo_netting_attempts",
+  "clearing_rounds",
+  "clearing_round_participants",
+  "clearing_round_leg_matches",
+  "clearing_round_events",
+  "internal_clearing_admin_events",
+  "internal_clearing_unwind_tasks",
   "internal_cross_admin_events",
   "internal_cross_unwind_tasks",
   "internal_netting_admin_events",
@@ -50,5 +56,14 @@ export const requiredIndexes = [
   "idx_combo_netting_match_legs_market_outcome",
   "idx_combo_netting_events_group_id",
   "idx_combo_netting_attempts_incoming_combo_id",
-  "idx_combo_netting_attempts_matched_combo_id"
+  "idx_combo_netting_attempts_matched_combo_id",
+  "idx_clearing_rounds_bucket_created_at",
+  "idx_clearing_rounds_state_created_at",
+  "idx_clearing_round_participants_round_id",
+  "idx_clearing_round_leg_matches_market_outcome",
+  "idx_clearing_round_events_round_id",
+  "idx_internal_clearing_admin_events_entity_created_at",
+  "idx_internal_clearing_admin_events_correlation_id",
+  "idx_internal_clearing_unwind_tasks_round_id",
+  "idx_internal_clearing_unwind_tasks_correlation_id"
 ];

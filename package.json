@@ -24,6 +24,7 @@
     "stress:sor": "tsx scripts/stress-sor.ts",
     "stress:internal-cross": "tsx scripts/stress-internal-cross.ts",
     "stress:internal-netting": "tsx scripts/stress-internal-netting.ts",
+    "stress:internal-clearing": "tsx scripts/stress-internal-clearing.ts",
     "chaos:internal-cross": "tsx scripts/chaos-internal-cross.ts",
     "rebuild:internal-cross-book": "tsx scripts/rebuild-internal-cross-book.ts"
   },

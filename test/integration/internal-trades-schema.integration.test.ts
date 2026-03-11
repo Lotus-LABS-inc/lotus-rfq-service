@@ -76,6 +76,23 @@ const hasComboNettingTables = async (pool: Pool): Promise<boolean> => {
   return result.rows.length === 4;
 };
 
+const hasClearingRoundTables = async (pool: Pool): Promise<boolean> => {
+  const result = await pool.query<{ table_name: string }>(
+    `SELECT table_name
+       FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = ANY($1::text[])`,
+    [[
+      "clearing_rounds",
+      "clearing_round_participants",
+      "clearing_round_leg_matches",
+      "clearing_round_events"
+    ]]
+  );
+
+  return result.rows.length === 4;
+};
+
 const applyComboNettingMigrationIfNeeded = async (pool: Pool): Promise<void> => {
   if (await hasComboNettingTables(pool)) {
     return;
@@ -125,6 +142,23 @@ const applyComboLegRemainingMigrationIfNeeded = async (pool: Pool): Promise<void
   await pool.query(sql);
 };
 
+const applyClearingRoundMigrationIfNeeded = async (pool: Pool): Promise<void> => {
+  if (await hasClearingRoundTables(pool)) {
+    return;
+  }
+
+  const migrationPath = path.resolve(process.cwd(), "sql", "migrations", "2026_03_10_create_clearing_round_tables.sql");
+  const sql = await readFile(migrationPath, "utf8");
+  try {
+    await pool.query(sql);
+  } catch (error) {
+    const code = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
+    if (code !== "42P07" && code !== "42710") {
+      throw error;
+    }
+  }
+};
+
 describe.skipIf(!ENV_READY)("internal trades schema integration", () => {
   let pool: Pool | undefined;
 
@@ -140,6 +174,7 @@ describe.skipIf(!ENV_READY)("internal trades schema integration", () => {
     await applyMigrations(must(pool, "pool"));
     await applyComboNettingMigrationIfNeeded(must(pool, "pool"));
     await applyComboLegRemainingMigrationIfNeeded(must(pool, "pool"));
+    await applyClearingRoundMigrationIfNeeded(must(pool, "pool"));
   }, 180000);
 
   afterAll(async () => {
@@ -388,6 +423,177 @@ describe.skipIf(!ENV_READY)("internal trades schema integration", () => {
     ).rejects.toMatchObject({
       code: "23505",
       constraint: "uq_combo_netting_match_leg_pair"
+    });
+  });
+
+  it("creates clearing round tables with required indexes and foreign keys", async () => {
+    const db = must(pool, "pool");
+
+    expect(await hasClearingRoundTables(db)).toBe(true);
+
+    const tables = await db.query<{ table_name: string }>(
+      `SELECT table_name
+         FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = ANY($1::text[])`,
+      [[
+        "clearing_rounds",
+        "clearing_round_participants",
+        "clearing_round_leg_matches",
+        "clearing_round_events"
+      ]]
+    );
+
+    const indexes = await db.query<{ indexname: string }>(
+      `SELECT indexname
+         FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND tablename = ANY($1::text[])`,
+      [[
+        "clearing_rounds",
+        "clearing_round_participants",
+        "clearing_round_leg_matches",
+        "clearing_round_events"
+      ]]
+    );
+
+    const constraints = await db.query<{ conname: string }>(
+      `SELECT conname
+         FROM pg_constraint
+        WHERE conname = ANY($1::text[])`,
+      [[
+        "uq_clearing_rounds_participant_signature",
+        "uq_clearing_round_participants_entry",
+        "uq_clearing_round_leg_match"
+      ]]
+    );
+
+    const foreignKeys = await db.query<{ table_name: string; constraint_name: string }>(
+      `SELECT tc.table_name, tc.constraint_name
+         FROM information_schema.table_constraints tc
+        WHERE tc.table_schema = 'public'
+          AND tc.constraint_type = 'FOREIGN KEY'
+          AND tc.table_name = ANY($1::text[])`,
+      [[
+        "clearing_round_participants",
+        "clearing_round_leg_matches",
+        "clearing_round_events"
+      ]]
+    );
+
+    const tableNames = new Set(tables.rows.map((row) => row.table_name));
+    const indexNames = new Set(indexes.rows.map((row) => row.indexname));
+    const constraintNames = new Set(constraints.rows.map((row) => row.conname));
+
+    expect(tableNames.has("clearing_rounds")).toBe(true);
+    expect(tableNames.has("clearing_round_participants")).toBe(true);
+    expect(tableNames.has("clearing_round_leg_matches")).toBe(true);
+    expect(tableNames.has("clearing_round_events")).toBe(true);
+
+    expect(indexNames.has("idx_clearing_rounds_bucket_created_at")).toBe(true);
+    expect(indexNames.has("idx_clearing_rounds_state_created_at")).toBe(true);
+    expect(indexNames.has("idx_clearing_rounds_participant_hash")).toBe(true);
+    expect(indexNames.has("idx_clearing_round_participants_round_id")).toBe(true);
+    expect(indexNames.has("idx_clearing_round_participants_combo_or_order_id")).toBe(true);
+    expect(indexNames.has("idx_clearing_round_participants_user_id")).toBe(true);
+    expect(indexNames.has("idx_clearing_round_leg_matches_round_id")).toBe(true);
+    expect(indexNames.has("idx_clearing_round_leg_matches_market_outcome")).toBe(true);
+    expect(indexNames.has("idx_clearing_round_leg_matches_participant_id")).toBe(true);
+    expect(indexNames.has("idx_clearing_round_events_round_id")).toBe(true);
+    expect(indexNames.has("idx_clearing_round_events_type_created_at")).toBe(true);
+
+    expect(constraintNames.has("uq_clearing_rounds_participant_signature")).toBe(true);
+    expect(constraintNames.has("uq_clearing_round_participants_entry")).toBe(true);
+    expect(constraintNames.has("uq_clearing_round_leg_match")).toBe(true);
+
+    expect(foreignKeys.rows.some((row) => row.table_name === "clearing_round_participants")).toBe(true);
+    expect(foreignKeys.rows.some((row) => row.table_name === "clearing_round_leg_matches")).toBe(true);
+    expect(foreignKeys.rows.some((row) => row.table_name === "clearing_round_events")).toBe(true);
+  });
+
+  it("prevents duplicate clearing-round replay and participant/leg duplication", async () => {
+    const db = must(pool, "pool");
+    const roundId = randomUUID();
+    const participantId = randomUUID();
+
+    await db.query(
+      `INSERT INTO clearing_rounds
+        (id, compatibility_bucket, state, participant_count, unique_leg_count, compression_score, participant_set_hash, match_signature_hash)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [roundId, "bucket-a", "MATCHED", 3, 2, "1.50", "participants-hash-a", "signature-hash-a"]
+    );
+
+    await expect(
+      db.query(
+        `INSERT INTO clearing_rounds
+          (id, compatibility_bucket, state, participant_count, unique_leg_count, compression_score, participant_set_hash, match_signature_hash)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [randomUUID(), "bucket-a", "MATCHED", 3, 2, "1.50", "participants-hash-a", "signature-hash-a"]
+      )
+    ).rejects.toMatchObject({
+      code: "23505",
+      constraint: "uq_clearing_rounds_participant_signature"
+    });
+
+    await db.query(
+      `INSERT INTO clearing_round_participants
+        (id, clearing_round_id, combo_or_order_id, participant_user_id, role, original_remaining, matched_remaining)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)`,
+      [
+        participantId,
+        roundId,
+        randomUUID(),
+        randomUUID(),
+        "INCOMING",
+        JSON.stringify({ marketA: "5.0" }),
+        JSON.stringify({ marketA: "2.5" })
+      ]
+    );
+
+    const duplicateComboOrOrderId = await db.query<{ combo_or_order_id: string }>(
+      `SELECT combo_or_order_id
+         FROM clearing_round_participants
+        WHERE id = $1`,
+      [participantId]
+    );
+
+    await expect(
+      db.query(
+        `INSERT INTO clearing_round_participants
+          (id, clearing_round_id, combo_or_order_id, participant_user_id, role, original_remaining, matched_remaining)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)`,
+        [
+          randomUUID(),
+          roundId,
+          duplicateComboOrOrderId.rows[0]?.combo_or_order_id,
+          randomUUID(),
+          "INCOMING",
+          JSON.stringify({ marketA: "5.0" }),
+          JSON.stringify({ marketA: "2.5" })
+        ]
+      )
+    ).rejects.toMatchObject({
+      code: "23505",
+      constraint: "uq_clearing_round_participants_entry"
+    });
+
+    await db.query(
+      `INSERT INTO clearing_round_leg_matches
+        (id, clearing_round_id, market_id, outcome_id, participant_id, signed_matched_size, price)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [randomUUID(), roundId, "market-a", "outcome-yes", participantId, "2.50", "0.40"]
+    );
+
+    await expect(
+      db.query(
+        `INSERT INTO clearing_round_leg_matches
+          (id, clearing_round_id, market_id, outcome_id, participant_id, signed_matched_size, price)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [randomUUID(), roundId, "market-a", "outcome-yes", participantId, "1.25", "0.41"]
+      )
+    ).rejects.toMatchObject({
+      code: "23505",
+      constraint: "uq_clearing_round_leg_match"
     });
   });
 });

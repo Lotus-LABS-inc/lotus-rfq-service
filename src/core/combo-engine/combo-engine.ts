@@ -6,6 +6,10 @@ import type { IComboQuoteRepository } from "../../repositories/combo-quote.repos
 import type { IComboQuoteNormalizer } from "../../services/combo-quote-normalizer.js";
 import type { IExecutionPlanBuilder, ExecutionPlan } from "../execution-plan/execution-plan-builder.js";
 import type { IMultiLegInternalNettingEngine } from "./multi-leg-internal-netting-engine.js";
+import type { IResidualVectorBuilder } from "./residual-vector-builder.js";
+import type { IPhase2BCandidateRegistry } from "./phase2b-candidate-registry.js";
+import type { IClearingRoundPlanner } from "./clearing-round-planner.js";
+import type { IMultiPartyClearingExecutor } from "./multi-party-clearing-executor.js";
 import {
   ComboRFQRequest,
   ComboAcceptResult,
@@ -14,7 +18,8 @@ import {
   ComboRFQRequestSchema,
   LPComboQuoteRequest,
   type MultiLegInternalNettingInput,
-  type ResidualComboLeg
+  type ResidualComboLeg,
+  type ResidualVectorEntity
 } from "./types.js";
 import { computePayoutVector } from "./pricing-engine.js";
 import {
@@ -29,6 +34,15 @@ import {
   comboInternalNetShadowNettedSize,
   comboInternalNetShadowTotal,
   comboInternalNetSuccessTotal,
+  clearingRoundAttemptsTotal,
+  clearingRoundPartialTotal,
+  clearingRoundSuccessTotal,
+  clearingResidualRoutedTotal,
+  comboInternalClearingEnabledState,
+  comboInternalClearingKillSwitchTotal,
+  comboInternalClearingShadowDivergenceTotal,
+  comboInternalClearingShadowMatchTotal,
+  comboInternalClearingShadowTotal,
   comboQuoteReceivedTotal,
   comboExecutionSuccessTotal,
   comboExecutionFailureTotal,
@@ -53,6 +67,15 @@ import {
   type InternalNettingShadowDecision,
   type InternalNettingShadowReason
 } from "./runtime-controls.js";
+import {
+  compareInternalClearingShadowDecision,
+  isInternalClearingKillSwitchActive,
+  isInternalClearingRolloutWindowActive,
+  isInternalClearingSampled,
+  type InternalClearingPreviewOutcome,
+  type InternalClearingShadowDecision,
+  type InternalClearingShadowReason
+} from "./internal-clearing-runtime-controls.js";
 
 export interface IComboRiskEngine {
   validateRFQCreation(rfq: {
@@ -101,7 +124,29 @@ export interface ComboEngineRolloutConfig {
   internalNettingCanaryPercent?: number;
   internalNettingCanaryStartAt?: string;
   internalNettingCanaryEndAt?: string;
+  internalClearingEnabled?: boolean;
+  internalClearingShadowEnabled?: boolean;
+  internalClearingShadowPercent?: number;
+  internalClearingShadowStartAt?: string;
+  internalClearingShadowEndAt?: string;
+  internalClearingCanaryEnabled?: boolean;
+  internalClearingCanaryPercent?: number;
+  internalClearingCanaryStartAt?: string;
+  internalClearingCanaryEndAt?: string;
   now?: () => Date;
+}
+
+export interface ComboEnginePhase2BDeps {
+  residualVectorBuilder?: IResidualVectorBuilder;
+  phase2bCandidateRegistry?: IPhase2BCandidateRegistry;
+  clearingRoundPlanner?: IClearingRoundPlanner;
+  multiPartyClearingExecutor?: IMultiPartyClearingExecutor;
+}
+
+interface InternalClearingExecutionOutcome {
+  kind: "internal_cleared" | "partial_cleared";
+  execution: Awaited<ReturnType<IMultiPartyClearingExecutor["execute"]>>;
+  residualSession: ComboRFQSession;
 }
 
 export class ComboEngine implements IComboEngine {
@@ -118,10 +163,16 @@ export class ComboEngine implements IComboEngine {
     private readonly executionRouter: IExecutionRouter,
     private readonly redisClient: ComboRedisClient,
     private readonly logger: Logger,
-    private readonly rolloutConfig: ComboEngineRolloutConfig = {}
+    private readonly rolloutConfig: ComboEngineRolloutConfig = {},
+    private readonly phase2BDeps: ComboEnginePhase2BDeps = {}
   ) {
     comboInternalNetEnabledState.set(
       this.rolloutConfig.internalNettingEnabled || this.rolloutConfig.internalNettingCanaryEnabled ? 1 : 0
+    );
+    comboInternalClearingEnabledState.set(
+      this.rolloutConfig.internalClearingEnabled || this.rolloutConfig.internalClearingCanaryEnabled ? 1 : 0
+        ? 1
+        : 0
     );
   }
 
@@ -283,23 +334,23 @@ export class ComboEngine implements IComboEngine {
           typeof this.redisClient.get === "function"
             ? await isInternalNettingKillSwitchActive(this.redisClient as Required<Pick<ComboRedisClient, "get">>)
             : false;
-        const rolloutMode = this.resolveInternalNettingMode(session.id, internalNetKillSwitchActive);
+        const internalNetRolloutMode = this.resolveInternalNettingMode(session.id, internalNetKillSwitchActive);
 
         span.setAttribute("combo.internal_net.kill_switch_active", internalNetKillSwitchActive);
-        span.setAttribute("combo.internal_net.mode", rolloutMode.mode);
-        span.setAttribute("combo.internal_net.shadow_sampled", rolloutMode.shadowSampled);
-        span.setAttribute("combo.internal_net.canary_sampled", rolloutMode.canarySampled);
+        span.setAttribute("combo.internal_net.mode", internalNetRolloutMode.mode);
+        span.setAttribute("combo.internal_net.shadow_sampled", internalNetRolloutMode.shadowSampled);
+        span.setAttribute("combo.internal_net.canary_sampled", internalNetRolloutMode.canarySampled);
 
-        if (rolloutMode.shadowSampled) {
+        if (internalNetRolloutMode.shadowSampled) {
           try {
-            await this.runInternalNetShadowComparison(session, internalNetKillSwitchActive, rolloutMode.mode);
+            await this.runInternalNetShadowComparison(session, internalNetKillSwitchActive, internalNetRolloutMode.mode);
           } catch (error) {
             comboInternalNetShadowDivergenceTotal.inc({ reason: "error" });
             this.logger.error({ comboId: session.id, err: error }, "Combo internal-net shadow comparison failed.");
           }
         }
 
-        const nettingResult = rolloutMode.authoritativeInternalNetting
+        const nettingResult = internalNetRolloutMode.authoritativeInternalNetting
           ? await this.runAuthoritativeInternalNet(session, internalNetKillSwitchActive)
           : this.zeroNettingResult(session);
 
@@ -333,9 +384,69 @@ export class ComboEngine implements IComboEngine {
           };
         }
 
-        const residualSession = this.applyResidualLegsToSession(refreshedSession, nettingResult.residualLegs);
+        let residualSession = this.applyResidualLegsToSession(refreshedSession, nettingResult.residualLegs);
         if (Number(nettingResult.nettedSize) > 0) {
           comboInternalNetPartialTotal.inc();
+        }
+
+        const internalClearingKillSwitchActive =
+          typeof this.redisClient.get === "function"
+            ? await isInternalClearingKillSwitchActive(this.redisClient as Required<Pick<ComboRedisClient, "get">>)
+            : false;
+        const internalClearingRolloutMode = this.resolveInternalClearingMode(session.id, internalClearingKillSwitchActive);
+
+        span.setAttribute("combo.internal_clearing.kill_switch_active", internalClearingKillSwitchActive);
+        span.setAttribute("combo.internal_clearing.mode", internalClearingRolloutMode.mode);
+        span.setAttribute("combo.internal_clearing.shadow_sampled", internalClearingRolloutMode.shadowSampled);
+        span.setAttribute("combo.internal_clearing.canary_sampled", internalClearingRolloutMode.canarySampled);
+
+        if (internalClearingRolloutMode.shadowSampled) {
+          try {
+            await this.runInternalClearingShadowComparison(
+              residualSession,
+              internalClearingKillSwitchActive,
+              internalClearingRolloutMode.mode
+            );
+          } catch (error) {
+            comboInternalClearingShadowDivergenceTotal.inc({ reason: "error" });
+            this.logger.error({ comboId: session.id, err: error }, "Combo internal-clearing shadow comparison failed.");
+          }
+        }
+
+        const clearingResult = internalClearingRolloutMode.authoritativeInternalClearing
+          ? await this.runAuthoritativeInternalClearing(residualSession, internalClearingKillSwitchActive)
+          : null;
+
+        if (clearingResult?.kind === "internal_cleared") {
+          await this.comboRepo.updateSessionState(sessionId, "EXECUTED");
+          comboExecutionSuccessTotal.inc({ acceptance_policy: session.acceptancePolicy });
+          comboExecutionDurationMs.observe({ acceptance_policy: session.acceptancePolicy }, Date.now() - execStart);
+
+          if (this.riskEngine.rollbackReservation) {
+            await this.riskEngine.rollbackReservation(reservationToken);
+          }
+
+          await this.emitSequencedEvent(sessionId, "COMBO_EXECUTION_UPDATE", {
+            status: "SETTLED",
+            liquiditySource: LiquiditySource.INTERNAL_CLEARING,
+            clearingRoundId: clearingResult.execution.clearingRoundId,
+            participantSetHash: clearingResult.execution.participantSetHash,
+            matchSignatureHash: clearingResult.execution.matchSignatureHash,
+            clearedParticipantCount: clearingResult.execution.participants.length
+          });
+
+          return {
+            kind: "internal_cleared",
+            comboId: sessionId,
+            clearingRoundId: clearingResult.execution.clearingRoundId,
+            participantSetHash: clearingResult.execution.participantSetHash,
+            matchSignatureHash: clearingResult.execution.matchSignatureHash,
+            clearedParticipantCount: clearingResult.execution.participants.length
+          };
+        }
+
+        if (clearingResult?.kind === "partial_cleared") {
+          residualSession = clearingResult.residualSession;
         }
 
         const plan = await this.planBuilder.buildExecutionPlan(
@@ -349,9 +460,15 @@ export class ComboEngine implements IComboEngine {
         span.setAttribute("combo.num_steps", plan.steps.length);
         span.setAttribute("combo.internal_netted_size", nettingResult.nettedSize);
         span.setAttribute("combo.residual_leg_count", nettingResult.residualLegs.length);
+        if (clearingResult) {
+          span.setAttribute("combo.internal_clearing.round_id", clearingResult.execution.clearingRoundId);
+          span.setAttribute("combo.internal_clearing.participant_count", clearingResult.execution.participants.length);
+        }
 
         await this.comboRepo.updateSessionState(sessionId, "ACCEPTED");
-        if (Number(nettingResult.nettedSize) > 0) {
+        if (clearingResult?.kind === "partial_cleared") {
+          clearingResidualRoutedTotal.inc();
+        } else if (Number(nettingResult.nettedSize) > 0) {
           comboInternalNetResidualRoutedTotal.inc();
         }
         const result = await this.executionRouter.executePlan(plan);
@@ -373,15 +490,15 @@ export class ComboEngine implements IComboEngine {
 
           await this.emitSequencedEvent(sessionId, "COMBO_EXECUTION_UPDATE", {
             status: "SETTLED",
-            liquiditySource: Number(nettingResult.nettedSize) > 0 ? LiquiditySource.INTERNAL_NETTING : LiquiditySource.LP,
+            liquiditySource: this.resolveResidualLiquiditySource(nettingResult, clearingResult),
             nettedSize: nettingResult.nettedSize,
-            residualLegCount: nettingResult.residualLegs.length
+            residualLegCount: residualSession.legs.length
           });
           return {
             kind: "external_plan",
             plan,
             nettedSize: nettingResult.nettedSize,
-            residualLegCount: nettingResult.residualLegs.length
+            residualLegCount: residualSession.legs.length
           };
         }
 
@@ -393,15 +510,15 @@ export class ComboEngine implements IComboEngine {
         comboUnwindAttemptsTotal.inc({ outcome: "success" });
         await this.emitSequencedEvent(sessionId, "COMBO_EXECUTION_UPDATE", {
           status: "FAILED",
-          liquiditySource: Number(nettingResult.nettedSize) > 0 ? LiquiditySource.INTERNAL_NETTING : LiquiditySource.LP,
+          liquiditySource: this.resolveResidualLiquiditySource(nettingResult, clearingResult),
           nettedSize: nettingResult.nettedSize,
-          residualLegCount: nettingResult.residualLegs.length
+          residualLegCount: residualSession.legs.length
         });
         return {
           kind: "external_plan",
           plan,
           nettedSize: nettingResult.nettedSize,
-          residualLegCount: nettingResult.residualLegs.length
+          residualLegCount: residualSession.legs.length
         };
       } catch (error) {
         comboExecutionDurationMs.observe({ acceptance_policy: session.acceptancePolicy }, Date.now() - execStart);
@@ -624,6 +741,329 @@ export class ComboEngine implements IComboEngine {
       nettingGroupIds: [],
       eventsWritten: 0
     };
+  }
+
+  private resolveInternalClearingMode(
+    stableId: string,
+    killSwitchActive: boolean
+  ): {
+    mode: "disabled" | "shadow" | "canary" | "enabled";
+    authoritativeInternalClearing: boolean;
+    shadowSampled: boolean;
+    canarySampled: boolean;
+  } {
+    const now = this.rolloutConfig.now;
+    const shadowWindowActive = isInternalClearingRolloutWindowActive({
+      enabled: this.rolloutConfig.internalClearingShadowEnabled ?? false,
+      percent: this.rolloutConfig.internalClearingShadowPercent ?? 0,
+      ...(this.rolloutConfig.internalClearingShadowStartAt ? { startAt: this.rolloutConfig.internalClearingShadowStartAt } : {}),
+      ...(this.rolloutConfig.internalClearingShadowEndAt ? { endAt: this.rolloutConfig.internalClearingShadowEndAt } : {}),
+      ...(now ? { now } : {})
+    });
+    const canaryWindowActive = isInternalClearingRolloutWindowActive({
+      enabled: this.rolloutConfig.internalClearingCanaryEnabled ?? false,
+      percent: this.rolloutConfig.internalClearingCanaryPercent ?? 0,
+      ...(this.rolloutConfig.internalClearingCanaryStartAt ? { startAt: this.rolloutConfig.internalClearingCanaryStartAt } : {}),
+      ...(this.rolloutConfig.internalClearingCanaryEndAt ? { endAt: this.rolloutConfig.internalClearingCanaryEndAt } : {}),
+      ...(now ? { now } : {})
+    });
+
+    const shadowSampled =
+      shadowWindowActive &&
+      isInternalClearingSampled(stableId, this.rolloutConfig.internalClearingShadowPercent ?? 0);
+    const canarySampled =
+      canaryWindowActive &&
+      isInternalClearingSampled(stableId, this.rolloutConfig.internalClearingCanaryPercent ?? 0);
+
+    const authoritativeInternalClearing =
+      !killSwitchActive && ((this.rolloutConfig.internalClearingEnabled ?? false) || canarySampled);
+
+    if (authoritativeInternalClearing && canarySampled) {
+      return { mode: "canary", authoritativeInternalClearing: true, shadowSampled, canarySampled };
+    }
+    if (authoritativeInternalClearing) {
+      return { mode: "enabled", authoritativeInternalClearing: true, shadowSampled, canarySampled };
+    }
+    if (shadowSampled) {
+      return { mode: "shadow", authoritativeInternalClearing: false, shadowSampled, canarySampled };
+    }
+    return { mode: "disabled", authoritativeInternalClearing: false, shadowSampled, canarySampled };
+  }
+
+  private async runInternalClearingShadowComparison(
+    session: ComboRFQSession,
+    killSwitchActive: boolean,
+    mode: "disabled" | "shadow" | "canary" | "enabled"
+  ): Promise<void> {
+    const sampled = true;
+    comboInternalClearingShadowTotal.inc({ mode, sampled: String(sampled) });
+
+    const authoritative = this.buildAuthoritativeExternalClearingDecision(session);
+    let reason: InternalClearingShadowReason | undefined;
+
+    const shadowDecision = await withSpan(
+      "combo.internal_clearing.shadow_evaluate",
+      {
+        "combo.id": session.id,
+        "combo.acceptance_policy": session.acceptancePolicy,
+        "combo.internal_clearing.kill_switch_active": killSwitchActive,
+        "shadow_mode": true
+      },
+      async () => {
+        if (killSwitchActive) {
+          reason = "kill_switch";
+          this.logger.info(
+            { comboId: session.id, mode, killSwitchActive: true },
+            "Computed Phase 2B shadow clearing outcome without committing because kill switch is active."
+          );
+          return this.buildInternalClearingShadowDecision(null, session);
+        }
+
+        const roundPlan = await this.planInternalClearingRound(session, {
+          registerCurrentEntity: true,
+          unregisterAfterPlanning: true
+        });
+        this.logger.info(
+          {
+            comboId: session.id,
+            mode,
+            killSwitchActive: false,
+            compatibilityBucket: roundPlan?.compatibilityBucket ?? null,
+            participantIds: roundPlan?.selectedGroup.participantIds ?? [],
+            residualLegCount: roundPlan?.residuals.length ?? session.legs.length
+          },
+          "Computed Phase 2B shadow clearing plan without committing."
+        );
+        return this.buildInternalClearingShadowDecision(roundPlan, session);
+      }
+    );
+
+    await withSpan(
+      "combo.internal_clearing.shadow_compare",
+      {
+        "combo.id": session.id,
+        "combo.acceptance_policy": session.acceptancePolicy,
+        "combo.internal_clearing.kill_switch_active": killSwitchActive,
+        "shadow_mode": true
+      },
+      async (compareSpan) => {
+        const comparison =
+          reason === "kill_switch" || reason === "disabled"
+            ? {
+              match: false,
+              dimension: "clearing_outcome" as const,
+              reason
+            }
+            : compareInternalClearingShadowDecision(authoritative, shadowDecision);
+
+        compareSpan.setAttribute("combo.internal_clearing.shadow.match", comparison.match);
+        compareSpan.setAttribute("combo.internal_clearing.shadow.dimension", comparison.dimension);
+        if (comparison.reason) {
+          compareSpan.setAttribute("combo.internal_clearing.shadow.reason", comparison.reason);
+        }
+
+        if (comparison.match) {
+          comboInternalClearingShadowMatchTotal.inc({ dimension: comparison.dimension });
+          return;
+        }
+
+        comboInternalClearingShadowDivergenceTotal.inc({
+          reason: comparison.reason ?? "error"
+        });
+      }
+    );
+  }
+
+  private async runAuthoritativeInternalClearing(
+    session: ComboRFQSession,
+    killSwitchActive: boolean
+  ): Promise<InternalClearingExecutionOutcome | null> {
+    if (killSwitchActive) {
+      comboInternalClearingKillSwitchTotal.inc({ mode: "authoritative" });
+      this.logger.warn({ comboId: session.id }, "Skipped combo internal clearing because kill switch is active.");
+      return null;
+    }
+
+    const roundPlan = await withSpan(
+      "combo.internal_clearing.plan",
+      {
+        "combo.id": session.id,
+        "combo.acceptance_policy": session.acceptancePolicy,
+        "combo.internal_clearing.kill_switch_active": false,
+        "liquidity_source": LiquiditySource.INTERNAL_CLEARING
+      },
+      async (planSpan) => {
+        clearingRoundAttemptsTotal.inc();
+        const plan = await this.planInternalClearingRound(session, {
+          registerCurrentEntity: true,
+          unregisterAfterPlanning: false
+        });
+        if (plan) {
+          planSpan.setAttribute("compatibility_bucket", plan.compatibilityBucket);
+          planSpan.setAttribute("participant_count", plan.selectedGroup.participantIds.length);
+        }
+        return plan;
+      }
+    );
+
+    if (!roundPlan) {
+      return null;
+    }
+
+    if (!roundPlan.selectedGroup.participantIds.includes(session.id)) {
+      await this.phase2BDeps.phase2bCandidateRegistry?.unregisterEntity(session.id, roundPlan.compatibilityBucket);
+      return null;
+    }
+
+    const execution = await withSpan(
+      "combo.internal_clearing.execute",
+      {
+        "combo.id": session.id,
+        "compatibility_bucket": roundPlan.compatibilityBucket,
+        "participant_count": roundPlan.selectedGroup.participantIds.length,
+        "liquidity_source": LiquiditySource.INTERNAL_CLEARING
+      },
+      async (executeSpan) => {
+        const executor = this.requirePhase2BCollaborators().multiPartyClearingExecutor;
+        const result = await executor.execute(roundPlan);
+        executeSpan.setAttribute("clearing_round_id", result.clearingRoundId);
+        executeSpan.setAttribute("residual_leg_count", result.residuals.length);
+        return result;
+      }
+    );
+
+    const refreshedSession = await this.comboRepo.getSession(session.id);
+    if (!refreshedSession) {
+      throw new Error("Session disappeared after internal clearing.");
+    }
+
+    const residualSession = this.sessionToResidualOnly(refreshedSession);
+    if (residualSession.legs.length === 0) {
+      clearingRoundSuccessTotal.inc();
+      return {
+        kind: "internal_cleared",
+        execution,
+        residualSession
+      };
+    }
+
+    clearingRoundPartialTotal.inc();
+    await this.phase2BDeps.phase2bCandidateRegistry?.unregisterEntity(session.id, roundPlan.compatibilityBucket);
+    return {
+      kind: "partial_cleared",
+      execution,
+      residualSession
+    };
+  }
+
+  private async planInternalClearingRound(
+    session: ComboRFQSession,
+    options: { registerCurrentEntity: boolean; unregisterAfterPlanning: boolean }
+  ) {
+    const { residualVectorBuilder, phase2bCandidateRegistry, clearingRoundPlanner } = this.requirePhase2BCollaborators();
+    const residualVector = residualVectorBuilder.build(this.toResidualVectorEntity(session));
+
+    if (options.registerCurrentEntity) {
+      await phase2bCandidateRegistry.registerEntity(residualVector);
+    }
+
+    const plan = await clearingRoundPlanner.plan(residualVector.compatibilityBucket);
+    if (options.unregisterAfterPlanning) {
+      await phase2bCandidateRegistry.unregisterEntity(session.id, residualVector.compatibilityBucket);
+    }
+    if (!plan) {
+      if (!options.unregisterAfterPlanning) {
+        await phase2bCandidateRegistry.unregisterEntity(session.id, residualVector.compatibilityBucket);
+      }
+      return null;
+    }
+
+    return plan;
+  }
+
+  private buildAuthoritativeExternalClearingDecision(
+    session: ComboRFQSession
+  ): InternalClearingShadowDecision {
+    return {
+      outcome: "no_clear",
+      residualLegCount: session.legs.length,
+      participantCount: 1
+    };
+  }
+
+  private buildInternalClearingShadowDecision(
+    roundPlan: Awaited<ReturnType<IClearingRoundPlanner["plan"]>> | null,
+    session: ComboRFQSession
+  ): InternalClearingShadowDecision {
+    if (!roundPlan || !roundPlan.selectedGroup.participantIds.includes(session.id)) {
+      return {
+        outcome: "no_clear",
+        residualLegCount: session.legs.length,
+        participantCount: 1
+      };
+    }
+
+    const residualLegCount = roundPlan.residuals.length;
+    return {
+      outcome: residualLegCount === 0 ? "full_clear" : "partial_clear",
+      residualLegCount,
+      participantCount: roundPlan.selectedGroup.participantIds.length
+    };
+  }
+
+  private requirePhase2BCollaborators(): Required<ComboEnginePhase2BDeps> {
+    const {
+      residualVectorBuilder,
+      phase2bCandidateRegistry,
+      clearingRoundPlanner,
+      multiPartyClearingExecutor
+    } = this.phase2BDeps;
+
+    if (!residualVectorBuilder || !phase2bCandidateRegistry || !clearingRoundPlanner || !multiPartyClearingExecutor) {
+      throw new Error("phase2b_clearing_dependencies_missing");
+    }
+
+    return {
+      residualVectorBuilder,
+      phase2bCandidateRegistry,
+      clearingRoundPlanner,
+      multiPartyClearingExecutor
+    };
+  }
+
+  private toResidualVectorEntity(session: ComboRFQSession): ResidualVectorEntity {
+    return {
+      entityId: session.id,
+      userId: session.userId,
+      legs: session.legs.map((leg) => ({
+        id: leg.id,
+        canonicalMarketId: leg.canonicalMarketId,
+        canonicalOutcomeId: leg.canonicalOutcomeId,
+        side: leg.side,
+        remainingSize: leg.remainingSize ?? leg.quantity,
+        ...(leg.metadata ? { metadata: leg.metadata } : {})
+      }))
+    };
+  }
+
+  private sessionToResidualOnly(session: ComboRFQSession): ComboRFQSession {
+    return {
+      ...session,
+      legs: session.legs.filter((leg) => Number(leg.remainingSize ?? leg.quantity) > 0)
+    };
+  }
+
+  private resolveResidualLiquiditySource(
+    nettingResult: Awaited<ReturnType<IMultiLegInternalNettingEngine["attemptNet"]>>,
+    clearingResult: InternalClearingExecutionOutcome | null
+  ): LiquiditySource {
+    if (clearingResult) {
+      return LiquiditySource.INTERNAL_CLEARING;
+    }
+    if (Number(nettingResult.nettedSize) > 0) {
+      return LiquiditySource.INTERNAL_NETTING;
+    }
+    return LiquiditySource.LP;
   }
 
   private applyResidualLegsToSession(

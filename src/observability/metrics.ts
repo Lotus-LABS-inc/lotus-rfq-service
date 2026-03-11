@@ -302,6 +302,64 @@ export const comboInternalNetEnabledState = new Gauge({
   ...gaugeConfig
 });
 
+export const clearingRoundAttemptsTotal = new Counter({
+  name: "clearing_round_attempts_total",
+  help: "Total number of authoritative Phase 2B clearing round attempts.",
+  ...counterConfig
+});
+
+export const clearingRoundSuccessTotal = new Counter({
+  name: "clearing_round_success_total",
+  help: "Total number of Phase 2B clearing rounds that fully satisfied the current entity.",
+  ...counterConfig
+});
+
+export const clearingRoundPartialTotal = new Counter({
+  name: "clearing_round_partial_total",
+  help: "Total number of Phase 2B clearing rounds that partially satisfied the current entity.",
+  ...counterConfig
+});
+
+export const clearingResidualRoutedTotal = new Counter({
+  name: "clearing_residual_routed_total",
+  help: "Total number of Phase 2B clearing attempts whose residual was routed externally.",
+  ...counterConfig
+});
+
+export const comboInternalClearingKillSwitchTotal = new Counter({
+  name: "combo_internal_clearing_kill_switch_total",
+  help: "Total number of combo internal-clearing suppressions due to kill switch.",
+  labelNames: ["mode"],
+  ...counterConfig
+});
+
+export const comboInternalClearingShadowTotal = new Counter({
+  name: "combo_internal_clearing_shadow_total",
+  help: "Total combo internal-clearing shadow or canary evaluations.",
+  labelNames: ["mode", "sampled"],
+  ...counterConfig
+});
+
+export const comboInternalClearingShadowMatchTotal = new Counter({
+  name: "combo_internal_clearing_shadow_match_total",
+  help: "Total matching combo internal-clearing shadow comparisons.",
+  labelNames: ["dimension"],
+  ...counterConfig
+});
+
+export const comboInternalClearingShadowDivergenceTotal = new Counter({
+  name: "combo_internal_clearing_shadow_divergence_total",
+  help: "Total divergent combo internal-clearing shadow comparisons.",
+  labelNames: ["reason"],
+  ...counterConfig
+});
+
+export const comboInternalClearingEnabledState = new Gauge({
+  name: "combo_internal_clearing_enabled_state",
+  help: "Current runtime combo internal-clearing enablement state (1 enabled, 0 disabled).",
+  ...gaugeConfig
+});
+
 // ─── Combo Engine Histograms ──────────────────────────────────────────────────
 
 export const comboRankingDurationMs = new Histogram({

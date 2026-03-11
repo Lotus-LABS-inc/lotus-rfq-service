@@ -16,6 +16,10 @@ describe("ComboEngine Core Behaviors", () => {
     let canonicalClientMock: any;
     let executionRouterMock: any;
     let redisMock: any;
+    let residualVectorBuilderMock: any;
+    let phase2bCandidateRegistryMock: any;
+    let clearingRoundPlannerMock: any;
+    let multiPartyClearingExecutorMock: any;
 
     beforeEach(() => {
         comboRepoMock = {
@@ -61,6 +65,28 @@ describe("ComboEngine Core Behaviors", () => {
         executionRouterMock = {
             executePlan: vi.fn().mockResolvedValue({ status: "COMPLETED" })
         };
+        residualVectorBuilderMock = {
+            build: vi.fn().mockReturnValue({
+                entityId: "session-1",
+                userId: "user-1",
+                compatibilityBucket: "u|e|s|r",
+                vector: { "m1:o1": "4" },
+                legCount: 1,
+                grossAbsSize: "4"
+            })
+        };
+        phase2bCandidateRegistryMock = {
+            registerEntity: vi.fn(),
+            unregisterEntity: vi.fn(),
+            listBucketEntities: vi.fn(),
+            getEntitySnapshot: vi.fn()
+        };
+        clearingRoundPlannerMock = {
+            plan: vi.fn().mockResolvedValue(null)
+        };
+        multiPartyClearingExecutorMock = {
+            execute: vi.fn()
+        };
         redisMock = {
             get: vi.fn().mockResolvedValue(null),
             hset: vi.fn(),
@@ -81,7 +107,13 @@ describe("ComboEngine Core Behaviors", () => {
             executionRouterMock,
             redisMock,
             mockLogger,
-            { internalNettingEnabled: true }
+            { internalNettingEnabled: true },
+            {
+                residualVectorBuilder: residualVectorBuilderMock,
+                phase2bCandidateRegistry: phase2bCandidateRegistryMock,
+                clearingRoundPlanner: clearingRoundPlannerMock,
+                multiPartyClearingExecutor: multiPartyClearingExecutorMock
+            }
         );
     });
 
@@ -394,6 +426,692 @@ describe("ComboEngine Core Behaviors", () => {
             comboId: "session-canary",
             nettingGroupIds: ["group-canary"],
             nettedSize: "10"
+        });
+    });
+
+    it("returns internal_cleared when Phase 2B fully clears the residual", async () => {
+        const session = {
+            id: "session-clear",
+            expiresAt: new Date(Date.now() + 60000),
+            state: "OPEN",
+            acceptancePolicy: AcceptancePolicy.ALL_OR_NONE,
+            userId: "user-1",
+            legs: [
+                {
+                    id: "leg-1",
+                    canonicalMarketId: "m1",
+                    canonicalOutcomeId: "o1",
+                    side: "buy",
+                    quantity: "10",
+                    remainingSize: "10",
+                    metadata: {
+                        resolutionUniverse: "u",
+                        expiryClass: "e",
+                        settlementModel: "s",
+                        resolutionRuleClass: "r"
+                    }
+                }
+            ],
+            createdAt: new Date("2026-03-10T12:00:00.000Z")
+        };
+        comboRepoMock.getSession
+            .mockResolvedValueOnce(session)
+            .mockResolvedValueOnce(session)
+            .mockResolvedValueOnce({ ...session, state: "EXECUTED", legs: [] });
+        quoteRepoMock.getQuotesForSession.mockResolvedValue([{ id: "quote-1", effectiveCost: "50" }]);
+        multiLegInternalNettingEngineMock.attemptNet.mockResolvedValue({
+            nettedSize: "0",
+            residualLegs: session.legs,
+            residualRemaining: true,
+            nettingGroupIds: [],
+            eventsWritten: 0
+        });
+        clearingRoundPlannerMock.plan.mockResolvedValue({
+            compatibilityBucket: "u|e|s|r",
+            selectedGroup: {
+                participantIds: ["session-clear", "combo-b"],
+                uniqueLegs: ["m1:o1"],
+                estimatedCompressionScore: "1",
+                residualAfterNetting: [],
+                exactnessScore: "1"
+            },
+            score: {
+                compressionScore: "10",
+                preNetAbsExposure: "10",
+                postNetAbsResidual: "0",
+                residualVectorByParticipant: {},
+                rankingPenalty: "1",
+                finalScore: "9",
+                tieBreak: {
+                    smallestResidual: "0",
+                    oldestParticipantAt: "2026-03-10T12:00:00.000Z",
+                    participantCount: 2
+                }
+            },
+            residuals: [],
+            participantLockOrder: ["combo-b", "session-clear"].sort()
+        });
+        multiPartyClearingExecutorMock.execute.mockResolvedValue({
+            replayed: false,
+            applied: true,
+            clearingRoundId: "round-1",
+            compatibilityBucket: "u|e|s|r",
+            participantSetHash: "set-hash",
+            matchSignatureHash: "sig-hash",
+            residuals: [],
+            participantLockOrder: ["combo-b", "session-clear"].sort(),
+            updatedParticipantIds: ["combo-b", "session-clear"].sort(),
+            participants: [
+                {
+                    entityId: "session-clear",
+                    userId: "user-1",
+                    state: "EXECUTED",
+                    originalRemaining: { "m1:o1": "10" },
+                    matchedRemaining: { "m1:o1": "10" },
+                    residualRemaining: {}
+                }
+            ],
+            eventCount: 1
+        });
+
+        engine = new ComboEngine(
+            comboRepoMock,
+            quoteRepoMock,
+            normalizerMock,
+            planBuilderMock,
+            multiLegInternalNettingEngineMock,
+            riskEngineMock,
+            canonicalClientMock,
+            executionRouterMock,
+            redisMock,
+            mockLogger,
+            { internalNettingEnabled: true, internalClearingEnabled: true },
+            {
+                residualVectorBuilder: residualVectorBuilderMock,
+                phase2bCandidateRegistry: phase2bCandidateRegistryMock,
+                clearingRoundPlanner: clearingRoundPlannerMock,
+                multiPartyClearingExecutor: multiPartyClearingExecutorMock
+            }
+        );
+
+        const result = await engine.acceptCombo("session-clear", "quote-1");
+
+        expect(planBuilderMock.buildExecutionPlan).not.toHaveBeenCalled();
+        expect(executionRouterMock.executePlan).not.toHaveBeenCalled();
+        expect(riskEngineMock.rollbackReservation).toHaveBeenCalledWith("reservation-token-123");
+        expect(result).toEqual({
+            kind: "internal_cleared",
+            comboId: "session-clear",
+            clearingRoundId: "round-1",
+            participantSetHash: "set-hash",
+            matchSignatureHash: "sig-hash",
+            clearedParticipantCount: 1
+        });
+    });
+
+    it("leaves Phase 2B authoritative clearing disabled by default and continues on the external path", async () => {
+        const session = {
+            id: "session-phase2b-disabled",
+            expiresAt: new Date(Date.now() + 60000),
+            state: "OPEN",
+            acceptancePolicy: AcceptancePolicy.ALL_OR_NONE,
+            userId: "user-1",
+            legs: [
+                {
+                    id: "leg-1",
+                    canonicalMarketId: "m1",
+                    canonicalOutcomeId: "o1",
+                    side: "buy",
+                    quantity: "10",
+                    remainingSize: "10",
+                    metadata: {
+                        resolutionUniverse: "u",
+                        expiryClass: "e",
+                        settlementModel: "s",
+                        resolutionRuleClass: "r"
+                    }
+                }
+            ],
+            createdAt: new Date("2026-03-10T12:00:00.000Z")
+        };
+        comboRepoMock.getSession.mockResolvedValue(session);
+        quoteRepoMock.getQuotesForSession.mockResolvedValue([{ id: "quote-1", effectiveCost: "50" }]);
+        const mockPlan = { id: "plan-phase2b-disabled", steps: [] };
+        planBuilderMock.buildExecutionPlan.mockResolvedValue(mockPlan);
+
+        engine = new ComboEngine(
+            comboRepoMock,
+            quoteRepoMock,
+            normalizerMock,
+            planBuilderMock,
+            multiLegInternalNettingEngineMock,
+            riskEngineMock,
+            canonicalClientMock,
+            executionRouterMock,
+            redisMock,
+            mockLogger,
+            { internalNettingEnabled: true, internalClearingEnabled: false },
+            {
+                residualVectorBuilder: residualVectorBuilderMock,
+                phase2bCandidateRegistry: phase2bCandidateRegistryMock,
+                clearingRoundPlanner: clearingRoundPlannerMock,
+                multiPartyClearingExecutor: multiPartyClearingExecutorMock
+            }
+        );
+
+        const result = await engine.acceptCombo("session-phase2b-disabled", "quote-1");
+
+        expect(clearingRoundPlannerMock.plan).not.toHaveBeenCalled();
+        expect(multiPartyClearingExecutorMock.execute).not.toHaveBeenCalled();
+        expect(planBuilderMock.buildExecutionPlan).toHaveBeenCalledTimes(1);
+        expect(result).toEqual({
+            kind: "external_plan",
+            plan: mockPlan,
+            nettedSize: "0",
+            residualLegCount: 1
+        });
+    });
+
+    it("routes only residual legs after partial Phase 2B clearing", async () => {
+        const initialSession = {
+            id: "session-phase2b",
+            expiresAt: new Date(Date.now() + 60000),
+            state: "OPEN",
+            acceptancePolicy: AcceptancePolicy.ALL_OR_NONE,
+            userId: "user-1",
+            legs: [
+                {
+                    id: "leg-1",
+                    canonicalMarketId: "m1",
+                    canonicalOutcomeId: "o1",
+                    side: "buy",
+                    quantity: "10",
+                    remainingSize: "10",
+                    metadata: {
+                        resolutionUniverse: "u",
+                        expiryClass: "e",
+                        settlementModel: "s",
+                        resolutionRuleClass: "r"
+                    }
+                },
+                {
+                    id: "leg-2",
+                    canonicalMarketId: "m2",
+                    canonicalOutcomeId: "o2",
+                    side: "sell",
+                    quantity: "6",
+                    remainingSize: "6",
+                    metadata: {
+                        resolutionUniverse: "u",
+                        expiryClass: "e",
+                        settlementModel: "s",
+                        resolutionRuleClass: "r"
+                    }
+                }
+            ],
+            createdAt: new Date("2026-03-10T12:00:00.000Z")
+        };
+        const postNettingSession = {
+            ...initialSession,
+            state: "PARTIALLY_EXECUTED",
+            legs: [
+                { ...initialSession.legs[0], remainingSize: "4" },
+                { ...initialSession.legs[1], remainingSize: "6" }
+            ]
+        };
+        const postClearingSession = {
+            ...postNettingSession,
+            legs: [
+                { ...postNettingSession.legs[0], remainingSize: "2" },
+                { ...postNettingSession.legs[1], remainingSize: "0" }
+            ]
+        };
+        comboRepoMock.getSession
+            .mockResolvedValueOnce(initialSession)
+            .mockResolvedValueOnce(postNettingSession)
+            .mockResolvedValueOnce(postClearingSession);
+        quoteRepoMock.getQuotesForSession.mockResolvedValue([{ id: "quote-1", effectiveCost: "50" }]);
+        multiLegInternalNettingEngineMock.attemptNet.mockResolvedValue({
+            nettedSize: "6",
+            residualLegs: [
+                {
+                    id: "leg-1",
+                    canonicalMarketId: "m1",
+                    canonicalOutcomeId: "o1",
+                    side: "buy",
+                    remainingSize: "4"
+                },
+                {
+                    id: "leg-2",
+                    canonicalMarketId: "m2",
+                    canonicalOutcomeId: "o2",
+                    side: "sell",
+                    remainingSize: "6"
+                }
+            ],
+            residualRemaining: true,
+            nettingGroupIds: ["group-1"],
+            eventsWritten: 1
+        });
+        clearingRoundPlannerMock.plan.mockResolvedValue({
+            compatibilityBucket: "u|e|s|r",
+            selectedGroup: {
+                participantIds: ["session-phase2b", "combo-b"],
+                uniqueLegs: ["m1:o1", "m2:o2"],
+                estimatedCompressionScore: "0.75",
+                residualAfterNetting: [{ key: "m1:o1", signedResidual: "2" }],
+                exactnessScore: "0.5"
+            },
+            score: {
+                compressionScore: "8",
+                preNetAbsExposure: "10",
+                postNetAbsResidual: "2",
+                residualVectorByParticipant: {},
+                rankingPenalty: "2",
+                finalScore: "6",
+                tieBreak: {
+                    smallestResidual: "2",
+                    oldestParticipantAt: "2026-03-10T12:00:00.000Z",
+                    participantCount: 2
+                }
+            },
+            residuals: [{ key: "m1:o1", signedResidual: "2" }],
+            participantLockOrder: ["combo-b", "session-phase2b"].sort()
+        });
+        multiPartyClearingExecutorMock.execute.mockResolvedValue({
+            replayed: false,
+            applied: true,
+            clearingRoundId: "round-2",
+            compatibilityBucket: "u|e|s|r",
+            participantSetHash: "set-hash",
+            matchSignatureHash: "sig-hash",
+            residuals: [{ key: "m1:o1", signedResidual: "2" }],
+            participantLockOrder: ["combo-b", "session-phase2b"].sort(),
+            updatedParticipantIds: ["combo-b", "session-phase2b"].sort(),
+            participants: [
+                {
+                    entityId: "session-phase2b",
+                    userId: "user-1",
+                    state: "PARTIALLY_EXECUTED",
+                    originalRemaining: { "m1:o1": "4", "m2:o2": "-6" },
+                    matchedRemaining: { "m1:o1": "2", "m2:o2": "-6" },
+                    residualRemaining: { "m1:o1": "2" }
+                }
+            ],
+            eventCount: 1
+        });
+        const mockPlan = { id: "plan-phase2b", steps: [{ legId: "leg-1", targetSize: "2" }] };
+        planBuilderMock.buildExecutionPlan.mockResolvedValue(mockPlan);
+
+        engine = new ComboEngine(
+            comboRepoMock,
+            quoteRepoMock,
+            normalizerMock,
+            planBuilderMock,
+            multiLegInternalNettingEngineMock,
+            riskEngineMock,
+            canonicalClientMock,
+            executionRouterMock,
+            redisMock,
+            mockLogger,
+            { internalNettingEnabled: true, internalClearingEnabled: true },
+            {
+                residualVectorBuilder: residualVectorBuilderMock,
+                phase2bCandidateRegistry: phase2bCandidateRegistryMock,
+                clearingRoundPlanner: clearingRoundPlannerMock,
+                multiPartyClearingExecutor: multiPartyClearingExecutorMock
+            }
+        );
+
+        const result = await engine.acceptCombo("session-phase2b", "quote-1");
+
+        expect(planBuilderMock.buildExecutionPlan).toHaveBeenCalledWith(
+            expect.objectContaining({
+                legs: [
+                    expect.objectContaining({
+                        id: "leg-1",
+                        remainingSize: "2"
+                    })
+                ]
+            }),
+            expect.objectContaining({ id: "quote-1" }),
+            "reservation-token-123",
+            AcceptancePolicy.ALL_OR_NONE
+        );
+        expect(result).toEqual({
+            kind: "external_plan",
+            plan: mockPlan,
+            nettedSize: "6",
+            residualLegCount: 1
+        });
+    });
+
+    it("continues normal external routing when Phase 2B planner returns null", async () => {
+        const session = {
+            id: "session-phase2b-null",
+            expiresAt: new Date(Date.now() + 60000),
+            state: "OPEN",
+            acceptancePolicy: AcceptancePolicy.ALL_OR_NONE,
+            userId: "user-1",
+            legs: [
+                {
+                    id: "leg-1",
+                    canonicalMarketId: "m1",
+                    canonicalOutcomeId: "o1",
+                    side: "buy",
+                    quantity: "10",
+                    remainingSize: "10",
+                    metadata: {
+                        resolutionUniverse: "u",
+                        expiryClass: "e",
+                        settlementModel: "s",
+                        resolutionRuleClass: "r"
+                    }
+                }
+            ],
+            createdAt: new Date("2026-03-10T12:00:00.000Z")
+        };
+        comboRepoMock.getSession.mockResolvedValue(session);
+        quoteRepoMock.getQuotesForSession.mockResolvedValue([{ id: "quote-1", effectiveCost: "50" }]);
+        const mockPlan = { id: "plan-no-clear", steps: [] };
+        planBuilderMock.buildExecutionPlan.mockResolvedValue(mockPlan);
+        clearingRoundPlannerMock.plan.mockResolvedValue(null);
+
+        engine = new ComboEngine(
+            comboRepoMock,
+            quoteRepoMock,
+            normalizerMock,
+            planBuilderMock,
+            multiLegInternalNettingEngineMock,
+            riskEngineMock,
+            canonicalClientMock,
+            executionRouterMock,
+            redisMock,
+            mockLogger,
+            { internalNettingEnabled: true, internalClearingEnabled: true },
+            {
+                residualVectorBuilder: residualVectorBuilderMock,
+                phase2bCandidateRegistry: phase2bCandidateRegistryMock,
+                clearingRoundPlanner: clearingRoundPlannerMock,
+                multiPartyClearingExecutor: multiPartyClearingExecutorMock
+            }
+        );
+
+        await engine.acceptCombo("session-phase2b-null", "quote-1");
+
+        expect(multiPartyClearingExecutorMock.execute).not.toHaveBeenCalled();
+        expect(planBuilderMock.buildExecutionPlan).toHaveBeenCalled();
+    });
+
+    it("skips authoritative Phase 2B clearing when its kill switch is active", async () => {
+        const session = {
+            id: "session-phase2b-kill",
+            expiresAt: new Date(Date.now() + 60000),
+            state: "OPEN",
+            acceptancePolicy: AcceptancePolicy.ALL_OR_NONE,
+            userId: "user-1",
+            legs: [
+                {
+                    id: "leg-1",
+                    canonicalMarketId: "m1",
+                    canonicalOutcomeId: "o1",
+                    side: "buy",
+                    quantity: "10",
+                    remainingSize: "10",
+                    metadata: {
+                        resolutionUniverse: "u",
+                        expiryClass: "e",
+                        settlementModel: "s",
+                        resolutionRuleClass: "r"
+                    }
+                }
+            ],
+            createdAt: new Date("2026-03-10T12:00:00.000Z")
+        };
+        comboRepoMock.getSession.mockResolvedValue(session);
+        quoteRepoMock.getQuotesForSession.mockResolvedValue([{ id: "quote-1", effectiveCost: "50" }]);
+        redisMock.get.mockImplementation(async (key: string) => key === "internal_clearing:kill_switch" ? "true" : null);
+        const mockPlan = { id: "plan-kill", steps: [] };
+        planBuilderMock.buildExecutionPlan.mockResolvedValue(mockPlan);
+
+        engine = new ComboEngine(
+            comboRepoMock,
+            quoteRepoMock,
+            normalizerMock,
+            planBuilderMock,
+            multiLegInternalNettingEngineMock,
+            riskEngineMock,
+            canonicalClientMock,
+            executionRouterMock,
+            redisMock,
+            mockLogger,
+            { internalNettingEnabled: true, internalClearingEnabled: true },
+            {
+                residualVectorBuilder: residualVectorBuilderMock,
+                phase2bCandidateRegistry: phase2bCandidateRegistryMock,
+                clearingRoundPlanner: clearingRoundPlannerMock,
+                multiPartyClearingExecutor: multiPartyClearingExecutorMock
+            }
+        );
+
+        await engine.acceptCombo("session-phase2b-kill", "quote-1");
+
+        expect(clearingRoundPlannerMock.plan).not.toHaveBeenCalled();
+        expect(multiPartyClearingExecutorMock.execute).not.toHaveBeenCalled();
+        expect(planBuilderMock.buildExecutionPlan).toHaveBeenCalled();
+    });
+
+    it("runs Phase 2B shadow evaluation without executor mutation when sampled", async () => {
+        const session = {
+            id: "session-phase2b-shadow",
+            expiresAt: new Date(Date.now() + 60000),
+            state: "OPEN",
+            acceptancePolicy: AcceptancePolicy.ALL_OR_NONE,
+            userId: "user-1",
+            legs: [
+                {
+                    id: "leg-1",
+                    canonicalMarketId: "m1",
+                    canonicalOutcomeId: "o1",
+                    side: "buy",
+                    quantity: "10",
+                    remainingSize: "10",
+                    metadata: {
+                        resolutionUniverse: "u",
+                        expiryClass: "e",
+                        settlementModel: "s",
+                        resolutionRuleClass: "r"
+                    }
+                }
+            ],
+            createdAt: new Date("2026-03-10T12:00:00.000Z")
+        };
+        comboRepoMock.getSession.mockResolvedValue(session);
+        quoteRepoMock.getQuotesForSession.mockResolvedValue([{ id: "quote-1", effectiveCost: "50" }]);
+        const mockPlan = { id: "plan-shadow-clear", steps: [] };
+        planBuilderMock.buildExecutionPlan.mockResolvedValue(mockPlan);
+        clearingRoundPlannerMock.plan.mockResolvedValue({
+            compatibilityBucket: "u|e|s|r",
+            selectedGroup: {
+                participantIds: ["combo-b", "session-phase2b-shadow"].sort(),
+                uniqueLegs: ["m1:o1"],
+                estimatedCompressionScore: "1",
+                residualAfterNetting: [],
+                exactnessScore: "1"
+            },
+            score: {
+                compressionScore: "10",
+                preNetAbsExposure: "10",
+                postNetAbsResidual: "0",
+                residualVectorByParticipant: {},
+                rankingPenalty: "1",
+                finalScore: "9",
+                tieBreak: {
+                    smallestResidual: "0",
+                    oldestParticipantAt: "2026-03-10T12:00:00.000Z",
+                    participantCount: 2
+                }
+            },
+            residuals: [],
+            participantLockOrder: ["combo-b", "session-phase2b-shadow"].sort()
+        });
+
+        engine = new ComboEngine(
+            comboRepoMock,
+            quoteRepoMock,
+            normalizerMock,
+            planBuilderMock,
+            multiLegInternalNettingEngineMock,
+            riskEngineMock,
+            canonicalClientMock,
+            executionRouterMock,
+            redisMock,
+            mockLogger,
+            {
+                internalNettingEnabled: true,
+                internalClearingEnabled: false,
+                internalClearingShadowEnabled: true,
+                internalClearingShadowPercent: 1,
+                now: () => new Date("2026-03-10T12:00:00.000Z")
+            },
+            {
+                residualVectorBuilder: residualVectorBuilderMock,
+                phase2bCandidateRegistry: phase2bCandidateRegistryMock,
+                clearingRoundPlanner: clearingRoundPlannerMock,
+                multiPartyClearingExecutor: multiPartyClearingExecutorMock
+            }
+        );
+
+        await engine.acceptCombo("session-phase2b-shadow", "quote-1");
+
+        expect(clearingRoundPlannerMock.plan).toHaveBeenCalledTimes(1);
+        expect(multiPartyClearingExecutorMock.execute).not.toHaveBeenCalled();
+        expect(planBuilderMock.buildExecutionPlan).toHaveBeenCalledWith(
+            expect.objectContaining({
+                legs: [expect.objectContaining({ id: "leg-1", remainingSize: "10" })]
+            }),
+            expect.objectContaining({ id: "quote-1" }),
+            "reservation-token-123",
+            AcceptancePolicy.ALL_OR_NONE
+        );
+    });
+
+    it("uses Phase 2B canary authority when sampled", async () => {
+        const session = {
+            id: "session-phase2b-canary",
+            expiresAt: new Date(Date.now() + 60000),
+            state: "OPEN",
+            acceptancePolicy: AcceptancePolicy.ALL_OR_NONE,
+            userId: "user-1",
+            legs: [
+                {
+                    id: "leg-1",
+                    canonicalMarketId: "m1",
+                    canonicalOutcomeId: "o1",
+                    side: "buy",
+                    quantity: "10",
+                    remainingSize: "10",
+                    metadata: {
+                        resolutionUniverse: "u",
+                        expiryClass: "e",
+                        settlementModel: "s",
+                        resolutionRuleClass: "r"
+                    }
+                }
+            ],
+            createdAt: new Date("2026-03-10T12:00:00.000Z")
+        };
+        comboRepoMock.getSession
+            .mockResolvedValueOnce(session)
+            .mockResolvedValueOnce(session)
+            .mockResolvedValueOnce({ ...session, state: "EXECUTED", legs: [] });
+        quoteRepoMock.getQuotesForSession.mockResolvedValue([{ id: "quote-1", effectiveCost: "50" }]);
+        clearingRoundPlannerMock.plan.mockResolvedValue({
+            compatibilityBucket: "u|e|s|r",
+            selectedGroup: {
+                participantIds: ["combo-b", "session-phase2b-canary"].sort(),
+                uniqueLegs: ["m1:o1"],
+                estimatedCompressionScore: "1",
+                residualAfterNetting: [],
+                exactnessScore: "1"
+            },
+            score: {
+                compressionScore: "10",
+                preNetAbsExposure: "10",
+                postNetAbsResidual: "0",
+                residualVectorByParticipant: {},
+                rankingPenalty: "1",
+                finalScore: "9",
+                tieBreak: {
+                    smallestResidual: "0",
+                    oldestParticipantAt: "2026-03-10T12:00:00.000Z",
+                    participantCount: 2
+                }
+            },
+            residuals: [],
+            participantLockOrder: ["combo-b", "session-phase2b-canary"].sort()
+        });
+        multiPartyClearingExecutorMock.execute.mockResolvedValue({
+            replayed: false,
+            applied: true,
+            clearingRoundId: "round-canary",
+            compatibilityBucket: "u|e|s|r",
+            participantSetHash: "set-hash",
+            matchSignatureHash: "sig-hash",
+            residuals: [],
+            participantLockOrder: ["combo-b", "session-phase2b-canary"].sort(),
+            updatedParticipantIds: ["combo-b", "session-phase2b-canary"].sort(),
+            participants: [
+                {
+                    entityId: "session-phase2b-canary",
+                    userId: "user-1",
+                    state: "EXECUTED",
+                    originalRemaining: { "m1:o1": "10" },
+                    matchedRemaining: { "m1:o1": "10" },
+                    residualRemaining: {}
+                }
+            ],
+            eventCount: 1
+        });
+
+        engine = new ComboEngine(
+            comboRepoMock,
+            quoteRepoMock,
+            normalizerMock,
+            planBuilderMock,
+            multiLegInternalNettingEngineMock,
+            riskEngineMock,
+            canonicalClientMock,
+            executionRouterMock,
+            redisMock,
+            mockLogger,
+            {
+                internalNettingEnabled: true,
+                internalClearingEnabled: false,
+                internalClearingCanaryEnabled: true,
+                internalClearingCanaryPercent: 1,
+                now: () => new Date("2026-03-10T12:00:00.000Z")
+            },
+            {
+                residualVectorBuilder: residualVectorBuilderMock,
+                phase2bCandidateRegistry: phase2bCandidateRegistryMock,
+                clearingRoundPlanner: clearingRoundPlannerMock,
+                multiPartyClearingExecutor: multiPartyClearingExecutorMock
+            }
+        );
+
+        const result = await engine.acceptCombo("session-phase2b-canary", "quote-1");
+
+        expect(clearingRoundPlannerMock.plan).toHaveBeenCalledTimes(1);
+        expect(multiPartyClearingExecutorMock.execute).toHaveBeenCalledTimes(1);
+        expect(planBuilderMock.buildExecutionPlan).not.toHaveBeenCalled();
+        expect(result).toEqual({
+            kind: "internal_cleared",
+            comboId: "session-phase2b-canary",
+            clearingRoundId: "round-canary",
+            participantSetHash: "set-hash",
+            matchSignatureHash: "sig-hash",
+            clearedParticipantCount: 1
         });
     });
 

@@ -9,10 +9,11 @@ export enum LiquiditySource {
   LP = "LP",
   VENUE = "VENUE",
   INTERNAL_CROSS = "INTERNAL_CROSS",
-  INTERNAL_NETTING = "INTERNAL_NETTING"
+  INTERNAL_NETTING = "INTERNAL_NETTING",
+  INTERNAL_CLEARING = "INTERNAL_CLEARING"
 }
 
-export const LiquiditySourceValues = ["LP", "VENUE", "INTERNAL_CROSS", "INTERNAL_NETTING"] as const;
+export const LiquiditySourceValues = ["LP", "VENUE", "INTERNAL_CROSS", "INTERNAL_NETTING", "INTERNAL_CLEARING"] as const;
 export const LiquiditySourceSchema = z.enum(LiquiditySourceValues);
 export type LiquiditySourceValue = z.infer<typeof LiquiditySourceSchema>;
 

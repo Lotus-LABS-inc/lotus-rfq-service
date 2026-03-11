@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { STPMode } from "../sor/types.js";
 
 /**
  * Valid Acceptance Policies for Combo RFQs.
@@ -94,6 +95,15 @@ export interface ComboAcceptInternalFilledResult {
     nettedSize: string;
 }
 
+export interface ComboAcceptInternalClearedResult {
+    kind: "internal_cleared";
+    comboId: string;
+    clearingRoundId: string;
+    participantSetHash: string;
+    matchSignatureHash: string;
+    clearedParticipantCount: number;
+}
+
 export interface ComboAcceptExternalPlanResult {
     kind: "external_plan";
     plan: import("../execution-plan/execution-plan-builder.js").ExecutionPlan;
@@ -101,7 +111,10 @@ export interface ComboAcceptExternalPlanResult {
     residualLegCount: number;
 }
 
-export type ComboAcceptResult = ComboAcceptInternalFilledResult | ComboAcceptExternalPlanResult;
+export type ComboAcceptResult =
+    | ComboAcceptInternalFilledResult
+    | ComboAcceptInternalClearedResult
+    | ComboAcceptExternalPlanResult;
 
 export type ComboNettingGroupState = "PENDING" | "MATCHED" | "SETTLED" | "FAILED" | "UNWOUND";
 
@@ -243,4 +256,291 @@ export interface ComboNettingUserExposureAggregate {
 export interface ComboNettingExposureAggregationResult {
     userA: ComboNettingUserExposureAggregate;
     userB: ComboNettingUserExposureAggregate;
+}
+
+export type ClearingRoundState = "PENDING" | "MATCHED" | "SETTLED" | "FAILED" | "UNWOUND";
+
+export type ClearingParticipantRole = "INCOMING" | "MATCHED" | "RESIDUAL";
+
+export interface ClearingRound {
+    id: string;
+    compatibilityBucket: string;
+    state: ClearingRoundState;
+    participantCount: number;
+    uniqueLegCount: number;
+    compressionScore: string;
+    participantSetHash: string;
+    matchSignatureHash: string;
+    createdAt: Date;
+}
+
+export interface CreateClearingRoundInput {
+    id?: string;
+    compatibilityBucket: string;
+    state: ClearingRoundState;
+    participantCount: number;
+    uniqueLegCount: number;
+    compressionScore: string;
+    participantSetHash: string;
+    matchSignatureHash: string;
+    createdAt?: Date;
+}
+
+export interface ClearingRoundParticipant {
+    id: string;
+    clearingRoundId: string;
+    comboOrOrderId: string;
+    participantUserId: string;
+    role: ClearingParticipantRole;
+    originalRemaining: Record<string, unknown>;
+    matchedRemaining: Record<string, unknown>;
+    createdAt: Date;
+}
+
+export interface CreateClearingRoundParticipantInput {
+    id?: string;
+    clearingRoundId: string;
+    comboOrOrderId: string;
+    participantUserId: string;
+    role: ClearingParticipantRole;
+    originalRemaining: Record<string, unknown>;
+    matchedRemaining: Record<string, unknown>;
+    createdAt?: Date;
+}
+
+export interface ClearingRoundLegMatch {
+    id: string;
+    clearingRoundId: string;
+    marketId: string;
+    outcomeId: string;
+    participantId: string;
+    signedMatchedSize: string;
+    price: string | null;
+    createdAt: Date;
+}
+
+export interface CreateClearingRoundLegMatchInput {
+    id?: string;
+    clearingRoundId: string;
+    marketId: string;
+    outcomeId: string;
+    participantId: string;
+    signedMatchedSize: string;
+    price?: string | null;
+    createdAt?: Date;
+}
+
+export interface ClearingRoundEvent {
+    id: string;
+    clearingRoundId: string;
+    eventType: string;
+    payload: Record<string, unknown>;
+    createdAt: Date;
+}
+
+export interface CreateClearingRoundEventInput {
+    id?: string;
+    clearingRoundId: string;
+    eventType: string;
+    payload: Record<string, unknown>;
+    createdAt?: Date;
+}
+
+export interface ResidualVectorLeg {
+    id: string;
+    canonicalMarketId: string;
+    canonicalOutcomeId: string;
+    side: "buy" | "sell";
+    remainingSize: string;
+    metadata?: Record<string, unknown>;
+}
+
+export interface ResidualVectorEntity {
+    entityId: string;
+    userId: string;
+    legs: readonly ResidualVectorLeg[];
+}
+
+export interface ResidualVector {
+    entityId: string;
+    userId: string;
+    compatibilityBucket: string;
+    vector: Record<string, string>;
+    legCount: number;
+    grossAbsSize: string;
+}
+
+export interface OverlapGraphNode {
+    entityId: string;
+    userId: string;
+    compatibilityBucket: string;
+    vector: Record<string, string>;
+    legCount: number;
+    grossAbsSize: string;
+}
+
+export interface OverlapGraphOverlapLeg {
+    key: string;
+    signedSizeA: string;
+    signedSizeB: string;
+    offsetSize: string;
+}
+
+export interface OverlapGraphEdge {
+    from: string;
+    to: string;
+    overlapLegs: readonly OverlapGraphOverlapLeg[];
+    compressionPotential: string;
+    exactOppositionScore: string;
+    partialOverlapScore: string;
+}
+
+export interface OverlapGraph {
+    nodes: readonly OverlapGraphNode[];
+    edges: readonly OverlapGraphEdge[];
+}
+
+export interface CandidateGroupEnumeratorConfig {
+    maxParticipants: number;
+    maxUniqueLegs: number;
+    stpMode: STPMode;
+}
+
+export interface CandidateGroupResidual {
+    key: string;
+    signedResidual: string;
+}
+
+export interface CandidateGroup {
+    participantIds: readonly string[];
+    uniqueLegs: readonly string[];
+    estimatedCompressionScore: string;
+    residualAfterNetting: readonly CandidateGroupResidual[];
+    exactnessScore: string;
+}
+
+export interface ScorableResidualVector extends ResidualVector {
+    createdAt: Date | string;
+}
+
+export interface ParticipantResidualVector {
+    entityId: string;
+    vector: Record<string, string>;
+}
+
+export interface ClearingCompressionTieBreak {
+    smallestResidual: string;
+    oldestParticipantAt: string;
+    participantCount: number;
+}
+
+export interface ClearingCompressionScore {
+    compressionScore: string;
+    preNetAbsExposure: string;
+    postNetAbsResidual: string;
+    residualVectorByParticipant: Record<string, ParticipantResidualVector>;
+    rankingPenalty: string;
+    finalScore: string;
+    tieBreak: ClearingCompressionTieBreak;
+}
+
+export interface ClearingRoundPlannerConfig {
+    bucketWindowLimit: number;
+    bucketCursor?: string;
+    maxParticipants: number;
+    maxUniqueLegs: number;
+    stpMode: STPMode;
+}
+
+export interface ClearingRoundPlan {
+    compatibilityBucket: string;
+    selectedGroup: CandidateGroup;
+    score: ClearingCompressionScore;
+    residuals: readonly CandidateGroupResidual[];
+    participantLockOrder: readonly string[];
+}
+
+export interface ClearingExecutionResidual {
+    key: string;
+    signedResidual: string;
+}
+
+export interface ClearingExecutionParticipant {
+    entityId: string;
+    userId: string;
+    state: "EXECUTED" | "PARTIALLY_EXECUTED";
+    originalRemaining: Record<string, string>;
+    matchedRemaining: Record<string, string>;
+    residualRemaining: Record<string, string>;
+}
+
+export interface ClearingMatchSignature {
+    participantSetHash: string;
+    matchSignatureHash: string;
+}
+
+export interface ClearingRoundReplayResult extends ClearingMatchSignature {
+    replayed: true;
+    applied: false;
+    clearingRoundId: string;
+    compatibilityBucket: string;
+    residuals: readonly ClearingExecutionResidual[];
+    participantLockOrder: readonly string[];
+    updatedParticipantIds: readonly string[];
+    participants: readonly ClearingExecutionParticipant[];
+    eventCount: number;
+}
+
+export interface ClearingRoundExecutionAppliedResult extends ClearingMatchSignature {
+    replayed: false;
+    applied: true;
+    clearingRoundId: string;
+    compatibilityBucket: string;
+    residuals: readonly ClearingExecutionResidual[];
+    participantLockOrder: readonly string[];
+    updatedParticipantIds: readonly string[];
+    participants: readonly ClearingExecutionParticipant[];
+    eventCount: number;
+}
+
+export type ClearingRoundExecutionResult =
+    | ClearingRoundReplayResult
+    | ClearingRoundExecutionAppliedResult;
+
+export interface MultiPartyExposureAggregationLeg {
+    participantId: string;
+    userId: string;
+    legId: string;
+    marketId: string;
+    outcomeId: string;
+    side: "buy" | "sell";
+    price: string;
+    matchedSize: string;
+}
+
+export interface MultiPartyExposureAggregationInput {
+    matchedLegAllocations: readonly MultiPartyExposureAggregationLeg[];
+}
+
+export interface MultiPartyPerLegExposureDelta {
+    legId: string;
+    marketId: string;
+    outcomeId: string;
+    side: "buy" | "sell";
+    price: string;
+    matchedSize: string;
+    maxLossDelta: string;
+    maxGainDelta: string;
+}
+
+export interface MultiPartyParticipantExposureDelta {
+    participantId: string;
+    userId: string;
+    maxLossDelta: string;
+    maxGainDelta: string;
+    perLegDeltas: readonly MultiPartyPerLegExposureDelta[];
+}
+
+export interface MultiPartyExposureAggregationResult {
+    participantExposureDeltas: readonly MultiPartyParticipantExposureDelta[];
 }

@@ -35,6 +35,8 @@ import { registerAdminInternalCrossRoutes } from "./admin/internal-cross.routes.
 import { InternalCrossAdminService } from "./admin/internal-cross-admin-service.js";
 import { registerAdminInternalNettingRoutes } from "./admin/internal-netting.routes.js";
 import { InternalNettingAdminService } from "./admin/internal-netting-admin-service.js";
+import { registerAdminInternalClearingRoutes } from "./admin/internal-clearing.routes.js";
+import { InternalClearingAdminService } from "./admin/internal-clearing-admin-service.js";
 import { CostModel, OrderRouter, PlanComposer, PlanRunner, RouteScout, Splitter, type SORAcceptancePolicy, type CanonicalRFQInput } from "../core/sor/index.js";
 import {
   compareShadowDecisions,
@@ -84,6 +86,15 @@ export interface ServerDependencies {
   internalNettingCanaryPercent?: number;
   internalNettingCanaryStartAt?: string;
   internalNettingCanaryEndAt?: string;
+  internalClearingEnabled?: boolean;
+  internalClearingShadowEnabled?: boolean;
+  internalClearingShadowPercent?: number;
+  internalClearingShadowStartAt?: string;
+  internalClearingShadowEndAt?: string;
+  internalClearingCanaryEnabled?: boolean;
+  internalClearingCanaryPercent?: number;
+  internalClearingCanaryStartAt?: string;
+  internalClearingCanaryEndAt?: string;
   reliabilityWeight: number;
   latencyWeight: number;
   failureWeight: number;
@@ -678,6 +689,13 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   });
   await registerAdminInternalNettingRoutes(app, adminAuthMiddleware, {
     internalNettingAdminService: new InternalNettingAdminService({
+      pool: dependencies.pgPool,
+      redis: dependencies.redisClient,
+      logger: dependencies.logger
+    })
+  });
+  await registerAdminInternalClearingRoutes(app, adminAuthMiddleware, {
+    internalClearingAdminService: new InternalClearingAdminService({
       pool: dependencies.pgPool,
       redis: dependencies.redisClient,
       logger: dependencies.logger
