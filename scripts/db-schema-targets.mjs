@@ -29,6 +29,10 @@ export const requiredTables = [
   "clearing_round_events",
   "replay_envelopes",
   "replay_runs",
+  "strategy_qualification_runs",
+  "strategy_decision_evaluations",
+  "strategy_promotion_events",
+  "auto_safety_actions",
   "control_plane_overrides",
   "control_plane_audit_events",
   "planner_shard_state",
@@ -41,6 +45,10 @@ export const requiredTables = [
   "internal_cross_unwind_tasks",
   "internal_netting_admin_events",
   "internal_netting_unwind_tasks"
+];
+
+export const requiredMaterializedViews = [
+  "qualification_metrics_rollup"
 ];
 
 export const requiredIndexes = [
@@ -78,6 +86,29 @@ export const requiredIndexes = [
   "idx_replay_runs_mode",
   "idx_replay_runs_result_status",
   "idx_replay_runs_created_at",
+  "idx_strategy_qualification_runs_strategy_key",
+  "idx_strategy_qualification_runs_scope",
+  "idx_strategy_qualification_runs_stage",
+  "idx_strategy_qualification_runs_status",
+  "idx_strategy_qualification_runs_started_at",
+  "idx_strategy_qualification_runs_engine_version",
+  "idx_strategy_qualification_runs_config_version",
+  "idx_strategy_decision_evaluations_qualification_run_id",
+  "idx_strategy_decision_evaluations_decision_type",
+  "idx_strategy_decision_evaluations_entity_id",
+  "idx_strategy_decision_evaluations_replay_envelope_id",
+  "idx_strategy_decision_evaluations_created_at",
+  "idx_strategy_promotion_events_strategy_key",
+  "idx_strategy_promotion_events_scope",
+  "idx_strategy_promotion_events_created_at",
+  "idx_auto_safety_actions_strategy_key",
+  "idx_auto_safety_actions_scope",
+  "idx_auto_safety_actions_action_type",
+  "idx_auto_safety_actions_resolved_at",
+  "idx_auto_safety_actions_created_at",
+  "idx_qualification_metrics_rollup_grouping",
+  "idx_qualification_metrics_rollup_strategy_scope",
+  "idx_qualification_metrics_rollup_stage_market",
   "idx_control_plane_overrides_scope",
   "idx_control_plane_overrides_override_type",
   "idx_control_plane_overrides_created_at",

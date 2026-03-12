@@ -106,7 +106,24 @@ describe("InternalCrossingEngine", () => {
       connect: vi.fn().mockResolvedValue(client)
     };
     const logger = makeLogger();
-    const engine = new InternalCrossingEngine(pool as Pool, orderBook as OrderBook, orderLocker as OrderLocker, logger as Logger);
+    const qualificationHook = {
+      emitEvaluation: vi.fn(async () => null)
+    };
+    const engine = new InternalCrossingEngine(
+      pool as Pool,
+      orderBook as OrderBook,
+      orderLocker as OrderLocker,
+      logger as Logger,
+      undefined,
+      undefined,
+      undefined,
+      qualificationHook as never,
+      {
+        enabled: true,
+        strategyKey: "strategy.internal-cross",
+        failMode: "INLINE_BEST_EFFORT"
+      }
+    );
 
     const result = await engine.attemptCross(makeIncomingOrder());
 
@@ -143,6 +160,14 @@ describe("InternalCrossingEngine", () => {
     expect(Number(takerPayload.maxGainDelta)).toBeCloseTo(4, 8);
     expect(Number(makerPayload.maxLossDelta)).toBeCloseTo(4, 8);
     expect(Number(makerPayload.maxGainDelta)).toBeCloseTo(6, 8);
+    expect(qualificationHook.emitEvaluation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        strategyKey: "strategy.internal-cross",
+        scopeType: "MARKET",
+        decisionType: "PHASE1_INTERNAL_CROSS_CHANGE",
+        entityId: "taker-order-1"
+      })
+    );
   });
 
   it("fully fills a maker and removes it from the redis book", async () => {

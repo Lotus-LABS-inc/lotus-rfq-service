@@ -62,6 +62,7 @@ describe("ClearingRoundPlanner", () => {
   let candidateGroupEnumerator: ICandidateGroupEnumerator;
   let clearingCompressionScorer: IClearingCompressionScorer;
   let planner: ClearingRoundPlanner;
+  let qualificationHook: { emitEvaluation: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     candidateRegistry = {
@@ -82,11 +83,31 @@ describe("ClearingRoundPlanner", () => {
     clearingCompressionScorer = {
       score: vi.fn()
     };
+    qualificationHook = {
+      emitEvaluation: vi.fn(async () => null)
+    };
     planner = new ClearingRoundPlanner(
       candidateRegistry,
       overlapGraphBuilder,
       candidateGroupEnumerator,
-      clearingCompressionScorer
+      clearingCompressionScorer,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "clearing-phase2b-main",
+      undefined,
+      undefined,
+      undefined,
+      qualificationHook as never,
+      {
+        enabled: true,
+        strategyKey: "strategy.phase2b",
+        failMode: "INLINE_BEST_EFFORT"
+      }
     );
   });
 
@@ -127,6 +148,14 @@ describe("ClearingRoundPlanner", () => {
 
     expect(first).toEqual(second);
     expect(first?.participantLockOrder).toEqual(["a", "b"]);
+    expect(qualificationHook.emitEvaluation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        strategyKey: "strategy.phase2b",
+        scopeType: "BUCKET",
+        scopeId: "bucket-1",
+        decisionType: "PHASE2B_CLEARING_STRATEGY_CHANGE"
+      })
+    );
   });
 
   it("returns null when bucket is empty", async () => {

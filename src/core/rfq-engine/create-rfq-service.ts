@@ -19,8 +19,12 @@ import type { IResolutionRiskGroupingService } from "./resolution-risk-grouping-
 import type { ResolutionRiskVenueGrouping } from "./resolution-risk.types.js";
 import type { IResolutionRiskPolicyService } from "./resolution-risk-policy-service.js";
 import type { IReplayDecisionCaptureService } from "../replay/replay-decision-capture-service.js";
-import type { ReplayCaptureConfig } from "../replay/replay.types.js";
+import type { ReplayCaptureConfig, ReplayEnvelope } from "../replay/replay.types.js";
 import { RFQGroupingSnapshotBuilder } from "../replay/builders/rfq-grouping-snapshot-builder.js";
+import type {
+  IQualificationRuntimeHook,
+  QualificationDomainHookConfig
+} from "../qualification/runtime-qualification-hook.js";
 
 export interface CreateRFQCommand {
   canonicalMarketId: string;
@@ -51,6 +55,8 @@ export interface CreateRFQServiceDependencies {
   resolutionRiskPolicyService?: IResolutionRiskPolicyService;
   replayDecisionCaptureService?: IReplayDecisionCaptureService;
   replayCaptureConfig?: ReplayCaptureConfig;
+  qualificationHook?: IQualificationRuntimeHook;
+  qualificationConfig?: QualificationDomainHookConfig;
 }
 
 export class MarketInactiveError extends Error {
@@ -109,8 +115,9 @@ export class CreateRFQService {
         const resolutionRiskGrouping = resolutionRiskPolicy?.grouping ?? rawResolutionRiskGrouping;
         const resolutionRiskShadowGrouping = resolutionRiskPolicy?.shadowGrouping;
 
-        if (this.deps.replayDecisionCaptureService && this.deps.replayCaptureConfig) {
-          await this.deps.replayDecisionCaptureService.capture({
+        const replayEnvelope: ReplayEnvelope | null =
+          this.deps.replayDecisionCaptureService && this.deps.replayCaptureConfig
+            ? await this.deps.replayDecisionCaptureService.capture({
             config: this.deps.replayCaptureConfig,
             buildEnvelope: (metadata) =>
               this.replaySnapshotBuilder.build({
@@ -123,8 +130,8 @@ export class CreateRFQService {
                 pairGenerationOrder: rawResolutionRiskGroupingTrace.pairGenerationOrder,
                 grouping: resolutionRiskGrouping as unknown as Record<string, unknown>
               })
-          });
-        }
+            })
+            : null;
 
         try {
           await this.deps.riskEngine.validateRFQCreation({
@@ -278,6 +285,37 @@ export class CreateRFQService {
           recordResolutionGroupingMetrics(resolutionRiskGrouping);
         }
         activeRFQSessions.inc();
+
+        if (this.deps.qualificationHook && this.deps.qualificationConfig?.enabled) {
+          const liveDecision = {
+            safePools: resolutionRiskGrouping.safePools.map((lane) => [...lane]),
+            cautionLanes: resolutionRiskGrouping.cautionLanes.map((lane) => [...lane]),
+            blockedProfiles: [...resolutionRiskGrouping.blockedProfiles]
+          };
+          const shadowGrouping = resolutionRiskShadowGrouping ?? resolutionRiskGrouping;
+          const shadowDecision = {
+            safePools: shadowGrouping.safePools.map((lane) => [...lane]),
+            cautionLanes: shadowGrouping.cautionLanes.map((lane) => [...lane]),
+            blockedProfiles: [...shadowGrouping.blockedProfiles]
+          };
+          await this.deps.qualificationHook.emitEvaluation({
+            strategyKey: this.deps.qualificationConfig.strategyKey,
+            scopeType: "EVENT",
+            scopeId: canonicalEventId,
+            decisionType: "RFQ_GROUPING_CHANGE",
+            entityId: session.id,
+            replayEnvelopeId: replayEnvelope?.id ?? null,
+            mode: resolutionRiskShadowGrouping ? "shadow_compare" : "live_only",
+            ...(this.deps.qualificationConfig.failMode ? { failMode: this.deps.qualificationConfig.failMode } : {}),
+            liveDecision: () => liveDecision,
+            shadowDecision: () => shadowDecision,
+            metadata: {
+              marketId: command.canonicalMarketId,
+              canonicalEventId,
+              policyMode: resolutionRiskPolicy?.mode ?? "enabled"
+            }
+          });
+        }
 
         return {
           sessionId: session.id,

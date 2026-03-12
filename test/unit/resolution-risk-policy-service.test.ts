@@ -173,4 +173,43 @@ describe("ResolutionRiskPolicyService", () => {
         const shadowMatches = await resolutionRiskShadowMatchTotal.get();
         expect(shadowMatches.values).toHaveLength(0);
     });
+
+    it("emits qualification evaluations for shadowed SOR threshold decisions", async () => {
+        const qualificationHook = {
+            emitEvaluation: vi.fn(async () => null)
+        };
+        const service = new ResolutionRiskPolicyService({
+            enabled: false,
+            shadowEnabled: true,
+            shadowPercent: 1,
+            now: () => new Date("2026-03-11T12:00:00.000Z"),
+            qualificationHook,
+            qualificationConfig: {
+                enabled: true,
+                strategyKey: "strategy.resolution-risk",
+                failMode: "ASYNC_BEST_EFFORT"
+            }
+        });
+
+        service.evaluateSORDecision({
+            stableKey: "sor-shadow-qualification-1",
+            intendedDecision: "blocked",
+            reason: "resolution_risk_do_not_pool",
+            equivalenceClass: "DO_NOT_POOL",
+            canonicalEventId: "event-shadow-qualification-1"
+        });
+
+        await Promise.resolve();
+
+        expect(qualificationHook.emitEvaluation).toHaveBeenCalledWith(
+            expect.objectContaining({
+                strategyKey: "strategy.resolution-risk",
+                scopeType: "EVENT",
+                scopeId: "event-shadow-qualification-1",
+                decisionType: "RESOLUTION_RISK_THRESHOLD_CHANGE",
+                entityId: "sor-shadow-qualification-1",
+                mode: "shadow_compare"
+            })
+        );
+    });
 });

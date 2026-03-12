@@ -32,7 +32,7 @@ import type { InternalOrder } from "../internal-engine/types.js";
 import type { IResolutionRiskReadService } from "../rfq-engine/resolution-risk-read-service.js";
 import type { IResolutionRiskPolicyService } from "../rfq-engine/resolution-risk-policy-service.js";
 import type { IReplayDecisionCaptureService } from "../replay/replay-decision-capture-service.js";
-import type { ReplayCaptureConfig, ReplaySplitEligibilitySnapshot } from "../replay/replay.types.js";
+import type { ReplayCaptureConfig, ReplayEnvelope, ReplaySplitEligibilitySnapshot } from "../replay/replay.types.js";
 import { SORSnapshotBuilder } from "../replay/builders/sor-snapshot-builder.js";
 import type { PerformanceGuardrailConfig } from "../../guardrails/guardrail-config.js";
 import type { IGuardrailEvaluator } from "../../guardrails/guardrail-evaluator.js";
@@ -54,6 +54,11 @@ import {
   resolutionRiskCandidatePairKey,
   type ResolutionRiskRoutingDecision
 } from "./resolution-risk-routing-policy.js";
+import type {
+  IQualificationRuntimeHook,
+  QualificationDomainHookConfig
+} from "../qualification/runtime-qualification-hook.js";
+import type { SORDecisionOutput } from "../qualification/shadow-qualification-evaluator.js";
 
 const DEFAULT_MIN_CHUNK = 0.000001;
 const DEFAULT_TICK_SIZE = 0.000001;
@@ -91,6 +96,16 @@ export interface OrderRouterDependencies {
   controlPlaneShardId?: string;
   guardrailEnforcementMode?: GuardrailEnforcementMode;
   phase3AGuardrailShadowResolver?: IPhase3AGuardrailShadowResolver;
+  qualificationHook?: IQualificationRuntimeHook;
+  qualificationConfig?: QualificationDomainHookConfig;
+  qualificationShadowDecisionBuilder?: (input: {
+    rfq: CanonicalRFQInput;
+    selectedQuote: SelectedQuoteInput;
+    policy: SORAcceptancePolicy;
+    routeCandidates: readonly import("./types.js").RouteCandidate[];
+    scoredCandidates: readonly CandidateScore[];
+    allocations: readonly SplitAllocation[];
+  }) => Promise<SORDecisionOutput> | SORDecisionOutput;
 }
 
 
@@ -128,7 +143,7 @@ export class OrderRouter implements IOrderRouter {
             filledSize: crossResult.filledSize,
             trades: crossResult.trades
           };
-          await this.captureReplayDecision({
+          const replayEnvelope = await this.captureReplayDecision({
             rfqId: rfq.rfqId,
             rfq,
             selectedQuote,
@@ -227,7 +242,7 @@ export class OrderRouter implements IOrderRouter {
           plan
         };
 
-        await this.captureReplayDecision({
+        const replayEnvelope = await this.captureReplayDecision({
           rfqId: rfq.rfqId,
           rfq: residualRFQ,
           selectedQuote: residualQuote,
@@ -245,6 +260,16 @@ export class OrderRouter implements IOrderRouter {
           candidateOrdering: routeCandidates.map((candidate) => candidate.id),
           splitEligibilityDecisions: allocationResult.splitEligibilityDecisions,
           buildResult: planCreatedResult as unknown as Record<string, unknown>
+        });
+
+        await this.emitQualificationEvaluation({
+          rfq: residualRFQ,
+          selectedQuote: residualQuote,
+          policy,
+          routeCandidates,
+          scoredCandidates,
+          allocations,
+          replayEnvelopeId: replayEnvelope?.id ?? null
         });
 
         return {
@@ -728,12 +753,12 @@ export class OrderRouter implements IOrderRouter {
     candidateOrdering: readonly string[];
     splitEligibilityDecisions: readonly ReplaySplitEligibilitySnapshot[];
     buildResult: Record<string, unknown>;
-  }): Promise<void> {
+  }): Promise<ReplayEnvelope | null> {
     if (!this.deps.replayDecisionCaptureService || !this.deps.replayCaptureConfig) {
-      return;
+      return null;
     }
 
-    await this.deps.replayDecisionCaptureService.capture({
+    return this.deps.replayDecisionCaptureService.capture({
       config: this.deps.replayCaptureConfig,
       buildEnvelope: (metadata) =>
         this.replaySnapshotBuilder.build({
@@ -742,6 +767,61 @@ export class OrderRouter implements IOrderRouter {
           ...input
         })
     });
+  }
+
+  private async emitQualificationEvaluation(input: {
+    rfq: CanonicalRFQInput;
+    selectedQuote: SelectedQuoteInput;
+    policy: SORAcceptancePolicy;
+    routeCandidates: readonly import("./types.js").RouteCandidate[];
+    scoredCandidates: readonly CandidateScore[];
+    allocations: readonly SplitAllocation[];
+    replayEnvelopeId: string | null;
+  }): Promise<void> {
+    if (!this.deps.qualificationHook || !this.deps.qualificationConfig?.enabled) {
+      return;
+    }
+
+    const liveDecision = this.toSORDecisionOutput(input.allocations);
+    const shadowDecision = this.deps.qualificationShadowDecisionBuilder
+      ? await this.deps.qualificationShadowDecisionBuilder({
+          rfq: input.rfq,
+          selectedQuote: input.selectedQuote,
+          policy: input.policy,
+          routeCandidates: input.routeCandidates,
+          scoredCandidates: input.scoredCandidates,
+          allocations: input.allocations
+        })
+      : liveDecision;
+
+    await this.deps.qualificationHook.emitEvaluation({
+      strategyKey: this.deps.qualificationConfig.strategyKey,
+      scopeType: "MARKET",
+      scopeId: input.rfq.canonicalMarketId,
+      decisionType: "SOR_CONFIG_CHANGE",
+      entityId: input.rfq.rfqId,
+      replayEnvelopeId: input.replayEnvelopeId,
+      mode: this.deps.qualificationShadowDecisionBuilder && this.deps.qualificationConfig.shadowEnabled ? "shadow_compare" : "live_only",
+      ...(this.deps.qualificationConfig.failMode ? { failMode: this.deps.qualificationConfig.failMode } : {}),
+      liveDecision: () => liveDecision,
+      shadowDecision: () => shadowDecision,
+      metadata: {
+        market: input.rfq.canonicalMarketId
+      }
+    });
+  }
+
+  private toSORDecisionOutput(allocations: readonly SplitAllocation[]): SORDecisionOutput {
+    return {
+      routeIds: allocations.map((allocation) => allocation.candidateId),
+      providerIds: [...new Set(allocations.map((allocation) => allocation.providerId))],
+      allocations: allocations.map((allocation) => ({
+        candidateId: allocation.candidateId,
+        providerId: allocation.providerId,
+        targetSize: allocation.roundedSize.toString(),
+        targetPrice: allocation.targetPrice.toString()
+      }))
+    };
   }
 
   private async buildResolutionRiskContext(

@@ -1,5 +1,5 @@
 import pg from "pg";
-import { requiredIndexes, requiredTables } from "./db-schema-targets.mjs";
+import { requiredIndexes, requiredMaterializedViews, requiredTables } from "./db-schema-targets.mjs";
 import { loadRepoEnv, resolveRepoRoot } from "./db-migration-lib.mjs";
 
 const { Pool } = pg;
@@ -26,6 +26,19 @@ const run = async () => {
   const missingTables = requiredTables.filter((table) => !foundTables.has(table));
   if (missingTables.length > 0) {
     throw new Error(`Missing tables: ${missingTables.join(", ")}`);
+  }
+
+  const materializedViewResult = await pool.query(
+    `SELECT matviewname
+     FROM pg_matviews
+     WHERE schemaname = 'public'
+       AND matviewname = ANY($1::text[])`,
+    [requiredMaterializedViews]
+  );
+  const foundMaterializedViews = new Set(materializedViewResult.rows.map((row) => row.matviewname));
+  const missingMaterializedViews = requiredMaterializedViews.filter((viewName) => !foundMaterializedViews.has(viewName));
+  if (missingMaterializedViews.length > 0) {
+    throw new Error(`Missing materialized views: ${missingMaterializedViews.join(", ")}`);
   }
 
   const indexResult = await pool.query(

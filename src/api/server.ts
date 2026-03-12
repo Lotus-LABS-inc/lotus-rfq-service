@@ -44,6 +44,22 @@ import { registerAdminControlPlaneRoutes } from "./admin/control-plane.routes.js
 import { ControlPlaneAdminService } from "./admin/control-plane-admin-service.js";
 import { registerAdminReplayRoutes } from "./admin/replay.routes.js";
 import { ReplayAdminService } from "./admin/replay-admin-service.js";
+import { registerAdminQualificationRoutes } from "./admin/qualification.routes.js";
+import { QualificationAdminService, createDefaultPromotionGateConfig } from "./admin/qualification-admin-service.js";
+import { registerAdminQualificationSafetyRoutes } from "./admin/qualification-safety.routes.js";
+import { QualificationSafetyAdminService } from "./admin/qualification-safety-admin-service.js";
+import { PromotionGateEvaluator } from "../core/qualification/promotion-gate-evaluator.js";
+import { EconomicQualityEngine } from "../core/qualification/economic-quality-engine.js";
+import { QualificationRunManager } from "../core/qualification/qualification-run-manager.js";
+import { ShadowQualificationEvaluator } from "../core/qualification/shadow-qualification-evaluator.js";
+import { AutoSafetyActionEngine, createDefaultAutoSafetyActionConfig } from "../core/qualification/auto-safety-action-engine.js";
+import {
+  QualificationRuntimeHook,
+  type QualificationRuntimeConfig
+} from "../core/qualification/runtime-qualification-hook.js";
+import { ExternalOnlyBaselineBuilder } from "../core/qualification/baselines/external-only-baseline.js";
+import { NoInternalizationBaselineBuilder } from "../core/qualification/baselines/no-internalization-baseline.js";
+import { NoResolutionRiskBaselineBuilder } from "../core/qualification/baselines/no-resolution-risk-baseline.js";
 import { CostModel, OrderRouter, PlanComposer, PlanRunner, RouteScout, Splitter, type SORAcceptancePolicy, type CanonicalRFQInput } from "../core/sor/index.js";
 import {
   compareShadowDecisions,
@@ -140,6 +156,7 @@ export interface ServerDependencies {
   sorAcceptAonAwait: boolean;
   sorAcceptNonAonBackground: boolean;
   performanceGuardrailConfig?: PerformanceGuardrailConfig;
+  qualificationRuntimeConfig?: QualificationRuntimeConfig;
 }
 
 export const buildServer = async (dependencies: ServerDependencies): Promise<FastifyInstance> => {
@@ -189,6 +206,26 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     new ReplayEnvelopeWriter({ pool: dependencies.pgPool }),
     dependencies.logger
   );
+  const qualificationRuntimeConfig = dependencies.qualificationRuntimeConfig ?? { enabled: false };
+  const qualificationRunManager = new QualificationRunManager({
+    pool: dependencies.pgPool,
+    logger: dependencies.logger
+  });
+  const shadowQualificationEvaluator = new ShadowQualificationEvaluator({
+    qualificationRunManager,
+    economicQualityEngine: new EconomicQualityEngine(),
+    externalOnlyBaselineBuilder: new ExternalOnlyBaselineBuilder(),
+    noInternalizationBaselineBuilder: new NoInternalizationBaselineBuilder(),
+    noResolutionRiskBaselineBuilder: new NoResolutionRiskBaselineBuilder(),
+    logger: dependencies.logger
+  });
+  const qualificationHook = qualificationRuntimeConfig.enabled
+    ? new QualificationRuntimeHook({
+        qualificationRunManager,
+        shadowQualificationEvaluator,
+        logger: dependencies.logger
+      })
+    : undefined;
   const performanceGuardrailConfig =
     dependencies.performanceGuardrailConfig ??
     createPerformanceGuardrailConfig({
@@ -251,7 +288,11 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     shadowPercent: dependencies.resolutionRiskShadowPercent ?? 0,
     ...(dependencies.resolutionRiskShadowStartAt ? { shadowStartAt: dependencies.resolutionRiskShadowStartAt } : {}),
     ...(dependencies.resolutionRiskShadowEndAt ? { shadowEndAt: dependencies.resolutionRiskShadowEndAt } : {}),
-    logger: dependencies.logger
+    logger: dependencies.logger,
+    ...(qualificationHook ? { qualificationHook } : {}),
+    ...(qualificationRuntimeConfig.resolutionRisk
+      ? { qualificationConfig: qualificationRuntimeConfig.resolutionRisk }
+      : {})
   });
   const resolutionRiskEligibilityService = new ResolutionRiskEligibilityService({
     readService: resolutionRiskReadService,
@@ -280,7 +321,11 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       configVersion: "replay-capture-v1",
       engineVersion: "rfq-grouping-v1",
       featureFlags: {}
-    }
+    },
+    ...(qualificationHook ? { qualificationHook } : {}),
+    ...(qualificationRuntimeConfig.rfqGrouping
+      ? { qualificationConfig: qualificationRuntimeConfig.rfqGrouping }
+      : {})
   });
   const lpAuthMiddleware = createLPAuthMiddleware({
     redisClient: dependencies.redisClient,
@@ -344,7 +389,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       configVersion: "replay-capture-v1",
       engineVersion: "internal-cross-v1",
       featureFlags: {}
-    }
+    },
+    qualificationHook,
+    qualificationRuntimeConfig.phase1InternalCross
   );
   const orderRouter = new OrderRouter({
     routeScout: sorRouteScout,
@@ -383,7 +430,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     degradationManager,
     replayWriteFailureStatsSource,
     controlPlaneShardId: "sor-main",
-    phase3AGuardrailShadowResolver
+    phase3AGuardrailShadowResolver,
+    ...(qualificationHook ? { qualificationHook } : {}),
+    ...(qualificationRuntimeConfig.sor ? { qualificationConfig: qualificationRuntimeConfig.sor } : {})
   });
 
   const sorExecutionRouter = {
@@ -902,6 +951,25 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       }),
       logger: dependencies.logger,
     }),
+  });
+  await registerAdminQualificationRoutes(app, adminAuthMiddleware, {
+    qualificationAdminService: new QualificationAdminService({
+      pool: dependencies.pgPool,
+      promotionGateEvaluator: new PromotionGateEvaluator(createDefaultPromotionGateConfig()),
+      logger: dependencies.logger,
+    }),
+  });
+  await registerAdminQualificationSafetyRoutes(app, adminAuthMiddleware, {
+    qualificationSafetyAdminService: new QualificationSafetyAdminService({
+      pool: dependencies.pgPool,
+      autoSafetyActionEngine: new AutoSafetyActionEngine({
+        pool: dependencies.pgPool,
+        controlPlaneAdminService,
+        config: createDefaultAutoSafetyActionConfig(),
+        logger: dependencies.logger
+      }),
+      logger: dependencies.logger
+    })
   });
   await registerLPQuotesRoute(app, lpAuthMiddleware, receiveLPQuoteService);
 

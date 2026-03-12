@@ -26,6 +26,7 @@ import type { IReplayDecisionCaptureService } from "../replay/replay-decision-ca
 import type {
   ReplayCaptureConfig,
   ReplayComboCandidateSnapshot,
+  ReplayEnvelope,
   ReplayMatchedLegPairSnapshot,
   ReplayResolutionEligibilityDecision
 } from "../replay/replay.types.js";
@@ -39,6 +40,11 @@ import {
   type IReplayWriteFailureStatsSource
 } from "../../guardrails/planning-guardrail-helper.js";
 import type { IPhase3AGuardrailShadowResolver } from "../../guardrails/phase3a-guardrail-shadow.js";
+import type {
+  IQualificationRuntimeHook,
+  QualificationDomainHookConfig
+} from "../qualification/runtime-qualification-hook.js";
+import type { NettingDecisionOutput } from "../qualification/shadow-qualification-evaluator.js";
 
 type DecimalValue = InstanceType<typeof Decimal>;
 
@@ -106,7 +112,9 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
     private readonly lockWaitStatsSource?: { getCurrentLockWaitMs(): number | Promise<number> },
     private readonly controlPlaneShardId = "netting-phase2a-main",
     private readonly guardrailEnforcementMode?: GuardrailEnforcementMode,
-    private readonly phase3AGuardrailShadowResolver?: IPhase3AGuardrailShadowResolver
+    private readonly phase3AGuardrailShadowResolver?: IPhase3AGuardrailShadowResolver,
+    private readonly qualificationHook?: IQualificationRuntimeHook,
+    private readonly qualificationConfig?: QualificationDomainHookConfig
   ) {}
 
   public async attemptNet(incomingCombo: MultiLegInternalNettingInput): Promise<MultiLegInternalNettingResult> {
@@ -120,12 +128,17 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
         state: incomingCombo.state ?? "OPEN"
       },
       async () => {
+        const previewResult =
+          this.qualificationHook && this.qualificationConfig?.enabled && this.qualificationConfig.shadowEnabled
+            ? await this.previewNet(incomingCombo)
+            : null;
         let authoritativeIncoming = await this.loadCombo(incomingCombo.id);
         this.assertFinalIncoming(authoritativeIncoming, incomingCombo.userId);
 
         let totalNetted = new Decimal(0);
         let totalEventsWritten = 0;
         const nettingGroupIds = new Set<string>();
+        let lastReplayEnvelopeId: string | null = null;
 
         if (this.comboRemaining(authoritativeIncoming).eq(0)) {
           return this.buildResult(totalNetted, authoritativeIncoming.legs, nettingGroupIds, totalEventsWritten);
@@ -193,7 +206,7 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
             continue;
           }
 
-          await this.captureReplayDecision({
+          const replayEnvelope = await this.captureReplayDecision({
             incomingCombo: authoritativeIncoming,
             candidateCombos: [candidateCombo],
             candidateOrder: [candidateCombo.id],
@@ -232,6 +245,7 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
               candidateComboId: candidateCombo.id
             }
           });
+          lastReplayEnvelopeId = replayEnvelope?.id ?? lastReplayEnvelopeId;
 
           const lockHandle = await this.resourceLocker.acquireLocks(lockResourceIds);
 
@@ -254,7 +268,9 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
         authoritativeIncoming = await this.loadCombo(incomingCombo.id);
         this.assertFinalIncoming(authoritativeIncoming, incomingCombo.userId);
 
-        return this.buildResult(totalNetted, authoritativeIncoming.legs, nettingGroupIds, totalEventsWritten);
+        const result = this.buildResult(totalNetted, authoritativeIncoming.legs, nettingGroupIds, totalEventsWritten);
+        await this.emitQualificationEvaluation(incomingCombo, authoritativeIncoming, result, previewResult, lastReplayEnvelopeId);
+        return result;
       }
     );
   }
@@ -624,9 +640,9 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
     lockResourceIds: readonly string[];
     attemptSnapshots: readonly Record<string, unknown>[];
     result: Record<string, unknown>;
-  }): Promise<void> {
+  }): Promise<ReplayEnvelope | null> {
     if (!this.replayDecisionCaptureService || !this.replayCaptureConfig) {
-      return;
+      return null;
     }
 
     const candidateSnapshots: ReplayComboCandidateSnapshot[] = input.candidateCombos.map((combo) => ({
@@ -636,7 +652,7 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
       legs: combo.legs as unknown as readonly Record<string, unknown>[]
     }));
 
-    await this.replayDecisionCaptureService.capture({
+    return this.replayDecisionCaptureService.capture({
       config: this.replayCaptureConfig,
       buildEnvelope: (metadata) =>
         this.replaySnapshotBuilder.build({
@@ -659,6 +675,52 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
           result: input.result
         })
     });
+  }
+
+  private async emitQualificationEvaluation(
+    incomingCombo: MultiLegInternalNettingInput,
+    authoritativeIncoming: AuthoritativeComboRow,
+    result: MultiLegInternalNettingResult,
+    previewResult: MultiLegInternalNettingResult | null,
+    replayEnvelopeId: string | null
+  ): Promise<void> {
+    if (!this.qualificationHook || !this.qualificationConfig?.enabled) {
+      return;
+    }
+
+    const marketIds = [...new Set(authoritativeIncoming.legs.map((leg) => leg.canonical_market_id))];
+    const scopeType = marketIds.length === 1 ? "MARKET" : "SHARD";
+    const scopeId = marketIds.length === 1 ? marketIds[0]! : this.controlPlaneShardId;
+    const liveDecision = this.toNettingDecisionOutput(result);
+    const shadowDecision = previewResult ? this.toNettingDecisionOutput(previewResult) : liveDecision;
+
+    await this.qualificationHook.emitEvaluation({
+      strategyKey: this.qualificationConfig.strategyKey,
+      scopeType,
+      scopeId,
+      decisionType: "PHASE2A_NETTING_SCOPE_CHANGE",
+      entityId: incomingCombo.id,
+      replayEnvelopeId,
+      mode: previewResult ? "shadow_compare" : "live_only",
+      ...(this.qualificationConfig.failMode ? { failMode: this.qualificationConfig.failMode } : {}),
+      liveDecision: () => liveDecision,
+      shadowDecision: () => shadowDecision,
+      metadata: {
+        ...(marketIds.length === 1 ? { market: marketIds[0] } : {}),
+        shardId: this.controlPlaneShardId
+      }
+    });
+  }
+
+  private toNettingDecisionOutput(result: MultiLegInternalNettingResult): NettingDecisionOutput {
+    return {
+      nettingGroupIds: [...result.nettingGroupIds].sort((left, right) => left.localeCompare(right)),
+      nettedSize: result.nettedSize,
+      residualLegs: result.residualLegs.map((leg) => ({
+        id: leg.id,
+        remainingSize: leg.remainingSize
+      }))
+    };
   }
 
   private async loadCombo(comboId: string): Promise<AuthoritativeComboRow | null> {

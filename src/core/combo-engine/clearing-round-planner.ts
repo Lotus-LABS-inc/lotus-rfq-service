@@ -9,6 +9,7 @@ import type { IResolutionRiskEligibilityService } from "../rfq-engine/resolution
 import type { IReplayDecisionCaptureService } from "../replay/replay-decision-capture-service.js";
 import type {
   ReplayCaptureConfig,
+  ReplayEnvelope,
   ReplayClearingScoreSnapshot,
   ReplayResolutionEligibilityDecision
 } from "../replay/replay.types.js";
@@ -23,9 +24,16 @@ import {
 } from "../../guardrails/planning-guardrail-helper.js";
 import type { IPhase3AGuardrailShadowResolver } from "../../guardrails/phase3a-guardrail-shadow.js";
 import type {
+  IQualificationRuntimeHook,
+  QualificationDomainHookConfig
+} from "../qualification/runtime-qualification-hook.js";
+import type { ClearingDecisionOutput } from "../qualification/shadow-qualification-evaluator.js";
+import type {
+  CandidateGroup,
   ClearingCompressionScore,
   ClearingRoundPlan,
   ClearingRoundPlannerConfig,
+  OverlapGraph,
   ScorableResidualVector
 } from "./types.js";
 
@@ -61,7 +69,18 @@ export class ClearingRoundPlanner implements IClearingRoundPlanner {
     private readonly controlPlaneShardId = "clearing-phase2b-main",
     private readonly logger?: Pick<Logger, "info" | "warn" | "error">,
     private readonly guardrailEnforcementMode?: GuardrailEnforcementMode,
-    private readonly phase3AGuardrailShadowResolver?: IPhase3AGuardrailShadowResolver
+    private readonly phase3AGuardrailShadowResolver?: IPhase3AGuardrailShadowResolver,
+    private readonly qualificationHook?: IQualificationRuntimeHook,
+    private readonly qualificationConfig?: QualificationDomainHookConfig,
+    private readonly qualificationShadowDecisionBuilder?: (input: {
+      bucketId: string;
+      plannerConfig: ClearingRoundPlannerConfig;
+      candidateSnapshots: readonly Record<string, unknown>[];
+      bucketEntityOrder: readonly string[];
+      overlapGraph: Record<string, unknown>;
+      enumeratedGroups: readonly Record<string, unknown>[];
+      selectedPlan: Record<string, unknown>;
+    }) => Promise<ClearingDecisionOutput> | ClearingDecisionOutput
   ) {}
 
   public async plan(
@@ -176,7 +195,7 @@ export class ClearingRoundPlanner implements IClearingRoundPlanner {
       participantLockOrder: [...selected.group.participantIds].sort((left, right) => left.localeCompare(right))
     };
 
-    await this.captureReplayDecision({
+    const replayEnvelope = await this.captureReplayDecision({
       bucketId,
       plannerConfig: resolvedConfig as unknown as Record<string, unknown>,
       candidateSnapshots: snapshots as unknown as readonly Record<string, unknown>[],
@@ -189,6 +208,17 @@ export class ClearingRoundPlanner implements IClearingRoundPlanner {
       })),
       resolutionEligibilityExclusions,
       selectedPlan: plan as unknown as Record<string, unknown>
+    });
+
+    await this.emitQualificationEvaluation({
+      bucketId,
+      resolvedConfig,
+      snapshots: snapshots as unknown as readonly Record<string, unknown>[],
+      page,
+      graph,
+      candidateGroups,
+      plan,
+      replayEnvelopeId: replayEnvelope?.id ?? null
     });
 
     return plan;
@@ -334,12 +364,12 @@ export class ClearingRoundPlanner implements IClearingRoundPlanner {
     scoreSnapshots: readonly ReplayClearingScoreSnapshot[];
     resolutionEligibilityExclusions: readonly ReplayResolutionEligibilityDecision[];
     selectedPlan: Record<string, unknown>;
-  }): Promise<void> {
+  }): Promise<ReplayEnvelope | null> {
     if (!this.replayDecisionCaptureService || !this.replayCaptureConfig) {
-      return;
+      return null;
     }
 
-    await this.replayDecisionCaptureService.capture({
+    return this.replayDecisionCaptureService.capture({
       config: this.replayCaptureConfig,
       buildEnvelope: (metadata) =>
         this.replaySnapshotBuilder.build({
@@ -348,5 +378,62 @@ export class ClearingRoundPlanner implements IClearingRoundPlanner {
           ...input
         })
     });
+  }
+
+  private async emitQualificationEvaluation(input: {
+    bucketId: string;
+    resolvedConfig: ClearingRoundPlannerConfig;
+    snapshots: readonly Record<string, unknown>[];
+    page: { entityIds: readonly string[] };
+    graph: OverlapGraph;
+    candidateGroups: readonly CandidateGroup[];
+    plan: ClearingRoundPlan;
+    replayEnvelopeId: string | null;
+  }): Promise<void> {
+    if (!this.qualificationHook || !this.qualificationConfig?.enabled) {
+      return;
+    }
+
+    const liveDecision = this.toClearingDecisionOutput(input.plan);
+    const shadowDecision = this.qualificationShadowDecisionBuilder
+      ? await this.qualificationShadowDecisionBuilder({
+          bucketId: input.bucketId,
+          plannerConfig: input.resolvedConfig,
+          candidateSnapshots: input.snapshots,
+          bucketEntityOrder: input.page.entityIds,
+          overlapGraph: input.graph as unknown as Record<string, unknown>,
+          enumeratedGroups: input.candidateGroups as unknown as readonly Record<string, unknown>[],
+          selectedPlan: input.plan as unknown as Record<string, unknown>
+        })
+      : liveDecision;
+
+    await this.qualificationHook.emitEvaluation({
+      strategyKey: this.qualificationConfig.strategyKey,
+      scopeType: "BUCKET",
+      scopeId: input.bucketId,
+      decisionType: "PHASE2B_CLEARING_STRATEGY_CHANGE",
+      entityId: input.bucketId,
+      replayEnvelopeId: input.replayEnvelopeId,
+      mode: this.qualificationShadowDecisionBuilder && this.qualificationConfig.shadowEnabled ? "shadow_compare" : "live_only",
+      ...(this.qualificationConfig.failMode ? { failMode: this.qualificationConfig.failMode } : {}),
+      liveDecision: () => liveDecision,
+      shadowDecision: () => shadowDecision,
+      metadata: {
+        bucketId: input.bucketId
+      }
+    });
+  }
+
+  private toClearingDecisionOutput(plan: ClearingRoundPlan): ClearingDecisionOutput {
+    return {
+      clearingRoundId: plan.compatibilityBucket,
+      participantSetHash: [...plan.selectedGroup.participantIds].sort((left, right) => left.localeCompare(right)).join("|"),
+      matchSignatureHash: plan.participantLockOrder.join("|"),
+      compressionScore: plan.score.compressionScore,
+      residuals: plan.residuals.map((residual) => ({
+        key: residual.key,
+        signedResidual: residual.signedResidual
+      }))
+    };
   }
 }

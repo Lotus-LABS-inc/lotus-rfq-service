@@ -97,6 +97,9 @@ describe("SOR OrderRouter", () => {
       expect(rfq.takerId).toBe(rfqInput.takerId);
       return composedPlan;
     });
+    const qualificationHook = {
+      emitEvaluation: vi.fn(async () => null)
+    };
     const internalEngine = {
       attemptCross: vi.fn(async () => ({
         filledSize: 0,
@@ -118,7 +121,13 @@ describe("SOR OrderRouter", () => {
       planComposer: { composePlan } as never,
       internalEngine,
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
-      internalCrossingEnabled: true
+      internalCrossingEnabled: true,
+      qualificationHook,
+      qualificationConfig: {
+        enabled: true,
+        strategyKey: "strategy.sor",
+        failMode: "INLINE_BEST_EFFORT"
+      }
     });
 
     const result = await router.buildPlan(rfqInput, selectedQuoteInput, "ALL_OR_NONE");
@@ -153,6 +162,16 @@ describe("SOR OrderRouter", () => {
       (value) => value.labels.rfq_id === rfqInput.rfqId
     );
     expect(splitValue?.value).toBe(1);
+    expect(qualificationHook.emitEvaluation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        strategyKey: "strategy.sor",
+        scopeType: "MARKET",
+        scopeId: "market-1",
+        decisionType: "SOR_CONFIG_CHANGE",
+        entityId: rfqInput.rfqId,
+        mode: "live_only"
+      })
+    );
   });
 
   it("throws insufficient liquidity for AON when split does not cover target size", async () => {

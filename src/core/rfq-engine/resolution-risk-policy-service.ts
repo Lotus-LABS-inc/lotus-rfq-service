@@ -7,6 +7,10 @@ import {
     resolutionRiskShadowMatchTotal,
     resolutionRiskShadowTotal
 } from "../../observability/metrics.js";
+import type {
+    IQualificationRuntimeHook,
+    QualificationDomainHookConfig
+} from "../qualification/runtime-qualification-hook.js";
 import {
     resolveResolutionRiskRolloutMode,
     type ResolutionRiskRolloutWindowInput
@@ -22,6 +26,8 @@ import type {
 
 export interface ResolutionRiskPolicyServiceDeps extends ResolutionRiskRolloutWindowInput {
     logger?: Pick<Logger, "info" | "warn" | "error">;
+    qualificationHook?: IQualificationRuntimeHook;
+    qualificationConfig?: QualificationDomainHookConfig;
 }
 
 export interface ResolutionRiskSOREvaluationInput {
@@ -60,9 +66,13 @@ export interface IResolutionRiskPolicyService {
 export class ResolutionRiskPolicyService implements IResolutionRiskPolicyService {
     private readonly logger: Pick<Logger, "info" | "warn" | "error"> | undefined;
     private readonly rolloutInput: ResolutionRiskRolloutWindowInput;
+    private readonly qualificationHook: IQualificationRuntimeHook | undefined;
+    private readonly qualificationConfig: QualificationDomainHookConfig | undefined;
 
     public constructor(deps: ResolutionRiskPolicyServiceDeps) {
         this.logger = deps.logger;
+        this.qualificationHook = deps.qualificationHook;
+        this.qualificationConfig = deps.qualificationConfig;
         this.rolloutInput = {
             enabled: deps.enabled,
             shadowEnabled: deps.shadowEnabled,
@@ -127,13 +137,25 @@ export class ResolutionRiskPolicyService implements IResolutionRiskPolicyService
     public evaluateSORDecision(input: ResolutionRiskSOREvaluationInput): ResolutionRiskPolicyDecision {
         const mode = resolveResolutionRiskRolloutMode(input.stableKey, this.rolloutInput);
         if (mode === "enabled") {
-            return {
+            const result: ResolutionRiskPolicyDecision = {
                 domain: "sor",
                 mode,
                 enforcementActive: true,
                 enforcedDecision: input.intendedDecision,
                 reason: input.reason
             };
+            this.emitQualificationEvaluation({
+                stableKey: input.stableKey,
+                mode: "live_only",
+                liveDecision: {
+                    intendedDecision: input.intendedDecision,
+                    enforcedDecision: result.enforcedDecision,
+                    equivalenceClass: input.equivalenceClass ?? null,
+                    reason: input.reason
+                },
+                ...(input.canonicalEventId ? { canonicalEventId: input.canonicalEventId } : {})
+            });
+            return result;
         }
 
         resolutionRiskEnforcementDisabledTotal.labels("sor").inc();
@@ -166,7 +188,7 @@ export class ResolutionRiskPolicyService implements IResolutionRiskPolicyService
             }
         }
 
-        return {
+        const result: ResolutionRiskPolicyDecision = {
             domain: "sor",
             mode,
             enforcementActive: false,
@@ -183,6 +205,28 @@ export class ResolutionRiskPolicyService implements IResolutionRiskPolicyService
                 }
                 : {})
         };
+        this.emitQualificationEvaluation({
+            stableKey: input.stableKey,
+            mode: mode === "shadow" ? "shadow_compare" : "live_only",
+            liveDecision: {
+                intendedDecision: input.intendedDecision,
+                enforcedDecision: result.enforcedDecision,
+                equivalenceClass: input.equivalenceClass ?? null,
+                reason: input.reason
+            },
+            ...(input.canonicalEventId ? { canonicalEventId: input.canonicalEventId } : {}),
+            ...(mode === "shadow"
+                ? {
+                    shadowDecision: {
+                        intendedDecision: input.intendedDecision,
+                        enforcedDecision: input.intendedDecision,
+                        equivalenceClass: input.equivalenceClass ?? null,
+                        reason: input.reason
+                    }
+                }
+                : {})
+        });
+        return result;
     }
 
     public evaluateInternalEligibility(input: ResolutionRiskInternalEvaluationInput): boolean {
@@ -193,6 +237,17 @@ export class ResolutionRiskPolicyService implements IResolutionRiskPolicyService
         }
 
         if (mode === "enabled") {
+            this.emitQualificationEvaluation({
+                stableKey: input.stableKey,
+                mode: "live_only",
+                liveDecision: {
+                    intendedDecision: input.intendedAllowed ? "allowed" : "blocked",
+                    enforcedDecision: input.intendedAllowed ? "allowed" : "blocked",
+                    equivalenceClass,
+                    reason: input.reason
+                },
+                ...(input.canonicalEventId ? { canonicalEventId: input.canonicalEventId } : {})
+            });
             return input.intendedAllowed;
         }
 
@@ -223,7 +278,68 @@ export class ResolutionRiskPolicyService implements IResolutionRiskPolicyService
             }
         }
 
-        return true;
+        const enforcedAllowed = true;
+        this.emitQualificationEvaluation({
+            stableKey: input.stableKey,
+            mode: mode === "shadow" ? "shadow_compare" : "live_only",
+            liveDecision: {
+                intendedDecision: input.intendedAllowed ? "allowed" : "blocked",
+                enforcedDecision: enforcedAllowed ? "allowed" : "blocked",
+                equivalenceClass,
+                reason: input.reason
+            },
+            ...(input.canonicalEventId ? { canonicalEventId: input.canonicalEventId } : {}),
+            ...(mode === "shadow"
+                ? {
+                    shadowDecision: {
+                        intendedDecision: input.intendedAllowed ? "allowed" : "blocked",
+                        enforcedDecision: input.intendedAllowed ? "allowed" : "blocked",
+                        equivalenceClass,
+                        reason: input.reason
+                    }
+                }
+                : {})
+        });
+
+        return enforcedAllowed;
+    }
+
+    private emitQualificationEvaluation(input: {
+        stableKey: string;
+        canonicalEventId?: string;
+        mode: "live_only" | "shadow_compare";
+        liveDecision: {
+            intendedDecision: string;
+            enforcedDecision: string;
+            equivalenceClass?: string | null;
+            reason: string;
+        };
+        shadowDecision?: {
+            intendedDecision: string;
+            enforcedDecision: string;
+            equivalenceClass?: string | null;
+            reason: string;
+        };
+    }): void {
+        if (!this.qualificationHook || !this.qualificationConfig?.enabled || !input.canonicalEventId) {
+            return;
+        }
+
+        const shadowDecision = input.shadowDecision;
+        void this.qualificationHook.emitEvaluation({
+            strategyKey: this.qualificationConfig.strategyKey,
+            scopeType: "EVENT",
+            scopeId: input.canonicalEventId,
+            decisionType: "RESOLUTION_RISK_THRESHOLD_CHANGE",
+            entityId: input.stableKey,
+            mode: input.mode,
+            ...(this.qualificationConfig.failMode ? { failMode: this.qualificationConfig.failMode } : {}),
+            liveDecision: () => input.liveDecision,
+            ...(shadowDecision ? { shadowDecision: () => shadowDecision } : {}),
+            metadata: {
+                domain: "resolution_risk"
+            }
+        });
     }
 
     private logShadowDivergence(input: {

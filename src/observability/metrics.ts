@@ -587,6 +587,55 @@ export const replayErrorTotal = new Counter({
   ...counterConfig
 });
 
+export const qualificationEvaluationsWrittenTotal = new Counter({
+  name: "qualification_evaluations_written_total",
+  help: "Total qualification decision evaluations persisted successfully.",
+  labelNames: ["decision_type", "strategy_key", "mode"],
+  ...counterConfig
+});
+
+export const shadowDecisionDiffTotal = new Counter({
+  name: "shadow_decision_diff_total",
+  help: "Total runtime qualification shadow decision divergences.",
+  labelNames: ["decision_type", "reason"],
+  ...counterConfig
+});
+
+export const promotionGateFailTotal = new Counter({
+  name: "promotion_gate_fail_total",
+  help: "Total promotion gate failures by current stage and gate.",
+  labelNames: ["stage", "gate"],
+  ...counterConfig
+});
+
+export const autoSafetyActionsCreatedTotal = new Counter({
+  name: "auto_safety_actions_created_total",
+  help: "Total auto safety actions created by action type, trigger reason, and scope type.",
+  labelNames: ["action_type", "trigger_reason", "scope_type"],
+  ...counterConfig
+});
+
+export const autoSafetyActionsResolvedTotal = new Counter({
+  name: "auto_safety_actions_resolved_total",
+  help: "Total auto safety actions resolved by action type and scope type.",
+  labelNames: ["action_type", "scope_type"],
+  ...counterConfig
+});
+
+export const qualificationRollupRefreshTotal = new Counter({
+  name: "qualification_rollup_refresh_total",
+  help: "Total qualification rollup materialized-view refresh attempts by status.",
+  labelNames: ["status"],
+  ...counterConfig
+});
+
+export const qualificationRollupRefreshDurationMs = new Histogram({
+  name: "qualification_rollup_refresh_duration_ms",
+  help: "Duration of qualification rollup materialized-view refreshes in milliseconds.",
+  buckets: [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000],
+  ...histogramConfig
+});
+
 export const plannerShardPausedTotal = new Counter({
   name: "planner_shard_paused_total",
   help: "Total successful planner shard pause operations.",

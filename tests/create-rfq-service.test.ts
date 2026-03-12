@@ -563,4 +563,98 @@ describe("CreateRFQService", () => {
     expect(sessionRepository.create).toHaveBeenCalledOnce();
     expect(setSessionMetadata).toHaveBeenCalled();
   });
+
+  it("emits a qualification evaluation after successful RFQ grouping", async () => {
+    const qualificationHook = {
+      emitEvaluation: vi.fn(async () => null)
+    };
+
+    const service = new CreateRFQService({
+      sessionRepository: {
+        create: vi.fn(async () => ({
+          id: "session-qualification-1",
+          request_id: "req-qualification-1",
+          canonical_market_id: "mkt-qualification-1",
+          taker_id: "taker-qualification-1",
+          side: "buy",
+          quantity: "2",
+          status: "CREATED",
+          idempotency_key: "idemp-qualification-1",
+          expires_at: new Date("2026-02-25T12:01:00.000Z"),
+          metadata: {},
+          created_at: new Date("2026-02-25T12:00:00.000Z"),
+          updated_at: new Date("2026-02-25T12:00:00.000Z")
+        })),
+        updateStatus: vi.fn(async () => ({
+          id: "session-qualification-1",
+          status: "BROADCAST"
+        }))
+      } as unknown as RFQSessionRepository,
+      eventRepository: {
+        append: vi.fn(async () => ({ id: "evt-qualification-1" }))
+      } as unknown as RFQEventRepository,
+      sessionManager: {
+        setSessionMetadata: vi.fn(async () => undefined)
+      } as unknown as RFQSessionManager,
+      canonicalMarketClient: {
+        fetchMarketById: vi.fn(async () => ({
+          id: "mkt-qualification-1",
+          canonicalEventId: "event-qualification-1",
+          isActive: true
+        }))
+      } as CanonicalMarketClient,
+      eventEmitter: {
+        emitEvent: vi.fn()
+      } as RFQEventEmitter,
+      logger: loggerStub,
+      riskEngine: {
+        validateRFQCreation: vi.fn(async () => undefined),
+        validateBeforeExecution: vi.fn(async () => "reservation-token"),
+        updateExposureAfterExecution: vi.fn(async () => undefined),
+        reconcileExposureSnapshot: vi.fn(async () => undefined)
+      },
+      resolutionRiskGroupingService: {
+        groupProfilesForCanonicalEvent: vi.fn(),
+        groupProfilesForCanonicalEventWithTrace: vi.fn(async () => ({
+          canonicalEventId: "event-qualification-1",
+          orderedProfiles: [],
+          orderedAssessments: [],
+          pairGenerationOrder: [],
+          grouping: {
+            canonicalEventId: "event-qualification-1",
+            safePools: [["profile-a"]],
+            cautionLanes: [],
+            blockedProfiles: [],
+            reasonsByProfile: {},
+            pairMatrix: {}
+          }
+        }))
+      },
+      qualificationHook,
+      qualificationConfig: {
+        enabled: true,
+        strategyKey: "strategy.rfq-grouping",
+        failMode: "INLINE_BEST_EFFORT"
+      }
+    });
+
+    await service.execute({
+      canonicalMarketId: "mkt-qualification-1",
+      takerId: "taker-qualification-1",
+      side: "buy",
+      quantity: "2",
+      idempotencyKey: "idemp-qualification-1",
+      ttlSeconds: 30
+    });
+
+    expect(qualificationHook.emitEvaluation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        strategyKey: "strategy.rfq-grouping",
+        scopeType: "EVENT",
+        scopeId: "event-qualification-1",
+        decisionType: "RFQ_GROUPING_CHANGE",
+        entityId: "session-qualification-1"
+      })
+    );
+  });
 });

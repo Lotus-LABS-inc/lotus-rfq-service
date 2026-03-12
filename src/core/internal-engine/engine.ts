@@ -9,8 +9,13 @@ import type { OrderLocker } from "./locker.js";
 import { withSpan } from "../../observability/tracing.js";
 import type { IResolutionRiskEligibilityService } from "../rfq-engine/resolution-risk-eligibility-service.js";
 import type { IReplayDecisionCaptureService } from "../replay/replay-decision-capture-service.js";
-import type { ReplayCaptureConfig } from "../replay/replay.types.js";
+import type { ReplayCaptureConfig, ReplayEnvelope } from "../replay/replay.types.js";
 import { InternalCrossSnapshotBuilder } from "../replay/builders/internal-cross-snapshot-builder.js";
+import type {
+    IQualificationRuntimeHook,
+    QualificationDomainHookConfig
+} from "../qualification/runtime-qualification-hook.js";
+import type { InternalCrossDecisionOutput } from "../qualification/shadow-qualification-evaluator.js";
 
 type DecimalValue = InstanceType<typeof Decimal>;
 
@@ -50,7 +55,9 @@ export class InternalCrossingEngine {
         private readonly logger: Logger,
         private readonly resolutionRiskEligibilityService?: IResolutionRiskEligibilityService,
         private readonly replayDecisionCaptureService?: IReplayDecisionCaptureService,
-        private readonly replayCaptureConfig?: ReplayCaptureConfig
+        private readonly replayCaptureConfig?: ReplayCaptureConfig,
+        private readonly qualificationHook?: IQualificationRuntimeHook,
+        private readonly qualificationConfig?: QualificationDomainHookConfig
     ) { }
 
     /**
@@ -70,9 +77,14 @@ export class InternalCrossingEngine {
                 state: "ATTEMPTING"
             },
             async () => {
+                const shadowPreview =
+                    this.qualificationHook && this.qualificationConfig?.enabled && this.qualificationConfig.shadowEnabled
+                        ? await this.previewCross(incomingOrder)
+                        : null;
                 let remainingTakerSize = new Decimal(incomingOrder.remaining_size);
                 let filledTakerSize = new Decimal(0);
                 const trades: Trade[] = [];
+                let lastReplayEnvelopeId: string | null = null;
 
                 this.logger.info({
                     orderId: incomingOrder.id,
@@ -123,7 +135,7 @@ export class InternalCrossingEngine {
                         const plannedRemainingSize = remainingTakerSize.minus(plannedMatchSize);
                         const lockOrder = [incomingOrder.id, makerEntry.orderId].sort((left, right) => left.localeCompare(right));
 
-                        await this.captureReplayDecision({
+                        const replayEnvelope = await this.captureReplayDecision({
                             incomingOrder,
                             orderedCandidates: candidates,
                             makerEntry,
@@ -133,6 +145,7 @@ export class InternalCrossingEngine {
                             plannedRemainingSize,
                             filledSoFar: filledTakerSize
                         });
+                        lastReplayEnvelopeId = replayEnvelope?.id ?? lastReplayEnvelopeId;
 
                         const lockHandle = await withSpan(
                             "internal_cross.lock_pair",
@@ -176,11 +189,20 @@ export class InternalCrossingEngine {
                     }
                 }
 
-                return {
+                const result = {
                     filledSize: Number(filledTakerSize.toString()),
                     remainingSize: Number(remainingTakerSize.toString()),
                     trades
                 };
+
+                await this.emitQualificationEvaluation(
+                    incomingOrder,
+                    result,
+                    shadowPreview,
+                    lastReplayEnvelopeId
+                );
+
+                return result;
             }
         );
     }
@@ -546,12 +568,12 @@ export class InternalCrossingEngine {
         plannedMatchSize: DecimalValue;
         plannedRemainingSize: DecimalValue;
         filledSoFar: DecimalValue;
-    }): Promise<void> {
+    }): Promise<ReplayEnvelope | null> {
         if (!this.replayDecisionCaptureService || !this.replayCaptureConfig) {
-            return;
+            return null;
         }
 
-        await this.replayDecisionCaptureService.capture({
+        return this.replayDecisionCaptureService.capture({
             config: this.replayCaptureConfig,
             buildEnvelope: (metadata) =>
                 this.replaySnapshotBuilder.build({
@@ -593,5 +615,60 @@ export class InternalCrossingEngine {
                     }
                 })
         });
+    }
+
+    private async emitQualificationEvaluation(
+        incomingOrder: InternalOrder,
+        result: {
+            filledSize: number;
+            remainingSize: number;
+            trades: Trade[];
+        },
+        shadowPreview: InternalCrossPreviewResult | null,
+        replayEnvelopeId: string | null
+    ): Promise<void> {
+        if (!this.qualificationHook || !this.qualificationConfig?.enabled) {
+            return;
+        }
+
+        const liveDecision = this.toInternalCrossDecisionOutput(result);
+        const shadowDecision = shadowPreview ? this.toPreviewDecisionOutput(shadowPreview) : liveDecision;
+
+        await this.qualificationHook.emitEvaluation({
+            strategyKey: this.qualificationConfig.strategyKey,
+            scopeType: "MARKET",
+            scopeId: incomingOrder.market_id,
+            decisionType: "PHASE1_INTERNAL_CROSS_CHANGE",
+            entityId: incomingOrder.id,
+            replayEnvelopeId,
+            mode: shadowPreview ? "shadow_compare" : "live_only",
+            ...(this.qualificationConfig.failMode ? { failMode: this.qualificationConfig.failMode } : {}),
+            liveDecision: () => liveDecision,
+            shadowDecision: () => shadowDecision,
+            metadata: {
+                market: incomingOrder.market_id
+            }
+        });
+    }
+
+    private toInternalCrossDecisionOutput(result: {
+        filledSize: number;
+        remainingSize: number;
+        trades: Trade[];
+    }): InternalCrossDecisionOutput {
+        const matchedOrderIds = result.trades.flatMap((trade) => [trade.buy_order_id, trade.sell_order_id]).sort((left, right) => left.localeCompare(right));
+        return {
+            filledSize: result.filledSize.toString(),
+            matchedOrderIds,
+            remainingSize: result.remainingSize.toString()
+        };
+    }
+
+    private toPreviewDecisionOutput(preview: InternalCrossPreviewResult): InternalCrossDecisionOutput {
+        return {
+            filledSize: preview.fillableSize.toString(),
+            matchedOrderIds: [...preview.matchedOrderIds].sort((left, right) => left.localeCompare(right)),
+            remainingSize: preview.remainingSize.toString()
+        };
     }
 }

@@ -93,15 +93,36 @@ describe("MultiLegInternalNettingEngine", () => {
   };
 
   let engine: MultiLegInternalNettingEngine;
+  let qualificationHook: { emitEvaluation: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    qualificationHook = {
+      emitEvaluation: vi.fn(async () => null)
+    };
     engine = new MultiLegInternalNettingEngine(
       pool as never,
       candidateRegistry,
       compatibilityEngine as never,
       resourceLocker as never,
-      logger
+      logger,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "netting-phase2a-main",
+      undefined,
+      undefined,
+      qualificationHook as never,
+      {
+        enabled: true,
+        strategyKey: "strategy.phase2a",
+        failMode: "INLINE_BEST_EFFORT"
+      }
     );
   });
 
@@ -155,6 +176,13 @@ describe("MultiLegInternalNettingEngine", () => {
       eventsWritten: 0
     });
     expect(resourceLocker.acquireLocks).not.toHaveBeenCalled();
+    expect(qualificationHook.emitEvaluation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        strategyKey: "strategy.phase2a",
+        decisionType: "PHASE2A_NETTING_SCOPE_CHANGE",
+        entityId: "incoming"
+      })
+    );
   });
 
   it("returns residual legs after partial internal netting", async () => {
