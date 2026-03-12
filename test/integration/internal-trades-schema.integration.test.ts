@@ -108,6 +108,48 @@ const hasResolutionRiskTables = async (pool: Pool): Promise<boolean> => {
   return result.rows.length === 2;
 };
 
+const hasReplayTables = async (pool: Pool): Promise<boolean> => {
+  const result = await pool.query<{ table_name: string }>(
+    `SELECT table_name
+       FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = ANY($1::text[])`,
+    [[
+      "replay_envelopes",
+      "replay_runs"
+    ]]
+  );
+
+  return result.rows.length === 2;
+};
+
+const hasControlPlaneStateTables = async (pool: Pool): Promise<boolean> => {
+  const result = await pool.query<{ table_name: string }>(
+    `SELECT table_name
+       FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = ANY($1::text[])`,
+    [[
+      "control_plane_overrides",
+      "planner_shard_state",
+      "bucket_state"
+    ]]
+  );
+
+  return result.rows.length === 3;
+};
+
+const hasControlPlaneAuditTables = async (pool: Pool): Promise<boolean> => {
+  const result = await pool.query<{ table_name: string }>(
+    `SELECT table_name
+       FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = 'control_plane_audit_events'`
+  );
+
+  return result.rows.length === 1;
+};
+
 const applyComboNettingMigrationIfNeeded = async (pool: Pool): Promise<void> => {
   if (await hasComboNettingTables(pool)) {
     return;
@@ -191,6 +233,57 @@ const applyResolutionRiskMigrationIfNeeded = async (pool: Pool): Promise<void> =
   }
 };
 
+const applyReplayMigrationIfNeeded = async (pool: Pool): Promise<void> => {
+  if (await hasReplayTables(pool)) {
+    return;
+  }
+
+  const migrationPath = path.resolve(process.cwd(), "sql", "migrations", "2026_03_11_create_replay_tables.sql");
+  const sql = await readFile(migrationPath, "utf8");
+  try {
+    await pool.query(sql);
+  } catch (error) {
+    const code = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
+    if (code !== "42P07" && code !== "42710") {
+      throw error;
+    }
+  }
+};
+
+const applyControlPlaneStateMigrationIfNeeded = async (pool: Pool): Promise<void> => {
+  if (await hasControlPlaneStateTables(pool)) {
+    return;
+  }
+
+  const migrationPath = path.resolve(process.cwd(), "sql", "migrations", "2026_03_11_create_control_plane_state_tables.sql");
+  const sql = await readFile(migrationPath, "utf8");
+  try {
+    await pool.query(sql);
+  } catch (error) {
+    const code = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
+    if (code !== "42P07" && code !== "42710") {
+      throw error;
+    }
+  }
+};
+
+const applyControlPlaneAuditMigrationIfNeeded = async (pool: Pool): Promise<void> => {
+  if (await hasControlPlaneAuditTables(pool)) {
+    return;
+  }
+
+  const migrationPath = path.resolve(process.cwd(), "sql", "migrations", "2026_03_12_create_control_plane_audit_events.sql");
+  const sql = await readFile(migrationPath, "utf8");
+  try {
+    await pool.query(sql);
+  } catch (error) {
+    const code = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
+    if (code !== "42P07" && code !== "42710") {
+      throw error;
+    }
+  }
+};
+
 describe.skipIf(!ENV_READY)("internal trades schema integration", () => {
   let pool: Pool | undefined;
 
@@ -208,6 +301,9 @@ describe.skipIf(!ENV_READY)("internal trades schema integration", () => {
     await applyComboLegRemainingMigrationIfNeeded(must(pool, "pool"));
     await applyClearingRoundMigrationIfNeeded(must(pool, "pool"));
     await applyResolutionRiskMigrationIfNeeded(must(pool, "pool"));
+    await applyReplayMigrationIfNeeded(must(pool, "pool"));
+    await applyControlPlaneStateMigrationIfNeeded(must(pool, "pool"));
+    await applyControlPlaneAuditMigrationIfNeeded(must(pool, "pool"));
   }, 180000);
 
   afterAll(async () => {
@@ -771,5 +867,196 @@ describe.skipIf(!ENV_READY)("internal trades schema integration", () => {
       code: "23505",
       constraint: "uq_resolution_risk_assessment_pair_version"
     });
+  });
+
+  it("creates replay tables with required indexes and foreign key", async () => {
+    const db = must(pool, "pool");
+
+    expect(await hasReplayTables(db)).toBe(true);
+
+    const tables = await db.query<{ table_name: string }>(
+      `SELECT table_name
+         FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = ANY($1::text[])`,
+      [[
+        "replay_envelopes",
+        "replay_runs"
+      ]]
+    );
+
+    const indexes = await db.query<{ indexname: string }>(
+      `SELECT indexname
+         FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND tablename = ANY($1::text[])`,
+      [[
+        "replay_envelopes",
+        "replay_runs"
+      ]]
+    );
+
+    const foreignKeys = await db.query<{ table_name: string; constraint_name: string }>(
+      `SELECT tc.table_name, tc.constraint_name
+         FROM information_schema.table_constraints tc
+        WHERE tc.table_schema = 'public'
+          AND tc.constraint_type = 'FOREIGN KEY'
+          AND tc.table_name = 'replay_runs'`
+    );
+
+    const tableNames = new Set(tables.rows.map((row) => row.table_name));
+    const indexNames = new Set(indexes.rows.map((row) => row.indexname));
+
+    expect(tableNames.has("replay_envelopes")).toBe(true);
+    expect(tableNames.has("replay_runs")).toBe(true);
+
+    expect(indexNames.has("idx_replay_envelopes_decision_type")).toBe(true);
+    expect(indexNames.has("idx_replay_envelopes_entity_id")).toBe(true);
+    expect(indexNames.has("idx_replay_envelopes_correlation_id")).toBe(true);
+    expect(indexNames.has("idx_replay_envelopes_created_at")).toBe(true);
+    expect(indexNames.has("idx_replay_runs_replay_envelope_id")).toBe(true);
+    expect(indexNames.has("idx_replay_runs_mode")).toBe(true);
+    expect(indexNames.has("idx_replay_runs_result_status")).toBe(true);
+    expect(indexNames.has("idx_replay_runs_created_at")).toBe(true);
+
+    expect(foreignKeys.rowCount).toBe(1);
+  });
+
+  it("rejects replay runs that reference a missing replay envelope", async () => {
+    const db = must(pool, "pool");
+
+    await expect(
+      db.query(
+        `INSERT INTO replay_runs
+          (id, replay_envelope_id, mode, requested_by, result_status, diff_summary)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+        [
+          randomUUID(),
+          randomUUID(),
+          "READ_ONLY",
+          "ops@example.com",
+          "FAILED",
+          JSON.stringify({ reason: "missing envelope" })
+        ]
+      )
+    ).rejects.toMatchObject({
+      code: "23503"
+    });
+  });
+
+  it("creates control plane state tables with required indexes and primary keys", async () => {
+    const db = must(pool, "pool");
+
+    expect(await hasControlPlaneStateTables(db)).toBe(true);
+
+    const tables = await db.query<{ table_name: string }>(
+      `SELECT table_name
+         FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = ANY($1::text[])`,
+      [[
+        "control_plane_overrides",
+        "planner_shard_state",
+        "bucket_state"
+      ]]
+    );
+
+    const indexes = await db.query<{ indexname: string }>(
+      `SELECT indexname
+         FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND tablename = ANY($1::text[])`,
+      [[
+        "control_plane_overrides",
+        "planner_shard_state",
+        "bucket_state"
+      ]]
+    );
+
+    const primaryKeys = await db.query<{ table_name: string; constraint_name: string }>(
+      `SELECT tc.table_name, tc.constraint_name
+         FROM information_schema.table_constraints tc
+        WHERE tc.table_schema = 'public'
+          AND tc.constraint_type = 'PRIMARY KEY'
+          AND tc.table_name = ANY($1::text[])`,
+      [[
+        "planner_shard_state",
+        "bucket_state"
+      ]]
+    );
+
+    const tableNames = new Set(tables.rows.map((row) => row.table_name));
+    const indexNames = new Set(indexes.rows.map((row) => row.indexname));
+    const primaryKeyTables = new Set(primaryKeys.rows.map((row) => row.table_name));
+
+    expect(tableNames.has("control_plane_overrides")).toBe(true);
+    expect(tableNames.has("planner_shard_state")).toBe(true);
+    expect(tableNames.has("bucket_state")).toBe(true);
+
+    expect(indexNames.has("idx_control_plane_overrides_scope")).toBe(true);
+    expect(indexNames.has("idx_control_plane_overrides_override_type")).toBe(true);
+    expect(indexNames.has("idx_control_plane_overrides_created_at")).toBe(true);
+    expect(indexNames.has("idx_control_plane_overrides_expires_at")).toBe(true);
+    expect(indexNames.has("idx_planner_shard_state_mode")).toBe(true);
+    expect(indexNames.has("idx_planner_shard_state_updated_at")).toBe(true);
+    expect(indexNames.has("idx_bucket_state_bucket_type")).toBe(true);
+    expect(indexNames.has("idx_bucket_state_mode")).toBe(true);
+    expect(indexNames.has("idx_bucket_state_updated_at")).toBe(true);
+
+    expect(primaryKeyTables.has("planner_shard_state")).toBe(true);
+    expect(primaryKeyTables.has("bucket_state")).toBe(true);
+  });
+
+  it("stores control plane override payloads successfully", async () => {
+    const db = must(pool, "pool");
+    const overrideId = randomUUID();
+    const payload = {
+      mode: "READ_ONLY",
+      reason: "operator intervention",
+      limit: 25
+    };
+
+    const insertResult = await db.query<{
+      payload: Record<string, unknown>;
+      created_by: string;
+      expires_at: Date | null;
+    }>(
+      `INSERT INTO control_plane_overrides
+        (id, scope_type, scope_id, override_type, payload, created_by, expires_at)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+       RETURNING payload, created_by, expires_at`,
+      [
+        overrideId,
+        "bucket",
+        `bucket-${randomUUID()}`,
+        "force_mode",
+        JSON.stringify(payload),
+        "ops@example.com",
+        null
+      ]
+    );
+
+    expect(insertResult.rows[0]?.payload).toEqual(payload);
+    expect(insertResult.rows[0]?.created_by).toBe("ops@example.com");
+    expect(insertResult.rows[0]?.expires_at).toBeNull();
+  });
+
+  it("creates control plane audit events table with required indexes", async () => {
+    const db = must(pool, "pool");
+
+    expect(await hasControlPlaneAuditTables(db)).toBe(true);
+
+    const indexes = await db.query<{ indexname: string }>(
+      `SELECT indexname
+         FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND tablename = 'control_plane_audit_events'`
+    );
+
+    const indexNames = new Set(indexes.rows.map((row) => row.indexname));
+
+    expect(indexNames.has("idx_control_plane_audit_events_scope_created_at")).toBe(true);
+    expect(indexNames.has("idx_control_plane_audit_events_event_type")).toBe(true);
+    expect(indexNames.has("idx_control_plane_audit_events_created_at")).toBe(true);
   });
 });

@@ -71,6 +71,10 @@ export interface BootstrapModules {
     resolutionRiskShadowPercent?: number;
     resolutionRiskShadowStartAt?: string;
     resolutionRiskShadowEndAt?: string;
+    phase3AGuardrailShadowEnabled?: boolean;
+    phase3AGuardrailShadowPercent?: number;
+    phase3AGuardrailShadowStartAt?: string;
+    phase3AGuardrailShadowEndAt?: string;
     reliabilityWeight: number;
     latencyWeight: number;
     failureWeight: number;
@@ -154,6 +158,14 @@ export const startService = async (
     resolutionRiskShadowPercent: env.RESOLUTION_RISK_SHADOW_PERCENT,
     ...(env.RESOLUTION_RISK_SHADOW_START_AT ? { resolutionRiskShadowStartAt: env.RESOLUTION_RISK_SHADOW_START_AT } : {}),
     ...(env.RESOLUTION_RISK_SHADOW_END_AT ? { resolutionRiskShadowEndAt: env.RESOLUTION_RISK_SHADOW_END_AT } : {}),
+    phase3AGuardrailShadowEnabled: env.PHASE3A_GUARDRAIL_SHADOW_ENABLED,
+    phase3AGuardrailShadowPercent: env.PHASE3A_GUARDRAIL_SHADOW_PERCENT,
+    ...(env.PHASE3A_GUARDRAIL_SHADOW_START_AT
+      ? { phase3AGuardrailShadowStartAt: env.PHASE3A_GUARDRAIL_SHADOW_START_AT }
+      : {}),
+    ...(env.PHASE3A_GUARDRAIL_SHADOW_END_AT
+      ? { phase3AGuardrailShadowEndAt: env.PHASE3A_GUARDRAIL_SHADOW_END_AT }
+      : {}),
     reliabilityWeight: env.RELIABILITY_WEIGHT,
     latencyWeight: env.LATENCY_WEIGHT,
     failureWeight: env.FAILURE_WEIGHT,

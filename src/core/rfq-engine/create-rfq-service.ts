@@ -18,6 +18,9 @@ import type { IRiskEngine } from "../risk-engine.js";
 import type { IResolutionRiskGroupingService } from "./resolution-risk-grouping-service.js";
 import type { ResolutionRiskVenueGrouping } from "./resolution-risk.types.js";
 import type { IResolutionRiskPolicyService } from "./resolution-risk-policy-service.js";
+import type { IReplayDecisionCaptureService } from "../replay/replay-decision-capture-service.js";
+import type { ReplayCaptureConfig } from "../replay/replay.types.js";
+import { RFQGroupingSnapshotBuilder } from "../replay/builders/rfq-grouping-snapshot-builder.js";
 
 export interface CreateRFQCommand {
   canonicalMarketId: string;
@@ -46,6 +49,8 @@ export interface CreateRFQServiceDependencies {
   riskEngine: IRiskEngine;
   resolutionRiskGroupingService: IResolutionRiskGroupingService;
   resolutionRiskPolicyService?: IResolutionRiskPolicyService;
+  replayDecisionCaptureService?: IReplayDecisionCaptureService;
+  replayCaptureConfig?: ReplayCaptureConfig;
 }
 
 export class MarketInactiveError extends Error {
@@ -65,6 +70,7 @@ export class CanonicalMarketResolutionMetadataError extends Error {
 export class CreateRFQService {
   private readonly now: () => Date;
   private readonly createRequestId: () => string;
+  private readonly replaySnapshotBuilder = new RFQGroupingSnapshotBuilder();
 
   public constructor(private readonly deps: CreateRFQServiceDependencies) {
     this.now = deps.now ?? (() => new Date());
@@ -90,16 +96,35 @@ export class CreateRFQService {
         if (!market.canonicalEventId) {
           throw new CanonicalMarketResolutionMetadataError(command.canonicalMarketId);
         }
+        const canonicalEventId = market.canonicalEventId;
 
-        const rawResolutionRiskGrouping = await this.deps.resolutionRiskGroupingService.groupProfilesForCanonicalEvent(
-          market.canonicalEventId
+        const rawResolutionRiskGroupingTrace = await this.deps.resolutionRiskGroupingService.groupProfilesForCanonicalEventWithTrace(
+          canonicalEventId
         );
+        const rawResolutionRiskGrouping = rawResolutionRiskGroupingTrace.grouping;
         const resolutionRiskPolicy = this.deps.resolutionRiskPolicyService?.applyRFQGrouping(
           rawResolutionRiskGrouping,
           command.idempotencyKey
         );
         const resolutionRiskGrouping = resolutionRiskPolicy?.grouping ?? rawResolutionRiskGrouping;
         const resolutionRiskShadowGrouping = resolutionRiskPolicy?.shadowGrouping;
+
+        if (this.deps.replayDecisionCaptureService && this.deps.replayCaptureConfig) {
+          await this.deps.replayDecisionCaptureService.capture({
+            config: this.deps.replayCaptureConfig,
+            buildEnvelope: (metadata) =>
+              this.replaySnapshotBuilder.build({
+                ...metadata,
+                correlationId: command.idempotencyKey,
+                rfqId: command.idempotencyKey,
+                canonicalEventId,
+                orderedCandidateProfiles: rawResolutionRiskGroupingTrace.orderedProfiles as unknown as readonly Record<string, unknown>[],
+                orderedAssessments: rawResolutionRiskGroupingTrace.orderedAssessments as unknown as readonly Record<string, unknown>[],
+                pairGenerationOrder: rawResolutionRiskGroupingTrace.pairGenerationOrder,
+                grouping: resolutionRiskGrouping as unknown as Record<string, unknown>
+              })
+          });
+        }
 
         try {
           await this.deps.riskEngine.validateRFQCreation({

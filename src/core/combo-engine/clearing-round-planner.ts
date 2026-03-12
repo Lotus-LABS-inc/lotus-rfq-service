@@ -1,10 +1,27 @@
 import Decimal from "decimal.js";
+import type { Logger } from "pino";
 
 import type { IPhase2BCandidateRegistry } from "./phase2b-candidate-registry.js";
 import type { IOverlapGraphBuilder } from "./overlap-graph-builder.js";
 import type { ICandidateGroupEnumerator } from "./candidate-group-enumerator.js";
 import type { IClearingCompressionScorer } from "./clearing-compression-scorer.js";
 import type { IResolutionRiskEligibilityService } from "../rfq-engine/resolution-risk-eligibility-service.js";
+import type { IReplayDecisionCaptureService } from "../replay/replay-decision-capture-service.js";
+import type {
+  ReplayCaptureConfig,
+  ReplayClearingScoreSnapshot,
+  ReplayResolutionEligibilityDecision
+} from "../replay/replay.types.js";
+import { ClearingPhase2BSnapshotBuilder } from "../replay/builders/clearing-phase2b-snapshot-builder.js";
+import type { PerformanceGuardrailConfig } from "../../guardrails/guardrail-config.js";
+import type { IGuardrailEvaluator } from "../../guardrails/guardrail-evaluator.js";
+import type { IDegradationManager } from "../../guardrails/degradation-manager.js";
+import {
+  evaluatePlanningGuardrails,
+  type GuardrailEnforcementMode,
+  type IReplayWriteFailureStatsSource
+} from "../../guardrails/planning-guardrail-helper.js";
+import type { IPhase3AGuardrailShadowResolver } from "../../guardrails/phase3a-guardrail-shadow.js";
 import type {
   ClearingCompressionScore,
   ClearingRoundPlan,
@@ -27,12 +44,24 @@ export interface IClearingRoundPlanner {
 }
 
 export class ClearingRoundPlanner implements IClearingRoundPlanner {
+  private readonly replaySnapshotBuilder = new ClearingPhase2BSnapshotBuilder();
+
   public constructor(
     private readonly candidateRegistry: IPhase2BCandidateRegistry,
     private readonly overlapGraphBuilder: IOverlapGraphBuilder,
     private readonly candidateGroupEnumerator: ICandidateGroupEnumerator,
     private readonly clearingCompressionScorer: IClearingCompressionScorer,
-    private readonly resolutionRiskEligibilityService?: IResolutionRiskEligibilityService
+    private readonly resolutionRiskEligibilityService?: IResolutionRiskEligibilityService,
+    private readonly replayDecisionCaptureService?: IReplayDecisionCaptureService,
+    private readonly replayCaptureConfig?: ReplayCaptureConfig,
+    private readonly guardrailConfig?: PerformanceGuardrailConfig,
+    private readonly guardrailEvaluator?: IGuardrailEvaluator,
+    private readonly degradationManager?: IDegradationManager,
+    private readonly replayWriteFailureStatsSource?: IReplayWriteFailureStatsSource,
+    private readonly controlPlaneShardId = "clearing-phase2b-main",
+    private readonly logger?: Pick<Logger, "info" | "warn" | "error">,
+    private readonly guardrailEnforcementMode?: GuardrailEnforcementMode,
+    private readonly phase3AGuardrailShadowResolver?: IPhase3AGuardrailShadowResolver
   ) {}
 
   public async plan(
@@ -55,6 +84,17 @@ export class ClearingRoundPlanner implements IClearingRoundPlanner {
     );
 
     if (page.entityIds.length === 0) {
+      return null;
+    }
+
+    const preflightGuardrailDecision = await this.evaluateClearingGuardrails({
+      bucketId,
+      bucketEntityCount: page.entityIds.length,
+      graphEdges: 0,
+      candidateGroups: 0,
+      plannerLatencyMs: 0
+    });
+    if (preflightGuardrailDecision?.skipCurrentEngine) {
       return null;
     }
 
@@ -92,13 +132,25 @@ export class ClearingRoundPlanner implements IClearingRoundPlanner {
     });
 
     const eligibleGroups: typeof candidateGroups = [];
+    const resolutionEligibilityExclusions: ReplayResolutionEligibilityDecision[] = [];
     for (const group of candidateGroups) {
-      if (await this.isGroupResolutionEligible(group, vectors, bucketId)) {
+      if (await this.isGroupResolutionEligible(group, vectors, bucketId, resolutionEligibilityExclusions)) {
         eligibleGroups.push(group);
       }
     }
 
     if (eligibleGroups.length === 0) {
+      return null;
+    }
+
+    const postEnumerationGuardrailDecision = await this.evaluateClearingGuardrails({
+      bucketId,
+      bucketEntityCount: page.entityIds.length,
+      graphEdges: graph.edges.length,
+      candidateGroups: eligibleGroups.length,
+      plannerLatencyMs: 0
+    });
+    if (postEnumerationGuardrailDecision?.skipCurrentEngine) {
       return null;
     }
 
@@ -116,13 +168,76 @@ export class ClearingRoundPlanner implements IClearingRoundPlanner {
       return null;
     }
 
-    return {
+    const plan = {
       compatibilityBucket,
       selectedGroup: selected.group,
       score: selected.score,
       residuals: selected.group.residualAfterNetting,
       participantLockOrder: [...selected.group.participantIds].sort((left, right) => left.localeCompare(right))
     };
+
+    await this.captureReplayDecision({
+      bucketId,
+      plannerConfig: resolvedConfig as unknown as Record<string, unknown>,
+      candidateSnapshots: snapshots as unknown as readonly Record<string, unknown>[],
+      bucketEntityOrder: page.entityIds,
+      overlapGraph: graph as unknown as Record<string, unknown>,
+      enumeratedGroups: candidateGroups as unknown as readonly Record<string, unknown>[],
+      scoreSnapshots: scored.map((entry) => ({
+        participantIds: entry.group.participantIds,
+        score: entry.score as unknown as Record<string, unknown>
+      })),
+      resolutionEligibilityExclusions,
+      selectedPlan: plan as unknown as Record<string, unknown>
+    });
+
+    return plan;
+  }
+
+  private async evaluateClearingGuardrails(input: {
+    bucketId: string;
+    bucketEntityCount: number;
+    graphEdges: number;
+    candidateGroups: number;
+    plannerLatencyMs: number;
+  }) {
+    if (!this.guardrailConfig || !this.guardrailEvaluator || !this.degradationManager) {
+      return null;
+    }
+
+    const enforcementMode =
+      this.guardrailEnforcementMode ??
+      (
+        await this.phase3AGuardrailShadowResolver?.resolve({
+          engine: "CLEARING_PHASE2B",
+          shardId: this.controlPlaneShardId,
+          bucketId: input.bucketId,
+          stableId: input.bucketId,
+        })
+      )?.enforcementMode ??
+      "ENFORCED";
+
+    return evaluatePlanningGuardrails({
+      guardrails: this.guardrailConfig,
+      stats: {
+        plannerType: "CLEARING_PHASE2B",
+        plannerLatencyMs: input.plannerLatencyMs,
+        bucketEntityCount: input.bucketEntityCount,
+        graphEdges: input.graphEdges,
+        candidateGroups: input.candidateGroups,
+        lockWaitMs: 0
+      },
+      context: {
+        shardId: this.controlPlaneShardId,
+        bucketId: input.bucketId,
+        engine: "CLEARING_PHASE2B"
+      },
+      guardrailEvaluator: this.guardrailEvaluator,
+      degradationManager: this.degradationManager,
+      replayWriteFailureStatsSource: this.replayWriteFailureStatsSource,
+      logger: this.logger ?? { info() {}, warn() {}, error() {} },
+      enforcementMode
+    });
   }
 
   private compareScores(
@@ -157,7 +272,8 @@ export class ClearingRoundPlanner implements IClearingRoundPlanner {
   private async isGroupResolutionEligible(
     group: { participantIds: readonly string[] },
     vectors: readonly ScorableResidualVector[],
-    stableKey: string
+    stableKey: string,
+    exclusions: ReplayResolutionEligibilityDecision[]
   ): Promise<boolean> {
     if (!this.resolutionRiskEligibilityService) {
       return true;
@@ -177,6 +293,13 @@ export class ClearingRoundPlanner implements IClearingRoundPlanner {
           continue;
         }
         if (!left.resolutionProfileId || !right.resolutionProfileId) {
+          exclusions.push({
+            leftProfileId: left.resolutionProfileId ?? null,
+            rightProfileId: right.resolutionProfileId ?? null,
+            allowed: false,
+            reason: "missing_profile_mapping",
+            stableKey
+          });
           return false;
         }
 
@@ -186,11 +309,44 @@ export class ClearingRoundPlanner implements IClearingRoundPlanner {
           { stableKey }
         );
         if (!safe) {
+          exclusions.push({
+            leftProfileId: left.resolutionProfileId,
+            rightProfileId: right.resolutionProfileId,
+            allowed: false,
+            reason: "resolution_profile_not_safe",
+            stableKey
+          });
           return false;
         }
       }
     }
 
     return true;
+  }
+
+  private async captureReplayDecision(input: {
+    bucketId: string;
+    plannerConfig: Record<string, unknown>;
+    candidateSnapshots: readonly Record<string, unknown>[];
+    bucketEntityOrder: readonly string[];
+    overlapGraph: Record<string, unknown>;
+    enumeratedGroups: readonly Record<string, unknown>[];
+    scoreSnapshots: readonly ReplayClearingScoreSnapshot[];
+    resolutionEligibilityExclusions: readonly ReplayResolutionEligibilityDecision[];
+    selectedPlan: Record<string, unknown>;
+  }): Promise<void> {
+    if (!this.replayDecisionCaptureService || !this.replayCaptureConfig) {
+      return;
+    }
+
+    await this.replayDecisionCaptureService.capture({
+      config: this.replayCaptureConfig,
+      buildEnvelope: (metadata) =>
+        this.replaySnapshotBuilder.build({
+          ...metadata,
+          correlationId: input.bucketId,
+          ...input
+        })
+    });
   }
 }

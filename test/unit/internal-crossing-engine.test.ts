@@ -291,7 +291,11 @@ describe("InternalCrossingEngine", () => {
       makeIncomingOrder({ resolution_profile_id: "profile-a", remaining_size: "10", initial_size: "10" })
     );
 
-    expect(eligibilityService.isSafeForInternalPooling).toHaveBeenCalledWith("profile-a", "profile-b");
+    expect(eligibilityService.isSafeForInternalPooling).toHaveBeenCalledWith(
+      "profile-a",
+      "profile-b",
+      { stableKey: "taker-order-1" }
+    );
     expect(result.filledSize).toBe(10);
   });
 
@@ -320,7 +324,11 @@ describe("InternalCrossingEngine", () => {
       makeIncomingOrder({ resolution_profile_id: "profile-a" })
     );
 
-    expect(eligibilityService.isSafeForInternalPooling).toHaveBeenCalledWith("profile-a", "profile-b");
+    expect(eligibilityService.isSafeForInternalPooling).toHaveBeenCalledWith(
+      "profile-a",
+      "profile-b",
+      { stableKey: "taker-order-1" }
+    );
     expect(orderLocker.acquireDualOrderLocks).not.toHaveBeenCalled();
     expect(result.filledSize).toBe(0);
     expect(result.remainingSize).toBe(10);

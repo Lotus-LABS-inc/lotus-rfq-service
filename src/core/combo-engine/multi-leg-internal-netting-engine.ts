@@ -22,6 +22,23 @@ import type {
 import type { ResourceLocker } from "./resource-locker.js";
 import { withSpan } from "../../observability/tracing.js";
 import type { IResolutionRiskEligibilityService } from "../rfq-engine/resolution-risk-eligibility-service.js";
+import type { IReplayDecisionCaptureService } from "../replay/replay-decision-capture-service.js";
+import type {
+  ReplayCaptureConfig,
+  ReplayComboCandidateSnapshot,
+  ReplayMatchedLegPairSnapshot,
+  ReplayResolutionEligibilityDecision
+} from "../replay/replay.types.js";
+import { NettingPhase2ASnapshotBuilder } from "../replay/builders/netting-phase2a-snapshot-builder.js";
+import type { PerformanceGuardrailConfig } from "../../guardrails/guardrail-config.js";
+import type { IGuardrailEvaluator } from "../../guardrails/guardrail-evaluator.js";
+import type { IDegradationManager } from "../../guardrails/degradation-manager.js";
+import {
+  evaluatePlanningGuardrails,
+  type GuardrailEnforcementMode,
+  type IReplayWriteFailureStatsSource
+} from "../../guardrails/planning-guardrail-helper.js";
+import type { IPhase3AGuardrailShadowResolver } from "../../guardrails/phase3a-guardrail-shadow.js";
 
 type DecimalValue = InstanceType<typeof Decimal>;
 
@@ -71,13 +88,25 @@ export interface IMultiLegInternalNettingEngine {
 }
 
 export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEngine {
+  private readonly replaySnapshotBuilder = new NettingPhase2ASnapshotBuilder();
+
   public constructor(
     private readonly pool: Pool,
     private readonly candidateRegistry: IComboNettingCandidateRegistry,
     private readonly compatibilityEngine: IComboNettingCompatibilityEngine,
     private readonly resourceLocker: ResourceLocker,
     private readonly logger: Logger,
-    private readonly resolutionRiskEligibilityService?: IResolutionRiskEligibilityService
+    private readonly resolutionRiskEligibilityService?: IResolutionRiskEligibilityService,
+    private readonly replayDecisionCaptureService?: IReplayDecisionCaptureService,
+    private readonly replayCaptureConfig?: ReplayCaptureConfig,
+    private readonly guardrailConfig?: PerformanceGuardrailConfig,
+    private readonly guardrailEvaluator?: IGuardrailEvaluator,
+    private readonly degradationManager?: IDegradationManager,
+    private readonly replayWriteFailureStatsSource?: IReplayWriteFailureStatsSource,
+    private readonly lockWaitStatsSource?: { getCurrentLockWaitMs(): number | Promise<number> },
+    private readonly controlPlaneShardId = "netting-phase2a-main",
+    private readonly guardrailEnforcementMode?: GuardrailEnforcementMode,
+    private readonly phase3AGuardrailShadowResolver?: IPhase3AGuardrailShadowResolver
   ) {}
 
   public async attemptNet(incomingCombo: MultiLegInternalNettingInput): Promise<MultiLegInternalNettingResult> {
@@ -110,6 +139,16 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
           this.toRegistryCombo(authoritativeIncoming)
         );
 
+        const guardrailDecision = await this.evaluateNettingGuardrails({
+          incomingCombo: authoritativeIncoming,
+          candidateCount: candidateIds.length,
+          candidateGroups: candidateIds.length,
+          plannerLatencyMs: 0
+        });
+        if (guardrailDecision?.skipCurrentEngine) {
+          return this.buildResult(totalNetted, authoritativeIncoming.legs, nettingGroupIds, totalEventsWritten);
+        }
+
         for (const candidateId of candidateIds) {
           authoritativeIncoming = await this.loadCombo(incomingCombo.id);
           this.assertFinalIncoming(authoritativeIncoming, incomingCombo.userId);
@@ -140,14 +179,61 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
             continue;
           }
 
-          const lockHandle = await this.resourceLocker.acquireLocks([
+          const lockResourceIds = [
             this.resourceLocker.comboLockId(authoritativeIncoming.id),
             this.resourceLocker.comboLockId(candidateCombo.id),
             ...compatibility.matchedLegPairs.flatMap((pair) => [
               this.resourceLocker.comboLegLockId(pair.incomingLegId),
               this.resourceLocker.comboLegLockId(pair.candidateLegId)
             ])
-          ]);
+          ].sort((left, right) => left.localeCompare(right));
+
+          const nettableSize = this.resolvePreviewNettableSize(authoritativeIncoming, candidateCombo, compatibility.matchedLegPairs);
+          if (nettableSize.lte(0)) {
+            continue;
+          }
+
+          await this.captureReplayDecision({
+            incomingCombo: authoritativeIncoming,
+            candidateCombos: [candidateCombo],
+            candidateOrder: [candidateCombo.id],
+            compatibilityInputs: [
+              {
+                incomingComboId: authoritativeIncoming.id,
+                candidateComboId: candidateCombo.id
+              }
+            ],
+            matchedLegPairOrder: compatibility.matchedLegPairs.map((pair) => ({
+              incomingLegId: pair.incomingLegId,
+              candidateLegId: pair.candidateLegId,
+              marketId: pair.marketId,
+              outcomeId: pair.outcomeId,
+              matchedSize: nettableSize.toString()
+            })),
+            resolutionEligibilityDecisions: [
+              {
+                leftProfileId: this.readComboResolutionProfileId(authoritativeIncoming),
+                rightProfileId: this.readComboResolutionProfileId(candidateCombo),
+                allowed: true,
+                reason: "safe_for_cross_venue_netting",
+                stableKey: authoritativeIncoming.id
+              }
+            ],
+            lockResourceIds,
+            attemptSnapshots: [
+              {
+                incomingComboId: authoritativeIncoming.id,
+                candidateComboId: candidateCombo.id,
+                maxNettableSize: nettableSize.toString()
+              }
+            ],
+            result: {
+              nettedSize: nettableSize.toString(),
+              candidateComboId: candidateCombo.id
+            }
+          });
+
+          const lockHandle = await this.resourceLocker.acquireLocks(lockResourceIds);
 
           try {
             const result = await this.executeNettingTransaction(authoritativeIncoming.id, candidateCombo.id);
@@ -171,6 +257,52 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
         return this.buildResult(totalNetted, authoritativeIncoming.legs, nettingGroupIds, totalEventsWritten);
       }
     );
+  }
+
+  private async evaluateNettingGuardrails(input: {
+    incomingCombo: AuthoritativeComboRow;
+    candidateCount: number;
+    candidateGroups: number;
+    plannerLatencyMs: number;
+  }) {
+    if (!this.guardrailConfig || !this.guardrailEvaluator || !this.degradationManager) {
+      return null;
+    }
+
+    const lockWaitMs = this.lockWaitStatsSource ? await this.lockWaitStatsSource.getCurrentLockWaitMs() : 0;
+    const enforcementMode =
+      this.guardrailEnforcementMode ??
+      (
+        await this.phase3AGuardrailShadowResolver?.resolve({
+          engine: "NETTING_PHASE2A",
+          shardId: this.controlPlaneShardId,
+          stableId: input.incomingCombo.id,
+          marketId: input.incomingCombo.legs[0]?.canonical_market_id ?? null,
+        })
+      )?.enforcementMode ??
+      "ENFORCED";
+    return evaluatePlanningGuardrails({
+      guardrails: this.guardrailConfig,
+      stats: {
+        plannerType: "NETTING_PHASE2A",
+        plannerLatencyMs: input.plannerLatencyMs,
+        bucketEntityCount: input.candidateCount,
+        graphEdges: 0,
+        candidateGroups: input.candidateGroups,
+        lockWaitMs
+      },
+      context: {
+        shardId: this.controlPlaneShardId,
+        engine: "NETTING_PHASE2A",
+        marketId: input.incomingCombo.legs[0]?.canonical_market_id ?? null
+      },
+      guardrailEvaluator: this.guardrailEvaluator,
+      degradationManager: this.degradationManager,
+      replayWriteFailureStatsSource: this.replayWriteFailureStatsSource,
+      logger: this.logger,
+      requestedBy: "netting-phase2a",
+      enforcementMode
+    });
   }
 
   public async previewNet(incomingCombo: MultiLegInternalNettingInput): Promise<MultiLegInternalNettingResult> {
@@ -441,6 +573,92 @@ export class MultiLegInternalNettingEngine implements IMultiLegInternalNettingEn
     } finally {
       client.release();
     }
+  }
+
+  private resolvePreviewNettableSize(
+    authoritativeIncoming: AuthoritativeComboRow,
+    authoritativeCandidate: AuthoritativeComboRow,
+    matchedLegPairs: readonly ComboNettingMatchedLegPair[]
+  ): DecimalValue {
+    let smallest: DecimalValue | null = null;
+    for (const pair of matchedLegPairs) {
+      const incomingLeg = authoritativeIncoming.legs.find((leg) => leg.id === pair.incomingLegId);
+      const candidateLeg = authoritativeCandidate.legs.find((leg) => leg.id === pair.candidateLegId);
+      if (!incomingLeg || !candidateLeg) {
+        throw new Error("Matched leg pair missing during replay capture preparation.");
+      }
+
+      const candidateSize = Decimal.min(
+        new Decimal(incomingLeg.remaining_size),
+        new Decimal(candidateLeg.remaining_size)
+      );
+      if (smallest === null || candidateSize.lessThan(smallest)) {
+        smallest = candidateSize;
+      }
+    }
+
+    return smallest ?? new Decimal(0);
+  }
+
+  private readComboResolutionProfileId(combo: AuthoritativeComboRow): string | null {
+    const profileIds = new Set(
+      combo.legs
+        .map((leg) => leg.metadata?.resolution_profile_id)
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+    );
+
+    if (profileIds.size !== 1) {
+      return null;
+    }
+
+    return [...profileIds][0] ?? null;
+  }
+
+  private async captureReplayDecision(input: {
+    incomingCombo: AuthoritativeComboRow;
+    candidateCombos: readonly AuthoritativeComboRow[];
+    candidateOrder: readonly string[];
+    compatibilityInputs: readonly Record<string, unknown>[];
+    matchedLegPairOrder: readonly ReplayMatchedLegPairSnapshot[];
+    resolutionEligibilityDecisions: readonly ReplayResolutionEligibilityDecision[];
+    lockResourceIds: readonly string[];
+    attemptSnapshots: readonly Record<string, unknown>[];
+    result: Record<string, unknown>;
+  }): Promise<void> {
+    if (!this.replayDecisionCaptureService || !this.replayCaptureConfig) {
+      return;
+    }
+
+    const candidateSnapshots: ReplayComboCandidateSnapshot[] = input.candidateCombos.map((combo) => ({
+      comboId: combo.id,
+      userId: combo.user_id,
+      state: combo.state,
+      legs: combo.legs as unknown as readonly Record<string, unknown>[]
+    }));
+
+    await this.replayDecisionCaptureService.capture({
+      config: this.replayCaptureConfig,
+      buildEnvelope: (metadata) =>
+        this.replaySnapshotBuilder.build({
+          ...metadata,
+          correlationId: input.incomingCombo.id,
+          incomingComboId: input.incomingCombo.id,
+          incomingCombo: {
+            id: input.incomingCombo.id,
+            userId: input.incomingCombo.user_id,
+            state: input.incomingCombo.state,
+            legs: input.incomingCombo.legs
+          },
+          candidateCombos: candidateSnapshots,
+          candidateOrder: input.candidateOrder,
+          compatibilityInputs: input.compatibilityInputs,
+          matchedLegPairOrder: input.matchedLegPairOrder,
+          resolutionEligibilityDecisions: input.resolutionEligibilityDecisions,
+          lockResourceIds: input.lockResourceIds,
+          attemptSnapshots: input.attemptSnapshots,
+          result: input.result
+        })
+    });
   }
 
   private async loadCombo(comboId: string): Promise<AuthoritativeComboRow | null> {

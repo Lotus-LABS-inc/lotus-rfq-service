@@ -552,6 +552,178 @@ export const resolutionRiskInternalExclusionTotal = new Counter({
   ...counterConfig
 });
 
+export const replayEnvelopesWrittenTotal = new Counter({
+  name: "replay_envelopes_written_total",
+  help: "Total replay envelopes persisted successfully.",
+  labelNames: ["decision_type", "mode"],
+  ...counterConfig
+});
+
+export const replayWriteFailuresTotal = new Counter({
+  name: "replay_write_failures_total",
+  help: "Total replay envelope write failures.",
+  labelNames: ["decision_type", "mode"],
+  ...counterConfig
+});
+
+export const replayExactMatchTotal = new Counter({
+  name: "replay_exact_match_total",
+  help: "Total replay executions that produced an exact match.",
+  labelNames: ["decision_type"],
+  ...counterConfig
+});
+
+export const replayDiffTotal = new Counter({
+  name: "replay_diff_total",
+  help: "Total replay executions that produced a diff.",
+  labelNames: ["decision_type"],
+  ...counterConfig
+});
+
+export const replayErrorTotal = new Counter({
+  name: "replay_error_total",
+  help: "Total replay executions that produced an error.",
+  labelNames: ["decision_type"],
+  ...counterConfig
+});
+
+export const plannerShardPausedTotal = new Counter({
+  name: "planner_shard_paused_total",
+  help: "Total successful planner shard pause operations.",
+  ...counterConfig
+});
+
+export const bucketDrainedTotal = new Counter({
+  name: "bucket_drained_total",
+  help: "Total successful bucket drain operations.",
+  ...counterConfig
+});
+
+export const degradedModeActivationsTotal = new Counter({
+  name: "degraded_mode_activations_total",
+  help: "Total effective execution mode degradations activated by the control plane.",
+  labelNames: ["mode", "source", "engine"],
+  ...counterConfig
+});
+
+export const guardrailModeTransitionsTotal = new Counter({
+  name: "guardrail_mode_transitions_total",
+  help: "Total engine handling transitions triggered by guardrail evaluation.",
+  labelNames: ["engine", "mode", "reason"],
+  ...counterConfig
+});
+
+export const phase3aGuardrailShadowTotal = new Counter({
+  name: "phase3a_guardrail_shadow_total",
+  help: "Total Phase 3A guardrail shadow evaluations by engine and enforcement mode.",
+  labelNames: ["engine", "mode"],
+  ...counterConfig
+});
+
+export const phase3aGuardrailShadowWouldDegradeTotal = new Counter({
+  name: "phase3a_guardrail_shadow_would_degrade_total",
+  help: "Total Phase 3A shadow evaluations that would degrade to a non-full mode.",
+  labelNames: ["engine", "mode"],
+  ...counterConfig
+});
+
+export const phase3aGuardrailShadowDivergenceTotal = new Counter({
+  name: "phase3a_guardrail_shadow_divergence_total",
+  help: "Total Phase 3A shadow decisions that diverged from enforced full-mode behavior.",
+  labelNames: ["engine", "reason"],
+  ...counterConfig
+});
+
+export const phase3aGuardrailShadowResolutionTotal = new Counter({
+  name: "phase3a_guardrail_shadow_resolution_total",
+  help: "Total Phase 3A guardrail shadow resolution decisions by engine, source, and enforcement mode.",
+  labelNames: ["engine", "source", "enforcement_mode"],
+  ...counterConfig
+});
+
+export const plannerLatencyBudgetExceededTotal = new Counter({
+  name: "planner_latency_budget_exceeded_total",
+  help: "Total planner latency guardrail violations detected.",
+  labelNames: ["engine", "planner_type"],
+  ...counterConfig
+});
+
+export const bucketSizeLimitExceededTotal = new Counter({
+  name: "bucket_size_limit_exceeded_total",
+  help: "Total bucket size guardrail violations detected.",
+  labelNames: ["engine", "planner_type"],
+  ...counterConfig
+});
+
+export const graphDensityLimitExceededTotal = new Counter({
+  name: "graph_density_limit_exceeded_total",
+  help: "Total graph density guardrail violations detected.",
+  labelNames: ["engine", "planner_type"],
+  ...counterConfig
+});
+
+export const lockWaitLimitExceededTotal = new Counter({
+  name: "lock_wait_limit_exceeded_total",
+  help: "Total lock wait guardrail violations detected.",
+  labelNames: ["engine", "planner_type"],
+  ...counterConfig
+});
+
+export const reconciliationV2RunsTotal = new Counter({
+  name: "reconciliation_v2_runs_total",
+  help: "Total ReconciliationV2 runs by status and dry-run mode.",
+  labelNames: ["status", "dry_run"],
+  ...counterConfig
+});
+
+export const reconciliationV2RunDurationMs = new Histogram({
+  name: "reconciliation_v2_run_duration_ms",
+  help: "Duration of full ReconciliationV2 runs in milliseconds.",
+  buckets: [10, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000, 120000],
+  ...histogramConfig
+});
+
+export const reconciliationV2LockConflictTotal = new Counter({
+  name: "reconciliation_v2_lock_conflict_total",
+  help: "Total ReconciliationV2 singleton lock conflicts.",
+  ...counterConfig
+});
+
+export const reconciliationV2InfraErrorTotal = new Counter({
+  name: "reconciliation_v2_infra_error_total",
+  help: "Total ReconciliationV2 infrastructure failures by domain and operation.",
+  labelNames: ["domain", "operation"],
+  ...counterConfig
+});
+
+export const reconciliationV2DiscrepanciesTotal = new Counter({
+  name: "reconciliation_v2_discrepancies_total",
+  help: "Total ReconciliationV2 discrepancies by domain, code, and severity.",
+  labelNames: ["domain", "code", "severity"],
+  ...counterConfig
+});
+
+export const reconciliationMismatchTotal = new Counter({
+  name: "reconciliation_mismatch_total",
+  help: "Total reconciliation mismatches emitted by ReconciliationV2.",
+  labelNames: ["domain", "code", "severity"],
+  ...counterConfig
+});
+
+export const replayMissingTotal = new Counter({
+  name: "replay_missing_total",
+  help: "Total missing replay envelopes detected by reconciliation.",
+  labelNames: ["decision_type"],
+  ...counterConfig
+});
+
+export const reconciliationV2FixesTotal = new Counter({
+  name: "reconciliation_v2_fixes_total",
+  help: "Total Redis-only ReconciliationV2 fixes by domain, code, and result.",
+  labelNames: ["domain", "code", "result"],
+  ...counterConfig
+});
+
 export const internalCrossingTotal = new Counter({
   name: "internal_crossing_total",
   help: "Total number of internal crossing attempts.",

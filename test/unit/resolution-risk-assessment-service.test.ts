@@ -1,9 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Pool, QueryResult, QueryResultRow } from "pg";
 import {
+  ReplayDecisionCaptureError,
+  ReplayDecisionCaptureService
+} from "../../src/core/replay/replay-decision-capture-service.js";
+import {
   ResolutionRiskAssessmentService,
   ResolutionRiskAssessmentServiceError
 } from "../../src/core/rfq-engine/resolution-risk-assessment-service.js";
+import type {
+  ResolutionRiskEquivalenceThresholds,
+  ResolutionRiskScoringWeights
+} from "../../src/core/rfq-engine/resolution-risk-scoring-engine.js";
 import type {
   NormalizedResolutionProfile,
   ResolutionFactorComparisonResult,
@@ -102,6 +110,28 @@ const makeQueryResult = <T extends QueryResultRow>(rows: T[]): QueryResult<T> =>
   rows
 });
 
+const makeScoringEngineMock = (scoreImpl: (input: { marketAProfileId: string; marketBProfileId: string }) => ResolutionRiskAssessment) => ({
+  score: vi.fn(scoreImpl),
+  getReplayWeights: vi.fn<() => ResolutionRiskScoringWeights>(() => ({
+    oracleMismatch: "0.22",
+    ruleMismatch: "0.20",
+    wordingAmbiguity: "0.16",
+    disputeWindowMismatch: "0.12",
+    settlementLagMismatch: "0.10",
+    structuralMismatch: "0.10",
+    historicalDivergence: "0.10"
+  })),
+  getReplayThresholds: vi.fn<() => ResolutionRiskEquivalenceThresholds>(() => ({
+    safeEquivalentMaxRisk: "0.20",
+    safeEquivalentMinConfidence: "0.70",
+    cautionMaxRisk: "0.45",
+    highRiskMaxRisk: "0.75",
+    doNotPoolMinRisk: "0.75",
+    lowConfidenceThreshold: "0.50"
+  })),
+  buildReplayConfidenceInputs: vi.fn(() => ({ factorConfidence: 1 }))
+});
+
 describe("ResolutionRiskAssessmentService", () => {
   const logger = {
     info: vi.fn(),
@@ -132,9 +162,7 @@ describe("ResolutionRiskAssessmentService", () => {
     });
 
     const comparator = { compare: vi.fn(() => factorComparison) };
-    const scorer = {
-      score: vi.fn(({ marketAProfileId, marketBProfileId }) => persisted.get(`${marketAProfileId}:${marketBProfileId}`)!)
-    };
+    const scorer = makeScoringEngineMock(({ marketAProfileId, marketBProfileId }) => persisted.get(`${marketAProfileId}:${marketBProfileId}`)!);
 
     const service = new ResolutionRiskAssessmentService({
       pool: { query } as unknown as Pool,
@@ -173,13 +201,11 @@ describe("ResolutionRiskAssessmentService", () => {
     });
 
     const comparator = { compare: vi.fn(() => factorComparison) };
-    const scorer = {
-      score: vi.fn(({ marketAProfileId, marketBProfileId }) => ({
+    const scorer = makeScoringEngineMock(({ marketAProfileId, marketBProfileId }) => ({
         ...persisted,
         marketAProfileId,
         marketBProfileId
-      }))
-    };
+      }));
 
     const service = new ResolutionRiskAssessmentService({
       pool: { query } as unknown as Pool,
@@ -213,7 +239,7 @@ describe("ResolutionRiskAssessmentService", () => {
     const service = new ResolutionRiskAssessmentService({
       pool: { query } as unknown as Pool,
       comparator: { compare: vi.fn() },
-      scoringEngine: { score: vi.fn() },
+      scoringEngine: makeScoringEngineMock(() => assessmentRow("a-profile", "b-profile")),
       logger,
       config: { version: "resolution-risk-v1" }
     });
@@ -252,9 +278,7 @@ describe("ResolutionRiskAssessmentService", () => {
     const service = new ResolutionRiskAssessmentService({
       pool: { query } as unknown as Pool,
       comparator: { compare: vi.fn(() => factorComparison) },
-      scoringEngine: {
-        score: vi.fn(({ marketAProfileId, marketBProfileId }) => persisted.get(`${marketAProfileId}:${marketBProfileId}`)!)
-      },
+      scoringEngine: makeScoringEngineMock(({ marketAProfileId, marketBProfileId }) => persisted.get(`${marketAProfileId}:${marketBProfileId}`)!),
       logger,
       metricsHooks: hooks,
       config: { version: "resolution-risk-v1" }
@@ -297,7 +321,7 @@ describe("ResolutionRiskAssessmentService", () => {
     const successService = new ResolutionRiskAssessmentService({
       pool: { query: successQuery } as unknown as Pool,
       comparator: { compare: vi.fn(() => factorComparison) },
-      scoringEngine: { score: vi.fn(() => persisted) },
+      scoringEngine: makeScoringEngineMock(() => persisted),
       logger,
       metricsHooks: successHooks,
       config: { version: "resolution-risk-v1" }
@@ -318,7 +342,7 @@ describe("ResolutionRiskAssessmentService", () => {
     const failureService = new ResolutionRiskAssessmentService({
       pool: { query: successQuery } as unknown as Pool,
       comparator: { compare: vi.fn(() => { throw new Error("compare_failed"); }) },
-      scoringEngine: { score: vi.fn() },
+      scoringEngine: makeScoringEngineMock(() => persisted),
       logger,
       metricsHooks: failureHooks,
       config: { version: "resolution-risk-v1" }
@@ -348,7 +372,7 @@ describe("ResolutionRiskAssessmentService", () => {
     const service = new ResolutionRiskAssessmentService({
       pool: { query } as unknown as Pool,
       comparator: { compare: vi.fn(() => factorComparison) },
-      scoringEngine: { score: vi.fn(() => persisted) },
+      scoringEngine: makeScoringEngineMock(() => persisted),
       logger,
       config: { version: "resolution-risk-v1" }
     });
@@ -358,5 +382,90 @@ describe("ResolutionRiskAssessmentService", () => {
 
     expect(first.id).toBe(second.id);
     expect(query.mock.calls.filter(([sql]) => (sql as string).includes("INSERT INTO resolution_risk_assessments"))).toHaveLength(2);
+  });
+
+  it("fails closed before persistence when replay capture is REQUIRED and capture fails", async () => {
+    const profileA = makeProfile("a-profile");
+    const profileB = makeProfile("b-profile");
+
+    const query = vi.fn(async (sql: string) => {
+      if (sql.includes("FROM resolution_profiles") && sql.includes("id = ANY")) {
+        return makeQueryResult([toProfileRow(profileA), toProfileRow(profileB)]);
+      }
+
+      if (sql.includes("INSERT INTO resolution_risk_assessments")) {
+        throw new Error("assessment persistence should not be reached");
+      }
+
+      throw new Error(`Unexpected query: ${sql}`);
+    });
+
+    const replayDecisionCaptureService = {
+      capture: vi.fn(async () => {
+        throw new ReplayDecisionCaptureError("RESOLUTION_RISK_ASSESSMENT", "REQUIRED", new Error("capture_failed"));
+      }),
+      getTotalFailureCount: vi.fn(() => 0)
+    };
+
+    const service = new ResolutionRiskAssessmentService({
+      pool: { query } as unknown as Pool,
+      comparator: { compare: vi.fn(() => factorComparison) },
+      scoringEngine: makeScoringEngineMock(() => assessmentRow("a-profile", "b-profile")),
+      logger,
+      config: { version: "resolution-risk-v1" },
+      replayDecisionCaptureService,
+      replayCaptureConfig: {
+        mode: "REQUIRED",
+        configVersion: "cfg-v1",
+        engineVersion: "eng-v1",
+        featureFlags: { replay: true }
+      }
+    });
+
+    await expect(service.comparePair("a-profile", "b-profile")).rejects.toBeInstanceOf(ReplayDecisionCaptureError);
+    expect(query).not.toHaveBeenCalledWith(expect.stringContaining("INSERT INTO resolution_risk_assessments"), expect.anything());
+  });
+
+  it("continues to persistence when replay capture is BEST_EFFORT and capture fails", async () => {
+    const profileA = makeProfile("a-profile");
+    const profileB = makeProfile("b-profile");
+    const persisted = assessmentRow("a-profile", "b-profile");
+
+    const query = vi.fn(async (sql: string) => {
+      if (sql.includes("FROM resolution_profiles") && sql.includes("id = ANY")) {
+        return makeQueryResult([toProfileRow(profileA), toProfileRow(profileB)]);
+      }
+
+      if (sql.includes("INSERT INTO resolution_risk_assessments")) {
+        return makeQueryResult([toAssessmentRow(persisted)]);
+      }
+
+      throw new Error(`Unexpected query: ${sql}`);
+    });
+
+    const replayDecisionCaptureService = {
+      capture: vi.fn(async () => null),
+      getTotalFailureCount: vi.fn(() => 1)
+    };
+
+    const service = new ResolutionRiskAssessmentService({
+      pool: { query } as unknown as Pool,
+      comparator: { compare: vi.fn(() => factorComparison) },
+      scoringEngine: makeScoringEngineMock(() => persisted),
+      logger,
+      config: { version: "resolution-risk-v1" },
+      replayDecisionCaptureService,
+      replayCaptureConfig: {
+        mode: "BEST_EFFORT",
+        configVersion: "cfg-v1",
+        engineVersion: "eng-v1",
+        featureFlags: { replay: true }
+      }
+    });
+
+    const result = await service.comparePair("a-profile", "b-profile");
+
+    expect(result.id).toBe(persisted.id);
+    expect(replayDecisionCaptureService.capture).toHaveBeenCalledOnce();
   });
 });

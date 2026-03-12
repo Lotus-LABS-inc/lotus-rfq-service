@@ -20,7 +20,32 @@ const FACTOR_ORDER = [
 type FactorName = typeof FACTOR_ORDER[number];
 type DecimalValue = InstanceType<typeof Decimal>;
 
-const FACTOR_WEIGHTS: Record<FactorName, DecimalValue> = {
+export interface ResolutionRiskScoringWeights {
+    oracleMismatch: string;
+    ruleMismatch: string;
+    wordingAmbiguity: string;
+    disputeWindowMismatch: string;
+    settlementLagMismatch: string;
+    structuralMismatch: string;
+    historicalDivergence: string;
+}
+
+export interface ResolutionRiskEquivalenceThresholds {
+    safeEquivalentMaxRisk: string;
+    safeEquivalentMinConfidence: string;
+    cautionMaxRisk: string;
+    highRiskMaxRisk: string;
+    doNotPoolMinRisk: string;
+    lowConfidenceThreshold: string;
+}
+
+export interface ResolutionRiskScoringConfig {
+    weights: ResolutionRiskScoringWeights;
+    thresholds: ResolutionRiskEquivalenceThresholds;
+    conservativeDowngradeOnLowConfidence: boolean;
+}
+
+const DEFAULT_FACTOR_WEIGHTS: Record<FactorName, DecimalValue> = {
     oracleMismatch: new Decimal("0.22"),
     ruleMismatch: new Decimal("0.20"),
     wordingAmbiguity: new Decimal("0.16"),
@@ -28,6 +53,29 @@ const FACTOR_WEIGHTS: Record<FactorName, DecimalValue> = {
     settlementLagMismatch: new Decimal("0.10"),
     structuralMismatch: new Decimal("0.10"),
     historicalDivergence: new Decimal("0.10")
+};
+
+const DEFAULT_THRESHOLDS: ResolutionRiskEquivalenceThresholds = {
+    safeEquivalentMaxRisk: "0.20",
+    safeEquivalentMinConfidence: "0.70",
+    cautionMaxRisk: "0.45",
+    highRiskMaxRisk: "0.75",
+    doNotPoolMinRisk: "0.75",
+    lowConfidenceThreshold: "0.50"
+};
+
+export const DEFAULT_RESOLUTION_RISK_SCORING_CONFIG: ResolutionRiskScoringConfig = {
+    weights: {
+        oracleMismatch: "0.22",
+        ruleMismatch: "0.20",
+        wordingAmbiguity: "0.16",
+        disputeWindowMismatch: "0.12",
+        settlementLagMismatch: "0.10",
+        structuralMismatch: "0.10",
+        historicalDivergence: "0.10"
+    },
+    thresholds: DEFAULT_THRESHOLDS,
+    conservativeDowngradeOnLowConfidence: true
 };
 
 export class ResolutionRiskScoringError extends Error {
@@ -42,9 +90,38 @@ export class ResolutionRiskScoringError extends Error {
 
 export interface IResolutionRiskScoringEngine {
     score(input: ResolutionRiskScoringInput): CreateResolutionRiskAssessmentInput;
+    getReplayWeights(): ResolutionRiskScoringWeights;
+    getReplayThresholds(): ResolutionRiskEquivalenceThresholds;
+    buildReplayConfidenceInputs(factorComparison: ResolutionFactorComparisonResult): Record<string, unknown>;
 }
 
 export class ResolutionRiskScoringEngine implements IResolutionRiskScoringEngine {
+    private readonly weights: Record<FactorName, DecimalValue>;
+    private readonly thresholds: ResolutionRiskEquivalenceThresholds;
+    private readonly conservativeDowngradeOnLowConfidence: boolean;
+
+    public constructor(config: Partial<ResolutionRiskScoringConfig> = {}) {
+        const mergedWeights = {
+            ...DEFAULT_RESOLUTION_RISK_SCORING_CONFIG.weights,
+            ...(config.weights ?? {})
+        };
+        this.weights = {
+            oracleMismatch: new Decimal(mergedWeights.oracleMismatch),
+            ruleMismatch: new Decimal(mergedWeights.ruleMismatch),
+            wordingAmbiguity: new Decimal(mergedWeights.wordingAmbiguity),
+            disputeWindowMismatch: new Decimal(mergedWeights.disputeWindowMismatch),
+            settlementLagMismatch: new Decimal(mergedWeights.settlementLagMismatch),
+            structuralMismatch: new Decimal(mergedWeights.structuralMismatch),
+            historicalDivergence: new Decimal(mergedWeights.historicalDivergence)
+        };
+        this.thresholds = {
+            ...DEFAULT_THRESHOLDS,
+            ...(config.thresholds ?? {})
+        };
+        this.conservativeDowngradeOnLowConfidence = config.conservativeDowngradeOnLowConfidence
+            ?? DEFAULT_RESOLUTION_RISK_SCORING_CONFIG.conservativeDowngradeOnLowConfidence;
+    }
+
     public score(input: ResolutionRiskScoringInput): CreateResolutionRiskAssessmentInput {
         this.validateInput(input);
 
@@ -63,6 +140,47 @@ export class ResolutionRiskScoringEngine implements IResolutionRiskScoringEngine
             factorBreakdown: input.factorComparison as unknown as Record<string, unknown>,
             reasons,
             version: input.version
+        };
+    }
+
+    public getReplayWeights(): ResolutionRiskScoringWeights {
+        return {
+            oracleMismatch: this.weights.oracleMismatch.toString(),
+            ruleMismatch: this.weights.ruleMismatch.toString(),
+            wordingAmbiguity: this.weights.wordingAmbiguity.toString(),
+            disputeWindowMismatch: this.weights.disputeWindowMismatch.toString(),
+            settlementLagMismatch: this.weights.settlementLagMismatch.toString(),
+            structuralMismatch: this.weights.structuralMismatch.toString(),
+            historicalDivergence: this.weights.historicalDivergence.toString()
+        };
+    }
+
+    public getReplayThresholds(): ResolutionRiskEquivalenceThresholds {
+        return { ...this.thresholds };
+    }
+
+    public buildReplayConfidenceInputs(factorComparison: ResolutionFactorComparisonResult): Record<string, unknown> {
+        const baseFactorConfidence = this.computeWeightedValue(factorComparison, "confidence");
+        const nonHistoricalFactors = FACTOR_ORDER
+            .filter((factorName) => factorName !== "historicalDivergence")
+            .map((factorName) => factorComparison[factorName].confidence);
+
+        const metadataCompletenessScore = nonHistoricalFactors.some((confidence) => confidence <= 0.4)
+            ? new Decimal("0.3")
+            : nonHistoricalFactors.every((confidence) => confidence >= 1)
+                ? new Decimal("1")
+                : nonHistoricalFactors.every((confidence) => confidence >= 0.75)
+                    ? new Decimal("0.75")
+                    : new Decimal("0.5");
+
+        const historicalCoverageScore = new Decimal(factorComparison.historicalDivergence.confidence);
+        const finalConfidence = this.computeConfidenceScore(factorComparison);
+
+        return {
+            baseFactorConfidence: baseFactorConfidence.toString(),
+            metadataCompletenessScore: metadataCompletenessScore.toString(),
+            historicalCoverageScore: historicalCoverageScore.toString(),
+            finalConfidenceScore: finalConfidence.toString()
         };
     }
 
@@ -106,7 +224,7 @@ export class ResolutionRiskScoringEngine implements IResolutionRiskScoringEngine
     ): DecimalValue {
         return FACTOR_ORDER.reduce(
             (acc, factorName) =>
-                acc.plus(FACTOR_WEIGHTS[factorName].times(factorComparison[factorName][field])),
+                acc.plus(this.weights[factorName].times(factorComparison[factorName][field])),
             new Decimal(0)
         );
     }
@@ -140,23 +258,28 @@ export class ResolutionRiskScoringEngine implements IResolutionRiskScoringEngine
         factorComparison: ResolutionFactorComparisonResult
     ): ResolutionEquivalenceClass {
         let classification: ResolutionEquivalenceClass;
+        const safeEquivalentMaxRisk = new Decimal(this.thresholds.safeEquivalentMaxRisk);
+        const cautionMaxRisk = new Decimal(this.thresholds.cautionMaxRisk);
+        const doNotPoolMinRisk = new Decimal(this.thresholds.doNotPoolMinRisk);
+        const lowConfidenceThreshold = new Decimal(this.thresholds.lowConfidenceThreshold);
+        const safeEquivalentMinConfidence = new Decimal(this.thresholds.safeEquivalentMinConfidence);
 
         if (
             factorComparison.oracleMismatch.score === 1 ||
             factorComparison.ruleMismatch.score === 1 ||
             factorComparison.structuralMismatch.score === 1 ||
-            riskScore.greaterThanOrEqualTo("0.75")
+            riskScore.greaterThanOrEqualTo(doNotPoolMinRisk)
         ) {
             classification = "DO_NOT_POOL";
-        } else if (riskScore.greaterThanOrEqualTo("0.45")) {
+        } else if (riskScore.greaterThanOrEqualTo(cautionMaxRisk)) {
             classification = "HIGH_RISK";
-        } else if (riskScore.greaterThanOrEqualTo("0.20")) {
+        } else if (riskScore.greaterThanOrEqualTo(safeEquivalentMaxRisk)) {
             classification = "CAUTION";
         } else {
             classification = "SAFE_EQUIVALENT";
         }
 
-        if (confidenceScore.lessThan("0.50")) {
+        if (this.conservativeDowngradeOnLowConfidence && confidenceScore.lessThan(lowConfidenceThreshold)) {
             switch (classification) {
                 case "SAFE_EQUIVALENT":
                     return "CAUTION";
@@ -169,7 +292,7 @@ export class ResolutionRiskScoringEngine implements IResolutionRiskScoringEngine
             }
         }
 
-        if (classification === "SAFE_EQUIVALENT" && confidenceScore.lessThan("0.70")) {
+        if (classification === "SAFE_EQUIVALENT" && confidenceScore.lessThan(safeEquivalentMinConfidence)) {
             return "CAUTION";
         }
 

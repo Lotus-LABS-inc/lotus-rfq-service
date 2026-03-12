@@ -52,6 +52,10 @@ const envSchema = z
     RESOLUTION_RISK_SHADOW_PERCENT: z.coerce.number().min(0).max(1).default(0),
     RESOLUTION_RISK_SHADOW_START_AT: optionalIsoDateSchema,
     RESOLUTION_RISK_SHADOW_END_AT: optionalIsoDateSchema,
+    PHASE3A_GUARDRAIL_SHADOW_ENABLED: z.coerce.boolean().default(false),
+    PHASE3A_GUARDRAIL_SHADOW_PERCENT: z.coerce.number().min(0).max(1).default(0),
+    PHASE3A_GUARDRAIL_SHADOW_START_AT: optionalIsoDateSchema,
+    PHASE3A_GUARDRAIL_SHADOW_END_AT: optionalIsoDateSchema,
     SOR_ACCEPT_AON_AWAIT: z.coerce.boolean().default(true),
     SOR_ACCEPT_NON_AON_BACKGROUND: z.coerce.boolean().default(true),
     RELIABILITY_WEIGHT: z.coerce.number().min(0).max(1).default(0.05),
@@ -121,6 +125,14 @@ const envSchema = z
         code: z.ZodIssueCode.custom,
         path: ["RESOLUTION_RISK_SHADOW_PERCENT"],
         message: "RESOLUTION_RISK_SHADOW_PERCENT must be > 0 when RESOLUTION_RISK_SHADOW_ENABLED is true."
+      });
+    }
+
+    if (value.PHASE3A_GUARDRAIL_SHADOW_ENABLED && value.PHASE3A_GUARDRAIL_SHADOW_PERCENT <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["PHASE3A_GUARDRAIL_SHADOW_PERCENT"],
+        message: "PHASE3A_GUARDRAIL_SHADOW_PERCENT must be > 0 when PHASE3A_GUARDRAIL_SHADOW_ENABLED is true."
       });
     }
 
@@ -204,6 +216,18 @@ const envSchema = z
           code: z.ZodIssueCode.custom,
           path: ["RESOLUTION_RISK_SHADOW_END_AT"],
           message: "RESOLUTION_RISK_SHADOW_END_AT must be later than RESOLUTION_RISK_SHADOW_START_AT."
+        });
+      }
+    }
+
+    if (value.PHASE3A_GUARDRAIL_SHADOW_START_AT && value.PHASE3A_GUARDRAIL_SHADOW_END_AT) {
+      const start = Date.parse(value.PHASE3A_GUARDRAIL_SHADOW_START_AT);
+      const end = Date.parse(value.PHASE3A_GUARDRAIL_SHADOW_END_AT);
+      if (Number.isFinite(start) && Number.isFinite(end) && start >= end) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["PHASE3A_GUARDRAIL_SHADOW_END_AT"],
+          message: "PHASE3A_GUARDRAIL_SHADOW_END_AT must be later than PHASE3A_GUARDRAIL_SHADOW_START_AT."
         });
       }
     }

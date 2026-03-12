@@ -5,6 +5,7 @@ import { pino } from "pino";
 import * as aggregationModule from "../../src/core/combo-engine/combo-netting-exposure-aggregation.js";
 import { MultiLegInternalNettingEngine } from "../../src/core/combo-engine/multi-leg-internal-netting-engine.js";
 import type { MultiLegInternalNettingInput } from "../../src/core/combo-engine/types.js";
+import { createPerformanceGuardrailConfig } from "../../src/guardrails/guardrail-config.js";
 
 const logger = pino({ level: "silent" });
 
@@ -293,7 +294,11 @@ describe("MultiLegInternalNettingEngine", () => {
 
     await engine.attemptNet(toInput(incoming));
 
-    expect(eligibilityService.isSafeForCrossVenueNetting).toHaveBeenCalledWith("profile-a", "profile-b");
+    expect(eligibilityService.isSafeForCrossVenueNetting).toHaveBeenCalledWith(
+      "profile-a",
+      "profile-b",
+      { stableKey: "incoming" }
+    );
     expect(resourceLocker.acquireLocks).toHaveBeenCalledTimes(1);
   });
 
@@ -357,9 +362,188 @@ describe("MultiLegInternalNettingEngine", () => {
 
     const result = await engine.attemptNet(toInput(incoming));
 
-    expect(eligibilityService.isSafeForCrossVenueNetting).toHaveBeenCalledWith("profile-a", "profile-b");
+    expect(eligibilityService.isSafeForCrossVenueNetting).toHaveBeenCalledWith(
+      "profile-a",
+      "profile-b",
+      { stableKey: "incoming" }
+    );
     expect(resourceLocker.acquireLocks).not.toHaveBeenCalled();
     expect(result.nettedSize).toBe("0");
+  });
+
+  it("skips Phase 2A before transaction when degraded to DISABLE_PHASE2A_AND_2B", async () => {
+    engine = new MultiLegInternalNettingEngine(
+      pool as never,
+      candidateRegistry,
+      compatibilityEngine as never,
+      resourceLocker as never,
+      logger,
+      undefined,
+      undefined,
+      undefined,
+      createPerformanceGuardrailConfig({
+        version: "guardrails-v1",
+        maxSorPlanningLatencyMs: 100,
+        maxNettingPlanningLatencyMs: 1,
+        maxClearingPlanningLatencyMs: 100,
+        maxBucketEntityCount: 100,
+        maxGraphEdges: 100,
+        maxCandidateGroups: 100,
+        maxLockWaitMs: 100,
+        maxLockHoldMs: 100,
+        maxReplayWriteFailuresBeforeDegrade: 100,
+        degradationPolicyVersion: "v1"
+      }),
+      {
+        evaluate: vi.fn(() => ({
+          violated: true,
+          violations: [
+            {
+              type: "PLANNER_LATENCY_BUDGET_EXCEEDED",
+              actual: 5,
+              threshold: 1,
+              reason: "planner latency exceeded budget"
+            }
+          ],
+          suggestedDegradation: "DISABLE_PHASE2A_AND_2B"
+        }))
+      } as never,
+      {
+        getEffectiveExecutionMode: vi.fn(async () => ({
+          mode: "DISABLE_PHASE2A_AND_2B",
+          reason: "PLANNER_LATENCY_BUDGET_EXCEEDED",
+          source: "guardrail",
+          violations: []
+        }))
+      } as never,
+      {
+        getReplayWriteFailures: () => 0
+      },
+      {
+        getCurrentLockWaitMs: () => 0
+      }
+    );
+
+    const incoming = createCombo("incoming", "user-a", [
+      { id: "in-leg-1", marketId: "m1", outcomeId: "o1", side: "buy", size: "10", remaining: "10", priceHint: "0.6" }
+    ]);
+
+    candidateRegistry.findCandidateCombos.mockResolvedValue(["candidate"]);
+    vi.spyOn(engine as never, "loadCombo").mockImplementation(async (comboId: unknown) => {
+      if (comboId === "incoming") {
+        return incoming;
+      }
+      return null;
+    });
+    const executeSpy = vi.spyOn(engine as never, "executeNettingTransaction");
+
+    const result = await engine.attemptNet(toInput(incoming));
+
+    expect(result.nettedSize).toBe("0");
+    expect(result.residualRemaining).toBe(true);
+    expect(resourceLocker.acquireLocks).not.toHaveBeenCalled();
+    expect(executeSpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps Phase 2A observational only when guardrails are resolved in SHADOW mode", async () => {
+    engine = new MultiLegInternalNettingEngine(
+      pool as never,
+      candidateRegistry,
+      compatibilityEngine as never,
+      resourceLocker as never,
+      logger,
+      undefined,
+      undefined,
+      undefined,
+      createPerformanceGuardrailConfig({
+        version: "guardrails-v1",
+        maxSorPlanningLatencyMs: 100,
+        maxNettingPlanningLatencyMs: 1,
+        maxClearingPlanningLatencyMs: 100,
+        maxBucketEntityCount: 100,
+        maxGraphEdges: 100,
+        maxCandidateGroups: 100,
+        maxLockWaitMs: 100,
+        maxLockHoldMs: 100,
+        maxReplayWriteFailuresBeforeDegrade: 100,
+        degradationPolicyVersion: "v1"
+      }),
+      {
+        evaluate: vi.fn(() => ({
+          violated: true,
+          violations: [
+            {
+              type: "PLANNER_LATENCY_BUDGET_EXCEEDED",
+              actual: 5,
+              threshold: 1,
+              reason: "planner latency exceeded budget"
+            }
+          ],
+          suggestedDegradation: "DISABLE_PHASE2A_AND_2B"
+        }))
+      } as never,
+      {
+        getEffectiveExecutionMode: vi.fn(async () => ({
+          mode: "DISABLE_PHASE2A_AND_2B",
+          reason: "PLANNER_LATENCY_BUDGET_EXCEEDED",
+          source: "guardrail",
+          violations: []
+        }))
+      } as never,
+      {
+        getReplayWriteFailures: () => 0
+      },
+      {
+        getCurrentLockWaitMs: () => 0
+      },
+      "netting-phase2a-main",
+      "SHADOW"
+    );
+
+    const incoming = createCombo("incoming", "user-a", [
+      { id: "in-leg-1", marketId: "m1", outcomeId: "o1", side: "buy", size: "10", remaining: "10", priceHint: "0.6" }
+    ]);
+    const candidate = createCombo("candidate", "user-b", [
+      { id: "cand-leg-1", marketId: "m1", outcomeId: "o1", side: "sell", size: "10", remaining: "10", priceHint: "0.55" }
+    ]);
+
+    candidateRegistry.findCandidateCombos.mockResolvedValue(["candidate"]);
+    compatibilityEngine.evaluate.mockReturnValue({
+      compatible: true,
+      matchedLegPairs: [
+        {
+          incomingLegId: "in-leg-1",
+          candidateLegId: "cand-leg-1",
+          marketId: "m1",
+          outcomeId: "o1",
+          matchedSize: "5"
+        }
+      ],
+      maxNettableSize: "5"
+    });
+    resourceLocker.acquireLocks.mockResolvedValue({ lockKeys: ["lock:combo:incoming"], ownerId: "owner-1" });
+    vi.spyOn(engine as never, "loadCombo").mockImplementation(async (comboId: unknown) => {
+      if (comboId === "incoming") {
+        return incoming;
+      }
+      if (comboId === "candidate") {
+        return candidate;
+      }
+      return null;
+    });
+    const executeSpy = vi.spyOn(engine as never, "executeNettingTransaction").mockResolvedValue({
+      nettingGroupId: "group-1",
+      nettedSize: new Decimal(5),
+      eventsWritten: 1,
+      incomingResidualLegs: [],
+      exhaustedComboIds: []
+    });
+
+    const result = await engine.attemptNet(toInput(incoming));
+
+    expect(result.nettedSize).toBe("5");
+    expect(resourceLocker.acquireLocks).toHaveBeenCalledTimes(1);
+    expect(executeSpy).toHaveBeenCalledTimes(1);
   });
 
   it("treats replayed candidate attempts as no-op", async () => {
@@ -592,10 +776,10 @@ describe("MultiLegInternalNettingEngine", () => {
     await engine.attemptNet(toInput(incoming));
 
     expect(resourceLocker.acquireLocks).toHaveBeenCalledWith([
-      "lock:combo:combo-b",
-      "lock:combo:combo-a",
+      "lock:combo-leg:leg-a",
       "lock:combo-leg:leg-b",
-      "lock:combo-leg:leg-a"
+      "lock:combo:combo-a",
+      "lock:combo:combo-b"
     ]);
   });
 

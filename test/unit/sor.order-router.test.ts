@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OrderRouter } from "../../src/core/sor/order-router.js";
 import { InsufficientLiquidityError } from "../../src/core/sor/splitter.js";
+import { createPerformanceGuardrailConfig } from "../../src/guardrails/guardrail-config.js";
 import type {
   CanonicalRFQInput,
   CandidateScore,
@@ -648,6 +649,147 @@ describe("SOR OrderRouter", () => {
     expect(result.plan.steps[0]?.providerId).toBe("lp-1");
   });
 
+  it("downgrades to isolated routing when SOR_ONLY guardrails trigger", async () => {
+    const candidates: RouteCandidate[] = [
+      {
+        id: "30000000-0000-4000-8000-000000000001",
+        leg_id: "20111111-1111-4111-8111-111111111111",
+        provider_type: "LP",
+        provider_id: "lp-1",
+        available_size: 5,
+        quoted_price: 1.0,
+        fees: {},
+        latency_ms: 1,
+        fill_prob: 0.95
+      },
+      {
+        id: "30000000-0000-4000-8000-000000000002",
+        leg_id: "20111111-1111-4111-8111-111111111111",
+        provider_type: "VENUE",
+        provider_id: "venue-2",
+        available_size: 5,
+        quoted_price: 1.01,
+        fees: {},
+        latency_ms: 1,
+        fill_prob: 0.95
+      }
+    ];
+    const scores: CandidateScore[] = [
+      {
+        candidateId: candidates[0]!.id,
+        providerId: candidates[0]!.provider_id,
+        effectiveUnitCost: 1.0,
+        totalExpectedCost: 10.0,
+        breakdown: {
+          effectiveUnitCost: 1,
+          basePrice: 1,
+          providerFee: 0,
+          protocolFee: 0,
+          gasCost: 0,
+          latencyPenalty: 0,
+          failurePenalty: 0,
+          resolutionRiskPenalty: 0
+        }
+      },
+      {
+        candidateId: candidates[1]!.id,
+        providerId: candidates[1]!.provider_id,
+        effectiveUnitCost: 1.01,
+        totalExpectedCost: 10.1,
+        breakdown: {
+          effectiveUnitCost: 1.01,
+          basePrice: 1.01,
+          providerFee: 0,
+          protocolFee: 0,
+          gasCost: 0,
+          latencyPenalty: 0,
+          failurePenalty: 0,
+          resolutionRiskPenalty: 0
+        }
+      }
+    ];
+    const split = vi.fn();
+    const composePlan = vi.fn(async (_rfq, routeCandidates: readonly RouteCandidate[], _scores, allocations: readonly { candidateId: string; roundedSize: number; targetPrice: number }[]) => ({
+      id: "30000000-0000-4000-8000-000000000099",
+      rfqId: rfqInput.rfqId,
+      acceptancePolicy: "PARTIAL_ALLOWED" as const,
+      steps: allocations.map((allocation, index) => ({
+        id: `step-${index}`,
+        stepIndex: index,
+        providerType: routeCandidates.find((candidate) => candidate.id === allocation.candidateId)!.provider_type,
+        providerId: routeCandidates.find((candidate) => candidate.id === allocation.candidateId)!.provider_id,
+        candidateId: allocation.candidateId,
+        targetSize: allocation.roundedSize,
+        roundedSize: allocation.roundedSize,
+        targetPrice: allocation.targetPrice,
+        idempotencyKey: `idem-${index}`,
+        state: "PENDING" as const
+      })),
+      createdAt: new Date("2026-03-12T00:00:00.000Z")
+    }));
+
+    const router = new OrderRouter({
+      routeScout: { discoverCandidates: vi.fn(async () => candidates) } as never,
+      costModel: { evaluateCandidates: vi.fn(async () => scores) } as never,
+      splitter: { split } as never,
+      planComposer: { composePlan } as never,
+      internalEngine: {
+        attemptCross: vi.fn(async () => ({ filledSize: 0, remainingSize: 10, trades: [] })),
+        previewCross: vi.fn(async () => ({ fillableSize: 0, remainingSize: 10, matchedOrderIds: [], wouldSelfTrade: false }))
+      },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
+      internalCrossingEnabled: true,
+      guardrailConfig: createPerformanceGuardrailConfig({
+        version: "test-guardrails",
+        maxSorPlanningLatencyMs: 1,
+        maxNettingPlanningLatencyMs: 100,
+        maxClearingPlanningLatencyMs: 100,
+        maxBucketEntityCount: 100,
+        maxGraphEdges: 100,
+        maxCandidateGroups: 100,
+        maxLockWaitMs: 100,
+        maxLockHoldMs: 100,
+        maxReplayWriteFailuresBeforeDegrade: 100,
+        degradationPolicyVersion: "v1"
+      }),
+      guardrailEvaluator: {
+        evaluate: vi.fn(() => ({
+          violated: true,
+          violations: [
+            {
+              type: "PLANNER_LATENCY_BUDGET_EXCEEDED",
+              actual: 10,
+              threshold: 1,
+              reason: "planner latency exceeded budget"
+            }
+          ],
+          suggestedDegradation: "SOR_ONLY"
+        }))
+      } as never,
+      degradationManager: {
+        getEffectiveExecutionMode: vi.fn(async () => ({
+          mode: "SOR_ONLY",
+          reason: "PLANNER_LATENCY_BUDGET_EXCEEDED",
+          source: "guardrail",
+          violations: []
+        }))
+      } as never,
+      replayWriteFailureStatsSource: {
+        getReplayWriteFailures: () => 0
+      }
+    });
+
+    const result = await router.buildPlan(rfqInput, selectedQuoteInput, "PARTIAL_ALLOWED");
+
+    expect(result.kind).toBe("plan_created");
+    if (result.kind !== "plan_created") {
+      throw new Error("expected plan_created");
+    }
+    expect(split).not.toHaveBeenCalled();
+    expect(result.plan.steps).toHaveLength(1);
+    expect(result.plan.steps[0]?.providerId).toBe("lp-1");
+  });
+
   it("treats blocked SOR pairs as normal in shadow mode", async () => {
     const candidates: RouteCandidate[] = [
       {
@@ -782,6 +924,166 @@ describe("SOR OrderRouter", () => {
     const result = await router.buildPlan(rfqInput, selectedQuoteInput, "PARTIAL_ALLOWED");
 
     expect(result.kind).toBe("plan_created");
+    if (result.kind !== "plan_created") {
+      throw new Error("expected plan_created");
+    }
+    expect(result.plan.steps).toHaveLength(2);
+  });
+
+  it("keeps authoritative routing behavior when SOR guardrails are resolved in SHADOW mode", async () => {
+    const candidates: RouteCandidate[] = [
+      {
+        id: "40000000-0000-4000-8000-000000000001",
+        leg_id: "30111111-1111-4111-8111-111111111111",
+        provider_type: "LP",
+        provider_id: "lp-1",
+        available_size: 5,
+        quoted_price: 1.0,
+        fees: {},
+        latency_ms: 1,
+        fill_prob: 0.95
+      },
+      {
+        id: "40000000-0000-4000-8000-000000000002",
+        leg_id: "30111111-1111-4111-8111-111111111111",
+        provider_type: "VENUE",
+        provider_id: "venue-2",
+        available_size: 5,
+        quoted_price: 1.01,
+        fees: {},
+        latency_ms: 1,
+        fill_prob: 0.95
+      }
+    ];
+    const scores: CandidateScore[] = [
+      {
+        candidateId: candidates[0]!.id,
+        providerId: candidates[0]!.provider_id,
+        effectiveUnitCost: 1.0,
+        totalExpectedCost: 10,
+        breakdown: {
+          effectiveUnitCost: 1,
+          basePrice: 1,
+          providerFee: 0,
+          protocolFee: 0,
+          gasCost: 0,
+          latencyPenalty: 0,
+          failurePenalty: 0,
+          resolutionRiskPenalty: 0
+        }
+      },
+      {
+        candidateId: candidates[1]!.id,
+        providerId: candidates[1]!.provider_id,
+        effectiveUnitCost: 1.01,
+        totalExpectedCost: 10.1,
+        breakdown: {
+          effectiveUnitCost: 1.01,
+          basePrice: 1.01,
+          providerFee: 0,
+          protocolFee: 0,
+          gasCost: 0,
+          latencyPenalty: 0,
+          failurePenalty: 0,
+          resolutionRiskPenalty: 0
+        }
+      }
+    ];
+    const split = vi.fn(async () => [
+      {
+        candidateId: candidates[0]!.id,
+        providerId: "lp-1",
+        targetSize: 10,
+        roundedSize: 10,
+        targetPrice: 1
+      },
+      {
+        candidateId: candidates[1]!.id,
+        providerId: "venue-2",
+        targetSize: 10,
+        roundedSize: 10,
+        targetPrice: 1.01
+      }
+    ]);
+
+    const router = new OrderRouter({
+      routeScout: { discoverCandidates: vi.fn(async () => candidates) } as never,
+      costModel: { evaluateCandidates: vi.fn(async () => scores) } as never,
+      splitter: { split } as never,
+      planComposer: {
+        composePlan: vi.fn(async (
+          _rfq,
+          routeCandidates: readonly RouteCandidate[],
+          _scores,
+          allocations: ReadonlyArray<{ candidateId: string; roundedSize: number; targetPrice: number }>
+        ) => ({
+          id: "40000000-0000-4000-8000-000000000099",
+          rfqId: rfqInput.rfqId,
+          acceptancePolicy: "PARTIAL_ALLOWED" as const,
+          steps: allocations.map((allocation, index: number) => ({
+            id: `step-shadow-${index}`,
+            stepIndex: index,
+            providerType: routeCandidates.find((candidate) => candidate.id === allocation.candidateId)!.provider_type,
+            providerId: routeCandidates.find((candidate) => candidate.id === allocation.candidateId)!.provider_id,
+            candidateId: allocation.candidateId,
+            targetSize: allocation.roundedSize,
+            roundedSize: allocation.roundedSize,
+            targetPrice: allocation.targetPrice,
+            idempotencyKey: `idem-shadow-${index}`,
+            state: "PENDING" as const
+          })),
+          createdAt: new Date("2026-03-12T00:00:00.000Z")
+        }))
+      } as never,
+      internalEngine: {
+        attemptCross: vi.fn(async () => ({ filledSize: 0, remainingSize: 10, trades: [] })),
+        previewCross: vi.fn(async () => ({ fillableSize: 0, remainingSize: 10, matchedOrderIds: [], wouldSelfTrade: false }))
+      },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
+      internalCrossingEnabled: true,
+      guardrailConfig: createPerformanceGuardrailConfig({
+        version: "test-guardrails",
+        maxSorPlanningLatencyMs: 1,
+        maxNettingPlanningLatencyMs: 100,
+        maxClearingPlanningLatencyMs: 100,
+        maxBucketEntityCount: 100,
+        maxGraphEdges: 100,
+        maxCandidateGroups: 100,
+        maxLockWaitMs: 100,
+        maxLockHoldMs: 100,
+        maxReplayWriteFailuresBeforeDegrade: 100,
+        degradationPolicyVersion: "v1"
+      }),
+      guardrailEvaluator: {
+        evaluate: vi.fn(() => ({
+          violated: true,
+          violations: [
+            {
+              type: "PLANNER_LATENCY_BUDGET_EXCEEDED",
+              actual: 5,
+              threshold: 1,
+              reason: "planner latency exceeded budget"
+            }
+          ],
+          suggestedDegradation: "SOR_ONLY"
+        }))
+      } as never,
+      degradationManager: {
+        getEffectiveExecutionMode: vi.fn(async () => ({
+          mode: "SOR_ONLY",
+          reason: "PLANNER_LATENCY_BUDGET_EXCEEDED",
+          source: "guardrail",
+          violations: []
+        }))
+      } as never,
+      replayWriteFailureStatsSource: { getReplayWriteFailures: () => 0 },
+      guardrailEnforcementMode: "SHADOW"
+    });
+
+    const result = await router.buildPlan(rfqInput, selectedQuoteInput, "PARTIAL_ALLOWED");
+
+    expect(result.kind).toBe("plan_created");
+    expect(split).toHaveBeenCalledTimes(1);
     if (result.kind !== "plan_created") {
       throw new Error("expected plan_created");
     }

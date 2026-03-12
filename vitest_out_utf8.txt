@@ -1,0 +1,156 @@
+﻿
+[1m[46m RUN [49m[22m [36mv3.2.4 [39m[90mC:/Users/Admin/Documents/lotus-RFQ-service/lotus-rfq-service[39m
+
+node.exe : [90mstderr[2m | 
+test/integration/rfq-lifecycle.test.ts[2m > 
+[22m[2mRFQ lifecycle integration harness[2m 
+> [22m[2mSOR handoff: accept creates plan, 
+persists reservation token, and runs plan
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" 
+"C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ( 
+   [90mstderr[2m..., and runs plan:String) [  
+  ], RemoteException
+    + FullyQualifiedErrorId : NativeCommandErr 
+   or
+ 
+[22m[39minternalEngine.attemptCross error!!! 
+ReplyError: ERR syntax error
+    at parseError [90m(C:\Users\Admin\Document
+s\lotus-RFQ-service\lotus-rfq-service\[39mnode
+_modules\[4mredis-parser[24m\lib\parser.js:17
+9:12[90m)[39m
+    at parseType [90m(C:\Users\Admin\Documents
+\lotus-RFQ-service\lotus-rfq-service\[39mnode_
+modules\[4mredis-parser[24m\lib\parser.js:302
+:14[90m)[39m {
+  command: {
+    name: [32m'zrangebyscore'[39m,
+    args: [
+      [32m'book:a0eb58b9-a89c-48a7-bda8-b08a05
+0ad95e:SELL'[39m,
+      [32m'-inf'[39m,
+      [32m'1.1'[39m,
+      [32m'[object Object]'[39m
+    ]
+  }
+}
+
+[90mstderr[2m | 
+test/integration/rfq-lifecycle.test.ts[2m > 
+[22m[2mRFQ lifecycle integration harness[2m 
+> [22m[2mSOR feature flag disabled: accept 
+uses legacy path and keeps 202 plan envelope
+[22m[39minternalEngine.attemptCross error!!! 
+ReplyError: ERR syntax error
+    at parseError [90m(C:\Users\Admin\Document
+s\lotus-RFQ-service\lotus-rfq-service\[39mnode
+_modules\[4mredis-parser[24m\lib\parser.js:17
+9:12[90m)[39m
+    at parseType [90m(C:\Users\Admin\Documents
+\lotus-RFQ-service\lotus-rfq-service\[39mnode_
+modules\[4mredis-parser[24m\lib\parser.js:302
+:14[90m)[39m {
+  command: {
+    name: [32m'zrangebyscore'[39m,
+    args: [
+      [32m'book:a0eb58b9-a89c-48a7-bda8-b08a05
+0ad95e:SELL'[39m,
+      [32m'-inf'[39m,
+      [32m'1.05'[39m,
+      [32m'[object Object]'[39m
+    ]
+  }
+}
+
+ [31mΓ¥»[39m test/integration/rfq-lifecycle.test.ts [2m([22m[2m7 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 43669[2mms[22m[39m
+[31m   [31m├ù[31m RFQ lifecycle integration harness[2m > [22mSOR handoff: accept creates plan, persists reservation token, and runs plan[39m[33m 2451[2mms[22m[39m
+[31m     ΓåÆ expected 500 to be 202 // Object.is equality[39m
+   [33m[2mΓ£ô[22m[39m RFQ lifecycle integration harness[2m > [22mSOR handoff: risk rejection returns structured 409 [33m 2451[2mms[22m[39m
+[31m   [31m├ù[31m RFQ lifecycle integration harness[2m > [22mSOR feature flag disabled: accept uses legacy path and keeps 202 plan envelope[39m[33m 3331[2mms[22m[39m
+[31m     ΓåÆ expected 500 to be 202 // Object.is equality[39m
+   [33m[2mΓ£ô[22m[39m RFQ lifecycle integration harness[2m > [22mScenario 1: Happy Path [33m 10339[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m RFQ lifecycle integration harness[2m > [22mScenario 2: Expired Session [33m 5884[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m RFQ lifecycle integration harness[2m > [22mScenario 3: Concurrent Accept [33m 5696[2mms[22m[39m
+   [33m[2mΓ£ô[22m[39m RFQ lifecycle integration harness[2m > [22mScenario 4: Duplicate Quote ID [33m 5507[2mms[22m[39m
+
+[31mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[39m[1m[41m 
+Failed Tests 2 
+[49m[22m[31mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[39m
+
+[41m[1m FAIL [22m[49m 
+test/integration/rfq-lifecycle.test.ts[2m > 
+[22mRFQ lifecycle integration harness[2m > 
+[22mSOR handoff: accept creates plan, 
+persists reservation token, and runs plan
+[31m[1mAssertionError[22m: expected 500 to 
+be 202 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 202[39m
+[31m+ 500[39m
+
+[36m [2mΓ¥»[22m test/integration/rfq-lifecyc
+le.test.ts:[2m378:39[22m[39m
+    [90m376| [39m    })[33m;[39m
+    [90m377| [39m
+    [90m378| [39m    [34mexpect[39m(acceptR
+esponse[33m.[39mstatusCode)[33m.[39m[34mto
+Be[39m([34m202[39m)[33m;[39m
+    [90m   | [39m                            
+          [31m^[39m
+    [90m379| [39m    [35mconst[39m body 
+[33m=[39m 
+acceptResponse[33m.[39m[34mjson[39m() 
+[35mas[39m {
+    [90m380| [39m      status[33m:[39m 
+string[33m;[39m
+
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ
+»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[1/2]ΓÄ»[22m
+[39m
+
+[41m[1m FAIL [22m[49m 
+test/integration/rfq-lifecycle.test.ts[2m > 
+[22mRFQ lifecycle integration harness[2m > 
+[22mSOR feature flag disabled: accept uses 
+legacy path and keeps 202 plan envelope
+[31m[1mAssertionError[22m: expected 500 to 
+be 202 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 202[39m
+[31m+ 500[39m
+
+[36m [2mΓ¥»[22m test/integration/rfq-lifecyc
+le.test.ts:[2m524:41[22m[39m
+    [90m522| [39m      })[33m;[39m
+    [90m523| [39m
+    [90m524| [39m      [34mexpect[39m(accep
+tResponse[33m.[39mstatusCode)[33m.[39m[34m
+toBe[39m([34m202[39m)[33m;[39m
+    [90m   | [39m                            
+            [31m^[39m
+    [90m525| [39m      [34mexpect[39m(accep
+tResponse[33m.[39m[34mjson[39m())[33m.[39
+m[34mtoMatchObject[39m({
+    [90m526| [39m        status[33m:[39m 
+[32m"PLAN_ACCEPTED"[39m[33m,[39m
+
+[31m[2mΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ
+»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[2/2]ΓÄ»[22m
+[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m5 passed[39m[22m[90m (7)[39m
+[2m   Start at [22m 08:53:55
+[2m   Duration [22m 46.31s[2m (transform 396ms, setup 25ms, collect 1.93s, tests 43.67s, environment 0ms, prepare 202ms)[22m
+

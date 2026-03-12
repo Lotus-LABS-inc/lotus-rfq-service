@@ -8,6 +8,9 @@ import type { OrderBook } from "./order-book.js";
 import type { OrderLocker } from "./locker.js";
 import { withSpan } from "../../observability/tracing.js";
 import type { IResolutionRiskEligibilityService } from "../rfq-engine/resolution-risk-eligibility-service.js";
+import type { IReplayDecisionCaptureService } from "../replay/replay-decision-capture-service.js";
+import type { ReplayCaptureConfig } from "../replay/replay.types.js";
+import { InternalCrossSnapshotBuilder } from "../replay/builders/internal-cross-snapshot-builder.js";
 
 type DecimalValue = InstanceType<typeof Decimal>;
 
@@ -38,12 +41,16 @@ export interface InternalCrossPreviewResult {
 }
 
 export class InternalCrossingEngine {
+    private readonly replaySnapshotBuilder = new InternalCrossSnapshotBuilder();
+
     constructor(
         private readonly pool: Pool,
         private readonly orderBook: OrderBook,
         private readonly orderLocker: OrderLocker,
         private readonly logger: Logger,
-        private readonly resolutionRiskEligibilityService?: IResolutionRiskEligibilityService
+        private readonly resolutionRiskEligibilityService?: IResolutionRiskEligibilityService,
+        private readonly replayDecisionCaptureService?: IReplayDecisionCaptureService,
+        private readonly replayCaptureConfig?: ReplayCaptureConfig
     ) { }
 
     /**
@@ -111,6 +118,21 @@ export class InternalCrossingEngine {
                             }, "Skipping internal crossing candidate due to non-safe resolution profile equivalence.");
                             continue;
                         }
+
+                        const plannedMatchSize = Decimal.min(remainingTakerSize, new Decimal(makerEntry.remaining));
+                        const plannedRemainingSize = remainingTakerSize.minus(plannedMatchSize);
+                        const lockOrder = [incomingOrder.id, makerEntry.orderId].sort((left, right) => left.localeCompare(right));
+
+                        await this.captureReplayDecision({
+                            incomingOrder,
+                            orderedCandidates: candidates,
+                            makerEntry,
+                            resolutionAllowed: true,
+                            lockOrder,
+                            plannedMatchSize,
+                            plannedRemainingSize,
+                            filledSoFar: filledTakerSize
+                        });
 
                         const lockHandle = await withSpan(
                             "internal_cross.lock_pair",
@@ -512,6 +534,64 @@ export class InternalCrossingEngine {
 
         return this.resolutionRiskEligibilityService.isSafeForInternalPooling(takerProfileId, makerProfileId, {
             stableKey: incomingOrder.id
+        });
+    }
+
+    private async captureReplayDecision(input: {
+        incomingOrder: InternalOrder;
+        orderedCandidates: readonly RedisBookOrder[];
+        makerEntry: RedisBookOrder;
+        resolutionAllowed: boolean;
+        lockOrder: readonly string[];
+        plannedMatchSize: DecimalValue;
+        plannedRemainingSize: DecimalValue;
+        filledSoFar: DecimalValue;
+    }): Promise<void> {
+        if (!this.replayDecisionCaptureService || !this.replayCaptureConfig) {
+            return;
+        }
+
+        await this.replayDecisionCaptureService.capture({
+            config: this.replayCaptureConfig,
+            buildEnvelope: (metadata) =>
+                this.replaySnapshotBuilder.build({
+                    ...metadata,
+                    correlationId: input.incomingOrder.id,
+                    incomingOrderId: input.incomingOrder.id,
+                    incomingOrder: input.incomingOrder as unknown as Record<string, unknown>,
+                    orderedCandidates: input.orderedCandidates as unknown as readonly Record<string, unknown>[],
+                    selfTradeChecks: [
+                        {
+                            incomingUserId: input.incomingOrder.user_id,
+                            makerOrderId: input.makerEntry.orderId,
+                            makerUserId: input.makerEntry.userId,
+                            wouldSelfTrade: false
+                        }
+                    ],
+                    resolutionEligibilityDecisions: [
+                        {
+                            leftProfileId: input.incomingOrder.resolution_profile_id ?? null,
+                            rightProfileId: input.makerEntry.resolutionProfileId ?? null,
+                            allowed: input.resolutionAllowed,
+                            reason: input.resolutionAllowed ? "safe_for_internal_pooling" : "resolution_profile_not_safe",
+                            stableKey: input.incomingOrder.id
+                        }
+                    ],
+                    makerIterationOrder: input.orderedCandidates.map((candidate) => candidate.orderId),
+                    lockOrder: input.lockOrder,
+                    matchDecisions: [
+                        {
+                            makerOrderId: input.makerEntry.orderId,
+                            makerRemaining: input.makerEntry.remaining,
+                            plannedMatchSize: input.plannedMatchSize.toString()
+                        }
+                    ],
+                    result: {
+                        filledSize: input.filledSoFar.plus(input.plannedMatchSize).toString(),
+                        remainingSize: input.plannedRemainingSize.toString(),
+                        matchedOrderIds: [input.makerEntry.orderId]
+                    }
+                })
         });
     }
 }

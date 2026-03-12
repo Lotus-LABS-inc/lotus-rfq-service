@@ -9,6 +9,7 @@ import type { RFQSessionRepository } from "../src/db/repositories/rfq-session-re
 import type { RFQEventRepository } from "../src/db/repositories/rfq-event-repository.js";
 import type { CanonicalMarketClient } from "../src/core/rfq-engine/canonical-market-client.js";
 import type { RFQEventEmitter } from "../src/core/rfq-engine/rfq-domain-events.js";
+import { ReplayDecisionCaptureError } from "../src/core/replay/replay-decision-capture-service.js";
 
 const loggerStub = {
   info: vi.fn<(payload: Record<string, unknown>, message: string) => void>(),
@@ -83,6 +84,20 @@ describe("CreateRFQService", () => {
           blockedProfiles: [],
           reasonsByProfile: {},
           pairMatrix: {}
+        })),
+        groupProfilesForCanonicalEventWithTrace: vi.fn(async () => ({
+          canonicalEventId: "event-1",
+          orderedProfiles: [],
+          orderedAssessments: [],
+          pairGenerationOrder: [],
+          grouping: {
+            canonicalEventId: "event-1",
+            safePools: [["profile-a", "profile-b"]],
+            cautionLanes: [],
+            blockedProfiles: [],
+            reasonsByProfile: {},
+            pairMatrix: {}
+          }
         }))
       },
       now: () => new Date("2026-02-25T12:00:00.000Z"),
@@ -162,7 +177,8 @@ describe("CreateRFQService", () => {
         reconcileExposureSnapshot: vi.fn(async () => undefined)
       },
       resolutionRiskGroupingService: {
-        groupProfilesForCanonicalEvent: vi.fn()
+        groupProfilesForCanonicalEvent: vi.fn(),
+        groupProfilesForCanonicalEventWithTrace: vi.fn()
       }
     });
 
@@ -207,7 +223,8 @@ describe("CreateRFQService", () => {
         reconcileExposureSnapshot: vi.fn(async () => undefined)
       },
       resolutionRiskGroupingService: {
-        groupProfilesForCanonicalEvent: vi.fn()
+        groupProfilesForCanonicalEvent: vi.fn(),
+        groupProfilesForCanonicalEventWithTrace: vi.fn()
       }
     });
 
@@ -283,6 +300,23 @@ describe("CreateRFQService", () => {
             "profile-blocked": ["pair:profile-blocked|profile-safe: blocked"]
           },
           pairMatrix: {}
+        })),
+        groupProfilesForCanonicalEventWithTrace: vi.fn(async () => ({
+          canonicalEventId: "event-shadow-1",
+          orderedProfiles: [],
+          orderedAssessments: [],
+          pairGenerationOrder: [],
+          grouping: {
+            canonicalEventId: "event-shadow-1",
+            safePools: [["profile-safe"]],
+            cautionLanes: [["profile-caution"]],
+            blockedProfiles: ["profile-blocked"],
+            reasonsByProfile: {
+              "profile-caution": ["pair:profile-caution|profile-safe: caution lane"],
+              "profile-blocked": ["pair:profile-blocked|profile-safe: blocked"]
+            },
+            pairMatrix: {}
+          }
         }))
       },
       resolutionRiskPolicyService: {
@@ -347,5 +381,186 @@ describe("CreateRFQService", () => {
         })
       })
     );
+  });
+
+  it("fails closed before session persistence when replay capture is REQUIRED and capture fails", async () => {
+    const sessionRepository = {
+      create: vi.fn(),
+      updateStatus: vi.fn()
+    } as unknown as RFQSessionRepository;
+
+    const service = new CreateRFQService({
+      sessionRepository,
+      eventRepository: {
+        append: vi.fn()
+      } as unknown as RFQEventRepository,
+      sessionManager: {
+        setSessionMetadata: vi.fn()
+      } as unknown as RFQSessionManager,
+      canonicalMarketClient: {
+        fetchMarketById: vi.fn(async () => ({
+          id: "mkt-required-1",
+          canonicalEventId: "event-required-1",
+          isActive: true
+        }))
+      } as CanonicalMarketClient,
+      eventEmitter: {
+        emitEvent: vi.fn()
+      } as RFQEventEmitter,
+      logger: loggerStub,
+      riskEngine: {
+        validateRFQCreation: vi.fn(async () => undefined),
+        validateBeforeExecution: vi.fn(async () => "reservation-token"),
+        updateExposureAfterExecution: vi.fn(async () => undefined),
+        reconcileExposureSnapshot: vi.fn(async () => undefined)
+      },
+      resolutionRiskGroupingService: {
+        groupProfilesForCanonicalEvent: vi.fn(async () => ({
+          canonicalEventId: "event-required-1",
+          safePools: [["profile-a"]],
+          cautionLanes: [],
+          blockedProfiles: [],
+          reasonsByProfile: {},
+          pairMatrix: {}
+        })),
+        groupProfilesForCanonicalEventWithTrace: vi.fn(async () => ({
+          canonicalEventId: "event-required-1",
+          orderedProfiles: [],
+          orderedAssessments: [],
+          pairGenerationOrder: [],
+          grouping: {
+            canonicalEventId: "event-required-1",
+            safePools: [["profile-a"]],
+            cautionLanes: [],
+            blockedProfiles: [],
+            reasonsByProfile: {},
+            pairMatrix: {}
+          }
+        }))
+      },
+      replayDecisionCaptureService: {
+        capture: vi.fn(async () => {
+          throw new ReplayDecisionCaptureError("RFQ_GROUPING", "REQUIRED", new Error("capture_failed"));
+        }),
+        getTotalFailureCount: vi.fn(() => 0)
+      },
+      replayCaptureConfig: {
+        mode: "REQUIRED",
+        configVersion: "cfg-v1",
+        engineVersion: "eng-v1",
+        featureFlags: { replay: true }
+      }
+    });
+
+    await expect(
+      service.execute({
+        canonicalMarketId: "mkt-required-1",
+        takerId: "taker-required-1",
+        side: "buy",
+        quantity: "2",
+        idempotencyKey: "idemp-required-1",
+        ttlSeconds: 30
+      })
+    ).rejects.toBeInstanceOf(ReplayDecisionCaptureError);
+
+    expect(sessionRepository.create).not.toHaveBeenCalled();
+  });
+
+  it("continues RFQ creation when replay capture is BEST_EFFORT and capture fails", async () => {
+    const setSessionMetadata = vi.fn(async () => {});
+    const sessionRepository = {
+      create: vi.fn(async () => ({
+        id: "session-best-effort-1",
+        request_id: "req-best-effort-1",
+        canonical_market_id: "mkt-best-effort-1",
+        taker_id: "taker-best-effort-1",
+        side: "buy",
+        quantity: "3",
+        status: "CREATED",
+        idempotency_key: "idemp-best-effort-1",
+        expires_at: new Date("2026-02-25T12:01:00.000Z"),
+        metadata: {},
+        created_at: new Date("2026-02-25T12:00:00.000Z"),
+        updated_at: new Date("2026-02-25T12:00:00.000Z")
+      })),
+      updateStatus: vi.fn(async () => ({
+        id: "session-best-effort-1",
+        status: "BROADCAST"
+      }))
+    } as unknown as RFQSessionRepository;
+
+    const service = new CreateRFQService({
+      sessionRepository,
+      eventRepository: {
+        append: vi.fn(async () => ({ id: "evt-best-effort-1" }))
+      } as unknown as RFQEventRepository,
+      sessionManager: {
+        setSessionMetadata
+      } as unknown as RFQSessionManager,
+      canonicalMarketClient: {
+        fetchMarketById: vi.fn(async () => ({
+          id: "mkt-best-effort-1",
+          canonicalEventId: "event-best-effort-1",
+          isActive: true
+        }))
+      } as CanonicalMarketClient,
+      eventEmitter: {
+        emitEvent: vi.fn()
+      } as RFQEventEmitter,
+      logger: loggerStub,
+      riskEngine: {
+        validateRFQCreation: vi.fn(async () => undefined),
+        validateBeforeExecution: vi.fn(async () => "reservation-token"),
+        updateExposureAfterExecution: vi.fn(async () => undefined),
+        reconcileExposureSnapshot: vi.fn(async () => undefined)
+      },
+      resolutionRiskGroupingService: {
+        groupProfilesForCanonicalEvent: vi.fn(async () => ({
+          canonicalEventId: "event-best-effort-1",
+          safePools: [["profile-a"]],
+          cautionLanes: [],
+          blockedProfiles: [],
+          reasonsByProfile: {},
+          pairMatrix: {}
+        })),
+        groupProfilesForCanonicalEventWithTrace: vi.fn(async () => ({
+          canonicalEventId: "event-best-effort-1",
+          orderedProfiles: [],
+          orderedAssessments: [],
+          pairGenerationOrder: [],
+          grouping: {
+            canonicalEventId: "event-best-effort-1",
+            safePools: [["profile-a"]],
+            cautionLanes: [],
+            blockedProfiles: [],
+            reasonsByProfile: {},
+            pairMatrix: {}
+          }
+        }))
+      },
+      replayDecisionCaptureService: {
+        capture: vi.fn(async () => null),
+        getTotalFailureCount: vi.fn(() => 1)
+      },
+      replayCaptureConfig: {
+        mode: "BEST_EFFORT",
+        configVersion: "cfg-v1",
+        engineVersion: "eng-v1",
+        featureFlags: { replay: true }
+      }
+    });
+
+    const result = await service.execute({
+      canonicalMarketId: "mkt-best-effort-1",
+      takerId: "taker-best-effort-1",
+      side: "buy",
+      quantity: "3",
+      idempotencyKey: "idemp-best-effort-1",
+      ttlSeconds: 30
+    });
+
+    expect(result.state).toBe("BROADCAST");
+    expect(sessionRepository.create).toHaveBeenCalledOnce();
+    expect(setSessionMetadata).toHaveBeenCalled();
   });
 });

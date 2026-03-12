@@ -13,6 +13,7 @@ import type { IOverlapGraphBuilder } from "../../src/core/combo-engine/overlap-g
 import type { ICandidateGroupEnumerator } from "../../src/core/combo-engine/candidate-group-enumerator.js";
 import type { IClearingCompressionScorer } from "../../src/core/combo-engine/clearing-compression-scorer.js";
 import type { IResolutionRiskEligibilityService } from "../../src/core/rfq-engine/resolution-risk-eligibility-service.js";
+import { createPerformanceGuardrailConfig } from "../../src/guardrails/guardrail-config.js";
 
 const makeVector = (
   entityId: string,
@@ -255,7 +256,11 @@ describe("ClearingRoundPlanner", () => {
     const result = await planner.plan("bucket-1");
 
     expect(result).toBeNull();
-    expect(resolutionRiskEligibilityService.isSafeForCrossVenueNetting).toHaveBeenCalledWith("profile-a", "profile-b");
+    expect(resolutionRiskEligibilityService.isSafeForCrossVenueNetting).toHaveBeenCalledWith(
+      "profile-a",
+      "profile-b",
+      { stableKey: "bucket-1" }
+    );
     expect(clearingCompressionScorer.score).not.toHaveBeenCalled();
   });
 
@@ -292,6 +297,154 @@ describe("ClearingRoundPlanner", () => {
     const result = await planner.plan("bucket-1");
 
     expect(result?.selectedGroup.participantIds).toEqual(["a", "b"]);
-    expect(resolutionRiskEligibilityService.isSafeForCrossVenueNetting).toHaveBeenCalledWith("profile-a", "profile-b");
+    expect(resolutionRiskEligibilityService.isSafeForCrossVenueNetting).toHaveBeenCalledWith(
+      "profile-a",
+      "profile-b",
+      { stableKey: "bucket-1" }
+    );
+  });
+
+  it("returns null before graph build when DISABLE_PHASE2B guardrails trigger", async () => {
+    planner = new ClearingRoundPlanner(
+      candidateRegistry,
+      overlapGraphBuilder,
+      candidateGroupEnumerator,
+      clearingCompressionScorer,
+      undefined,
+      undefined,
+      undefined,
+      createPerformanceGuardrailConfig({
+        version: "guardrails-v1",
+        maxSorPlanningLatencyMs: 100,
+        maxNettingPlanningLatencyMs: 100,
+        maxClearingPlanningLatencyMs: 100,
+        maxBucketEntityCount: 1,
+        maxGraphEdges: 10,
+        maxCandidateGroups: 10,
+        maxLockWaitMs: 100,
+        maxLockHoldMs: 100,
+        maxReplayWriteFailuresBeforeDegrade: 10,
+        degradationPolicyVersion: "degradation-v1"
+      }),
+      {
+        evaluate: vi.fn().mockReturnValue({
+          violated: true,
+          violations: [
+            {
+              type: "BUCKET_TOO_LARGE",
+              actual: 2,
+              threshold: 1,
+              reason: "bucket entity count exceeded threshold"
+            }
+          ],
+          suggestedDegradation: "DISABLE_PHASE2B"
+        })
+      } as never,
+      {
+        getEffectiveExecutionMode: vi.fn().mockResolvedValue({
+          mode: "DISABLE_PHASE2B",
+          reason: "BUCKET_TOO_LARGE",
+          source: "guardrail"
+        })
+      } as never,
+      {
+        getReplayWriteFailures: vi.fn().mockResolvedValue(0)
+      },
+      "clearing-phase2b-test",
+      {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn()
+      }
+    );
+    vi.mocked(candidateRegistry.listBucketEntities).mockResolvedValue({
+      entityIds: ["a", "b"],
+      nextCursor: null
+    });
+
+    const result = await planner.plan("bucket-1");
+
+    expect(result).toBeNull();
+    expect(candidateRegistry.getEntitySnapshot).not.toHaveBeenCalled();
+    expect(overlapGraphBuilder.build).not.toHaveBeenCalled();
+  });
+
+  it("keeps Phase 2B observational only when guardrails are resolved in SHADOW mode", async () => {
+    planner = new ClearingRoundPlanner(
+      candidateRegistry,
+      overlapGraphBuilder,
+      candidateGroupEnumerator,
+      clearingCompressionScorer,
+      undefined,
+      undefined,
+      undefined,
+      createPerformanceGuardrailConfig({
+        version: "guardrails-v1",
+        maxSorPlanningLatencyMs: 100,
+        maxNettingPlanningLatencyMs: 100,
+        maxClearingPlanningLatencyMs: 100,
+        maxBucketEntityCount: 1,
+        maxGraphEdges: 10,
+        maxCandidateGroups: 10,
+        maxLockWaitMs: 100,
+        maxLockHoldMs: 100,
+        maxReplayWriteFailuresBeforeDegrade: 10,
+        degradationPolicyVersion: "degradation-v1"
+      }),
+      {
+        evaluate: vi.fn().mockReturnValue({
+          violated: true,
+          violations: [
+            {
+              type: "BUCKET_TOO_LARGE",
+              actual: 2,
+              threshold: 1,
+              reason: "bucket entity count exceeded threshold"
+            }
+          ],
+          suggestedDegradation: "DISABLE_PHASE2B"
+        })
+      } as never,
+      {
+        getEffectiveExecutionMode: vi.fn().mockResolvedValue({
+          mode: "DISABLE_PHASE2B",
+          reason: "BUCKET_TOO_LARGE",
+          source: "guardrail"
+        })
+      } as never,
+      {
+        getReplayWriteFailures: vi.fn().mockResolvedValue(0)
+      },
+      "clearing-phase2b-test",
+      {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn()
+      },
+      "SHADOW"
+    );
+    vi.mocked(candidateRegistry.listBucketEntities).mockResolvedValue({
+      entityIds: ["a", "b"],
+      nextCursor: null
+    });
+    vi.mocked(candidateRegistry.getEntitySnapshot)
+      .mockResolvedValueOnce(makeVector("a", "2026-03-10T09:00:00.000Z"))
+      .mockResolvedValueOnce(makeVector("b", "2026-03-10T09:10:00.000Z"));
+    vi.mocked(overlapGraphBuilder.build).mockReturnValue({ nodes: [], edges: [] });
+    vi.mocked(candidateGroupEnumerator.enumerate).mockReturnValue([makeGroup(["a", "b"])]);
+    vi.mocked(clearingCompressionScorer.score).mockReturnValue(
+      makeScore({
+        residualVectorByParticipant: {
+          a: { entityId: "a", vector: { "m1:o1": "2" } },
+          b: { entityId: "b", vector: { "m1:o1": "-2" } }
+        }
+      })
+    );
+
+    const result = await planner.plan("bucket-1");
+
+    expect(result?.selectedGroup.participantIds).toEqual(["a", "b"]);
+    expect(candidateRegistry.getEntitySnapshot).toHaveBeenCalledTimes(2);
+    expect(overlapGraphBuilder.build).toHaveBeenCalledTimes(1);
   });
 });

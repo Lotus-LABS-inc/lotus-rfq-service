@@ -2,6 +2,9 @@ import type { Pool } from "pg";
 import type { Logger } from "pino";
 import type { IResolutionPairComparator } from "./resolution-pair-comparator.js";
 import type { IResolutionRiskScoringEngine } from "./resolution-risk-scoring-engine.js";
+import type { IReplayDecisionCaptureService } from "../replay/replay-decision-capture-service.js";
+import type { ReplayCaptureConfig } from "../replay/replay.types.js";
+import { ResolutionRiskSnapshotBuilder } from "../replay/builders/resolution-risk-snapshot-builder.js";
 import type {
     NormalizedResolutionProfile,
     ResolutionRiskAssessment,
@@ -77,6 +80,8 @@ interface ResolutionRiskAssessmentServiceDeps {
     logger: Pick<Logger, "info" | "warn" | "error">;
     metricsHooks?: ResolutionRiskAssessmentMetricsHooks;
     config: ResolutionRiskAssessmentServiceConfig;
+    replayDecisionCaptureService?: IReplayDecisionCaptureService;
+    replayCaptureConfig?: ReplayCaptureConfig;
 }
 
 export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmentService {
@@ -86,6 +91,9 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
     private readonly logger: Pick<Logger, "info" | "warn" | "error">;
     private readonly metricsHooks: ResolutionRiskAssessmentMetricsHooks | undefined;
     private readonly version: string;
+    private readonly replayDecisionCaptureService: IReplayDecisionCaptureService | undefined;
+    private readonly replayCaptureConfig: ReplayCaptureConfig | undefined;
+    private readonly replaySnapshotBuilder = new ResolutionRiskSnapshotBuilder();
 
     public constructor(deps: ResolutionRiskAssessmentServiceDeps) {
         this.pool = deps.pool;
@@ -94,6 +102,8 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
         this.logger = deps.logger;
         this.metricsHooks = deps.metricsHooks;
         this.version = deps.config.version;
+        this.replayDecisionCaptureService = deps.replayDecisionCaptureService;
+        this.replayCaptureConfig = deps.replayCaptureConfig;
     }
 
     public async buildAssessmentsForCanonicalEvent(canonicalEventId: string): Promise<readonly ResolutionRiskAssessment[]> {
@@ -204,6 +214,25 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
                 factorComparison,
                 version: this.version
             });
+
+            if (this.replayDecisionCaptureService && this.replayCaptureConfig) {
+                await this.replayDecisionCaptureService.capture({
+                    config: this.replayCaptureConfig,
+                    buildEnvelope: (metadata) =>
+                        this.replaySnapshotBuilder.build({
+                            ...metadata,
+                            correlationId: `${profileA.canonicalEventId}:${profileA.id}:${profileB.id}:${this.version}`,
+                            canonicalEventId: profileA.canonicalEventId,
+                            profileA: profileA as unknown as Record<string, unknown>,
+                            profileB: profileB as unknown as Record<string, unknown>,
+                            factorComparison: factorComparison as unknown as Record<string, unknown>,
+                            scoredAssessment: scored as unknown as Record<string, unknown>,
+                            scoringWeights: this.scoringEngine.getReplayWeights() as unknown as Record<string, unknown>,
+                            confidenceInputs: this.scoringEngine.buildReplayConfidenceInputs(factorComparison),
+                            equivalenceThresholds: this.scoringEngine.getReplayThresholds() as unknown as Record<string, unknown>
+                        })
+                });
+            }
 
             this.metricsHooks?.onAssessmentBuilt?.({
                 canonicalEventId: scored.canonicalEventId,

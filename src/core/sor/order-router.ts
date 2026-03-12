@@ -31,6 +31,18 @@ import type { InternalCrossPreviewResult, InternalCrossingEngine } from "../inte
 import type { InternalOrder } from "../internal-engine/types.js";
 import type { IResolutionRiskReadService } from "../rfq-engine/resolution-risk-read-service.js";
 import type { IResolutionRiskPolicyService } from "../rfq-engine/resolution-risk-policy-service.js";
+import type { IReplayDecisionCaptureService } from "../replay/replay-decision-capture-service.js";
+import type { ReplayCaptureConfig, ReplaySplitEligibilitySnapshot } from "../replay/replay.types.js";
+import { SORSnapshotBuilder } from "../replay/builders/sor-snapshot-builder.js";
+import type { PerformanceGuardrailConfig } from "../../guardrails/guardrail-config.js";
+import type { IGuardrailEvaluator } from "../../guardrails/guardrail-evaluator.js";
+import type { IDegradationManager } from "../../guardrails/degradation-manager.js";
+import {
+  evaluatePlanningGuardrails,
+  type GuardrailEnforcementMode,
+  type IReplayWriteFailureStatsSource
+} from "../../guardrails/planning-guardrail-helper.js";
+import type { IPhase3AGuardrailShadowResolver } from "../../guardrails/phase3a-guardrail-shadow.js";
 import { pairKey } from "../rfq-engine/resolution-risk-read-service.js";
 import {
   isInternalCrossShadowSampled,
@@ -70,9 +82,26 @@ export interface OrderRouterDependencies {
   resolutionRiskPolicyService?: IResolutionRiskPolicyService;
   resolutionRiskPenalty?: number;
   now?: () => Date;
+  replayDecisionCaptureService?: IReplayDecisionCaptureService;
+  replayCaptureConfig?: ReplayCaptureConfig;
+  guardrailConfig?: PerformanceGuardrailConfig;
+  guardrailEvaluator?: IGuardrailEvaluator;
+  degradationManager?: IDegradationManager;
+  replayWriteFailureStatsSource?: IReplayWriteFailureStatsSource;
+  controlPlaneShardId?: string;
+  guardrailEnforcementMode?: GuardrailEnforcementMode;
+  phase3AGuardrailShadowResolver?: IPhase3AGuardrailShadowResolver;
 }
 
+
+const isEnforcedGuardrailDecision = (
+  decision:
+    | Awaited<ReturnType<OrderRouter["evaluateSorGuardrails"]>>
+    | null
+    | undefined,
+): boolean => decision?.enforcementMode === "ENFORCED";
 export class OrderRouter implements IOrderRouter {
+  private readonly replaySnapshotBuilder = new SORSnapshotBuilder();
   public constructor(private readonly deps: OrderRouterDependencies) { }
 
   public async buildPlan(
@@ -94,6 +123,24 @@ export class OrderRouter implements IOrderRouter {
         const crossResult = await this.evaluateInternalCross(rfq, internalCrossOrder);
 
         if (crossResult.kind === "internal_filled") {
+          const internalFilledResult = {
+            kind: "internal_filled" as const,
+            filledSize: crossResult.filledSize,
+            trades: crossResult.trades
+          };
+          await this.captureReplayDecision({
+            rfqId: rfq.rfqId,
+            rfq,
+            selectedQuote,
+            policy,
+            routeCandidates: [],
+            scoredCandidates: [],
+            allocations: [],
+            resolutionRiskPairPolicies: [],
+            candidateOrdering: [],
+            splitEligibilityDecisions: [],
+            buildResult: internalFilledResult
+          });
           return {
             kind: "internal_filled",
             filledSize: crossResult.filledSize,
@@ -103,6 +150,13 @@ export class OrderRouter implements IOrderRouter {
 
         const residualRFQ = this.buildResidualRFQ(rfq, crossResult.remainingSize);
         const residualQuote = this.buildResidualQuote(selectedQuote, Number.parseFloat(crossResult.remainingSize));
+        const preflightGuardrailDecision = await this.evaluateSorGuardrails({
+          rfq,
+          bucketEntityCount: 0,
+          candidateGroups: 0,
+          plannerLatencyMs: 0,
+          reasonSuffix: "preflight"
+        });
         const allCandidates = await this.deps.routeScout.discoverCandidates(residualRFQ, residualQuote, policy);
 
         const routeCandidates = this.filterSTPViolations(residualRFQ, allCandidates);
@@ -119,13 +173,43 @@ export class OrderRouter implements IOrderRouter {
         );
         sorCandidatesEvaluatedCount.labels(residualRFQ.rfqId).set(scoredCandidates.length);
 
-        const allocations = await this.buildAllocationsByLeg(
-          rfq.rfqId,
-          routeCandidates,
-          scoredCandidates,
-          residualQuote.quantity,
-          policy
-        );
+        const postDiscoveryGuardrailDecision = await this.evaluateSorGuardrails({
+          rfq,
+          bucketEntityCount: routeCandidates.length,
+          candidateGroups: scoredCandidates.length,
+          plannerLatencyMs: performance.now() - startedAt,
+          reasonSuffix: "post_discovery"
+        });
+        const enforcedPostDiscoveryMode =
+          postDiscoveryGuardrailDecision && isEnforcedGuardrailDecision(postDiscoveryGuardrailDecision)
+            ? postDiscoveryGuardrailDecision.effectiveMode
+            : null;
+        const enforcedPreflightMode =
+          preflightGuardrailDecision && isEnforcedGuardrailDecision(preflightGuardrailDecision)
+            ? preflightGuardrailDecision.effectiveMode
+            : null;
+
+        const activeGuardrailMode =
+          enforcedPostDiscoveryMode ??
+          enforcedPreflightMode ??
+          "FULL_MODE";
+        const allocationResult =
+          activeGuardrailMode === "SOR_ONLY" || activeGuardrailMode === "SAFE_FALLBACK"
+            ? await this.buildIsolatedAllocationsByLeg(
+                rfq.rfqId,
+                routeCandidates,
+                scoredCandidates,
+                residualQuote.quantity,
+                policy
+              )
+            : await this.buildAllocationsByLeg(
+                rfq.rfqId,
+                routeCandidates,
+                scoredCandidates,
+                residualQuote.quantity,
+                policy
+              );
+        const allocations = allocationResult.allocations;
 
         sorPlanBuildLatencyMs.labels(policy).observe(performance.now() - startedAt);
         const avgSplits = this.calculateAvgSplitsPerLeg(routeCandidates, allocations);
@@ -136,6 +220,33 @@ export class OrderRouter implements IOrderRouter {
           routeCandidates
         });
 
+        const planCreatedResult = {
+          kind: "plan_created" as const,
+          crossingFilledSize: crossResult.crossingFilledSize,
+          remainingSize: crossResult.remainingSize,
+          plan
+        };
+
+        await this.captureReplayDecision({
+          rfqId: rfq.rfqId,
+          rfq: residualRFQ,
+          selectedQuote: residualQuote,
+          policy,
+          routeCandidates: routeCandidates as readonly Record<string, unknown>[],
+          scoredCandidates: scoredCandidates.map((candidate) => ({
+            candidateId: candidate.candidateId,
+            providerId: candidate.providerId,
+            effectiveUnitCost: candidate.effectiveUnitCost,
+            totalExpectedCost: candidate.totalExpectedCost,
+            breakdown: candidate.breakdown as unknown as Record<string, unknown>
+          })),
+          allocations: allocations as unknown as readonly Record<string, unknown>[],
+          resolutionRiskPairPolicies: allocationResult.resolutionRiskPairPolicies,
+          candidateOrdering: routeCandidates.map((candidate) => candidate.id),
+          splitEligibilityDecisions: allocationResult.splitEligibilityDecisions,
+          buildResult: planCreatedResult as unknown as Record<string, unknown>
+        });
+
         return {
           kind: "plan_created",
           crossingFilledSize: crossResult.crossingFilledSize,
@@ -144,6 +255,53 @@ export class OrderRouter implements IOrderRouter {
         };
       }
     );
+  }
+
+  private async evaluateSorGuardrails(input: {
+    rfq: CanonicalRFQInput;
+    bucketEntityCount: number;
+    candidateGroups: number;
+    plannerLatencyMs: number;
+    reasonSuffix: string;
+  }) {
+    if (!this.deps.guardrailConfig || !this.deps.guardrailEvaluator || !this.deps.degradationManager) {
+      return null;
+    }
+
+    const enforcementMode =
+      this.deps.guardrailEnforcementMode ??
+      (
+        await this.deps.phase3AGuardrailShadowResolver?.resolve({
+          engine: "SOR",
+          shardId: this.deps.controlPlaneShardId ?? "sor-main",
+          stableId: input.rfq.rfqId,
+          marketId: input.rfq.canonicalMarketId,
+        })
+      )?.enforcementMode ??
+      "ENFORCED";
+
+    return evaluatePlanningGuardrails({
+      guardrails: this.deps.guardrailConfig,
+      stats: {
+        plannerType: "SOR",
+        plannerLatencyMs: input.plannerLatencyMs,
+        bucketEntityCount: input.bucketEntityCount,
+        graphEdges: 0,
+        candidateGroups: input.candidateGroups,
+        lockWaitMs: 0
+      },
+      context: {
+        shardId: this.deps.controlPlaneShardId ?? "sor-main",
+        engine: "SOR",
+        marketId: input.rfq.canonicalMarketId
+      },
+      guardrailEvaluator: this.deps.guardrailEvaluator,
+      degradationManager: this.deps.degradationManager,
+      replayWriteFailureStatsSource: this.deps.replayWriteFailureStatsSource,
+      logger: this.deps.logger,
+      requestedBy: `sor:${input.reasonSuffix}`,
+      enforcementMode
+    });
   }
 
 
@@ -394,7 +552,11 @@ export class OrderRouter implements IOrderRouter {
     scoredCandidates: readonly CandidateScore[],
     targetSize: number,
     policy: SORAcceptancePolicy
-  ): Promise<readonly SplitAllocation[]> {
+  ): Promise<{
+    allocations: readonly SplitAllocation[];
+    resolutionRiskPairPolicies: readonly Record<string, unknown>[];
+    splitEligibilityDecisions: readonly ReplaySplitEligibilitySnapshot[];
+  }> {
     const scoreByCandidateId = new Map(
       scoredCandidates.map((candidate) => [candidate.candidateId, candidate] as const)
     );
@@ -409,6 +571,8 @@ export class OrderRouter implements IOrderRouter {
     }
 
     const allocations: SplitAllocation[] = [];
+    const resolutionRiskPairPolicies: Record<string, unknown>[] = [];
+    const splitEligibilityDecisions: ReplaySplitEligibilitySnapshot[] = [];
     for (const legCandidates of candidatesByLeg.values()) {
       const legScored = legCandidates
         .map((candidate) => scoreByCandidateId.get(candidate.id))
@@ -427,6 +591,20 @@ export class OrderRouter implements IOrderRouter {
       }
 
       const resolutionRisk = await this.buildResolutionRiskContext(stableKey, legCandidates);
+      if (resolutionRisk) {
+        for (const [pairKeyValue, decision] of resolutionRisk.pairPolicies.entries()) {
+          resolutionRiskPairPolicies.push({
+            pairKey: pairKeyValue,
+            ...decision
+          });
+          splitEligibilityDecisions.push({
+            candidateId: pairKeyValue,
+            allowed: decision.mode === "normal" || decision.mode === "penalty",
+            reason: decision.reason ?? decision.mode,
+            ...(decision.mode !== "normal" ? { pairKey: pairKeyValue } : {})
+          });
+        }
+      }
 
       const splitResult = await this.deps.splitter.split(targetSize, legScored, {
         minChunkSize: DEFAULT_MIN_CHUNK,
@@ -446,7 +624,124 @@ export class OrderRouter implements IOrderRouter {
       allocations.push(...splitResult);
     }
 
-    return allocations;
+    return {
+      allocations,
+      resolutionRiskPairPolicies,
+      splitEligibilityDecisions
+    };
+  }
+
+  private async buildIsolatedAllocationsByLeg(
+    stableKey: string,
+    routeCandidates: readonly import("./types.js").RouteCandidate[],
+    scoredCandidates: readonly CandidateScore[],
+    targetSize: number,
+    policy: SORAcceptancePolicy
+  ): Promise<{
+    allocations: readonly SplitAllocation[];
+    resolutionRiskPairPolicies: readonly Record<string, unknown>[];
+    splitEligibilityDecisions: readonly ReplaySplitEligibilitySnapshot[];
+  }> {
+    const candidatesByLeg = new Map<string, CandidateScore[]>();
+    const routeCandidateById = new Map(routeCandidates.map((candidate) => [candidate.id, candidate] as const));
+
+    for (const scored of scoredCandidates) {
+      const routeCandidate = routeCandidateById.get(scored.candidateId);
+      if (!routeCandidate) {
+        continue;
+      }
+      const existing = candidatesByLeg.get(routeCandidate.leg_id);
+      if (existing) {
+        existing.push(scored);
+      } else {
+        candidatesByLeg.set(routeCandidate.leg_id, [scored]);
+      }
+    }
+
+    const allocations: SplitAllocation[] = [];
+    const resolutionRiskPairPolicies: Record<string, unknown>[] = [];
+    const splitEligibilityDecisions: ReplaySplitEligibilitySnapshot[] = [];
+
+    for (const [legId, legScores] of candidatesByLeg.entries()) {
+      const best = [...legScores].sort((left, right) => {
+        if (left.effectiveUnitCost !== right.effectiveUnitCost) {
+          return left.effectiveUnitCost - right.effectiveUnitCost;
+        }
+        return left.candidateId.localeCompare(right.candidateId);
+      })[0];
+
+      if (!best) {
+        throw new InsufficientLiquidityError(legId, targetSize);
+      }
+
+      const routeCandidate = routeCandidateById.get(best.candidateId);
+      if (!routeCandidate) {
+        throw new InsufficientLiquidityError(legId, targetSize);
+      }
+
+      const roundedSize = Math.min(targetSize, routeCandidate.available_size);
+      if (policy === "ALL_OR_NONE" && roundedSize + 1e-9 < targetSize) {
+        throw new InsufficientLiquidityError(legId, targetSize - roundedSize);
+      }
+
+      allocations.push({
+        candidateId: best.candidateId,
+        providerId: best.providerId,
+        targetSize,
+        roundedSize,
+        targetPrice: best.effectiveUnitCost
+      });
+      splitEligibilityDecisions.push({
+        candidateId: best.candidateId,
+        allowed: true,
+        reason: "guardrail_isolated_route"
+      });
+      resolutionRiskPairPolicies.push({
+        pairKey: `${stableKey}:${best.candidateId}`,
+        mode: "guardrail_isolated_route"
+      });
+    }
+
+    if (allocations.length === 0) {
+      throw new InsufficientLiquidityError(
+        routeCandidates[0]?.leg_id ?? "00000000-0000-0000-0000-000000000000",
+        targetSize
+      );
+    }
+
+    return {
+      allocations,
+      resolutionRiskPairPolicies,
+      splitEligibilityDecisions
+    };
+  }
+
+  private async captureReplayDecision(input: {
+    rfqId: string;
+    rfq: Record<string, unknown>;
+    selectedQuote: Record<string, unknown>;
+    policy: string;
+    routeCandidates: readonly Record<string, unknown>[];
+    scoredCandidates: readonly import("../replay/replay.types.js").ReplayScoreBreakdownSnapshot[];
+    allocations: readonly Record<string, unknown>[];
+    resolutionRiskPairPolicies: readonly Record<string, unknown>[];
+    candidateOrdering: readonly string[];
+    splitEligibilityDecisions: readonly ReplaySplitEligibilitySnapshot[];
+    buildResult: Record<string, unknown>;
+  }): Promise<void> {
+    if (!this.deps.replayDecisionCaptureService || !this.deps.replayCaptureConfig) {
+      return;
+    }
+
+    await this.deps.replayDecisionCaptureService.capture({
+      config: this.deps.replayCaptureConfig,
+      buildEnvelope: (metadata) =>
+        this.replaySnapshotBuilder.build({
+          ...metadata,
+          correlationId: input.rfqId,
+          ...input
+        })
+    });
   }
 
   private async buildResolutionRiskContext(

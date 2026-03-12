@@ -40,6 +40,10 @@ import { registerAdminInternalClearingRoutes } from "./admin/internal-clearing.r
 import { InternalClearingAdminService } from "./admin/internal-clearing-admin-service.js";
 import { registerAdminResolutionRiskRoutes } from "./admin/resolution-risk.routes.js";
 import { ResolutionRiskAdminService } from "./admin/resolution-risk-admin-service.js";
+import { registerAdminControlPlaneRoutes } from "./admin/control-plane.routes.js";
+import { ControlPlaneAdminService } from "./admin/control-plane-admin-service.js";
+import { registerAdminReplayRoutes } from "./admin/replay.routes.js";
+import { ReplayAdminService } from "./admin/replay-admin-service.js";
 import { CostModel, OrderRouter, PlanComposer, PlanRunner, RouteScout, Splitter, type SORAcceptancePolicy, type CanonicalRFQInput } from "../core/sor/index.js";
 import {
   compareShadowDecisions,
@@ -70,6 +74,20 @@ import { ResolutionRiskEligibilityService } from "../core/rfq-engine/resolution-
 import { ResolutionRiskGroupingService } from "../core/rfq-engine/resolution-risk-grouping-service.js";
 import { ResolutionRiskPolicyService } from "../core/rfq-engine/resolution-risk-policy-service.js";
 import type { NormalizedResolutionProfile } from "../core/rfq-engine/resolution-risk.types.js";
+import { ReplayEnvelopeWriter } from "../core/replay/replay-envelope-writer.js";
+import { ReplayDecisionCaptureService } from "../core/replay/replay-decision-capture-service.js";
+import { ExactReplayRunner } from "../core/replay/exact-replay-runner.js";
+import { DiffReplayRunner } from "../core/replay/diff-replay-runner.js";
+import {
+  createPerformanceGuardrailConfig,
+  type PerformanceGuardrailConfig
+} from "../guardrails/guardrail-config.js";
+import { GuardrailEvaluator } from "../guardrails/guardrail-evaluator.js";
+import { DegradationManager } from "../guardrails/degradation-manager.js";
+import { Phase3AGuardrailShadowResolver } from "../guardrails/phase3a-guardrail-shadow.js";
+import { OverlapGraphBuilder } from "../core/combo-engine/overlap-graph-builder.js";
+import { CandidateGroupEnumerator } from "../core/combo-engine/candidate-group-enumerator.js";
+import { ClearingCompressionScorer } from "../core/combo-engine/clearing-compression-scorer.js";
 
 export interface ServerDependencies {
   logger: Logger;
@@ -111,12 +129,17 @@ export interface ServerDependencies {
   resolutionRiskShadowPercent?: number;
   resolutionRiskShadowStartAt?: string;
   resolutionRiskShadowEndAt?: string;
+  phase3AGuardrailShadowEnabled?: boolean;
+  phase3AGuardrailShadowPercent?: number;
+  phase3AGuardrailShadowStartAt?: string;
+  phase3AGuardrailShadowEndAt?: string;
   reliabilityWeight: number;
   latencyWeight: number;
   failureWeight: number;
   sorResolutionRiskPenalty?: number;
   sorAcceptAonAwait: boolean;
   sorAcceptNonAonBackground: boolean;
+  performanceGuardrailConfig?: PerformanceGuardrailConfig;
 }
 
 export const buildServer = async (dependencies: ServerDependencies): Promise<FastifyInstance> => {
@@ -162,13 +185,60 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     dependencies.logger
   );
 
+  const replayDecisionCaptureService = new ReplayDecisionCaptureService(
+    new ReplayEnvelopeWriter({ pool: dependencies.pgPool }),
+    dependencies.logger
+  );
+  const performanceGuardrailConfig =
+    dependencies.performanceGuardrailConfig ??
+    createPerformanceGuardrailConfig({
+      version: "performance-guardrails-v1",
+      maxSorPlanningLatencyMs: 250,
+      maxNettingPlanningLatencyMs: 250,
+      maxClearingPlanningLatencyMs: 250,
+      maxBucketEntityCount: 500,
+      maxGraphEdges: 5000,
+      maxCandidateGroups: 1000,
+      maxLockWaitMs: 3000,
+      maxLockHoldMs: 5000,
+      maxReplayWriteFailuresBeforeDegrade: 25,
+      degradationPolicyVersion: "degradation-policy-v1"
+    });
+  const guardrailEvaluator = new GuardrailEvaluator();
+  const degradationManager = new DegradationManager({
+    pool: dependencies.pgPool,
+    logger: dependencies.logger
+  });
+  const phase3AGuardrailShadowResolver = new Phase3AGuardrailShadowResolver({
+    pool: dependencies.pgPool,
+    config: {
+      enabled: dependencies.phase3AGuardrailShadowEnabled ?? false,
+      percent: dependencies.phase3AGuardrailShadowPercent ?? 0,
+      ...(dependencies.phase3AGuardrailShadowStartAt
+        ? { startAt: dependencies.phase3AGuardrailShadowStartAt }
+        : {}),
+      ...(dependencies.phase3AGuardrailShadowEndAt
+        ? { endAt: dependencies.phase3AGuardrailShadowEndAt }
+        : {}),
+    },
+  });
+  const replayWriteFailureStatsSource = {
+    getReplayWriteFailures: () => replayDecisionCaptureService.getTotalFailureCount()
+  };
   const resolutionRiskAssessmentService = new ResolutionRiskAssessmentService({
+    replayDecisionCaptureService,
     pool: dependencies.pgPool,
     comparator: new ResolutionPairComparator(),
     scoringEngine: new ResolutionRiskScoringEngine(),
     logger: dependencies.logger,
     config: {
       version: "resolution-risk-v1"
+    },
+    replayCaptureConfig: {
+      mode: "BEST_EFFORT",
+      configVersion: "replay-capture-v1",
+      engineVersion: "resolution-risk-assessment-service-v1",
+      featureFlags: {}
     }
   });
   const resolutionRiskReadService = new ResolutionRiskReadService({
@@ -203,7 +273,14 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     logger: dependencies.logger,
     riskEngine,
     resolutionRiskGroupingService,
-    resolutionRiskPolicyService
+    resolutionRiskPolicyService,
+    replayDecisionCaptureService,
+    replayCaptureConfig: {
+      mode: "BEST_EFFORT",
+      configVersion: "replay-capture-v1",
+      engineVersion: "rfq-grouping-v1",
+      featureFlags: {}
+    }
   });
   const lpAuthMiddleware = createLPAuthMiddleware({
     redisClient: dependencies.redisClient,
@@ -260,7 +337,14 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     internalOrderBook,
     internalOrderLocker,
     dependencies.logger,
-    resolutionRiskEligibilityService
+    resolutionRiskEligibilityService,
+    replayDecisionCaptureService,
+    {
+      mode: "BEST_EFFORT",
+      configVersion: "replay-capture-v1",
+      engineVersion: "internal-cross-v1",
+      featureFlags: {}
+    }
   );
   const orderRouter = new OrderRouter({
     routeScout: sorRouteScout,
@@ -286,7 +370,20 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     resolutionRiskPolicyService,
     ...(dependencies.sorResolutionRiskPenalty !== undefined
       ? { resolutionRiskPenalty: dependencies.sorResolutionRiskPenalty }
-      : {})
+      : {}),
+    replayDecisionCaptureService,
+    replayCaptureConfig: {
+      mode: "BEST_EFFORT",
+      configVersion: "replay-capture-v1",
+      engineVersion: "sor-plan-v1",
+      featureFlags: {}
+    },
+    guardrailConfig: performanceGuardrailConfig,
+    guardrailEvaluator,
+    degradationManager,
+    replayWriteFailureStatsSource,
+    controlPlaneShardId: "sor-main",
+    phase3AGuardrailShadowResolver
   });
 
   const sorExecutionRouter = {
@@ -772,6 +869,39 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       logger: dependencies.logger,
       version: "resolution-risk-v1"
     })
+  });
+  const controlPlaneAdminService = new ControlPlaneAdminService({
+    pool: dependencies.pgPool,
+    logger: dependencies.logger,
+    phase3AGuardrailShadowResolver,
+  });
+  await registerAdminControlPlaneRoutes(app, adminAuthMiddleware, {
+    controlPlaneAdminService,
+  });
+  await registerAdminReplayRoutes(app, adminAuthMiddleware, {
+    replayAdminService: new ReplayAdminService({
+      replayMetadataReader: controlPlaneAdminService,
+      exactReplayRunner: new ExactReplayRunner({
+        pool: dependencies.pgPool,
+        resolutionPairComparator: new ResolutionPairComparator(),
+        resolutionRiskScoringEngine: new ResolutionRiskScoringEngine(),
+        costModel: new CostModel(),
+        splitter: new Splitter(),
+        overlapGraphBuilder: new OverlapGraphBuilder(),
+        candidateGroupEnumerator: new CandidateGroupEnumerator(),
+        clearingCompressionScorer: new ClearingCompressionScorer(),
+      }),
+      diffReplayRunner: new DiffReplayRunner({
+        pool: dependencies.pgPool,
+        resolutionPairComparator: new ResolutionPairComparator(),
+        costModel: new CostModel(),
+        splitter: new Splitter(),
+        overlapGraphBuilder: new OverlapGraphBuilder(),
+        candidateGroupEnumerator: new CandidateGroupEnumerator(),
+        clearingCompressionScorer: new ClearingCompressionScorer(),
+      }),
+      logger: dependencies.logger,
+    }),
   });
   await registerLPQuotesRoute(app, lpAuthMiddleware, receiveLPQuoteService);
 

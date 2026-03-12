@@ -25,6 +25,7 @@
     "stress:internal-cross": "tsx scripts/stress-internal-cross.ts",
     "stress:internal-netting": "tsx scripts/stress-internal-netting.ts",
     "stress:internal-clearing": "tsx scripts/stress-internal-clearing.ts",
+    "stress:phase3a": "tsx scripts/stress-phase3a.ts",
     "chaos:internal-cross": "tsx scripts/chaos-internal-cross.ts",
     "rebuild:internal-cross-book": "tsx scripts/rebuild-internal-cross-book.ts"
   },
@@ -43,15 +44,15 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^8.15.0",
-    "@typescript-eslint/parser": "^8.15.0",
-    "eslint": "^9.15.0",
     "@types/decimal.js": "^0.0.32",
     "@types/node": "^24.6.0",
     "@types/pg": "^8.15.5",
     "@types/supertest": "^6.0.3",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
     "dotenv": "^17.3.1",
     "drizzle-kit": "^0.31.6",
+    "eslint": "^9.15.0",
     "supertest": "^7.1.4",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
