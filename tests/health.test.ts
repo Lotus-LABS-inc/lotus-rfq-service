@@ -96,6 +96,7 @@ describe("infrastructure scaffold", () => {
       CANONICAL_SERVICE_BASE_URL: "http://localhost:4001",
       DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_rfq",
       JWT_SECRET: "test-secret-at-least-thirty-two-chars",
+      DEV_SIMULATION_PREVIEW_ENABLED: "false",
       COMBO_RFQ_ENABLED: "false",
       SOR_ACCEPT_AON_AWAIT: "true",
       SOR_ACCEPT_NON_AON_BACKGROUND: "true",
@@ -169,6 +170,7 @@ describe("bootstrap lifecycle", () => {
           CANONICAL_SERVICE_BASE_URL: "http://localhost:4001",
           DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_rfq",
           JWT_SECRET: "test-secret-at-least-thirty-two-chars",
+          DEV_SIMULATION_PREVIEW_ENABLED: false,
           COMBO_RFQ_ENABLED: false,
           SOR_ENABLED: false,
           SOR_CANARY_SHADOW_ENABLED: false,
@@ -262,6 +264,7 @@ describe("bootstrap lifecycle", () => {
         CANONICAL_SERVICE_BASE_URL: "http://localhost:4001",
         DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_rfq",
         JWT_SECRET: "test-secret-at-least-thirty-two-chars",
+        DEV_SIMULATION_PREVIEW_ENABLED: false,
         COMBO_RFQ_ENABLED: false,
         SOR_ENABLED: false,
         SOR_CANARY_SHADOW_ENABLED: false,
@@ -307,5 +310,77 @@ describe("bootstrap lifecycle", () => {
 
     await runtime.shutdown();
     expect(callOrder).toEqual(["app.close", "disconnectRedis", "closePgPool"]);
+  });
+
+  it("continues startup without Redis when dev simulation preview is enabled", async () => {
+    const mockApp = {
+      listen: vi.fn(async () => {
+        callOrder.push("listen");
+      }),
+      close: vi.fn(async () => {
+        callOrder.push("app.close");
+      })
+    } as unknown as FastifyInstance;
+
+    const runtime = await startService({
+      loadEnv: () => ({
+        NODE_ENV: "development",
+        HOST: "127.0.0.1",
+        PORT: 3003,
+        LOG_LEVEL: "info",
+        REDIS_URL: "redis://localhost:6379",
+        CANONICAL_SERVICE_BASE_URL: "http://localhost:4001",
+        DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_rfq",
+        JWT_SECRET: "test-secret-at-least-thirty-two-chars",
+        DEV_SIMULATION_PREVIEW_ENABLED: true,
+        COMBO_RFQ_ENABLED: false,
+        SOR_ENABLED: false,
+        SOR_CANARY_SHADOW_ENABLED: false,
+        SOR_CANARY_PERCENT: 0,
+        INTERNAL_CROSS_ENABLED: false,
+        INTERNAL_CROSS_SHADOW_ENABLED: false,
+        INTERNAL_CROSS_SHADOW_PERCENT: 0,
+        INTERNAL_NETTING_ENABLED: false,
+        INTERNAL_NETTING_SHADOW_ENABLED: false,
+        INTERNAL_NETTING_SHADOW_PERCENT: 0,
+        INTERNAL_NETTING_CANARY_ENABLED: false,
+        INTERNAL_NETTING_CANARY_PERCENT: 0,
+        INTERNAL_CLEARING_ENABLED: false,
+        INTERNAL_CLEARING_SHADOW_ENABLED: false,
+        INTERNAL_CLEARING_SHADOW_PERCENT: 0,
+        INTERNAL_CLEARING_CANARY_ENABLED: false,
+        INTERNAL_CLEARING_CANARY_PERCENT: 0,
+        RESOLUTION_RISK_ENABLED: false,
+        RESOLUTION_RISK_SHADOW_ENABLED: false,
+        RESOLUTION_RISK_SHADOW_PERCENT: 0,
+        PHASE3A_GUARDRAIL_SHADOW_ENABLED: false,
+        PHASE3A_GUARDRAIL_SHADOW_PERCENT: 0,
+        SOR_RESOLUTION_RISK_PENALTY: 0.05,
+        SOR_ACCEPT_AON_AWAIT: true,
+        SOR_ACCEPT_NON_AON_BACKGROUND: true,
+        RELIABILITY_WEIGHT: 0.05,
+        LATENCY_WEIGHT: 0.03,
+        FAILURE_WEIGHT: 0.08
+      }),
+      createLogger: () => createTestLogger(),
+      createRedisClient: () => ({} as unknown as RedisClient),
+      connectRedis: async () => {
+        throw new Error("redis unavailable");
+      },
+      createPgPool: () => ({} as unknown as Pool),
+      createDrizzleDb: () => ({} as AppDb),
+      buildServer: async () => mockApp,
+      disconnectRedis: async () => {
+        callOrder.push("disconnectRedis");
+      },
+      closePgPool: async () => {
+        callOrder.push("closePgPool");
+      }
+    });
+
+    expect(callOrder).toEqual(["listen"]);
+
+    await runtime.shutdown();
+    expect(callOrder).toEqual(["listen", "app.close", "closePgPool"]);
   });
 });

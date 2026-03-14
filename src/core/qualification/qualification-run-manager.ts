@@ -336,7 +336,48 @@ export class QualificationRunManager {
         return result.rows.map(mapStrategyQualificationRunRow);
     }
 
-    private async getRun(runId: string): Promise<StrategyQualificationRun> {
+    public async mergeRunMetadata(runId: string, patch: Record<string, unknown>): Promise<StrategyQualificationRun> {
+        ensureNonEmptyString(runId, "runId");
+        if (!isPlainObject(patch)) {
+            throw new QualificationRunTransitionError("metadata patch must be a plain object.");
+        }
+
+        const current = await this.getRun(runId);
+        const mergedMetadata = {
+            ...current.metadata,
+            ...patch
+        };
+
+        const result: QueryResult<StrategyQualificationRunRow> = await this.pool.query(
+            `UPDATE strategy_qualification_runs
+             SET metadata = $2::jsonb
+             WHERE id = $1
+             RETURNING
+                id,
+                strategy_key,
+                scope_type,
+                scope_id,
+                stage,
+                engine_version,
+                config_version,
+                started_at,
+                ended_at,
+                status,
+                metadata`,
+            [runId, JSON.stringify(mergedMetadata)]
+        );
+
+        const row = result.rows[0];
+        if (!row) {
+            throw new QualificationRunNotFoundError(runId);
+        }
+
+        this.logger?.info?.({ runId }, "Merged qualification run metadata.");
+
+        return mapStrategyQualificationRunRow(row);
+    }
+
+    public async getRun(runId: string): Promise<StrategyQualificationRun> {
         const result: QueryResult<StrategyQualificationRunRow> = await this.pool.query(
             `SELECT
                 id,

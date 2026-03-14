@@ -61,7 +61,7 @@ export class ResolutionRiskEligibilityService implements IResolutionRiskEligibil
         }
 
         return this.applyPolicy(
-            assessment.equivalenceClass === "SAFE_EQUIVALENT",
+            assessment.equivalenceClass === "SAFE_EQUIVALENT" || assessment.equivalenceClass === "EQUIVALENT_WITH_LAG",
             assessment.equivalenceClass,
             assessment.equivalenceClass,
             profileAId,

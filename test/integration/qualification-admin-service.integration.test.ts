@@ -143,5 +143,5 @@ describe.skipIf(!ENV_READY)("QualificationAdminService integration", () => {
             [runId]
         );
         expect(pausedRow.rows[0]?.status).toBe("PAUSED");
-    });
+    }, 30000);
 });

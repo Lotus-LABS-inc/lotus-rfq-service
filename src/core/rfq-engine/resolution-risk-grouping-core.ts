@@ -86,6 +86,7 @@ export const computeResolutionRiskVenueGrouping = (
 
             switch (assessment.equivalenceClass) {
                 case "SAFE_EQUIVALENT":
+                case "EQUIVALENT_WITH_LAG":
                     break;
                 case "CAUTION":
                     cautionProfiles.add(left.id);

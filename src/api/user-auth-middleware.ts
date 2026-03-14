@@ -6,6 +6,10 @@ export interface UserAuth {
     role: "USER" | "ADMIN";
 }
 
+export interface AdminPreviewMiddlewareConfig {
+    enabled: boolean;
+}
+
 declare module "@fastify/jwt" {
     interface FastifyJWT {
         user: UserAuth;
@@ -41,5 +45,32 @@ export const createAdminAuthMiddleware = () => {
                 message: "Missing or invalid authentication token."
             });
         }
+    };
+};
+
+const isLoopbackRequest = (request: FastifyRequest): boolean => {
+    const hostHeader = typeof request.headers.host === "string" ? request.headers.host : "";
+    const host = hostHeader.split(":")[0]?.toLowerCase() ?? "";
+    if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
+        return true;
+    }
+
+    return request.ip === "127.0.0.1" || request.ip === "::1" || request.ip === "::ffff:127.0.0.1";
+};
+
+export const createAdminSimulationPreviewMiddleware = (config: AdminPreviewMiddlewareConfig) => {
+    const adminAuthMiddleware = createAdminAuthMiddleware();
+
+    return async (request: FastifyRequest, reply: FastifyReply) => {
+        if (config.enabled && isLoopbackRequest(request)) {
+            const previewUser = request as FastifyRequest & { user: UserAuth };
+            previewUser.user = {
+                userId: "dev-simulation-preview",
+                role: "ADMIN"
+            };
+            return;
+        }
+
+        return adminAuthMiddleware(request, reply);
     };
 };

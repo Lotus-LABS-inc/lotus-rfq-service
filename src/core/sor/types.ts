@@ -239,7 +239,7 @@ export interface ISplitter {
           mode: "normal" | "penalty" | "isolated_only" | "blocked";
           penalty: number;
           reason?: string;
-          equivalenceClass?: "SAFE_EQUIVALENT" | "CAUTION" | "HIGH_RISK" | "DO_NOT_POOL";
+          equivalenceClass?: "SAFE_EQUIVALENT" | "EQUIVALENT_WITH_LAG" | "CAUTION" | "HIGH_RISK" | "DO_NOT_POOL";
         }>;
       };
     }

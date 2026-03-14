@@ -32,6 +32,8 @@ interface ResolutionRiskAssessmentRow {
     reasons: readonly string[];
     version: string;
     computed_at: Date;
+    liquidity_cost: string | null;
+    max_settlement_delay_hours: string | null;
 }
 
 interface ResolutionProfileRow {
@@ -209,8 +211,8 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
             const factorComparison = this.comparator.compare(profileA, profileB);
             const scored = this.scoringEngine.score({
                 canonicalEventId: profileA.canonicalEventId,
-                marketAProfileId: profileA.id,
-                marketBProfileId: profileB.id,
+                profileA,
+                profileB,
                 factorComparison,
                 version: this.version
             });
@@ -371,8 +373,8 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
         try {
             const result = await this.pool.query<ResolutionRiskAssessmentRow>(
                 `INSERT INTO resolution_risk_assessments
-                    (canonical_event_id, market_a_profile_id, market_b_profile_id, risk_score, confidence_score, equivalence_class, factor_breakdown, reasons, version)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9)
+                    (canonical_event_id, market_a_profile_id, market_b_profile_id, risk_score, confidence_score, equivalence_class, factor_breakdown, reasons, version, liquidity_cost, max_settlement_delay_hours)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11)
                  ON CONFLICT (canonical_event_id, market_a_profile_id, market_b_profile_id, version)
                  DO UPDATE
                      SET risk_score = EXCLUDED.risk_score,
@@ -380,6 +382,8 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
                          equivalence_class = EXCLUDED.equivalence_class,
                          factor_breakdown = EXCLUDED.factor_breakdown,
                          reasons = EXCLUDED.reasons,
+                         liquidity_cost = EXCLUDED.liquidity_cost,
+                         max_settlement_delay_hours = EXCLUDED.max_settlement_delay_hours,
                          computed_at = now()
                  RETURNING *`,
                 [
@@ -391,7 +395,9 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
                     scored.equivalenceClass,
                     JSON.stringify(scored.factorBreakdown),
                     JSON.stringify(scored.reasons),
-                    scored.version
+                    scored.version,
+                    scored.liquidityCost ?? null,
+                    scored.maxSettlementDelayHours ?? null
                 ]
             );
 
@@ -438,7 +444,9 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
             factorBreakdown: row.factor_breakdown,
             reasons: row.reasons,
             version: row.version,
-            computedAt: new Date(row.computed_at)
+            computedAt: new Date(row.computed_at),
+            liquidityCost: row.liquidity_cost ?? undefined,
+            maxSettlementDelayHours: row.max_settlement_delay_hours ? Number(row.max_settlement_delay_hours) : undefined
         };
     }
 }

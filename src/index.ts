@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { config as loadDotenvFile } from "dotenv";
 import type { FastifyInstance } from "fastify";
 import type { Logger } from "pino";
 import type { Pool } from "pg";
@@ -38,6 +39,7 @@ export interface BootstrapModules {
     db: AppDb;
     canonicalServiceBaseUrl: string;
     jwtSecret: string;
+    devSimulationPreviewEnabled?: boolean;
     sorEnabled?: boolean;
     sorCanaryShadowEnabled?: boolean;
     sorCanaryPercent?: number;
@@ -101,6 +103,7 @@ const defaultModules: BootstrapModules = {
 export const startService = async (
   modules: Partial<BootstrapModules> = {}
 ): Promise<ServiceRuntime> => {
+  loadDotenvFile();
   const impl: BootstrapModules = { ...defaultModules, ...modules };
 
   const env = impl.loadEnv();
@@ -110,7 +113,20 @@ export const startService = async (
     logger
   });
 
-  await impl.connectRedis(redisClient);
+  let redisConnected = false;
+  try {
+    await impl.connectRedis(redisClient);
+    redisConnected = true;
+  } catch (error) {
+    if (!env.DEV_SIMULATION_PREVIEW_ENABLED) {
+      throw error;
+    }
+
+    logger.warn(
+      { err: error },
+      "Redis connection failed during dev simulation preview startup. Continuing without an active Redis connection."
+    );
+  }
 
   const pgPool = impl.createPgPool({
     databaseUrl: env.DATABASE_URL,
@@ -125,6 +141,7 @@ export const startService = async (
     db,
     canonicalServiceBaseUrl: env.CANONICAL_SERVICE_BASE_URL,
     jwtSecret: env.JWT_SECRET,
+    devSimulationPreviewEnabled: env.DEV_SIMULATION_PREVIEW_ENABLED,
     sorEnabled: env.SOR_ENABLED,
     sorCanaryShadowEnabled: env.SOR_CANARY_SHADOW_ENABLED,
     sorCanaryPercent: env.SOR_CANARY_PERCENT,
@@ -188,7 +205,9 @@ export const startService = async (
 
     logger.info("Service shutdown started.");
     await app.close();
-    await impl.disconnectRedis(redisClient);
+    if (redisConnected) {
+      await impl.disconnectRedis(redisClient);
+    }
     await impl.closePgPool(pgPool);
     logger.info("Service shutdown completed.");
   };

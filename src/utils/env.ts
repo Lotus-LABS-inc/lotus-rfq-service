@@ -18,6 +18,7 @@ const envSchema = z
     DATABASE_URL: z.string().url().optional(),
     SUPABASE_DB_URL: z.string().url().optional(),
     JWT_SECRET: z.string().min(32),
+    DEV_SIMULATION_PREVIEW_ENABLED: z.coerce.boolean().default(false),
     COMBO_RFQ_ENABLED: z.coerce.boolean().default(false),
     SOR_ENABLED: z.coerce.boolean().default(false),
     SOR_CANARY_SHADOW_ENABLED: z.coerce.boolean().default(false),

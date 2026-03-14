@@ -1,5 +1,6 @@
 export type ResolutionEquivalenceClass =
     | "SAFE_EQUIVALENT"
+    | "EQUIVALENT_WITH_LAG"
     | "CAUTION"
     | "HIGH_RISK"
     | "DO_NOT_POOL";
@@ -141,6 +142,8 @@ export interface ResolutionRiskAssessment {
     reasons: readonly string[];
     version: string;
     computedAt: Date;
+    liquidityCost?: string | undefined;
+    maxSettlementDelayHours?: number | undefined;
 }
 
 export type ResolutionRiskRecommendedAction =
@@ -182,8 +185,8 @@ export interface ResolutionFactorComparisonResult {
 
 export interface ResolutionRiskScoringInput {
     canonicalEventId: string;
-    marketAProfileId: string;
-    marketBProfileId: string;
+    profileA: NormalizedResolutionProfile;
+    profileB: NormalizedResolutionProfile;
     factorComparison: ResolutionFactorComparisonResult;
     version: string;
 }

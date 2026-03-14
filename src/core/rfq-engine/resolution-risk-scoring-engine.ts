@@ -130,16 +130,28 @@ export class ResolutionRiskScoringEngine implements IResolutionRiskScoringEngine
         const equivalenceClass = this.mapEquivalenceClass(riskScore, confidenceScore, input.factorComparison);
         const reasons = this.buildReasons(input.factorComparison);
 
+        const profileAMaxDelay = Number(input.profileA.disputeWindowHours ?? 0) + Number(input.profileA.settlementLagHours ?? 0);
+        const profileBMaxDelay = Number(input.profileB.disputeWindowHours ?? 0) + Number(input.profileB.settlementLagHours ?? 0);
+        const maxSettlementDelayHours = Math.abs(profileAMaxDelay - profileBMaxDelay);
+
+        // 15% APY Base Liquidity Premium
+        const annualRate = new Decimal(0.15); 
+        const liquidityCost = maxSettlementDelayHours > 0 
+            ? annualRate.times(maxSettlementDelayHours).div(8760) 
+            : new Decimal(0);
+
         return {
             canonicalEventId: input.canonicalEventId,
-            marketAProfileId: input.marketAProfileId,
-            marketBProfileId: input.marketBProfileId,
+            marketAProfileId: input.profileA.id,
+            marketBProfileId: input.profileB.id,
             riskScore: this.serializeClampedDecimal(riskScore),
             confidenceScore: this.serializeClampedDecimal(confidenceScore),
             equivalenceClass,
             factorBreakdown: input.factorComparison as unknown as Record<string, unknown>,
             reasons,
-            version: input.version
+            version: input.version,
+            liquidityCost: this.serializeClampedDecimal(liquidityCost),
+            maxSettlementDelayHours
         };
     }
 
@@ -187,14 +199,14 @@ export class ResolutionRiskScoringEngine implements IResolutionRiskScoringEngine
     private validateInput(input: ResolutionRiskScoringInput): void {
         if (
             input.canonicalEventId.trim().length === 0 ||
-            input.marketAProfileId.trim().length === 0 ||
-            input.marketBProfileId.trim().length === 0 ||
+            input.profileA.id.trim().length === 0 ||
+            input.profileB.id.trim().length === 0 ||
             input.version.trim().length === 0
         ) {
             throw new ResolutionRiskScoringError("invalid_scoring_input");
         }
 
-        if (input.marketAProfileId === input.marketBProfileId) {
+        if (input.profileA.id === input.profileB.id) {
             throw new ResolutionRiskScoringError("invalid_scoring_input");
         }
 
@@ -264,6 +276,13 @@ export class ResolutionRiskScoringEngine implements IResolutionRiskScoringEngine
         const lowConfidenceThreshold = new Decimal(this.thresholds.lowConfidenceThreshold);
         const safeEquivalentMinConfidence = new Decimal(this.thresholds.safeEquivalentMinConfidence);
 
+        // Define structural risk markers (mismatch here is a hard blocker)
+        const isOutcomeSymmetric = 
+            factorComparison.oracleMismatch.score === 0 &&
+            factorComparison.ruleMismatch.score === 0 &&
+            factorComparison.structuralMismatch.score === 0 &&
+            factorComparison.wordingAmbiguity.score === 0;
+
         if (
             factorComparison.oracleMismatch.score === 1 ||
             factorComparison.ruleMismatch.score === 1 ||
@@ -272,9 +291,9 @@ export class ResolutionRiskScoringEngine implements IResolutionRiskScoringEngine
         ) {
             classification = "DO_NOT_POOL";
         } else if (riskScore.greaterThanOrEqualTo(cautionMaxRisk)) {
-            classification = "HIGH_RISK";
+            classification = isOutcomeSymmetric ? "EQUIVALENT_WITH_LAG" : "HIGH_RISK";
         } else if (riskScore.greaterThanOrEqualTo(safeEquivalentMaxRisk)) {
-            classification = "CAUTION";
+            classification = isOutcomeSymmetric ? "EQUIVALENT_WITH_LAG" : "CAUTION";
         } else {
             classification = "SAFE_EQUIVALENT";
         }
@@ -282,6 +301,7 @@ export class ResolutionRiskScoringEngine implements IResolutionRiskScoringEngine
         if (this.conservativeDowngradeOnLowConfidence && confidenceScore.lessThan(lowConfidenceThreshold)) {
             switch (classification) {
                 case "SAFE_EQUIVALENT":
+                case "EQUIVALENT_WITH_LAG":
                     return "CAUTION";
                 case "CAUTION":
                     return "HIGH_RISK";
@@ -293,7 +313,7 @@ export class ResolutionRiskScoringEngine implements IResolutionRiskScoringEngine
         }
 
         if (classification === "SAFE_EQUIVALENT" && confidenceScore.lessThan(safeEquivalentMinConfidence)) {
-            return "CAUTION";
+            return isOutcomeSymmetric ? "EQUIVALENT_WITH_LAG" : "CAUTION";
         }
 
         return classification;

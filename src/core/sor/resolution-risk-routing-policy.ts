@@ -22,11 +22,19 @@ export const resolutionRiskCandidatePairKey = (candidateAId: string, candidateBI
 
 export const decisionFromEquivalenceClass = (
   equivalenceClass: ResolutionEquivalenceClass,
-  cautionPenalty: number
+  cautionPenalty: number,
+  liquidityCost?: string | number
 ): ResolutionRiskRoutingDecision => {
   switch (equivalenceClass) {
     case "SAFE_EQUIVALENT":
       return { mode: "normal", penalty: 0, equivalenceClass };
+    case "EQUIVALENT_WITH_LAG":
+      return { 
+        mode: "penalty", 
+        penalty: liquidityCost ? Number(liquidityCost) : 0, 
+        equivalenceClass,
+        reason: "settlement_lag_liquidity_premium"
+      };
     case "CAUTION":
       return { mode: "penalty", penalty: cautionPenalty, equivalenceClass, reason: "resolution_risk_caution" };
     case "HIGH_RISK":

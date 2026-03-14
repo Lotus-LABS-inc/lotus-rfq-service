@@ -21,6 +21,7 @@
     "db:migrate:supabase": "node scripts/db-migrate-supabase.mjs",
     "db:verify:supabase": "node scripts/db-verify-supabase.mjs",
     "db:schema:validate": "node scripts/db-schema-validate.mjs",
+    "seed:simulation-console-preview": "tsx scripts/seed-simulation-console-preview.ts",
     "stress:sor": "tsx scripts/stress-sor.ts",
     "stress:internal-cross": "tsx scripts/stress-internal-cross.ts",
     "stress:internal-netting": "tsx scripts/stress-internal-netting.ts",

@@ -923,7 +923,11 @@ export class OrderRouter implements IOrderRouter {
           continue;
         }
 
-        const rawDecision = decisionFromEquivalenceClass(assessment.equivalenceClass, cautionPenalty);
+        const rawDecision = decisionFromEquivalenceClass(
+          assessment.equivalenceClass,
+          cautionPenalty,
+          assessment.liquidityCost
+        );
         pairPolicies.set(
           candidatePairKey,
           this.applyResolutionRiskPolicy(stableKey, rawDecision, {

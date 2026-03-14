@@ -23,7 +23,11 @@ import { registerWebSocketPlugin } from "../ws/plugin.js";
 import type { RFQDomainEvent } from "../core/rfq-engine/rfq-domain-events.js";
 import { LPStatsRepository } from "../repositories/lp-stats.repository.js";
 import fastifyJwt from "@fastify/jwt";
-import { createUserAuthMiddleware, createAdminAuthMiddleware } from "./user-auth-middleware.js";
+import {
+  createUserAuthMiddleware,
+  createAdminAuthMiddleware,
+  createAdminSimulationPreviewMiddleware
+} from "./user-auth-middleware.js";
 import { ExposureRepository } from "../repositories/exposure.repository.js";
 import { ExposureRedisCache } from "../repositories/exposure-redis-cache.js";
 import { RiskEngine } from "../core/risk-engine.js";
@@ -48,6 +52,9 @@ import { registerAdminQualificationRoutes } from "./admin/qualification.routes.j
 import { QualificationAdminService, createDefaultPromotionGateConfig } from "./admin/qualification-admin-service.js";
 import { registerAdminQualificationSafetyRoutes } from "./admin/qualification-safety.routes.js";
 import { QualificationSafetyAdminService } from "./admin/qualification-safety-admin-service.js";
+import { registerAdminSimulationRoutes } from "./admin/simulation.routes.js";
+import { registerAdminSimulationConsoleRoutes } from "./admin/simulation-console.routes.js";
+import { SimulationAdminService } from "./admin/simulation-admin-service.js";
 import { PromotionGateEvaluator } from "../core/qualification/promotion-gate-evaluator.js";
 import { EconomicQualityEngine } from "../core/qualification/economic-quality-engine.js";
 import { QualificationRunManager } from "../core/qualification/qualification-run-manager.js";
@@ -104,6 +111,12 @@ import { Phase3AGuardrailShadowResolver } from "../guardrails/phase3a-guardrail-
 import { OverlapGraphBuilder } from "../core/combo-engine/overlap-graph-builder.js";
 import { CandidateGroupEnumerator } from "../core/combo-engine/candidate-group-enumerator.js";
 import { ClearingCompressionScorer } from "../core/combo-engine/clearing-compression-scorer.js";
+import { HistoricalSimulationRunner } from "../simulation/historical-simulation-runner.js";
+import { PolymarketOnlyBaselineEvaluator } from "../simulation/baselines/polymarket-only-baseline.js";
+import { LimitlessOnlyBaselineEvaluator } from "../simulation/baselines/limitless-only-baseline.js";
+import { BestExternalOnlyBaselineEvaluator } from "../simulation/baselines/best-external-only-baseline.js";
+import { NoInternalizationBaselineEvaluator } from "../simulation/baselines/no-internalization-baseline.js";
+import { createDefaultHistoricalLotusEvaluators } from "../simulation/default-historical-lotus-evaluators.js";
 
 export interface ServerDependencies {
   logger: Logger;
@@ -112,6 +125,7 @@ export interface ServerDependencies {
   db: AppDb;
   canonicalServiceBaseUrl: string;
   jwtSecret: string;
+  devSimulationPreviewEnabled?: boolean;
   sorEnabled?: boolean;
   sorCanaryShadowEnabled?: boolean;
   sorCanaryPercent?: number;
@@ -871,6 +885,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     }
   });
   const adminAuthMiddleware = createAdminAuthMiddleware();
+  const simulationPreviewAdminMiddleware = createAdminSimulationPreviewMiddleware({
+    enabled: dependencies.devSimulationPreviewEnabled ?? false
+  });
   await registerAdminRiskRoutes(app, adminAuthMiddleware, {
     riskEngine,
     exposureRepo: exposureRepository,
@@ -910,14 +927,15 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       logger: dependencies.logger
     })
   });
+  const resolutionRiskAdminService = new ResolutionRiskAdminService({
+    pool: dependencies.pgPool,
+    redis: dependencies.redisClient,
+    assessmentService: resolutionRiskAssessmentService,
+    logger: dependencies.logger,
+    version: "resolution-risk-v1"
+  });
   await registerAdminResolutionRiskRoutes(app, adminAuthMiddleware, {
-    resolutionRiskAdminService: new ResolutionRiskAdminService({
-      pool: dependencies.pgPool,
-      redis: dependencies.redisClient,
-      assessmentService: resolutionRiskAssessmentService,
-      logger: dependencies.logger,
-      version: "resolution-risk-v1"
-    })
+    resolutionRiskAdminService
   });
   const controlPlaneAdminService = new ControlPlaneAdminService({
     pool: dependencies.pgPool,
@@ -971,6 +989,25 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       logger: dependencies.logger
     })
   });
+  await registerAdminSimulationRoutes(app, simulationPreviewAdminMiddleware, {
+    simulationAdminService: new SimulationAdminService({
+      pool: dependencies.pgPool,
+      historicalSimulationRunner: new HistoricalSimulationRunner({
+        pool: dependencies.pgPool,
+        polymarketOnlyBaselineEvaluator: new PolymarketOnlyBaselineEvaluator(),
+        limitlessOnlyBaselineEvaluator: new LimitlessOnlyBaselineEvaluator(),
+        bestExternalOnlyBaselineEvaluator: new BestExternalOnlyBaselineEvaluator(),
+        noInternalizationBaselineEvaluator: new NoInternalizationBaselineEvaluator(),
+        lotusEvaluators: createDefaultHistoricalLotusEvaluators(),
+        logger: dependencies.logger
+      }),
+      resolutionRiskAdminService,
+      configVersion: "historical-sim-v1",
+      engineVersion: "historical-sim-v1",
+      logger: dependencies.logger
+    })
+  });
+  await registerAdminSimulationConsoleRoutes(app, simulationPreviewAdminMiddleware);
   await registerLPQuotesRoute(app, lpAuthMiddleware, receiveLPQuoteService);
 
   const forwardableEventTypes: ReadonlySet<string> = new Set([

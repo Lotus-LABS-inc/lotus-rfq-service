@@ -636,6 +636,27 @@ export const qualificationRollupRefreshDurationMs = new Histogram({
   ...histogramConfig
 });
 
+export const historicalIngestRunsTotal = new Counter({
+  name: "historical_ingest_runs_total",
+  help: "Total historical ingestion job runs by venue, mode, and status.",
+  labelNames: ["venue", "mode", "status"],
+  ...counterConfig
+});
+
+export const historicalIngestFailuresTotal = new Counter({
+  name: "historical_ingest_failures_total",
+  help: "Total historical ingestion failures by venue and stage.",
+  labelNames: ["venue", "stage"],
+  ...counterConfig
+});
+
+export const historicalRowsWrittenTotal = new Counter({
+  name: "historical_rows_written_total",
+  help: "Total historical market-state rows inserted by venue and mode.",
+  labelNames: ["venue", "mode"],
+  ...counterConfig
+});
+
 export const plannerShardPausedTotal = new Counter({
   name: "planner_shard_paused_total",
   help: "Total successful planner shard pause operations.",

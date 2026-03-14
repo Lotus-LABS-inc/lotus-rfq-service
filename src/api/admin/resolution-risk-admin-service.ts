@@ -47,6 +47,8 @@ interface ResolutionAssessmentRow {
     reasons: readonly string[];
     version: string;
     computed_at: Date;
+    liquidity_cost: string | null;
+    max_settlement_delay_hours: string | null;
 }
 
 export interface ResolutionRiskFreshness {
@@ -381,4 +383,6 @@ const mapAssessmentRow = (row: ResolutionAssessmentRow): ResolutionRiskAssessmen
     reasons: row.reasons,
     version: row.version,
     computedAt: new Date(row.computed_at),
+    liquidityCost: row.liquidity_cost ?? undefined,
+    maxSettlementDelayHours: row.max_settlement_delay_hours ? Number(row.max_settlement_delay_hours) : undefined
 });

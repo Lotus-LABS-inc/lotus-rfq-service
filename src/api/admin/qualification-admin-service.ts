@@ -83,6 +83,7 @@ export interface QualificationRunEvaluationSummary {
 export interface QualificationRunDetail {
     run: StrategyQualificationRun;
     summary: QualificationRunEvaluationSummary;
+    historicalSimulationSummary: Record<string, unknown> | null;
 }
 
 export interface PromoteRunResult {
@@ -421,7 +422,10 @@ export class QualificationAdminService {
                 realized: buildMetricAggregate(evaluations, "realizedMetrics"),
                 counterfactual: buildMetricAggregate(evaluations, "counterfactualMetrics"),
                 improvement: buildMetricAggregate(evaluations, "improvementMetrics")
-            }
+            },
+            historicalSimulationSummary: isPlainRecord(run.metadata.historicalSimulationEvidence)
+                ? run.metadata.historicalSimulationEvidence
+                : null
         };
     }
 

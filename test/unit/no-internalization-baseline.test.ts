@@ -1,63 +1,64 @@
 import { describe, expect, it } from "vitest";
 
-import { NoInternalizationBaselineBuilder } from "../../src/core/qualification/baselines/no-internalization-baseline.js";
-import { CounterfactualBaselineError } from "../../src/core/qualification/baselines/shared.js";
+import { HistoricalMarketClass, type HistoricalMarketState } from "../../src/core/historical-simulation/historical-simulation.types.js";
+import { BestExternalOnlyBaselineEvaluator } from "../../src/simulation/baselines/best-external-only-baseline.js";
+import { NoInternalizationBaselineEvaluator } from "../../src/simulation/baselines/no-internalization-baseline.js";
 
-describe("NoInternalizationBaselineBuilder", () => {
-    it("strips crossing, netting, and clearing contributions completely and remains deterministic", () => {
-        const builder = new NoInternalizationBaselineBuilder();
-        const input = {
-            selectedQuote: {
-                quantity: "20",
-                arrivalPrice: "0.95"
-            },
-            routeCandidates: [
-                {
-                    candidateId: "cand-a",
-                    providerId: "venue-a",
-                    quotedPrice: "0.96",
-                    availableSize: "20",
-                    fees: { protocol_fee: 0.05 }
-                }
-            ],
-            internalCrossSnapshot: { filledSize: "8" },
-            phase2ANettingSnapshot: { nettedSize: "6" },
-            phase2BClearingSnapshot: { clearedSize: "6" },
-            realizedExecution: {
-                timeToFillMs: 450
-            }
-        };
+const feePolicy = {
+  version: "fees-v1",
+  venues: {
+    POLYMARKET: { feeBps: "10" },
+    LIMITLESS: { feeBps: "20" }
+  }
+} as const;
 
-        const first = builder.build(input);
-        const second = builder.build(input);
+const createState = (overrides: Partial<HistoricalMarketState>): HistoricalMarketState => ({
+  id: "state",
+  canonicalEventId: "canonical-event-1",
+  canonicalCategory: "OTHER",
+  venue: "POLYMARKET",
+  venueMarketId: "market-id",
+  marketClass: HistoricalMarketClass.BINARY,
+  timestamp: new Date("2026-03-13T00:00:00.000Z"),
+  midpoint: null,
+  bestBid: null,
+  bestAsk: null,
+  spread: null,
+  lastPrice: "0.60",
+  volume: null,
+  openInterest: null,
+  candles: null,
+  orderbookSnapshot: null,
+  marketEvents: null,
+  trades: null,
+  ownExecutionHistory: null,
+  metadataVersion: "v1",
+  sourceTimestamp: new Date("2026-03-13T00:00:00.000Z"),
+  ...overrides
+});
 
-        expect(JSON.stringify(first)).toBe(JSON.stringify(second));
-        expect(first.internalizedNotional).toBe("0");
-        expect(first.crossedNotional).toBe("0");
-        expect(first.nettedNotional).toBe("0");
-        expect(first.clearedNotional).toBe("0");
-        expect(first.compressionNotional).toBe("0");
-        expect(first.externalNotional).toBe(first.fillNotional);
-        expect(first.metadata).toMatchObject({
-            strippedInternalization: {
-                internalCrossProvided: true,
-                phase2ANettingProvided: true,
-                phase2BClearingProvided: true
-            }
-        });
+describe("NoInternalizationBaselineEvaluator", () => {
+  it("matches best-external-only economics and records stripped internalization metadata", () => {
+    const bestExternal = new BestExternalOnlyBaselineEvaluator();
+    const noInternalization = new NoInternalizationBaselineEvaluator(bestExternal);
+    const input = {
+      canonicalEventId: "canonical-event-1",
+      marketStates: [
+        createState({ venue: "POLYMARKET", venueMarketId: "condition-1", bestAsk: "0.55", orderbookSnapshot: { bids: [{ price: "0.54", size: "1" }], asks: [{ price: "0.55", size: "1" }] } }),
+        createState({ venue: "LIMITLESS", venueMarketId: "limitless-1", lastPrice: "0.53" })
+      ],
+      feePolicy
+    };
+
+    const external = bestExternal.evaluate(input);
+    const stripped = noInternalization.evaluate(input);
+
+    expect(stripped.effectiveCost).toBe(external.effectiveCost);
+    expect(stripped.fees).toBe(external.fees);
+    expect(stripped.slippage).toBe(external.slippage);
+    expect(stripped.metadata).toMatchObject({
+      internalizationStripped: true,
+      sourceBaseline: "BEST_EXTERNAL_ONLY"
     });
-
-    it("fails closed when route candidates are missing", () => {
-        const builder = new NoInternalizationBaselineBuilder();
-
-        expect(() =>
-            builder.build({
-                selectedQuote: {
-                    quantity: "20",
-                    arrivalPrice: "0.95"
-                },
-                routeCandidates: []
-            })
-        ).toThrowError(CounterfactualBaselineError);
-    });
+  });
 });
