@@ -11,7 +11,7 @@ export const resolveRepoRoot = (importMetaUrl) => {
 };
 
 export const loadRepoEnv = (repoRoot) => {
-  const envCandidates = [path.resolve(repoRoot, ".env"), path.resolve(repoRoot, "..", ".env")];
+  const envCandidates = [path.resolve(repoRoot, "..", ".env"), path.resolve(repoRoot, ".env")];
   for (const envPath of envCandidates) {
     if (existsSync(envPath)) {
       process.loadEnvFile(envPath);
@@ -24,12 +24,38 @@ export const migrationDirsForRepo = (repoRoot) => [
   path.join(repoRoot, "sql", "migrations")
 ];
 
+const migrationOrderOverrides = new Map([
+  ["2026_03_02_create_combo_tables.sql", -20],
+  ["2026_03_02_combine_exec_plans.sql", -19],
+  ["2026_03_10_create_combo_netting_tables.sql", -18],
+  ["2026_03_10_create_combo_netting_attempts.sql", -17]
+]);
+
+const migrationPriority = (filename) => {
+  const override = migrationOrderOverrides.get(filename);
+  if (override !== undefined) {
+    return override;
+  }
+  if (filename.includes("_create_")) return 0;
+  if (filename.includes("_add_")) return 1;
+  if (filename.includes("_update_")) return 2;
+  if (filename.includes("_combine_")) return 3;
+  return 4;
+};
+
 export const listMigrationFiles = async (migrationDirs) => {
   const migrations = [];
   for (const migrationsDir of migrationDirs) {
     const files = (await readdir(migrationsDir))
       .filter((name) => name.endsWith(".sql"))
-      .sort((left, right) => left.localeCompare(right));
+      .sort((left, right) => {
+        const leftPriority = migrationPriority(left);
+        const rightPriority = migrationPriority(right);
+        if (leftPriority !== rightPriority) {
+          return leftPriority - rightPriority;
+        }
+        return left.localeCompare(right);
+      });
     for (const file of files) {
       migrations.push({
         dirName: path.basename(migrationsDir),

@@ -4,9 +4,11 @@ import {
   PredexonSchemaParseError,
   parsePredexonCandlesticksResponse,
   parsePredexonEventsResponse,
+  parsePredexonLimitlessOrderbooksResponse,
   parsePredexonMarketPriceResponse,
   parsePredexonMarketsResponse,
   parsePredexonOpenInterestResponse,
+  parsePredexonOpinionOrderbooksResponse,
   parsePredexonOrderbooksResponse,
   parsePredexonTradesResponse,
   parsePredexonVolumeResponse
@@ -85,6 +87,22 @@ export type PredexonMarketPriceQuery = Readonly<{
 
 export type PredexonOrderbooksQuery = Readonly<{
   token_id: string;
+  start_time: number;
+  end_time: number;
+  limit?: number;
+  pagination_key?: string;
+}>
+
+export type PredexonLimitlessOrderbooksQuery = Readonly<{
+  market_slug: string;
+  start_time: number;
+  end_time: number;
+  limit?: number;
+  pagination_key?: string;
+}>
+
+export type PredexonOpinionOrderbooksQuery = Readonly<{
+  market_id: string;
   start_time: number;
   end_time: number;
   limit?: number;
@@ -170,6 +188,8 @@ export const PREDExonHistoricalEndpoints = Object.freeze({
   candlesticks: (conditionId: string) => `/v2/polymarket/candlesticks/${encodeURIComponent(conditionId)}`,
   marketPrice: (tokenId: string) => `/v2/polymarket/market-price/${encodeURIComponent(tokenId)}`,
   orderbooks: "/v2/polymarket/orderbooks",
+  limitlessOrderbooks: "/v2/limitless/orderbooks",
+  opinionOrderbooks: "/v2/opinion/orderbooks",
   trades: "/v2/polymarket/trades",
   volume: (tokenId: string) => `/v2/polymarket/markets/${encodeURIComponent(tokenId)}/volume`,
   openInterest: (conditionId: string) =>
@@ -221,6 +241,8 @@ export type PredexonEvent = ArrayElement<ReturnType<typeof parsePredexonEventsRe
 export type PredexonCandle = ArrayElement<ReturnType<typeof parsePredexonCandlesticksResponse>>
 export type PredexonMarketPrice = ReturnType<typeof parsePredexonMarketPriceResponse>
 export type PredexonOrderbookSnapshot = ArrayElement<ReturnType<typeof parsePredexonOrderbooksResponse>>
+export type PredexonLimitlessOrderbookSnapshot = ArrayElement<ReturnType<typeof parsePredexonLimitlessOrderbooksResponse>>
+export type PredexonOpinionOrderbookSnapshot = ArrayElement<ReturnType<typeof parsePredexonOpinionOrderbooksResponse>>
 export type PredexonTrade = ArrayElement<ReturnType<typeof parsePredexonTradesResponse>>
 export type PredexonVolumePoint = ArrayElement<ReturnType<typeof parsePredexonVolumeResponse>>
 export type PredexonOpenInterestPoint = ArrayElement<ReturnType<typeof parsePredexonOpenInterestResponse>>
@@ -260,6 +282,28 @@ export class PredexonHistoricalClient {
 
   public getOrderbookHistory(query: PredexonOrderbooksQuery): Promise<PredexonOrderbookSnapshot[]> {
     return this.request("getOrderbookHistory", PREDExonHistoricalEndpoints.orderbooks, query, parsePredexonOrderbooksResponse)
+  }
+
+  public getLimitlessOrderbookHistory(
+    query: PredexonLimitlessOrderbooksQuery
+  ): Promise<PredexonLimitlessOrderbookSnapshot[]> {
+    return this.request(
+      "getLimitlessOrderbookHistory",
+      PREDExonHistoricalEndpoints.limitlessOrderbooks,
+      query,
+      parsePredexonLimitlessOrderbooksResponse
+    )
+  }
+
+  public getOpinionOrderbookHistory(
+    query: PredexonOpinionOrderbooksQuery
+  ): Promise<PredexonOpinionOrderbookSnapshot[]> {
+    return this.request(
+      "getOpinionOrderbookHistory",
+      PREDExonHistoricalEndpoints.opinionOrderbooks,
+      query,
+      parsePredexonOpinionOrderbooksResponse
+    )
   }
 
   public getTradesHistory(query: PredexonTradesQuery): Promise<PredexonTrade[]> {

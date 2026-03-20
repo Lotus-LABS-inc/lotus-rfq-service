@@ -25,6 +25,7 @@ const createProfile = (id: string, canonicalEventId: string): NormalizedResoluti
   venue: "POLYMARKET",
   venueMarketId: `${id}-market`,
   canonicalEventId,
+  canonicalMarketId: `${id}-canonical-market`,
   oracleType: "api_oracle",
   oracleName: "oracle",
   resolutionAuthorityType: "official",
@@ -50,6 +51,7 @@ const createAssessment = (
 ): ResolutionRiskAssessment => ({
   id: `${marketAProfileId}-${marketBProfileId}`,
   canonicalEventId: "canonical-event-1",
+  canonicalMarketId: null,
   marketAProfileId,
   marketBProfileId,
   riskScore: "0.05",
@@ -121,6 +123,7 @@ describe("CanonicalHistoricalNormalizer", () => {
     expect(result[0]?.state).toEqual(
       expect.objectContaining({
         canonicalEventId: "canonical-sports-1",
+        canonicalMarketId: "canonical-market-1",
         venue: "POLYMARKET",
         venueMarketId: "sports-market-1"
       })

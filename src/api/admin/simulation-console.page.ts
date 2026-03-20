@@ -1,10 +1,16 @@
 const clientScript = String.raw`
-const state = { scopes: [], latestRunId: null };
+const state = { scopes: [], latestRunId: null, canonicalMarkets: [] };
 
 const endpoints = {
   scopes: "/admin/simulation/scopes",
   run: "/admin/simulation/run",
-  canonical: (eventId) => "/admin/simulation/canonical/" + encodeURIComponent(eventId),
+  canonical: (eventId, canonicalMarketId) => {
+    const url = new URL("/admin/simulation/canonical/" + encodeURIComponent(eventId), window.location.origin);
+    if (canonicalMarketId) {
+      url.searchParams.set("canonicalMarketId", canonicalMarketId);
+    }
+    return url.pathname + url.search;
+  },
   runDetail: (runId) => "/admin/simulation/run/" + encodeURIComponent(runId),
   runResults: (runId) => "/admin/simulation/run/" + encodeURIComponent(runId) + "/results"
 };
@@ -42,12 +48,181 @@ const fmtProb = (value) => {
   return Number.isFinite(numeric) ? (numeric * 100).toFixed(0) + "%" : String(value);
 };
 
+const fmtAbsNum = (value) => {
+  if (value === null || value === undefined || value === "") return "N/A";
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? fmtNum(Math.abs(numeric)) : fmtNum(value);
+};
+
+const currentSide = () => el.side?.value ?? state.latestSide ?? "BUY";
+
+const cashLabel = (side) => side === "SELL" ? "Estimated net proceeds" : "Estimated cash spent";
+const filledCashLabel = (side) => side === "SELL" ? "Cash received" : "Cash spent";
+const averagePriceLabel = (side) => side === "SELL" ? "Average sale price" : "Average buy price";
+const quantityLabel = () => "Filled quantity";
+const residualQuantityLabel = () => "Unfilled quantity";
+
+const describeComparisonReason = (reason, selectedPlan, alternatePlan) => {
+  switch (reason) {
+    case "higher_fill_ratio":
+      return selectedPlan.planType + " won because it can prove more immediate fill than " + alternatePlan.planType + ".";
+    case "lower_effective_cost":
+      return selectedPlan.planType + " won because the economically comparable portion is cheaper for this order size.";
+    case "fewer_allocations":
+      return selectedPlan.planType + " won because both plans were economically similar and it used fewer venue allocations.";
+    case "stable_plan_order":
+      return selectedPlan.planType + " won on the deterministic tie-break.";
+    default:
+      return selectedPlan.planType + " was selected by the routing comparison.";
+  }
+};
+
+const yesNo = (value) => value ? "Yes" : "No";
+
+const fmtSignedDelta = (value) => {
+  if (value === null || value === undefined || value === "") return "N/A";
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return String(value);
+  const formatted = fmtNum(Math.abs(numeric));
+  if (numeric === 0) return formatted;
+  return (numeric > 0 ? "+" : "-") + formatted;
+};
+
+const parseRatio = (value) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+};
+
 const badge = (label, tone) => '<span class="badge ' + tone + '">' + esc(label) + "</span>";
+
+const deriveConfidence = (lotusResult) => {
+  const blocked = lotusResult?.metadata?.blocked === true || lotusResult?.resolutionRiskGating?.allowed === false;
+  const selectedPlan = lotusResult?.feeAdjustedResult?.routingComparison?.selectedPlan ?? null;
+
+  if (blocked || !selectedPlan) {
+    return {
+      grade: "BLOCKED",
+      tone: "danger",
+      summary: "Lotus did not produce a runnable route for this slice."
+    };
+  }
+
+  const provableFillRatio = parseRatio(selectedPlan.provableFillRatio);
+  const containsUnknownDepth = selectedPlan.containsUnknownDepth === true;
+  const unprovenResidual = Math.abs(Number(selectedPlan.unprovenResidualNotional ?? 0));
+
+  if (provableFillRatio >= 0.999 && !containsUnknownDepth && unprovenResidual === 0) {
+    return {
+      grade: "HIGH",
+      tone: "success",
+      summary: "The winning route is fully backed by explicit historical depth."
+    };
+  }
+
+  if (provableFillRatio >= 0.25) {
+    return {
+      grade: "MEDIUM",
+      tone: "warning",
+      summary: "A meaningful portion of the route is depth-proven, but some capacity still depends on price-only residual assignment."
+    };
+  }
+
+  return {
+    grade: "LOW",
+    tone: "danger",
+    summary: "Most of the winning route still depends on price-only capacity or very limited provable depth."
+  };
+};
 
 const kv = (items) =>
   '<dl class="kv">' +
-  items.map(([label, value]) => '<div><dt>' + esc(label) + '</dt><dd>' + esc(value) + "</dd></div>").join("") +
+  items.map(([label, value, raw]) => '<div><dt>' + esc(label) + '</dt><dd>' + (raw ? value : esc(value)) + "</dd></div>").join("") +
   "</dl>";
+
+const currentRouteMode = () => el.routeMode?.value ?? "POLYMARKET_LIMITLESS";
+
+const routeReasonLabel = (reason) => {
+  switch (reason) {
+    case "missing_required_venue":
+      return "Missing required venue";
+    case "missing_historical_rows":
+      return "No historical rows";
+    case "missing_pair_assessment":
+      return "Missing pair assessment";
+    case "incomplete_resolution_risk":
+      return "Incomplete resolution risk";
+    case "stale_resolution_risk":
+      return "Stale resolution risk";
+    case "unsafe_equivalence":
+      return "Unsafe equivalence";
+    case "ambiguous_venue_identity":
+      return "Ambiguous venue identity";
+    default:
+      return "Unavailable";
+  }
+};
+
+const selectedRouteAvailability = (market) =>
+  (market?.routeModes ?? []).find((route) => route.routeMode === currentRouteMode()) ?? null;
+
+const isRunnableForSelectedRouteMode = (market) => selectedRouteAvailability(market)?.runnable === true;
+
+const formatRouteBadgeList = (routeModes) =>
+  (Array.isArray(routeModes) ? routeModes : []).map((route) =>
+    badge(
+      route.label + (route.runnable ? " runnable" : " unavailable"),
+      route.runnable ? "success" : "danger"
+    ) + (route.runnable || !route.reason ? "" : ' <span class="muted">(' + esc(routeReasonLabel(route.reason)) + ")</span>")
+  ).join(" ");
+
+const renderCanonicalMarketOptions = (markets, preferredValue) => {
+  const marketOptions = Array.isArray(markets) ? markets : [];
+  state.canonicalMarkets = marketOptions;
+  const describeVenueMarket = (venue) => {
+    const title = venue.title ? " (" + venue.title + ")" : "";
+    return venue.venue + ": " + venue.venueMarketId + title;
+  };
+  const availableIds = marketOptions.filter((market) => isRunnableForSelectedRouteMode(market)).map((market) => market.canonicalMarketId);
+  const previousValue = preferredValue ?? el.canonicalMarketId.value;
+  const nextValue =
+    availableIds.includes(previousValue)
+      ? previousValue
+      : availableIds.length === 1
+        ? availableIds[0]
+        : "";
+
+  if (marketOptions.length === 0) {
+    el.canonicalMarketId.innerHTML = '<option value="">No market-scoped IDs available for this event</option>';
+    el.canonicalMarketId.value = "";
+    el.canonicalMarketId.disabled = true;
+    el.canonicalMarketId.dataset.mode = "disabled";
+    return "";
+  }
+
+  el.canonicalMarketId.innerHTML = '<option value="">Select exact market for this route mode</option>' +
+    marketOptions.map((market) => {
+      const venueLabel = market.venues.map((venue) => describeVenueMarket(venue)).join(" | ");
+      const routeAvailability = selectedRouteAvailability(market);
+      const stateLabel = routeAvailability?.runnable
+        ? "Runnable"
+        : "Unavailable: " + routeReasonLabel(routeAvailability?.reason);
+      return '<option value="' + esc(market.canonicalMarketId) + '">' +
+        esc(market.canonicalMarketId + " | " + stateLabel + " | " + venueLabel) +
+        '</option>';
+    }).join("");
+  el.canonicalMarketId.disabled = false;
+  el.canonicalMarketId.dataset.mode = "enabled";
+  el.canonicalMarketId.value = nextValue;
+  return nextValue;
+};
+
+const resetCanonicalMarketSelect = () => {
+  el.canonicalMarketId.innerHTML = '<option value="">Select an event first</option>';
+  el.canonicalMarketId.value = "";
+  el.canonicalMarketId.disabled = true;
+  el.canonicalMarketId.dataset.mode = "disabled";
+};
+
 
 const updateScopeOptions = () => {
   const current = el.eventSelect.value;
@@ -55,7 +230,7 @@ const updateScopeOptions = () => {
   for (const scope of state.scopes) {
     const option = document.createElement("option");
     option.value = scope.canonicalEventId;
-    option.textContent = scope.canonicalEventId + " | " + scope.canonicalCategory;
+    option.textContent = scope.canonicalEventId + " | " + scope.canonicalCategory + " | " + (scope.catalogScope === "historical_simulation" ? "Historical catalog" : "Live catalog");
     el.eventSelect.appendChild(option);
   }
   if (current && state.scopes.some((scope) => scope.canonicalEventId === current)) {
@@ -83,25 +258,68 @@ const renderCanonical = (payload) => {
     "<tr><td>" + esc(row.venue) + "</td><td>" + esc(String(row.rowCount)) + "</td><td>" + esc(fmtDate(row.coverageStart)) + "</td><td>" + esc(fmtDate(row.coverageEnd)) + "</td></tr>"
   ).join("");
 
-  const venuesWithMultipleMarkets = [...new Set((payload.pairedMarkets ?? []).map(m => m.venue))].filter(v => 
-    (payload.pairedMarkets ?? []).filter(m => m.venue === v).length > 1
-  );
-
+  const ambiguity = payload.ambiguity ?? {};
+  const venuesWithMultipleMarkets = Object.keys(ambiguity).filter(v => ambiguity[v].isAmbiguous);
   const pairingAmbiguous = venuesWithMultipleMarkets.length > 0;
   const pairedMarketsRows = (payload.pairedMarkets ?? []).map((market) =>
     "<tr><td>" + esc(market.venue) + "</td><td>" + esc(market.venueMarketId) + "</td><td>" + esc(market.title ?? "N/A") + "</td></tr>"
   ).join("");
 
+  const selectedCanonicalMarketId = renderCanonicalMarketOptions(payload.canonicalMarkets ?? [], payload.canonicalMarketId ?? null);
+
+  // Auto-set time range based on coverage
+  const startTimes = (payload.venueCoverage ?? []).map(v => new Date(v.coverageStart).getTime()).filter(t => !isNaN(t));
+  const endTimes = (payload.venueCoverage ?? []).map(v => new Date(v.coverageEnd).getTime()).filter(t => !isNaN(t));
+  if (startTimes.length > 0 && endTimes.length > 0) {
+    const minStart = new Date(Math.min(...startTimes));
+    const maxEnd = new Date(Math.max(...endTimes));
+    
+    // adjust for local timezone offset when setting datetime-local input
+    const toLocalString = (date) => new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0,16);
+    
+    el.from.value = toLocalString(minStart);
+    el.to.value = toLocalString(maxEnd);
+
+  }
+
   el.canonical.innerHTML =
     '<section class="card"><h3>Canonical event</h3>' +
     kv([
       ["Event ID", payload.canonicalEventId ?? "N/A"],
+      ["Catalog scope", payload.catalogScope === "historical_simulation" ? "Historical simulation" : "Live"],
+      ["Canonical Market ID", selectedCanonicalMarketId || "Choose exact market for route mode"],
       ["Category", payload.canonicalCategory ?? "N/A"],
-      ["Market class", payload.marketClass ?? "N/A"]
+      ["Market class", payload.marketClass ?? "N/A"],
+      ["3-platform routes", payload.hasTriVenueRoute ? "Available" : "Not found"],
+      ["Tri-venue exact markets", String(payload.triVenueRouteableMarketCount ?? 0)]
     ]) +
     "</section>" +
-    '<section class="card"><h3>Exact paired markets</h3>' +
+    '<section class="card"><h3>Route mode summary</h3><div class="cards">' +
+    (payload.routeModeSummary ?? []).map((summary) =>
+      '<section class="card"><h3>' + esc(summary.label) + '</h3>' +
+      kv([
+        ["Mode", summary.routeMode],
+        ["Cardinality", summary.cardinality],
+        ["Routeable markets", String(summary.routeableMarketCount)],
+        ["Available in event", summary.hasAnyRoute ? "Yes" : "No"]
+      ]) +
+      '</section>'
+    ).join("") +
+    '</div></section>' +
+    '<section class="card"><h3>Exact market routes</h3>' +
+    ((payload.canonicalMarkets ?? []).some((market) => !isRunnableForSelectedRouteMode(market))
+      ? '<p class="muted">Every exact market stays visible for audit context. Simulation is only allowed on markets that are runnable for the selected route mode.</p>'
+      : '') +
     (pairingAmbiguous ? '<p class="callout">' + badge("Ambiguous Pairing", "danger") + ' Multiple markets found for: ' + esc(venuesWithMultipleMarkets.join(", ")) + '</p>' : "") +
+    '<table class="table"><thead><tr><th>Canonical Market ID</th><th>Venues</th><th>Route Modes</th></tr></thead><tbody>' +
+    ((payload.canonicalMarkets ?? []).map((market) =>
+      '<tr><td>' + esc(market.canonicalMarketId) + '</td><td>' +
+      esc((market.venues ?? []).map((venue) => venue.venue + ": " + venue.venueMarketId).join(" | ") || "N/A") +
+      '</td><td>' + formatRouteBadgeList(market.routeModes) + '</td></tr>'
+    ).join("") || '<tr><td colspan="3" class="muted">No exact markets found.</td></tr>') +
+    '</tbody></table>' +
+    "</section>" +
+    '<section class="card"><h3>Selected market venues</h3>' +
     '<table class="table"><thead><tr><th>Venue</th><th>Venue Market ID</th><th>Title</th></tr></thead><tbody>' +
     (pairedMarketsRows || '<tr><td colspan="3" class="muted">No paired markets found.</td></tr>') +
     '</tbody></table>' +
@@ -113,7 +331,8 @@ const renderCanonical = (payload) => {
       ["Expected pairs", String(freshness.expectedPairCount ?? 0)],
       ["Persisted pairs", String(freshness.persistedPairCount ?? 0)],
       ["Max Settlement Delay", (inspection.assessments?.[0]?.maxSettlementDelayHours ?? 0) + "h"],
-      ["Liquidity Cost", (Number(inspection.assessments?.[0]?.liquidityCost ?? 0) * 100).toFixed(4) + "%"]
+      ["Liquidity Cost", (Number(inspection.assessments?.[0]?.liquidityCost ?? 0) * 100).toFixed(4) + "%"],
+      ["Identity Guard", pairingAmbiguous ? badge("MULTIPLE_MARKETS", "danger") : badge("READY", "success"), true]
     ]) +
     (inspection.assessments?.length > 0 ? 
       '<h4>Risk Factor Audit</h4><table class="table"><thead><tr><th>Factor</th><th>Score</th><th>Confidence</th><th>Reason</th></tr></thead><tbody>' +
@@ -138,12 +357,14 @@ const renderRun = (payload) => {
 
   const status = run?.status ?? sim?.status ?? "UNKNOWN";
   const tone = status === "SUCCEEDED" ? "success" : status === "FAILED" ? "danger" : "warning";
+  state.latestSide = run?.metadata?.side ?? sim?.metadata?.side ?? state.latestSide ?? "BUY";
 
   el.run.innerHTML =
     '<section class="card"><h3>Run status</h3><p class="callout">' + badge(status, tone) + '</p>' +
     kv([
       ["Run ID", run?.id ?? sim?.runId ?? "Dry run"],
       ["Strategy key", run?.metadata?.strategyKey ?? sim?.metadata?.strategyKey ?? "N/A"],
+      ["Catalog scope", run?.metadata?.catalogScope ?? sim?.metadata?.catalogScope ?? "N/A"],
       ["Started", fmtDate(run?.startedAt ?? null)],
       ["Ended", fmtDate(run?.endedAt ?? null)]
     ]) +
@@ -151,7 +372,9 @@ const renderRun = (payload) => {
     '<section class="card"><h3>Simulation summary</h3>' +
     kv([
       ["Scope", run ? run.scopeType + " / " + run.scopeId : "Dry run"],
-      ["Venue pair", run?.venuePair ?? "POLYMARKET_LIMITLESS"],
+      ["Route mode", run?.routeMode ?? "POLYMARKET_LIMITLESS"],
+      ["Side", run?.metadata?.side ?? sim?.metadata?.side ?? "N/A"],
+      ["Requested notional", fmtNum(run?.metadata?.requestedNotional ?? sim?.metadata?.requestedNotional ?? null)],
       ["Slices evaluated", String(sim?.sliceCount ?? 0)],
       ["Blocked slices", String(sim?.blockedSliceCount ?? 0)],
       ["Persisted results", String(sim?.persistedResultCount ?? 0)]
@@ -166,9 +389,12 @@ const renderBaselines = (baselineResults) => {
   }
 
   const winner = baselineResults.bestExternalOnly?.venue ?? "N/A";
+  const side = currentSide();
   const rows = [
     ["Polymarket only", baselineResults.polymarketOnly],
     ["Limitless only", baselineResults.limitlessOnly],
+    ["Opinion only", baselineResults.opinionOnly],
+    ["Myriad only", baselineResults.myriadOnly],
     ["Best external", baselineResults.bestExternalOnly],
     ["No internalization", baselineResults.noInternalization]
   ].filter(([, value]) => value);
@@ -179,8 +405,8 @@ const renderBaselines = (baselineResults) => {
       '<section class="card"><h3>' + esc(label) + '</h3>' +
       kv([
         ["Venue", baseline.venue ?? "N/A"],
-        ["Effective cost", fmtNum(baseline.effectiveCost)],
-        ["Slippage", fmtNum(baseline.slippage)],
+        [cashLabel(side), fmtAbsNum(baseline.effectiveCost)],
+        ["Reference slippage", fmtSignedDelta(baseline.slippage)],
         ["Fees", fmtNum(baseline.fees)],
         ["Fill probability", fmtProb(baseline.fillProbability)]
       ]) +
@@ -195,23 +421,88 @@ const renderLotus = (lotusResult) => {
     el.lotus.innerHTML = '<p class="muted">No Lotus result available.</p>';
     return;
   }
+  state.latestRoutingComparison = lotusResult.feeAdjustedResult?.routingComparison ?? null;
 
   const blocked = lotusResult.metadata?.blocked === true || lotusResult.resolutionRiskGating?.allowed === false;
-  const reason = lotusResult.metadata?.blockedReason ?? lotusResult.resolutionRiskGating?.reason ?? "Allowed";
+  const rawReason = lotusResult.metadata?.blockedReason ?? lotusResult.resolutionRiskGating?.reason ?? "Allowed";
+  const isIdentityBlock = rawReason.includes("identity_mismatch");
+  const reason = isIdentityBlock ? "IDENTITY_BLOCK: " + rawReason : rawReason;
+  const confidence = deriveConfidence(lotusResult);
 
   el.lotus.innerHTML =
     '<section class="card"><h3>Lotus path</h3><p class="callout">' +
     badge(blocked ? "Blocked" : "Allowed", blocked ? "danger" : "success") +
-    '</p><p class="lead">' + esc(reason) + '</p>' +
+    (isIdentityBlock ? " " + badge("IDENTITY_RISK", "danger") : "") +
+    '</p><p class="callout">' + badge("Confidence: " + confidence.grade, confidence.tone) + '</p><p class="lead">' + esc(confidence.summary) + '</p><p class="muted">' + esc(reason) + '</p>' +
     kv([
+      ["Confidence grade", confidence.grade],
       ["Config version", lotusResult.configVersion ?? "N/A"],
       ["Engine version", lotusResult.engineVersion ?? "N/A"],
       ["Timestamp", fmtDate(lotusResult.timestamp ?? null)],
       ["SAFE_EQUIVALENT eligible", lotusResult.safeEquivalentEligible ? "Yes" : "No"],
       ["SOR evaluated", lotusResult.sor ? "Yes" : "No"],
-      ["RFQ grouping evaluated", lotusResult.rfqGrouping ? "Yes" : "No"]
+      ["RFQ grouping evaluated", lotusResult.rfqGrouping ? "Yes" : "No"],
+      ["Selected route plan", lotusResult.feeAdjustedResult?.metadata?.selectedPlanType ?? "N/A"]
     ]) +
-    "</section>";
+    "</section>" +
+    renderRoutingComparison(lotusResult.feeAdjustedResult?.routingComparison ?? null);
+};
+
+const renderPlanCard = (title, plan) =>
+  '<section class="card"><h3>' + esc(title) + '</h3>' +
+  '<p class="lead">' + esc(
+    (plan.planType ?? "Plan") + " can prove " + fmtProb(plan.provableFillRatio ?? plan.fillRatio) + " of the order now." +
+    ((Number(plan.unprovenResidualNotional ?? 0) > 0) ? " The rest is only economically assigned to a price-only venue and is not capacity-proven." :
+      (Number(plan.residualNotional ?? 0) > 0) ? " The remaining amount is unfilled." : "")
+  ) + '</p>' +
+  kv([
+    ["Plan type", plan.planType ?? "N/A"],
+    ["Order size", fmtNum(plan.requestedNotional)],
+    ["Provably fillable now", fmtAbsNum(plan.provableFilledNotional ?? plan.filledNotional)],
+    ["Provable fill quantity", fmtNum(plan.provableFilledQuantity ?? plan.filledQuantity)],
+    ["Provable fill ratio", fmtProb(plan.provableFillRatio ?? plan.fillRatio)],
+    ["Residual with unknown depth", fmtAbsNum(plan.unprovenResidualNotional ?? "0")],
+    ["Unknown-depth quantity", fmtNum(plan.unprovenResidualQuantity ?? "0")],
+    ["Contains unknown-depth leg", yesNo(plan.containsUnknownDepth)],
+    [filledCashLabel(plan.side), fmtAbsNum(plan.filledNotional)],
+    ["Unfilled amount", fmtAbsNum(plan.residualNotional)],
+    [quantityLabel(), fmtNum(plan.filledQuantity)],
+    [residualQuantityLabel(), fmtNum(plan.residualQuantity)],
+    ["Fill ratio", fmtProb(plan.fillRatio)],
+    [averagePriceLabel(plan.side), fmtAbsNum(plan.averageExecutionPrice)],
+    [cashLabel(plan.side), fmtAbsNum(plan.effectiveCost)],
+    ["Reference slippage", fmtSignedDelta(plan.slippage)],
+    ["Fees", fmtNum(plan.fees)],
+    ["Fill probability", fmtProb(plan.fillProbability)]
+  ]) +
+  (Array.isArray(plan.allocations) && plan.allocations.length > 0
+    ? '<div class="table-wrap"><table class="table compact-table"><thead><tr><th>Venue</th><th>Market</th><th>Price</th><th>Filled Qty</th><th>' + esc(filledCashLabel(plan.side)) + '</th><th>Liquidity Evidence</th><th>Provable</th></tr></thead><tbody>' +
+      plan.allocations.map((allocation) =>
+        '<tr><td>' + esc(allocation.venue) + '</td><td>' + esc(allocation.venueMarketId) + '</td><td>' + esc(fmtAbsNum(allocation.price)) + '</td><td>' + esc(fmtNum(allocation.quantity)) + '</td><td>' + esc(fmtAbsNum(allocation.filledNotional)) + '</td><td>' + esc(allocation.depthSource ?? "N/A") + '</td><td>' + esc(allocation.isProvable ? "Yes" : "No") + '</td></tr>'
+      ).join("") +
+      '</tbody></table></div>'
+    : '<p class="muted">No routed allocations were available.</p>') +
+  ((plan.containsUnknownDepth || Number(plan.unprovenResidualNotional ?? 0) > 0)
+    ? '<p class="muted">Residual leg uses price-only venue; capacity is not provable from historical depth.</p>'
+    : '') +
+  (plan.fillProbabilityReason ? '<p class="muted">Fill note: ' + esc(plan.fillProbabilityReason) + '</p>' : "") +
+  '</section>';
+
+const renderRoutingComparison = (comparison) => {
+  if (!comparison) {
+    return '<p class="muted">No routing comparison available.</p>';
+  }
+
+  return '<section class="card"><h3>Routing comparison</h3><p class="lead">' +
+    esc(describeComparisonReason(comparison.comparisonReason, comparison.selectedPlan ?? {}, comparison.alternatePlan ?? {})) +
+    '</p><p class="muted">Comparison basis: ' + esc(comparison.comparisonBasis ?? "stable_plan_order") + '.' +
+    ((comparison.selectedPlan?.containsUnknownDepth || comparison.alternatePlan?.containsUnknownDepth)
+      ? ' Price-only residual capacity is shown separately from provable fill.'
+      : '') +
+    '</p><div class="cards">' +
+    renderPlanCard("Winning Plan", comparison.selectedPlan) +
+    renderPlanCard("Alternate Plan", comparison.alternatePlan) +
+    '</div></section>';
 };
 
 const renderImprovement = (improvement) => {
@@ -224,19 +515,27 @@ const renderImprovement = (improvement) => {
     ["Best external", improvement.bestExternalOnly],
     ["No internalization", improvement.noInternalization],
     ["Polymarket", improvement.venueSpecific?.polymarketOnly],
-    ["Limitless", improvement.venueSpecific?.limitlessOnly]
+    ["Limitless", improvement.venueSpecific?.limitlessOnly],
+    ["Opinion", improvement.venueSpecific?.opinionOnly]
   ].filter(([, value]) => value);
 
   el.improvement.innerHTML = '<div class="cards">' +
     items.map(([label, item]) =>
       '<section class="card"><h3>' + esc(label) + '</h3>' +
       '<p class="callout">' + badge(item.status ?? "UNKNOWN", item.status === "BLOCKED" ? "danger" : "success") + '</p>' +
+      ((state.latestRoutingComparison?.selectedPlan?.containsUnknownDepth)
+        ? '<p class="muted">Economically preferred result includes price-only residual capacity; only the provable portion should be treated as guaranteed fill.</p>'
+        : '') +
       kv([
         ["Baseline venue", item.baselineVenue ?? "N/A"],
-        ["Baseline cost", fmtNum(item.baselineEffectiveCost)],
-        ["Baseline slippage", fmtNum(item.baselineSlippage)],
+        [cashLabel(currentSide()), fmtAbsNum(item.baselineEffectiveCost)],
+        ["Baseline slippage", fmtSignedDelta(item.baselineSlippage)],
         ["Baseline fees", fmtNum(item.baselineFees)],
-        ["Baseline fill probability", fmtProb(item.baselineFillProbability)]
+        ["Baseline fill probability", fmtProb(item.baselineFillProbability)],
+        ["Lotus cash improvement", fmtSignedDelta(item.effectiveCostDelta)],
+        ["Lotus slippage improvement", fmtSignedDelta(item.slippageDelta)],
+        ["Lotus fee improvement", fmtSignedDelta(item.feeDelta)],
+        ["Lotus fill probability delta", item.fillProbabilityDelta === null || item.fillProbabilityDelta === undefined ? "Not inferable" : fmtSignedDelta(item.fillProbabilityDelta)]
       ]) +
       "</section>"
     ).join("") +
@@ -304,13 +603,15 @@ const requestJson = async (url, init) => {
 const loadScopes = async () => {
   setStatus("Loading scopes...", "loading");
   const query = new URLSearchParams();
-  if (el.marketClass.value === "SPORTS" || el.marketClass.value === "CRYPTO") {
-    query.set("category", el.marketClass.value);
-  }
+  query.set("category", el.marketClass.value);
   query.set("marketClass", "BINARY");
+  query.set("routeMode", el.routeMode.value);
   const payload = await requestJson(endpoints.scopes + "?" + query.toString(), { method: "GET" });
   state.scopes = Array.isArray(payload.scopes) ? payload.scopes : [];
   updateScopeOptions();
+  if (!el.eventSelect.value) {
+    resetCanonicalMarketSelect();
+  }
   setStatus(state.scopes.length > 0 ? "Scopes loaded." : "No scopes available for this filter.", state.scopes.length > 0 ? "success" : "warning");
 };
 
@@ -318,7 +619,7 @@ const loadCanonical = async () => {
   const eventId = el.eventSelect.value;
   if (!eventId) throw new Error("Select a canonical event first.");
   setStatus("Loading canonical coverage...", "loading");
-  const payload = await requestJson(endpoints.canonical(eventId), { method: "GET" });
+  const payload = await requestJson(endpoints.canonical(eventId, el.canonicalMarketId.value || null), { method: "GET" });
   renderCanonical(payload);
   setStatus("Canonical coverage loaded.", "success");
 };
@@ -338,11 +639,27 @@ const runSimulation = async (event) => {
     setStatus("Select a canonical event before running simulation.", "error");
     return;
   }
+  const selectedMarketId = el.canonicalMarketId.value || null;
+  const runnableMarkets = state.canonicalMarkets.filter((market) => isRunnableForSelectedRouteMode(market));
+  if (!selectedMarketId && runnableMarkets.length > 1) {
+    setStatus("Choose one exact canonical market before running this route mode.", "error");
+    return;
+  }
+  if (selectedMarketId) {
+    const selectedMarket = state.canonicalMarkets.find((market) => market.canonicalMarketId === selectedMarketId) ?? null;
+    if (!isRunnableForSelectedRouteMode(selectedMarket)) {
+      setStatus("Selected canonical market is unavailable for this route mode.", "error");
+      return;
+    }
+  }
 
   const body = {
     marketClass: "BINARY",
-    venuePair: el.venuePair.value,
+    routeMode: el.routeMode.value,
     canonicalEventId: el.eventSelect.value,
+    canonicalMarketId: selectedMarketId || undefined,
+    side: el.side.value,
+    requestedNotional: el.requestedNotional.value,
     from: new Date(el.from.value).toISOString(),
     to: new Date(el.to.value).toISOString(),
     strategyKey: el.strategyKey.value,
@@ -382,10 +699,13 @@ window.addEventListener("DOMContentLoaded", () => {
   el.status = document.getElementById("console-status");
   el.eventSelect = document.getElementById("canonical-event");
   el.marketClass = document.getElementById("market-class");
-  el.venuePair = document.getElementById("venue-pair");
+  el.routeMode = document.getElementById("route-mode");
   el.from = document.getElementById("time-from");
   el.to = document.getElementById("time-to");
+  el.side = document.getElementById("order-side");
+  el.requestedNotional = document.getElementById("requested-notional");
   el.strategyKey = document.getElementById("strategy-key");
+  el.canonicalMarketId = document.getElementById("canonical-market");
   el.dryRun = document.getElementById("dry-run");
   el.submit = document.getElementById("run-submit");
   el.canonical = document.getElementById("canonical-summary");
@@ -395,11 +715,11 @@ window.addEventListener("DOMContentLoaded", () => {
   el.improvement = document.getElementById("improvement-metrics");
   el.eligibility = document.getElementById("rollout-eligibility");
   el.slices = document.getElementById("slice-results");
-
   const now = new Date();
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
   el.from.value = oneHourAgo.toISOString().slice(0, 16);
   el.to.value = now.toISOString().slice(0, 16);
+  resetCanonicalMarketSelect();
 
   el.scopeRefresh.addEventListener("click", () => loadScopes().catch((error) => setStatus(error.message, "error")));
   el.canonicalRefresh.addEventListener("click", () => loadCanonical().catch((error) => setStatus(error.message, "error")));
@@ -410,6 +730,19 @@ window.addEventListener("DOMContentLoaded", () => {
     }
     loadPersistedRun(state.latestRunId).then(() => setStatus("Persisted run refreshed.", "success")).catch((error) => setStatus(error.message, "error"));
   });
+
+  el.marketClass.addEventListener("change", () => loadScopes().catch((error) => setStatus(error.message, "error")));
+  el.routeMode.addEventListener("change", () => {
+    Promise.resolve()
+      .then(() => loadScopes())
+      .then(() => (el.eventSelect.value ? loadCanonical() : undefined))
+      .catch((error) => setStatus(error.message, "error"));
+  });
+  el.eventSelect.addEventListener("change", () => {
+    resetCanonicalMarketSelect();
+    loadCanonical().catch((error) => setStatus(error.message, "error"));
+  });
+  el.canonicalMarketId.addEventListener("change", () => loadCanonical().catch((error) => setStatus(error.message, "error")));
   el.form.addEventListener("submit", runSimulation);
 
   loadScopes().catch((error) => setStatus(error.message, "error"));
@@ -450,6 +783,7 @@ export const renderSimulationConsolePage = (): string => `<!DOCTYPE html>
       .hero, .panel, .card {
         border: 1px solid var(--line);
         background: var(--panel);
+        min-width: 0;
       }
       .hero, .panel { padding: 16px; }
       .hero { margin-bottom: 16px; }
@@ -509,8 +843,13 @@ export const renderSimulationConsolePage = (): string => `<!DOCTYPE html>
       }
       .cards {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
       }
-      .card { padding: 12px; }
+      .card {
+        padding: 12px;
+        min-width: 0;
+        overflow: hidden;
+      }
       .callout { margin: 0 0 10px; }
       .lead {
         color: var(--ink);
@@ -535,20 +874,40 @@ export const renderSimulationConsolePage = (): string => `<!DOCTYPE html>
         display: grid;
         grid-template-columns: 160px 1fr;
         gap: 12px;
+        min-width: 0;
       }
       .kv dt { font-weight: 700; color: var(--muted); }
       .kv dd { margin: 0; word-break: break-word; }
+      .table-wrap {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        margin-top: 12px;
+      }
       .table {
         width: 100%;
         border-collapse: collapse;
         font-size: 13px;
+        min-width: 0;
       }
       .table th, .table td {
         padding: 8px 10px;
         border: 1px solid var(--line);
         text-align: left;
+        vertical-align: top;
+        overflow-wrap: anywhere;
+        word-break: break-word;
       }
       .table th { background: #f1eadb; }
+      .compact-table {
+        min-width: 640px;
+        font-size: 12px;
+      }
+      .compact-table th,
+      .compact-table td {
+        padding: 6px 8px;
+      }
       .details { margin-top: 12px; }
       .details summary { cursor: pointer; font-weight: 700; }
       pre {
@@ -567,6 +926,9 @@ export const renderSimulationConsolePage = (): string => `<!DOCTYPE html>
         font-size: 12px;
         color: var(--muted);
       }
+      @media (max-width: 1180px) {
+        .cards { grid-template-columns: 1fr; }
+      }
       @media (max-width: 960px) {
         .form-panel, .summary-panel, .result-panel { grid-column: span 12; }
         .cards { grid-template-columns: 1fr; }
@@ -578,7 +940,7 @@ export const renderSimulationConsolePage = (): string => `<!DOCTYPE html>
     <main>
       <section class="hero">
         <h1>Internal Historical Simulation Console</h1>
-        <p class="muted">Admin-only testing surface for Predexon + Limitless historical simulation across sports and crypto scopes.</p>
+        <p class="muted">Admin-only testing surface for exact-market route discovery and historical simulation across Predexon, Limitless, Opinion, and Myriad.</p>
         <div id="console-status" class="status" data-kind="idle">Console ready.</div>
       </section>
 
@@ -587,22 +949,44 @@ export const renderSimulationConsolePage = (): string => `<!DOCTYPE html>
           <h2>Run Simulation</h2>
           <form id="simulation-run-form" class="controls">
             <label>
-              Venue Pair
-              <select id="venue-pair" name="venuePair">
+              Route Mode
+              <select id="route-mode" name="routeMode">
+                <option value="POLYMARKET_ONLY">Predexon Only</option>
+                <option value="LIMITLESS_ONLY">Limitless Only</option>
+                <option value="OPINION_ONLY">Opinion Only</option>
+                <option value="MYRIAD_ONLY">Myriad Only</option>
                 <option value="POLYMARKET_LIMITLESS">Predexon + Limitless</option>
+                <option value="POLYMARKET_OPINION">Predexon + Opinion</option>
+                <option value="LIMITLESS_OPINION">Limitless + Opinion</option>
+                <option value="POLYMARKET_LIMITLESS_OPINION">Predexon + Limitless + Opinion</option>
               </select>
             </label>
             <label>
-              Market Class
+              Side
+              <select id="order-side" name="side">
+                <option value="BUY">BUY</option>
+                <option value="SELL">SELL</option>
+              </select>
+            </label>
+            <label>
+              Category
               <select id="market-class" name="marketClass">
                 <option value="SPORTS">SPORTS</option>
                 <option value="CRYPTO">CRYPTO</option>
+                <option value="POLITICS">POLITICS</option>
+                <option value="ESPORTS">ESPORTS</option>
               </select>
             </label>
             <label>
               Canonical Event
               <select id="canonical-event" name="canonicalEventId">
                 <option value="">Select canonical event</option>
+              </select>
+            </label>
+            <label>
+              Canonical Market ID (Optional)
+              <select id="canonical-market" name="canonicalMarketId">
+                <option value="">Select market ID (Optional)</option>
               </select>
             </label>
             <label>
@@ -616,6 +1000,10 @@ export const renderSimulationConsolePage = (): string => `<!DOCTYPE html>
             <label>
               Strategy Key
               <input id="strategy-key" name="strategyKey" type="text" placeholder="strategy.phase4.internal" required />
+            </label>
+            <label>
+              Requested Notional
+              <input id="requested-notional" name="requestedNotional" type="number" min="0.01" step="0.01" value="100" required />
             </label>
             <label class="checkbox-row">
               <input id="dry-run" name="dryRun" type="checkbox" />

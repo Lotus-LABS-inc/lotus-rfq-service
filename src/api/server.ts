@@ -55,6 +55,7 @@ import { QualificationSafetyAdminService } from "./admin/qualification-safety-ad
 import { registerAdminSimulationRoutes } from "./admin/simulation.routes.js";
 import { registerAdminSimulationConsoleRoutes } from "./admin/simulation-console.routes.js";
 import { SimulationAdminService } from "./admin/simulation-admin-service.js";
+import { HistoricalSimulationCatalogService } from "./admin/historical-simulation-catalog-service.js";
 import { PromotionGateEvaluator } from "../core/qualification/promotion-gate-evaluator.js";
 import { EconomicQualityEngine } from "../core/qualification/economic-quality-engine.js";
 import { QualificationRunManager } from "../core/qualification/qualification-run-manager.js";
@@ -116,6 +117,8 @@ import { PolymarketOnlyBaselineEvaluator } from "../simulation/baselines/polymar
 import { LimitlessOnlyBaselineEvaluator } from "../simulation/baselines/limitless-only-baseline.js";
 import { BestExternalOnlyBaselineEvaluator } from "../simulation/baselines/best-external-only-baseline.js";
 import { NoInternalizationBaselineEvaluator } from "../simulation/baselines/no-internalization-baseline.js";
+import { OpinionOnlyBaselineEvaluator } from "../simulation/baselines/opinion-only-baseline.js";
+import { MyriadOnlyBaselineEvaluator } from "../simulation/baselines/myriad-only-baseline.js";
 import { createDefaultHistoricalLotusEvaluators } from "../simulation/default-historical-lotus-evaluators.js";
 
 export interface ServerDependencies {
@@ -996,12 +999,19 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         pool: dependencies.pgPool,
         polymarketOnlyBaselineEvaluator: new PolymarketOnlyBaselineEvaluator(),
         limitlessOnlyBaselineEvaluator: new LimitlessOnlyBaselineEvaluator(),
+        opinionOnlyBaselineEvaluator: new OpinionOnlyBaselineEvaluator(),
+        myriadOnlyBaselineEvaluator: new MyriadOnlyBaselineEvaluator(),
         bestExternalOnlyBaselineEvaluator: new BestExternalOnlyBaselineEvaluator(),
         noInternalizationBaselineEvaluator: new NoInternalizationBaselineEvaluator(),
         lotusEvaluators: createDefaultHistoricalLotusEvaluators(),
         logger: dependencies.logger
       }),
       resolutionRiskAdminService,
+      historicalSimulationCatalogService: new HistoricalSimulationCatalogService({
+        pool: dependencies.pgPool,
+        version: "historical-sim-catalog-v1",
+        logger: dependencies.logger
+      }),
       configVersion: "historical-sim-v1",
       engineVersion: "historical-sim-v1",
       logger: dependencies.logger
@@ -1073,6 +1083,7 @@ interface ResolutionProfileLookupRow {
   venue: string;
   venue_market_id: string;
   canonical_event_id: string;
+  canonical_market_id: string;
   oracle_type: string | null;
   oracle_name: string | null;
   resolution_authority_type: string | null;
@@ -1115,6 +1126,7 @@ const findResolutionProfileByVenueMarket = async (
     venue: row.venue,
     venueMarketId: row.venue_market_id,
     canonicalEventId: row.canonical_event_id,
+    canonicalMarketId: row.canonical_market_id,
     oracleType: row.oracle_type,
     oracleName: row.oracle_name,
     resolutionAuthorityType: row.resolution_authority_type,

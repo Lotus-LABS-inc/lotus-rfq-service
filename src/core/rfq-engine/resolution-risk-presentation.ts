@@ -9,6 +9,7 @@ const MAX_SHORT_REASONS = 3;
 
 const LABELS: Record<ResolutionEquivalenceClass, string> = {
     SAFE_EQUIVALENT: "Safe equivalent",
+    EQUIVALENT_WITH_LAG: "Equivalent with lag",
     CAUTION: "Caution",
     HIGH_RISK: "High risk",
     DO_NOT_POOL: "Do not pool",
@@ -16,6 +17,7 @@ const LABELS: Record<ResolutionEquivalenceClass, string> = {
 
 const ACTIONS: Record<ResolutionEquivalenceClass, ResolutionRiskRecommendedAction> = {
     SAFE_EQUIVALENT: "Poolable",
+    EQUIVALENT_WITH_LAG: "Pool with caution (lag)",
     CAUTION: "Pool with caution",
     HIGH_RISK: "Isolate execution",
     DO_NOT_POOL: "Do not pool",
@@ -79,6 +81,7 @@ const validateAssessment = (assessment: ResolutionRiskAssessment): void => {
 
     if (
         assessment.equivalenceClass !== "SAFE_EQUIVALENT" &&
+        assessment.equivalenceClass !== "EQUIVALENT_WITH_LAG" &&
         assessment.equivalenceClass !== "CAUTION" &&
         assessment.equivalenceClass !== "HIGH_RISK" &&
         assessment.equivalenceClass !== "DO_NOT_POOL"

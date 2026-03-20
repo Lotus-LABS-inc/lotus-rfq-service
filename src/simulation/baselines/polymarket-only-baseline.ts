@@ -1,7 +1,7 @@
 import {
   buildEstimate,
   inferPolymarketFillProbability,
-  resolveRequestedSize,
+  resolveRequestedNotional,
   selectBestPriceState,
   selectReferencePriceState,
   validateCommonInput,
@@ -12,19 +12,21 @@ import {
 export class PolymarketOnlyBaselineEvaluator {
   public evaluate(input: HistoricalSimulationBaselineInput): HistoricalSimulationBaselineEstimate {
     const states = validateCommonInput(input, "POLYMARKET");
-    const requestedSize = resolveRequestedSize(input.requestedSize);
-    const selected = selectBestPriceState(states);
-    const reference = selectReferencePriceState(states);
+    const requestedNotional = resolveRequestedNotional(input.requestedNotional);
+    const reference = selectReferencePriceState(states, input.side);
+    const requestedQuantity = reference.selectedPrice.gt(0) ? requestedNotional.div(reference.selectedPrice) : requestedNotional;
+    const selected = selectBestPriceState(states, input.side);
 
     return buildEstimate({
       venue: "POLYMARKET",
       baselineType: "POLYMARKET_ONLY",
+      side: input.side,
       states,
       selected,
       reference,
-      requestedSize,
+      requestedNotional,
       feePolicy: input.feePolicy,
-      fillProbability: inferPolymarketFillProbability(selected.state, requestedSize)
+      fillProbability: inferPolymarketFillProbability(selected.state, requestedQuantity, input.side)
     });
   }
 }

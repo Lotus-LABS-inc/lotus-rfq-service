@@ -218,6 +218,136 @@ Required span attributes:
 
 ## 9. Failure Modes & Runbook Actions
 
+## 10. Exact-Market Route Availability
+
+Historical simulation and future Lotus route selection now depend on an exact-market route availability model instead of a hardcoded venue-pair enum.
+
+Supported route modes:
+
+- `POLYMARKET_ONLY`
+- `LIMITLESS_ONLY`
+- `OPINION_ONLY`
+- `MYRIAD_ONLY`
+- `POLYMARKET_LIMITLESS`
+- `POLYMARKET_OPINION`
+- `LIMITLESS_OPINION`
+- `POLYMARKET_LIMITLESS_OPINION`
+
+Rules:
+
+- Routeability is computed per exact `canonical_market_id`, never across different markets inside one `canonical_event_id`.
+- Single-venue route modes require historical rows for the required venue on that exact market.
+- Multi-venue route modes require all required venues on that same exact market plus safe pairwise resolution-risk support.
+- A pair edge is eligible only when the persisted assessment is `SAFE_EQUIVALENT` or `EQUIVALENT_WITH_LAG`.
+- `MYRIAD_ONLY` is intentionally single-venue in v1 because documented Myriad history provides price charts and market events, not historical quote-depth snapshots.
+
+## 11. Layered Canonicalization Graph
+
+The router must now be understood as consuming a layered canonical graph, not a single merged market identity model.
+
+Authoritative graph objects:
+
+1. `CanonicalEvent`
+- broad proposition cluster
+- useful for search, discovery, and proposition grouping
+- not directly poolable
+
+2. `VenueMarketProfile`
+- venue execution object with venue-native IDs, timing, fees, resolution data, settlement data, structure, and payload lineage
+
+3. `CompatibilityEdge`
+- explicit pairwise execution relationship between two venue profiles under the same `CanonicalEvent`
+- classes:
+  - `EQUIVALENT`
+  - `COMPATIBLE_WITH_CAUTION`
+  - `DISTINCT`
+  - `DO_NOT_POOL`
+
+4. `CanonicalExecutableMarket`
+- execution-safe grouping derived only from eligible `CompatibilityEdge`s
+- this is the routing-facing identity behind pooled execution
+
+Design rule:
+- SOR must never infer pooled execution from `CanonicalEvent` alone.
+- SOR may only pool when the relevant venue profiles belong to the same `CanonicalExecutableMarket`.
+
+## 12. Liquidity Cost And Conservative Finality
+
+Settlement lag is not part of proposition identity.
+
+It is handled on `CompatibilityEdge` as priced friction only after semantic safety is already acceptable.
+
+Persisted edge fields include:
+- `capitalLockHours`
+- `maxSettlementDelayHours`
+- `liquidityCostModelVersion`
+- `liquidityCostBps`
+- `anchoredFinalityHours`
+- `requiresConservativeSettlementAnchor`
+
+Operational policy:
+- unsafe proposition / resolution / finality mismatches do not become “equivalent with a fee”
+- lag-only safe edges may remain groupable, but SOR must price the lag and anchor payout/finality to the slowest safe timeline
+- Tri-venue routeability requires all three pair edges to pass:
+  - `POLYMARKET ↔ LIMITLESS`
+  - `POLYMARKET ↔ OPINION`
+  - `LIMITLESS ↔ OPINION`
+
+Unavailable route modes must fail closed with explicit reasons:
+
+- `missing_required_venue`
+- `missing_historical_rows`
+- `missing_pair_assessment`
+- `incomplete_resolution_risk`
+- `stale_resolution_risk`
+- `unsafe_equivalence`
+- `ambiguous_venue_identity`
+
+Operational consequence:
+
+- ambiguous or unsafe pooled routes do not block single-venue or external-only routing
+- this preserves the fail-to-SOR behavior for user continuity while keeping pooled internalization fail-closed
+
+## 11. Simulation-Only Historical Catalog
+
+To support route testing before live cross-venue inventory is fully curated, the admin historical simulation layer now unions in a simulation-only historical catalog.
+
+Inventory boundary:
+
+- live routing inventory remains in:
+  - `resolution_profiles`
+  - `resolution_risk_assessments`
+- historical simulation-only inventory now lives in:
+  - `historical_simulation_profiles`
+  - `historical_simulation_risk_assessments`
+
+Time-series behavior:
+
+- accepted historical discoveries write their state history into `historical_market_states`
+- simulation-only rows use dedicated canonical IDs:
+  - event ids prefixed with `HISTSIM::`
+  - market ids prefixed with `HISTSIM-`
+
+Approval model:
+
+- candidate generation is non-destructive
+- generated candidates go to `docs/historical-route-candidates.json`
+- only checked-in `accepted` entries from `docs/historical-route-curation.json` are synced into the catalog
+- unresolved or rejected historical candidates never become routable
+
+Admin/API consequence:
+
+- simulation scope and canonical-coverage responses include `catalogScope`
+  - `live`
+  - `historical_simulation`
+- Myriad historical inventory may appear in those responses as `catalogScope=live` graph-backed inventory, but its v1 runnable route is only `MYRIAD_ONLY`
+- this lets operators test historical exact markets without confusing them with current live Lotus routeability
+
+Current limitation:
+
+- pair and tri-venue historical routes still require curated exact market IDs and safe pair assessments on all participating venues
+- Opinion historical discovery remains limited to already known numeric IDs
+
 1. Lock acquisition failure
    - Action: reject execution attempt, retry with bounded backoff, alert on sustained contention.
 2. Reservation failure

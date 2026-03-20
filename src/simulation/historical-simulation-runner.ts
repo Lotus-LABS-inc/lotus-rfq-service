@@ -4,15 +4,21 @@ import type { Pool, QueryResultRow } from "pg";
 
 import {
   HistoricalMarketClass,
+  resolveHistoricalSimulationRouteModeVenues,
   HistoricalSimulationRunStatus,
+  type HistoricalRoutingComparison,
   type HistoricalCanonicalCategory,
+  type HistoricalSimulationOrderSide,
+  type HistoricalSimulationRouteMode,
   type CreateHistoricalSimulationResultInput,
   type HistoricalMarketState
 } from "../core/historical-simulation/historical-simulation.types.js";
 import type { BestExternalOnlyBaselineEvaluator } from "./baselines/best-external-only-baseline.js";
 import type { HistoricalSimulationBaselineEstimate } from "./baselines/shared.js";
 import type { LimitlessOnlyBaselineEvaluator } from "./baselines/limitless-only-baseline.js";
+import type { MyriadOnlyBaselineEvaluator } from "./baselines/myriad-only-baseline.js";
 import type { NoInternalizationBaselineEvaluator } from "./baselines/no-internalization-baseline.js";
+import type { OpinionOnlyBaselineEvaluator } from "./baselines/opinion-only-baseline.js";
 import type { PolymarketOnlyBaselineEvaluator } from "./baselines/polymarket-only-baseline.js";
 
 export type HistoricalSimulationRunnerErrorCode =
@@ -39,15 +45,19 @@ export interface HistoricalLotusFeeAdjustedResult {
   fees: string;
   fillProbability: string | null;
   fillProbabilityReason?: string | null;
+  routingComparison?: HistoricalRoutingComparison;
   metadata?: Record<string, unknown>;
 }
 
 export interface HistoricalLotusPathSliceContext {
   scopeType: string;
   scopeId: string;
-  venuePair: string;
+  routeMode: HistoricalSimulationRouteMode;
   marketClass: HistoricalMarketClass;
   canonicalEventId: string;
+  canonicalMarketId: string | null | undefined;
+  side: HistoricalSimulationOrderSide;
+  requestedNotional: string;
   timestamp: Date;
   configVersion: string;
   engineVersion: string;
@@ -89,9 +99,12 @@ export interface HistoricalSimulationRunnerInput {
   qualificationRunId?: string | null;
   scopeType: string;
   scopeId: string;
-  venuePair: string;
+  routeMode: HistoricalSimulationRouteMode;
   marketClass: HistoricalMarketClass;
   canonicalEventId: string;
+  canonicalMarketId?: string | null | undefined;
+  side: HistoricalSimulationOrderSide;
+  requestedNotional: string;
   windowStart: Date;
   windowEnd: Date;
   configVersion: string;
@@ -106,8 +119,10 @@ export interface HistoricalSimulationRunnerInput {
 export interface HistoricalSimulationSliceResult {
   timestamp: Date;
   baselineResults: {
-    polymarketOnly: HistoricalSimulationBaselineEstimate;
-    limitlessOnly: HistoricalSimulationBaselineEstimate;
+    polymarketOnly: HistoricalSimulationBaselineEstimate | null;
+    limitlessOnly: HistoricalSimulationBaselineEstimate | null;
+    opinionOnly: HistoricalSimulationBaselineEstimate | null;
+    myriadOnly: HistoricalSimulationBaselineEstimate | null;
     bestExternalOnly: HistoricalSimulationBaselineEstimate;
     noInternalization: HistoricalSimulationBaselineEstimate;
   };
@@ -140,6 +155,7 @@ interface HistoricalSimulationResultRow extends QueryResultRow {
 interface HistoricalMarketStateRow extends QueryResultRow {
   id: string;
   canonical_event_id: string;
+  canonical_market_id: string | null;
   canonical_category: string | null;
   venue: string;
   venue_market_id: string;
@@ -165,6 +181,8 @@ export interface HistoricalSimulationRunnerDeps {
   pool: Pool;
   polymarketOnlyBaselineEvaluator: Pick<PolymarketOnlyBaselineEvaluator, "evaluate">;
   limitlessOnlyBaselineEvaluator: Pick<LimitlessOnlyBaselineEvaluator, "evaluate">;
+  opinionOnlyBaselineEvaluator: Pick<OpinionOnlyBaselineEvaluator, "evaluate">;
+  myriadOnlyBaselineEvaluator: Pick<MyriadOnlyBaselineEvaluator, "evaluate">;
   bestExternalOnlyBaselineEvaluator: Pick<BestExternalOnlyBaselineEvaluator, "evaluate">;
   noInternalizationBaselineEvaluator: Pick<NoInternalizationBaselineEvaluator, "evaluate">;
   lotusEvaluators: HistoricalLotusPathEvaluatorBundle;
@@ -223,6 +241,7 @@ const parseDeltaDecimal = (value: string | null, fieldName: string): InstanceTyp
 const mapHistoricalMarketStateRow = (row: HistoricalMarketStateRow): HistoricalMarketState => ({
   id: row.id,
   canonicalEventId: row.canonical_event_id,
+  canonicalMarketId: row.canonical_market_id,
   canonicalCategory: row.canonical_category as HistoricalCanonicalCategory | null,
   venue: row.venue,
   venueMarketId: row.venue_market_id,
@@ -312,6 +331,10 @@ const compareLotusAgainstBaseline = (
     status: "EVALUATED",
     baselineVenue: baseline.venue,
     baselineType: baseline.baselineType,
+    baselineEffectiveCost: baseline.effectiveCost,
+    baselineSlippage: baseline.slippage,
+    baselineFees: baseline.fees,
+    baselineFillProbability: baseline.fillProbability,
     effectiveCostDelta: parseDeltaDecimal(baseline.effectiveCost, "baseline.effectiveCost")
       ?.minus(parseDeltaDecimal(lotusResult.effectiveCost, "lotusResult.effectiveCost")!)
       .toString(),
@@ -408,24 +431,34 @@ export class HistoricalSimulationRunner {
     states: readonly HistoricalMarketState[],
     runId: string | null
   ): Promise<HistoricalSimulationSliceResult> {
-    const baselineInput = {
+      const baselineInput = {
       canonicalEventId: input.canonicalEventId,
       marketStates: states,
-      requestedSize: "1",
+      side: input.side,
+      requestedNotional: input.requestedNotional,
       feePolicy: {
         version: input.configVersion,
         venues: {
           POLYMARKET: { feeBps: "0" },
-          LIMITLESS: { feeBps: "0" }
+          LIMITLESS: { feeBps: "0" },
+          OPINION: { feeBps: "0" },
+          MYRIAD: { feeBps: "0" }
         }
       }
     };
 
     let baselineResults: HistoricalSimulationSliceResult["baselineResults"];
     try {
+      const availableVenues = new Set(states.map((state) => state.venue));
       baselineResults = {
-        polymarketOnly: this.deps.polymarketOnlyBaselineEvaluator.evaluate(baselineInput),
-        limitlessOnly: this.deps.limitlessOnlyBaselineEvaluator.evaluate(baselineInput),
+        polymarketOnly: availableVenues.has("POLYMARKET")
+          ? this.deps.polymarketOnlyBaselineEvaluator.evaluate(baselineInput)
+          : null,
+        limitlessOnly: availableVenues.has("LIMITLESS")
+          ? this.deps.limitlessOnlyBaselineEvaluator.evaluate(baselineInput)
+          : null,
+        opinionOnly: availableVenues.has("OPINION") ? this.deps.opinionOnlyBaselineEvaluator.evaluate(baselineInput) : null,
+        myriadOnly: availableVenues.has("MYRIAD") ? this.deps.myriadOnlyBaselineEvaluator.evaluate(baselineInput) : null,
         bestExternalOnly: this.deps.bestExternalOnlyBaselineEvaluator.evaluate(baselineInput),
         noInternalization: this.deps.noInternalizationBaselineEvaluator.evaluate(baselineInput)
       };
@@ -440,9 +473,12 @@ export class HistoricalSimulationRunner {
     const sliceContext: HistoricalLotusPathSliceContext = {
       scopeType: input.scopeType,
       scopeId: input.scopeId,
-      venuePair: input.venuePair,
+      routeMode: input.routeMode,
       marketClass: input.marketClass,
       canonicalEventId: input.canonicalEventId,
+      canonicalMarketId: input.canonicalMarketId,
+      side: input.side,
+      requestedNotional: input.requestedNotional,
       timestamp,
       configVersion: input.configVersion,
       engineVersion: input.engineVersion,
@@ -521,8 +557,26 @@ export class HistoricalSimulationRunner {
       bestExternalOnly: compareLotusAgainstBaseline(feeAdjustedLotusResult, baselineResults.bestExternalOnly),
       noInternalization: compareLotusAgainstBaseline(feeAdjustedLotusResult, baselineResults.noInternalization),
       venueSpecific: {
-        polymarketOnly: compareLotusAgainstBaseline(feeAdjustedLotusResult, baselineResults.polymarketOnly),
-        limitlessOnly: compareLotusAgainstBaseline(feeAdjustedLotusResult, baselineResults.limitlessOnly)
+        ...(baselineResults.polymarketOnly
+          ? {
+              polymarketOnly: compareLotusAgainstBaseline(feeAdjustedLotusResult, baselineResults.polymarketOnly)
+            }
+          : {}),
+        ...(baselineResults.limitlessOnly
+          ? {
+              limitlessOnly: compareLotusAgainstBaseline(feeAdjustedLotusResult, baselineResults.limitlessOnly)
+            }
+          : {}),
+        ...(baselineResults.opinionOnly
+          ? {
+              opinionOnly: compareLotusAgainstBaseline(feeAdjustedLotusResult, baselineResults.opinionOnly)
+            }
+          : {}),
+        ...(baselineResults.myriadOnly
+          ? {
+              myriadOnly: compareLotusAgainstBaseline(feeAdjustedLotusResult, baselineResults.myriadOnly)
+            }
+          : {})
       }
     });
 
@@ -585,15 +639,17 @@ export class HistoricalSimulationRunner {
         input.qualificationRunId ?? null,
         input.scopeType,
         input.scopeId,
-        input.venuePair,
+        input.routeMode,
         input.marketClass,
         HistoricalSimulationRunStatus.RUNNING,
         JSON.stringify(
-          stableJsonRecord({
-            canonicalEventId: input.canonicalEventId,
-            configVersion: input.configVersion,
-            engineVersion: input.engineVersion,
-            dryRun: input.dryRun,
+            stableJsonRecord({
+              canonicalEventId: input.canonicalEventId,
+              configVersion: input.configVersion,
+              engineVersion: input.engineVersion,
+              side: input.side,
+              requestedNotional: input.requestedNotional,
+              dryRun: input.dryRun,
             ...(input.metadata ?? {})
           })
         )
@@ -618,10 +674,19 @@ export class HistoricalSimulationRunner {
   }
 
   private async loadHistoricalStates(input: HistoricalSimulationRunnerInput): Promise<readonly HistoricalMarketState[]> {
+    const allowedVenues = resolveHistoricalSimulationRouteModeVenues(input.routeMode);
+    if (allowedVenues.length === 0) {
+      throw new HistoricalSimulationRunnerError(
+        "historical_state_invalid",
+        `Unsupported route mode ${input.routeMode}.`
+      );
+    }
+
     const result = await this.deps.pool.query<HistoricalMarketStateRow>(
       `SELECT
          id,
          canonical_event_id,
+         canonical_market_id,
          canonical_category,
          venue,
          venue_market_id,
@@ -645,8 +710,10 @@ export class HistoricalSimulationRunner {
       WHERE canonical_event_id = $1
         AND timestamp >= $2
         AND timestamp <= $3
+        AND ($4::text IS NULL OR canonical_market_id = $4)
+        AND venue = ANY($5::text[])
       ORDER BY timestamp ASC, venue ASC, venue_market_id ASC, source_timestamp ASC`,
-      [input.canonicalEventId, input.windowStart, input.windowEnd]
+      [input.canonicalEventId, input.windowStart, input.windowEnd, input.canonicalMarketId ?? null, allowedVenues]
     );
 
     const states = result.rows.map(mapHistoricalMarketStateRow);
@@ -657,7 +724,6 @@ export class HistoricalSimulationRunner {
         `Loaded historical states do not resolve cleanly to canonical event ${input.canonicalEventId}.`
       );
     }
-
     return states;
   }
 

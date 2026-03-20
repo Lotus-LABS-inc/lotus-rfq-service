@@ -1,9 +1,11 @@
 import Decimal from "decimal.js";
 import type {
     CreateResolutionRiskAssessmentInput,
+    NormalizedResolutionProfile,
     ResolutionEquivalenceClass,
     ResolutionFactorComparison,
     ResolutionFactorComparisonResult,
+    ResolutionRiskAssessment,
     ResolutionRiskScoringInput
 } from "./resolution-risk.types.js";
 
@@ -89,7 +91,7 @@ export class ResolutionRiskScoringError extends Error {
 }
 
 export interface IResolutionRiskScoringEngine {
-    score(input: ResolutionRiskScoringInput): CreateResolutionRiskAssessmentInput;
+    score(input: ResolutionRiskScoringInput): ResolutionRiskAssessment;
     getReplayWeights(): ResolutionRiskScoringWeights;
     getReplayThresholds(): ResolutionRiskEquivalenceThresholds;
     buildReplayConfidenceInputs(factorComparison: ResolutionFactorComparisonResult): Record<string, unknown>;
@@ -122,17 +124,40 @@ export class ResolutionRiskScoringEngine implements IResolutionRiskScoringEngine
             ?? DEFAULT_RESOLUTION_RISK_SCORING_CONFIG.conservativeDowngradeOnLowConfidence;
     }
 
-    public score(input: ResolutionRiskScoringInput): CreateResolutionRiskAssessmentInput {
+    public score(input: ResolutionRiskScoringInput): ResolutionRiskAssessment {
         this.validateInput(input);
+        const { canonicalEventId, profileA, profileB, factorComparison, version } = input;
+        
+        // Ensure we use the correct canonicalMarketId from the profiles
+        // (They should be identical as they are linked to the same canonical market)
+        const canonicalMarketId = profileA.canonicalMarketId || canonicalEventId;
 
-        const riskScore = this.computeWeightedValue(input.factorComparison, "score");
-        const confidenceScore = this.computeConfidenceScore(input.factorComparison);
-        const equivalenceClass = this.mapEquivalenceClass(riskScore, confidenceScore, input.factorComparison);
-        const reasons = this.buildReasons(input.factorComparison);
+        const maxSettlementDelayHours = this.calculateMaxSettlementDelay(profileA, profileB);
+        
+        // Identity Guard: Scoped markets must have matching canonicalMarketId
+        if (profileA.canonicalMarketId !== profileB.canonicalMarketId) {
+            return {
+                id: "",
+                canonicalEventId,
+                canonicalMarketId: "IDENTITY_MISMATCH",
+                marketAProfileId: profileA.id,
+                marketBProfileId: profileB.id,
+                riskScore: "1.0",
+                confidenceScore: "1.0",
+                equivalenceClass: "DO_NOT_POOL",
+                factorBreakdown: {},
+                reasons: [`Market identity mismatch: ${profileA.canonicalMarketId} vs ${profileB.canonicalMarketId}`],
+                version,
+                computedAt: new Date(),
+                liquidityCost: new Decimal(0).toString(),
+                maxSettlementDelayHours: 0
+            };
+        }
 
-        const profileAMaxDelay = Number(input.profileA.disputeWindowHours ?? 0) + Number(input.profileA.settlementLagHours ?? 0);
-        const profileBMaxDelay = Number(input.profileB.disputeWindowHours ?? 0) + Number(input.profileB.settlementLagHours ?? 0);
-        const maxSettlementDelayHours = Math.abs(profileAMaxDelay - profileBMaxDelay);
+        const riskScore = this.computeWeightedValue(factorComparison, "score");
+        const confidenceScore = this.computeConfidenceScore(factorComparison);
+        const equivalenceClass = this.mapEquivalenceClass(riskScore, confidenceScore, factorComparison);
+        const reasons = this.buildReasons(factorComparison);
 
         // 15% APY Base Liquidity Premium
         const annualRate = new Decimal(0.15); 
@@ -141,17 +166,20 @@ export class ResolutionRiskScoringEngine implements IResolutionRiskScoringEngine
             : new Decimal(0);
 
         return {
-            canonicalEventId: input.canonicalEventId,
-            marketAProfileId: input.profileA.id,
-            marketBProfileId: input.profileB.id,
+            id: "", // Calculated by persistence layer
+            canonicalEventId,
+            canonicalMarketId,
+            marketAProfileId: profileA.id,
+            marketBProfileId: profileB.id,
             riskScore: this.serializeClampedDecimal(riskScore),
             confidenceScore: this.serializeClampedDecimal(confidenceScore),
             equivalenceClass,
-            factorBreakdown: input.factorComparison as unknown as Record<string, unknown>,
+            factorBreakdown: factorComparison as unknown as Record<string, unknown>,
             reasons,
             version: input.version,
             liquidityCost: this.serializeClampedDecimal(liquidityCost),
-            maxSettlementDelayHours
+            maxSettlementDelayHours,
+            computedAt: new Date()
         };
     }
 
@@ -334,6 +362,12 @@ export class ResolutionRiskScoringEngine implements IResolutionRiskScoringEngine
         });
 
         return [...new Set(reasons)];
+    }
+
+    private calculateMaxSettlementDelay(profileA: NormalizedResolutionProfile, profileB: NormalizedResolutionProfile): number {
+        const profileAMaxDelay = Number(profileA.disputeWindowHours ?? 0) + Number(profileA.settlementLagHours ?? 0);
+        const profileBMaxDelay = Number(profileB.disputeWindowHours ?? 0) + Number(profileB.settlementLagHours ?? 0);
+        return Math.abs(profileAMaxDelay - profileBMaxDelay);
     }
 
     private serializeClampedDecimal(value: DecimalValue): string {

@@ -8,7 +8,7 @@ import {
 } from "../observability/metrics.js";
 
 export type HistoricalIngestionMode = "backfill" | "incremental";
-export type HistoricalIngestionCategory = "sports" | "crypto";
+export type HistoricalIngestionCategory = "sports" | "crypto" | "politics" | "esports";
 
 export interface HistoricalIngestionJobInput {
   mode: HistoricalIngestionMode;
@@ -16,6 +16,9 @@ export interface HistoricalIngestionJobInput {
   windowEnd: Date;
   batchSize: number;
   overlapMs?: number;
+  categories?: readonly HistoricalIngestionCategory[];
+  canonicalEventId?: string;
+  canonicalMarketId?: string;
 }
 
 export interface HistoricalIngestionJobResult {
@@ -32,6 +35,9 @@ export interface HistoricalIngestionJobResult {
 export interface HistoricalIngestScopeProvider<TScope> {
   listScopedMarkets(input: {
     categories: readonly HistoricalIngestionCategory[];
+    canonicalEventId?: string;
+    canonicalMarketId?: string;
+    venue?: string;
   }): Promise<readonly TScope[]>;
 }
 

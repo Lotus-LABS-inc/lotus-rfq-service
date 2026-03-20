@@ -13,6 +13,8 @@ import {
 } from "../../src/simulation/historical-simulation-runner.js";
 import { BestExternalOnlyBaselineEvaluator } from "../../src/simulation/baselines/best-external-only-baseline.js";
 import { LimitlessOnlyBaselineEvaluator } from "../../src/simulation/baselines/limitless-only-baseline.js";
+import { MyriadOnlyBaselineEvaluator } from "../../src/simulation/baselines/myriad-only-baseline.js";
+import { OpinionOnlyBaselineEvaluator } from "../../src/simulation/baselines/opinion-only-baseline.js";
 import { NoInternalizationBaselineEvaluator } from "../../src/simulation/baselines/no-internalization-baseline.js";
 import { PolymarketOnlyBaselineEvaluator } from "../../src/simulation/baselines/polymarket-only-baseline.js";
 
@@ -20,6 +22,22 @@ const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const ENV_READY = Boolean(TEST_DB_URL);
 
 const applyMigrations = async (pool: Pool): Promise<void> => {
+  const migrationPriority = (filename: string): number => {
+    const overrides = new Map<string, number>([
+      ["2026_03_02_create_combo_tables.sql", -20],
+      ["2026_03_02_combine_exec_plans.sql", -19],
+      ["2026_03_10_create_combo_netting_tables.sql", -18],
+      ["2026_03_10_create_combo_netting_attempts.sql", -17]
+    ]);
+    const override = overrides.get(filename);
+    if (override !== undefined) return override;
+    if (filename.includes("_create_")) return 0;
+    if (filename.includes("_add_")) return 1;
+    if (filename.includes("_update_")) return 2;
+    if (filename.includes("_combine_")) return 3;
+    return 4;
+  };
+
   const migrationDirs = [
     path.resolve(process.cwd(), "infra", "migrations"),
     path.resolve(process.cwd(), "sql", "migrations")
@@ -28,7 +46,14 @@ const applyMigrations = async (pool: Pool): Promise<void> => {
   for (const migrationsDir of migrationDirs) {
     const files = (await readdir(migrationsDir))
       .filter((name) => name.endsWith(".sql"))
-      .sort((left, right) => left.localeCompare(right));
+      .sort((left, right) => {
+        const leftPriority = migrationPriority(left);
+        const rightPriority = migrationPriority(right);
+        if (leftPriority !== rightPriority) {
+          return leftPriority - rightPriority;
+        }
+        return left.localeCompare(right);
+      });
 
     for (const file of files) {
       const sql = await readFile(path.join(migrationsDir, file), "utf8");
@@ -36,7 +61,7 @@ const applyMigrations = async (pool: Pool): Promise<void> => {
         await pool.query(sql);
       } catch (error) {
         const code = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
-        if (code === "42P07" || code === "42710") {
+        if (code === "42P07" || code === "42710" || code === "42701") {
           continue;
         }
         throw error;
@@ -47,6 +72,7 @@ const applyMigrations = async (pool: Pool): Promise<void> => {
 
 const createState = (overrides: Partial<CreateHistoricalMarketStateInput>): CreateHistoricalMarketStateInput => ({
   canonicalEventId: "phase4-runner-sports",
+  canonicalMarketId: null,
   canonicalCategory: "SPORTS",
   venue: "POLYMARKET",
   venueMarketId: "market-1",
@@ -63,6 +89,7 @@ const insertStates = async (pool: Pool, states: readonly CreateHistoricalMarketS
     await pool.query(
       `INSERT INTO historical_market_states (
          canonical_event_id,
+         canonical_market_id,
          canonical_category,
          venue,
          venue_market_id,
@@ -84,10 +111,11 @@ const insertStates = async (pool: Pool, states: readonly CreateHistoricalMarketS
          source_timestamp
        ) VALUES (
          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-         $11, $12, $13, $14::jsonb, $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb, $19, $20
+         $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb, $20, $21
        )`,
       [
         state.canonicalEventId,
+        state.canonicalMarketId ?? null,
         state.canonicalCategory ?? null,
         state.venue,
         state.venueMarketId,
@@ -152,6 +180,8 @@ describe.skipIf(!ENV_READY)("HistoricalSimulationRunner integration", () => {
       pool: pool as Pool,
       polymarketOnlyBaselineEvaluator: new PolymarketOnlyBaselineEvaluator(),
       limitlessOnlyBaselineEvaluator: new LimitlessOnlyBaselineEvaluator(),
+      opinionOnlyBaselineEvaluator: new OpinionOnlyBaselineEvaluator(),
+      myriadOnlyBaselineEvaluator: new MyriadOnlyBaselineEvaluator(),
       bestExternalOnlyBaselineEvaluator: new BestExternalOnlyBaselineEvaluator(),
       noInternalizationBaselineEvaluator: new NoInternalizationBaselineEvaluator(),
       lotusEvaluators: createLotusEvaluators()
@@ -181,9 +211,11 @@ describe.skipIf(!ENV_READY)("HistoricalSimulationRunner integration", () => {
     const result = await runner.run({
       scopeType: "EVENT",
       scopeId: "phase4-runner-sports-scope",
-      venuePair: "POLYMARKET_LIMITLESS",
+      routeMode: "POLYMARKET_LIMITLESS",
       marketClass: HistoricalMarketClass.BINARY,
       canonicalEventId: "phase4-runner-sports",
+      side: "BUY",
+      requestedNotional: "100",
       windowStart: new Date("2026-03-13T00:00:00.000Z"),
       windowEnd: new Date("2026-03-13T00:05:00.000Z"),
       configVersion: "cfg-v1",
@@ -219,6 +251,8 @@ describe.skipIf(!ENV_READY)("HistoricalSimulationRunner integration", () => {
       pool: pool as Pool,
       polymarketOnlyBaselineEvaluator: new PolymarketOnlyBaselineEvaluator(),
       limitlessOnlyBaselineEvaluator: new LimitlessOnlyBaselineEvaluator(),
+      opinionOnlyBaselineEvaluator: new OpinionOnlyBaselineEvaluator(),
+      myriadOnlyBaselineEvaluator: new MyriadOnlyBaselineEvaluator(),
       bestExternalOnlyBaselineEvaluator: new BestExternalOnlyBaselineEvaluator(),
       noInternalizationBaselineEvaluator: new NoInternalizationBaselineEvaluator(),
       lotusEvaluators: createLotusEvaluators()
@@ -274,9 +308,11 @@ describe.skipIf(!ENV_READY)("HistoricalSimulationRunner integration", () => {
     const persisted = await runner.run({
       scopeType: "EVENT",
       scopeId: "phase4-runner-crypto-scope",
-      venuePair: "POLYMARKET_LIMITLESS",
+      routeMode: "POLYMARKET_LIMITLESS",
       marketClass: HistoricalMarketClass.BINARY,
       canonicalEventId: "phase4-runner-crypto",
+      side: "BUY",
+      requestedNotional: "100",
       windowStart: new Date("2026-03-13T01:00:00.000Z"),
       windowEnd: new Date("2026-03-13T01:10:00.000Z"),
       configVersion: "cfg-v2",
@@ -296,9 +332,11 @@ describe.skipIf(!ENV_READY)("HistoricalSimulationRunner integration", () => {
     const dryRun = await runner.run({
       scopeType: "EVENT",
       scopeId: "phase4-runner-crypto-dryrun",
-      venuePair: "POLYMARKET_LIMITLESS",
+      routeMode: "POLYMARKET_LIMITLESS",
       marketClass: HistoricalMarketClass.BINARY,
       canonicalEventId: "phase4-runner-crypto",
+      side: "BUY",
+      requestedNotional: "100",
       windowStart: new Date("2026-03-13T01:00:00.000Z"),
       windowEnd: new Date("2026-03-13T01:10:00.000Z"),
       configVersion: "cfg-v2",

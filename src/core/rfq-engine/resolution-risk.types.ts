@@ -107,6 +107,7 @@ export interface NormalizedResolutionProfile {
     venue: string;
     venueMarketId: string;
     canonicalEventId: string;
+    canonicalMarketId: string;
     oracleType?: string | null;
     oracleName?: string | null;
     resolutionAuthorityType?: string | null;
@@ -133,6 +134,7 @@ export type CreateNormalizedResolutionProfileInput = Omit<
 export interface ResolutionRiskAssessment {
     id: string;
     canonicalEventId: string;
+    canonicalMarketId: string;
     marketAProfileId: string;
     marketBProfileId: string;
     riskScore: string;
@@ -149,6 +151,7 @@ export interface ResolutionRiskAssessment {
 export type ResolutionRiskRecommendedAction =
     | "Poolable"
     | "Pool with caution"
+    | "Pool with caution (lag)"
     | "Isolate execution"
     | "Do not pool";
 

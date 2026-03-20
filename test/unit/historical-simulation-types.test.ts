@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
     HistoricalMarketClass,
+    HistoricalSimulationRouteModeDefinitions,
     HistoricalSimulationRunStatus,
     type CreateHistoricalMarketStateInput,
     type CreateHistoricalSimulationRunInput,
@@ -58,7 +59,7 @@ describe("historical-simulation types", () => {
         const request: HistoricalSimulationRequest = {
             scopeType: "MARKET",
             scopeId: "market-1",
-            venuePair: "POLYMARKET|LIMITLESS",
+            routeMode: "POLYMARKET_LIMITLESS",
             marketClass: HistoricalMarketClass.BINARY,
             canonicalEventId: "event-1",
             startTimestamp: new Date("2026-03-01T00:00:00.000Z"),
@@ -79,7 +80,7 @@ describe("historical-simulation types", () => {
             createdAt: new Date("2026-03-01T12:00:01.000Z")
         };
 
-        expect(request.venuePair).toBe("POLYMARKET|LIMITLESS");
+        expect(request.routeMode).toBe("POLYMARKET_LIMITLESS");
         expect(result.rolloutEligibility.safeEquivalent).toBe(true);
     });
 
@@ -106,7 +107,7 @@ describe("historical-simulation types", () => {
         const createRun: CreateHistoricalSimulationRunInput = {
             scopeType: "MARKET",
             scopeId: "market-1",
-            venuePair: "POLYMARKET|LIMITLESS",
+            routeMode: "POLYMARKET_LIMITLESS",
             marketClass: HistoricalMarketClass.BINARY,
             status: HistoricalSimulationRunStatus.PENDING
         };
@@ -124,5 +125,15 @@ describe("historical-simulation types", () => {
         expect(createState.candles).toBeUndefined();
         expect(createRun.metadata).toBeUndefined();
         expect(createResult.createdAt).toBeUndefined();
+    });
+
+    it("includes Myriad as a supported single-venue route mode", () => {
+        expect(HistoricalSimulationRouteModeDefinitions.find((definition) => definition.mode === "MYRIAD_ONLY")).toEqual(
+            expect.objectContaining({
+                mode: "MYRIAD_ONLY",
+                cardinality: "single",
+                requiredVenues: ["MYRIAD"]
+            })
+        );
     });
 });

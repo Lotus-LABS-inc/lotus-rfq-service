@@ -1,0 +1,631 @@
+{
+  "version": 1,
+  "observedAt": "2026-03-19T22:31:48.921Z",
+  "policy": {
+    "exactMatchRule": "exact_semantic_equivalence_only",
+    "approvalMode": "checked_in_curated_manifest",
+    "catalogScope": "historical_simulation"
+  },
+  "candidates": [
+    {
+      "historicalCanonicalEventId": "HISTSIM::LIMITLESS-MLB-DODGERS-GAME-WINNER",
+      "historicalCanonicalMarketId": "HISTSIM-LIMITLESS-MLB-DODGERS-GAME-WINNER",
+      "canonicalCategory": "OTHER",
+      "title": "MLB: Dodgers vs Opponent - Winner",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "awaiting_curated_approval",
+        "reason": "Candidate generated from existing inventory and requires explicit historical curation approval."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "11111111-1111-4111-8111-111111111111:LIMITLESS-MLB-DODGERS-GAME-WINNER",
+          "observation": "Generated from existing live resolution_profiles and historical row windows."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "limitless-sports-mlb-yes",
+          "title": "MLB: Dodgers vs Opponent - Winner",
+          "historySource": "predexon_limitless",
+          "historyWindow": {
+            "start": "2026-03-12T12:05:00.000Z",
+            "end": "2026-03-12T12:05:00.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::OPINION-MLB-DODGERS-WORLD-SERIES-WIN",
+      "historicalCanonicalMarketId": "HISTSIM-OPINION-MLB-DODGERS-WORLD-SERIES-WIN",
+      "canonicalCategory": "OTHER",
+      "title": "Dodgers win World Series",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "awaiting_curated_approval",
+        "reason": "Candidate generated from existing inventory and requires explicit historical curation approval."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "11111111-1111-4111-8111-111111111111:OPINION-MLB-DODGERS-WORLD-SERIES-WIN",
+          "observation": "Generated from existing live resolution_profiles and historical row windows."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "opinion-sports-mlb-yes",
+          "title": "Dodgers win World Series",
+          "historySource": "predexon_opinion",
+          "historyWindow": {
+            "start": "2026-03-12T12:05:00.000Z",
+            "end": "2026-03-12T12:05:00.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::POLYMARKET-NBA-LAL-ORL-2026-03-21-LAKERS-WIN",
+      "historicalCanonicalMarketId": "HISTSIM-POLYMARKET-NBA-LAL-ORL-2026-03-21-LAKERS-WIN",
+      "canonicalCategory": "SPORTS",
+      "title": "Lakers vs. Magic",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "awaiting_curated_approval",
+        "reason": "Candidate generated from existing inventory and requires explicit historical curation approval."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "11111111-1111-4111-8111-111111111111:POLYMARKET-NBA-LAL-ORL-2026-03-21-LAKERS-WIN",
+          "observation": "Generated from existing live resolution_profiles and historical row windows."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "0x0954cc08de0ab8345bcf24f314d571e6a77d913ea9977ce2b4187983a70b450d",
+          "title": "Lakers vs. Magic",
+          "historySource": "predexon_polymarket",
+          "historyWindow": {
+            "start": "2026-03-10T00:00:00.000Z",
+            "end": "2026-03-19T21:00:00.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::BTC-90K-LEGACY",
+      "historicalCanonicalMarketId": "HISTSIM-BTC-90K-LEGACY",
+      "canonicalCategory": "CRYPTO",
+      "title": "BTC over $90k (Legacy Contract)",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "awaiting_curated_approval",
+        "reason": "Candidate generated from existing inventory and requires explicit historical curation approval."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "22222222-2222-4222-8222-222222222222:BTC-90K-LEGACY",
+          "observation": "Generated from existing live resolution_profiles and historical row windows."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "polymarket-crypto-btc-90k-deprecated",
+          "title": "BTC over $90k (Legacy Contract)",
+          "historySource": "predexon_polymarket",
+          "historyWindow": {
+            "start": "2026-03-12T12:10:00.000Z",
+            "end": "2026-03-12T12:10:00.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::LIMITLESS-BTC-ABOVE-90K",
+      "historicalCanonicalMarketId": "HISTSIM-LIMITLESS-BTC-ABOVE-90K",
+      "canonicalCategory": "OTHER",
+      "title": "BTC over $90k",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "awaiting_curated_approval",
+        "reason": "Candidate generated from existing inventory and requires explicit historical curation approval."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "22222222-2222-4222-8222-222222222222:LIMITLESS-BTC-ABOVE-90K",
+          "observation": "Generated from existing live resolution_profiles and historical row windows."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "limitless-crypto-btc-60k",
+          "title": "BTC over $90k",
+          "historySource": "predexon_limitless",
+          "historyWindow": {
+            "start": "2026-03-12T12:10:00.000Z",
+            "end": "2026-03-12T12:10:00.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::OPINION-BTC-ABOVE-90K-BY-2026-03-31",
+      "historicalCanonicalMarketId": "HISTSIM-OPINION-BTC-ABOVE-90K-BY-2026-03-31",
+      "canonicalCategory": "OTHER",
+      "title": "BTC over $90k by March 31, 2026",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "awaiting_curated_approval",
+        "reason": "Candidate generated from existing inventory and requires explicit historical curation approval."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "22222222-2222-4222-8222-222222222222:OPINION-BTC-ABOVE-90K-BY-2026-03-31",
+          "observation": "Generated from existing live resolution_profiles and historical row windows."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "opinion-crypto-btc-90k",
+          "title": "BTC over $90k by March 31, 2026",
+          "historySource": "predexon_opinion",
+          "historyWindow": {
+            "start": "2026-03-12T12:10:00.000Z",
+            "end": "2026-03-12T12:10:00.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::POLYMARKET-BTC-ALL-TIME-HIGH-BY-2026-03-31",
+      "historicalCanonicalMarketId": "HISTSIM-POLYMARKET-BTC-ALL-TIME-HIGH-BY-2026-03-31",
+      "canonicalCategory": "CRYPTO",
+      "title": "Bitcoin all time high by March 31, 2026?",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "awaiting_curated_approval",
+        "reason": "Candidate generated from existing inventory and requires explicit historical curation approval."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "22222222-2222-4222-8222-222222222222:POLYMARKET-BTC-ALL-TIME-HIGH-BY-2026-03-31",
+          "observation": "Generated from existing live resolution_profiles and historical row windows."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "0x3fd88dc4dde49dd20ceade22fda96dc345aa6932c46237ff7f47352e49475588",
+          "title": "Bitcoin all time high by March 31, 2026?",
+          "historySource": "predexon_polymarket",
+          "historyWindow": {
+            "start": "2026-03-10T00:00:00.000Z",
+            "end": "2026-03-19T21:00:00.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::POLYMARKET-2028-DEM-NOM-GAVIN-NEWSOM",
+      "historicalCanonicalMarketId": "HISTSIM-POLYMARKET-2028-DEM-NOM-GAVIN-NEWSOM",
+      "canonicalCategory": "POLITICS",
+      "title": "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "awaiting_curated_approval",
+        "reason": "Candidate generated from existing inventory and requires explicit historical curation approval."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "66666666-6666-4666-8666-666666666666:POLYMARKET-2028-DEM-NOM-GAVIN-NEWSOM",
+          "observation": "Generated from existing live resolution_profiles and historical row windows."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "0x0f49db97f71c68b1e42a6d16e3de93d85dbf7d4148e3f018eb79e88554be9f75",
+          "title": "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
+          "historySource": "predexon_polymarket",
+          "historyWindow": {
+            "start": "2026-03-10T00:00:00.000Z",
+            "end": "2026-03-19T21:00:00.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::POLYMARKET-2028-GOP-NOM-MIKE-PENCE",
+      "historicalCanonicalMarketId": "HISTSIM-POLYMARKET-2028-GOP-NOM-MIKE-PENCE",
+      "canonicalCategory": "POLITICS",
+      "title": "Will Mike Pence win the 2028 Republican presidential nomination?",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "awaiting_curated_approval",
+        "reason": "Candidate generated from existing inventory and requires explicit historical curation approval."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "66666666-6666-4666-8666-666666666666:POLYMARKET-2028-GOP-NOM-MIKE-PENCE",
+          "observation": "Generated from existing live resolution_profiles and historical row windows."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "0x41c6341dd79903aca4bb0c29f5a7976946c3774d2fd72f38cbb7de7092144520",
+          "title": "Will Mike Pence win the 2028 Republican presidential nomination?",
+          "historySource": "predexon_polymarket",
+          "historyWindow": {
+            "start": "2026-03-10T00:00:00.000Z",
+            "end": "2026-03-19T21:00:00.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::US-ELECTION-2028-DEMOCRATIC-WINS",
+      "historicalCanonicalMarketId": "HISTSIM-US-ELECTION-2028-DEMOCRATIC-WINS",
+      "canonicalCategory": "OTHER",
+      "title": "US Election 2028: Democratic party wins",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "awaiting_curated_approval",
+        "reason": "Candidate generated from existing inventory and requires explicit historical curation approval."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "66666666-6666-4666-8666-666666666666:US-ELECTION-2028-DEMOCRATIC-WINS",
+          "observation": "Generated from existing live resolution_profiles and historical row windows."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "democratic-1769089740520",
+          "title": "US Election 2028: Democratic party wins",
+          "historySource": "predexon_limitless",
+          "historyWindow": {
+            "start": "2026-03-09T22:31:48.921Z",
+            "end": "2026-03-19T22:31:48.921Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "opinion-politics-us-election-dem",
+          "title": "US Election 2028: Democratic party wins",
+          "historySource": "predexon_opinion",
+          "historyWindow": {
+            "start": "2026-03-12T12:15:00.000Z",
+            "end": "2026-03-12T12:15:00.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::US-ELECTION-2028-REPUBLICAN-WINS",
+      "historicalCanonicalMarketId": "HISTSIM-US-ELECTION-2028-REPUBLICAN-WINS",
+      "canonicalCategory": "OTHER",
+      "title": "US Election 2028: Republican party wins",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "awaiting_curated_approval",
+        "reason": "Candidate generated from existing inventory and requires explicit historical curation approval."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "66666666-6666-4666-8666-666666666666:US-ELECTION-2028-REPUBLICAN-WINS",
+          "observation": "Generated from existing live resolution_profiles and historical row windows."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "republican-1769089740531",
+          "title": "US Election 2028: Republican party wins",
+          "historySource": "predexon_limitless",
+          "historyWindow": {
+            "start": "2026-03-09T22:31:48.921Z",
+            "end": "2026-03-19T22:31:48.921Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "opinion-politics-us-election-gop",
+          "title": "US Election 2028: Republican party wins",
+          "historySource": "predexon_opinion",
+          "historyWindow": {
+            "start": "2026-03-12T12:20:00.000Z",
+            "end": "2026-03-12T12:20:00.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::LIVE-POLYMARKET-BTC-UPDOWN-2026-03-21",
+      "historicalCanonicalMarketId": "HISTSIM-LIVE-POLYMARKET-BTC-UPDOWN-2026-03-21",
+      "canonicalCategory": "CRYPTO",
+      "title": "Bitcoin Up or Down on March 21?",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "awaiting_curated_approval",
+        "reason": "Candidate generated from existing inventory and requires explicit historical curation approval."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "6c6ca772-bf16-49f9-a4d5-b3b4fb26a111:LIVE-POLYMARKET-BTC-UPDOWN-2026-03-21",
+          "observation": "Generated from existing live resolution_profiles and historical row windows."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "0xd1436b9fb82e252c5a1482c33920e68ff6e64c977ff1bec70585ce6586321917",
+          "title": "Bitcoin Up or Down on March 21?",
+          "historySource": "predexon_polymarket",
+          "historyWindow": {
+            "start": "2026-03-12T00:00:00.000Z",
+            "end": "2026-03-19T20:00:47.992Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::LIVE-LIMITLESS-BTC-ABOVE-2026-03-19T20Z",
+      "historicalCanonicalMarketId": "HISTSIM-LIVE-LIMITLESS-BTC-ABOVE-2026-03-19T20Z",
+      "canonicalCategory": "CRYPTO",
+      "title": "BTC above $69820.12 on Mar 19, 20:00 UTC?",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "awaiting_curated_approval",
+        "reason": "Candidate generated from existing inventory and requires explicit historical curation approval."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "6c6ca772-bf16-49f9-a4d5-b3b4fb26a222:LIVE-LIMITLESS-BTC-ABOVE-2026-03-19T20Z",
+          "observation": "Generated from existing live resolution_profiles and historical row windows."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "btc-above-dollar6982012-on-mar-19-2000-utc-1773946806488",
+          "title": "BTC above $69820.12 on Mar 19, 20:00 UTC?",
+          "historySource": "predexon_limitless",
+          "historyWindow": {
+            "start": "2026-03-19T19:00:00.000Z",
+            "end": "2026-03-19T19:03:56.887Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::LIVE-OPINION-DEM-NOM-2028-JON-OSSOFF",
+      "historicalCanonicalMarketId": "HISTSIM-LIVE-OPINION-DEM-NOM-2028-JON-OSSOFF",
+      "canonicalCategory": "POLITICS",
+      "title": "Democratic Presidential Nominee 2028: Jon Ossoff",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "awaiting_curated_approval",
+        "reason": "Candidate generated from existing inventory and requires explicit historical curation approval."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "6c6ca772-bf16-49f9-a4d5-b3b4fb26a333:LIVE-OPINION-DEM-NOM-2028-JON-OSSOFF",
+          "observation": "Generated from existing live resolution_profiles and historical row windows."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "6808",
+          "title": "Democratic Presidential Nominee 2028: Jon Ossoff",
+          "historySource": "predexon_opinion",
+          "historyWindow": {
+            "start": "2026-02-06T00:00:00.000Z",
+            "end": "2026-03-10T16:20:23.774Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::LOL-WORLDS-2026-GENG-WINS",
+      "historicalCanonicalMarketId": "HISTSIM-LOL-WORLDS-2026-GENG-WINS",
+      "canonicalCategory": "OTHER",
+      "title": "League of Legends Worlds 2026: Gen.G wins",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "awaiting_curated_approval",
+        "reason": "Candidate generated from existing inventory and requires explicit historical curation approval."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "77777777-7777-4777-8777-777777777777:LOL-WORLDS-2026-GENG-WINS",
+          "observation": "Generated from existing live resolution_profiles and historical row windows."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "limitless-esports-lol-gen",
+          "title": "League of Legends Worlds 2026: Gen.G wins",
+          "historySource": "predexon_limitless",
+          "historyWindow": {
+            "start": "2026-03-12T12:30:00.000Z",
+            "end": "2026-03-12T12:30:00.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "opinion-esports-lol-gen",
+          "title": "League of Legends Worlds 2026: Gen.G wins",
+          "historySource": "predexon_opinion",
+          "historyWindow": {
+            "start": "2026-03-12T12:30:00.000Z",
+            "end": "2026-03-12T12:30:00.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::LOL-WORLDS-2026-T1-WINS",
+      "historicalCanonicalMarketId": "HISTSIM-LOL-WORLDS-2026-T1-WINS",
+      "canonicalCategory": "OTHER",
+      "title": "League of Legends Worlds 2026: T1 wins",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "awaiting_curated_approval",
+        "reason": "Candidate generated from existing inventory and requires explicit historical curation approval."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "77777777-7777-4777-8777-777777777777:LOL-WORLDS-2026-T1-WINS",
+          "observation": "Generated from existing live resolution_profiles and historical row windows."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "limitless-esports-lol-t1",
+          "title": "League of Legends Worlds 2026: T1 wins",
+          "historySource": "predexon_limitless",
+          "historyWindow": {
+            "start": "2026-03-12T12:25:00.000Z",
+            "end": "2026-03-12T12:25:00.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "opinion-esports-lol-t1",
+          "title": "League of Legends Worlds 2026: T1 wins",
+          "historySource": "predexon_opinion",
+          "historyWindow": {
+            "start": "2026-03-12T12:25:00.000Z",
+            "end": "2026-03-12T12:25:00.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::POLYMARKET-LOL-2026-GENG-GOLDEN-ROAD",
+      "historicalCanonicalMarketId": "HISTSIM-POLYMARKET-LOL-2026-GENG-GOLDEN-ROAD",
+      "canonicalCategory": "ESPORTS",
+      "title": "Will Gen.G complete the League of Legends \"Golden Road\" in 2026?",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "awaiting_curated_approval",
+        "reason": "Candidate generated from existing inventory and requires explicit historical curation approval."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "77777777-7777-4777-8777-777777777777:POLYMARKET-LOL-2026-GENG-GOLDEN-ROAD",
+          "observation": "Generated from existing live resolution_profiles and historical row windows."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "0xfd17453f83cd10bf3fa5fc46b30d23a7abc3d66da7aa3dc961187d30506573db",
+          "title": "Will Gen.G complete the League of Legends \"Golden Road\" in 2026?",
+          "historySource": "predexon_polymarket",
+          "historyWindow": {
+            "start": "2026-03-10T00:00:00.000Z",
+            "end": "2026-03-19T20:00:00.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::POLYMARKET-LOL-WORLDS-2026-LCK-TEAM-WINS",
+      "historicalCanonicalMarketId": "HISTSIM-POLYMARKET-LOL-WORLDS-2026-LCK-TEAM-WINS",
+      "canonicalCategory": "ESPORTS",
+      "title": "Will a team from LCK (South Korea) win LoL Worlds 2026?",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "awaiting_curated_approval",
+        "reason": "Candidate generated from existing inventory and requires explicit historical curation approval."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "77777777-7777-4777-8777-777777777777:POLYMARKET-LOL-WORLDS-2026-LCK-TEAM-WINS",
+          "observation": "Generated from existing live resolution_profiles and historical row windows."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "0xbfc776a7f419fdc9bec5f026cb6bd115db75e22664f5d99873e4c330676015f8",
+          "title": "Will a team from LCK (South Korea) win LoL Worlds 2026?",
+          "historySource": "predexon_polymarket",
+          "historyWindow": {
+            "start": "2026-03-10T00:00:00.000Z",
+            "end": "2026-03-19T09:00:00.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    }
+  ]
+}

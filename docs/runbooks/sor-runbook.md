@@ -133,3 +133,149 @@ Use role-based escalation (do not rely on personal-only contacts):
 3. Risk Operations Lead (`#risk-ops`, escalation for exposure mismatch/unwind incidents).
 4. Security On-Call (`#security-oncall`, required for auth abuse/admin endpoint misuse).
 5. Engineering Manager (final escalation owner for prolonged degradation > 30 minutes).
+
+## Exact-Market Route Availability
+
+The admin simulation surface now exposes route availability by exact `canonical_market_id`, not by event-level venue guessing.
+
+Supported route modes:
+
+- `POLYMARKET_ONLY`
+- `LIMITLESS_ONLY`
+- `OPINION_ONLY`
+- `MYRIAD_ONLY`
+- `POLYMARKET_LIMITLESS`
+- `POLYMARKET_OPINION`
+- `LIMITLESS_OPINION`
+- `POLYMARKET_LIMITLESS_OPINION`
+
+### Inspect Routeability For One Event
+1. Load `GET /admin/simulation/canonical/:eventId`
+2. Inspect:
+   - `canonicalMarkets[].routeModes`
+   - `routeModeSummary`
+   - `hasTriVenueRoute`
+   - `triVenueRouteableMarketCount`
+3. Confirm the target exact market is runnable for the requested route mode before attempting a pooled simulation.
+
+### Interpret Unavailable Reasons
+- `missing_required_venue`
+  - the exact market is not present on every venue required by the route mode
+- `missing_pair_assessment`
+  - a required resolution-risk edge is absent
+- `stale_resolution_risk`
+  - assessments exist but were computed before the latest profile update
+- `unsafe_equivalence`
+  - the required pair exists but is not eligible for pooled routing
+- `ambiguous_venue_identity`
+  - more than one active profile exists for a required venue on the same exact market
+
+### Tri-Venue Diagnosis
+For `POLYMARKET_LIMITLESS_OPINION`, all three pair edges must be safe on the same exact market.
+
+If tri-venue routing is unavailable:
+1. inspect `canonicalMarkets[].routeModes` for the selected exact market
+2. identify which pair edge is missing or unsafe
+3. confirm the issue is not identity ambiguity on one venue
+4. if the exact market exists on all three venues but one edge is missing, escalate to resolution-risk recomputation before re-testing
+
+### Myriad-Only Interpretation
+`MYRIAD_ONLY` is valid when the exact market has Myriad historical rows.
+
+Operational meaning:
+- historical replay is based on documented Myriad price charts plus market events
+- historical orderbook depth is not available
+- fills are conservative and evidence-bounded, not arbitrary-size historical quote replays
+
+Current policy:
+- do not expect Myriad pair or tri-venue route modes in v1
+- treat Myriad as single-venue simulation inventory until exact cross-venue compatibility edges are curated
+
+## Historical Simulation Catalog Workflow
+
+Use this flow when operators need more historical route inventory for simulation without promoting markets into live Lotus routing.
+
+### Generate Historical Candidates
+Run:
+```bash
+npm run generate:historical-route-candidates
+```
+
+Output:
+- `docs/historical-route-candidates.json`
+
+Meaning:
+- this is discovery only
+- nothing is written into live routing inventory
+- nothing becomes runnable until curation marks it `accepted`
+
+### Curate Historical Routes
+Edit:
+- `docs/historical-route-curation.json`
+
+Rules:
+- `accepted` means the exact historical market is approved for simulation-only catalog sync
+- `unresolved` means keep it visible but non-routable
+- `rejected` means explicitly block promotion into the historical catalog
+
+### Apply Historical Catalog Sync
+Run:
+```bash
+npm run sync:historical-route-curation
+```
+
+Effects:
+- upserts `historical_simulation_profiles`
+- upserts `historical_simulation_risk_assessments`
+- backfills `historical_market_states` under `HISTSIM::...` / `HISTSIM-...`
+
+### Verify Historical Routeability
+1. Load `GET /admin/simulation/scopes?routeMode=<mode>`
+2. confirm the event appears with `catalogScope=historical_simulation`
+3. inspect `GET /admin/simulation/canonical/:eventId`
+4. confirm the exact market is runnable for the requested route mode
+
+Current known seeded historical catalog route:
+- `HISTSIM::LIVE-OPINION-DEM-NOM-2028-JON-OSSOFF`
+- runnable for `OPINION_ONLY`
+
+Important boundary:
+- historical simulation catalog entries do not become live Lotus route inventory automatically
+
+Direct Myriad ingest:
+```bash
+npm run ingest:myriad -- --mode=backfill --category=crypto --batchSize=20
+```
+
+Notes:
+- `batchSize` currently caps candidate markets processed, not the depth of each market's event history
+- some Myriad markets have very large event histories, so backfills can take several minutes
+
+## Canonical Graph Checks Before Escalation
+
+When a route looks surprising, check the graph layers in this order:
+
+1. `CanonicalEvent`
+- are the venue markets about the same proposition at all?
+
+2. `CanonicalExecutableMarket`
+- are they actually in the same execution-safe group?
+
+3. `CompatibilityEdge`
+- is the pair `EQUIVALENT`, cautionary, distinct, or blocked?
+- what reasons were persisted?
+
+Routing rule:
+- SOR can only pool inside one `CanonicalExecutableMarket`
+- broad event overlap without executable grouping is not enough
+
+## Liquidity-Cost-Aware Routing Interpretation
+
+If a route is available with lag:
+- it may still be safe
+- Lotus prices `liquidityCostBps`
+- Lotus anchors payout/finality to the slowest safe side
+
+If a route is unavailable:
+- do not assume lag alone is the reason
+- first verify whether the failure is actually identity, resolution, or finality safety

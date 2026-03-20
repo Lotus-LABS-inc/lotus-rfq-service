@@ -9,8 +9,12 @@ import {
   type PredexonHistoricalClient,
   type PredexonCandlesticksQuery,
   type PredexonEventsQuery,
+  type PredexonLimitlessOrderbookSnapshot,
+  type PredexonLimitlessOrderbooksQuery,
   type PredexonMarketsQuery,
   type PredexonOpenInterestQuery,
+  type PredexonOpinionOrderbookSnapshot,
+  type PredexonOpinionOrderbooksQuery,
   type PredexonOrderbooksQuery,
   type PredexonTradesQuery,
   type PredexonVolumeQuery
@@ -59,6 +63,7 @@ export interface HistoricalMarketStateFragment extends Omit<CreateHistoricalMark
 export interface PredexonFragmentContext {
   canonicalEventId: string;
   venueMarketId: string;
+  venue?: "POLYMARKET" | "LIMITLESS" | "OPINION";
 }
 
 export interface PredexonPriceFragmentContext extends PredexonFragmentContext {
@@ -75,6 +80,9 @@ export interface PredexonVolumeOpenInterestContext extends PredexonFragmentConte
 
 const toNumericString = (value: string | number | null | undefined): string | null =>
   value === undefined || value === null ? null : String(value)
+
+const toNumericStringFromUnknown = (value: unknown): string | null =>
+  typeof value === "string" || typeof value === "number" ? String(value) : null
 
 const toDate = (value: string | number): Date => {
   if (typeof value === "string") {
@@ -95,7 +103,7 @@ const buildBaseFragment = (
   timestamp: Date
 ): HistoricalMarketStateFragment => ({
   canonicalEventId: context.canonicalEventId,
-  venue: "POLYMARKET",
+  venue: context.venue ?? "POLYMARKET",
   venueMarketId: context.venueMarketId,
   marketClass: HistoricalMarketClass.BINARY,
   timestamp,
@@ -128,6 +136,11 @@ const topOfBook = (levels: ReadonlyArray<Record<string, unknown>>): string | nul
   const first = levels[0]
   return first && (typeof first.price === "string" || typeof first.price === "number") ? String(first.price) : null
 }
+
+const normalizeOrderbookLevels = (levels: unknown): ReadonlyArray<Record<string, unknown>> =>
+  Array.isArray(levels)
+    ? levels.filter((level): level is Record<string, unknown> => typeof level === "object" && level !== null)
+    : []
 
 const buildSpread = (bestBid: string | null, bestAsk: string | null): string | null =>
   bestBid !== null && bestAsk !== null ? String(Number(bestAsk) - Number(bestBid)) : null
@@ -208,8 +221,8 @@ export class PredexonHistoricalAdapter {
     const snapshots = await this.config.client.getOrderbookHistory(query)
     return snapshots.map((snapshot) => {
       const timestamp = toDate(snapshot.timestamp)
-      const bestBid = topOfBook(snapshot.bids as ReadonlyArray<Record<string, unknown>>)
-      const bestAsk = topOfBook(snapshot.asks as ReadonlyArray<Record<string, unknown>>)
+      const bestBid = topOfBook(normalizeOrderbookLevels(snapshot.bids))
+      const bestAsk = topOfBook(normalizeOrderbookLevels(snapshot.asks))
       return {
         ...buildBaseFragment(context, this.config.metadataVersion, timestamp),
         bestBid,
@@ -219,6 +232,22 @@ export class PredexonHistoricalAdapter {
         orderbookSnapshot: snapshot
       }
     })
+  }
+
+  public async buildLimitlessOrderbookStateFragments(
+    context: PredexonFragmentContext,
+    query: PredexonLimitlessOrderbooksQuery
+  ): Promise<HistoricalMarketStateFragment[]> {
+    const snapshots = await this.config.client.getLimitlessOrderbookHistory(query)
+    return snapshots.map((snapshot) => this.buildExternalOrderbookFragment({ ...context, venue: "LIMITLESS" }, snapshot))
+  }
+
+  public async buildOpinionOrderbookStateFragments(
+    context: PredexonFragmentContext,
+    query: PredexonOpinionOrderbooksQuery
+  ): Promise<HistoricalMarketStateFragment[]> {
+    const snapshots = await this.config.client.getOpinionOrderbookHistory(query)
+    return snapshots.map((snapshot) => this.buildExternalOrderbookFragment({ ...context, venue: "OPINION" }, snapshot))
   }
 
   public async buildTradeStateFragments(
@@ -277,6 +306,37 @@ export class PredexonHistoricalAdapter {
     return {
       ...buildBaseFragment(context, this.config.metadataVersion, timestamp),
       lastPrice: toNumericString(price.price)
+    }
+  }
+
+  private buildExternalOrderbookFragment(
+    context: PredexonFragmentContext,
+    snapshot: PredexonLimitlessOrderbookSnapshot | PredexonOpinionOrderbookSnapshot
+  ): HistoricalMarketStateFragment {
+    const timestamp = toDate(snapshot.timestamp)
+    const bestBid =
+      "best_bid" in snapshot && snapshot.best_bid !== undefined
+        ? toNumericStringFromUnknown(snapshot.best_bid)
+        : topOfBook(normalizeOrderbookLevels(snapshot.bids))
+    const bestAsk =
+      "best_ask" in snapshot && snapshot.best_ask !== undefined
+        ? toNumericStringFromUnknown(snapshot.best_ask)
+        : topOfBook(normalizeOrderbookLevels(snapshot.asks))
+    const midpoint =
+      "adjusted_midpoint" in snapshot && snapshot.adjusted_midpoint !== undefined
+        ? toNumericStringFromUnknown(snapshot.adjusted_midpoint)
+        : "midpoint" in snapshot && snapshot.midpoint !== undefined
+          ? toNumericStringFromUnknown(snapshot.midpoint)
+          : buildMidpoint(bestBid, bestAsk)
+
+    return {
+      ...buildBaseFragment(context, this.config.metadataVersion, timestamp),
+      bestBid,
+      bestAsk,
+      spread: buildSpread(bestBid, bestAsk),
+      midpoint,
+      lastPrice: midpoint,
+      orderbookSnapshot: snapshot
     }
   }
 }

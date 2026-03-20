@@ -1,0 +1,253 @@
+{
+  "version": 2,
+  "observedAt": "2026-03-19",
+  "policy": {
+    "matchRule": "exact_semantic_equivalence_only",
+    "acceptedVenueMarketIdShape": "numeric_string",
+    "predexonValidation": {
+      "endpoint": "/v2/opinion/orderbooks",
+      "successCriteria": "HTTP 200"
+    },
+    "mutationRule": "only accepted entries may update resolution_profiles"
+  },
+  "pairs": [
+    {
+      "resolutionProfileId": "88888888-8888-4888-8888-888888888885",
+      "canonicalEventId": "66666666-6666-4666-8666-666666666666",
+      "canonicalMarketId": "US-ELECTION-2028-DEMOCRATIC-WINS",
+      "category": "POLITICS",
+      "currentVenueMarketId": "opinion-politics-us-election-dem",
+      "currentResolutionText": "US Election 2028: Democratic party wins",
+      "crossVenueAssessment": {
+        "status": "exact",
+        "currentVenueMeanings": [
+          {
+            "venue": "LIMITLESS",
+            "venueMarketId": "democratic-1769089740520",
+            "title": "US Election 2028: Democratic party wins"
+          },
+          {
+            "venue": "OPINION",
+            "venueMarketId": "opinion-politics-us-election-dem",
+            "title": "US Election 2028: Democratic party wins"
+          }
+        ]
+      },
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "no_exact_market",
+        "reason": "No exact public Opinion numeric market was found for the Democratic party-wins-election proposition."
+      },
+      "searchedSources": [
+        {
+          "type": "public_site",
+          "reference": "https://opinion.trade",
+          "observation": "Public surface exposed macro/calendar cards only and no exact 2028 Democratic party-wins-election market."
+        },
+        {
+          "type": "predexon_validation",
+          "reference": "https://api.predexon.com/v2/opinion/orderbooks?market_id=6808&start_time=1773100801&end_time=1773964799",
+          "observation": "Known numeric Opinion market 6808 validated at HTTP 200 but is a nominee market, not the party-wins-election proposition."
+        }
+      ],
+      "rejectedCandidates": [
+        {
+          "marketId": "6808",
+          "title": "Democratic Presidential Nominee 2028: Jon Ossoff",
+          "reasonCode": "only_proxy_markets_found",
+          "reason": "Nominee market, not the canonical Democratic party-wins-election proposition."
+        }
+      ]
+    },
+    {
+      "resolutionProfileId": "88888888-8888-4888-8888-888888888886",
+      "canonicalEventId": "66666666-6666-4666-8666-666666666666",
+      "canonicalMarketId": "US-ELECTION-2028-REPUBLICAN-WINS",
+      "category": "POLITICS",
+      "currentVenueMarketId": "opinion-politics-us-election-gop",
+      "currentResolutionText": "US Election 2028: Republican party wins",
+      "crossVenueAssessment": {
+        "status": "exact",
+        "currentVenueMeanings": [
+          {
+            "venue": "LIMITLESS",
+            "venueMarketId": "republican-1769089740531",
+            "title": "US Election 2028: Republican party wins"
+          },
+          {
+            "venue": "OPINION",
+            "venueMarketId": "opinion-politics-us-election-gop",
+            "title": "US Election 2028: Republican party wins"
+          }
+        ]
+      },
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "no_exact_market",
+        "reason": "No exact public Opinion numeric market was found for the Republican party-wins-election proposition."
+      },
+      "searchedSources": [
+        {
+          "type": "public_site",
+          "reference": "https://opinion.trade",
+          "observation": "Public surface exposed macro/calendar cards only and no exact 2028 Republican party-wins-election market."
+        }
+      ],
+      "rejectedCandidates": []
+    },
+    {
+      "resolutionProfileId": "44444444-5555-4555-8555-555555555555",
+      "canonicalEventId": "22222222-2222-4222-8222-222222222222",
+      "canonicalMarketId": "OPINION-BTC-ABOVE-90K-BY-2026-03-31",
+      "category": "CRYPTO",
+      "currentVenueMarketId": "opinion-crypto-btc-90k",
+      "currentResolutionText": "BTC over $90k by March 31, 2026",
+      "crossVenueAssessment": {
+        "status": "exact",
+        "currentVenueMeanings": [
+          {
+            "venue": "OPINION",
+            "venueMarketId": "opinion-crypto-btc-90k",
+            "title": "BTC over $90k by March 31, 2026"
+          }
+        ]
+      },
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "no_exact_market",
+        "reason": "No public numeric Opinion market ID was found for this exact threshold-by-date proposition."
+      },
+      "searchedSources": [
+        {
+          "type": "public_site",
+          "reference": "https://opinion.trade",
+          "observation": "Public surface did not expose any exact BTC over $90k by March 31, 2026 market."
+        },
+        {
+          "type": "search_query",
+          "reference": "site:opinion.trade \"BTC over $90k by March 31, 2026\"",
+          "observation": "No public indexed result found."
+        }
+      ],
+      "rejectedCandidates": []
+    },
+    {
+      "resolutionProfileId": "22222222-5555-4555-8555-555555555555",
+      "canonicalEventId": "11111111-1111-4111-8111-111111111111",
+      "canonicalMarketId": "OPINION-MLB-DODGERS-WORLD-SERIES-WIN",
+      "category": "SPORTS",
+      "currentVenueMarketId": "opinion-sports-mlb-yes",
+      "currentResolutionText": "Dodgers win World Series",
+      "crossVenueAssessment": {
+        "status": "exact",
+        "currentVenueMeanings": [
+          {
+            "venue": "OPINION",
+            "venueMarketId": "opinion-sports-mlb-yes",
+            "title": "Dodgers win World Series"
+          }
+        ]
+      },
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "no_exact_market",
+        "reason": "No public numeric Opinion market ID was found for this exact Dodgers World Series proposition."
+      },
+      "searchedSources": [
+        {
+          "type": "public_site",
+          "reference": "https://opinion.trade",
+          "observation": "Public surface did not expose any exact Dodgers win World Series market."
+        },
+        {
+          "type": "search_query",
+          "reference": "site:opinion.trade \"Dodgers win World Series\"",
+          "observation": "No public indexed result found."
+        }
+      ],
+      "rejectedCandidates": []
+    },
+    {
+      "resolutionProfileId": "99999999-9999-4999-8999-999999999995",
+      "canonicalEventId": "77777777-7777-4777-8777-777777777777",
+      "canonicalMarketId": "LOL-WORLDS-2026-T1-WINS",
+      "category": "ESPORTS",
+      "currentVenueMarketId": "opinion-esports-lol-t1",
+      "currentResolutionText": "League of Legends Worlds 2026: T1 wins",
+      "crossVenueAssessment": {
+        "status": "exact",
+        "currentVenueMeanings": [
+          {
+            "venue": "LIMITLESS",
+            "venueMarketId": "limitless-esports-lol-t1",
+            "title": "League of Legends Worlds 2026: T1 wins"
+          },
+          {
+            "venue": "OPINION",
+            "venueMarketId": "opinion-esports-lol-t1",
+            "title": "League of Legends Worlds 2026: T1 wins"
+          }
+        ]
+      },
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "no_exact_market",
+        "reason": "No public numeric Opinion market ID was found for the exact T1-wins-Worlds proposition."
+      },
+      "searchedSources": [
+        {
+          "type": "public_site",
+          "reference": "https://opinion.trade",
+          "observation": "Public surface did not expose any exact League of Legends Worlds 2026 T1 wins market."
+        },
+        {
+          "type": "search_query",
+          "reference": "site:opinion.trade \"League of Legends Worlds\" \"T1\"",
+          "observation": "No public indexed result found."
+        }
+      ],
+      "rejectedCandidates": []
+    },
+    {
+      "resolutionProfileId": "99999999-9999-4999-8999-999999999996",
+      "canonicalEventId": "77777777-7777-4777-8777-777777777777",
+      "canonicalMarketId": "LOL-WORLDS-2026-GENG-WINS",
+      "category": "ESPORTS",
+      "currentVenueMarketId": "opinion-esports-lol-gen",
+      "currentResolutionText": "League of Legends Worlds 2026: Gen.G wins",
+      "crossVenueAssessment": {
+        "status": "exact",
+        "currentVenueMeanings": [
+          {
+            "venue": "LIMITLESS",
+            "venueMarketId": "limitless-esports-lol-gen",
+            "title": "League of Legends Worlds 2026: Gen.G wins"
+          },
+          {
+            "venue": "OPINION",
+            "venueMarketId": "opinion-esports-lol-gen",
+            "title": "League of Legends Worlds 2026: Gen.G wins"
+          }
+        ]
+      },
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "no_exact_market",
+        "reason": "No public numeric Opinion market ID was found for the exact Gen.G-wins-Worlds proposition."
+      },
+      "searchedSources": [
+        {
+          "type": "public_site",
+          "reference": "https://opinion.trade",
+          "observation": "Public surface did not expose any exact League of Legends Worlds 2026 Gen.G wins market."
+        },
+        {
+          "type": "search_query",
+          "reference": "site:opinion.trade \"League of Legends Worlds\" \"Gen.G\"",
+          "observation": "No public indexed result found."
+        }
+      ],
+      "rejectedCandidates": []
+    }
+  ]
+}

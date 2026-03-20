@@ -17,6 +17,7 @@ interface ResolutionProfileRow {
     venue: string;
     venue_market_id: string;
     canonical_event_id: string;
+    canonical_market_id: string;
     oracle_type: string | null;
     oracle_name: string | null;
     resolution_authority_type: string | null;
@@ -38,6 +39,7 @@ interface ResolutionProfileRow {
 interface ResolutionAssessmentRow {
     id: string;
     canonical_event_id: string;
+    canonical_market_id: string;
     market_a_profile_id: string;
     market_b_profile_id: string;
     risk_score: string;
@@ -353,6 +355,7 @@ const mapProfileRow = (row: ResolutionProfileRow): NormalizedResolutionProfile =
     venue: row.venue,
     venueMarketId: row.venue_market_id,
     canonicalEventId: row.canonical_event_id,
+    canonicalMarketId: row.canonical_market_id,
     oracleType: row.oracle_type,
     oracleName: row.oracle_name,
     resolutionAuthorityType: row.resolution_authority_type,
@@ -371,18 +374,21 @@ const mapProfileRow = (row: ResolutionProfileRow): NormalizedResolutionProfile =
     updatedAt: new Date(row.updated_at),
 });
 
-const mapAssessmentRow = (row: ResolutionAssessmentRow): ResolutionRiskAssessment => ({
-    id: row.id,
-    canonicalEventId: row.canonical_event_id,
-    marketAProfileId: row.market_a_profile_id,
-    marketBProfileId: row.market_b_profile_id,
-    riskScore: row.risk_score,
-    confidenceScore: row.confidence_score,
-    equivalenceClass: row.equivalence_class,
-    factorBreakdown: row.factor_breakdown,
-    reasons: row.reasons,
-    version: row.version,
-    computedAt: new Date(row.computed_at),
-    liquidityCost: row.liquidity_cost ?? undefined,
-    maxSettlementDelayHours: row.max_settlement_delay_hours ? Number(row.max_settlement_delay_hours) : undefined
-});
+const mapAssessmentRow = (row: ResolutionAssessmentRow): ResolutionRiskAssessment => {
+    return {
+        id: row.id,
+        canonicalEventId: row.canonical_event_id,
+        canonicalMarketId: row.canonical_market_id,
+        marketAProfileId: row.market_a_profile_id,
+        marketBProfileId: row.market_b_profile_id,
+        riskScore: row.risk_score,
+        confidenceScore: row.confidence_score,
+        equivalenceClass: row.equivalence_class,
+        factorBreakdown: row.factor_breakdown,
+        reasons: row.reasons,
+        version: row.version,
+        computedAt: row.computed_at,
+        liquidityCost: row.liquidity_cost ?? undefined,
+        maxSettlementDelayHours: row.max_settlement_delay_hours ? Number(row.max_settlement_delay_hours) : undefined
+    };
+};

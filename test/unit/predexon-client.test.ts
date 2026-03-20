@@ -16,12 +16,14 @@ const makeResponse = (body: unknown, init?: ResponseInit): Response =>
 describe("PredexonHistoricalClient", () => {
   it("builds listMarkets requests with repeated array query parameters", async () => {
     const fetchImpl = vi.fn<FetchImpl>(async () =>
-      makeResponse([
-        {
-          condition_id: "cond-1",
-          title: "Will BTC close above 100k?"
-        }
-      ])
+      makeResponse({
+        markets: [
+          {
+            condition_id: "cond-1",
+            title: "Will BTC close above 100k?"
+          }
+        ]
+      })
     )
     const client = new PredexonHistoricalClient({
       baseUrl: "https://api.predexon.com",
@@ -76,12 +78,14 @@ describe("PredexonHistoricalClient", () => {
       .fn<FetchImpl>()
       .mockResolvedValueOnce(makeResponse({ message: "server error" }, { status: 500 }))
       .mockResolvedValueOnce(
-        makeResponse([
-          {
-            condition_id: "cond-1",
-            title: "Will ETH rally?"
-          }
-        ])
+        makeResponse({
+          markets: [
+            {
+              condition_id: "cond-1",
+              title: "Will ETH rally?"
+            }
+          ]
+        })
       )
 
     const client = new PredexonHistoricalClient({
@@ -118,5 +122,104 @@ describe("PredexonHistoricalClient", () => {
     })
 
     await expect(client.listMarkets()).rejects.toThrow("payload validation failed")
+  })
+
+  it("supports Limitless historical orderbooks", async () => {
+    const fetchImpl = vi.fn<FetchImpl>(async () =>
+      makeResponse({
+        snapshots: [
+          {
+            market_slug: "btc-limitless",
+            timestamp: 1710000000000,
+            bids: [{ price: 0.47, size: 40 }],
+            asks: [{ price: 0.49, size: 35 }],
+            adjusted_midpoint: 0.48
+          }
+        ]
+      })
+    )
+    const client = new PredexonHistoricalClient({
+      baseUrl: "https://api.predexon.com",
+      apiKey: "test-key",
+      fetchImpl
+    })
+
+    const result = await client.getLimitlessOrderbookHistory({
+      market_slug: "btc-limitless",
+      start_time: 1710000000,
+      end_time: 1710003600
+    })
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    const [requestUrl] = fetchImpl.mock.calls[0] ?? []
+    expect(requestUrl).toContain("/v2/limitless/orderbooks?")
+    expect(result[0]?.market_slug).toBe("btc-limitless")
+    expect(result[0]?.adjusted_midpoint).toBe(0.48)
+  })
+
+  it("supports Opinion historical orderbooks", async () => {
+    const fetchImpl = vi.fn<FetchImpl>(async () =>
+      makeResponse({
+        snapshots: [
+          {
+            market_id: 6808,
+            timestamp: 1710000000000,
+            bids: [{ price: 0.62, size: 18 }],
+            asks: [{ price: 0.64, size: 15 }],
+            best_bid: 0.62,
+            best_ask: 0.64,
+            bid_depth: 18,
+            ask_depth: 15
+          }
+        ]
+      })
+    )
+    const client = new PredexonHistoricalClient({
+      baseUrl: "https://api.predexon.com",
+      apiKey: "test-key",
+      fetchImpl
+    })
+
+    const result = await client.getOpinionOrderbookHistory({
+      market_id: "opinion-market-1",
+      start_time: 1710000000,
+      end_time: 1710003600
+    })
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    const [requestUrl] = fetchImpl.mock.calls[0] ?? []
+    expect(requestUrl).toContain("/v2/opinion/orderbooks?")
+    expect(result[0]?.market_id).toBe("6808")
+    expect(result[0]?.best_bid).toBe(0.62)
+  })
+
+  it("accepts polymarket orderbooks that use assetId instead of token_id", async () => {
+    const fetchImpl = vi.fn<FetchImpl>(async () =>
+      makeResponse({
+        snapshots: [
+          {
+            assetId: "token-asset-1",
+            market: "condition-1",
+            timestamp: 1710000000000,
+            bids: [{ price: 0.48, size: 100 }],
+            asks: [{ price: 0.52, size: 90 }]
+          }
+        ]
+      })
+    )
+    const client = new PredexonHistoricalClient({
+      baseUrl: "https://api.predexon.com",
+      apiKey: "test-key",
+      fetchImpl
+    })
+
+    const result = await client.getOrderbookHistory({
+      token_id: "token-asset-1",
+      start_time: 1710000000000,
+      end_time: 1710003600000
+    })
+
+    expect(result[0]?.token_id).toBe("token-asset-1")
+    expect(result[0]?.bids[0]).toEqual(expect.objectContaining({ price: 0.48, size: 100 }))
   })
 })

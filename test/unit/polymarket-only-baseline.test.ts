@@ -15,6 +15,7 @@ const feePolicy = {
 const createState = (overrides: Partial<HistoricalMarketState>): HistoricalMarketState => ({
   id: "state-1",
   canonicalEventId: "canonical-sports-1",
+  canonicalMarketId: null,
   canonicalCategory: "SPORTS",
   venue: "POLYMARKET",
   venueMarketId: "condition-1",
@@ -46,6 +47,8 @@ describe("PolymarketOnlyBaselineEvaluator", () => {
         createState({ id: "state-2", timestamp: new Date("2026-03-13T00:01:00.000Z"), bestAsk: "0.52", midpoint: "0.51", lastPrice: "0.53", sourceTimestamp: new Date("2026-03-13T00:01:00.000Z"), orderbookSnapshot: { bids: [{ price: "0.50", size: "2" }], asks: [{ price: "0.52", size: "2" }] } }),
         createState({})
       ],
+      side: "BUY",
+      requestedNotional: "1",
       feePolicy
     };
 
@@ -53,9 +56,9 @@ describe("PolymarketOnlyBaselineEvaluator", () => {
     const second = evaluator.evaluate(input);
 
     expect(JSON.stringify(first)).toBe(JSON.stringify(second));
-    expect(first.effectiveCost).toBe("0.52052");
-    expect(first.slippage).toBe("-0.04");
-    expect(first.fees).toBe("0.00052");
+    expect(first.effectiveCost).toBe("0.92950000000000000001");
+    expect(first.slippage).toBe("-0.071428571428571428572");
+    expect(first.fees).toBe("0.00092857142857142857144");
     expect(first.fillProbability).toBe("1");
   });
 
@@ -69,6 +72,8 @@ describe("PolymarketOnlyBaselineEvaluator", () => {
           createState({ canonicalEventId: "canonical-sports-1" }),
           createState({ id: "state-2", canonicalEventId: "canonical-sports-2" })
         ],
+        side: "BUY",
+        requestedNotional: "1",
         feePolicy
       })
     ).toThrow(HistoricalSimulationBaselineError);

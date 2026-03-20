@@ -102,6 +102,73 @@ describe("PredexonHistoricalAdapter", () => {
     )
   })
 
+  it("normalizes Limitless orderbook history into venue-specific fragments", async () => {
+    const adapter = new PredexonHistoricalAdapter({
+      metadataVersion: "predexon-v2",
+      client: {
+        getLimitlessOrderbookHistory: vi.fn(async () => [
+          {
+            market_slug: "limitless-btc",
+            timestamp: 1710000000000,
+            bids: [{ price: 0.48, size: 100 }],
+            asks: [{ price: 0.50, size: 90 }],
+            adjusted_midpoint: 0.49
+          }
+        ])
+      } as never
+    })
+
+    const result = await adapter.buildLimitlessOrderbookStateFragments(
+      { canonicalEventId: "canonical-event-1", venueMarketId: "limitless-btc", venue: "LIMITLESS" },
+      { market_slug: "limitless-btc", start_time: 1710000000, end_time: 1710003600 }
+    )
+
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        venue: "LIMITLESS",
+        bestBid: "0.48",
+        bestAsk: "0.5",
+        midpoint: "0.49",
+        lastPrice: "0.49"
+      })
+    )
+  })
+
+  it("normalizes Opinion orderbook history into venue-specific fragments", async () => {
+    const adapter = new PredexonHistoricalAdapter({
+      metadataVersion: "predexon-v2",
+      client: {
+        getOpinionOrderbookHistory: vi.fn(async () => [
+          {
+            market_id: "opinion-market-1",
+            timestamp: 1710000000000,
+            bids: [{ price: 0.61, size: 19 }],
+            asks: [{ price: 0.64, size: 14 }],
+            best_bid: 0.61,
+            best_ask: 0.64,
+            bid_depth: 19,
+            ask_depth: 14
+          }
+        ])
+      } as never
+    })
+
+    const result = await adapter.buildOpinionOrderbookStateFragments(
+      { canonicalEventId: "canonical-event-1", venueMarketId: "opinion-market-1", venue: "OPINION" },
+      { market_id: "opinion-market-1", start_time: 1710000000, end_time: 1710003600 }
+    )
+
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        venue: "OPINION",
+        bestBid: "0.61",
+        bestAsk: "0.64",
+        midpoint: "0.625",
+        lastPrice: "0.625"
+      })
+    )
+  })
+
   it("normalizes trades into historical market state fragments", async () => {
     const adapter = new PredexonHistoricalAdapter({
       metadataVersion: "predexon-v2",

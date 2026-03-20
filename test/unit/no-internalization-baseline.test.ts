@@ -15,6 +15,7 @@ const feePolicy = {
 const createState = (overrides: Partial<HistoricalMarketState>): HistoricalMarketState => ({
   id: "state",
   canonicalEventId: "canonical-event-1",
+  canonicalMarketId: null,
   canonicalCategory: "OTHER",
   venue: "POLYMARKET",
   venueMarketId: "market-id",
@@ -47,6 +48,8 @@ describe("NoInternalizationBaselineEvaluator", () => {
         createState({ venue: "POLYMARKET", venueMarketId: "condition-1", bestAsk: "0.55", orderbookSnapshot: { bids: [{ price: "0.54", size: "1" }], asks: [{ price: "0.55", size: "1" }] } }),
         createState({ venue: "LIMITLESS", venueMarketId: "limitless-1", lastPrice: "0.53" })
       ],
+      side: "BUY",
+      requestedNotional: "1",
       feePolicy
     };
 

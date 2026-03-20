@@ -5,6 +5,7 @@ import type { ResolutionEquivalenceClass } from "./resolution-risk.types.js";
 export interface ResolutionRiskEligibilityContext {
     stableKey?: string;
     canonicalEventId?: string;
+    canonicalMarketId?: string;
 }
 
 export interface IResolutionRiskEligibilityService {
@@ -58,6 +59,17 @@ export class ResolutionRiskEligibilityService implements IResolutionRiskEligibil
         const assessment = await this.readService.getAssessmentByProfilePair(profileAId, profileBId);
         if (!assessment) {
             return this.applyPolicy(false, undefined, "missing_assessment", profileAId, profileBId, context);
+        }
+
+        if (context?.canonicalMarketId && assessment.canonicalMarketId !== context.canonicalMarketId) {
+            return this.applyPolicy(
+                false, 
+                undefined, 
+                `identity_mismatch: expected ${context.canonicalMarketId}, found ${assessment.canonicalMarketId}`, 
+                profileAId, 
+                profileBId, 
+                context
+            );
         }
 
         return this.applyPolicy(

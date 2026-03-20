@@ -121,6 +121,7 @@ const cloneStateWithCanonicalEventId = (
 ): CreateHistoricalMarketStateInput => ({
   ...state,
   canonicalEventId,
+  canonicalMarketId: state.canonicalMarketId ?? null,
   canonicalCategory: state.canonicalCategory ?? null,
   timestamp: new Date(state.timestamp),
   sourceTimestamp: new Date(state.sourceTimestamp)
@@ -182,6 +183,7 @@ export class CanonicalHistoricalNormalizer {
       .map((record) => ({
         state: {
           ...cloneStateWithCanonicalEventId(record.state, record.mapping.canonicalEventId),
+          canonicalMarketId: record.mapping.canonicalMarketId ?? null,
           canonicalCategory: record.mapping.canonicalCategory
         },
         canonicalCategory: record.mapping.canonicalCategory,

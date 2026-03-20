@@ -17,6 +17,7 @@ interface ResolutionProfileRow {
     venue: string;
     venue_market_id: string;
     canonical_event_id: string;
+    canonical_market_id: string;
     oracle_type: string | null;
     oracle_name: string | null;
     resolution_authority_type: string | null;
@@ -148,6 +149,7 @@ export class ResolutionRiskGroupingService implements IResolutionRiskGroupingSer
                 venue: row.venue,
                 venueMarketId: row.venue_market_id,
                 canonicalEventId: row.canonical_event_id,
+                canonicalMarketId: row.canonical_market_id,
                 oracleType: row.oracle_type,
                 oracleName: row.oracle_name,
                 resolutionAuthorityType: row.resolution_authority_type,

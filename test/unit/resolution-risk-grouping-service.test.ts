@@ -3,11 +3,12 @@ import { ResolutionRiskGroupingService } from "../../src/core/rfq-engine/resolut
 import type { IResolutionRiskReadService } from "../../src/core/rfq-engine/resolution-risk-read-service.js";
 import type { ResolutionRiskAssessment } from "../../src/core/rfq-engine/resolution-risk.types.js";
 
-const makeProfileRow = (id: string, canonicalEventId = "event-1") => ({
+const makeProfileRow = (id: string, canonicalEventId = "event-1", canonicalMarketId = "market-1") => ({
     id,
     venue: `venue-${id}`,
     venue_market_id: `market-${id}`,
     canonical_event_id: canonicalEventId,
+    canonical_market_id: canonicalMarketId,
     oracle_type: "oracle",
     oracle_name: "oracle-name",
     resolution_authority_type: "authority",
@@ -34,6 +35,7 @@ const makeAssessment = (
 ): ResolutionRiskAssessment => ({
     id: `${marketAProfileId}-${marketBProfileId}`,
     canonicalEventId: "event-1",
+    canonicalMarketId: "market-1",
     marketAProfileId,
     marketBProfileId,
     riskScore: "0.1",
@@ -131,5 +133,32 @@ describe("ResolutionRiskGroupingService", () => {
         expect(grouping.cautionLanes).toEqual([["profile-c"]]);
         expect(grouping.pairMatrix["profile-a|profile-c"]?.equivalenceClass).toBe("DO_NOT_POOL");
         expect(grouping.pairMatrix["profile-a|profile-c"]?.reasons[0]).toContain("missing persisted resolution risk assessment");
+    });
+
+    it("fails closed when profiles share an event but not the same canonical market", async () => {
+        const pool = {
+            query: vi.fn(async () => ({
+                rows: [
+                    makeProfileRow("profile-a", "event-1", "market-a"),
+                    makeProfileRow("profile-b", "event-1", "market-b")
+                ]
+            }))
+        };
+        const readService: IResolutionRiskReadService = {
+            getAssessmentByProfilePair: vi.fn(),
+            getAssessmentsByProfilePairs: vi.fn(async () => new Map())
+        };
+
+        const service = new ResolutionRiskGroupingService({
+            pool: pool as any,
+            readService,
+            logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+        });
+
+        const grouping = await service.groupProfilesForCanonicalEvent("event-1");
+
+        expect(grouping.safePools).toEqual([]);
+        expect(grouping.blockedProfiles).toEqual(["profile-a", "profile-b"]);
+        expect(grouping.pairMatrix["profile-a|profile-b"]?.reasons[0]).toContain("market identity mismatch");
     });
 });

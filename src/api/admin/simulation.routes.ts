@@ -7,46 +7,85 @@ import {
   SimulationCanonicalCoverageNotFoundError,
   SimulationRunNotFoundError
 } from "./simulation-admin-service.js";
-import { HistoricalMarketClass, HistoricalSimulationRunStatus } from "../../core/historical-simulation/historical-simulation.types.js";
+import {
+  HistoricalMarketClass,
+  HistoricalSimulationCatalogScopeValues,
+  type HistoricalSimulationRouteMode,
+  HistoricalSimulationRouteModeValues,
+  HistoricalSimulationRunStatus
+} from "../../core/historical-simulation/historical-simulation.types.js";
 
 const paramsSchema = z.object({
   id: z.string().uuid()
 });
 
 const canonicalParamsSchema = z.object({
-  eventId: z.string().uuid()
+  eventId: z.string().min(1)
 });
 
-const scopeQuerySchema = z.object({
-  category: z.enum(["SPORTS", "CRYPTO"]).optional(),
-  marketClass: z.nativeEnum(HistoricalMarketClass).optional()
+const canonicalQuerySchema = z.object({
+  canonicalMarketId: z.string().optional()
 });
+
+const canonicalCategorySchema = z.enum(["SPORTS", "CRYPTO", "POLITICS", "ESPORTS"]);
+const routeModeSchema = z.enum(HistoricalSimulationRouteModeValues);
+const orderSideSchema = z.enum(["BUY", "SELL"]);
+
+const scopeQuerySchema = z.object({
+  category: canonicalCategorySchema.optional(),
+  marketClass: z.nativeEnum(HistoricalMarketClass).optional(),
+  routeMode: routeModeSchema.optional(),
+  venuePair: routeModeSchema.optional()
+}).refine(
+  (value) => !value.routeMode || !value.venuePair || value.routeMode === value.venuePair,
+  {
+    message: "routeMode and venuePair must match when both are provided",
+    path: ["routeMode"]
+  }
+);
 
 const isoDateSchema = z.string().datetime({ offset: true });
 
 const runBodySchema = z.object({
   marketClass: z.nativeEnum(HistoricalMarketClass),
-  venuePair: z.string().min(1),
-  canonicalEventId: z.string().uuid().optional(),
+  routeMode: routeModeSchema.optional(),
+  venuePair: routeModeSchema.optional(),
+  canonicalEventId: z.string().min(1).optional(),
+  canonicalMarketId: z.string().optional(),
+  side: orderSideSchema,
+  requestedNotional: z.string().refine((value) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric > 0;
+  }, "requestedNotional must be a positive decimal string"),
   from: isoDateSchema,
   to: isoDateSchema,
   strategyKey: z.string().min(1),
   dryRun: z.boolean()
+}).refine((value) => value.routeMode !== undefined || value.venuePair !== undefined, {
+  message: "routeMode is required",
+  path: ["routeMode"]
+}).refine((value) => !value.routeMode || !value.venuePair || value.routeMode === value.venuePair, {
+  message: "routeMode and venuePair must match when both are provided",
+  path: ["routeMode"]
 }).refine((value) => new Date(value.from).getTime() < new Date(value.to).getTime(), {
   message: "from must be before to",
   path: ["to"]
 });
 
 const scopeResponseSchema = z.object({
-  canonicalEventId: z.string().uuid(),
-  canonicalCategory: z.enum(["SPORTS", "CRYPTO"]),
+  canonicalEventId: z.string().min(1),
+  catalogScope: z.enum(HistoricalSimulationCatalogScopeValues),
+  canonicalCategory: canonicalCategorySchema,
   marketClass: z.nativeEnum(HistoricalMarketClass),
-  venuePair: z.literal("POLYMARKET_LIMITLESS"),
+  routeMode: routeModeSchema,
   coverageStart: isoDateSchema,
   coverageEnd: isoDateSchema,
+  routeableMarketCount: z.number().int(),
   venueCoverage: z.object({
     polymarketRows: z.number().int(),
-    limitlessRows: z.number().int()
+    limitlessRows: z.number().int(),
+    opinionRows: z.number().int(),
+    myriadRows: z.number().int()
   })
 });
 
@@ -55,7 +94,7 @@ const runResponseSchema = z.object({
   qualificationRunId: z.string().uuid().nullable(),
   scopeType: z.string(),
   scopeId: z.string(),
-  venuePair: z.string(),
+  routeMode: routeModeSchema,
   marketClass: z.nativeEnum(HistoricalMarketClass),
   startedAt: isoDateSchema,
   endedAt: isoDateSchema.nullable(),
@@ -66,7 +105,7 @@ const runResponseSchema = z.object({
 const simulationResultRowSchema = z.object({
   id: z.string().uuid(),
   runId: z.string().uuid(),
-  canonicalEventId: z.string().uuid(),
+  canonicalEventId: z.string().min(1),
   timestamp: isoDateSchema,
   baselineResults: z.record(z.string(), z.unknown()),
   lotusResult: z.record(z.string(), z.unknown()),
@@ -96,8 +135,10 @@ const simulationRunnerResultSchema = z.object({
 });
 
 const canonicalCoverageResponseSchema = z.object({
-  canonicalEventId: z.string().uuid(),
-  canonicalCategory: z.enum(["SPORTS", "CRYPTO", "OTHER"]).nullable(),
+  canonicalEventId: z.string().min(1),
+  catalogScope: z.enum(HistoricalSimulationCatalogScopeValues),
+  canonicalMarketId: z.string().nullable(),
+  canonicalCategory: z.enum(["SPORTS", "CRYPTO", "POLITICS", "ESPORTS", "OTHER"]).nullable(),
   marketClass: z.nativeEnum(HistoricalMarketClass).nullable(),
   venueCoverage: z.array(
     z.object({
@@ -114,8 +155,51 @@ const canonicalCoverageResponseSchema = z.object({
       title: z.string().nullable()
     })
   ),
+  routeModeSummary: z.array(
+    z.object({
+      routeMode: routeModeSchema,
+      label: z.string(),
+      cardinality: z.enum(["single", "pair", "tri"]),
+      routeableMarketCount: z.number().int(),
+      hasAnyRoute: z.boolean()
+    })
+  ),
+  hasTriVenueRoute: z.boolean(),
+  triVenueRouteableMarketCount: z.number().int(),
+  canonicalMarkets: z.array(
+    z.object({
+      canonicalMarketId: z.string(),
+      isRunnable: z.boolean(),
+      runnableRouteModes: z.array(routeModeSchema),
+      venues: z.array(
+        z.object({
+          venue: z.string(),
+          venueMarketId: z.string(),
+          title: z.string().nullable()
+        })
+      ),
+      routeModes: z.array(
+        z.object({
+          routeMode: routeModeSchema,
+          label: z.string(),
+          cardinality: z.enum(["single", "pair", "tri"]),
+          requiredVenues: z.array(z.string()),
+          runnable: z.boolean(),
+          reason: z.enum([
+            "missing_required_venue",
+            "missing_historical_rows",
+            "missing_pair_assessment",
+            "incomplete_resolution_risk",
+            "stale_resolution_risk",
+            "unsafe_equivalence",
+            "ambiguous_venue_identity"
+          ]).nullable()
+        })
+      )
+    })
+  ),
   resolutionRiskInspection: z.object({
-    canonicalEventId: z.string().uuid(),
+    canonicalEventId: z.string().min(1),
     profiles: z.array(z.record(z.string(), z.unknown())),
     assessments: z.array(z.record(z.string(), z.unknown())),
     scoringVersion: z.string(),
@@ -129,12 +213,22 @@ const canonicalCoverageResponseSchema = z.object({
       isStale: z.boolean(),
       hasMixedVersions: z.boolean()
     })
-  })
+  }),
+  ambiguity: z.record(z.string(), z.object({
+    isAmbiguous: z.boolean(),
+    count: z.number().int(),
+    markets: z.array(z.string())
+  }))
 });
 
 export interface AdminSimulationRouteDeps {
   simulationAdminService: SimulationAdminService;
 }
+
+const resolveRouteModeInput = (
+  value: { routeMode?: HistoricalSimulationRouteMode | undefined; venuePair?: HistoricalSimulationRouteMode | undefined }
+): HistoricalSimulationRouteMode | undefined =>
+  value.routeMode ?? value.venuePair;
 
 export const registerAdminSimulationRoutes = async (
   app: FastifyInstance,
@@ -148,9 +242,11 @@ export const registerAdminSimulationRoutes = async (
     }
 
     try {
+      const resolvedRouteMode = resolveRouteModeInput(parsedQuery.data);
       const scopes = await deps.simulationAdminService.listScopes({
         ...(parsedQuery.data.category ? { category: parsedQuery.data.category } : {}),
-        ...(parsedQuery.data.marketClass ? { marketClass: parsedQuery.data.marketClass } : {})
+        ...(parsedQuery.data.marketClass ? { marketClass: parsedQuery.data.marketClass } : {}),
+        ...(resolvedRouteMode ? { routeMode: resolvedRouteMode } : {})
       });
       return reply.send({
         scopes: z.array(scopeResponseSchema).parse(scopes.map(serializeScope))
@@ -168,10 +264,14 @@ export const registerAdminSimulationRoutes = async (
     }
 
     try {
+      const routeMode = resolveRouteModeInput(parsedBody.data);
       const result = await deps.simulationAdminService.runSimulation({
         marketClass: parsedBody.data.marketClass,
-        venuePair: parsedBody.data.venuePair,
+        routeMode: routeMode as typeof HistoricalSimulationRouteModeValues[number],
         ...(parsedBody.data.canonicalEventId ? { canonicalEventId: parsedBody.data.canonicalEventId } : {}),
+        ...(parsedBody.data.canonicalMarketId ? { canonicalMarketId: parsedBody.data.canonicalMarketId } : {}),
+        side: parsedBody.data.side,
+        requestedNotional: parsedBody.data.requestedNotional,
         from: new Date(parsedBody.data.from),
         to: new Date(parsedBody.data.to),
         strategyKey: parsedBody.data.strategyKey,
@@ -188,6 +288,9 @@ export const registerAdminSimulationRoutes = async (
       }
       if (error instanceof SimulationCanonicalCoverageNotFoundError) {
         return reply.status(404).send({ code: "SIMULATION_CANONICAL_COVERAGE_NOT_FOUND", message: error.message });
+      }
+      if (error instanceof Error && error.name === "HistoricalSimulationRunnerError") {
+        return reply.status(400).send({ code: "SIMULATION_RUNNER_ERROR", message: error.message });
       }
       app.log.error({ err: error, body: parsedBody.data }, "Failed to trigger historical simulation run.");
       return reply.status(500).send({ code: "SIMULATION_ADMIN_ERROR", message: "Failed to trigger historical simulation run." });
@@ -234,18 +337,28 @@ export const registerAdminSimulationRoutes = async (
 
   app.get("/admin/simulation/canonical/:eventId", { preHandler: adminMiddleware }, async (request, reply) => {
     const parsedParams = canonicalParamsSchema.safeParse(request.params);
+    const parsedQuery = canonicalQuerySchema.safeParse(request.query);
     if (!parsedParams.success) {
       return reply.status(400).send({ code: "INVALID_REQUEST", details: parsedParams.error.flatten() });
     }
+    if (!parsedQuery.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: parsedQuery.error.flatten() });
+    }
 
     try {
-      const coverage = await deps.simulationAdminService.getCanonicalCoverage(parsedParams.data.eventId);
+      const coverage = await deps.simulationAdminService.getCanonicalCoverage(
+        parsedParams.data.eventId,
+        parsedQuery.data.canonicalMarketId
+      );
       return reply.send(canonicalCoverageResponseSchema.parse(serializeCanonicalCoverage(coverage)));
     } catch (error) {
       if (error instanceof SimulationCanonicalCoverageNotFoundError) {
         return reply.status(404).send({ code: "SIMULATION_CANONICAL_COVERAGE_NOT_FOUND", message: error.message });
       }
-      app.log.error({ err: error, canonicalEventId: parsedParams.data.eventId }, "Failed to load simulation canonical coverage.");
+      app.log.error(
+        { err: error, canonicalEventId: parsedParams.data.eventId, canonicalMarketId: parsedQuery.data.canonicalMarketId },
+        "Failed to load simulation canonical coverage."
+      );
       return reply.status(500).send({ code: "SIMULATION_ADMIN_ERROR", message: "Failed to load simulation canonical coverage." });
     }
   });
@@ -256,7 +369,7 @@ const serializeRun = (run: {
   qualificationRunId: string | null;
   scopeType: string;
   scopeId: string;
-  venuePair: string;
+  routeMode: typeof HistoricalSimulationRouteModeValues[number];
   marketClass: HistoricalMarketClass;
   startedAt: Date;
   endedAt: Date | null;
@@ -270,12 +383,14 @@ const serializeRun = (run: {
 
 const serializeScope = (scope: {
   canonicalEventId: string;
-  canonicalCategory: "SPORTS" | "CRYPTO";
+  catalogScope: typeof HistoricalSimulationCatalogScopeValues[number];
+  canonicalCategory: "SPORTS" | "CRYPTO" | "POLITICS" | "ESPORTS";
   marketClass: HistoricalMarketClass;
-  venuePair: "POLYMARKET_LIMITLESS";
+  routeMode: typeof HistoricalSimulationRouteModeValues[number];
   coverageStart: Date;
   coverageEnd: Date;
-  venueCoverage: { polymarketRows: number; limitlessRows: number };
+  routeableMarketCount: number;
+  venueCoverage: { polymarketRows: number; limitlessRows: number; opinionRows: number; myriadRows: number };
 }) => ({
   ...scope,
   coverageStart: scope.coverageStart.toISOString(),
@@ -324,10 +439,43 @@ const serializeSimulationRunnerResult = (result: {
 
 const serializeCanonicalCoverage = (coverage: {
   canonicalEventId: string;
-  canonicalCategory: "SPORTS" | "CRYPTO" | "OTHER" | null;
+  catalogScope: typeof HistoricalSimulationCatalogScopeValues[number];
+  canonicalMarketId: string | null;
+  canonicalCategory: "SPORTS" | "CRYPTO" | "POLITICS" | "ESPORTS" | "OTHER" | null;
   marketClass: HistoricalMarketClass | null;
   venueCoverage: ReadonlyArray<{ venue: string; rowCount: number; coverageStart: Date; coverageEnd: Date }>;
   pairedMarkets: ReadonlyArray<{ venue: string; venueMarketId: string; title: string | null }>;
+  routeModeSummary: ReadonlyArray<{
+    routeMode: typeof HistoricalSimulationRouteModeValues[number];
+    label: string;
+    cardinality: "single" | "pair" | "tri";
+    routeableMarketCount: number;
+    hasAnyRoute: boolean;
+  }>;
+  hasTriVenueRoute: boolean;
+  triVenueRouteableMarketCount: number;
+  canonicalMarkets: ReadonlyArray<{
+    canonicalMarketId: string;
+    isRunnable: boolean;
+    runnableRouteModes: ReadonlyArray<typeof HistoricalSimulationRouteModeValues[number]>;
+    venues: ReadonlyArray<{ venue: string; venueMarketId: string; title: string | null }>;
+    routeModes: ReadonlyArray<{
+      routeMode: typeof HistoricalSimulationRouteModeValues[number];
+      label: string;
+      cardinality: "single" | "pair" | "tri";
+      requiredVenues: readonly string[];
+      runnable: boolean;
+      reason:
+        | "missing_required_venue"
+        | "missing_historical_rows"
+        | "missing_pair_assessment"
+        | "incomplete_resolution_risk"
+        | "stale_resolution_risk"
+        | "unsafe_equivalence"
+        | "ambiguous_venue_identity"
+        | null;
+    }>;
+  }>;
   resolutionRiskInspection: {
     canonicalEventId: string;
     profiles: ReadonlyArray<unknown>;
@@ -344,6 +492,7 @@ const serializeCanonicalCoverage = (coverage: {
       hasMixedVersions: boolean;
     };
   };
+  ambiguity: Record<string, { isAmbiguous: boolean; count: number; markets: string[] }>;
 }) => ({
   ...coverage,
   venueCoverage: coverage.venueCoverage.map((entry) => ({
@@ -364,5 +513,6 @@ const serializeCanonicalCoverage = (coverage: {
         ? coverage.resolutionRiskInspection.freshness.latestProfileUpdatedAt.toISOString()
         : null
     }
-  }
+  },
+  ambiguity: coverage.ambiguity
 });

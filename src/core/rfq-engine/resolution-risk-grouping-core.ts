@@ -53,6 +53,22 @@ export const computeResolutionRiskVenueGrouping = (
             const left = orderedProfiles[index]!;
             const right = orderedProfiles[cursor]!;
             const key = pairKey(left.id, right.id);
+            if (left.canonicalMarketId !== right.canonicalMarketId) {
+                const reason = `pair:${key}: market identity mismatch (${left.canonicalMarketId} vs ${right.canonicalMarketId}); sub-markets cannot be pooled`;
+                blockedProfiles.add(left.id);
+                blockedProfiles.add(right.id);
+                appendReason(reasonsByProfile, left.id, reason);
+                appendReason(reasonsByProfile, right.id, reason);
+                pairMatrixEntries.push([
+                    key,
+                    {
+                        equivalenceClass: "DO_NOT_POOL",
+                        reasons: [reason]
+                    }
+                ]);
+                continue;
+            }
+
             const assessment = assessmentMap.get(key);
 
             if (!assessment) {

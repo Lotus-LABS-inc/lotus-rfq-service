@@ -153,7 +153,7 @@ const buildHistoricalSimulationSummary = (
     latestSimulationRunId: result.runId,
     attachedAt: new Date().toISOString(),
     scope: {
-      venuePair: input.venuePair,
+      routeMode: input.routeMode,
       marketClass: input.marketClass,
       canonicalEventId: input.canonicalEventId,
       windowStart: input.windowStart.toISOString(),

@@ -2,7 +2,100 @@ export enum HistoricalMarketClass {
     BINARY = "BINARY"
 }
 
-export type HistoricalCanonicalCategory = "SPORTS" | "CRYPTO" | "OTHER";
+export type HistoricalCanonicalCategory = "SPORTS" | "CRYPTO" | "POLITICS" | "ESPORTS" | "OTHER";
+export type HistoricalSimulationOrderSide = "BUY" | "SELL";
+export type HistoricalSimulationRouteCardinality = "single" | "pair" | "tri";
+export const HistoricalSimulationCatalogScopeValues = ["live", "historical_simulation"] as const;
+export type HistoricalSimulationCatalogScope = (typeof HistoricalSimulationCatalogScopeValues)[number];
+export type HistoricalSimulationRouteAvailabilityReason =
+    | "missing_required_venue"
+    | "missing_historical_rows"
+    | "missing_pair_assessment"
+    | "incomplete_resolution_risk"
+    | "stale_resolution_risk"
+    | "unsafe_equivalence"
+    | "ambiguous_venue_identity";
+
+export const HistoricalSimulationRouteModeValues = [
+    "POLYMARKET_ONLY",
+    "LIMITLESS_ONLY",
+    "OPINION_ONLY",
+    "MYRIAD_ONLY",
+    "POLYMARKET_LIMITLESS",
+    "POLYMARKET_OPINION",
+    "LIMITLESS_OPINION",
+    "POLYMARKET_LIMITLESS_OPINION"
+] as const;
+
+export type HistoricalSimulationRouteMode = (typeof HistoricalSimulationRouteModeValues)[number];
+
+export interface HistoricalSimulationRouteModeDefinition {
+    mode: HistoricalSimulationRouteMode;
+    label: string;
+    cardinality: HistoricalSimulationRouteCardinality;
+    requiredVenues: readonly string[];
+}
+
+export const HistoricalSimulationRouteModeDefinitions: readonly HistoricalSimulationRouteModeDefinition[] = [
+    {
+        mode: "POLYMARKET_ONLY",
+        label: "Predexon Only",
+        cardinality: "single",
+        requiredVenues: ["POLYMARKET"]
+    },
+    {
+        mode: "LIMITLESS_ONLY",
+        label: "Limitless Only",
+        cardinality: "single",
+        requiredVenues: ["LIMITLESS"]
+    },
+    {
+        mode: "OPINION_ONLY",
+        label: "Opinion Only",
+        cardinality: "single",
+        requiredVenues: ["OPINION"]
+    },
+    {
+        mode: "MYRIAD_ONLY",
+        label: "Myriad Only",
+        cardinality: "single",
+        requiredVenues: ["MYRIAD"]
+    },
+    {
+        mode: "POLYMARKET_LIMITLESS",
+        label: "Predexon + Limitless",
+        cardinality: "pair",
+        requiredVenues: ["POLYMARKET", "LIMITLESS"]
+    },
+    {
+        mode: "POLYMARKET_OPINION",
+        label: "Predexon + Opinion",
+        cardinality: "pair",
+        requiredVenues: ["POLYMARKET", "OPINION"]
+    },
+    {
+        mode: "LIMITLESS_OPINION",
+        label: "Limitless + Opinion",
+        cardinality: "pair",
+        requiredVenues: ["LIMITLESS", "OPINION"]
+    },
+    {
+        mode: "POLYMARKET_LIMITLESS_OPINION",
+        label: "Predexon + Limitless + Opinion",
+        cardinality: "tri",
+        requiredVenues: ["POLYMARKET", "LIMITLESS", "OPINION"]
+    }
+] as const;
+
+export const getHistoricalSimulationRouteModeDefinition = (
+    routeMode: HistoricalSimulationRouteMode
+): HistoricalSimulationRouteModeDefinition =>
+    HistoricalSimulationRouteModeDefinitions.find((definition) => definition.mode === routeMode)
+        ?? HistoricalSimulationRouteModeDefinitions[0]!;
+
+export const resolveHistoricalSimulationRouteModeVenues = (
+    routeMode: HistoricalSimulationRouteMode
+): readonly string[] => getHistoricalSimulationRouteModeDefinition(routeMode).requiredVenues;
 
 export enum HistoricalSimulationRunStatus {
     PENDING = "PENDING",
@@ -25,6 +118,7 @@ export interface HistoricalVenueAdapter {
 export interface HistoricalMarketState {
     id: string;
     canonicalEventId: string;
+    canonicalMarketId: string | null;
     canonicalCategory: HistoricalCanonicalCategory | null;
     venue: string;
     venueMarketId: string;
@@ -49,6 +143,7 @@ export interface HistoricalMarketState {
 export interface CreateHistoricalMarketStateInput {
     id?: string;
     canonicalEventId: string;
+    canonicalMarketId?: string | null;
     canonicalCategory?: HistoricalCanonicalCategory | null;
     venue: string;
     venueMarketId: string;
@@ -75,7 +170,7 @@ export interface HistoricalSimulationRun {
     qualificationRunId: string | null;
     scopeType: string;
     scopeId: string;
-    venuePair: string;
+    routeMode: HistoricalSimulationRouteMode;
     marketClass: HistoricalMarketClass;
     startedAt: Date;
     endedAt: Date | null;
@@ -88,7 +183,7 @@ export interface CreateHistoricalSimulationRunInput {
     qualificationRunId?: string | null;
     scopeType: string;
     scopeId: string;
-    venuePair: string;
+    routeMode: HistoricalSimulationRouteMode;
     marketClass: HistoricalMarketClass;
     startedAt?: Date;
     endedAt?: Date | null;
@@ -99,7 +194,7 @@ export interface CreateHistoricalSimulationRunInput {
 export interface HistoricalSimulationRequest {
     scopeType: string;
     scopeId: string;
-    venuePair: string;
+    routeMode: HistoricalSimulationRouteMode;
     marketClass: HistoricalMarketClass;
     canonicalEventId: string;
     startTimestamp: Date;
@@ -135,4 +230,82 @@ export interface PairedMarketIdentity {
     venue: string;
     venueMarketId: string;
     title: string | null;
+}
+
+export interface CanonicalMarketOption {
+    canonicalMarketId: string;
+    isRunnable: boolean;
+    venues: ReadonlyArray<PairedMarketIdentity>;
+    routeModes: ReadonlyArray<HistoricalSimulationRouteAvailability>;
+    runnableRouteModes: ReadonlyArray<HistoricalSimulationRouteMode>;
+}
+
+export interface HistoricalSimulationRouteAvailability {
+    routeMode: HistoricalSimulationRouteMode;
+    label: string;
+    cardinality: HistoricalSimulationRouteCardinality;
+    requiredVenues: readonly string[];
+    runnable: boolean;
+    reason: HistoricalSimulationRouteAvailabilityReason | null;
+}
+
+export interface HistoricalSimulationEventRouteSummary {
+    routeMode: HistoricalSimulationRouteMode;
+    label: string;
+    cardinality: HistoricalSimulationRouteCardinality;
+    routeableMarketCount: number;
+    hasAnyRoute: boolean;
+}
+
+export interface HistoricalSimulationCatalogContext {
+    catalogScope: HistoricalSimulationCatalogScope;
+}
+
+export interface HistoricalRoutedVenueAllocation {
+    venue: string;
+    venueMarketId: string;
+    price: string;
+    quantity: string;
+    requestedNotional: string;
+    filledNotional: string;
+    fillRatio: string | null;
+    priceSource: string;
+    depthSource: string;
+    fillProbability: string | null;
+    fillProbabilityReason: string | null;
+    isProvable: boolean;
+    isResidualUnknownDepth: boolean;
+}
+
+export interface HistoricalRoutedExecutionPlan {
+    planType: "SINGLE_WINNER" | "MULTI_SPLIT";
+    side: HistoricalSimulationOrderSide;
+    requestedNotional: string;
+    requestedQuantity: string;
+    filledNotional: string;
+    filledQuantity: string;
+    provableFilledNotional: string;
+    provableFilledQuantity: string;
+    provableFillRatio: string;
+    residualNotional: string;
+    residualQuantity: string;
+    unprovenResidualNotional: string;
+    unprovenResidualQuantity: string;
+    fillRatio: string;
+    averageExecutionPrice: string | null;
+    effectiveCost: string;
+    slippage: string;
+    fees: string;
+    fillProbability: string | null;
+    fillProbabilityReason: string | null;
+    containsUnknownDepth: boolean;
+    allocations: ReadonlyArray<HistoricalRoutedVenueAllocation>;
+    metadata: Record<string, unknown>;
+}
+
+export interface HistoricalRoutingComparison {
+    selectedPlan: HistoricalRoutedExecutionPlan;
+    alternatePlan: HistoricalRoutedExecutionPlan;
+    comparisonReason: string;
+    comparisonBasis: "provable_fill_ratio" | "economic_cost" | "fewer_allocations" | "stable_plan_order";
 }

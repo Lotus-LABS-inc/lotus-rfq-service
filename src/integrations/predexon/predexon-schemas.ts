@@ -21,20 +21,7 @@ export const PredexonDocsTodo = Object.freeze({
 const finiteNumberSchema = z.number().finite()
 const numericValueSchema = z.union([z.string(), finiteNumberSchema])
 const timestampSchema = z.union([z.number().int(), z.string().min(1)])
-
-const arrayEnvelopeSchema = <T extends ZodType>(itemSchema: T) =>
-  z.union([
-    z.array(itemSchema),
-    z.object({ data: z.array(itemSchema) }).passthrough(),
-    z.object({ results: z.array(itemSchema) }).passthrough()
-  ])
-
-const objectEnvelopeSchema = <T extends ZodType>(itemSchema: T) =>
-  z.union([
-    itemSchema,
-    z.object({ data: itemSchema }).passthrough(),
-    z.object({ result: itemSchema }).passthrough()
-  ])
+const idStringSchema = z.union([z.string(), z.number().int()]).transform((value) => String(value))
 
 const marketOutcomeSchema = z
   .object({
@@ -46,11 +33,11 @@ const marketOutcomeSchema = z
 
 export const predexonMarketSchema = z
   .object({
-    market_id: z.string().optional(),
+    market_id: idStringSchema.optional(),
     condition_id: z.string(),
     title: z.string(),
     market_slug: z.string().optional(),
-    event_id: z.string().optional(),
+    event_id: idStringSchema.optional(),
     event_slug: z.string().optional(),
     token_id: z.string().optional(),
     token_ids: z.array(z.string()).optional(),
@@ -63,7 +50,7 @@ export const predexonMarketSchema = z
 
 export const predexonEventSchema = z
   .object({
-    id: z.string(),
+    id: idStringSchema,
     title: z.string(),
     slug: z.string().optional(),
     category: z.string().optional(),
@@ -85,6 +72,29 @@ export const predexonCandleSchema = z
   })
   .passthrough()
 
+const predexonWrappedCandleSchema = z
+  .object({
+    end_period_ts: timestampSchema,
+    price: z
+      .object({
+        open: numericValueSchema,
+        high: numericValueSchema,
+        low: numericValueSchema,
+        close: numericValueSchema
+      })
+      .passthrough(),
+    volume: numericValueSchema.optional()
+  })
+  .passthrough()
+  .transform((candle) => ({
+    timestamp: candle.end_period_ts,
+    open: candle.price.open,
+    high: candle.price.high,
+    low: candle.price.low,
+    close: candle.price.close,
+    ...(candle.volume !== undefined ? { volume: candle.volume } : {})
+  }))
+
 export const predexonMarketPriceSchema = z
   .object({
     price: numericValueSchema,
@@ -92,19 +102,65 @@ export const predexonMarketPriceSchema = z
   })
   .passthrough()
 
-const orderbookLevelSchema = z
+const orderbookLevelObjectSchema = z
   .object({
     price: numericValueSchema,
     size: numericValueSchema
   })
   .passthrough()
 
+const orderbookLevelSchema = z.union([
+  orderbookLevelObjectSchema,
+  z.tuple([numericValueSchema, numericValueSchema]).transform(([price, size]) => ({ price, size }))
+])
+
 export const predexonOrderbookSnapshotSchema = z
+  .union([
+    z
+      .object({
+        token_id: z.string(),
+        timestamp: timestampSchema,
+        bids: z.array(orderbookLevelSchema),
+        asks: z.array(orderbookLevelSchema)
+      })
+      .passthrough(),
+    z
+      .object({
+        assetId: z.string(),
+        timestamp: timestampSchema,
+        bids: z.array(orderbookLevelSchema),
+        asks: z.array(orderbookLevelSchema)
+      })
+      .passthrough()
+      .transform((snapshot) => ({
+        token_id: snapshot.assetId,
+        timestamp: snapshot.timestamp,
+        bids: snapshot.bids,
+        asks: snapshot.asks
+      }))
+  ])
+
+export const predexonLimitlessOrderbookSnapshotSchema = z
   .object({
-    token_id: z.string(),
+    market_slug: z.string(),
     timestamp: timestampSchema,
-    bids: z.array(orderbookLevelSchema),
-    asks: z.array(orderbookLevelSchema)
+    bids: z.array(orderbookLevelSchema).default([]),
+    asks: z.array(orderbookLevelSchema).default([]),
+    midpoint: numericValueSchema.optional(),
+    adjusted_midpoint: numericValueSchema.optional()
+  })
+  .passthrough()
+
+export const predexonOpinionOrderbookSnapshotSchema = z
+  .object({
+    market_id: idStringSchema,
+    timestamp: timestampSchema,
+    bids: z.array(orderbookLevelSchema).default([]),
+    asks: z.array(orderbookLevelSchema).default([]),
+    best_bid: numericValueSchema.optional(),
+    best_ask: numericValueSchema.optional(),
+    bid_depth: numericValueSchema.optional(),
+    ask_depth: numericValueSchema.optional()
   })
   .passthrough()
 
@@ -132,6 +188,7 @@ export const predexonOpenInterestPointSchema = z
   .object({
     timestamp: timestampSchema,
     open_interest: numericValueSchema.optional(),
+    open_interest_usd: numericValueSchema.optional(),
     value: numericValueSchema.optional()
   })
   .passthrough()
@@ -139,24 +196,41 @@ export const predexonOpenInterestPointSchema = z
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null
 
-const unwrapEnvelope = <T>(payload: T | { data: T } | { result: T } | { results: T }): T => {
-  if (Array.isArray(payload)) {
+const unwrapObjectEnvelope = <T>(payload: T | { data: T } | { result: T }): T => {
+  if (!isRecord(payload)) {
     return payload as T
   }
 
-  if (isRecord(payload) && "data" in payload) {
+  if ("data" in payload) {
     return payload.data
   }
 
-  if (isRecord(payload) && "result" in payload) {
+  if ("result" in payload) {
     return payload.result
   }
 
-  if (isRecord(payload) && "results" in payload) {
-    return payload.results
+  return payload as T
+}
+
+const unwrapArrayEnvelope = <T>(
+  payload: unknown,
+  keys: readonly string[]
+): unknown => {
+  if (Array.isArray(payload)) {
+    return payload
   }
 
-  return payload as T
+  if (!isRecord(payload)) {
+    return payload
+  }
+
+  for (const key of keys) {
+    if (key in payload) {
+      return payload[key]
+    }
+  }
+
+  return payload
 }
 
 const parseWithSchema = <T>(schema: ZodType<T>, payload: unknown, context: string): T => {
@@ -169,26 +243,49 @@ const parseWithSchema = <T>(schema: ZodType<T>, payload: unknown, context: strin
   return parsed.data
 }
 
+const parseNamedArrayEnvelope = <T>(
+  payload: unknown,
+  itemSchema: ZodType<T>,
+  context: string,
+  keys: readonly string[]
+): T[] => parseWithSchema(z.array(itemSchema), unwrapArrayEnvelope(payload, ["data", "results", ...keys]), context)
+
 export const parsePredexonMarketsResponse = (payload: unknown) =>
-  unwrapEnvelope(parseWithSchema(arrayEnvelopeSchema(predexonMarketSchema), payload, "markets"))
+  parseNamedArrayEnvelope(payload, predexonMarketSchema, "markets", ["markets"])
 
 export const parsePredexonEventsResponse = (payload: unknown) =>
-  unwrapEnvelope(parseWithSchema(arrayEnvelopeSchema(predexonEventSchema), payload, "events"))
+  parseNamedArrayEnvelope(payload, predexonEventSchema, "events", ["events"])
 
 export const parsePredexonCandlesticksResponse = (payload: unknown) =>
-  unwrapEnvelope(parseWithSchema(arrayEnvelopeSchema(predexonCandleSchema), payload, "candlesticks"))
+  parseNamedArrayEnvelope(payload, z.union([predexonCandleSchema, predexonWrappedCandleSchema]), "candlesticks", ["candlesticks"])
 
 export const parsePredexonMarketPriceResponse = (payload: unknown) =>
-  unwrapEnvelope(parseWithSchema(objectEnvelopeSchema(predexonMarketPriceSchema), payload, "market price"))
+  unwrapObjectEnvelope(parseWithSchema(z.union([predexonMarketPriceSchema, z.object({ data: predexonMarketPriceSchema }).passthrough(), z.object({ result: predexonMarketPriceSchema }).passthrough()]), payload, "market price"))
 
 export const parsePredexonOrderbooksResponse = (payload: unknown) =>
-  unwrapEnvelope(parseWithSchema(arrayEnvelopeSchema(predexonOrderbookSnapshotSchema), payload, "orderbooks"))
+  parseNamedArrayEnvelope(payload, predexonOrderbookSnapshotSchema, "orderbooks", ["snapshots"])
+
+export const parsePredexonLimitlessOrderbooksResponse = (payload: unknown) =>
+  parseNamedArrayEnvelope(payload, predexonLimitlessOrderbookSnapshotSchema, "limitless orderbooks", ["snapshots"])
+
+export const parsePredexonOpinionOrderbooksResponse = (payload: unknown) =>
+  parseNamedArrayEnvelope(payload, predexonOpinionOrderbookSnapshotSchema, "opinion orderbooks", ["snapshots"])
 
 export const parsePredexonTradesResponse = (payload: unknown) =>
-  unwrapEnvelope(parseWithSchema(arrayEnvelopeSchema(predexonTradeSchema), payload, "trades"))
+  parseNamedArrayEnvelope(payload, predexonTradeSchema, "trades", ["trades"])
 
 export const parsePredexonVolumeResponse = (payload: unknown) =>
-  unwrapEnvelope(parseWithSchema(arrayEnvelopeSchema(predexonVolumePointSchema), payload, "volume"))
+  parseNamedArrayEnvelope(payload, predexonVolumePointSchema, "volume", ["volume_over_time"])
 
 export const parsePredexonOpenInterestResponse = (payload: unknown) =>
-  unwrapEnvelope(parseWithSchema(arrayEnvelopeSchema(predexonOpenInterestPointSchema), payload, "open interest"))
+  parseNamedArrayEnvelope(
+    payload,
+    predexonOpenInterestPointSchema.transform((point) => ({
+      ...point,
+      ...(point.open_interest === undefined && point.open_interest_usd !== undefined
+        ? { open_interest: point.open_interest_usd }
+        : {})
+    })),
+    "open interest",
+    ["open_interest_over_time"]
+  )

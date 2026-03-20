@@ -15,6 +15,7 @@ const feePolicy = {
 const createState = (overrides: Partial<HistoricalMarketState>): HistoricalMarketState => ({
   id: "state-1",
   canonicalEventId: "canonical-crypto-1",
+  canonicalMarketId: null,
   canonicalCategory: "CRYPTO",
   venue: "LIMITLESS",
   venueMarketId: "btc-above-100k",
@@ -46,6 +47,8 @@ describe("LimitlessOnlyBaselineEvaluator", () => {
         createState({ id: "state-2", timestamp: new Date("2026-03-13T00:02:00.000Z"), lastPrice: "0.58", sourceTimestamp: new Date("2026-03-13T00:02:00.000Z") }),
         createState({})
       ],
+      side: "BUY",
+      requestedNotional: "1",
       feePolicy
     };
 
@@ -53,9 +56,9 @@ describe("LimitlessOnlyBaselineEvaluator", () => {
     const second = evaluator.evaluate(input);
 
     expect(JSON.stringify(first)).toBe(JSON.stringify(second));
-    expect(first.effectiveCost).toBe("0.58116");
-    expect(first.slippage).toBe("-0.03");
-    expect(first.fees).toBe("0.00116");
+    expect(first.effectiveCost).toBe("0.95272131147540983606");
+    expect(first.slippage).toBe("-0.049180327868852459016");
+    expect(first.fees).toBe("0.001901639344262295082");
     expect(first.fillProbability).toBeNull();
     expect(first.fillProbabilityReason).toBe("price_only_history");
   });
@@ -67,6 +70,8 @@ describe("LimitlessOnlyBaselineEvaluator", () => {
       evaluator.evaluate({
         canonicalEventId: "canonical-crypto-1",
         marketStates: [createState({ lastPrice: null, candles: null, ownExecutionHistory: { strategy: "Buy" } })],
+        side: "BUY",
+        requestedNotional: "1",
         feePolicy
       })
     ).toThrow(HistoricalSimulationBaselineError);

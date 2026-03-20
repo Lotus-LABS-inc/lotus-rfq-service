@@ -1,7 +1,7 @@
 import {
   buildEstimate,
   inferLimitlessFillProbability,
-  resolveRequestedSize,
+  resolveRequestedNotional,
   selectBestPriceState,
   selectReferencePriceState,
   validateCommonInput,
@@ -12,17 +12,18 @@ import {
 export class LimitlessOnlyBaselineEvaluator {
   public evaluate(input: HistoricalSimulationBaselineInput): HistoricalSimulationBaselineEstimate {
     const states = validateCommonInput(input, "LIMITLESS");
-    const requestedSize = resolveRequestedSize(input.requestedSize);
-    const selected = selectBestPriceState(states);
-    const reference = selectReferencePriceState(states);
+    const requestedNotional = resolveRequestedNotional(input.requestedNotional);
+    const selected = selectBestPriceState(states, input.side);
+    const reference = selectReferencePriceState(states, input.side);
 
     return buildEstimate({
       venue: "LIMITLESS",
       baselineType: "LIMITLESS_ONLY",
+      side: input.side,
       states,
       selected,
       reference,
-      requestedSize,
+      requestedNotional,
       feePolicy: input.feePolicy,
       fillProbability: inferLimitlessFillProbability(states)
     });

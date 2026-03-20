@@ -215,14 +215,16 @@ export class OrderRouter implements IOrderRouter {
                 routeCandidates,
                 scoredCandidates,
                 residualQuote.quantity,
-                policy
+                policy,
+                rfq.canonicalMarketId
               )
             : await this.buildAllocationsByLeg(
                 rfq.rfqId,
                 routeCandidates,
                 scoredCandidates,
                 residualQuote.quantity,
-                policy
+                policy,
+                rfq.canonicalMarketId
               );
         const allocations = allocationResult.allocations;
 
@@ -576,7 +578,8 @@ export class OrderRouter implements IOrderRouter {
     routeCandidates: readonly import("./types.js").RouteCandidate[],
     scoredCandidates: readonly CandidateScore[],
     targetSize: number,
-    policy: SORAcceptancePolicy
+    policy: SORAcceptancePolicy,
+    canonicalMarketId: string
   ): Promise<{
     allocations: readonly SplitAllocation[];
     resolutionRiskPairPolicies: readonly Record<string, unknown>[];
@@ -615,7 +618,7 @@ export class OrderRouter implements IOrderRouter {
         perProviderCapacity[candidate.provider_id] = candidate.available_size;
       }
 
-      const resolutionRisk = await this.buildResolutionRiskContext(stableKey, legCandidates);
+      const resolutionRisk = await this.buildResolutionRiskContext(stableKey, legCandidates, canonicalMarketId);
       if (resolutionRisk) {
         for (const [pairKeyValue, decision] of resolutionRisk.pairPolicies.entries()) {
           resolutionRiskPairPolicies.push({
@@ -661,7 +664,8 @@ export class OrderRouter implements IOrderRouter {
     routeCandidates: readonly import("./types.js").RouteCandidate[],
     scoredCandidates: readonly CandidateScore[],
     targetSize: number,
-    policy: SORAcceptancePolicy
+    policy: SORAcceptancePolicy,
+    canonicalMarketId: string
   ): Promise<{
     allocations: readonly SplitAllocation[];
     resolutionRiskPairPolicies: readonly Record<string, unknown>[];
@@ -826,7 +830,8 @@ export class OrderRouter implements IOrderRouter {
 
   private async buildResolutionRiskContext(
     stableKey: string,
-    candidates: readonly import("./types.js").RouteCandidate[]
+    candidates: readonly import("./types.js").RouteCandidate[],
+    canonicalMarketId?: string
   ): Promise<{ pairPolicies: ReadonlyMap<string, ResolutionRiskRoutingDecision> } | undefined> {
     if (candidates.length < 2) {
       return undefined;
@@ -912,6 +917,23 @@ export class OrderRouter implements IOrderRouter {
             reason: this.deps.resolutionRiskReadService
               ? "missing_resolution_risk_assessment"
               : "resolution_risk_unavailable"
+          } satisfies ResolutionRiskRoutingDecision;
+          pairPolicies.set(
+            candidatePairKey,
+            this.applyResolutionRiskPolicy(stableKey, rawDecision, {
+              profileAId: leftProfileId,
+              profileBId: rightProfileId
+            })
+          );
+          continue;
+        }
+
+        // Identity Guard: Fail-Closed if assessment market doesn't match current market
+        if (canonicalMarketId && assessment.canonicalMarketId !== canonicalMarketId) {
+          const rawDecision = {
+            mode: "isolated_only",
+            penalty: 0,
+            reason: `identity_mismatch: expected ${canonicalMarketId}, found ${assessment.canonicalMarketId}`
           } satisfies ResolutionRiskRoutingDecision;
           pairPolicies.set(
             candidatePairKey,

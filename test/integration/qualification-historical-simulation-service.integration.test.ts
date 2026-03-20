@@ -10,7 +10,9 @@ import { HistoricalMarketClass } from "../../src/core/historical-simulation/hist
 import { HistoricalSimulationRunner, type HistoricalLotusPathEvaluatorBundle } from "../../src/simulation/historical-simulation-runner.js";
 import { BestExternalOnlyBaselineEvaluator } from "../../src/simulation/baselines/best-external-only-baseline.js";
 import { LimitlessOnlyBaselineEvaluator } from "../../src/simulation/baselines/limitless-only-baseline.js";
+import { MyriadOnlyBaselineEvaluator } from "../../src/simulation/baselines/myriad-only-baseline.js";
 import { NoInternalizationBaselineEvaluator } from "../../src/simulation/baselines/no-internalization-baseline.js";
+import { OpinionOnlyBaselineEvaluator } from "../../src/simulation/baselines/opinion-only-baseline.js";
 import { PolymarketOnlyBaselineEvaluator } from "../../src/simulation/baselines/polymarket-only-baseline.js";
 import {
   QualificationAdminService,
@@ -138,6 +140,8 @@ describe.skipIf(!ENV_READY)("QualificationHistoricalSimulationService integratio
       pool: pool as Pool,
       polymarketOnlyBaselineEvaluator: new PolymarketOnlyBaselineEvaluator(),
       limitlessOnlyBaselineEvaluator: new LimitlessOnlyBaselineEvaluator(),
+      opinionOnlyBaselineEvaluator: new OpinionOnlyBaselineEvaluator(),
+      myriadOnlyBaselineEvaluator: new MyriadOnlyBaselineEvaluator(),
       bestExternalOnlyBaselineEvaluator: new BestExternalOnlyBaselineEvaluator(),
       noInternalizationBaselineEvaluator: new NoInternalizationBaselineEvaluator(),
       lotusEvaluators: createLotusEvaluators()
@@ -154,7 +158,7 @@ describe.skipIf(!ENV_READY)("QualificationHistoricalSimulationService integratio
       populateDecisionEvaluations: true,
       scopeType: "EVENT",
       scopeId: qualificationRun.scopeId,
-      venuePair: "POLYMARKET_LIMITLESS",
+      routeMode: "POLYMARKET_LIMITLESS",
       marketClass: HistoricalMarketClass.BINARY,
       canonicalEventId: "phase4-qualification-event",
       windowStart: new Date("2026-03-13T00:00:00.000Z"),

@@ -62,6 +62,7 @@ export class ResolutionProfileNormalizer implements IResolutionProfileNormalizer
             venue: input.market.venue,
             venueMarketId: input.market.venueMarketId,
             canonicalEventId: input.market.canonicalEventId,
+            canonicalMarketId: input.market.canonicalMarketId,
             oracleType: extracted.oracleType,
             oracleName: extracted.oracleName,
             resolutionAuthorityType: extracted.resolutionAuthorityType,

@@ -218,6 +218,69 @@ Expected behavior when enabled:
   - enforcement would have blocked a path that shadow allowed
 - `separated_vs_pooled`
   - enforcement would have separated RFQ lanes that shadow pooled
+
+## Route-Availability Edge Rules
+
+The admin simulation route sheet now consumes resolution-risk data per exact `canonical_market_id`.
+
+Pair-route requirement:
+- a two-venue route is runnable only when the exact market exists on both venues and the corresponding pair assessment is `SAFE_EQUIVALENT` or `EQUIVALENT_WITH_LAG`
+
+Single-venue requirement:
+- `POLYMARKET_ONLY`, `LIMITLESS_ONLY`, `OPINION_ONLY`, and `MYRIAD_ONLY` do not require pair assessments
+- `MYRIAD_ONLY` still requires exact market identity and historical state evidence, but not a pooled compatibility edge
+
+Tri-route requirement:
+- `POLYMARKET_LIMITLESS_OPINION` is runnable only when all three pair edges are present and eligible:
+  - `POLYMARKET ↔ LIMITLESS`
+  - `POLYMARKET ↔ OPINION`
+  - `LIMITLESS ↔ OPINION`
+
+Fail-closed reasons surfaced into route availability:
+- `missing_pair_assessment`
+- `incomplete_resolution_risk`
+- `stale_resolution_risk`
+- `unsafe_equivalence`
+- `ambiguous_venue_identity`
+
+## Canonical Graph Authority
+
+Resolution-risk rows are now treated as projected read models from the authoritative canonical graph.
+
+Authoritative graph objects:
+- `CanonicalEvent`
+- `VenueMarketProfile`
+- `CompatibilityEdge`
+- `CanonicalExecutableMarket`
+
+Operational meaning:
+- `resolution_profiles` is not the source of proposition identity by itself
+- `resolution_risk_assessments` is not the source of venue discovery by itself
+- both are routing/admin projections fed by the canonical graph
+
+When debugging a bad pair:
+1. confirm both venue markets are under the same `CanonicalEvent`
+2. inspect whether they actually belong to the same `CanonicalExecutableMarket`
+3. inspect the persisted `CompatibilityEdge` reason set before allowing any pooled treatment
+
+## Liquidity Cost Interpretation
+
+`EQUIVALENT_WITH_LAG` now means:
+- the pair is still execution-safe enough to compare and route together
+- Lotus must price capital lock / timing friction
+- Lotus must anchor settlement/finality to the slowest safe side
+
+It does not mean:
+- dispute or reversal risk was ignored
+- unsafe resolution semantics were priced through
+
+If the edge is unsafe on proposition, resolution, or finality:
+- expect `CAUTION` or `DO_NOT_POOL`
+- do not override that with a liquidity premium
+
+Operator rule:
+- if any required edge is missing, stale, unsafe, or ambiguous, pooled routing must remain blocked for that route mode
+- single-venue routing may still remain available
 - `penalty_vs_no_penalty`
   - enforcement would have applied a caution penalty that shadow skipped
 - `excluded_vs_allowed`
@@ -239,6 +302,27 @@ Operator checks after enabling:
 1. `GET /admin/resolution-risk/canonical/:eventId` still returns inspection output
 2. `POST /admin/resolution-risk/recompute/:profileId` returns `409`
 3. `POST /admin/resolution-risk/recompute/canonical/:eventId` returns `409`
+
+## Historical Simulation Catalog Edge Source
+
+The simulation-only historical catalog has its own pair-assessment store:
+
+- `historical_simulation_profiles`
+- `historical_simulation_risk_assessments`
+
+Operational rule:
+- these rows are only used by the admin historical simulation route-discovery path
+- they do not replace or mutate live `resolution_risk_assessments`
+
+When a historical multi-venue route is missing:
+1. confirm the exact venues exist on the same `HISTSIM-...` canonical market
+2. confirm accepted pair edges exist in `historical_simulation_risk_assessments`
+3. if the market is only in the candidate manifest, it is not yet approved
+4. if the route is unresolved because an Opinion numeric ID is missing, do not synthesize an assessment
+
+Current v1 limitation:
+- Opinion historical pair edges can only be created for already-known numeric IDs
+- Myriad historical ingestion is available, but Myriad pooled pair/tri edges are not enabled in v1
 
 ## Supabase Verification
 Before operational changes in a new environment:

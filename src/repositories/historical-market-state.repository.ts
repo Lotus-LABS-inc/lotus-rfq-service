@@ -53,6 +53,7 @@ export class HistoricalMarketStateRepository {
       const result = await this.pool.query<InsertedRow>(
         `INSERT INTO historical_market_states (
            canonical_event_id,
+           canonical_market_id,
            canonical_category,
            venue,
            venue_market_id,
@@ -74,12 +75,14 @@ export class HistoricalMarketStateRepository {
            source_timestamp
          ) VALUES (
            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-           $11, $12, $13, $14::jsonb, $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb, $19, $20
+           $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb, $20, $21
          )
-         ON CONFLICT (canonical_event_id, venue, venue_market_id, "timestamp", metadata_version) DO NOTHING
+         ON CONFLICT (canonical_event_id, canonical_market_id, venue, venue_market_id, "timestamp", metadata_version) 
+         DO UPDATE SET canonical_market_id = EXCLUDED.canonical_market_id
          RETURNING id`,
         [
           state.canonicalEventId,
+          state.canonicalMarketId ?? null,
           state.canonicalCategory ?? null,
           state.venue,
           state.venueMarketId,

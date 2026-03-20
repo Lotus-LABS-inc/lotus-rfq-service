@@ -1,5 +1,7 @@
 import type { HistoricalSimulationBaselineEstimate, HistoricalSimulationBaselineInput } from "./shared.js";
 import { LimitlessOnlyBaselineEvaluator } from "./limitless-only-baseline.js";
+import { MyriadOnlyBaselineEvaluator } from "./myriad-only-baseline.js";
+import { OpinionOnlyBaselineEvaluator } from "./opinion-only-baseline.js";
 import { PolymarketOnlyBaselineEvaluator } from "./polymarket-only-baseline.js";
 import { parseDecimal } from "./shared.js";
 
@@ -15,11 +17,19 @@ const compareEstimates = (
 export class BestExternalOnlyBaselineEvaluator {
   public constructor(
     private readonly polymarketOnly = new PolymarketOnlyBaselineEvaluator(),
-    private readonly limitlessOnly = new LimitlessOnlyBaselineEvaluator()
+    private readonly limitlessOnly = new LimitlessOnlyBaselineEvaluator(),
+    private readonly opinionOnly = new OpinionOnlyBaselineEvaluator(),
+    private readonly myriadOnly = new MyriadOnlyBaselineEvaluator()
   ) {}
 
   public evaluate(input: HistoricalSimulationBaselineInput): HistoricalSimulationBaselineEstimate {
-    const candidates = [this.polymarketOnly.evaluate(input), this.limitlessOnly.evaluate(input)].sort(compareEstimates);
+    const venues = new Set(input.marketStates.map((state) => state.venue));
+    const candidates = [
+      venues.has("POLYMARKET") ? this.polymarketOnly.evaluate(input) : null,
+      venues.has("LIMITLESS") ? this.limitlessOnly.evaluate(input) : null,
+      venues.has("OPINION") ? this.opinionOnly.evaluate(input) : null,
+      venues.has("MYRIAD") ? this.myriadOnly.evaluate(input) : null
+    ].filter((candidate): candidate is HistoricalSimulationBaselineEstimate => candidate !== null).sort(compareEstimates);
     const winner = candidates[0]!;
     const losers = candidates.slice(1).map((estimate) => ({
       venue: estimate.venue,

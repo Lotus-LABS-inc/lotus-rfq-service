@@ -21,12 +21,14 @@ describe("Admin Simulation Routes", () => {
       listScopes: vi.fn(async () => ([
         {
           canonicalEventId,
+          catalogScope: "live",
           canonicalCategory: "SPORTS",
           marketClass: HistoricalMarketClass.BINARY,
-          venuePair: "POLYMARKET_LIMITLESS",
+          routeMode: "POLYMARKET_LIMITLESS",
           coverageStart: new Date("2026-03-13T00:00:00.000Z"),
           coverageEnd: new Date("2026-03-13T01:00:00.000Z"),
-          venueCoverage: { polymarketRows: 10, limitlessRows: 8 }
+          routeableMarketCount: 1,
+          venueCoverage: { polymarketRows: 10, limitlessRows: 8, opinionRows: 0, myriadRows: 0 }
         }
       ])),
       runSimulation: vi.fn(async () => ({
@@ -35,7 +37,7 @@ describe("Admin Simulation Routes", () => {
           qualificationRunId: null,
           scopeType: "CANONICAL_EVENT",
           scopeId: canonicalEventId,
-          venuePair: "POLYMARKET_LIMITLESS",
+          routeMode: "POLYMARKET_LIMITLESS",
           marketClass: HistoricalMarketClass.BINARY,
           startedAt: new Date("2026-03-13T02:00:00.000Z"),
           endedAt: null,
@@ -58,7 +60,7 @@ describe("Admin Simulation Routes", () => {
         qualificationRunId: null,
         scopeType: "CANONICAL_EVENT",
         scopeId: canonicalEventId,
-        venuePair: "POLYMARKET_LIMITLESS",
+        routeMode: "POLYMARKET_LIMITLESS",
         marketClass: HistoricalMarketClass.BINARY,
         startedAt: new Date("2026-03-13T02:00:00.000Z"),
         endedAt: null,
@@ -78,6 +80,8 @@ describe("Admin Simulation Routes", () => {
       }])),
       getCanonicalCoverage: vi.fn(async () => ({
         canonicalEventId,
+        catalogScope: "live",
+        canonicalMarketId: null,
         canonicalCategory: "SPORTS",
         marketClass: HistoricalMarketClass.BINARY,
         venueCoverage: [{
@@ -101,8 +105,69 @@ describe("Admin Simulation Routes", () => {
             isStale: false,
             hasMixedVersions: false
           }
-        }
-      }))
+        },
+        pairedMarkets: [
+          { venue: "LIMITLESS", venueMarketId: "limitless-sports-m1", title: "Sports Market" },
+          { venue: "POLYMARKET", venueMarketId: "polymarket-sports-m1", title: "Sports Market" }
+        ],
+        canonicalMarkets: [
+          {
+            canonicalMarketId: "POLYMARKET-NBA-LAL-ORL-2026-03-21-LAKERS-WIN",
+            isRunnable: true,
+            runnableRouteModes: ["POLYMARKET_ONLY", "LIMITLESS_ONLY", "POLYMARKET_LIMITLESS"],
+            venues: [
+              { venue: "LIMITLESS", venueMarketId: "limitless-sports-m1", title: "Sports Market" },
+              { venue: "POLYMARKET", venueMarketId: "polymarket-sports-m1", title: "Sports Market" }
+            ],
+            routeModes: [
+              {
+                routeMode: "POLYMARKET_ONLY",
+                label: "Predexon Only",
+                cardinality: "single",
+                requiredVenues: ["POLYMARKET"],
+                runnable: true,
+                reason: null
+              },
+              {
+                routeMode: "LIMITLESS_ONLY",
+                label: "Limitless Only",
+                cardinality: "single",
+                requiredVenues: ["LIMITLESS"],
+                runnable: true,
+                reason: null
+              },
+              {
+                routeMode: "MYRIAD_ONLY",
+                label: "Myriad Only",
+                cardinality: "single",
+                requiredVenues: ["MYRIAD"],
+                runnable: false,
+                reason: "missing_required_venue"
+              },
+              {
+                routeMode: "POLYMARKET_LIMITLESS",
+                label: "Predexon + Limitless",
+                cardinality: "pair",
+                requiredVenues: ["POLYMARKET", "LIMITLESS"],
+                runnable: true,
+                reason: null
+              }
+            ]
+          }
+        ],
+        routeModeSummary: [
+          {
+            routeMode: "POLYMARKET_LIMITLESS",
+            label: "Predexon + Limitless",
+            cardinality: "pair",
+            routeableMarketCount: 1,
+            hasAnyRoute: true
+          }
+        ],
+        hasTriVenueRoute: false,
+        triVenueRouteableMarketCount: 0,
+        ambiguity: {}
+      })),
     } as unknown as SimulationAdminService;
 
     await registerAdminSimulationRoutes(app, adminMiddleware, { simulationAdminService });
@@ -121,8 +186,10 @@ describe("Admin Simulation Routes", () => {
         url: "/admin/simulation/run",
         payload: {
           marketClass: "BINARY",
-          venuePair: "POLYMARKET_LIMITLESS",
+          routeMode: "POLYMARKET_LIMITLESS",
           canonicalEventId,
+          side: "BUY",
+          requestedNotional: "100",
           from: "2026-03-13T00:00:00.000Z",
           to: "2026-03-13T01:00:00.000Z",
           strategyKey: "strategy.sim.v1",
@@ -161,7 +228,9 @@ describe("Admin Simulation Routes", () => {
       url: "/admin/simulation/run",
       payload: {
         marketClass: "BINARY",
-        venuePair: "POLYMARKET_LIMITLESS",
+        routeMode: "POLYMARKET_LIMITLESS",
+        side: "BUY",
+        requestedNotional: "100",
         from: "2026-03-13T01:00:00.000Z",
         to: "2026-03-13T00:00:00.000Z",
         strategyKey: "",
@@ -173,8 +242,8 @@ describe("Admin Simulation Routes", () => {
     const invalidRunId = await app.inject({ method: "GET", url: "/admin/simulation/run/not-a-uuid" });
     expect(invalidRunId.statusCode).toBe(400);
 
-    const invalidEventId = await app.inject({ method: "GET", url: "/admin/simulation/canonical/not-a-uuid" });
-    expect(invalidEventId.statusCode).toBe(400);
+    const validHistoricalEventId = await app.inject({ method: "GET", url: "/admin/simulation/canonical/HISTSIM::demo-market" });
+    expect(validHistoricalEventId.statusCode).toBe(200);
 
     await app.close();
   });
@@ -186,13 +255,28 @@ describe("Admin Simulation Routes", () => {
     const scopes = await app.inject({ method: "GET", url: "/admin/simulation/scopes?category=SPORTS&marketClass=BINARY" });
     expect(scopes.statusCode).toBe(200);
 
+    const triVenueScopes = await app.inject({
+      method: "GET",
+      url: "/admin/simulation/scopes?category=SPORTS&marketClass=BINARY&routeMode=POLYMARKET_LIMITLESS_OPINION"
+    });
+    expect(triVenueScopes.statusCode).toBe(200);
+    expect(
+      (simulationAdminService as unknown as { listScopes: ReturnType<typeof vi.fn> }).listScopes
+    ).toHaveBeenCalledWith({
+      category: "SPORTS",
+      marketClass: HistoricalMarketClass.BINARY,
+      routeMode: "POLYMARKET_LIMITLESS_OPINION"
+    });
+
     const run = await app.inject({
       method: "POST",
       url: "/admin/simulation/run",
       payload: {
         marketClass: "BINARY",
-        venuePair: "POLYMARKET_LIMITLESS",
+        routeMode: "POLYMARKET_LIMITLESS",
         canonicalEventId,
+        side: "BUY",
+        requestedNotional: "100",
         from: "2026-03-13T00:00:00.000Z",
         to: "2026-03-13T01:00:00.000Z",
         strategyKey: "strategy.sim.v1",
@@ -209,7 +293,9 @@ describe("Admin Simulation Routes", () => {
       url: "/admin/simulation/run",
       payload: {
         marketClass: "BINARY",
-        venuePair: "POLYMARKET_LIMITLESS",
+        routeMode: "POLYMARKET_LIMITLESS",
+        side: "BUY",
+        requestedNotional: "100",
         from: "2026-03-13T00:00:00.000Z",
         to: "2026-03-13T01:00:00.000Z",
         strategyKey: "strategy.sim.v1",
@@ -229,6 +315,11 @@ describe("Admin Simulation Routes", () => {
     );
     const missingCoverage = await app.inject({ method: "GET", url: `/admin/simulation/canonical/${canonicalEventId}` });
     expect(missingCoverage.statusCode).toBe(404);
+
+    await app.inject({ method: "GET", url: `/admin/simulation/canonical/${canonicalEventId}?canonicalMarketId=LIMITLESS-BTC-ABOVE-90K` });
+    expect(
+      (simulationAdminService as unknown as { getCanonicalCoverage: ReturnType<typeof vi.fn> }).getCanonicalCoverage
+    ).toHaveBeenCalledWith(canonicalEventId, "LIMITLESS-BTC-ABOVE-90K");
 
     await app.close();
   });

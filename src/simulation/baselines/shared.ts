@@ -1,10 +1,12 @@
 import Decimal from "decimal.js";
 
-import type { HistoricalMarketState } from "../../core/historical-simulation/historical-simulation.types.js";
+import type { HistoricalMarketState, HistoricalSimulationOrderSide } from "../../core/historical-simulation/historical-simulation.types.js";
 
 export type HistoricalSimulationBaselineType =
   | "POLYMARKET_ONLY"
   | "LIMITLESS_ONLY"
+  | "OPINION_ONLY"
+  | "MYRIAD_ONLY"
   | "BEST_EXTERNAL_ONLY"
   | "NO_INTERNALIZATION";
 
@@ -23,7 +25,8 @@ export interface HistoricalSimulationBaselineInput {
   marketStates: readonly HistoricalMarketState[];
   timelineSliceStart?: Date;
   timelineSliceEnd?: Date;
-  requestedSize?: string;
+  side: HistoricalSimulationOrderSide;
+  requestedNotional: string;
   feePolicy: HistoricalSimulationFeePolicy;
 }
 
@@ -61,7 +64,7 @@ export class HistoricalSimulationBaselineError extends Error {
 export interface SelectedHistoricalPriceState {
   state: HistoricalMarketState;
   selectedPrice: InstanceType<typeof Decimal>;
-  priceSource: "bestAsk" | "midpoint" | "lastPrice";
+  priceSource: "bestAsk" | "bestBid" | "midpoint" | "lastPrice";
 }
 
 export interface FillProbabilityResult {
@@ -71,8 +74,6 @@ export interface FillProbabilityResult {
 
 const ZERO = new Decimal(0);
 const ONE = new Decimal(1);
-const DEFAULT_REQUESTED_SIZE = "1";
-
 export const parseDecimal = (value: string | number, fieldName: string): InstanceType<typeof Decimal> => {
   try {
     const parsed = new Decimal(value);
@@ -85,10 +86,10 @@ export const parseDecimal = (value: string | number, fieldName: string): Instanc
   }
 };
 
-export const resolveRequestedSize = (requestedSize?: string): InstanceType<typeof Decimal> => {
-  const resolved = parseDecimal(requestedSize ?? DEFAULT_REQUESTED_SIZE, "requestedSize");
+export const resolveRequestedNotional = (requestedNotional: string): InstanceType<typeof Decimal> => {
+  const resolved = parseDecimal(requestedNotional, "requestedNotional");
   if (resolved.lte(0)) {
-    throw new HistoricalSimulationBaselineError("invalid_baseline_input", "requestedSize must be positive.");
+    throw new HistoricalSimulationBaselineError("invalid_baseline_input", "requestedNotional must be positive.");
   }
   return resolved;
 };
@@ -173,9 +174,28 @@ export const computeFees = (
   return notional.times(feeBps).div(10_000).plus(fixedFee);
 };
 
-export const extractPriceCandidate = (state: HistoricalMarketState): SelectedHistoricalPriceState | null => {
-  if (state.bestAsk !== null) {
-    return { state, selectedPrice: parseDecimal(state.bestAsk, "bestAsk"), priceSource: "bestAsk" };
+export const extractPriceCandidate = (
+  state: HistoricalMarketState,
+  side: HistoricalSimulationOrderSide
+): SelectedHistoricalPriceState | null => {
+  if (side === "BUY") {
+    if (state.bestAsk !== null) {
+      return { state, selectedPrice: parseDecimal(state.bestAsk, "bestAsk"), priceSource: "bestAsk" };
+    }
+    if (state.midpoint !== null) {
+      return { state, selectedPrice: parseDecimal(state.midpoint, "midpoint"), priceSource: "midpoint" };
+    }
+    if (state.lastPrice !== null) {
+      return { state, selectedPrice: parseDecimal(state.lastPrice, "lastPrice"), priceSource: "lastPrice" };
+    }
+    if (state.bestBid !== null) {
+      return { state, selectedPrice: parseDecimal(state.bestBid, "bestBid"), priceSource: "bestBid" };
+    }
+    return null;
+  }
+
+  if (state.bestBid !== null) {
+    return { state, selectedPrice: parseDecimal(state.bestBid, "bestBid"), priceSource: "bestBid" };
   }
   if (state.midpoint !== null) {
     return { state, selectedPrice: parseDecimal(state.midpoint, "midpoint"), priceSource: "midpoint" };
@@ -183,26 +203,35 @@ export const extractPriceCandidate = (state: HistoricalMarketState): SelectedHis
   if (state.lastPrice !== null) {
     return { state, selectedPrice: parseDecimal(state.lastPrice, "lastPrice"), priceSource: "lastPrice" };
   }
+  if (state.bestAsk !== null) {
+    return { state, selectedPrice: parseDecimal(state.bestAsk, "bestAsk"), priceSource: "bestAsk" };
+  }
   return null;
 };
 
-export const selectBestPriceState = (states: readonly HistoricalMarketState[]): SelectedHistoricalPriceState => {
-  const candidates = states.map(extractPriceCandidate).filter((value): value is SelectedHistoricalPriceState => value !== null);
+export const selectBestPriceState = (
+  states: readonly HistoricalMarketState[],
+  side: HistoricalSimulationOrderSide
+): SelectedHistoricalPriceState => {
+  const candidates = states.map((state) => extractPriceCandidate(state, side)).filter((value): value is SelectedHistoricalPriceState => value !== null);
   if (candidates.length === 0) {
     throw new HistoricalSimulationBaselineError("unsupported_market_shape", "No usable price evidence was found in the historical state.");
   }
 
   return [...candidates].sort(
     (left, right) =>
-      left.selectedPrice.cmp(right.selectedPrice) ||
+      (side === "BUY" ? left.selectedPrice.cmp(right.selectedPrice) : right.selectedPrice.cmp(left.selectedPrice)) ||
       left.state.timestamp.getTime() - right.state.timestamp.getTime() ||
       left.state.venueMarketId.localeCompare(right.state.venueMarketId)
   )[0]!;
 };
 
-export const selectReferencePriceState = (states: readonly HistoricalMarketState[]): SelectedHistoricalPriceState => {
+export const selectReferencePriceState = (
+  states: readonly HistoricalMarketState[],
+  side: HistoricalSimulationOrderSide
+): SelectedHistoricalPriceState => {
   for (const state of states) {
-    const candidate = extractPriceCandidate(state);
+    const candidate = extractPriceCandidate(state, side);
     if (candidate !== null) {
       return candidate;
     }
@@ -225,7 +254,8 @@ const parseTopLevelSize = (level: unknown): InstanceType<typeof Decimal> | null 
 
 export const inferPolymarketFillProbability = (
   state: HistoricalMarketState,
-  requestedSize: InstanceType<typeof Decimal>
+  requestedQuantity: InstanceType<typeof Decimal>,
+  side: HistoricalSimulationOrderSide
 ): FillProbabilityResult => {
   const snapshot = asRecord(state.orderbookSnapshot);
   if (snapshot === null) {
@@ -234,23 +264,22 @@ export const inferPolymarketFillProbability = (
 
   const bids = Array.isArray(snapshot.bids) ? snapshot.bids : [];
   const asks = Array.isArray(snapshot.asks) ? snapshot.asks : [];
-  const bidSize = parseTopLevelSize(bids[0]);
-  const askSize = parseTopLevelSize(asks[0]);
+  const topSize = side === "BUY" ? parseTopLevelSize(asks[0]) : parseTopLevelSize(bids[0]);
 
-  if (bidSize === null && askSize === null) {
+  if (topSize === null) {
     return { fillProbability: null, fillProbabilityReason: "depth_missing" };
   }
 
-  const proxySize = bidSize !== null && askSize !== null ? Decimal.min(bidSize, askSize) : bidSize ?? askSize ?? ZERO;
+  const proxySize = topSize;
   if (proxySize.lte(0)) {
     return { fillProbability: "0", fillProbabilityReason: null };
   }
-  if (proxySize.gte(requestedSize)) {
+  if (proxySize.gte(requestedQuantity)) {
     return { fillProbability: "1", fillProbabilityReason: null };
   }
 
   return {
-    fillProbability: Decimal.max(ZERO, Decimal.min(proxySize.div(requestedSize), ONE)).toString(),
+    fillProbability: Decimal.max(ZERO, Decimal.min(proxySize.div(requestedQuantity), ONE)).toString(),
     fillProbabilityReason: null
   };
 };
@@ -297,21 +326,83 @@ export const inferLimitlessFillProbability = (states: readonly HistoricalMarketS
   return { fillProbability: null, fillProbabilityReason: "insufficient_own_execution_history" };
 };
 
+export const inferOpinionFillProbability = (_states: readonly HistoricalMarketState[]): FillProbabilityResult => ({
+  fillProbability: null,
+  fillProbabilityReason: "price_only_history"
+});
+
+const parseEventValue = (value: unknown): InstanceType<typeof Decimal> | null =>
+  typeof value === "string" || typeof value === "number" ? parseDecimal(value, "marketEvents.value") : null;
+
+const extractMyriadObservedNotional = (states: readonly HistoricalMarketState[]): InstanceType<typeof Decimal> => {
+  let observed = ZERO;
+
+  for (const state of states) {
+    const marketEvents = asRecord(state.marketEvents);
+    if (marketEvents === null) {
+      continue;
+    }
+    const events = Array.isArray(marketEvents.events) ? marketEvents.events : [];
+    for (const entry of events) {
+      const record = asRecord(entry);
+      if (record === null) {
+        continue;
+      }
+      const action = typeof record.action === "string" ? record.action : null;
+      if (action !== "buy" && action !== "sell") {
+        continue;
+      }
+      const parsed = parseEventValue(record.value);
+      if (parsed !== null && parsed.gt(observed)) {
+        observed = parsed;
+      }
+    }
+  }
+
+  return observed;
+};
+
+export const inferMyriadFillProbability = (
+  states: readonly HistoricalMarketState[],
+  requestedNotional: InstanceType<typeof Decimal>
+): FillProbabilityResult => {
+  const observed = extractMyriadObservedNotional(states);
+  if (observed.lte(0)) {
+    return { fillProbability: null, fillProbabilityReason: "price_only_history" };
+  }
+
+  const probability = Decimal.min(ONE, observed.div(requestedNotional).times("0.5"));
+  return {
+    fillProbability: probability.toString(),
+    fillProbabilityReason: "event_capped_conservative"
+  };
+};
+
 export const buildEstimate = (params: {
   venue: string;
   baselineType: HistoricalSimulationBaselineType;
+  side: HistoricalSimulationOrderSide;
   states: readonly HistoricalMarketState[];
   selected: SelectedHistoricalPriceState;
   reference: SelectedHistoricalPriceState;
-  requestedSize: InstanceType<typeof Decimal>;
+  requestedNotional: InstanceType<typeof Decimal>;
   feePolicy: HistoricalSimulationFeePolicy;
   fillProbability: FillProbabilityResult;
   metadata?: Record<string, unknown>;
 }): HistoricalSimulationBaselineEstimate => {
-  const notional = params.selected.selectedPrice.times(params.requestedSize);
-  const fees = computeFees(params.feePolicy, params.venue, notional);
-  const effectiveCost = notional.plus(fees);
-  const slippage = params.selected.selectedPrice.minus(params.reference.selectedPrice).times(params.requestedSize);
+  const requestedQuantity = params.reference.selectedPrice.gt(0)
+    ? params.requestedNotional.div(params.reference.selectedPrice)
+    : ZERO;
+  const tradedNotional = params.selected.selectedPrice.times(requestedQuantity);
+  const fees = computeFees(params.feePolicy, params.venue, tradedNotional);
+  const effectiveCost =
+    params.side === "BUY"
+      ? tradedNotional.plus(fees)
+      : fees.minus(tradedNotional);
+  const slippage =
+    params.side === "BUY"
+      ? params.selected.selectedPrice.minus(params.reference.selectedPrice).times(requestedQuantity)
+      : params.reference.selectedPrice.minus(params.selected.selectedPrice).times(requestedQuantity);
   const timestampStart = params.states[0]!.timestamp;
   const timestampEnd = params.states[params.states.length - 1]!.timestamp;
 
@@ -328,11 +419,15 @@ export const buildEstimate = (params: {
     observedStateCount: params.states.length,
     metadata: {
       feePolicyVersion: params.feePolicy.version,
+      side: params.side,
       referencePriceSource: params.reference.priceSource,
+      referencePrice: params.reference.selectedPrice.toString(),
       selectedStateTimestamp: params.selected.state.timestamp.toISOString(),
       selectedVenueMarketId: params.selected.state.venueMarketId,
       observationCount: params.states.length,
-      requestedSize: params.requestedSize.toString(),
+      requestedNotional: params.requestedNotional.toString(),
+      requestedQuantity: requestedQuantity.toString(),
+      selectedPrice: params.selected.selectedPrice.toString(),
       ...(params.metadata ?? {})
     }
   };

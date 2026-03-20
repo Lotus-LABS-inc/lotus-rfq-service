@@ -4,6 +4,7 @@ import type { ResolutionRiskAssessment } from "./resolution-risk.types.js";
 interface ResolutionRiskAssessmentRow {
     id: string;
     canonical_event_id: string;
+    canonical_market_id: string;
     market_a_profile_id: string;
     market_b_profile_id: string;
     risk_score: string;
@@ -13,6 +14,8 @@ interface ResolutionRiskAssessmentRow {
     reasons: readonly string[];
     version: string;
     computed_at: Date;
+    liquidity_cost: string | null;
+    max_settlement_delay_hours: string | null;
 }
 
 export interface ResolutionRiskPairLookup {
@@ -129,6 +132,7 @@ const dedupeOrderedPairs = (
 const mapAssessmentRow = (row: ResolutionRiskAssessmentRow): ResolutionRiskAssessment => ({
     id: row.id,
     canonicalEventId: row.canonical_event_id,
+    canonicalMarketId: row.canonical_market_id,
     marketAProfileId: row.market_a_profile_id,
     marketBProfileId: row.market_b_profile_id,
     riskScore: row.risk_score,
@@ -137,5 +141,7 @@ const mapAssessmentRow = (row: ResolutionRiskAssessmentRow): ResolutionRiskAsses
     factorBreakdown: row.factor_breakdown,
     reasons: row.reasons,
     version: row.version,
-    computedAt: new Date(row.computed_at)
+    computedAt: new Date(row.computed_at),
+    liquidityCost: row.liquidity_cost ?? undefined,
+    maxSettlementDelayHours: row.max_settlement_delay_hours ? Number(row.max_settlement_delay_hours) : undefined
 });

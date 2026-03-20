@@ -23,6 +23,7 @@ type ServiceErrorCode =
 interface ResolutionRiskAssessmentRow {
     id: string;
     canonical_event_id: string;
+    canonical_market_id: string;
     market_a_profile_id: string;
     market_b_profile_id: string;
     risk_score: string;
@@ -41,6 +42,7 @@ interface ResolutionProfileRow {
     venue: string;
     venue_market_id: string;
     canonical_event_id: string;
+    canonical_market_id: string;
     oracle_type: string | null;
     oracle_name: string | null;
     resolution_authority_type: string | null;
@@ -373,9 +375,9 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
         try {
             const result = await this.pool.query<ResolutionRiskAssessmentRow>(
                 `INSERT INTO resolution_risk_assessments
-                    (canonical_event_id, market_a_profile_id, market_b_profile_id, risk_score, confidence_score, equivalence_class, factor_breakdown, reasons, version, liquidity_cost, max_settlement_delay_hours)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11)
-                 ON CONFLICT (canonical_event_id, market_a_profile_id, market_b_profile_id, version)
+                    (canonical_event_id, canonical_market_id, market_a_profile_id, market_b_profile_id, risk_score, confidence_score, equivalence_class, factor_breakdown, reasons, version, liquidity_cost, max_settlement_delay_hours)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11, $12)
+                 ON CONFLICT (canonical_event_id, canonical_market_id, market_a_profile_id, market_b_profile_id, version)
                  DO UPDATE
                      SET risk_score = EXCLUDED.risk_score,
                          confidence_score = EXCLUDED.confidence_score,
@@ -388,6 +390,7 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
                  RETURNING *`,
                 [
                     scored.canonicalEventId,
+                    scored.canonicalMarketId,
                     scored.marketAProfileId,
                     scored.marketBProfileId,
                     scored.riskScore,
@@ -413,6 +416,7 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
             venue: row.venue,
             venueMarketId: row.venue_market_id,
             canonicalEventId: row.canonical_event_id,
+            canonicalMarketId: row.canonical_market_id,
             oracleType: row.oracle_type,
             oracleName: row.oracle_name,
             resolutionAuthorityType: row.resolution_authority_type,
@@ -436,6 +440,7 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
         return {
             id: row.id,
             canonicalEventId: row.canonical_event_id,
+            canonicalMarketId: row.canonical_market_id,
             marketAProfileId: row.market_a_profile_id,
             marketBProfileId: row.market_b_profile_id,
             riskScore: row.risk_score,

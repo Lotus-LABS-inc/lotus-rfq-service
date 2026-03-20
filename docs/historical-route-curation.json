@@ -1,0 +1,215 @@
+{
+  "version": 1,
+  "observedAt": "2026-03-19T00:00:00.000Z",
+  "policy": {
+    "exactMatchRule": "exact_semantic_equivalence_only",
+    "approvalMode": "checked_in_curated_manifest",
+    "catalogScope": "historical_simulation"
+  },
+  "routes": [
+    {
+      "historicalCanonicalEventId": "HISTSIM::LIVE-OPINION-DEM-NOM-2028-JON-OSSOFF",
+      "historicalCanonicalMarketId": "HISTSIM-LIVE-OPINION-DEM-NOM-2028-JON-OSSOFF",
+      "canonicalCategory": "POLITICS",
+      "title": "Democratic Presidential Nominee 2028: Jon Ossoff",
+      "decision": {
+        "status": "accepted",
+        "reasonCode": "known_numeric_historical_market",
+        "reason": "Known Opinion numeric market 6808 has valid historical rows and can be cataloged as a simulation-only single-venue market."
+      },
+      "discoveredFrom": [
+        {
+          "type": "archived_known_id",
+          "reference": "6808",
+          "observation": "Historical Opinion numeric market already observed in local historical_market_states and live resolution profile inventory."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "6808",
+          "title": "Democratic Presidential Nominee 2028: Jon Ossoff",
+          "historySource": "predexon_opinion",
+          "historyWindow": {
+            "start": "2026-03-10T00:00:00.000Z",
+            "end": "2026-03-19T23:59:59.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::US-ELECTION-2028-DEMOCRATIC-WINS",
+      "historicalCanonicalMarketId": "HISTSIM-US-ELECTION-2028-DEMOCRATIC-WINS",
+      "canonicalCategory": "POLITICS",
+      "title": "US Election 2028: Democratic party wins",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "missing_numeric_opinion_id",
+        "reason": "The exact Limitless/Opinion proposition is known, but the Opinion venue still lacks a verified numeric historical market ID."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "US-ELECTION-2028-DEMOCRATIC-WINS",
+          "observation": "Exact live cross-venue market exists in current resolution_profiles but Opinion remains on a placeholder ID."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "democratic-1769089740520",
+          "title": "US Election 2028: Democratic party wins",
+          "historySource": "predexon_limitless",
+          "historyWindow": {
+            "start": "2026-03-10T00:00:00.000Z",
+            "end": "2026-03-19T23:59:59.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "opinion-politics-us-election-dem",
+          "title": "US Election 2028: Democratic party wins",
+          "historySource": "predexon_opinion",
+          "historyWindow": {
+            "start": "2026-03-10T00:00:00.000Z",
+            "end": "2026-03-19T23:59:59.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::US-ELECTION-2028-REPUBLICAN-WINS",
+      "historicalCanonicalMarketId": "HISTSIM-US-ELECTION-2028-REPUBLICAN-WINS",
+      "canonicalCategory": "POLITICS",
+      "title": "US Election 2028: Republican party wins",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "missing_numeric_opinion_id",
+        "reason": "The exact Limitless/Opinion proposition is known, but the Opinion venue still lacks a verified numeric historical market ID."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "US-ELECTION-2028-REPUBLICAN-WINS",
+          "observation": "Exact live cross-venue market exists in current resolution_profiles but Opinion remains on a placeholder ID."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "republican-1769089740531",
+          "title": "US Election 2028: Republican party wins",
+          "historySource": "predexon_limitless",
+          "historyWindow": {
+            "start": "2026-03-10T00:00:00.000Z",
+            "end": "2026-03-19T23:59:59.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "opinion-politics-us-election-gop",
+          "title": "US Election 2028: Republican party wins",
+          "historySource": "predexon_opinion",
+          "historyWindow": {
+            "start": "2026-03-10T00:00:00.000Z",
+            "end": "2026-03-19T23:59:59.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::LOL-WORLDS-2026-T1-WINS",
+      "historicalCanonicalMarketId": "HISTSIM-LOL-WORLDS-2026-T1-WINS",
+      "canonicalCategory": "ESPORTS",
+      "title": "League of Legends Worlds 2026: T1 wins",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "missing_numeric_opinion_id",
+        "reason": "The exact Limitless/Opinion proposition is known, but the Opinion venue still lacks a verified numeric historical market ID."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "LOL-WORLDS-2026-T1-WINS",
+          "observation": "Exact live cross-venue market exists in current resolution_profiles but Opinion remains on a placeholder ID."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "limitless-esports-lol-t1",
+          "title": "League of Legends Worlds 2026: T1 wins",
+          "historySource": "predexon_limitless",
+          "historyWindow": {
+            "start": "2026-03-10T00:00:00.000Z",
+            "end": "2026-03-19T23:59:59.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "opinion-esports-lol-t1",
+          "title": "League of Legends Worlds 2026: T1 wins",
+          "historySource": "predexon_opinion",
+          "historyWindow": {
+            "start": "2026-03-10T00:00:00.000Z",
+            "end": "2026-03-19T23:59:59.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    },
+    {
+      "historicalCanonicalEventId": "HISTSIM::LOL-WORLDS-2026-GENG-WINS",
+      "historicalCanonicalMarketId": "HISTSIM-LOL-WORLDS-2026-GENG-WINS",
+      "canonicalCategory": "ESPORTS",
+      "title": "League of Legends Worlds 2026: Gen.G wins",
+      "decision": {
+        "status": "unresolved",
+        "reasonCode": "missing_numeric_opinion_id",
+        "reason": "The exact Limitless/Opinion proposition is known, but the Opinion venue still lacks a verified numeric historical market ID."
+      },
+      "discoveredFrom": [
+        {
+          "type": "db_inventory",
+          "reference": "LOL-WORLDS-2026-GENG-WINS",
+          "observation": "Exact live cross-venue market exists in current resolution_profiles but Opinion remains on a placeholder ID."
+        }
+      ],
+      "venueProfiles": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "limitless-esports-lol-gen",
+          "title": "League of Legends Worlds 2026: Gen.G wins",
+          "historySource": "predexon_limitless",
+          "historyWindow": {
+            "start": "2026-03-10T00:00:00.000Z",
+            "end": "2026-03-19T23:59:59.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "opinion-esports-lol-gen",
+          "title": "League of Legends Worlds 2026: Gen.G wins",
+          "historySource": "predexon_opinion",
+          "historyWindow": {
+            "start": "2026-03-10T00:00:00.000Z",
+            "end": "2026-03-19T23:59:59.000Z"
+          },
+          "copyFromLiveResolutionProfile": true
+        }
+      ],
+      "acceptedAssessments": []
+    }
+  ]
+}
