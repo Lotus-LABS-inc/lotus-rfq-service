@@ -147,3 +147,17 @@ Manual ingest entrypoint:
 ```bash
 npm run ingest:myriad -- --mode=backfill --category=crypto --batchSize=20
 ```
+
+Operational caps:
+
+- `MYRIAD_EVENT_PAGE_SIZE`
+- `MYRIAD_MAX_EVENT_PAGES_PER_MARKET`
+- `MYRIAD_MAX_EVENT_ROWS_PER_MARKET`
+
+CLI overrides:
+
+```bash
+npm run ingest:myriad -- --mode=backfill --category=crypto --batchSize=20 --maxEventPages=10 --maxEventRows=1000
+```
+
+These caps are intentionally conservative. Some Myriad markets have very large event histories, so uncapped backfills can be slow and operationally noisy.

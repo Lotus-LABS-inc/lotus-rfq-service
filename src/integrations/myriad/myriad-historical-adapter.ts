@@ -25,6 +25,9 @@ import type {
 export interface MyriadHistoricalAdapterConfig {
   client: Pick<MyriadClient, "listMarkets" | "getMarket" | "listQuestions" | "getMarketEvents">;
   metadataVersion: string;
+  eventPageSize?: number;
+  maxEventPagesPerMarket?: number;
+  maxEventRowsPerMarket?: number;
   logger?: Pick<Logger, "info" | "warn" | "error">;
 }
 
@@ -187,8 +190,24 @@ export class MyriadHistoricalAdapter {
       network_id: input.scope.detail.networkId,
       since: eventWindow.since,
       until: eventWindow.until,
-      limit: 100
+      limit: this.config.eventPageSize ?? 100,
+      maxPages: this.config.maxEventPagesPerMarket,
+      maxEvents: this.config.maxEventRowsPerMarket
     });
+    if (events.truncated) {
+      this.logger?.warn?.(
+        {
+          canonicalMarketId: input.scope.canonicalMarketId,
+          venueMarketId: stringifyId(input.scope.detail.id),
+          pagesFetched: events.pagesFetched,
+          eventRowsFetched: events.events.length,
+          truncationReason: events.truncationReason,
+          maxEventPagesPerMarket: this.config.maxEventPagesPerMarket ?? null,
+          maxEventRowsPerMarket: this.config.maxEventRowsPerMarket ?? null
+        },
+        "Myriad event backfill truncated to conservative operational cap."
+      );
+    }
 
     const chartFragments = buildPriceChartFragments(input.scope, this.config.metadataVersion, input.windowStart, input.windowEnd);
     const eventFragments = buildEventFragments(

@@ -249,7 +249,8 @@ npm run ingest:myriad -- --mode=backfill --category=crypto --batchSize=20
 
 Notes:
 - `batchSize` currently caps candidate markets processed, not the depth of each market's event history
-- some Myriad markets have very large event histories, so backfills can take several minutes
+- use `--maxEventPages` / `--maxEventRows` or the matching env vars to cap heavy market histories
+- some Myriad markets have very large event histories, so uncapped backfills can take several minutes
 
 ## Canonical Graph Checks Before Escalation
 

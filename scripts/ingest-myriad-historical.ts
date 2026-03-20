@@ -75,6 +75,17 @@ const parseCategoriesArg = (value: string | undefined): readonly HistoricalInges
   return [...new Set(categories)];
 };
 
+const parseOptionalPositiveIntArg = (value: string | undefined, field: string): number | undefined => {
+  if (!value) {
+    return undefined;
+  }
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${field} must be a positive integer.`);
+  }
+  return parsed;
+};
+
 const parseArgs = (): HistoricalIngestionJobInput => {
   const args = parseKeyValueArgs();
   const mode = parseModeArg(args.get("mode"));
@@ -108,7 +119,20 @@ const main = async (): Promise<void> => {
 
   const baseUrl = process.env.MYRIAD_BASE_URL ?? "https://api-v2.myriadprotocol.com/";
   const metadataVersion = process.env.MYRIAD_METADATA_VERSION ?? "myriad-v1";
+  const rawArgs = parseKeyValueArgs();
   const input = parseArgs();
+  const effectiveEventPageSize =
+    parseOptionalPositiveIntArg(rawArgs.get("eventPageSize"), "eventPageSize")
+    ?? parseOptionalPositiveIntArg(process.env.MYRIAD_EVENT_PAGE_SIZE, "MYRIAD_EVENT_PAGE_SIZE")
+    ?? 100;
+  const effectiveMaxEventPages =
+    parseOptionalPositiveIntArg(rawArgs.get("maxEventPages"), "maxEventPages")
+    ?? parseOptionalPositiveIntArg(process.env.MYRIAD_MAX_EVENT_PAGES_PER_MARKET, "MYRIAD_MAX_EVENT_PAGES_PER_MARKET")
+    ?? 25;
+  const effectiveMaxEventRows =
+    parseOptionalPositiveIntArg(rawArgs.get("maxEventRows"), "maxEventRows")
+    ?? parseOptionalPositiveIntArg(process.env.MYRIAD_MAX_EVENT_ROWS_PER_MARKET, "MYRIAD_MAX_EVENT_ROWS_PER_MARKET")
+    ?? 2_500;
 
   const pool = new Pool({
     connectionString: databaseUrl,
@@ -135,6 +159,9 @@ const main = async (): Promise<void> => {
     const adapter = new MyriadHistoricalAdapter({
       client,
       metadataVersion,
+      eventPageSize: effectiveEventPageSize,
+      maxEventPagesPerMarket: effectiveMaxEventPages,
+      maxEventRowsPerMarket: effectiveMaxEventRows,
       logger
     });
     const job = new MyriadHistoricalIngestionJob({
@@ -151,6 +178,9 @@ const main = async (): Promise<void> => {
         categories: input.categories ?? VALID_CATEGORIES,
         canonicalEventId: input.canonicalEventId ?? null,
         canonicalMarketId: input.canonicalMarketId ?? null,
+        eventPageSize: effectiveEventPageSize,
+        maxEventPagesPerMarket: effectiveMaxEventPages,
+        maxEventRowsPerMarket: effectiveMaxEventRows,
         start: input.windowStart.toISOString(),
         end: input.windowEnd.toISOString()
       },

@@ -1431,3 +1431,15 @@ Operational takeaway:
 ### Current Limitation
 - Some Myriad markets have very large event histories, so direct backfills can take several minutes even with a small candidate-market batch.
 - Myriad pair/tri routing remains intentionally blocked until exact cross-venue compatibility edges are curated.
+
+### 2026-03-20 Follow-up: Operational Backfill Caps
+- Added hard operational controls for Myriad event history ingestion:
+  - `MYRIAD_EVENT_PAGE_SIZE`
+  - `MYRIAD_MAX_EVENT_PAGES_PER_MARKET`
+  - `MYRIAD_MAX_EVENT_ROWS_PER_MARKET`
+  - CLI overrides: `--eventPageSize`, `--maxEventPages`, `--maxEventRows`
+- `MyriadMarketEventsBackfill` now truncates deterministically when those limits are hit and reports:
+  - `truncated`
+  - `truncationReason = max_pages | max_events`
+- Verified targeted tests still pass.
+- Verified capped manual runs complete quickly without open-ended event crawl.

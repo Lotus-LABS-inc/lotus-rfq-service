@@ -168,6 +168,93 @@ describe("Myriad extraction modules", () => {
     expect(events.events.map((item) => item.timestamp)).toEqual([1710000100, 1710000200])
   })
 
+  it("caps market event backfill by configured page or row limits", async () => {
+    const backfill = new MyriadMarketEventsBackfill({
+      client: {
+        getMarketEvents: vi
+          .fn()
+          .mockResolvedValueOnce({
+            data: [{
+              user: "0x1",
+              action: "buy",
+              marketTitle: "Election Market",
+              marketSlug: "election-market",
+              marketId: 101,
+              networkId: 2741,
+              outcomeTitle: "Yes",
+              outcomeId: 0,
+              shares: 10,
+              value: 5.2,
+              timestamp: 1710000100,
+              blockNumber: 100,
+              token: "0xtoken"
+            }],
+            pagination: { page: 1, limit: 1, total: 3, totalPages: 3, hasNext: true, hasPrev: false }
+          })
+          .mockResolvedValueOnce({
+            data: [{
+              user: "0x2",
+              action: "buy",
+              marketTitle: "Election Market",
+              marketSlug: "election-market",
+              marketId: 101,
+              networkId: 2741,
+              outcomeTitle: "Yes",
+              outcomeId: 0,
+              shares: 10,
+              value: 5.4,
+              timestamp: 1710000200,
+              blockNumber: 101,
+              token: "0xtoken"
+            }],
+            pagination: { page: 2, limit: 1, total: 3, totalPages: 3, hasNext: true, hasPrev: true }
+          })
+          .mockResolvedValueOnce({
+            data: [{
+              user: "0x3",
+              action: "buy",
+              marketTitle: "Election Market",
+              marketSlug: "election-market",
+              marketId: 101,
+              networkId: 2741,
+              outcomeTitle: "Yes",
+              outcomeId: 0,
+              shares: 10,
+              value: 5.6,
+              timestamp: 1710000300,
+              blockNumber: 102,
+              token: "0xtoken"
+            }],
+            pagination: { page: 3, limit: 1, total: 3, totalPages: 3, hasNext: false, hasPrev: true }
+          })
+      } as never
+    })
+
+    const cappedByPages = await backfill.backfill({
+      idOrSlug: "election-market",
+      network_id: 2741,
+      limit: 1,
+      maxPages: 2
+    })
+
+    expect(cappedByPages.pagesFetched).toBe(2)
+    expect(cappedByPages.events).toHaveLength(2)
+    expect(cappedByPages.truncated).toBe(true)
+    expect(cappedByPages.truncationReason).toBe("max_pages")
+
+    const cappedByRows = await backfill.backfill({
+      idOrSlug: "election-market",
+      network_id: 2741,
+      limit: 1,
+      maxEvents: 1
+    })
+
+    expect(cappedByRows.pagesFetched).toBe(1)
+    expect(cappedByRows.events).toHaveLength(1)
+    expect(cappedByRows.truncated).toBe(true)
+    expect(cappedByRows.truncationReason).toBe("max_events")
+  })
+
   it("normalizes categories and generates deterministic shortlists", () => {
     expect(
       normalizeMyriadTopicCategory({

@@ -12,11 +12,15 @@ export interface MyriadMarketEventsBackfillInput extends MyriadMarketLookup {
   since?: number;
   until?: number;
   limit?: number;
+  maxPages?: number;
+  maxEvents?: number;
 }
 
 export interface MyriadMarketEventsBackfillResult {
   events: readonly MyriadMarketEvent[];
   pagesFetched: number;
+  truncated: boolean;
+  truncationReason: "max_pages" | "max_events" | null;
 }
 
 export class MyriadMarketEventsBackfill {
@@ -24,9 +28,12 @@ export class MyriadMarketEventsBackfill {
 
   public async backfill(input: MyriadMarketEventsBackfillInput): Promise<MyriadMarketEventsBackfillResult> {
     const limit = Math.min(input.limit ?? 100, 100)
+    const maxPages = input.maxPages ?? null
+    const maxEvents = input.maxEvents ?? null
     let page = 1
     let pagesFetched = 0
     const events: MyriadMarketEvent[] = []
+    let truncationReason: MyriadMarketEventsBackfillResult["truncationReason"] = null
 
     while (true) {
       const query: MyriadMarketEventsQuery = {
@@ -41,6 +48,14 @@ export class MyriadMarketEventsBackfill {
       pagesFetched += 1
       events.push(...response.data)
       this.config.logger?.info({ idOrSlug: input.idOrSlug, page, limit, returned: response.data.length }, "Fetched Myriad market events page.")
+      if (maxEvents !== null && events.length >= maxEvents) {
+        truncationReason = "max_events"
+        break
+      }
+      if (maxPages !== null && pagesFetched >= maxPages) {
+        truncationReason = "max_pages"
+        break
+      }
       if (!response.pagination.hasNext) {
         break
       }
@@ -48,13 +63,15 @@ export class MyriadMarketEventsBackfill {
     }
 
     return {
-      events: [...events].sort(
+      events: [...events.slice(0, maxEvents ?? events.length)].sort(
         (left, right) =>
           left.timestamp - right.timestamp ||
           left.blockNumber - right.blockNumber ||
           String(left.marketId).localeCompare(String(right.marketId))
       ),
-      pagesFetched
+      pagesFetched,
+      truncated: truncationReason !== null,
+      truncationReason
     }
   }
 }
