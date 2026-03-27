@@ -358,7 +358,7 @@ describe("SimulationAdminService", () => {
       coverageStart: new Date("2026-03-13T00:00:00.000Z"),
       coverageEnd: new Date("2026-03-13T01:00:00.000Z"),
       routeableMarketCount: 1,
-      venueCoverage: { polymarketRows: 10, limitlessRows: 8, opinionRows: 0, myriadRows: 0 }
+      venueCoverage: { polymarketRows: 10, limitlessRows: 8, opinionRows: 0, myriadRows: 0, predictRows: 0 }
     }]);
   });
 
@@ -390,7 +390,7 @@ describe("SimulationAdminService", () => {
       coverageStart: new Date("2026-03-13T00:00:00.000Z"),
       coverageEnd: new Date("2026-03-13T01:00:00.000Z"),
       routeableMarketCount: 1,
-      venueCoverage: { polymarketRows: 10, limitlessRows: 8, opinionRows: 7, myriadRows: 0 }
+      venueCoverage: { polymarketRows: 10, limitlessRows: 8, opinionRows: 7, myriadRows: 0, predictRows: 0 }
     }]);
   });
 
@@ -476,7 +476,7 @@ describe("SimulationAdminService", () => {
         coverageStart: new Date("2026-03-13T00:00:00.000Z"),
         coverageEnd: new Date("2026-03-13T01:00:00.000Z"),
         routeableMarketCount: 1,
-        venueCoverage: { polymarketRows: 4, limitlessRows: 4, opinionRows: 0, myriadRows: 0 }
+        venueCoverage: { polymarketRows: 4, limitlessRows: 4, opinionRows: 0, myriadRows: 0, predictRows: 0 }
       },
       {
         canonicalEventId: "22222222-2222-4222-8222-222222222222",
@@ -487,7 +487,7 @@ describe("SimulationAdminService", () => {
         coverageStart: new Date("2026-03-13T00:00:00.000Z"),
         coverageEnd: new Date("2026-03-13T01:00:00.000Z"),
         routeableMarketCount: 1,
-        venueCoverage: { polymarketRows: 4, limitlessRows: 4, opinionRows: 0, myriadRows: 0 }
+        venueCoverage: { polymarketRows: 4, limitlessRows: 4, opinionRows: 0, myriadRows: 0, predictRows: 0 }
       }
     ]);
 

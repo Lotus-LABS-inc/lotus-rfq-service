@@ -1,13 +1,15 @@
 #!/usr/bin/env tsx
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { Pool } from "pg";
-
+import { historicalRouteCandidatesSchema } from "../src/simulation/historical-route-catalog-manifest.js";
 import {
-  historicalRouteCandidatesSchema,
-  type HistoricalCatalogManifestEntry
-} from "../src/simulation/historical-route-catalog-manifest.js";
+  buildSourceBackedHistoricalCandidate,
+  historicalRouteDiscoverySeeds,
+  type HistoricalRouteDiscoverySeed
+} from "../src/simulation/historical-route-source-discovery.js";
+import { PredexonHistoricalClient } from "../src/integrations/predexon/predexon-client.js";
+import { LimitlessHistoricalClient } from "../src/integrations/limitless/limitless-client.js";
 
 const envCandidates = [path.resolve(process.cwd(), "..", ".env"), path.resolve(process.cwd(), ".env")];
 for (const envPath of envCandidates) {
@@ -16,159 +18,294 @@ for (const envPath of envCandidates) {
   }
 }
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL is required.");
+const predexonApiKey = process.env.PREDEXON_API_KEY;
+const predexonBaseUrl = process.env.PREDEXON_BASE_URL ?? "https://api.predexon.com";
+const limitlessApiKey = process.env.LIMITLESS_API_KEY;
+const limitlessBaseUrl = process.env.LIMITLESS_BASE_URL ?? "https://api.limitless.exchange";
+const opinionApiKey = process.env.OPINION_API_KEY;
+const opinionBaseUrl = process.env.OPINION_OPENAPI_BASE_URL ?? "https://openapi.opinion.trade/openapi";
+
+if (!predexonApiKey) {
+  throw new Error("PREDEXON_API_KEY is required.");
 }
 
-interface CandidateRow {
-  canonical_event_id: string;
-  canonical_market_id: string;
-  venue: "POLYMARKET" | "LIMITLESS" | "OPINION";
-  venue_market_id: string;
-  primary_resolution_text: string | null;
-  canonical_category: string | null;
-  min_timestamp: Date | null;
-  max_timestamp: Date | null;
+if (!limitlessApiKey) {
+  throw new Error("LIMITLESS_API_KEY is required.");
 }
 
-const resolveHistorySource = (venue: CandidateRow["venue"]): "predexon_polymarket" | "predexon_limitless" | "predexon_opinion" => {
-  switch (venue) {
-    case "POLYMARKET":
-      return "predexon_polymarket";
-    case "LIMITLESS":
-      return "predexon_limitless";
-    case "OPINION":
-      return "predexon_opinion";
+const predexonClient = new PredexonHistoricalClient({
+  baseUrl: predexonBaseUrl,
+  apiKey: predexonApiKey
+});
+
+const limitlessClient = new LimitlessHistoricalClient({
+  baseUrl: limitlessBaseUrl,
+  apiKey: limitlessApiKey
+});
+
+const normalizeComparableTitle = (value: string): string =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+const readOpinionCurationExclusions = (): Set<string> => {
+  const reportPath = path.resolve(process.cwd(), "docs", "predexon-opinion-id-curation.json");
+  if (!existsSync(reportPath)) {
+    return new Set();
   }
+
+  const payload = JSON.parse(readFileSync(reportPath, "utf8")) as {
+    pairs?: Array<{ rejectedCandidates?: Array<{ marketId?: string }> }>;
+  };
+
+  return new Set(
+    (payload.pairs ?? [])
+      .flatMap((pair) => pair.rejectedCandidates ?? [])
+      .map((candidate) => candidate.marketId)
+      .filter((marketId): marketId is string => typeof marketId === "string" && marketId.length > 0)
+  );
 };
 
-const buildHistoricalEventId = (canonicalMarketId: string): string => `HISTSIM::${canonicalMarketId}`;
-const buildHistoricalMarketId = (canonicalMarketId: string): string => `HISTSIM-${canonicalMarketId}`;
+const fetchOpinionMarketList = async (): Promise<Array<{ marketId: string; title: string }>> => {
+  if (!opinionApiKey) {
+    return [];
+  }
 
-const defaultWindow = () => {
-  const end = new Date();
-  const start = new Date(end.getTime() - 10 * 24 * 60 * 60 * 1_000);
-  return { start, end };
+  const response = await fetch(`${opinionBaseUrl}/market?page=1&limit=200`, {
+    headers: {
+      "x-api-key": opinionApiKey
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Opinion OpenAPI /market failed with HTTP ${response.status}.`);
+  }
+
+  const payload = await response.json() as Record<string, unknown>;
+  const candidates = [
+    ...(Array.isArray(payload.data) ? payload.data : []),
+    ...(Array.isArray((payload.data as Record<string, unknown> | undefined)?.markets)
+      ? ((payload.data as Record<string, unknown>).markets as unknown[])
+      : []),
+    ...(Array.isArray((payload.data as Record<string, unknown> | undefined)?.items)
+      ? ((payload.data as Record<string, unknown>).items as unknown[])
+      : []),
+    ...(Array.isArray(payload.markets) ? (payload.markets as unknown[]) : []),
+    ...(Array.isArray(payload.items) ? (payload.items as unknown[]) : [])
+  ];
+
+  const seen = new Set<string>();
+  const extracted: Array<{ marketId: string; title: string }> = [];
+  for (const entry of candidates) {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+      continue;
+    }
+    const record = entry as Record<string, unknown>;
+    const marketId = typeof record.marketId === "string"
+      ? record.marketId
+      : typeof record.id === "string"
+        ? record.id
+        : typeof record.market_id === "string"
+          ? record.market_id
+          : null;
+    const title = typeof record.title === "string"
+      ? record.title
+      : typeof record.marketTitle === "string"
+        ? record.marketTitle
+        : typeof record.question === "string"
+          ? record.question
+          : null;
+
+    if (!marketId || !title || seen.has(marketId)) {
+      continue;
+    }
+
+    seen.add(marketId);
+    extracted.push({ marketId, title });
+  }
+
+  return extracted;
+};
+
+const buildOpinionWindow = (seed: HistoricalRouteDiscoverySeed) => {
+  const start = seed.venueProfiles
+    .map((profile) => new Date(profile.historyWindow.start).getTime())
+    .reduce((left, right) => Math.min(left, right));
+  const end = seed.venueProfiles
+    .map((profile) => new Date(profile.historyWindow.end).getTime())
+    .reduce((left, right) => Math.max(left, right));
+
+  return {
+    start,
+    end
+  };
+};
+
+const resolveOpinionExpansion = async (
+  seed: HistoricalRouteDiscoverySeed,
+  exclusions: ReadonlySet<string>,
+  opinionMarkets: readonly Array<{ marketId: string; title: string }>
+) => {
+  if (!seed.opinionDiscovery) {
+    return {
+      discoveredFrom: [] as Array<{ type: "public_site" | "search_query" | "predexon_validation"; reference: string; observation: string }>,
+      venueProfiles: [] as typeof seed.venueProfiles
+    };
+  }
+
+  const discoveredFrom = [
+    {
+      type: "public_site" as const,
+      reference: seed.opinionDiscovery.publicReference,
+      observation: "Opinion historical pair discovery uses the documented Opinion OpenAPI /market listing surface when an API key is available."
+    },
+    ...seed.opinionDiscovery.searchQueries.map((query) => ({
+      type: "search_query" as const,
+      reference: query,
+      observation: "Exact Opinion public discovery query retained for audit and repeatable exclusion review."
+    }))
+  ];
+
+  if (!opinionApiKey) {
+    return {
+      discoveredFrom: [
+        ...discoveredFrom,
+        {
+          type: "public_site" as const,
+          reference: "OPINION_API_KEY",
+          observation:
+            "Opinion OpenAPI discovery was skipped because OPINION_API_KEY is not configured. Exact historical Opinion pair expansion remains blocked until direct Opinion discovery is enabled."
+        }
+      ],
+      venueProfiles: [] as typeof seed.venueProfiles
+    };
+  }
+
+  const titleSet = new Set(seed.opinionDiscovery.expectedTitles.map((title) => normalizeComparableTitle(title)));
+  const window = buildOpinionWindow(seed);
+  for (const market of opinionMarkets) {
+    if (!titleSet.has(normalizeComparableTitle(market.title)) || exclusions.has(market.marketId)) {
+      continue;
+    }
+
+    const snapshots = await predexonClient.getOpinionOrderbookHistory({
+      market_id: market.marketId,
+      start_time: window.start,
+      end_time: window.end,
+      limit: 1
+    });
+
+    if (snapshots.length === 0) {
+      continue;
+    }
+
+    return {
+      discoveredFrom: [
+        ...discoveredFrom,
+        {
+          type: "predexon_validation" as const,
+          reference: `${predexonBaseUrl}/v2/opinion/orderbooks?market_id=${market.marketId}&start_time=${window.start}&end_time=${window.end}`,
+          observation: `Predexon Opinion historical validation returned non-empty orderbook history for exact market ${market.marketId}.`
+        }
+      ],
+      venueProfiles: [
+        {
+          venue: "OPINION" as const,
+          venueMarketId: market.marketId,
+          title: market.title,
+          historySource: "predexon_opinion" as const,
+          historyWindow: {
+            start: new Date(window.start).toISOString(),
+            end: new Date(window.end).toISOString()
+          }
+        }
+      ] as typeof seed.venueProfiles
+    };
+  }
+
+  return { discoveredFrom, venueProfiles: [] as typeof seed.venueProfiles };
+};
+
+const validateSeed = async (seed: HistoricalRouteDiscoverySeed): Promise<void> => {
+  for (const validation of seed.validations) {
+    if (validation.validationKind === "predexon_polymarket") {
+      const markets = await predexonClient.listMarkets({ condition_id: [validation.expectedReference] });
+      const market = markets[0];
+      if (!market) {
+        throw new Error(`Predexon market not found for ${validation.expectedReference}.`);
+      }
+      if (market.title !== validation.expectedTitle) {
+        throw new Error(
+          `Predexon title mismatch for ${validation.expectedReference}: expected "${validation.expectedTitle}", received "${market.title}".`
+        );
+      }
+      continue;
+    }
+
+    if (validation.validationKind === "limitless_market_detail") {
+      const market = await limitlessClient.getMarketDetail(validation.expectedReference);
+      if (market.title !== validation.expectedTitle) {
+        throw new Error(
+          `Limitless title mismatch for ${validation.expectedReference}: expected "${validation.expectedTitle}", received "${market.title}".`
+        );
+      }
+      continue;
+    }
+
+    if (validation.validationKind === "predexon_opinion") {
+      const opinionProfile = seed.venueProfiles.find((profile) => profile.venue === "OPINION");
+      if (!opinionProfile) {
+        throw new Error(`Missing Opinion venue profile for ${seed.historicalCanonicalMarketId}.`);
+      }
+      const snapshots = await predexonClient.getOpinionOrderbookHistory({
+        market_id: validation.expectedReference,
+        start_time: new Date(opinionProfile.historyWindow.start).getTime(),
+        end_time: new Date(opinionProfile.historyWindow.end).getTime(),
+        limit: 1
+      });
+      if (snapshots.length === 0) {
+        throw new Error(`Predexon Opinion orderbook history is empty for ${validation.expectedReference}.`);
+      }
+      continue;
+    }
+  }
 };
 
 const main = async (): Promise<void> => {
-  const pool = new Pool({
-    connectionString: databaseUrl,
-    application_name: "generate-historical-route-candidates"
+  const opinionExclusions = readOpinionCurationExclusions();
+  const opinionMarkets = await fetchOpinionMarketList();
+  const candidates = [];
+  for (const seed of historicalRouteDiscoverySeeds) {
+    await validateSeed(seed);
+    const opinionExpansion = await resolveOpinionExpansion(seed, opinionExclusions, opinionMarkets);
+    candidates.push(buildSourceBackedHistoricalCandidate(seed, {
+      additionalDiscoveredFrom: opinionExpansion.discoveredFrom,
+      additionalVenueProfiles: opinionExpansion.venueProfiles
+    }));
+  }
+
+  const payload = historicalRouteCandidatesSchema.parse({
+    version: 2,
+    observedAt: new Date().toISOString(),
+    policy: {
+      exactMatchRule: "exact_semantic_equivalence_only",
+      approvalMode: "checked_in_curated_manifest",
+      catalogScope: "historical_simulation"
+    },
+    candidates
   });
 
-  try {
-    const result = await pool.query<CandidateRow>(
-      `WITH latest_state_category AS (
-         SELECT DISTINCT ON (canonical_event_id, canonical_market_id, venue, venue_market_id)
-                canonical_event_id,
-                canonical_market_id,
-                venue,
-                venue_market_id,
-                canonical_category
-           FROM historical_market_states
-          ORDER BY canonical_event_id, canonical_market_id, venue, venue_market_id, "timestamp" DESC
-       ),
-       state_windows AS (
-         SELECT venue,
-                venue_market_id,
-                MIN("timestamp") AS min_timestamp,
-                MAX("timestamp") AS max_timestamp
-           FROM historical_market_states
-          GROUP BY venue, venue_market_id
-       )
-       SELECT
-         rp.canonical_event_id::text AS canonical_event_id,
-         rp.canonical_market_id,
-         rp.venue,
-         rp.venue_market_id,
-         rp.primary_resolution_text,
-         COALESCE(ls.canonical_category, UPPER(NULLIF(rp.metadata->>'canonicalCategory', ''))) AS canonical_category,
-         sw.min_timestamp,
-         sw.max_timestamp
-       FROM resolution_profiles rp
-       LEFT JOIN latest_state_category ls
-         ON ls.canonical_event_id::text = rp.canonical_event_id::text
-        AND ls.canonical_market_id = rp.canonical_market_id
-        AND ls.venue = rp.venue
-        AND ls.venue_market_id = rp.venue_market_id
-       LEFT JOIN state_windows sw
-         ON sw.venue = rp.venue
-        AND sw.venue_market_id = rp.venue_market_id
-      ORDER BY rp.canonical_market_id, rp.venue`
-    );
-
-    const grouped = new Map<string, CandidateRow[]>();
-    for (const row of result.rows) {
-      const key = `${row.canonical_event_id}|${row.canonical_market_id}`;
-      const current = grouped.get(key) ?? [];
-      current.push(row);
-      grouped.set(key, current);
-    }
-
-    const candidates: HistoricalCatalogManifestEntry[] = [...grouped.entries()]
-      .sort((left, right) => left[0].localeCompare(right[0]))
-      .map(([, rows]) => {
-        const first = rows[0]!;
-        return {
-          historicalCanonicalEventId: buildHistoricalEventId(first.canonical_market_id),
-          historicalCanonicalMarketId: buildHistoricalMarketId(first.canonical_market_id),
-          canonicalCategory: (
-            first.canonical_category === "SPORTS" ||
-            first.canonical_category === "CRYPTO" ||
-            first.canonical_category === "POLITICS" ||
-            first.canonical_category === "ESPORTS" ||
-            first.canonical_category === "OTHER"
-          ) ? first.canonical_category : "OTHER",
-          title: first.primary_resolution_text ?? first.canonical_market_id,
-          decision: {
-            status: "unresolved",
-            reasonCode: "awaiting_curated_approval",
-            reason: "Candidate generated from existing inventory and requires explicit historical curation approval."
-          },
-          discoveredFrom: [
-            {
-              type: "db_inventory",
-              reference: `${first.canonical_event_id}:${first.canonical_market_id}`,
-              observation: "Generated from existing live resolution_profiles and historical row windows."
-            }
-          ],
-          venueProfiles: rows.map((row) => {
-            const fallbackWindow = defaultWindow();
-            return {
-              venue: row.venue,
-              venueMarketId: row.venue_market_id,
-              title: row.primary_resolution_text ?? row.canonical_market_id,
-              historySource: resolveHistorySource(row.venue),
-              historyWindow: {
-                start: (row.min_timestamp ?? fallbackWindow.start).toISOString(),
-                end: (row.max_timestamp ?? fallbackWindow.end).toISOString()
-              },
-              copyFromLiveResolutionProfile: true
-            };
-          }),
-          acceptedAssessments: []
-        };
-      });
-
-    const payload = historicalRouteCandidatesSchema.parse({
-      version: 1,
-      observedAt: new Date().toISOString(),
-      policy: {
-        exactMatchRule: "exact_semantic_equivalence_only",
-        approvalMode: "checked_in_curated_manifest",
-        catalogScope: "historical_simulation"
-      },
-      candidates
-    });
-
-    const outputPath = path.resolve(process.cwd(), "docs", "historical-route-candidates.json");
-    writeFileSync(outputPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-    console.log(JSON.stringify({ outputPath, candidateCount: payload.candidates.length }));
-  } finally {
-    await pool.end();
-  }
+  const outputPath = path.resolve(process.cwd(), "docs", "historical-route-candidates.json");
+  writeFileSync(outputPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  console.log(
+    JSON.stringify({
+      outputPath,
+      candidateCount: payload.candidates.length,
+      opinionDiscoveryEnabled: Boolean(opinionApiKey),
+      opinionCandidateCount: opinionMarkets.length
+    })
+  );
 };
 
 main().catch((error) => {

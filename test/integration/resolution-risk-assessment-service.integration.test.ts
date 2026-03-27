@@ -3,9 +3,12 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { Pool } from "pg";
+import { config as loadDotenv } from "dotenv";
 import { ResolutionPairComparator } from "../../src/core/rfq-engine/resolution-pair-comparator.js";
 import { ResolutionRiskScoringEngine } from "../../src/core/rfq-engine/resolution-risk-scoring-engine.js";
 import { ResolutionRiskAssessmentService } from "../../src/core/rfq-engine/resolution-risk-assessment-service.js";
+
+loadDotenv({ path: path.resolve(process.cwd(), ".env"), override: true });
 
 const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const ENV_READY = Boolean(TEST_DB_URL);
@@ -27,7 +30,7 @@ const applyMigrations = async (pool: Pool): Promise<void> => {
         await pool.query(sql);
       } catch (error) {
         const code = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
-        if (code === "42P07" || code === "42710") {
+        if (code === "42P07" || code === "42710" || code === "42701") {
           continue;
         }
         throw error;
@@ -81,16 +84,17 @@ describe.skipIf(!ENV_READY)("resolution risk assessment service integration", ()
 
     await db.query(
       `INSERT INTO resolution_profiles
-        (id, venue, venue_market_id, canonical_event_id, oracle_type, oracle_name, resolution_authority_type,
+        (id, venue, venue_market_id, canonical_event_id, canonical_market_id, oracle_type, oracle_name, resolution_authority_type,
          primary_resolution_text, supplemental_rules_text, dispute_window_hours, settlement_lag_hours,
          market_type, outcome_schema, historical_divergence_rate, metadata)
        VALUES
-        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15::jsonb)`,
+        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16::jsonb)`,
       [
         id,
         "venue-a",
         `market-${id}`,
         canonicalEventId,
+        `canonical-market-${canonicalEventId}`,
         overrides.oracleType ?? "manual_committee",
         overrides.oracleName ?? "Resolution Committee",
         overrides.resolutionAuthorityType ?? "committee",

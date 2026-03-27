@@ -297,6 +297,10 @@ export class DiffReplayRunner implements IDiffReplayRunner {
 
     private expectedComparableSnapshot(envelope: ReplayEnvelope): Record<string, unknown> {
         switch (envelope.decisionType) {
+            case "RESOLUTION_RISK_ASSESSMENT":
+                return {
+                    assessment: this.projectResolutionRiskAssessment(asObject(envelope.outputSnapshot, "outputSnapshot").assessment)
+                };
             case "SOR_PLAN":
                 return {
                     decisionTrace: {
@@ -320,6 +324,10 @@ export class DiffReplayRunner implements IDiffReplayRunner {
 
     private actualComparableSnapshot(decisionType: ReplayDecisionType, replayOutput: Record<string, unknown>): Record<string, unknown> {
         switch (decisionType) {
+            case "RESOLUTION_RISK_ASSESSMENT":
+                return {
+                    assessment: this.projectResolutionRiskAssessment(asObject(replayOutput, "replayOutput").assessment)
+                };
             case "SOR_PLAN":
                 return {
                     decisionTrace: asObject(replayOutput.decisionTrace, "replayOutput.decisionTrace"),
@@ -336,6 +344,24 @@ export class DiffReplayRunner implements IDiffReplayRunner {
             default:
                 return replayOutput;
         }
+    }
+
+    private projectResolutionRiskAssessment(value: unknown): Record<string, unknown> {
+        const assessment = asObject(value, "resolutionRisk.assessment");
+        return {
+            canonicalEventId: assessment.canonicalEventId ?? null,
+            canonicalMarketId: assessment.canonicalMarketId ?? null,
+            marketAProfileId: assessment.marketAProfileId ?? null,
+            marketBProfileId: assessment.marketBProfileId ?? null,
+            riskScore: assessment.riskScore ?? null,
+            confidenceScore: assessment.confidenceScore ?? null,
+            equivalenceClass: assessment.equivalenceClass ?? null,
+            factorBreakdown: assessment.factorBreakdown ?? {},
+            reasons: assessment.reasons ?? [],
+            version: assessment.version ?? null,
+            liquidityCost: assessment.liquidityCost ?? null,
+            maxSettlementDelayHours: assessment.maxSettlementDelayHours ?? null
+        };
     }
 
     private projectSorBuildResult(value: unknown): Record<string, unknown> {

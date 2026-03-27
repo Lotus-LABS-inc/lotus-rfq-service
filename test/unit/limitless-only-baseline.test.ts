@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { HistoricalMarketClass, type HistoricalMarketState } from "../../src/core/historical-simulation/historical-simulation.types.js";
 import { LimitlessOnlyBaselineEvaluator } from "../../src/simulation/baselines/limitless-only-baseline.js";
 import { HistoricalSimulationBaselineError } from "../../src/simulation/baselines/shared.js";
+import type { HistoricalSimulationBaselineInput } from "../../src/simulation/baselines/shared.js";
 
 const feePolicy = {
   version: "fees-v1",
@@ -41,7 +42,7 @@ const createState = (overrides: Partial<HistoricalMarketState>): HistoricalMarke
 describe("LimitlessOnlyBaselineEvaluator", () => {
   it("produces stable crypto threshold output with nullable fill probability when only price history exists", () => {
     const evaluator = new LimitlessOnlyBaselineEvaluator();
-    const input = {
+    const input: HistoricalSimulationBaselineInput = {
       canonicalEventId: "canonical-crypto-1",
       marketStates: [
         createState({ id: "state-2", timestamp: new Date("2026-03-13T00:02:00.000Z"), lastPrice: "0.58", sourceTimestamp: new Date("2026-03-13T00:02:00.000Z") }),
@@ -73,7 +74,7 @@ describe("LimitlessOnlyBaselineEvaluator", () => {
         side: "BUY",
         requestedNotional: "1",
         feePolicy
-      })
+      } satisfies HistoricalSimulationBaselineInput)
     ).toThrow(HistoricalSimulationBaselineError);
   });
 });

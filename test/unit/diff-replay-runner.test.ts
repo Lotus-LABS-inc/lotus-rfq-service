@@ -103,6 +103,7 @@ const assessmentInputSnapshot = {
             venue: "venue-a",
             venueMarketId: "mkt-a",
             canonicalEventId: "event-1",
+            canonicalMarketId: "market-1",
             oracleType: "manual",
             oracleName: "oracle-a",
             resolutionAuthorityType: "committee",
@@ -125,6 +126,7 @@ const assessmentInputSnapshot = {
             venue: "venue-b",
             venueMarketId: "mkt-b",
             canonicalEventId: "event-1",
+            canonicalMarketId: "market-1",
             oracleType: "manual",
             oracleName: "oracle-b",
             resolutionAuthorityType: "committee",
@@ -149,8 +151,8 @@ const assessmentInputSnapshot = {
 const defaultAssessmentOutput = {
     assessment: new ResolutionRiskScoringEngine().score({
         canonicalEventId: "event-1",
-        marketAProfileId: "profile-a",
-        marketBProfileId: "profile-b",
+        profileA: assessmentInputSnapshot.profiles[0] as any,
+        profileB: assessmentInputSnapshot.profiles[1] as any,
         factorComparison: new ResolutionPairComparator().compare(
             assessmentInputSnapshot.profiles[0] as any,
             assessmentInputSnapshot.profiles[1] as any

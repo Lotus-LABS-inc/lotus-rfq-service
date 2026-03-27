@@ -20,6 +20,7 @@ import type { MyriadOnlyBaselineEvaluator } from "./baselines/myriad-only-baseli
 import type { NoInternalizationBaselineEvaluator } from "./baselines/no-internalization-baseline.js";
 import type { OpinionOnlyBaselineEvaluator } from "./baselines/opinion-only-baseline.js";
 import type { PolymarketOnlyBaselineEvaluator } from "./baselines/polymarket-only-baseline.js";
+import type { PredictOnlyBaselineEvaluator } from "./baselines/predict-only-baseline.js";
 
 export type HistoricalSimulationRunnerErrorCode =
   | "historical_state_missing"
@@ -123,6 +124,7 @@ export interface HistoricalSimulationSliceResult {
     limitlessOnly: HistoricalSimulationBaselineEstimate | null;
     opinionOnly: HistoricalSimulationBaselineEstimate | null;
     myriadOnly: HistoricalSimulationBaselineEstimate | null;
+    predictOnly: HistoricalSimulationBaselineEstimate | null;
     bestExternalOnly: HistoricalSimulationBaselineEstimate;
     noInternalization: HistoricalSimulationBaselineEstimate;
   };
@@ -183,6 +185,7 @@ export interface HistoricalSimulationRunnerDeps {
   limitlessOnlyBaselineEvaluator: Pick<LimitlessOnlyBaselineEvaluator, "evaluate">;
   opinionOnlyBaselineEvaluator: Pick<OpinionOnlyBaselineEvaluator, "evaluate">;
   myriadOnlyBaselineEvaluator: Pick<MyriadOnlyBaselineEvaluator, "evaluate">;
+  predictOnlyBaselineEvaluator: Pick<PredictOnlyBaselineEvaluator, "evaluate">;
   bestExternalOnlyBaselineEvaluator: Pick<BestExternalOnlyBaselineEvaluator, "evaluate">;
   noInternalizationBaselineEvaluator: Pick<NoInternalizationBaselineEvaluator, "evaluate">;
   lotusEvaluators: HistoricalLotusPathEvaluatorBundle;
@@ -272,21 +275,49 @@ const sortStates = (states: readonly HistoricalMarketState[]): HistoricalMarketS
       left.sourceTimestamp.getTime() - right.sourceTimestamp.getTime()
   );
 
-const groupStatesIntoSlices = (states: readonly HistoricalMarketState[]): ReadonlyMap<string, readonly HistoricalMarketState[]> => {
-  const grouped = new Map<string, HistoricalMarketState[]>();
+const stateHasPriceEvidence = (state: HistoricalMarketState): boolean =>
+  state.bestBid !== null || state.bestAsk !== null || state.midpoint !== null || state.lastPrice !== null;
 
-  for (const state of states) {
-    const key = state.timestamp.toISOString();
-    const slice = grouped.get(key) ?? [];
-    slice.push(state);
-    grouped.set(key, slice);
+const venueHasPriceEvidence = (states: readonly HistoricalMarketState[], venue: string): boolean =>
+  states.some((state) => state.venue === venue && stateHasPriceEvidence(state));
+
+const mergeAsOfState = (
+  previous: HistoricalMarketState | undefined,
+  next: HistoricalMarketState
+): HistoricalMarketState => {
+  if (previous === undefined) {
+    return next;
   }
 
-  return new Map(
-    [...grouped.entries()]
-      .sort((left, right) => left[0].localeCompare(right[0]))
-      .map(([key, value]) => [key, sortStates(value)])
-  );
+  return {
+    ...next,
+    midpoint: next.midpoint ?? previous.midpoint,
+    bestBid: next.bestBid ?? previous.bestBid,
+    bestAsk: next.bestAsk ?? previous.bestAsk,
+    spread: next.spread ?? previous.spread,
+    lastPrice: next.lastPrice ?? previous.lastPrice
+  };
+};
+
+const groupStatesIntoSlices = (
+  states: readonly HistoricalMarketState[]
+): ReadonlyMap<string, readonly HistoricalMarketState[]> => {
+  const orderedStates = sortStates(states);
+  const snapshots = new Map<string, readonly HistoricalMarketState[]>();
+  const latestByVenueMarket = new Map<string, HistoricalMarketState>();
+
+  for (const state of orderedStates) {
+    const key = state.timestamp.toISOString();
+    const venueMarketKey = `${state.venue}::${state.venueMarketId}`;
+    latestByVenueMarket.set(venueMarketKey, mergeAsOfState(latestByVenueMarket.get(venueMarketKey), state));
+
+    const snapshot = sortStates([...latestByVenueMarket.values()]);
+    if (snapshot.some((entry) => stateHasPriceEvidence(entry))) {
+      snapshots.set(key, snapshot);
+    }
+  }
+
+  return new Map([...snapshots.entries()].sort((left, right) => left[0].localeCompare(right[0])));
 };
 
 const buildBlockedLotusResult = (
@@ -442,23 +473,30 @@ export class HistoricalSimulationRunner {
           POLYMARKET: { feeBps: "0" },
           LIMITLESS: { feeBps: "0" },
           OPINION: { feeBps: "0" },
-          MYRIAD: { feeBps: "0" }
+          MYRIAD: { feeBps: "0" },
+          PREDICT: { feeBps: "0" }
         }
       }
     };
 
     let baselineResults: HistoricalSimulationSliceResult["baselineResults"];
     try {
-      const availableVenues = new Set(states.map((state) => state.venue));
       baselineResults = {
-        polymarketOnly: availableVenues.has("POLYMARKET")
+        polymarketOnly: venueHasPriceEvidence(states, "POLYMARKET")
           ? this.deps.polymarketOnlyBaselineEvaluator.evaluate(baselineInput)
           : null,
-        limitlessOnly: availableVenues.has("LIMITLESS")
+        limitlessOnly: venueHasPriceEvidence(states, "LIMITLESS")
           ? this.deps.limitlessOnlyBaselineEvaluator.evaluate(baselineInput)
           : null,
-        opinionOnly: availableVenues.has("OPINION") ? this.deps.opinionOnlyBaselineEvaluator.evaluate(baselineInput) : null,
-        myriadOnly: availableVenues.has("MYRIAD") ? this.deps.myriadOnlyBaselineEvaluator.evaluate(baselineInput) : null,
+        opinionOnly: venueHasPriceEvidence(states, "OPINION")
+          ? this.deps.opinionOnlyBaselineEvaluator.evaluate(baselineInput)
+          : null,
+        myriadOnly: venueHasPriceEvidence(states, "MYRIAD")
+          ? this.deps.myriadOnlyBaselineEvaluator.evaluate(baselineInput)
+          : null,
+        predictOnly: venueHasPriceEvidence(states, "PREDICT")
+          ? this.deps.predictOnlyBaselineEvaluator.evaluate(baselineInput)
+          : null,
         bestExternalOnly: this.deps.bestExternalOnlyBaselineEvaluator.evaluate(baselineInput),
         noInternalization: this.deps.noInternalizationBaselineEvaluator.evaluate(baselineInput)
       };
@@ -575,6 +613,11 @@ export class HistoricalSimulationRunner {
         ...(baselineResults.myriadOnly
           ? {
               myriadOnly: compareLotusAgainstBaseline(feeAdjustedLotusResult, baselineResults.myriadOnly)
+            }
+          : {}),
+        ...(baselineResults.predictOnly
+          ? {
+              predictOnly: compareLotusAgainstBaseline(feeAdjustedLotusResult, baselineResults.predictOnly)
             }
           : {})
       }

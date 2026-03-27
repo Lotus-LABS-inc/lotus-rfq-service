@@ -1,8 +1,10 @@
 import type { HistoricalSimulationBaselineEstimate, HistoricalSimulationBaselineInput } from "./shared.js";
+import { HistoricalSimulationBaselineError } from "./shared.js";
 import { LimitlessOnlyBaselineEvaluator } from "./limitless-only-baseline.js";
 import { MyriadOnlyBaselineEvaluator } from "./myriad-only-baseline.js";
 import { OpinionOnlyBaselineEvaluator } from "./opinion-only-baseline.js";
 import { PolymarketOnlyBaselineEvaluator } from "./polymarket-only-baseline.js";
+import { PredictOnlyBaselineEvaluator } from "./predict-only-baseline.js";
 import { parseDecimal } from "./shared.js";
 
 const compareEstimates = (
@@ -19,17 +21,32 @@ export class BestExternalOnlyBaselineEvaluator {
     private readonly polymarketOnly = new PolymarketOnlyBaselineEvaluator(),
     private readonly limitlessOnly = new LimitlessOnlyBaselineEvaluator(),
     private readonly opinionOnly = new OpinionOnlyBaselineEvaluator(),
-    private readonly myriadOnly = new MyriadOnlyBaselineEvaluator()
+    private readonly myriadOnly = new MyriadOnlyBaselineEvaluator(),
+    private readonly predictOnly = new PredictOnlyBaselineEvaluator()
   ) {}
 
   public evaluate(input: HistoricalSimulationBaselineInput): HistoricalSimulationBaselineEstimate {
-    const venues = new Set(input.marketStates.map((state) => state.venue));
+    const pricedVenues = new Set(
+      input.marketStates
+        .filter(
+          (state) =>
+            state.bestBid !== null || state.bestAsk !== null || state.midpoint !== null || state.lastPrice !== null
+        )
+        .map((state) => state.venue)
+    );
     const candidates = [
-      venues.has("POLYMARKET") ? this.polymarketOnly.evaluate(input) : null,
-      venues.has("LIMITLESS") ? this.limitlessOnly.evaluate(input) : null,
-      venues.has("OPINION") ? this.opinionOnly.evaluate(input) : null,
-      venues.has("MYRIAD") ? this.myriadOnly.evaluate(input) : null
+      pricedVenues.has("POLYMARKET") ? this.polymarketOnly.evaluate(input) : null,
+      pricedVenues.has("LIMITLESS") ? this.limitlessOnly.evaluate(input) : null,
+      pricedVenues.has("OPINION") ? this.opinionOnly.evaluate(input) : null,
+      pricedVenues.has("MYRIAD") ? this.myriadOnly.evaluate(input) : null,
+      pricedVenues.has("PREDICT") ? this.predictOnly.evaluate(input) : null
     ].filter((candidate): candidate is HistoricalSimulationBaselineEstimate => candidate !== null).sort(compareEstimates);
+    if (candidates.length === 0) {
+      throw new HistoricalSimulationBaselineError(
+        "unsupported_market_shape",
+        "No external venue has deterministic historical price evidence in the requested slice."
+      );
+    }
     const winner = candidates[0]!;
     const losers = candidates.slice(1).map((estimate) => ({
       venue: estimate.venue,

@@ -29,6 +29,7 @@ describe("historical-simulation types", () => {
         const state: HistoricalMarketState = {
             id: "state-1",
             canonicalEventId: "event-1",
+            canonicalMarketId: "market-1",
             canonicalCategory: "OTHER",
             venue: "PREDexon".toUpperCase(),
             venueMarketId: "market-1",

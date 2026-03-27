@@ -182,6 +182,7 @@ describe.skipIf(!ENV_READY)("DiffReplayRunner integration", () => {
             venue: "venue-a",
             venueMarketId: "mkt-a",
             canonicalEventId: `event-${randomUUID()}`,
+            canonicalMarketId: "market-1",
             oracleType: "manual",
             oracleName: "oracle-a",
             resolutionAuthorityType: "committee",
@@ -205,8 +206,8 @@ describe.skipIf(!ENV_READY)("DiffReplayRunner integration", () => {
         const factorComparison = comparator.compare(orderedA as any, orderedB as any);
         const scoredAssessment = scoringEngine.score({
             canonicalEventId: orderedA.canonicalEventId,
-            marketAProfileId: orderedA.id,
-            marketBProfileId: orderedB.id,
+            profileA: orderedA as any,
+            profileB: orderedB as any,
             factorComparison,
             version: "resolution-risk-v1"
         });
@@ -241,6 +242,7 @@ describe.skipIf(!ENV_READY)("DiffReplayRunner integration", () => {
             venue: "venue-a",
             venueMarketId: "mkt-a",
             canonicalEventId: `event-${randomUUID()}`,
+            canonicalMarketId: "market-1",
             oracleType: "manual",
             oracleName: "oracle-a",
             resolutionAuthorityType: "committee",
@@ -264,8 +266,8 @@ describe.skipIf(!ENV_READY)("DiffReplayRunner integration", () => {
         const factorComparison = comparator.compare(orderedA as any, orderedB as any);
         const scoredAssessment = scoringEngine.score({
             canonicalEventId: orderedA.canonicalEventId,
-            marketAProfileId: orderedA.id,
-            marketBProfileId: orderedB.id,
+            profileA: orderedA as any,
+            profileB: orderedB as any,
             factorComparison,
             version: "resolution-risk-v1"
         });

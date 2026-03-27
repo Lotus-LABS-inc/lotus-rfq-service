@@ -75,8 +75,14 @@ const buildPool = () =>
               risk_score: "0.02",
               confidence_score: "0.95",
               equivalence_class: "SAFE_EQUIVALENT",
-              factor_breakdown: {},
-              reasons: ["exact_match"],
+              factor_breakdown: {
+                propositionSimilarity: "1.00",
+                settlementCompatibility: "0.90"
+              },
+              reasons: [
+                "Exact proposition semantics were manually curated across the accepted venue profiles.",
+                "Historical replay stays conservative for cross-venue settlement/finality timing."
+              ],
               version: "historical-sim-catalog-v1",
               computed_at: new Date("2026-03-19T01:00:00.000Z"),
               liquidity_cost: null,
@@ -126,6 +132,20 @@ describe("HistoricalSimulationCatalogService", () => {
         id: "assessment-new",
         canonicalMarketId: "HISTSIM-demo-market",
         equivalenceClass: "SAFE_EQUIVALENT"
+      })
+    );
+    expect(inspection.assessments[0]?.factorBreakdown).toEqual(
+      expect.objectContaining({
+        propositionSimilarity: expect.objectContaining({
+          score: 1,
+          confidence: 0.95,
+          reason: "Exact proposition semantics were manually curated across the accepted venue profiles."
+        }),
+        settlementCompatibility: expect.objectContaining({
+          score: 0.9,
+          confidence: 0.95,
+          reason: "Historical replay stays conservative for cross-venue settlement/finality timing."
+        })
       })
     );
     expect(inspection.scoringVersion).toBe("historical-sim-catalog-v1");

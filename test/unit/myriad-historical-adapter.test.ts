@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MyriadHistoricalAdapter } from "../../src/integrations/myriad/myriad-historical-adapter.js";
 import type {
-  MyriadClient,
   MyriadMarketDetail,
   MyriadMarketEvent,
   MyriadMarketSummary,
   MyriadQuestion
 } from "../../src/integrations/myriad/myriad-schemas.js";
+import type { MyriadClient } from "../../src/integrations/myriad/myriad-client.js";
 
 const marketSummary: MyriadMarketSummary = {
   id: 101,

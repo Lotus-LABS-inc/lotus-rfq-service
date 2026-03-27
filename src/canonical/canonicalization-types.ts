@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export const canonicalVenueValues = ["POLYMARKET", "LIMITLESS", "OPINION", "MYRIAD"] as const;
+export const canonicalVenueValues = ["POLYMARKET", "LIMITLESS", "OPINION", "MYRIAD", "PREDICT"] as const;
 export type CanonicalVenue = typeof canonicalVenueValues[number];
 
 export const canonicalCategoryValues = [

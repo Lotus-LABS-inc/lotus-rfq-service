@@ -21,10 +21,14 @@ export const HistoricalSimulationRouteModeValues = [
     "LIMITLESS_ONLY",
     "OPINION_ONLY",
     "MYRIAD_ONLY",
+    "PREDICT_ONLY",
     "POLYMARKET_LIMITLESS",
     "POLYMARKET_OPINION",
     "LIMITLESS_OPINION",
-    "POLYMARKET_LIMITLESS_OPINION"
+    "POLYMARKET_LIMITLESS_OPINION",
+    "POLYMARKET_PREDICT",
+    "LIMITLESS_PREDICT",
+    "OPINION_PREDICT"
 ] as const;
 
 export type HistoricalSimulationRouteMode = (typeof HistoricalSimulationRouteModeValues)[number];
@@ -62,6 +66,12 @@ export const HistoricalSimulationRouteModeDefinitions: readonly HistoricalSimula
         requiredVenues: ["MYRIAD"]
     },
     {
+        mode: "PREDICT_ONLY",
+        label: "Predict Only",
+        cardinality: "single",
+        requiredVenues: ["PREDICT"]
+    },
+    {
         mode: "POLYMARKET_LIMITLESS",
         label: "Predexon + Limitless",
         cardinality: "pair",
@@ -84,6 +94,24 @@ export const HistoricalSimulationRouteModeDefinitions: readonly HistoricalSimula
         label: "Predexon + Limitless + Opinion",
         cardinality: "tri",
         requiredVenues: ["POLYMARKET", "LIMITLESS", "OPINION"]
+    },
+    {
+        mode: "POLYMARKET_PREDICT",
+        label: "Predexon + Predict",
+        cardinality: "pair",
+        requiredVenues: ["POLYMARKET", "PREDICT"]
+    },
+    {
+        mode: "LIMITLESS_PREDICT",
+        label: "Limitless + Predict",
+        cardinality: "pair",
+        requiredVenues: ["LIMITLESS", "PREDICT"]
+    },
+    {
+        mode: "OPINION_PREDICT",
+        label: "Opinion + Predict",
+        cardinality: "pair",
+        requiredVenues: ["OPINION", "PREDICT"]
     }
 ] as const;
 

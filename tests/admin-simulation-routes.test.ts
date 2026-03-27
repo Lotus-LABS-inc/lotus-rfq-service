@@ -28,7 +28,7 @@ describe("Admin Simulation Routes", () => {
           coverageStart: new Date("2026-03-13T00:00:00.000Z"),
           coverageEnd: new Date("2026-03-13T01:00:00.000Z"),
           routeableMarketCount: 1,
-          venueCoverage: { polymarketRows: 10, limitlessRows: 8, opinionRows: 0, myriadRows: 0 }
+          venueCoverage: { polymarketRows: 10, limitlessRows: 8, opinionRows: 0, myriadRows: 0, predictRows: 0 }
         }
       ])),
       runSimulation: vi.fn(async () => ({

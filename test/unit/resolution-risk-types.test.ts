@@ -12,6 +12,7 @@ describe("resolution risk canonical domain types", () => {
       venue: "venue-a",
       venueMarketId: "market-123",
       canonicalEventId: "e8bc7dde-ccf5-41d3-9a10-06ca40c0eb6a",
+      canonicalMarketId: "market-123",
       disputeWindowHours: "24",
       settlementLagHours: "12",
       historicalDivergenceRate: "0.02500000",
@@ -26,6 +27,7 @@ describe("resolution risk canonical domain types", () => {
     const assessment: ResolutionRiskAssessment = {
       id: "4d55f655-1adb-4afc-bd90-bec9288ed97e",
       canonicalEventId: profile.canonicalEventId,
+      canonicalMarketId: profile.canonicalMarketId,
       marketAProfileId: profile.id,
       marketBProfileId: "672f845b-a318-4f07-a0c7-dd9f39b59117",
       riskScore: "0.35000000",
@@ -48,6 +50,7 @@ describe("resolution risk canonical domain types", () => {
     const assessment: ResolutionRiskAssessment = {
       id: "3b4b7156-f330-4b45-b143-f33bc027607f",
       canonicalEventId: "10a8e013-cf34-4f72-aef4-c84fb386a59f",
+      canonicalMarketId: "market-456",
       marketAProfileId: "6df5db75-4ce4-41f4-9770-947f3da684dd",
       marketBProfileId: "7a5c9900-3867-4f1f-bec1-39d4b33f59a5",
       riskScore: "0.10000000",

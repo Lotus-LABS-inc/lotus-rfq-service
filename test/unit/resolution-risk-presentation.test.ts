@@ -5,6 +5,7 @@ import type { ResolutionRiskAssessment } from "../../src/core/rfq-engine/resolut
 const buildAssessment = (overrides: Partial<ResolutionRiskAssessment> = {}): ResolutionRiskAssessment => ({
     id: "11111111-1111-4111-8111-111111111111",
     canonicalEventId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    canonicalMarketId: "market-1",
     marketAProfileId: "22222222-2222-4222-8222-222222222222",
     marketBProfileId: "33333333-3333-4333-8333-333333333333",
     riskScore: "0.18",

@@ -5,6 +5,7 @@ import path from "node:path";
 import { Pool } from "pg";
 
 import { CanonicalGraphProjector } from "../src/canonical/canonical-graph-projector.js";
+import { CanonicalCompatibilityProjector } from "../src/canonical/canonical-compatibility-projector.js";
 import { MyriadHistoricalAdapter } from "../src/integrations/myriad/myriad-historical-adapter.js";
 import { MyriadClient } from "../src/integrations/myriad/myriad-client.js";
 import { MyriadHistoricalIngestionJob } from "../src/jobs/ingest-myriad-historical.job.js";
@@ -13,7 +14,9 @@ import type {
   HistoricalIngestionJobInput,
   HistoricalIngestionMode
 } from "../src/jobs/historical-ingestion.shared.js";
+import { CanonicalCompatibilityRepository } from "../src/repositories/canonical-compatibility.repository.js";
 import { CanonicalGraphRepository } from "../src/repositories/canonical-graph.repository.js";
+import { CompatibilityVersionRepository } from "../src/repositories/compatibility-version.repository.js";
 import { HistoricalMarketStateRepository } from "../src/repositories/historical-market-state.repository.js";
 
 const envCandidates = [path.resolve(process.cwd(), "..", ".env"), path.resolve(process.cwd(), ".env")];
@@ -154,7 +157,13 @@ const main = async (): Promise<void> => {
       logger
     });
     const graphRepository = new CanonicalGraphRepository(pool);
-    const graphProjector = new CanonicalGraphProjector(graphRepository);
+    const graphProjector = new CanonicalGraphProjector(
+      graphRepository,
+      new CanonicalCompatibilityProjector(
+        new CanonicalCompatibilityRepository(pool),
+        new CompatibilityVersionRepository(pool)
+      )
+    );
     const repository = new HistoricalMarketStateRepository(pool);
     const adapter = new MyriadHistoricalAdapter({
       client,

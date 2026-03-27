@@ -58,6 +58,7 @@ const simulationResult: HistoricalSimulationRunnerResult = {
         },
         opinionOnly: null,
         myriadOnly: null,
+        predictOnly: null,
         bestExternalOnly: {
           venue: "LIMITLESS",
           baselineType: "BEST_EXTERNAL_ONLY",
@@ -142,7 +143,7 @@ describe("QualificationHistoricalSimulationService", () => {
       counterfactualMetrics: {},
       improvementMetrics: {},
       createdAt: new Date("2026-03-13T00:00:01.000Z")
-    });
+      });
     const run = vi.fn().mockResolvedValue(simulationResult);
 
     const service = new QualificationHistoricalSimulationService({

@@ -23,6 +23,7 @@ const makeProfile = (id: string, canonicalEventId = "event-1"): NormalizedResolu
   venue: "venue-a",
   venueMarketId: `market-${id}`,
   canonicalEventId,
+  canonicalMarketId: "market-1",
   oracleType: "manual_committee",
   oracleName: "Resolution Committee",
   resolutionAuthorityType: "committee",
@@ -54,6 +55,7 @@ const factorComparison: ResolutionFactorComparisonResult = {
 const assessmentRow = (marketAProfileId: string, marketBProfileId: string): ResolutionRiskAssessment => ({
   id: `assessment-${marketAProfileId}-${marketBProfileId}`,
   canonicalEventId: "event-1",
+  canonicalMarketId: "market-1",
   marketAProfileId,
   marketBProfileId,
   riskScore: "0",
@@ -70,6 +72,7 @@ const toProfileRow = (profile: NormalizedResolutionProfile) => ({
   venue: profile.venue,
   venue_market_id: profile.venueMarketId,
   canonical_event_id: profile.canonicalEventId,
+  canonical_market_id: profile.canonicalMarketId,
   oracle_type: profile.oracleType,
   oracle_name: profile.oracleName,
   resolution_authority_type: profile.resolutionAuthorityType,
@@ -91,6 +94,7 @@ const toProfileRow = (profile: NormalizedResolutionProfile) => ({
 const toAssessmentRow = (assessment: ResolutionRiskAssessment) => ({
   id: assessment.id,
   canonical_event_id: assessment.canonicalEventId,
+  canonical_market_id: assessment.canonicalMarketId,
   market_a_profile_id: assessment.marketAProfileId,
   market_b_profile_id: assessment.marketBProfileId,
   risk_score: assessment.riskScore,
@@ -99,7 +103,9 @@ const toAssessmentRow = (assessment: ResolutionRiskAssessment) => ({
   factor_breakdown: assessment.factorBreakdown,
   reasons: assessment.reasons,
   version: assessment.version,
-  computed_at: assessment.computedAt
+  computed_at: assessment.computedAt,
+  liquidity_cost: assessment.liquidityCost ?? null,
+  max_settlement_delay_hours: assessment.maxSettlementDelayHours ? String(assessment.maxSettlementDelayHours) : null
 });
 
 const makeQueryResult = <T extends QueryResultRow>(rows: T[]): QueryResult<T> => ({
@@ -110,7 +116,9 @@ const makeQueryResult = <T extends QueryResultRow>(rows: T[]): QueryResult<T> =>
   rows
 });
 
-const makeScoringEngineMock = (scoreImpl: (input: { marketAProfileId: string; marketBProfileId: string }) => ResolutionRiskAssessment) => ({
+const makeScoringEngineMock = (
+  scoreImpl: (input: { profileA: NormalizedResolutionProfile; profileB: NormalizedResolutionProfile }) => ResolutionRiskAssessment
+) => ({
   score: vi.fn(scoreImpl),
   getReplayWeights: vi.fn<() => ResolutionRiskScoringWeights>(() => ({
     oracleMismatch: "0.22",
@@ -154,7 +162,7 @@ describe("ResolutionRiskAssessmentService", () => {
 
       if (sql.includes("INSERT INTO resolution_risk_assessments")) {
         const args = params as string[];
-        const key = `${args[1]}:${args[2]}`;
+        const key = `${args[2]}:${args[3]}`;
         return makeQueryResult([toAssessmentRow(persisted.get(key)!)]);
       }
 
@@ -162,7 +170,7 @@ describe("ResolutionRiskAssessmentService", () => {
     });
 
     const comparator = { compare: vi.fn(() => factorComparison) };
-    const scorer = makeScoringEngineMock(({ marketAProfileId, marketBProfileId }) => persisted.get(`${marketAProfileId}:${marketBProfileId}`)!);
+    const scorer = makeScoringEngineMock(({ profileA, profileB }) => persisted.get(`${profileA.id}:${profileB.id}`)!);
 
     const service = new ResolutionRiskAssessmentService({
       pool: { query } as unknown as Pool,
@@ -201,10 +209,10 @@ describe("ResolutionRiskAssessmentService", () => {
     });
 
     const comparator = { compare: vi.fn(() => factorComparison) };
-    const scorer = makeScoringEngineMock(({ marketAProfileId, marketBProfileId }) => ({
+    const scorer = makeScoringEngineMock(({ profileA, profileB }) => ({
         ...persisted,
-        marketAProfileId,
-        marketBProfileId
+        marketAProfileId: profileA.id,
+        marketBProfileId: profileB.id
       }));
 
     const service = new ResolutionRiskAssessmentService({
@@ -219,8 +227,8 @@ describe("ResolutionRiskAssessmentService", () => {
 
     expect(comparator.compare).toHaveBeenCalledWith(expect.objectContaining({ id: "a-profile" }), expect.objectContaining({ id: "b-profile" }));
     expect(scorer.score).toHaveBeenCalledWith(expect.objectContaining({
-      marketAProfileId: "a-profile",
-      marketBProfileId: "b-profile"
+      profileA: expect.objectContaining({ id: "a-profile" }),
+      profileB: expect.objectContaining({ id: "b-profile" })
     }));
   });
 
@@ -268,7 +276,7 @@ describe("ResolutionRiskAssessmentService", () => {
 
       if (sql.includes("INSERT INTO resolution_risk_assessments")) {
         const args = params as string[];
-        return makeQueryResult([toAssessmentRow(persisted.get(`${args[1]}:${args[2]}`)!)]); 
+        return makeQueryResult([toAssessmentRow(persisted.get(`${args[2]}:${args[3]}`)!)]); 
       }
 
       throw new Error(`Unexpected query: ${sql}`);
@@ -278,7 +286,7 @@ describe("ResolutionRiskAssessmentService", () => {
     const service = new ResolutionRiskAssessmentService({
       pool: { query } as unknown as Pool,
       comparator: { compare: vi.fn(() => factorComparison) },
-      scoringEngine: makeScoringEngineMock(({ marketAProfileId, marketBProfileId }) => persisted.get(`${marketAProfileId}:${marketBProfileId}`)!),
+      scoringEngine: makeScoringEngineMock(({ profileA, profileB }) => persisted.get(`${profileA.id}:${profileB.id}`)!),
       logger,
       metricsHooks: hooks,
       config: { version: "resolution-risk-v1" }

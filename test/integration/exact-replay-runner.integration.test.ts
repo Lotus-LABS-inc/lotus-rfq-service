@@ -111,6 +111,7 @@ describe.skipIf(!ENV_READY)("ExactReplayRunner integration", () => {
             venue: "venue-a",
             venueMarketId: "mkt-a",
             canonicalEventId: `event-${randomUUID()}`,
+            canonicalMarketId: "market-1",
             oracleType: "manual",
             oracleName: "oracle-a",
             resolutionAuthorityType: "committee",
@@ -132,8 +133,8 @@ describe.skipIf(!ENV_READY)("ExactReplayRunner integration", () => {
         const factorComparison = comparator.compare(profileA as any, profileB as any);
         const scoredAssessment = scoringEngine.score({
             canonicalEventId: profileA.canonicalEventId,
-            marketAProfileId: profileA.id < profileB.id ? profileA.id : profileB.id,
-            marketBProfileId: profileA.id < profileB.id ? profileB.id : profileA.id,
+            profileA: (profileA.id < profileB.id ? profileA : profileB) as any,
+            profileB: (profileA.id < profileB.id ? profileB : profileA) as any,
             factorComparison,
             version: "resolution-risk-v1"
         });
@@ -165,8 +166,8 @@ describe.skipIf(!ENV_READY)("ExactReplayRunner integration", () => {
         const rfqId = "11111111-1111-4111-8111-111111111111";
         const canonicalEventId = `event-${randomUUID()}`;
         const orderedCandidateProfiles = [
-            { id: "profile-a", canonicalEventId },
-            { id: "profile-b", canonicalEventId }
+            { id: "profile-a", canonicalEventId, canonicalMarketId: "market-1" },
+            { id: "profile-b", canonicalEventId, canonicalMarketId: "market-1" }
         ];
         const computedGrouping = replayRFQGrouping({
             canonicalEventId,

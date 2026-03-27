@@ -1443,3 +1443,173 @@ Operational takeaway:
   - `truncationReason = max_pages | max_events`
 - Verified targeted tests still pass.
 - Verified capped manual runs complete quickly without open-ended event crawl.
+
+### 2026-03-20 Follow-up: Historical Pair Readiness Across Categories
+- Replaced the old DB-derived historical candidate generator with source-backed exact-route discovery.
+- Added `src/simulation/historical-route-source-discovery.ts` as the authoritative historical pair seed inventory.
+- Historical candidate generation now validates exact upstream markets through documented venue clients before writing `docs/historical-route-candidates.json`.
+- Expanded the checked-in historical curation manifest to accepted simulation-only routes for:
+  - `HISTSIM::US-POLITICS-2028-DEM-NOM-GAVIN-NEWSOM`
+  - `HISTSIM::CRYPTO-BTC-ALL-TIME-HIGH-BY-2026-03-31`
+  - `HISTSIM::SPORTS-2026-NBA-CHAMPION-OKLAHOMA-CITY-THUNDER`
+  - `HISTSIM::SPORTS-2026-NHL-STANLEY-CUP-COLORADO-AVALANCHE`
+  - `HISTSIM::ESPORTS-LOL-LCK-2026-T1-WINS`
+  - `HISTSIM::ESPORTS-LOL-LCK-2026-GENG-WINS`
+  - plus retained single-venue `HISTSIM::LIVE-OPINION-DEM-NOM-2028-JON-OSSOFF`
+- Fixed the direct Limitless historical parsers/adapters to accept real API payloads:
+  - nullable venue fields on market detail
+  - single-object historical price responses
+  - raw trade-event payloads from `/markets/:slug/events`
+  - numeric-string timestamps in direct historical price data
+- Synced the accepted routes into the simulation-only historical catalog and backfilled `historical_market_states`.
+- Verified category-level pair readiness in the DB:
+  - `POLITICS = 1` runnable exact `POLYMARKET_LIMITLESS` historical market
+  - `CRYPTO = 1`
+  - `SPORTS = 2`
+  - `ESPORTS = 2`
+- Verified per-market historical row counts after sync:
+  - `HISTSIM-US-POLITICS-2028-DEM-NOM-GAVIN-NEWSOM`: `POLYMARKET=557`, `LIMITLESS=98`
+  - `HISTSIM-CRYPTO-BTC-ALL-TIME-HIGH-BY-2026-03-31`: `POLYMARKET=470`, `LIMITLESS=250`
+  - `HISTSIM-SPORTS-2026-NBA-CHAMPION-OKLAHOMA-CITY-THUNDER`: `POLYMARKET=555`, `LIMITLESS=127`
+  - `HISTSIM-SPORTS-2026-NHL-STANLEY-CUP-COLORADO-AVALANCHE`: `POLYMARKET=557`, `LIMITLESS=114`
+  - `HISTSIM-ESPORTS-LOL-LCK-2026-T1-WINS`: `POLYMARKET=178`, `LIMITLESS=111`
+  - `HISTSIM-ESPORTS-LOL-LCK-2026-GENG-WINS`: `POLYMARKET=223`, `LIMITLESS=133`
+
+### 2026-03-20 Follow-up: Deterministic Reference Price Fix
+- Fixed historical simulation slice construction to use deterministic as-of snapshots instead of raw exact-timestamp buckets.
+- Added price carry-forward for `bestBid`, `bestAsk`, `midpoint`, `spread`, and `lastPrice` on the same venue market when later updates omit those fields.
+- Slices with zero deterministic price evidence are now skipped instead of failing the whole run.
+- Venue-specific baselines and `BEST_EXTERNAL_ONLY` now run only for venues that have usable price evidence in the slice.
+- Added regression coverage for:
+  - later open-interest-only updates after an earlier priced state
+  - initial unpriced timestamps before the first priced state
+
+### 2026-03-20 Follow-up: Historical Audit Rendering And Opinion Pair Discovery
+- Historical simulation catalog assessments are now normalized into a display-safe factor shape before reaching the admin console.
+- Historical `factor_breakdown` numeric-string rows now render as:
+  - `score`
+  - `confidence` (fallback to assessment-level confidence)
+  - deterministic human-readable `reason`
+- This removed the `N/A / Not inferable / -` audit display for accepted historical pair routes without changing the stored table shape.
+- Historical route candidate generation now supports optional Opinion discovery expansion:
+  - reads the existing unresolved Opinion curation report as an exclusion source
+  - accepts optional Opinion OpenAPI discovery via `OPINION_API_KEY`
+  - validates any exact Opinion candidate through Predexon Opinion historical orderbooks before adding an `OPINION` venue profile to a generated candidate
+- Current local environment does not include `OPINION_API_KEY`, so historical Opinion pair routes remain unavailable unless a real numeric Opinion market ID is separately proven and curated.
+
+## Session: 2026-03-21 (Compatibility/Execution Cleanup Pass)
+
+**Goal:** Clean up the additive compatibility/execution rollout so the repo is type-clean again, the SOR CAUTION regression is closed, Myriad exactness issues are fixed, and the operational docs match the implemented system.
+
+### Code Cleanup
+- Restored repo-wide TypeScript consistency for replay, resolution-risk, historical simulation, and Myriad ingestion paths.
+- Fixed replay evaluators to use current required profile/assessment shapes, including:
+  - `canonicalMarketId` on normalized profiles and assessments
+  - current `ResolutionRiskScoringInput` shape using `profileA` / `profileB`
+- Fixed Myriad adapter exactness issues:
+  - corrected `MyriadClient` import surface
+  - omitted undefined optional fields instead of passing them
+  - removed stale `.value` assumptions in chart parsing
+  - fixed readonly predicate and parameter typing drift
+- Fixed replay comparison behavior so `RESOLUTION_RISK_ASSESSMENT` diffs compare stable decision substance instead of volatile ids/timestamps.
+
+### SOR Cleanup
+- Restored the `sor.order-router` CAUTION behavior expected by current tests without redesigning the router.
+- Kept the additive planner-stage wrappers and route-trace persistence.
+- Preserved the current rollout boundary:
+  - CAUTION routing still follows the existing `resolutionRiskReadService` / `resolutionRiskPolicyService` path
+  - the new feasibility filter remains additive unless explicit compatibility-decision cutover is enabled
+
+### Verification
+- `npm run typecheck` -> passed
+- `npm test -- test/unit/sor.order-router.test.ts test/unit/resolution-risk-assessment-service.test.ts test/unit/diff-replay-runner.test.ts test/unit/exact-replay-runner.test.ts test/unit/myriad-historical-adapter.test.ts test/unit/canonical-graph-projector.test.ts tests/admin-compatibility-review-routes.test.ts` -> passed
+
+### DB Validation Boundary
+- Intended operational split:
+  - `DATABASE_URL` -> local app/dev/ingestion database
+  - `TEST_DATABASE_URL` -> separate local test/schema-validation database
+  - `SUPABASE_DB_URL` -> product Supabase migration/verification target
+- Local development/test DB convention is now standardized on `127.0.0.1:5433` to avoid overlap confusion with Supabase `5432`.
+- Schema validation remains environment-blocked until the configured DB host/port/password match the running instance.
+
+### Operational Documentation Synced
+- Updated:
+  - `docs/runbook.md`
+  - `docs/runbooks/sor-runbook.md`
+  - `docs/runbooks/resolution-risk-runbook.md`
+  - `SUMMARY.md`
+  - repo-root `lotus_data_engineering.md`
+- Added explicit rollout notes for:
+  - `InterpretedContract`
+  - `CompatibilityDecision`
+  - compatibility override workflow with ADMIN + 2FA
+  - route-selection traces and replay linkage
+  - execution intent / execution record / execution state separation
+  - failure-recovery boundaries
+  - current CAUTION-policy authority and DB validation boundary
+
+## Session: 2026-03-26 (Local 5433 Harness And Supabase Lineage Verification)
+
+**Goal:** Close the remaining execution-path integration harness gap on the local `5433` test environment and confirm Supabase is aligned to the newest compatibility lineage migration.
+
+### RFQ Lifecycle Harness
+- Updated `test/integration/rfq-lifecycle.test.ts`
+  - self-loads the repo-local `.env` with override behavior
+  - uses an in-memory Redis test double instead of requiring an external Redis instance
+  - seeds the minimum canonical/profile/planner state required by the accept path
+  - truncates new compatibility/execution tables between tests
+- Fixed the last two failing scenarios:
+  - legacy accept path now expects the current routing-plan side effect before `LEGACY_EXECUTED`
+  - duplicate quote-id scenario now primes Redis session metadata so LP quote ingestion runs under the real `COLLECTING_QUOTES` session contract
+- Verified:
+  - `npm test -- test/integration/rfq-lifecycle.test.ts`
+  - `npm run typecheck`
+
+### Local Database Contract
+- Local app/test Postgres is now standardized on `127.0.0.1:5433`
+- Verified:
+  - `npm run db:migrate:test`
+  - `npm run db:schema:validate`
+
+### Supabase Verification
+- Applied the additive lineage migration:
+  - `sql/migrations/2026_03_26_add_compatibility_version_lineage.sql`
+- Verified:
+  - `npm run db:migrate:supabase`
+  - `npm run db:verify:supabase`
+- Current result:
+  - schema migrations aligned
+  - missing tables: `0`
+  - missing indexes: `0`
+  - compatibility version lineage columns/indexes present on Supabase
+## Session: 2026-03-27 (Predict Phase 4 Simulation Foundation)
+
+Implemented:
+- `src/integrations/predict/predict-client.ts`
+- `src/integrations/predict/predict-schemas.ts`
+- `src/integrations/predict/predict-types.ts`
+- `src/integrations/predict/predict-market-adapter.ts`
+- `src/integrations/predict/predict-orderbook-adapter.ts`
+- `src/integrations/predict/predict-events-adapter.ts`
+- `src/integrations/predict/predict-ws-client.ts`
+- `src/integrations/predict/predict-historical-fallback.ts`
+- `src/integrations/predict/predict-auth-service.ts`
+- `src/integrations/predict/predict-execution-capability.ts`
+- `src/recorders/predict-orderbook-recorder.ts`
+- `src/recorders/predict-match-event-recorder.ts`
+- `src/simulation/predict/predict-simulation-surface.ts`
+- `src/simulation/predict/predict-size-estimator.ts`
+- `src/simulation/baselines/predict-only-baseline.ts`
+- additive storage migration: `sql/migrations/2026_03_27_create_predict_phase4_simulation_tables.sql`
+
+Rollout boundary:
+- Predict is simulation/qualification-only in this pass
+- production trade submission remains disabled
+- future execution-prep is `EOA`-only
+- Predict Account support is deferred
+- Predexon fallback for Predict remains fail-closed unless a documented Predict surface exists in Predexon
+
+Verification:
+- `npm run typecheck`
+- targeted Predict integration tests
+- touched historical simulation/admin tests

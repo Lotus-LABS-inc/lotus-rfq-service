@@ -9,6 +9,7 @@ const toProfile = (value: unknown): NormalizedResolutionProfile => {
         venue: typeof raw.venue === "string" ? raw.venue : "unknown",
         venueMarketId: typeof raw.venueMarketId === "string" ? raw.venueMarketId : "unknown",
         canonicalEventId: asString(raw.canonicalEventId, "orderedProfile.canonicalEventId"),
+        canonicalMarketId: asString(raw.canonicalMarketId, "orderedProfile.canonicalMarketId"),
         oracleType: typeof raw.oracleType === "string" ? raw.oracleType : null,
         oracleName: typeof raw.oracleName === "string" ? raw.oracleName : null,
         resolutionAuthorityType: typeof raw.resolutionAuthorityType === "string" ? raw.resolutionAuthorityType : null,
@@ -35,6 +36,7 @@ const toAssessment = (value: unknown): ResolutionRiskAssessment => {
     return {
         id: typeof raw.id === "string" ? raw.id : "replay-assessment",
         canonicalEventId: asString(raw.canonicalEventId, "orderedAssessment.canonicalEventId"),
+        canonicalMarketId: asString(raw.canonicalMarketId, "orderedAssessment.canonicalMarketId"),
         marketAProfileId: asString(raw.marketAProfileId, "orderedAssessment.marketAProfileId"),
         marketBProfileId: asString(raw.marketBProfileId, "orderedAssessment.marketBProfileId"),
         riskScore: asString(raw.riskScore, "orderedAssessment.riskScore"),

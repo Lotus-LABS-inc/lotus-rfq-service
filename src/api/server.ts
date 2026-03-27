@@ -48,6 +48,7 @@ import { registerAdminControlPlaneRoutes } from "./admin/control-plane.routes.js
 import { ControlPlaneAdminService } from "./admin/control-plane-admin-service.js";
 import { registerAdminReplayRoutes } from "./admin/replay.routes.js";
 import { ReplayAdminService } from "./admin/replay-admin-service.js";
+import { registerAdminCompatibilityReviewRoutes } from "./admin/compatibility-review.routes.js";
 import { registerAdminQualificationRoutes } from "./admin/qualification.routes.js";
 import { QualificationAdminService, createDefaultPromotionGateConfig } from "./admin/qualification-admin-service.js";
 import { registerAdminQualificationSafetyRoutes } from "./admin/qualification-safety.routes.js";
@@ -119,7 +120,20 @@ import { BestExternalOnlyBaselineEvaluator } from "../simulation/baselines/best-
 import { NoInternalizationBaselineEvaluator } from "../simulation/baselines/no-internalization-baseline.js";
 import { OpinionOnlyBaselineEvaluator } from "../simulation/baselines/opinion-only-baseline.js";
 import { MyriadOnlyBaselineEvaluator } from "../simulation/baselines/myriad-only-baseline.js";
+import { PredictOnlyBaselineEvaluator } from "../simulation/baselines/predict-only-baseline.js";
 import { createDefaultHistoricalLotusEvaluators } from "../simulation/default-historical-lotus-evaluators.js";
+import { CanonicalCompatibilityRepository } from "../repositories/canonical-compatibility.repository.js";
+import { CompatibilityOverrideRepository } from "../repositories/compatibility-override.repository.js";
+import { ExecutionIntentRepository } from "../repositories/execution-intent.repository.js";
+import { ExecutionRecordRepository } from "../repositories/execution-record.repository.js";
+import { CompatibilityOverrideService } from "../canonical/compatibility-override-service.js";
+import { RouteSelectionTraceWriter } from "../routing/route-selection-trace.js";
+import { ExecutionStateMachine } from "../execution/execution-state-machine.js";
+import type { ExecutionState } from "../execution/execution-state-types.js";
+import type { ExecutionIntent } from "../execution/execution-intent.js";
+import type { ExecutionRecord } from "../execution/execution-record.js";
+import { FailureRecoveryManager } from "../execution/failure-recovery-manager.js";
+import { selectRecoveryPolicy } from "../execution/recovery-policies.js";
 
 export interface ServerDependencies {
   logger: Logger;
@@ -223,6 +237,16 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     new ReplayEnvelopeWriter({ pool: dependencies.pgPool }),
     dependencies.logger
   );
+  const canonicalCompatibilityRepository = new CanonicalCompatibilityRepository(dependencies.pgPool);
+  const compatibilityOverrideRepository = new CompatibilityOverrideRepository(dependencies.pgPool);
+  const compatibilityOverrideService = new CompatibilityOverrideService(
+    canonicalCompatibilityRepository,
+    compatibilityOverrideRepository
+  );
+  const routeSelectionTraceWriter = new RouteSelectionTraceWriter(dependencies.pgPool);
+  const executionIntentRepository = new ExecutionIntentRepository(dependencies.pgPool);
+  const executionRecordRepository = new ExecutionRecordRepository(dependencies.pgPool);
+  const failureRecoveryManager = new FailureRecoveryManager(dependencies.pgPool);
   const qualificationRuntimeConfig = dependencies.qualificationRuntimeConfig ?? { enabled: false };
   const qualificationRunManager = new QualificationRunManager({
     pool: dependencies.pgPool,
@@ -436,6 +460,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       ? { resolutionRiskPenalty: dependencies.sorResolutionRiskPenalty }
       : {}),
     replayDecisionCaptureService,
+    compatibilityOverrideService,
+    routeSelectionTraceWriter,
     replayCaptureConfig: {
       mode: "BEST_EFFORT",
       configVersion: "replay-capture-v1",
@@ -591,6 +617,265 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         validUntil: quote.valid_until.toISOString(),
         payload: quote.quote_payload
       } as const;
+      const requestedNotional = (
+        Number.parseFloat(session.quantity) * Number.parseFloat(quote.price)
+      ).toFixed(8);
+      const executionReplayConfig = {
+        mode: "BEST_EFFORT" as const,
+        configVersion: "replay-capture-v1",
+        engineVersion: "execution-infra-v1",
+        featureFlags: {
+          compatibilityExecutionInfra: true
+        }
+      };
+      const captureOperationalReplay = async (
+        decisionType: "EXECUTION_STATE_TRANSITION" | "FAILURE_RECOVERY_DECISION",
+        entityId: string,
+        inputSnapshot: Record<string, unknown>,
+        decisionTrace: Record<string, unknown>,
+        outputSnapshot: Record<string, unknown>
+      ) => {
+        if (!replayDecisionCaptureService) {
+          return null;
+        }
+
+        return replayDecisionCaptureService.capture({
+          config: executionReplayConfig,
+          buildEnvelope: (config) => ({
+            decisionType,
+            entityId,
+            correlationId: sessionId,
+            configVersion: config.configVersion,
+            engineVersion: config.engineVersion,
+            featureFlags: config.featureFlags,
+            inputSnapshot,
+            decisionTrace,
+            outputSnapshot
+          })
+        });
+      };
+      const createExecutionAuditContext = async (input: {
+        routeType: string;
+        routePlanId?: string | null;
+        routeSelectionTraceId?: string | null;
+        compatibilityDecisionIds?: readonly string[];
+        compatibilityVersionIds?: readonly string[];
+        replayEnvelopeId?: string | null;
+        intendedVenues: readonly string[];
+        executionVenue: string;
+        providerExecutionKey: string;
+        metadata?: Record<string, unknown>;
+      }): Promise<{
+        intent: ExecutionIntent;
+        getRecord: () => ExecutionRecord;
+        transition: (
+          nextState: ExecutionState,
+          reason: string,
+          options?: {
+            payload?: Record<string, unknown>;
+            syncStatus?: string;
+            settlementStatus?: string;
+            fillDetails?: Record<string, unknown>;
+            metadata?: Record<string, unknown>;
+          }
+        ) => Promise<ExecutionRecord>;
+        recordRecovery: (flags?: {
+          quoteExpired?: boolean;
+          localSyncFailed?: boolean;
+          duplicateSubmissionRisk?: boolean;
+        }) => Promise<void>;
+      }> => {
+        const intent = await executionIntentRepository.create({
+          requestKey: `${session.idempotency_key}:${input.routeType}`,
+          routePlanId: input.routePlanId ?? null,
+          routeSelectionTraceId: input.routeSelectionTraceId ?? null,
+          initiatingPrincipal: session.taker_id,
+          requestedAction: session.side.toUpperCase(),
+          requestedNotional,
+          requestedSize: session.quantity,
+          routeType: input.routeType,
+          approvalState: "APPROVED",
+          intendedVenues: input.intendedVenues,
+          compatibilityDecisionIds: input.compatibilityDecisionIds ?? [],
+          compatibilityVersionIds: input.compatibilityVersionIds ?? [],
+          replayEnvelopeId: input.replayEnvelopeId ?? null,
+          metadata: {
+            sessionId,
+            quoteId: request.quoteId,
+            canonicalMarketId: session.canonical_market_id,
+            ...(input.metadata ?? {})
+          }
+        });
+
+        let record = await executionRecordRepository.create({
+          executionIntentId: intent.id,
+          venue: input.executionVenue,
+          executionState: "CREATED",
+          syncStatus: "pending",
+          settlementStatus: "pending",
+          providerExecutionKey: input.providerExecutionKey,
+          replayEnvelopeId: input.replayEnvelopeId ?? null,
+          metadata: {
+            routeSelectionTraceId: input.routeSelectionTraceId ?? null,
+            routePlanId: input.routePlanId ?? null,
+            compatibilityDecisionIds: input.compatibilityDecisionIds ?? [],
+            compatibilityVersionIds: input.compatibilityVersionIds ?? [],
+            ...(input.metadata ?? {})
+          }
+        });
+        const stateMachine = new ExecutionStateMachine();
+
+        const transition = async (
+          nextState: ExecutionState,
+          reason: string,
+          options: {
+            payload?: Record<string, unknown>;
+            syncStatus?: string;
+            settlementStatus?: string;
+            fillDetails?: Record<string, unknown>;
+            metadata?: Record<string, unknown>;
+          } = {}
+        ): Promise<ExecutionRecord> => {
+          const fromState = stateMachine.getState();
+          stateMachine.transitionTo(nextState, {
+            reason,
+            ...(options.payload ? { payload: options.payload } : {})
+          });
+
+          const nextSyncStatus = options.syncStatus ?? record.syncStatus;
+          const nextSettlementStatus = options.settlementStatus ?? record.settlementStatus;
+          const nextFillDetails = options.fillDetails ?? (record.fillDetails as Record<string, unknown>);
+          const nextMetadata = {
+            ...(record.metadata as Record<string, unknown>),
+            ...(options.metadata ?? {})
+          };
+          const transitionReplay = await captureOperationalReplay(
+            "EXECUTION_STATE_TRANSITION",
+            record.id,
+            {
+              executionIntentId: intent.id,
+              executionRecordId: record.id,
+              routePlanId: intent.routePlanId,
+              routeSelectionTraceId: intent.routeSelectionTraceId,
+              compatibilityDecisionIds: intent.compatibilityDecisionIds,
+              compatibilityVersionIds: intent.compatibilityVersionIds,
+              replayEnvelopeId: record.replayEnvelopeId
+            },
+            {
+              fromState,
+              toState: nextState,
+              reason,
+              payload: options.payload ?? {}
+            },
+            {
+              executionState: nextState,
+              syncStatus: nextSyncStatus,
+              settlementStatus: nextSettlementStatus,
+              fillDetails: nextFillDetails
+            }
+          );
+
+          if (
+            fromState !== null ||
+            record.executionState !== nextState ||
+            nextSyncStatus !== record.syncStatus ||
+            nextSettlementStatus !== record.settlementStatus ||
+            nextFillDetails !== record.fillDetails ||
+            nextMetadata !== record.metadata
+          ) {
+            record = await executionRecordRepository.create({
+              executionIntentId: intent.id,
+              venue: record.venue,
+              venueExecutionRef: record.venueExecutionRef,
+              executionState: nextState,
+              syncStatus: nextSyncStatus,
+              settlementStatus: nextSettlementStatus,
+              fillDetails: nextFillDetails,
+              retryLineage: record.retryLineage,
+              providerExecutionKey: record.providerExecutionKey,
+              replayEnvelopeId: transitionReplay?.id ?? record.replayEnvelopeId,
+              metadata: nextMetadata
+            });
+          }
+
+          await executionRecordRepository.appendStateTransition(
+            record.id,
+            fromState,
+            nextState,
+            {
+              reason,
+              ...(options.payload ? { payload: options.payload } : {})
+            },
+            transitionReplay?.id ?? null
+          );
+
+          return record;
+        };
+
+        const recordRecovery = async (flags: {
+          quoteExpired?: boolean;
+          localSyncFailed?: boolean;
+          duplicateSubmissionRisk?: boolean;
+        } = {}): Promise<void> => {
+          const policy = selectRecoveryPolicy({
+            intent,
+            record,
+            ...(flags.quoteExpired !== undefined ? { quoteExpired: flags.quoteExpired } : {}),
+            ...(flags.localSyncFailed !== undefined ? { localSyncFailed: flags.localSyncFailed } : {}),
+            ...(flags.duplicateSubmissionRisk !== undefined
+              ? { duplicateSubmissionRisk: flags.duplicateSubmissionRisk }
+              : {})
+          });
+          const recoveryReplay = await captureOperationalReplay(
+            "FAILURE_RECOVERY_DECISION",
+            record.id,
+            {
+              executionIntentId: intent.id,
+              executionRecordId: record.id,
+              routePlanId: intent.routePlanId,
+              routeSelectionTraceId: intent.routeSelectionTraceId,
+              compatibilityDecisionIds: intent.compatibilityDecisionIds,
+              compatibilityVersionIds: intent.compatibilityVersionIds
+            },
+            {
+              currentState: record.executionState,
+              flags
+            },
+            {
+              policyName: policy.policyName,
+              actionType: policy.actionType,
+              safeToAutoApply: policy.safeToAutoApply,
+              rationale: policy.rationale,
+              syncStatus: record.syncStatus,
+              settlementStatus: record.settlementStatus
+            }
+          );
+
+          await failureRecoveryManager.recordRecoveryAction({
+            intent,
+            record,
+            replayEnvelopeId: recoveryReplay?.id ?? null,
+            ...(flags.quoteExpired !== undefined ? { quoteExpired: flags.quoteExpired } : {}),
+            ...(flags.localSyncFailed !== undefined ? { localSyncFailed: flags.localSyncFailed } : {}),
+            ...(flags.duplicateSubmissionRisk !== undefined
+              ? { duplicateSubmissionRisk: flags.duplicateSubmissionRisk }
+              : {})
+          });
+        };
+
+        await transition("CREATED", "execution_intent_created", {
+          payload: {
+            routeType: input.routeType
+          }
+        });
+
+        return {
+          intent,
+          getRecord: () => record,
+          transition,
+          recordRecovery
+        };
+      };
 
       let buildResult;
       try {
@@ -608,6 +893,38 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       }
 
       if (buildResult.kind === "internal_filled") {
+        const executionAudit = await createExecutionAuditContext({
+          routeType: "INTERNAL_CROSS",
+          routePlanId: null,
+          routeSelectionTraceId: buildResult.routeSelectionTraceId ?? null,
+          compatibilityDecisionIds: buildResult.compatibilityDecisionIds ?? [],
+          compatibilityVersionIds: buildResult.compatibilityVersionIds ?? [],
+          replayEnvelopeId: buildResult.replayEnvelopeId ?? null,
+          intendedVenues: ["INTERNAL_CROSS"],
+          executionVenue: "INTERNAL_CROSS",
+          providerExecutionKey: `internal:${sessionId}`,
+          metadata: {
+            crossingFilledSize: buildResult.filledSize
+          }
+        });
+        await executionAudit.transition("CHECKED", "reservation_validated");
+        await executionAudit.transition("QUOTED", "quote_selected");
+        await executionAudit.transition("APPROVED", "internal_cross_ready");
+        await executionAudit.transition("EXECUTING", "internal_cross_executing", {
+          payload: {
+            tradeCount: buildResult.trades.length
+          }
+        });
+        await executionAudit.transition("FILLED", "internal_cross_filled", {
+          fillDetails: {
+            filledSize: buildResult.filledSize,
+            trades: buildResult.trades
+          },
+          syncStatus: "synced"
+        });
+        await executionAudit.transition("SETTLED", "internal_cross_settled", {
+          settlementStatus: "settled"
+        });
         if (riskEngine.rollbackReservation) {
           await riskEngine.rollbackReservation(reservationToken);
         }
@@ -624,16 +941,94 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
 
       const executeSORAccept = async () => {
         const plan = buildResult.plan;
+        const executionAudit = await createExecutionAuditContext({
+          routeType: "SOR_PLAN",
+          routePlanId: plan.id,
+          routeSelectionTraceId: buildResult.routeSelectionTraceId ?? null,
+          compatibilityDecisionIds: buildResult.compatibilityDecisionIds ?? [],
+          compatibilityVersionIds: buildResult.compatibilityVersionIds ?? [],
+          replayEnvelopeId: buildResult.replayEnvelopeId ?? null,
+          intendedVenues: [...new Set(plan.steps.map((step) => step.providerId))],
+          executionVenue: plan.steps.length > 1 ? "MULTI_VENUE" : (plan.steps[0]?.providerType ?? "VENUE"),
+          providerExecutionKey: `sor:${plan.id}`,
+          metadata: {
+            acceptancePolicy,
+            stepCount: plan.steps.length
+          }
+        });
+        await executionAudit.transition("CHECKED", "reservation_validated");
+        await executionAudit.transition("QUOTED", "quote_selected");
+        await executionAudit.transition("APPROVED", "sor_plan_ready", {
+          payload: {
+            routePlanId: plan.id,
+            routeSelectionTraceId: buildResult.routeSelectionTraceId ?? null
+          }
+        });
 
         const runPlanAndTransition = async (): Promise<"COMPLETED" | "PARTIAL" | "FAILED" | "UNWOUND"> => {
           await transitionRFQState(sessionId, "ACCEPTED", "sor_plan_created");
           await transitionRFQState(sessionId, "EXECUTING", "sor_plan_running");
+          await executionAudit.transition("EXECUTING", "sor_plan_running", {
+            payload: {
+              routePlanId: plan.id
+            }
+          });
 
-          const result = await planRunner.run(plan);
+          let result;
+          try {
+            result = await planRunner.run(plan);
+          } catch (error) {
+            await executionAudit.transition("SYNC_PENDING", "sor_plan_sync_ambiguous", {
+              payload: {
+                routePlanId: plan.id,
+                error: error instanceof Error ? error.message : "unknown_error"
+              },
+              syncStatus: "sync_pending"
+            });
+            await executionAudit.recordRecovery({ localSyncFailed: true });
+            await executionAudit.transition("RECONCILING", "manual_reconciliation_required", {
+              payload: {
+                routePlanId: plan.id
+              }
+            });
+            throw error;
+          }
           if (result.status === "COMPLETED" || result.status === "PARTIAL") {
             await transitionRFQState(sessionId, "SETTLED", "sor_plan_completed");
           } else {
             await transitionRFQState(sessionId, "FAILED", "sor_plan_failed");
+          }
+
+          if (result.status === "COMPLETED") {
+            await executionAudit.transition("FILLED", "sor_plan_completed", {
+              syncStatus: "synced",
+              fillDetails: {
+                planId: plan.id,
+                status: result.status
+              }
+            });
+            await executionAudit.transition("SETTLED", "sor_execution_settled", {
+              settlementStatus: "settled"
+            });
+          } else if (result.status === "PARTIAL") {
+            await executionAudit.transition("PARTIALLY_FILLED", "sor_plan_partially_filled", {
+              syncStatus: "synced",
+              fillDetails: {
+                planId: plan.id,
+                status: result.status
+              }
+            });
+            await executionAudit.recordRecovery();
+          } else {
+            await executionAudit.transition("FAILED", "sor_plan_failed", {
+              syncStatus: "synced",
+              fillDetails: {
+                planId: plan.id,
+                status: result.status,
+                ...(result.failureReason ? { failureReason: result.failureReason } : {})
+              }
+            });
+            await executionAudit.recordRecovery();
           }
           return result.status;
         };
@@ -686,8 +1081,26 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
             soft_refresh_flag: false
           }))
         );
+        const executionAudit = await createExecutionAuditContext({
+          routeType: "LEGACY_EXECUTION",
+          routePlanId: null,
+          routeSelectionTraceId: null,
+          compatibilityDecisionIds: [],
+          compatibilityVersionIds: [],
+          replayEnvelopeId: null,
+          intendedVenues: rankedQuotes.flatMap((quote) => (quote.lpId ? [quote.lpId] : [])),
+          executionVenue: "LEGACY_EXECUTION",
+          providerExecutionKey: `legacy:${sessionId}`,
+          metadata: {
+            quoteCount: rankedQuotes.length
+          }
+        });
+        await executionAudit.transition("CHECKED", "reservation_validated");
+        await executionAudit.transition("QUOTED", "quote_selected");
+        await executionAudit.transition("APPROVED", "legacy_execution_ready");
 
         await transitionRFQState(sessionId, "ACCEPTED", "legacy_execution_requested");
+        await executionAudit.transition("EXECUTING", "legacy_execution_requested");
         const legacyResult = await legacyExecutionRouter.execute({
           sessionId,
           rankedQuotes,
@@ -696,6 +1109,15 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         });
 
         if (legacyResult.ok) {
+          await executionAudit.transition("FILLED", "legacy_execution_success", {
+            syncStatus: "synced",
+            fillDetails: {
+              executedQuoteId: legacyResult.executedQuoteId ?? null
+            }
+          });
+          await executionAudit.transition("SETTLED", "legacy_execution_settled", {
+            settlementStatus: "settled"
+          });
           await transitionRFQState(sessionId, "SETTLED", "legacy_execution_success");
           return {
             status: "PLAN_ACCEPTED" as const,
@@ -706,6 +1128,13 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           };
         }
 
+        await executionAudit.transition("FAILED", "legacy_execution_failed", {
+          syncStatus: "synced",
+          fillDetails: {
+            attempts: legacyResult.attempts
+          }
+        });
+        await executionAudit.recordRecovery();
         await transitionRFQState(sessionId, "FAILED", "legacy_execution_failed");
         return {
           status: "PLAN_ACCEPTED" as const,
@@ -973,6 +1402,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       logger: dependencies.logger,
     }),
   });
+  await registerAdminCompatibilityReviewRoutes(app, adminAuthMiddleware, {
+    compatibilityOverrideService
+  });
   await registerAdminQualificationRoutes(app, adminAuthMiddleware, {
     qualificationAdminService: new QualificationAdminService({
       pool: dependencies.pgPool,
@@ -1001,6 +1433,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         limitlessOnlyBaselineEvaluator: new LimitlessOnlyBaselineEvaluator(),
         opinionOnlyBaselineEvaluator: new OpinionOnlyBaselineEvaluator(),
         myriadOnlyBaselineEvaluator: new MyriadOnlyBaselineEvaluator(),
+        predictOnlyBaselineEvaluator: new PredictOnlyBaselineEvaluator(),
         bestExternalOnlyBaselineEvaluator: new BestExternalOnlyBaselineEvaluator(),
         noInternalizationBaselineEvaluator: new NoInternalizationBaselineEvaluator(),
         lotusEvaluators: createDefaultHistoricalLotusEvaluators(),

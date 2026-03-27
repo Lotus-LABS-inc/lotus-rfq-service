@@ -7,8 +7,11 @@ import { Pool } from "pg";
 import { z } from "zod";
 
 import { CanonicalGraphProjector } from "../src/canonical/canonical-graph-projector.js";
+import { CanonicalCompatibilityProjector } from "../src/canonical/canonical-compatibility-projector.js";
 import { CuratedCanonicalGraphSnapshotBuilder, type CuratedCanonicalGraphSeed } from "../src/canonical/curated-canonical-graph.js";
+import { CanonicalCompatibilityRepository } from "../src/repositories/canonical-compatibility.repository.js";
 import { CanonicalGraphRepository } from "../src/repositories/canonical-graph.repository.js";
+import { CompatibilityVersionRepository } from "../src/repositories/compatibility-version.repository.js";
 
 const envCandidates = [path.resolve(process.cwd(), "..", ".env"), path.resolve(process.cwd(), ".env")];
 for (const envPath of envCandidates) {
@@ -200,7 +203,13 @@ const main = async (): Promise<void> => {
     application_name: "sync-opinion-curated-mappings"
   });
   const snapshotBuilder = new CuratedCanonicalGraphSnapshotBuilder();
-  const projector = new CanonicalGraphProjector(new CanonicalGraphRepository(pool));
+  const projector = new CanonicalGraphProjector(
+    new CanonicalGraphRepository(pool),
+    new CanonicalCompatibilityProjector(
+      new CanonicalCompatibilityRepository(pool),
+      new CompatibilityVersionRepository(pool)
+    )
+  );
 
   let updated = 0;
   let unresolved = 0;

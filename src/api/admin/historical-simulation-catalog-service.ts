@@ -63,6 +63,58 @@ const createNoopLogger = (): Pick<Logger, "info" | "warn" | "error"> => ({
   error: () => undefined
 });
 
+const historicalFactorReasonByKey: Readonly<Record<string, string>> = {
+  propositionSimilarity: "Exact proposition semantics were manually curated across the accepted venue profiles.",
+  outcomeSchemaCompatibility: "Binary outcome semantics match on the same named participant or threshold proposition.",
+  structureCompatibility: "Binary outcome semantics match on the same named participant or threshold proposition.",
+  timingCompatibility: "Historical replay stays conservative for cross-venue settlement/finality timing.",
+  resolutionCompatibility: "Historical replay stays conservative for cross-venue settlement/finality timing.",
+  settlementCompatibility: "Historical replay stays conservative for cross-venue settlement/finality timing."
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+
+const parseFiniteNumber = (value: unknown): number | null => {
+  if (typeof value !== "string" && typeof value !== "number") {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeFactorBreakdown = (
+  factorBreakdown: Record<string, unknown>,
+  confidenceScore: string,
+  reasons: readonly string[]
+): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(factorBreakdown).map(([factor, rawValue]) => {
+      const factorRecord = asRecord(rawValue);
+      if (
+        factorRecord !== null &&
+        (Object.prototype.hasOwnProperty.call(factorRecord, "score") ||
+          Object.prototype.hasOwnProperty.call(factorRecord, "confidence") ||
+          Object.prototype.hasOwnProperty.call(factorRecord, "reason"))
+      ) {
+        return [factor, rawValue];
+      }
+
+      return [
+        factor,
+        {
+          score: parseFiniteNumber(rawValue),
+          confidence: parseFiniteNumber(confidenceScore),
+          reason:
+            historicalFactorReasonByKey[factor] ??
+            reasons[0] ??
+            "Historical catalog factor recorded during exact-route curation."
+        }
+      ];
+    })
+  );
+
 const mapProfileRow = (row: HistoricalSimulationProfileRow): NormalizedResolutionProfile => ({
   id: row.id,
   venue: row.venue,
@@ -96,7 +148,7 @@ const mapAssessmentRow = (row: HistoricalSimulationAssessmentRow): ResolutionRis
   riskScore: row.risk_score,
   confidenceScore: row.confidence_score,
   equivalenceClass: row.equivalence_class,
-  factorBreakdown: row.factor_breakdown,
+  factorBreakdown: normalizeFactorBreakdown(row.factor_breakdown, row.confidence_score, row.reasons),
   reasons: row.reasons,
   version: row.version,
   computedAt: new Date(row.computed_at),

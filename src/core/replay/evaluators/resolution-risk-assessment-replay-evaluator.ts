@@ -22,6 +22,7 @@ const toProfile = (value: unknown): NormalizedResolutionProfile => {
         venue: asString(raw.venue, "profile.venue"),
         venueMarketId: asString(raw.venueMarketId, "profile.venueMarketId"),
         canonicalEventId: asString(raw.canonicalEventId, "profile.canonicalEventId"),
+        canonicalMarketId: asString(raw.canonicalMarketId, "profile.canonicalMarketId"),
         oracleType: asString(raw.oracleType, "profile.oracleType"),
         oracleName: typeof raw.oracleName === "string" ? raw.oracleName : null,
         resolutionAuthorityType: asString(raw.resolutionAuthorityType, "profile.resolutionAuthorityType"),
@@ -67,8 +68,8 @@ export const replayResolutionRiskAssessment = (
     const factorComparison = comparator.compare(profileA, profileB);
     const scoringInput: ResolutionRiskScoringInput = {
         canonicalEventId: asString(inputSnapshot.canonicalEventId, "inputSnapshot.canonicalEventId"),
-        marketAProfileId: profileA.id,
-        marketBProfileId: profileB.id,
+        profileA,
+        profileB,
         factorComparison,
         version: asString(inputSnapshot.scoringVersion, "inputSnapshot.scoringVersion")
     };

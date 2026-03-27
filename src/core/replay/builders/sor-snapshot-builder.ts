@@ -41,7 +41,9 @@ export class SORSnapshotBuilder implements ISORSnapshotBuilder {
                 candidateOrdering: input.candidateOrdering,
                 scoredCandidates: input.scoredCandidates,
                 splitEligibilityDecisions: input.splitEligibilityDecisions,
-                allocations: input.allocations
+                allocations: input.allocations,
+                compatibilityDecisionIds: input.compatibilityDecisionIds ?? [],
+                compatibilityVersionIds: input.compatibilityVersionIds ?? []
             },
             outputSnapshot: {
                 buildResult: input.buildResult

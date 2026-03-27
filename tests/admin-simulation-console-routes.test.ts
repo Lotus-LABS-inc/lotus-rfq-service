@@ -64,7 +64,7 @@ describe("Admin Simulation Console Routes", () => {
     expect(response.body).toContain("/admin/simulation/run");
     expect(response.body).toContain("/admin/simulation/canonical/");
     expect(response.body).toContain("/admin/simulation/run/");
-    expect(response.body).toContain("Predexon, Limitless, Opinion, and Myriad");
+    expect(response.body).toContain("Predexon, Limitless, Opinion, Myriad, and Predict");
     expect(response.body).toContain("Baseline Results");
     expect(response.body).toContain("Lotus Result");
     expect(response.body).toContain("Improvement Metrics");

@@ -100,3 +100,138 @@ Current rollout rule:
 
 Operational takeaway:
 - if routing/admin data looks wrong, validate the canonical graph first, then the projected `resolution_*` rows
+
+## Compatibility And Execution Additive Layer
+
+Lotus now persists an additive compatibility/execution layer above the canonical graph and below the current routing/RFQ runtime seams.
+
+Authoritative additive objects:
+- `interpreted_contracts`
+- `compatibility_versions`
+- `compatibility_decisions`
+- `compatibility_overrides`
+- `route_selection_traces`
+- `route_candidate_sets`
+- `route_rejection_reasons`
+- `execution_intents`
+- `execution_records`
+- `execution_state_transitions`
+- `execution_recovery_actions`
+
+Operational meaning:
+- `InterpretedContract` is the post-normalization contract layer built from `VenueMarketProfile + PropositionFingerprint + ResolutionProfile + SettlementProfile`
+- `CompatibilityDecision` is the explainable, versioned decision artifact used for explicit compatibility reasoning and override review
+- existing `compatibility_edges` remain the canonical factor-scoring substrate
+- existing `resolution_profiles` and `resolution_risk_assessments` still support current readers as projections during rollout
+
+Important boundary:
+- CAUTION routing semantics have not been cut over to the new compatibility-decision feasibility layer yet
+- current CAUTION pooled-routing behavior still follows the existing `resolutionRiskReadService` / `resolutionRiskPolicyService` path
+- the new planner-stage wrappers and route traces are additive and observational unless explicit compatibility-decision gating is active
+
+## Compatibility Review Workflow
+
+Admin review routes now exist for explicit compatibility overrides:
+- `POST /admin/compatibility-review/override`
+- `POST /admin/compatibility-review/deactivate`
+- `GET /admin/compatibility-review/overrides`
+- `GET /admin/compatibility-review/decision/:id`
+- `GET /admin/compatibility-review/history/:overrideId`
+
+Mutation rules:
+- ADMIN auth is required
+- `twoFactorToken` is required on mutation routes
+- overrides are additive decision layers, not in-place mutation of historical decisions
+- ambiguous or conflicting active overrides must fail closed and block pooled treatment until cleaned up
+
+Operator checks:
+1. inspect the base decision first
+2. inspect active overrides second
+3. confirm expiry and reviewer identity before treating an overridden class as effective
+4. preserve replay linkage when escalating or replaying a route/execution incident
+
+## Execution And Recovery Boundaries
+
+Execution now has its own explicit lifecycle below the RFQ session lifecycle.
+
+Separation of concerns:
+- `RFQStateMachine`
+  - quote/session workflow
+- `ExecutionIntent`
+  - requested execution action and approval context
+- `ExecutionRecord`
+  - realized downstream execution result, venue execution refs, retry lineage, sync status, settlement status
+- `ExecutionStateMachine`
+  - explicit execution lifecycle and replayable transition history
+
+Execution states:
+- `CREATED`
+- `CHECKED`
+- `QUOTED`
+- `AWAITING_APPROVAL`
+- `APPROVED`
+- `EXECUTING`
+- `PARTIALLY_FILLED`
+- `FILLED`
+- `FAILED`
+- `SYNC_PENDING`
+- `SETTLED`
+- `RECONCILING`
+
+Failure-recovery scope:
+- delayed approval
+- quote expiry
+- one-leg fill / one-leg fail
+- venue fill with local sync failure
+- duplicate retry risk
+- stale reservation cleanup linkage
+- route revalidation after downstream state change
+
+Operator rule:
+- unsafe or ambiguous recovery must fail closed
+- auto-retry is not allowed when idempotency or venue-state certainty is missing
+- push those cases into `RECONCILING` or explicit operator review
+
+## Current Verification Status
+
+Code verification completed in this cleanup pass:
+- `npm run typecheck` passes
+- targeted SOR, replay, resolution-risk, Myriad, projector, and admin override tests pass
+- `npm test -- test/integration/rfq-lifecycle.test.ts` passes on the local test harness
+  - repo-local `.env` is loaded explicitly
+  - local test DB target is `TEST_DATABASE_URL` on `127.0.0.1:5433`
+  - execution intent / record / state transition persistence is validated through `/rfq/:id/accept`
+
+Database verification boundary:
+- operational target split should be:
+  - `DATABASE_URL` -> local dev/app database
+  - `TEST_DATABASE_URL` -> separate local test/schema-validation database
+  - `SUPABASE_DB_URL` -> product Supabase migration/verification target
+- local development/test convention is standardized on `127.0.0.1:5433`
+- `npm run db:migrate:test` passes
+- `npm run db:schema:validate` passes
+- `npm run db:migrate:supabase` passes
+- `npm run db:verify:supabase` passes
+
+Operational rule:
+- keep local app/test data on `5433`
+- keep Supabase for schema + migration verification and future product data only
+
+## Predict Phase 4 Simulation
+
+Predict is now integrated as a simulation and qualification venue, not a live execution venue.
+
+Operator rules:
+- use native Predict REST/WS data as the primary source
+- treat recorder data as the only valid path to high-fidelity native historical depth
+- do not claim `RECORDED_HISTORICAL` precision unless recorder or equivalent replay evidence exists
+- treat Predexon fallback for Predict as disabled unless a documented Predict historical surface is available from Predexon
+- keep production Predict trade submission disabled in this phase
+
+Predict env/example settings:
+- `PREDICT_MAINNET_BASE_URL`
+- `PREDICT_TESTNET_BASE_URL`
+- `PREDICT_API_KEY`
+- `PREDICT_METADATA_VERSION`
+- `PREDICT_WS_MAINNET_URL`
+- `PREDICT_WS_TESTNET_URL`

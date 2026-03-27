@@ -17,6 +17,7 @@ import { MyriadOnlyBaselineEvaluator } from "../../src/simulation/baselines/myri
 import { OpinionOnlyBaselineEvaluator } from "../../src/simulation/baselines/opinion-only-baseline.js";
 import { NoInternalizationBaselineEvaluator } from "../../src/simulation/baselines/no-internalization-baseline.js";
 import { PolymarketOnlyBaselineEvaluator } from "../../src/simulation/baselines/polymarket-only-baseline.js";
+import { PredictOnlyBaselineEvaluator } from "../../src/simulation/baselines/predict-only-baseline.js";
 
 const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const ENV_READY = Boolean(TEST_DB_URL);
@@ -182,6 +183,7 @@ describe.skipIf(!ENV_READY)("HistoricalSimulationRunner integration", () => {
       limitlessOnlyBaselineEvaluator: new LimitlessOnlyBaselineEvaluator(),
       opinionOnlyBaselineEvaluator: new OpinionOnlyBaselineEvaluator(),
       myriadOnlyBaselineEvaluator: new MyriadOnlyBaselineEvaluator(),
+      predictOnlyBaselineEvaluator: new PredictOnlyBaselineEvaluator(),
       bestExternalOnlyBaselineEvaluator: new BestExternalOnlyBaselineEvaluator(),
       noInternalizationBaselineEvaluator: new NoInternalizationBaselineEvaluator(),
       lotusEvaluators: createLotusEvaluators()
@@ -253,6 +255,7 @@ describe.skipIf(!ENV_READY)("HistoricalSimulationRunner integration", () => {
       limitlessOnlyBaselineEvaluator: new LimitlessOnlyBaselineEvaluator(),
       opinionOnlyBaselineEvaluator: new OpinionOnlyBaselineEvaluator(),
       myriadOnlyBaselineEvaluator: new MyriadOnlyBaselineEvaluator(),
+      predictOnlyBaselineEvaluator: new PredictOnlyBaselineEvaluator(),
       bestExternalOnlyBaselineEvaluator: new BestExternalOnlyBaselineEvaluator(),
       noInternalizationBaselineEvaluator: new NoInternalizationBaselineEvaluator(),
       lotusEvaluators: createLotusEvaluators()

@@ -1,8 +1,10 @@
 import { createHmac, randomUUID } from "node:crypto";
+import { EventEmitter } from "node:events";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import Fastify from "fastify";
 import type { FastifyRequest } from "fastify";
+import { config as loadDotenv } from "dotenv";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { buildServer } from "../../src/api/server.js";
 import { ExecutionRouterService } from "../../src/core/execution-router/execution-router.js";
@@ -10,7 +12,7 @@ import { InMemoryRFQEventEmitter } from "../../src/core/rfq-engine/rfq-domain-ev
 import { RFQStateMachine } from "../../src/core/rfq-engine/rfq-state-machine.js";
 import { rankQuotesByEffectiveCost, type RankedQuote } from "../../src/core/ranking/quote-ranking.js";
 import { createDrizzleDb } from "../../src/db/postgres.js";
-import { createRedisClient, connectRedis, disconnectRedis } from "../../src/db/redis.js";
+import type { RedisClient } from "../../src/db/redis.js";
 import { RFQExecutionRepository } from "../../src/db/repositories/rfq-execution-repository.js";
 import { RFQQuoteRepository } from "../../src/db/repositories/rfq-quote-repository.js";
 import { RFQSessionRepository } from "../../src/db/repositories/rfq-session-repository.js";
@@ -18,10 +20,15 @@ import { RFQSessionManager } from "../../src/core/rfq-engine/rfq-session-manager
 import { Pool } from "pg";
 import pino from "pino";
 
-const TEST_DB_URL = process.env.TEST_DATABASE_URL;
-const TEST_REDIS_URL = process.env.TEST_REDIS_URL;
+loadDotenv({
+  path: path.resolve(process.cwd(), ".env"),
+  override: true
+});
+
+const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const TEST_CANONICAL_MARKET_ID = "a0eb58b9-a89c-48a7-bda8-b08a050ad95e";
-const ENV_READY = Boolean(TEST_DB_URL && TEST_REDIS_URL);
+const TEST_CANONICAL_EVENT_ID = "11111111-1111-4111-8111-111111111111";
+const ENV_READY = Boolean(TEST_DB_URL);
 
 const logger = pino({ level: "silent" });
 const RUN_PREFIX = `it:${Date.now()}:${randomUUID()}:`;
@@ -33,6 +40,336 @@ interface LPKeyFixture {
   secret: string;
   keyDbId: string;
 }
+
+interface InMemoryRedisState {
+  strings: Map<string, string>;
+  hashes: Map<string, Map<string, string>>;
+  sets: Map<string, Set<string>>;
+  sortedSets: Map<string, Array<{ score: number; member: string }>>;
+  expirations: Map<string, { expiresAt: number; timeout: ReturnType<typeof setTimeout> }>;
+  clients: Set<InMemoryRedisClient>;
+}
+
+class InMemoryRedisClient implements RedisClient {
+  private readonly emitter = new EventEmitter();
+  private readonly subscribedChannels = new Set<string>();
+  private readonly subscribedPatterns = new Set<string>();
+  private connected = false;
+
+  public constructor(private readonly state: InMemoryRedisState) {
+    this.state.clients.add(this);
+  }
+
+  public async connect(): Promise<void> {
+    this.connected = true;
+    this.dispatchSimple("connect");
+  }
+
+  public async quit(): Promise<string> {
+    this.connected = false;
+    this.state.clients.delete(this);
+    this.dispatchSimple("end");
+    return "OK";
+  }
+
+  public duplicate(): RedisClient {
+    return new InMemoryRedisClient(this.state);
+  }
+
+  public async publish(channel: string, message: string): Promise<number> {
+    let delivered = 0;
+    for (const client of this.state.clients) {
+      if (client.subscribedChannels.has(channel)) {
+        client.dispatchMessage(channel, message);
+        delivered += 1;
+      }
+    }
+    return delivered;
+  }
+
+  public async subscribe(...channels: string[]): Promise<number> {
+    channels.forEach((channel) => this.subscribedChannels.add(channel));
+    return this.subscribedChannels.size;
+  }
+
+  public async unsubscribe(...channels: string[]): Promise<number> {
+    channels.forEach((channel) => this.subscribedChannels.delete(channel));
+    return this.subscribedChannels.size;
+  }
+
+  public async set(
+    key: string,
+    value: string,
+    mode: "EX" | "PX",
+    duration: number,
+    condition?: "NX"
+  ): Promise<"OK" | null> {
+    if (condition === "NX" && this.state.strings.has(key)) {
+      return null;
+    }
+    this.state.strings.set(key, value);
+    this.clearExpiration(key);
+    this.scheduleExpiration(key, mode === "EX" ? duration * 1000 : duration);
+    return "OK";
+  }
+
+  public async get(key: string): Promise<string | null> {
+    this.evictIfExpired(key);
+    return this.state.strings.get(key) ?? null;
+  }
+
+  public async incrbyfloat(key: string, increment: number): Promise<string> {
+    const current = Number.parseFloat((await this.get(key)) ?? "0");
+    const next = (current + increment).toString();
+    this.state.strings.set(key, next);
+    return next;
+  }
+
+  public async eval(_script: string, _numKeys: number, ..._args: string[]): Promise<unknown> {
+    return 1;
+  }
+
+  public async expire(key: string, seconds: number): Promise<number> {
+    if (!this.exists(key)) {
+      return 0;
+    }
+    this.clearExpiration(key);
+    this.scheduleExpiration(key, seconds * 1000);
+    return 1;
+  }
+
+  public async ttl(key: string): Promise<number> {
+    this.evictIfExpired(key);
+    const expiration = this.state.expirations.get(key);
+    if (!expiration) {
+      return this.exists(key) ? -1 : -2;
+    }
+    return Math.max(0, Math.ceil((expiration.expiresAt - Date.now()) / 1000));
+  }
+
+  public async del(...keys: string[]): Promise<number> {
+    let deleted = 0;
+    for (const key of keys) {
+      deleted += Number(this.deleteKey(key));
+    }
+    return deleted;
+  }
+
+  public async sadd(key: string, ...members: string[]): Promise<number> {
+    const set = this.state.sets.get(key) ?? new Set<string>();
+    this.state.sets.set(key, set);
+    let added = 0;
+    for (const member of members) {
+      if (!set.has(member)) {
+        set.add(member);
+        added += 1;
+      }
+    }
+    return added;
+  }
+
+  public async srem(key: string, ...members: string[]): Promise<number> {
+    const set = this.state.sets.get(key);
+    if (!set) {
+      return 0;
+    }
+    let removed = 0;
+    for (const member of members) {
+      removed += Number(set.delete(member));
+    }
+    return removed;
+  }
+
+  public async smembers(key: string): Promise<string[]> {
+    return [...(this.state.sets.get(key) ?? new Set<string>())];
+  }
+
+  public async sinter(...keys: string[]): Promise<string[]> {
+    const [first, ...rest] = keys.map((key) => this.state.sets.get(key) ?? new Set<string>());
+    if (!first) {
+      return [];
+    }
+    return [...first].filter((member) => rest.every((set) => set.has(member)));
+  }
+
+  public async zadd(key: string, score: number, member: string): Promise<number> {
+    const entries = this.state.sortedSets.get(key) ?? [];
+    this.state.sortedSets.set(key, entries);
+    const existing = entries.find((entry) => entry.member === member);
+    if (existing) {
+      existing.score = score;
+      return 0;
+    }
+    entries.push({ score, member });
+    return 1;
+  }
+
+  public async zrem(key: string, member: string): Promise<number> {
+    const entries = this.state.sortedSets.get(key) ?? [];
+    const next = entries.filter((entry) => entry.member !== member);
+    this.state.sortedSets.set(key, next);
+    return entries.length === next.length ? 0 : 1;
+  }
+
+  public async zrange(key: string, start: number, stop: number): Promise<string[]> {
+    return this.readSortedRange(key, start, stop, "asc");
+  }
+
+  public async zrangebyscore(
+    key: string,
+    min: number | string,
+    max: number | string,
+    limitLiteral?: "LIMIT",
+    offset?: number,
+    count?: number
+  ): Promise<string[]> {
+    const parsedMin = min === "-inf" ? Number.NEGATIVE_INFINITY : Number(min);
+    const parsedMax = max === "+inf" ? Number.POSITIVE_INFINITY : Number(max);
+    const entries = [...(this.state.sortedSets.get(key) ?? [])]
+      .filter((entry) => entry.score >= parsedMin && entry.score <= parsedMax)
+      .sort((left, right) => left.score - right.score || left.member.localeCompare(right.member));
+    if (limitLiteral === "LIMIT") {
+      return entries.slice(offset ?? 0, (offset ?? 0) + (count ?? entries.length)).map((entry) => entry.member);
+    }
+    return entries.map((entry) => entry.member);
+  }
+
+  public async zrevrange(key: string, start: number, stop: number): Promise<string[]> {
+    return this.readSortedRange(key, start, stop, "desc");
+  }
+
+  public async hset(key: string, field: string, value: string): Promise<number> {
+    const hash = this.state.hashes.get(key) ?? new Map<string, string>();
+    this.state.hashes.set(key, hash);
+    const existed = hash.has(field);
+    hash.set(field, value);
+    return existed ? 0 : 1;
+  }
+
+  public async hget(key: string, field: string): Promise<string | null> {
+    return this.state.hashes.get(key)?.get(field) ?? null;
+  }
+
+  public async hdel(key: string, field: string): Promise<number> {
+    return Number(this.state.hashes.get(key)?.delete(field) ?? false);
+  }
+
+  public async psubscribe(pattern: string): Promise<number> {
+    this.subscribedPatterns.add(pattern);
+    return this.subscribedPatterns.size;
+  }
+
+  public async punsubscribe(pattern: string): Promise<number> {
+    this.subscribedPatterns.delete(pattern);
+    return this.subscribedPatterns.size;
+  }
+
+  public on(event: "connect" | "end", listener: () => void): RedisClient;
+  public on(event: "error", listener: (error: Error) => void): RedisClient;
+  public on(
+    event: "pmessage",
+    listener: (pattern: string, channel: string, message: string) => void
+  ): RedisClient;
+  public on(event: "message", listener: (channel: string, message: string) => void): RedisClient;
+  public on(event: string, listener: (...args: any[]) => void): RedisClient {
+    this.emitter.on(event, listener);
+    return this;
+  }
+
+  public off(
+    event: "pmessage",
+    listener: (pattern: string, channel: string, message: string) => void
+  ): RedisClient;
+  public off(
+    event: "message",
+    listener: (channel: string, message: string) => void
+  ): RedisClient;
+  public off(event: "pmessage" | "message", listener: (...args: any[]) => void): RedisClient {
+    this.emitter.off(event, listener);
+    return this;
+  }
+
+  private readSortedRange(key: string, start: number, stop: number, direction: "asc" | "desc"): string[] {
+    const sorted = [...(this.state.sortedSets.get(key) ?? [])].sort((left, right) => {
+      const scoreOrder = direction === "asc" ? left.score - right.score : right.score - left.score;
+      return scoreOrder || left.member.localeCompare(right.member);
+    });
+    const safeStop = stop < 0 ? sorted.length - 1 : stop;
+    return sorted.slice(start, safeStop + 1).map((entry) => entry.member);
+  }
+
+  private exists(key: string): boolean {
+    this.evictIfExpired(key);
+    return (
+      this.state.strings.has(key) ||
+      this.state.hashes.has(key) ||
+      this.state.sets.has(key) ||
+      this.state.sortedSets.has(key)
+    );
+  }
+
+  private scheduleExpiration(key: string, durationMs: number): void {
+    const expiresAt = Date.now() + durationMs;
+    const timeout = setTimeout(() => {
+      this.deleteKey(key);
+      for (const client of this.state.clients) {
+        for (const pattern of client.subscribedPatterns) {
+          if (pattern === "__keyevent@*__:expired") {
+            client.dispatchPMessage(pattern, "__keyevent@0__:expired", key);
+          }
+        }
+      }
+    }, durationMs);
+    this.state.expirations.set(key, { expiresAt, timeout });
+  }
+
+  private clearExpiration(key: string): void {
+    const expiration = this.state.expirations.get(key);
+    if (expiration) {
+      clearTimeout(expiration.timeout);
+      this.state.expirations.delete(key);
+    }
+  }
+
+  private evictIfExpired(key: string): void {
+    const expiration = this.state.expirations.get(key);
+    if (expiration && expiration.expiresAt <= Date.now()) {
+      this.deleteKey(key);
+    }
+  }
+
+  private deleteKey(key: string): boolean {
+    this.clearExpiration(key);
+    return (
+      this.state.strings.delete(key) ||
+      this.state.hashes.delete(key) ||
+      this.state.sets.delete(key) ||
+      this.state.sortedSets.delete(key)
+    );
+  }
+
+  private dispatchSimple(event: "connect" | "end"): void {
+    this.emitter.emit(event);
+  }
+
+  private dispatchMessage(channel: string, message: string): void {
+    this.emitter.emit("message", channel, message);
+  }
+
+  private dispatchPMessage(pattern: string, channel: string, message: string): void {
+    this.emitter.emit("pmessage", pattern, channel, message);
+  }
+}
+
+const createInMemoryRedisClient = (): RedisClient =>
+  new InMemoryRedisClient({
+    strings: new Map(),
+    hashes: new Map(),
+    sets: new Map(),
+    sortedSets: new Map(),
+    expirations: new Map(),
+    clients: new Set()
+  });
 
 const sleep = async (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -77,7 +414,11 @@ const applyMigrations = async (pool: Pool): Promise<void> => {
       } catch (error) {
         if (
           error instanceof Error &&
-          ("code" in error && (error as { code?: string }).code === "42P07")
+          (
+            ("code" in error && (error as { code?: string }).code === "42P07") ||
+            ("code" in error && (error as { code?: string }).code === "42710") ||
+            ("code" in error && (error as { code?: string }).code === "42701")
+          )
         ) {
           continue;
         }
@@ -93,6 +434,13 @@ const clearPersistentState = async (pool: Pool): Promise<void> => {
     try {
       await pool.query(
         `TRUNCATE TABLE
+          execution_recovery_actions,
+          execution_state_transitions,
+          execution_records,
+          execution_intents,
+          route_rejection_reasons,
+          route_candidate_sets,
+          route_selection_traces,
           route_history,
           route_steps,
           route_candidates,
@@ -167,7 +515,7 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
   let canonicalService: Awaited<ReturnType<typeof Fastify>> | undefined;
   let app: Awaited<ReturnType<typeof buildServer>> | undefined;
   let pool: Pool | undefined;
-  let redisClient: ReturnType<typeof createRedisClient> | undefined;
+  let redisClient: RedisClient | undefined;
   let sessionRepository: RFQSessionRepository | undefined;
   let quoteRepository: RFQQuoteRepository | undefined;
   let executionRepository: RFQExecutionRepository | undefined;
@@ -243,7 +591,11 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
       const params = request.params as { id: string };
       return {
         id: params.id,
-        isActive: true
+        canonicalEventId: TEST_CANONICAL_EVENT_ID,
+        isActive: true,
+        resolutionMetadata: {
+          canonicalMarketId: params.id
+        }
       };
     });
     await canonicalService.listen({ host: "127.0.0.1", port: 4101 });
@@ -251,12 +603,62 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
     pool = new Pool({ connectionString: TEST_DB_URL as string });
     await applyMigrations(pool);
     await clearPersistentState(pool);
+    await pool.query(
+      `INSERT INTO resolution_profiles (
+        id,
+        venue,
+        venue_market_id,
+        canonical_event_id,
+        canonical_market_id,
+        oracle_type,
+        oracle_name,
+        resolution_authority_type,
+        primary_resolution_text,
+        supplemental_rules_text,
+        dispute_window_hours,
+        settlement_lag_hours,
+        market_type,
+        outcome_schema,
+        historical_divergence_rate,
+        metadata
+      ) VALUES (
+        $1::uuid, $2, $3, $4::uuid, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16::jsonb
+      )
+      ON CONFLICT (id) DO NOTHING`,
+      [
+        "10000000-0000-4000-8000-000000000001",
+        "POLYMARKET",
+        "integration-market-1",
+        TEST_CANONICAL_EVENT_ID,
+        TEST_CANONICAL_MARKET_ID,
+        "manual_committee",
+        "Integration Committee",
+        "committee",
+        "Resolves YES if the event occurs.",
+        "Primary venue bulletin controls.",
+        "24",
+        "12",
+        "binary",
+        JSON.stringify({ outcomes: ["YES", "NO"] }),
+        "0.01",
+        JSON.stringify({ testSuite: "rfq-lifecycle" })
+      ]
+    );
+    await pool.query(
+      `INSERT INTO planner_shard_state (
+        shard_id,
+        mode,
+        active_plans,
+        active_buckets,
+        stale_reservations,
+        avg_planner_latency_ms
+      ) VALUES ($1, $2, 0, 0, 0, NULL)
+      ON CONFLICT (shard_id) DO NOTHING`,
+      ["sor-main", "FULL_MODE"]
+    );
 
-    redisClient = createRedisClient({
-      redisUrl: TEST_REDIS_URL as string,
-      logger
-    });
-    await connectRedis(redisClient);
+    redisClient = createInMemoryRedisClient();
+    await redisClient.connect();
 
     const jwtSecret = "test-secret-at-least-thirty-two-chars";
     app = await buildServer({
@@ -312,7 +714,7 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
     }
     if (redisClient) {
       try {
-        await disconnectRedis(redisClient);
+        await redisClient.quit();
       } catch (error) {
         if (!isConnectionClosedError(error)) {
           throw error;
@@ -375,6 +777,9 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
       }
     });
 
+    if (acceptResponse.statusCode !== 202) {
+      throw new Error(`Accept RFQ failed with ${acceptResponse.statusCode}: ${acceptResponse.body}`);
+    }
     expect(acceptResponse.statusCode).toBe(202);
     const body = acceptResponse.json() as {
       status: string;
@@ -407,6 +812,37 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
 
     const finalSession = await sessions.findById(sessionId);
     expect(finalSession?.status).toBe("SETTLED");
+
+    const executionIntentCount = await pg.query<{ count: string }>(
+      "SELECT COUNT(*)::text AS count FROM execution_intents WHERE route_plan_id = $1",
+      [body.plan_id]
+    );
+    expect(Number.parseInt(executionIntentCount.rows[0]?.count ?? "0", 10)).toBe(1);
+
+    const executionRecordCount = await pg.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+       FROM execution_records er
+       JOIN execution_intents ei ON ei.id = er.execution_intent_id
+       WHERE ei.route_plan_id = $1`,
+      [body.plan_id]
+    );
+    expect(Number.parseInt(executionRecordCount.rows[0]?.count ?? "0", 10)).toBe(1);
+
+    const transitionCount = await pg.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+       FROM execution_state_transitions est
+       JOIN execution_records er ON er.id = est.execution_record_id
+       JOIN execution_intents ei ON ei.id = er.execution_intent_id
+       WHERE ei.route_plan_id = $1`,
+      [body.plan_id]
+    );
+    expect(Number.parseInt(transitionCount.rows[0]?.count ?? "0", 10)).toBeGreaterThanOrEqual(5);
+
+    const routeTrace = await pg.query<{ compatibility_version_ids: unknown }>(
+      "SELECT compatibility_version_ids FROM route_selection_traces WHERE route_plan_id = $1 LIMIT 1",
+      [body.plan_id]
+    );
+    expect(routeTrace.rows[0]?.compatibility_version_ids).toBeDefined();
   }, 60000);
 
   it("SOR handoff: risk rejection returns structured 409", async () => {
@@ -521,6 +957,9 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
         }
       });
 
+      if (acceptResponse.statusCode !== 202) {
+        throw new Error(`Legacy accept RFQ failed with ${acceptResponse.statusCode}: ${acceptResponse.body}`);
+      }
       expect(acceptResponse.statusCode).toBe(202);
       expect(acceptResponse.json()).toMatchObject({
         status: "PLAN_ACCEPTED",
@@ -531,7 +970,16 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
         "SELECT COUNT(*)::text AS count FROM routing_plans WHERE rfq_id = $1",
         [sessionId]
       );
-      expect(Number.parseInt(routingPlanCount.rows[0]?.count ?? "0", 10)).toBe(0);
+      expect(Number.parseInt(routingPlanCount.rows[0]?.count ?? "0", 10)).toBe(1);
+
+      const legacyIntentCount = await pg.query<{ count: string }>(
+        `SELECT COUNT(*)::text AS count
+         FROM execution_intents
+         WHERE route_type = 'LEGACY_EXECUTION'
+           AND metadata->>'sessionId' = $1`,
+        [sessionId]
+      );
+      expect(Number.parseInt(legacyIntentCount.rows[0]?.count ?? "0", 10)).toBe(1);
     } finally {
       await legacyApp.close();
     }
@@ -917,6 +1365,7 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
   it("Scenario 4: Duplicate Quote ID", async () => {
     const testApp = must(app, "app");
     const sessions = must(sessionRepository, "sessionRepository");
+    const manager = must(sessionManager, "sessionManager");
     const pg = must(pool, "pool");
     const [lp] = await createLPKeys(pg);
 
@@ -942,6 +1391,15 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
     const sessionId = created.sessionId;
     trackSessionKeys(sessionId);
     await sessions.updateStatus(sessionId, "COLLECTING_QUOTES");
+    await manager.setSessionMetadata(
+      sessionId,
+      {
+        id: sessionId,
+        state: "COLLECTING_QUOTES",
+        expiresAt: new Date(Date.now() + 120000).toISOString()
+      },
+      120
+    );
 
     const quoteId = `${RUN_PREFIX}dup-quote-1`;
     trackQuoteIdempotencyKey(sessionId, quoteId);
@@ -972,6 +1430,9 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
         firstNonce
       )
     });
+    if (first.statusCode !== 202) {
+      throw new Error(`First duplicate-quote submission failed with ${first.statusCode}: ${first.body}`);
+    }
 
     const second = await testApp.inject({
       method: "POST",

@@ -94,6 +94,7 @@ describe("ExactReplayRunner", () => {
                     venue: "venue-a",
                     venueMarketId: "mkt-a",
                     canonicalEventId: "event-1",
+                    canonicalMarketId: "market-1",
                     oracleType: "manual",
                     oracleName: "oracle-a",
                     resolutionAuthorityType: "committee",
@@ -116,6 +117,7 @@ describe("ExactReplayRunner", () => {
                     venue: "venue-b",
                     venueMarketId: "mkt-b",
                     canonicalEventId: "event-1",
+                    canonicalMarketId: "market-1",
                     oracleType: "manual",
                     oracleName: "oracle-a",
                     resolutionAuthorityType: "committee",
@@ -141,8 +143,8 @@ describe("ExactReplayRunner", () => {
         const outputSnapshot = {
             assessment: new ResolutionRiskScoringEngine().score({
                 canonicalEventId: "event-1",
-                marketAProfileId: "profile-a",
-                marketBProfileId: "profile-b",
+                profileA: inputSnapshot.profiles[0] as any,
+                profileB: inputSnapshot.profiles[1] as any,
                 factorComparison: new ResolutionPairComparator().compare(inputSnapshot.profiles[0] as any, inputSnapshot.profiles[1] as any),
                 version: "resolution-risk-v1"
             })
@@ -156,12 +158,13 @@ describe("ExactReplayRunner", () => {
         const inputSnapshot = {
             canonicalEventId: "event-1",
             orderedCandidateProfiles: [
-                { id: "profile-a", canonicalEventId: "event-1" },
-                { id: "profile-b", canonicalEventId: "event-1" }
+                { id: "profile-a", canonicalEventId: "event-1", canonicalMarketId: "market-1" },
+                { id: "profile-b", canonicalEventId: "event-1", canonicalMarketId: "market-1" }
             ],
             orderedAssessments: [{
                 id: "assessment-1",
                 canonicalEventId: "event-1",
+                canonicalMarketId: "market-1",
                 marketAProfileId: "profile-a",
                 marketBProfileId: "profile-b",
                 riskScore: "0.1",
@@ -332,8 +335,8 @@ describe("ExactReplayRunner", () => {
         const grouping = replayRFQGrouping({
             canonicalEventId: "event-1",
             orderedCandidateProfiles: [
-                { id: "profile-a", canonicalEventId: "event-1" },
-                { id: "profile-b", canonicalEventId: "event-1" }
+                { id: "profile-a", canonicalEventId: "event-1", canonicalMarketId: "market-1" },
+                { id: "profile-b", canonicalEventId: "event-1", canonicalMarketId: "market-1" }
             ],
             orderedAssessments: []
         });

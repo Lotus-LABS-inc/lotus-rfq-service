@@ -10,6 +10,7 @@ const PROFILE_B_ID = "33333333-3333-4333-8333-333333333333";
 const buildAssessment = (overrides: Partial<ResolutionRiskAssessment> = {}): ResolutionRiskAssessment => ({
   id: "11111111-1111-4111-8111-111111111111",
   canonicalEventId: CANONICAL_EVENT_ID,
+  canonicalMarketId: "market-1",
   marketAProfileId: PROFILE_A_ID,
   marketBProfileId: PROFILE_B_ID,
   riskScore: "0.18",
@@ -29,6 +30,7 @@ const buildProfile = (overrides: Partial<NormalizedResolutionProfile> = {}): Nor
   venue: "polymarket",
   venueMarketId: "mkt-1",
   canonicalEventId: CANONICAL_EVENT_ID,
+  canonicalMarketId: "market-1",
   oracleType: "manual_committee",
   oracleName: "Resolution Committee",
   resolutionAuthorityType: "committee",

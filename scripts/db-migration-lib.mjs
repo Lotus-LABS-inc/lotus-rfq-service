@@ -11,7 +11,7 @@ export const resolveRepoRoot = (importMetaUrl) => {
 };
 
 export const loadRepoEnv = (repoRoot) => {
-  const envCandidates = [path.resolve(repoRoot, "..", ".env"), path.resolve(repoRoot, ".env")];
+  const envCandidates = [path.resolve(repoRoot, ".env"), path.resolve(repoRoot, "..", ".env")];
   for (const envPath of envCandidates) {
     if (existsSync(envPath)) {
       process.loadEnvFile(envPath);

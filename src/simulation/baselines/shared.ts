@@ -7,6 +7,7 @@ export type HistoricalSimulationBaselineType =
   | "LIMITLESS_ONLY"
   | "OPINION_ONLY"
   | "MYRIAD_ONLY"
+  | "PREDICT_ONLY"
   | "BEST_EXTERNAL_ONLY"
   | "NO_INTERNALIZATION";
 

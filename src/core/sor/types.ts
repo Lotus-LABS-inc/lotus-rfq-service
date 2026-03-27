@@ -105,6 +105,10 @@ export interface InternalCrossBuildResult {
   kind: "internal_filled";
   filledSize: string;
   trades: readonly Trade[];
+  replayEnvelopeId?: string | null;
+  routeSelectionTraceId?: string | null;
+  compatibilityDecisionIds?: readonly string[];
+  compatibilityVersionIds?: readonly string[];
 }
 
 export interface ExternalPlanBuildResult {
@@ -112,6 +116,10 @@ export interface ExternalPlanBuildResult {
   crossingFilledSize: string;
   remainingSize: string;
   plan: ExecutionPlan;
+  replayEnvelopeId?: string | null;
+  routeSelectionTraceId?: string | null;
+  compatibilityDecisionIds?: readonly string[];
+  compatibilityVersionIds?: readonly string[];
 }
 
 export type OrderRouterBuildResult = InternalCrossBuildResult | ExternalPlanBuildResult;

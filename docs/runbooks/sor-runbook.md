@@ -235,9 +235,27 @@ Effects:
 3. inspect `GET /admin/simulation/canonical/:eventId`
 4. confirm the exact market is runnable for the requested route mode
 
-Current known seeded historical catalog route:
+Current known seeded historical catalog routes:
 - `HISTSIM::LIVE-OPINION-DEM-NOM-2028-JON-OSSOFF`
-- runnable for `OPINION_ONLY`
+  - runnable for `OPINION_ONLY`
+- `HISTSIM::US-POLITICS-2028-DEM-NOM-GAVIN-NEWSOM`
+  - runnable for `POLYMARKET_LIMITLESS`
+- `HISTSIM::CRYPTO-BTC-ALL-TIME-HIGH-BY-2026-03-31`
+  - runnable for `POLYMARKET_LIMITLESS`
+- `HISTSIM::SPORTS-2026-NBA-CHAMPION-OKLAHOMA-CITY-THUNDER`
+  - runnable for `POLYMARKET_LIMITLESS`
+- `HISTSIM::SPORTS-2026-NHL-STANLEY-CUP-COLORADO-AVALANCHE`
+  - runnable for `POLYMARKET_LIMITLESS`
+- `HISTSIM::ESPORTS-LOL-LCK-2026-T1-WINS`
+  - runnable for `POLYMARKET_LIMITLESS`
+- `HISTSIM::ESPORTS-LOL-LCK-2026-GENG-WINS`
+  - runnable for `POLYMARKET_LIMITLESS`
+
+Current historical pair-readiness baseline:
+- `POLITICS`: 1 exact pair route
+- `CRYPTO`: 1 exact pair route
+- `SPORTS`: 2 exact pair routes
+- `ESPORTS`: 2 exact pair routes
 
 Important boundary:
 - historical simulation catalog entries do not become live Lotus route inventory automatically
@@ -280,3 +298,79 @@ If a route is available with lag:
 If a route is unavailable:
 - do not assume lag alone is the reason
 - first verify whether the failure is actually identity, resolution, or finality safety
+
+## Compatibility Decision Rollout Boundary
+
+Lotus now persists explicit:
+- `InterpretedContract`
+- `CompatibilityDecision`
+- compatibility versions
+- compatibility overrides
+- route selection traces
+
+These are additive to the current SOR path.
+
+Current rollout rule:
+- explicit compatibility decisions are authoritative decision artifacts for audit, replay, and override review
+- current SOR pooled-routing treatment for `COMPATIBLE_WITH_CAUTION` still follows the existing `resolutionRiskReadService` / `resolutionRiskPolicyService` path
+- the new feasibility filter must not be treated as the authoritative CAUTION cutover until a separate routing-policy rollout says so
+
+Operational implication:
+- if a current SOR result looks inconsistent with a stored `CompatibilityDecision`, first confirm whether the route ran through the legacy resolution-risk gating path or an explicit compatibility-decision path
+- route traces are currently more authoritative for audit than for changing CAUTION routing behavior
+
+## Route Selection Trace And Replay
+
+SOR now records additive planner-stage artifacts:
+- feasibility filtering result
+- candidate set
+- route rejection reasons
+- chosen-route rationale
+- compatibility decision ids used in the trace
+
+Use these artifacts when diagnosing routing incidents:
+1. inspect the routing plan and route history
+2. inspect the route selection trace for candidate ordering and rejection reasons
+3. confirm which compatibility decision versions were linked
+4. confirm whether an override version was active
+5. only then compare against replay output
+
+Replay rule:
+- route replay must be interpreted against the exact compatibility basis that the trace references
+- do not infer compatibility from broad event identity or from `resolution_*` rows alone when the route trace provides narrower decision lineage
+
+## Execution Intent, Record, And Recovery
+
+SOR planning is now operationally separate from downstream execution state.
+
+Execution objects:
+- `ExecutionIntent`
+  - intended route plan, requested size/notional, initiator, approval state, intended venue set
+- `ExecutionRecord`
+  - actual downstream execution, venue execution ids, fill details, retry lineage, sync status, settlement status
+- `ExecutionStateTransition`
+  - replayable transition history for the execution lifecycle
+
+Recovery subsystem scope:
+- quote expiry
+- delayed approval
+- one-leg fill / one-leg fail
+- venue fill with local sync failure
+- duplicate submission protection
+- stale reservation cleanup linkage
+
+Operational rule:
+- the recovery subsystem is additive and explicit
+- unsafe recovery must fail closed and escalate to operator review
+- do not rely on unstructured logs to reconstruct execution state; use transition history and recovery actions first
+
+## Cleanup Status (2026-03-21)
+
+Completed in the compatibility/execution cleanup pass:
+- `sor.order-router` CAUTION regression fixed
+- additive planner-stage wrappers kept without changing current CAUTION policy authority
+- replay and resolution-risk type drift cleaned up
+- route and replay tests aligned to current `canonicalMarketId` and scoring input shapes
+
+Remaining environment boundary:
+- schema validation is still blocked until local Postgres connection details are aligned with the running instance

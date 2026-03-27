@@ -5,8 +5,11 @@ import path from "node:path";
 import { Pool } from "pg";
 
 import { CanonicalGraphProjector } from "../src/canonical/canonical-graph-projector.js";
+import { CanonicalCompatibilityProjector } from "../src/canonical/canonical-compatibility-projector.js";
 import { CuratedCanonicalGraphSnapshotBuilder, type CuratedCanonicalGraphSeed } from "../src/canonical/curated-canonical-graph.js";
+import { CanonicalCompatibilityRepository } from "../src/repositories/canonical-compatibility.repository.js";
 import { CanonicalGraphRepository } from "../src/repositories/canonical-graph.repository.js";
+import { CompatibilityVersionRepository } from "../src/repositories/compatibility-version.repository.js";
 import { CANONICAL_MARKET_REWRITE_SPEC } from "../src/simulation/canonical-market-rewrite-spec.js";
 
 const envCandidates = [path.resolve(process.cwd(), "..", ".env"), path.resolve(process.cwd(), ".env")];
@@ -130,7 +133,13 @@ const main = async (): Promise<void> => {
 
   try {
     const snapshotBuilder = new CuratedCanonicalGraphSnapshotBuilder();
-    const projector = new CanonicalGraphProjector(new CanonicalGraphRepository(pool));
+    const projector = new CanonicalGraphProjector(
+      new CanonicalGraphRepository(pool),
+      new CanonicalCompatibilityProjector(
+        new CanonicalCompatibilityRepository(pool),
+        new CompatibilityVersionRepository(pool)
+      )
+    );
     const snapshot = snapshotBuilder.build(LIVE_MAPPINGS.map(toCanonicalSeed));
     await projector.persistAndProject(snapshot);
     for (const mapping of LIVE_MAPPINGS) {

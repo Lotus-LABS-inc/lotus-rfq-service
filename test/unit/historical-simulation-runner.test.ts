@@ -19,6 +19,7 @@ import { MyriadOnlyBaselineEvaluator } from "../../src/simulation/baselines/myri
 import { NoInternalizationBaselineEvaluator } from "../../src/simulation/baselines/no-internalization-baseline.js";
 import { OpinionOnlyBaselineEvaluator } from "../../src/simulation/baselines/opinion-only-baseline.js";
 import { PolymarketOnlyBaselineEvaluator } from "../../src/simulation/baselines/polymarket-only-baseline.js";
+import { PredictOnlyBaselineEvaluator } from "../../src/simulation/baselines/predict-only-baseline.js";
 
 const createState = (overrides: Partial<HistoricalMarketState>): HistoricalMarketState => ({
   id: "state-1",
@@ -113,6 +114,7 @@ const createRunner = (pool: Pool, lotusEvaluators?: Partial<HistoricalLotusPathE
     limitlessOnlyBaselineEvaluator: new LimitlessOnlyBaselineEvaluator(),
     opinionOnlyBaselineEvaluator: new OpinionOnlyBaselineEvaluator(),
     myriadOnlyBaselineEvaluator: new MyriadOnlyBaselineEvaluator(),
+    predictOnlyBaselineEvaluator: new PredictOnlyBaselineEvaluator(),
     bestExternalOnlyBaselineEvaluator: new BestExternalOnlyBaselineEvaluator(),
     noInternalizationBaselineEvaluator: new NoInternalizationBaselineEvaluator(),
     lotusEvaluators: createLotusEvaluators(lotusEvaluators)
@@ -160,18 +162,20 @@ describe("HistoricalSimulationRunner", () => {
 
     const first = await runner.run(createInput());
     const second = await runner.run(createInput());
+    const firstSlice = first.sliceResults[0];
 
     expect(first.runId).toBeNull();
     expect(first.status).toBe(HistoricalSimulationRunStatus.SUCCEEDED);
     expect(first.sliceCount).toBe(1);
     expect(first.persistedResultCount).toBe(0);
-    expect(first.sliceResults[0]?.baselineResults.polymarketOnly.baselineType).toBe("POLYMARKET_ONLY");
-    expect(first.sliceResults[0]?.baselineResults.limitlessOnly.baselineType).toBe("LIMITLESS_ONLY");
-    expect(first.sliceResults[0]?.baselineResults.opinionOnly).toBeNull();
-    expect(first.sliceResults[0]?.baselineResults.myriadOnly).toBeNull();
-    expect(first.sliceResults[0]?.baselineResults.bestExternalOnly.baselineType).toBe("BEST_EXTERNAL_ONLY");
-    expect(first.sliceResults[0]?.baselineResults.noInternalization.baselineType).toBe("NO_INTERNALIZATION");
-    expect(first.sliceResults[0]?.lotusResult.safeEquivalentEligible).toBe(true);
+    expect(firstSlice).toBeDefined();
+    expect(firstSlice!.baselineResults.polymarketOnly?.baselineType).toBe("POLYMARKET_ONLY");
+    expect(firstSlice!.baselineResults.limitlessOnly?.baselineType).toBe("LIMITLESS_ONLY");
+    expect(firstSlice!.baselineResults.opinionOnly).toBeNull();
+    expect(firstSlice!.baselineResults.myriadOnly).toBeNull();
+    expect(firstSlice!.baselineResults.bestExternalOnly?.baselineType).toBe("BEST_EXTERNAL_ONLY");
+    expect(firstSlice!.baselineResults.noInternalization?.baselineType).toBe("NO_INTERNALIZATION");
+    expect(firstSlice!.lotusResult.safeEquivalentEligible).toBe(true);
     expect(first).toEqual(second);
   });
 
@@ -354,6 +358,106 @@ describe("HistoricalSimulationRunner", () => {
     expect(result.sliceResults[0]?.baselineResults.bestExternalOnly).toEqual(
       expect.objectContaining({
         venue: "MYRIAD"
+      })
+    );
+  });
+
+  it("uses prior priced evidence when a later slice update omits price fields", async () => {
+    const pool = createMockPool([
+      createState({
+        id: "carry-poly-priced",
+        canonicalEventId: "carry-event-1",
+        canonicalMarketId: "carry-market-1",
+        venue: "POLYMARKET",
+        venueMarketId: "carry-poly-market",
+        timestamp: new Date("2026-03-13T00:00:00.000Z"),
+        bestBid: "0.44",
+        bestAsk: "0.46",
+        orderbookSnapshot: { bids: [{ price: "0.44", size: "50" }], asks: [{ price: "0.46", size: "50" }] }
+      }),
+      createState({
+        id: "carry-poly-open-interest-only",
+        canonicalEventId: "carry-event-1",
+        canonicalMarketId: "carry-market-1",
+        venue: "POLYMARKET",
+        venueMarketId: "carry-poly-market",
+        timestamp: new Date("2026-03-13T00:05:00.000Z"),
+        bestBid: null,
+        bestAsk: null,
+        midpoint: null,
+        lastPrice: null,
+        orderbookSnapshot: null,
+        openInterest: "250"
+      }),
+      createState({
+        id: "carry-limitless-priced",
+        canonicalEventId: "carry-event-1",
+        canonicalMarketId: "carry-market-1",
+        venue: "LIMITLESS",
+        venueMarketId: "carry-limitless-market",
+        timestamp: new Date("2026-03-13T00:03:00.000Z"),
+        lastPrice: "0.45"
+      })
+    ]);
+    const runner = createRunner(pool);
+
+    const result = await runner.run(createInput({
+      canonicalEventId: "carry-event-1",
+      canonicalMarketId: "carry-market-1",
+      windowEnd: new Date("2026-03-13T00:10:00.000Z")
+    }));
+
+    expect(result.status).toBe(HistoricalSimulationRunStatus.SUCCEEDED);
+    expect(result.sliceCount).toBe(3);
+    expect(result.sliceResults[2]?.timestamp.toISOString()).toBe("2026-03-13T00:05:00.000Z");
+    expect(result.sliceResults[2]?.baselineResults.polymarketOnly).toEqual(
+      expect.objectContaining({
+        venue: "POLYMARKET",
+        baselineType: "POLYMARKET_ONLY"
+      })
+    );
+  });
+
+  it("skips initial slices that have no deterministic price evidence at all", async () => {
+    const pool = createMockPool([
+      createState({
+        id: "unpriced-poly",
+        canonicalEventId: "unpriced-event-1",
+        canonicalMarketId: "unpriced-market-1",
+        venue: "POLYMARKET",
+        venueMarketId: "unpriced-poly-market",
+        timestamp: new Date("2026-03-13T00:00:00.000Z"),
+        bestBid: null,
+        bestAsk: null,
+        midpoint: null,
+        lastPrice: null,
+        orderbookSnapshot: null,
+        volume: "10"
+      }),
+      createState({
+        id: "later-priced-limitless",
+        canonicalEventId: "unpriced-event-1",
+        canonicalMarketId: "unpriced-market-1",
+        venue: "LIMITLESS",
+        venueMarketId: "unpriced-limitless-market",
+        timestamp: new Date("2026-03-13T00:05:00.000Z"),
+        lastPrice: "0.51"
+      })
+    ]);
+    const runner = createRunner(pool);
+
+    const result = await runner.run(createInput({
+      canonicalEventId: "unpriced-event-1",
+      canonicalMarketId: "unpriced-market-1",
+      windowEnd: new Date("2026-03-13T00:10:00.000Z")
+    }));
+
+    expect(result.status).toBe(HistoricalSimulationRunStatus.SUCCEEDED);
+    expect(result.sliceCount).toBe(1);
+    expect(result.sliceResults[0]?.timestamp.toISOString()).toBe("2026-03-13T00:05:00.000Z");
+    expect(result.sliceResults[0]?.baselineResults.bestExternalOnly).toEqual(
+      expect.objectContaining({
+        venue: "LIMITLESS"
       })
     );
   });
@@ -572,6 +676,7 @@ describe("HistoricalSimulationRunner", () => {
           limitlessOnlyBaselineEvaluator: new LimitlessOnlyBaselineEvaluator(),
           opinionOnlyBaselineEvaluator: new OpinionOnlyBaselineEvaluator(),
           myriadOnlyBaselineEvaluator: new MyriadOnlyBaselineEvaluator(),
+          predictOnlyBaselineEvaluator: new PredictOnlyBaselineEvaluator(),
           bestExternalOnlyBaselineEvaluator: new BestExternalOnlyBaselineEvaluator(),
           noInternalizationBaselineEvaluator: new NoInternalizationBaselineEvaluator(),
           lotusEvaluators: {

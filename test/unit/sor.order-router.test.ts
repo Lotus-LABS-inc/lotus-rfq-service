@@ -534,6 +534,7 @@ describe("SOR OrderRouter", () => {
           {
             id: "assess-1",
             canonicalEventId: "event-1",
+            canonicalMarketId: "market-1",
             marketAProfileId: "profile-a",
             marketBProfileId: "profile-b",
             riskScore: "0.3",
@@ -908,6 +909,7 @@ describe("SOR OrderRouter", () => {
               {
                 id: "assessment-shadow-1",
                 canonicalEventId: "event-1",
+                canonicalMarketId: "market-1",
                 marketAProfileId: "profile-a",
                 marketBProfileId: "profile-b",
                 riskScore: "0.9",

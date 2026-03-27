@@ -59,6 +59,11 @@ import type {
   QualificationDomainHookConfig
 } from "../qualification/runtime-qualification-hook.js";
 import type { SORDecisionOutput } from "../qualification/shadow-qualification-evaluator.js";
+import { FeasibilityFilter } from "../../routing/feasibility-filter.js";
+import { CandidateGenerator } from "../../routing/candidate-generator.js";
+import { RouteScorer } from "../../routing/route-scorer.js";
+import type { RouteSelectionTraceWriter } from "../../routing/route-selection-trace.js";
+import type { CompatibilityOverrideService } from "../../canonical/compatibility-override-service.js";
 
 const DEFAULT_MIN_CHUNK = 0.000001;
 const DEFAULT_TICK_SIZE = 0.000001;
@@ -106,6 +111,8 @@ export interface OrderRouterDependencies {
     scoredCandidates: readonly CandidateScore[];
     allocations: readonly SplitAllocation[];
   }) => Promise<SORDecisionOutput> | SORDecisionOutput;
+  compatibilityOverrideService?: CompatibilityOverrideService;
+  routeSelectionTraceWriter?: RouteSelectionTraceWriter;
 }
 
 
@@ -117,7 +124,15 @@ const isEnforcedGuardrailDecision = (
 ): boolean => decision?.enforcementMode === "ENFORCED";
 export class OrderRouter implements IOrderRouter {
   private readonly replaySnapshotBuilder = new SORSnapshotBuilder();
-  public constructor(private readonly deps: OrderRouterDependencies) { }
+  private readonly feasibilityFilter: FeasibilityFilter;
+  private readonly candidateGenerator: CandidateGenerator;
+  private readonly routeScorer: RouteScorer;
+
+  public constructor(private readonly deps: OrderRouterDependencies) {
+    this.feasibilityFilter = new FeasibilityFilter(deps.compatibilityOverrideService);
+    this.candidateGenerator = new CandidateGenerator(deps.routeScout);
+    this.routeScorer = new RouteScorer(deps.costModel);
+  }
 
   public async buildPlan(
     rfq: CanonicalRFQInput,
@@ -154,12 +169,18 @@ export class OrderRouter implements IOrderRouter {
             resolutionRiskPairPolicies: [],
             candidateOrdering: [],
             splitEligibilityDecisions: [],
+            compatibilityDecisionIds: [],
+            compatibilityVersionIds: [],
             buildResult: internalFilledResult
           });
           return {
             kind: "internal_filled",
             filledSize: crossResult.filledSize,
-            trades: crossResult.trades
+            trades: crossResult.trades,
+            replayEnvelopeId: replayEnvelope?.id ?? null,
+            routeSelectionTraceId: null,
+            compatibilityDecisionIds: [],
+            compatibilityVersionIds: []
           };
         }
 
@@ -172,15 +193,17 @@ export class OrderRouter implements IOrderRouter {
           plannerLatencyMs: 0,
           reasonSuffix: "preflight"
         });
-        const allCandidates = await this.deps.routeScout.discoverCandidates(residualRFQ, residualQuote, policy);
+        const allCandidates = await this.candidateGenerator.generate(residualRFQ, residualQuote, policy);
 
-        const routeCandidates = this.filterSTPViolations(residualRFQ, allCandidates);
+        const stpFilteredCandidates = this.filterSTPViolations(residualRFQ, allCandidates);
+        const feasibility = await this.feasibilityFilter.filter(stpFilteredCandidates);
+        const routeCandidates = feasibility.acceptedCandidates;
 
         if (routeCandidates.length === 0) {
           throw new InsufficientLiquidityError("00000000-0000-0000-0000-000000000000", residualQuote.quantity);
         }
 
-        const scoredCandidates = await this.deps.costModel.evaluateCandidates(
+        const scoredCandidates = await this.routeScorer.score(
           residualRFQ,
           routeCandidates,
           residualQuote,
@@ -261,6 +284,8 @@ export class OrderRouter implements IOrderRouter {
           resolutionRiskPairPolicies: allocationResult.resolutionRiskPairPolicies,
           candidateOrdering: routeCandidates.map((candidate) => candidate.id),
           splitEligibilityDecisions: allocationResult.splitEligibilityDecisions,
+          compatibilityDecisionIds: feasibility.compatibilityDecisionIds,
+          compatibilityVersionIds: feasibility.compatibilityVersionIds,
           buildResult: planCreatedResult as unknown as Record<string, unknown>
         });
 
@@ -274,11 +299,56 @@ export class OrderRouter implements IOrderRouter {
           replayEnvelopeId: replayEnvelope?.id ?? null
         });
 
+        let routeSelectionTraceId: string | null = null;
+        if (this.deps.routeSelectionTraceWriter) {
+          routeSelectionTraceId = await this.deps.routeSelectionTraceWriter.create({
+            rfqId: rfq.rfqId,
+            routePlanId: plan.id,
+            replayEnvelopeId: replayEnvelope?.id ?? null,
+            selectedCandidateId: allocations[0]?.candidateId ?? null,
+            selectedRouteRationale: {
+              policy,
+              activeGuardrailMode,
+              averageSplitsPerLeg: avgSplits
+            },
+            candidateOrdering: scoredCandidates.map((candidate) => candidate.candidateId),
+            compatibilityDecisionIds: feasibility.compatibilityDecisionIds,
+            compatibilityVersionIds: feasibility.compatibilityVersionIds
+          });
+
+          for (const candidate of routeCandidates) {
+            await this.deps.routeSelectionTraceWriter.appendCandidate(
+              routeSelectionTraceId,
+              candidate.id,
+              candidate as unknown as Record<string, unknown>,
+              "accepted"
+            );
+          }
+          for (const rejected of feasibility.rejectedCandidates) {
+            await this.deps.routeSelectionTraceWriter.appendCandidate(
+              routeSelectionTraceId,
+              rejected.candidate.id,
+              rejected.candidate as unknown as Record<string, unknown>,
+              "rejected"
+            );
+            await this.deps.routeSelectionTraceWriter.appendRejectionReason(
+              routeSelectionTraceId,
+              rejected.candidate.id,
+              rejected.reasonCode,
+              rejected.reasonPayload
+            );
+          }
+        }
+
         return {
           kind: "plan_created",
           crossingFilledSize: crossResult.crossingFilledSize,
           remainingSize: crossResult.remainingSize,
-          plan
+          plan,
+          replayEnvelopeId: replayEnvelope?.id ?? null,
+          routeSelectionTraceId,
+          compatibilityDecisionIds: feasibility.compatibilityDecisionIds,
+          compatibilityVersionIds: feasibility.compatibilityVersionIds
         };
       }
     );
@@ -756,6 +826,8 @@ export class OrderRouter implements IOrderRouter {
     resolutionRiskPairPolicies: readonly Record<string, unknown>[];
     candidateOrdering: readonly string[];
     splitEligibilityDecisions: readonly ReplaySplitEligibilitySnapshot[];
+    compatibilityDecisionIds?: readonly string[];
+    compatibilityVersionIds?: readonly string[];
     buildResult: Record<string, unknown>;
   }): Promise<ReplayEnvelope | null> {
     if (!this.deps.replayDecisionCaptureService || !this.deps.replayCaptureConfig) {

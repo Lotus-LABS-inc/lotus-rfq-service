@@ -5,12 +5,15 @@ import path from "node:path";
 import { Pool } from "pg";
 
 import { CanonicalGraphProjector } from "../src/canonical/canonical-graph-projector.js";
+import { CanonicalCompatibilityProjector } from "../src/canonical/canonical-compatibility-projector.js";
 import { CuratedCanonicalGraphSnapshotBuilder, type CuratedCanonicalGraphSeed } from "../src/canonical/curated-canonical-graph.js";
 import {
   HistoricalMarketClass,
   type CreateHistoricalMarketStateInput
 } from "../src/core/historical-simulation/historical-simulation.types.js";
+import { CanonicalCompatibilityRepository } from "../src/repositories/canonical-compatibility.repository.js";
 import { CanonicalGraphRepository } from "../src/repositories/canonical-graph.repository.js";
+import { CompatibilityVersionRepository } from "../src/repositories/compatibility-version.repository.js";
 import { HistoricalMarketStateRepository } from "../src/repositories/historical-market-state.repository.js";
 
 const envCandidates = [path.resolve(process.cwd(), "..", ".env"), path.resolve(process.cwd(), ".env")];
@@ -146,7 +149,13 @@ const main = async (): Promise<void> => {
   try {
     const repository = new HistoricalMarketStateRepository(pool);
     const graphRepository = new CanonicalGraphRepository(pool);
-    const projector = new CanonicalGraphProjector(graphRepository);
+    const projector = new CanonicalGraphProjector(
+      graphRepository,
+      new CanonicalCompatibilityProjector(
+        new CanonicalCompatibilityRepository(pool),
+        new CompatibilityVersionRepository(pool)
+      )
+    );
     const snapshotBuilder = new CuratedCanonicalGraphSnapshotBuilder();
     await projector.persistAndProject(snapshotBuilder.build(liveMappings.map(toCanonicalSeed)));
 

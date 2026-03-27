@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { HistoricalMarketClass, type HistoricalMarketState } from "../../src/core/historical-simulation/historical-simulation.types.js";
 import { BestExternalOnlyBaselineEvaluator } from "../../src/simulation/baselines/best-external-only-baseline.js";
 import { NoInternalizationBaselineEvaluator } from "../../src/simulation/baselines/no-internalization-baseline.js";
+import type { HistoricalSimulationBaselineInput } from "../../src/simulation/baselines/shared.js";
 
 const feePolicy = {
   version: "fees-v1",
@@ -42,7 +43,7 @@ describe("NoInternalizationBaselineEvaluator", () => {
   it("matches best-external-only economics and records stripped internalization metadata", () => {
     const bestExternal = new BestExternalOnlyBaselineEvaluator();
     const noInternalization = new NoInternalizationBaselineEvaluator(bestExternal);
-    const input = {
+    const input: HistoricalSimulationBaselineInput = {
       canonicalEventId: "canonical-event-1",
       marketStates: [
         createState({ venue: "POLYMARKET", venueMarketId: "condition-1", bestAsk: "0.55", orderbookSnapshot: { bids: [{ price: "0.54", size: "1" }], asks: [{ price: "0.55", size: "1" }] } }),

@@ -1,11 +1,15 @@
 export type ReplayDecisionType =
     | "RESOLUTION_RISK_ASSESSMENT"
+    | "COMPATIBILITY_DECISION"
     | "RFQ_GROUPING"
     | "RFQ_RANKING"
     | "SOR_PLAN"
+    | "ROUTE_SELECTION_TRACE"
     | "INTERNAL_CROSS"
     | "NETTING_PHASE2A"
-    | "CLEARING_PHASE2B";
+    | "CLEARING_PHASE2B"
+    | "EXECUTION_STATE_TRANSITION"
+    | "FAILURE_RECOVERY_DECISION";
 
 export type ReplayMode = "READ_ONLY" | "VERIFY" | "DIFF_ONLY";
 export type ReplayWriteMode = "REQUIRED" | "BEST_EFFORT";
@@ -147,6 +151,8 @@ export interface BuildSORReplayEnvelopeInput extends ReplayBuilderBaseMetadata {
     resolutionRiskPairPolicies: readonly Record<string, unknown>[];
     candidateOrdering: readonly string[];
     splitEligibilityDecisions: readonly ReplaySplitEligibilitySnapshot[];
+    compatibilityDecisionIds?: readonly string[];
+    compatibilityVersionIds?: readonly string[];
     buildResult: Record<string, unknown>;
 }
 

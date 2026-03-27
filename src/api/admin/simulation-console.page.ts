@@ -395,6 +395,7 @@ const renderBaselines = (baselineResults) => {
     ["Limitless only", baselineResults.limitlessOnly],
     ["Opinion only", baselineResults.opinionOnly],
     ["Myriad only", baselineResults.myriadOnly],
+    ["Predict only", baselineResults.predictOnly],
     ["Best external", baselineResults.bestExternalOnly],
     ["No internalization", baselineResults.noInternalization]
   ].filter(([, value]) => value);
@@ -940,7 +941,7 @@ export const renderSimulationConsolePage = (): string => `<!DOCTYPE html>
     <main>
       <section class="hero">
         <h1>Internal Historical Simulation Console</h1>
-        <p class="muted">Admin-only testing surface for exact-market route discovery and historical simulation across Predexon, Limitless, Opinion, and Myriad.</p>
+        <p class="muted">Admin-only testing surface for exact-market route discovery and historical simulation across Predexon, Limitless, Opinion, Myriad, and Predict.</p>
         <div id="console-status" class="status" data-kind="idle">Console ready.</div>
       </section>
 
@@ -955,10 +956,14 @@ export const renderSimulationConsolePage = (): string => `<!DOCTYPE html>
                 <option value="LIMITLESS_ONLY">Limitless Only</option>
                 <option value="OPINION_ONLY">Opinion Only</option>
                 <option value="MYRIAD_ONLY">Myriad Only</option>
+                <option value="PREDICT_ONLY">Predict Only</option>
                 <option value="POLYMARKET_LIMITLESS">Predexon + Limitless</option>
                 <option value="POLYMARKET_OPINION">Predexon + Opinion</option>
                 <option value="LIMITLESS_OPINION">Limitless + Opinion</option>
                 <option value="POLYMARKET_LIMITLESS_OPINION">Predexon + Limitless + Opinion</option>
+                <option value="POLYMARKET_PREDICT">Predexon + Predict</option>
+                <option value="LIMITLESS_PREDICT">Limitless + Predict</option>
+                <option value="OPINION_PREDICT">Opinion + Predict</option>
               </select>
             </label>
             <label>

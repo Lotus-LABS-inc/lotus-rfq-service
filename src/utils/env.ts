@@ -16,6 +16,7 @@ const envSchema = z
     REDIS_URL: z.string().url(),
     CANONICAL_SERVICE_BASE_URL: z.string().url().default("http://localhost:4001"),
     DATABASE_URL: z.string().url().optional(),
+    TEST_DATABASE_URL: z.string().url().optional(),
     SUPABASE_DB_URL: z.string().url().optional(),
     JWT_SECRET: z.string().min(32),
     DEV_SIMULATION_PREVIEW_ENABLED: z.coerce.boolean().default(false),

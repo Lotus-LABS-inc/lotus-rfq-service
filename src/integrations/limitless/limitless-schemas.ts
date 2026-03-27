@@ -27,25 +27,28 @@ const finiteNumberSchema = z.number().finite()
 const numericValueSchema = z.union([z.string(), finiteNumberSchema])
 const timestampSchema = z.union([z.number().int(), z.string().min(1)])
 
+const nullableStringSchema = z.string().nullable().optional()
+const nullableNumericValueSchema = z.union([numericValueSchema, z.null()]).optional()
+
 const venueSchema = z
   .object({
-    exchange: z.string().optional(),
-    adapter: z.string().optional()
+    exchange: nullableStringSchema,
+    adapter: nullableStringSchema
   })
   .passthrough()
 
 const marketDetailCommonSchema = z
   .object({
-    address: z.string().optional(),
-    conditionId: z.string().optional(),
+    address: nullableStringSchema,
+    conditionId: nullableStringSchema,
     title: z.string(),
-    slug: z.string().optional(),
-    status: z.string().optional(),
-    tradeType: z.string().optional(),
-    marketType: z.string().optional(),
-    volume: numericValueSchema.optional(),
-    openInterest: numericValueSchema.optional(),
-    liquidity: numericValueSchema.optional(),
+    slug: nullableStringSchema,
+    status: nullableStringSchema,
+    tradeType: nullableStringSchema,
+    marketType: nullableStringSchema,
+    volume: nullableNumericValueSchema,
+    openInterest: nullableNumericValueSchema,
+    liquidity: nullableNumericValueSchema,
     venue: venueSchema.optional()
   })
   .passthrough()
@@ -64,7 +67,7 @@ const historicalPriceSeriesSchema = z
   })
   .passthrough()
 
-const marketEventSchema = z
+const documentedMarketEventSchema = z
   .object({
     id: z.string(),
     type: z.string(),
@@ -72,6 +75,22 @@ const marketEventSchema = z
     data: z.record(z.string(), z.unknown()).optional()
   })
   .passthrough()
+
+const historicalTradeEventSchema = z
+  .object({
+    createdAt: timestampSchema,
+    txHash: z.string().optional(),
+    price: numericValueSchema.optional()
+  })
+  .passthrough()
+  .transform((event) => ({
+    id: event.txHash ?? `${event.createdAt}`,
+    type: "TRADE",
+    timestamp: event.createdAt,
+    data: event
+  }))
+
+const marketEventSchema = z.union([documentedMarketEventSchema, historicalTradeEventSchema])
 
 const marketEventsResponseSchema = z
   .object({
@@ -126,7 +145,9 @@ export const parseLimitlessMarketDetailResponse = (payload: unknown) =>
   parseWithSchema(marketDetailCommonSchema, payload, "market detail")
 
 export const parseLimitlessHistoricalPriceResponse = (payload: unknown) =>
-  parseWithSchema(z.array(historicalPriceSeriesSchema), payload, "historical price")
+  Array.isArray(payload)
+    ? parseWithSchema(z.array(historicalPriceSeriesSchema), payload, "historical price")
+    : [parseWithSchema(historicalPriceSeriesSchema, payload, "historical price")]
 
 export const parseLimitlessMarketEventsResponse = (payload: unknown) =>
   parseWithSchema(marketEventsResponseSchema, payload, "market events")
@@ -136,4 +157,3 @@ export const parseLimitlessPortfolioHistoryResponse = (payload: unknown) =>
 
 export const parseLimitlessPortfolioTradesResponse = (payload: unknown) =>
   parseWithSchema(portfolioTradesResponseSchema, payload, "portfolio trades")
-

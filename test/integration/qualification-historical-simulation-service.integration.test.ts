@@ -14,6 +14,7 @@ import { MyriadOnlyBaselineEvaluator } from "../../src/simulation/baselines/myri
 import { NoInternalizationBaselineEvaluator } from "../../src/simulation/baselines/no-internalization-baseline.js";
 import { OpinionOnlyBaselineEvaluator } from "../../src/simulation/baselines/opinion-only-baseline.js";
 import { PolymarketOnlyBaselineEvaluator } from "../../src/simulation/baselines/polymarket-only-baseline.js";
+import { PredictOnlyBaselineEvaluator } from "../../src/simulation/baselines/predict-only-baseline.js";
 import {
   QualificationAdminService,
   createDefaultPromotionGateConfig
@@ -142,6 +143,7 @@ describe.skipIf(!ENV_READY)("QualificationHistoricalSimulationService integratio
       limitlessOnlyBaselineEvaluator: new LimitlessOnlyBaselineEvaluator(),
       opinionOnlyBaselineEvaluator: new OpinionOnlyBaselineEvaluator(),
       myriadOnlyBaselineEvaluator: new MyriadOnlyBaselineEvaluator(),
+      predictOnlyBaselineEvaluator: new PredictOnlyBaselineEvaluator(),
       bestExternalOnlyBaselineEvaluator: new BestExternalOnlyBaselineEvaluator(),
       noInternalizationBaselineEvaluator: new NoInternalizationBaselineEvaluator(),
       lotusEvaluators: createLotusEvaluators()
@@ -161,6 +163,8 @@ describe.skipIf(!ENV_READY)("QualificationHistoricalSimulationService integratio
       routeMode: "POLYMARKET_LIMITLESS",
       marketClass: HistoricalMarketClass.BINARY,
       canonicalEventId: "phase4-qualification-event",
+      side: "BUY",
+      requestedNotional: "100",
       windowStart: new Date("2026-03-13T00:00:00.000Z"),
       windowEnd: new Date("2026-03-13T00:05:00.000Z"),
       configVersion: "cfg-v1",

@@ -65,7 +65,15 @@ export const historicalCatalogManifestEntrySchema = z.object({
   }),
   discoveredFrom: z.array(
     z.object({
-      type: z.enum(["db_inventory", "predexon_market_catalog", "curated_seed", "archived_known_id"]),
+      type: z.enum([
+        "db_inventory",
+        "predexon_market_catalog",
+        "curated_seed",
+        "archived_known_id",
+        "public_site",
+        "search_query",
+        "predexon_validation"
+      ]),
       reference: z.string(),
       observation: z.string()
     })

@@ -23,7 +23,7 @@ const extractPriceCharts = (detail: MyriadMarketDetail): MyriadPriceChartSeries[
         timeframe: series.timeframe,
         points: series.prices.map((point) => ({
           timestamp: point.timestamp,
-          price: "price" in point && typeof point.price === "number" ? point.price : Number(point.value)
+          price: point.price
         }))
       }))
   )

@@ -131,6 +131,25 @@ describe.skipIf(!ENV_READY)("SimulationAdminService integration", () => {
           }
         })
       },
+      historicalSimulationCatalogService: {
+        hasCanonicalEvent: async () => false,
+        getCanonicalInspection: async (eventId: string) => ({
+          canonicalEventId: eventId,
+          profiles: [],
+          assessments: [],
+          scoringVersion: "resolution-risk-v1",
+          freshness: {
+            profileCount: 0,
+            expectedPairCount: 0,
+            persistedPairCount: 0,
+            lastComputedAt: null,
+            latestProfileUpdatedAt: null,
+            isComplete: true,
+            isStale: false,
+            hasMixedVersions: false
+          }
+        })
+      },
       configVersion: "cfg-hist-v1",
       engineVersion: "eng-hist-v1"
     });

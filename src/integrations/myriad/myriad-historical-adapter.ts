@@ -13,7 +13,6 @@ import { MyriadMarketDetailEnricher } from "./myriad-market-detail-enricher.js";
 import { MyriadMarketEventsBackfill } from "./myriad-market-events-backfill.js";
 import { classifyMyriadPreviewCategory, isSimpleBinaryOutcomeMarket } from "./myriad-topic-normalizer.js";
 import type {
-  MyriadClient,
   MyriadMarketDetail,
   MyriadMarketEvent,
   MyriadMarketSummary,
@@ -21,6 +20,7 @@ import type {
   MyriadPriceChartSeries,
   MyriadQuestion
 } from "./myriad-schemas.js";
+import type { MyriadClient } from "./myriad-client.js";
 
 export interface MyriadHistoricalAdapterConfig {
   client: Pick<MyriadClient, "listMarkets" | "getMarket" | "listQuestions" | "getMarketEvents">;
@@ -41,6 +41,7 @@ export interface MyriadHistoricalScope {
 }
 
 export interface HistoricalMarketStateFragment extends Omit<CreateHistoricalMarketStateInput, "id"> {}
+type HistoricalFragmentCategory = NonNullable<CreateHistoricalMarketStateInput["canonicalCategory"]>;
 
 export class MyriadHistoricalAdapter {
   private readonly logger: Pick<Logger, "info" | "warn" | "error"> | undefined;
@@ -50,9 +51,18 @@ export class MyriadHistoricalAdapter {
 
   public constructor(private readonly config: MyriadHistoricalAdapterConfig) {
     this.logger = config.logger;
-    this.marketCrawler = new MyriadMarketCrawler({ client: config.client, logger: config.logger });
-    this.detailEnricher = new MyriadMarketDetailEnricher({ client: config.client, logger: config.logger });
-    this.eventsBackfill = new MyriadMarketEventsBackfill({ client: config.client, logger: config.logger });
+    this.marketCrawler = new MyriadMarketCrawler({
+      client: config.client,
+      ...(config.logger ? { logger: config.logger } : {})
+    });
+    this.detailEnricher = new MyriadMarketDetailEnricher({
+      client: config.client,
+      ...(config.logger ? { logger: config.logger } : {})
+    });
+    this.eventsBackfill = new MyriadMarketEventsBackfill({
+      client: config.client,
+      ...(config.logger ? { logger: config.logger } : {})
+    });
   }
 
   public getVenueAdapter(): HistoricalVenueAdapter {
@@ -191,8 +201,12 @@ export class MyriadHistoricalAdapter {
       since: eventWindow.since,
       until: eventWindow.until,
       limit: this.config.eventPageSize ?? 100,
-      maxPages: this.config.maxEventPagesPerMarket,
-      maxEvents: this.config.maxEventRowsPerMarket
+      ...(this.config.maxEventPagesPerMarket !== undefined
+        ? { maxPages: this.config.maxEventPagesPerMarket }
+        : {}),
+      ...(this.config.maxEventRowsPerMarket !== undefined
+        ? { maxEvents: this.config.maxEventRowsPerMarket }
+        : {})
     });
     if (events.truncated) {
       this.logger?.warn?.(
@@ -253,7 +267,7 @@ export class MyriadHistoricalAdapter {
       keyword: detail.title
     });
 
-    return response.data.find((question) =>
+    return response.data.find((question: MyriadQuestion) =>
       question.markets.some((market) =>
         stringifyId(market.id) === stringifyId(detail.id) &&
         market.networkId === detail.networkId
@@ -377,14 +391,14 @@ const sanitizeJsonValue = (value: unknown): unknown => {
 
 const choosePreferredSeries = (outcome: MyriadOutcome): MyriadPriceChartSeries | null => {
   const candidates = (outcome.price_charts ?? [])
-    .map((series) => ({
+    .map((series): MyriadPriceChartSeries => ({
       timeframe: series.timeframe,
       points: series.prices.map((point) => ({
         timestamp: point.timestamp,
-        price: typeof point.price === "number" ? point.price : Number(point.value)
+        price: point.price
       }))
     }))
-    .filter((series): series is MyriadPriceChartSeries => series.points.length > 0);
+    .filter((series) => series.points.length > 0);
 
   if (candidates.length === 0) {
     return null;
@@ -410,6 +424,7 @@ const buildPriceChartFragments = (
   windowStart: Date,
   windowEnd: Date
 ): HistoricalMarketStateFragment[] => {
+  const canonicalCategory = scope.category.toUpperCase() as HistoricalFragmentCategory;
   const preferredSeries = scope.detail.outcomes
     .map((outcome) => ({
       outcome,
@@ -453,7 +468,7 @@ const buildPriceChartFragments = (
     return [{
       canonicalEventId: scope.canonicalEventId,
       canonicalMarketId: scope.canonicalMarketId,
-      canonicalCategory: scope.category.toUpperCase() as CreateHistoricalMarketStateInput["canonicalCategory"],
+      canonicalCategory,
       venue: "MYRIAD",
       venueMarketId: stringifyId(scope.detail.id),
       marketClass: HistoricalMarketClass.BINARY,
@@ -481,6 +496,7 @@ const buildEventFragments = (
   windowStart: Date,
   windowEnd: Date
 ): HistoricalMarketStateFragment[] => {
+  const canonicalCategory = scope.category.toUpperCase() as HistoricalFragmentCategory;
   const grouped = new Map<string, MyriadMarketEvent[]>();
 
   for (const event of events) {
@@ -506,7 +522,7 @@ const buildEventFragments = (
       return {
         canonicalEventId: scope.canonicalEventId,
         canonicalMarketId: scope.canonicalMarketId,
-        canonicalCategory: scope.category.toUpperCase() as CreateHistoricalMarketStateInput["canonicalCategory"],
+        canonicalCategory,
         venue: "MYRIAD",
         venueMarketId: stringifyId(scope.detail.id),
         marketClass: HistoricalMarketClass.BINARY,

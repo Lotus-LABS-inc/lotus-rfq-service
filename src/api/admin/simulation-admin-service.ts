@@ -101,6 +101,7 @@ export interface SimulationScopeSummary {
     limitlessRows: number;
     opinionRows: number;
     myriadRows: number;
+    predictRows: number;
   };
 }
 
@@ -605,6 +606,9 @@ export class SimulationAdminService {
             .reduce((total, entry) => total + entry.rowCount, 0),
           myriadRows: coverage.venueCoverage
             .filter((entry) => entry.venue === "MYRIAD")
+            .reduce((total, entry) => total + entry.rowCount, 0),
+          predictRows: coverage.venueCoverage
+            .filter((entry) => entry.venue === "PREDICT")
             .reduce((total, entry) => total + entry.rowCount, 0)
         }
       }];

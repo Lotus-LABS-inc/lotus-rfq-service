@@ -10,6 +10,7 @@ const makeProfile = (overrides: Partial<NormalizedResolutionProfile> = {}): Norm
   venue: "venue-a",
   venueMarketId: "market-1",
   canonicalEventId: "e45a24f7-ce99-4bfe-af96-c19c26c0e055",
+  canonicalMarketId: "market-1",
   oracleType: "manual_committee",
   oracleName: "Resolution Committee",
   resolutionAuthorityType: "committee",

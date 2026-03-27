@@ -51,6 +51,12 @@ const toNumericString = (value: string | number | null | undefined): string | nu
 
 const toDate = (value: string | number): Date => {
   if (typeof value === "string") {
+    if (/^\d+$/.test(value)) {
+      const numericValue = Number.parseInt(value, 10)
+      const millis = numericValue >= 1_000_000_000_000 ? numericValue : numericValue * 1_000
+      return new Date(millis)
+    }
+
     const parsed = Date.parse(value)
     if (!Number.isFinite(parsed)) {
       throw new LimitlessHistoricalAdapterError(`Limitless timestamp is not a valid ISO string: ${value}.`)

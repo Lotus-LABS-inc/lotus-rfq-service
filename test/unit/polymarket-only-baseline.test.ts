@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { HistoricalMarketClass, type HistoricalMarketState } from "../../src/core/historical-simulation/historical-simulation.types.js";
 import { PolymarketOnlyBaselineEvaluator } from "../../src/simulation/baselines/polymarket-only-baseline.js";
 import { HistoricalSimulationBaselineError } from "../../src/simulation/baselines/shared.js";
+import type { HistoricalSimulationBaselineInput } from "../../src/simulation/baselines/shared.js";
 
 const feePolicy = {
   version: "fees-v1",
@@ -41,7 +42,7 @@ const createState = (overrides: Partial<HistoricalMarketState>): HistoricalMarke
 describe("PolymarketOnlyBaselineEvaluator", () => {
   it("produces deterministic output for a sports binary slice", () => {
     const evaluator = new PolymarketOnlyBaselineEvaluator();
-    const input = {
+    const input: HistoricalSimulationBaselineInput = {
       canonicalEventId: "canonical-sports-1",
       marketStates: [
         createState({ id: "state-2", timestamp: new Date("2026-03-13T00:01:00.000Z"), bestAsk: "0.52", midpoint: "0.51", lastPrice: "0.53", sourceTimestamp: new Date("2026-03-13T00:01:00.000Z"), orderbookSnapshot: { bids: [{ price: "0.50", size: "2" }], asks: [{ price: "0.52", size: "2" }] } }),
@@ -75,7 +76,7 @@ describe("PolymarketOnlyBaselineEvaluator", () => {
         side: "BUY",
         requestedNotional: "1",
         feePolicy
-      })
+      } satisfies HistoricalSimulationBaselineInput)
     ).toThrow(HistoricalSimulationBaselineError);
   });
 });

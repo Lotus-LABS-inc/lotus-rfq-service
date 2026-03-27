@@ -324,6 +324,81 @@ Current v1 limitation:
 - Opinion historical pair edges can only be created for already-known numeric IDs
 - Myriad historical ingestion is available, but Myriad pooled pair/tri edges are not enabled in v1
 
+## Interpreted Contracts And Compatibility Decisions
+
+The compatibility layer now includes two explicit additive artifacts above the canonical graph:
+
+1. `InterpretedContract`
+- built from:
+  - `VenueMarketProfile`
+  - `PropositionFingerprint`
+  - `ResolutionProfile`
+  - `SettlementProfile`
+- represents normalized proposition, outcome, timing, resolution, and settlement semantics
+- carries ambiguity flags, interpretation confidence, and raw lineage references
+
+2. `CompatibilityDecision`
+- references two interpreted contracts plus a compatibility version row
+- stores:
+  - compatibility class
+  - structured reason codes
+  - hard blocks
+  - caution conditions
+  - soft penalties
+  - confidence score
+  - scoring/ruleset/model version linkage
+  - replay linkage
+  - optional override linkage
+
+Operational boundary:
+- these objects are authoritative for explainability, versioning, override review, and replay linkage
+- existing live routing/RFQ readers still consume projected `resolution_*` rows during rollout
+- do not assume a projected assessment row captures the full compatibility-decision lineage when a compatibility decision is available
+
+## Compatibility Override Workflow
+
+Compatibility review routes:
+- `POST /admin/compatibility-review/override`
+- `POST /admin/compatibility-review/deactivate`
+- `GET /admin/compatibility-review/overrides`
+- `GET /admin/compatibility-review/decision/:id`
+- `GET /admin/compatibility-review/history/:overrideId`
+
+Mutation requirements:
+- ADMIN auth
+- valid `twoFactorToken`
+
+Operator workflow:
+1. inspect the base `CompatibilityDecision`
+2. inspect active override rows and expiry
+3. confirm reviewer identity and evidence payload
+4. confirm there is no ambiguous/conflicting active override state
+5. only then treat the effective class as override-adjusted
+
+Fail-closed rule:
+- if override state is ambiguous, pooling must remain blocked until the override set is cleaned up
+
+## Current Rollout Boundary
+
+Current authoritative split:
+- canonical graph + interpreted contracts + compatibility decisions
+  - identity, semantics, versioned decision lineage
+- projected `resolution_profiles` + `resolution_risk_assessments`
+  - legacy reader compatibility for current RFQ/SOR/admin flows
+
+Current CAUTION rule:
+- CAUTION routing still follows the existing resolution-risk policy path until explicit cutover
+- the new compatibility-decision layer must not silently change current pooled CAUTION behavior
+
+Cleanup status as of 2026-03-21:
+- resolution-risk and replay type drift cleaned
+- replay evaluators and tests aligned to required `canonicalMarketId` and current scoring inputs
+- historical and admin fixtures aligned to current assessment/profile shapes
+- repo-wide typecheck passes
+
+Environment boundary:
+- local schema validation still requires the repo DB connection settings to match the running Postgres instance before it can be treated as complete
+
 ## Supabase Verification
 Before operational changes in a new environment:
 1. Run:

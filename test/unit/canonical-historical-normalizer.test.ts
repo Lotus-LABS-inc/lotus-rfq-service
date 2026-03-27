@@ -51,7 +51,7 @@ const createAssessment = (
 ): ResolutionRiskAssessment => ({
   id: `${marketAProfileId}-${marketBProfileId}`,
   canonicalEventId: "canonical-event-1",
-  canonicalMarketId: null,
+  canonicalMarketId: "canonical-market-1",
   marketAProfileId,
   marketBProfileId,
   riskScore: "0.05",

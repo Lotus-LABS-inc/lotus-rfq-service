@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { HistoricalMarketClass, type HistoricalMarketState } from "../../src/core/historical-simulation/historical-simulation.types.js";
 import { BestExternalOnlyBaselineEvaluator } from "../../src/simulation/baselines/best-external-only-baseline.js";
+import type { HistoricalSimulationBaselineInput } from "../../src/simulation/baselines/shared.js";
 
 const feePolicy = {
   version: "fees-v1",
@@ -40,7 +41,7 @@ const createState = (overrides: Partial<HistoricalMarketState>): HistoricalMarke
 describe("BestExternalOnlyBaselineEvaluator", () => {
   it("chooses the lower-cost venue deterministically", () => {
     const evaluator = new BestExternalOnlyBaselineEvaluator();
-    const result = evaluator.evaluate({
+    const input: HistoricalSimulationBaselineInput = {
       canonicalEventId: "canonical-event-1",
       marketStates: [
         createState({ venue: "POLYMARKET", venueMarketId: "condition-1", bestAsk: "0.55", orderbookSnapshot: { bids: [{ price: "0.54", size: "1" }], asks: [{ price: "0.55", size: "1" }] } }),
@@ -49,7 +50,8 @@ describe("BestExternalOnlyBaselineEvaluator", () => {
       side: "BUY",
       requestedNotional: "1",
       feePolicy
-    });
+    };
+    const result = evaluator.evaluate(input);
 
     expect(result.venue).toBe("POLYMARKET");
     expect(result.baselineType).toBe("BEST_EXTERNAL_ONLY");

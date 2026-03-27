@@ -62,9 +62,9 @@ export class MyriadHistoricalIngestionJob {
     try {
       const scopes = await this.config.adapter.listScopedMarkets({
         categories: input.categories ?? DEFAULT_CATEGORIES,
-        batchSize: input.batchSize,
-        canonicalEventId: input.canonicalEventId,
-        canonicalMarketId: input.canonicalMarketId
+        ...(input.batchSize !== undefined ? { batchSize: input.batchSize } : {}),
+        ...(input.canonicalEventId ? { canonicalEventId: input.canonicalEventId } : {}),
+        ...(input.canonicalMarketId ? { canonicalMarketId: input.canonicalMarketId } : {})
       });
       stats.discoveredMarkets = scopes.length;
 
