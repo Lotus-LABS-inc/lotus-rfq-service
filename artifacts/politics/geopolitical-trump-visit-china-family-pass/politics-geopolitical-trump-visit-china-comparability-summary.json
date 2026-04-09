@@ -1,0 +1,68 @@
+[
+  {
+    "topicKey": "GEOPOLITICAL_EVENT_BY_DATE|USA_CHINA|TRUMP_VISIT_CHINA|2026-04-30",
+    "topicLabel": "Trump visit China by 2026-04-30",
+    "deadlineDate": "2026-04-30",
+    "venuesPresent": [
+      "OPINION",
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "routeabilityCandidate": "TRI",
+    "matcherCandidate": true,
+    "comparabilityLabel": "EXACT_COMPARABLE",
+    "sourceRows": [
+      {
+        "venue": "OPINION",
+        "venueMarketId": "493245:april-30-2026",
+        "title": "Will Trump visit China by April 30, 2026?"
+      },
+      {
+        "venue": "POLYMARKET",
+        "venueMarketId": "will-trump-visit-china-by:april-30-2026",
+        "title": "Will Trump visit China by April 30, 2026?"
+      },
+      {
+        "venue": "PREDICT",
+        "venueMarketId": "16780",
+        "title": "Will Trump visit China by April 30, 2026?"
+      }
+    ]
+  },
+  {
+    "topicKey": "GEOPOLITICAL_EVENT_BY_DATE|USA_CHINA|TRUMP_VISIT_CHINA|2026-05-31",
+    "topicLabel": "Trump visit China by 2026-05-31",
+    "deadlineDate": "2026-05-31",
+    "venuesPresent": [
+      "OPINION"
+    ],
+    "routeabilityCandidate": "SINGLE_VENUE_ONLY",
+    "matcherCandidate": false,
+    "comparabilityLabel": "FRAGMENTED",
+    "sourceRows": [
+      {
+        "venue": "OPINION",
+        "venueMarketId": "493245:may-31-2026",
+        "title": "Will Trump visit China by May 31, 2026?"
+      }
+    ]
+  },
+  {
+    "topicKey": "GEOPOLITICAL_EVENT_BY_DATE|USA_CHINA|TRUMP_VISIT_CHINA|2026-06-30",
+    "topicLabel": "Trump visit China by 2026-06-30",
+    "deadlineDate": "2026-06-30",
+    "venuesPresent": [
+      "OPINION"
+    ],
+    "routeabilityCandidate": "SINGLE_VENUE_ONLY",
+    "matcherCandidate": false,
+    "comparabilityLabel": "FRAGMENTED",
+    "sourceRows": [
+      {
+        "venue": "OPINION",
+        "venueMarketId": "493245:june-30-2026",
+        "title": "Will Trump visit China by June 30, 2026?"
+      }
+    ]
+  }
+]

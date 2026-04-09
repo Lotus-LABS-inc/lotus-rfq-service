@@ -1,0 +1,93 @@
+{
+  "observedAt": "2026-04-08T22:00:32.369Z",
+  "laneId": "POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_TRI_LIMITLESS_OPINION_POLYMARKET_PREDICT",
+  "topicKey": "GEOPOLITICAL_EVENT_BY_DATE|USA_GREENLAND|TRUMP_ACQUIRE_GREENLAND|2026-12-31",
+  "triVenueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+  "exactSafeTriPropositions": [
+    "TRUMP_ACQUIRE_GREENLAND_BY_2026_12_31"
+  ],
+  "peerPairRoutes": [
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "laneId": "POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_LIMITLESS_POLYMARKET",
+      "exactSafePropositions": [
+        "TRUMP_ACQUIRE_GREENLAND_BY_2026_12_31"
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "laneId": "POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_LIMITLESS_OPINION",
+      "exactSafePropositions": [
+        "TRUMP_ACQUIRE_GREENLAND_BY_2026_12_31"
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "laneId": "POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_LIMITLESS_PREDICT",
+      "exactSafePropositions": [
+        "TRUMP_ACQUIRE_GREENLAND_BY_2026_12_31"
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "laneId": "POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_OPINION_POLYMARKET",
+      "exactSafePropositions": [
+        "TRUMP_ACQUIRE_GREENLAND_BY_2026_12_31"
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "laneId": "POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_OPINION_PREDICT",
+      "exactSafePropositions": [
+        "TRUMP_ACQUIRE_GREENLAND_BY_2026_12_31"
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "laneId": "POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_POLYMARKET_PREDICT",
+      "exactSafePropositions": [
+        "TRUMP_ACQUIRE_GREENLAND_BY_2026_12_31"
+      ]
+    }
+  ],
+  "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+  "operatorRuleReviewRequired": true,
+  "matcherReady": true,
+  "operatorCredible": true,
+  "readinessReviewJustified": true,
+  "rolloutRecommended": false,
+  "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+  "holdPolicy": {
+    "scope": "LANE_ONLY",
+    "holdConditions": [
+      "proposition_scope_drift",
+      "tri_venue_set_drift",
+      "rule_status_drift",
+      "operator_confidence_lost"
+    ],
+    "userConsentCanWidenScope": false
+  },
+  "rollbackPolicy": {
+    "scope": "LANE_ONLY",
+    "targetMode": "PAIR_ROUTE_INTERNAL_REVIEW_ONLY",
+    "fallbackLaneIds": [
+      "POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_LIMITLESS_POLYMARKET",
+      "POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_LIMITLESS_OPINION",
+      "POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_LIMITLESS_PREDICT",
+      "POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_OPINION_POLYMARKET",
+      "POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_OPINION_PREDICT",
+      "POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_POLYMARKET_PREDICT"
+    ],
+    "operatorSteps": [
+      "Record a lane-scoped rollback or hold event for the exact Greenland-acquisition tri lane.",
+      "Revert this tri lane to one or more separately approved pair routes in internal-review-only posture.",
+      "Do not widen to MYRIAD or any broader Greenland territorial-acquisition topic during rollback."
+    ]
+  },
+  "exclusionsStillMandatory": [
+    "NO_MYRIAD_FOR_THIS_TOPIC",
+    "NO_SCOPE_WIDENING_BEYOND_TRUMP_ACQUIRE_GREENLAND_2026_12_31",
+    "PAIR_ROUTES_MUST_REMAIN_EXPLICIT"
+  ],
+  "finalReadinessLabel": "GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW"
+}

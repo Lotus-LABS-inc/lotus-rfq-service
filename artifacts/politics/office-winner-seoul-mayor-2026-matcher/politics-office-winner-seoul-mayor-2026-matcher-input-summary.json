@@ -1,0 +1,151 @@
+{
+  "observedAt": "2026-04-08T14:00:33.842Z",
+  "exactTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+  "refreshedRowsUsed": [
+    {
+      "venue": "OPINION",
+      "venueMarketId": "493238",
+      "title": "2026 Seoul Mayoral Election Winner",
+      "candidateSet": [
+        "chong won oh",
+        "na kyung won",
+        "oh se hoon",
+        "park ju min"
+      ]
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "493237",
+      "title": "2026 Seoul Mayoral Election Winner",
+      "candidateSet": [
+        "chong won oh",
+        "na kyung won"
+      ]
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "493236",
+      "title": "2026 Seoul Mayoral Election Winner",
+      "candidateSet": [
+        "chong won oh",
+        "na kyung won"
+      ]
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-seoul-mayoral-election-winner",
+      "title": "2026 Seoul Mayoral Election Winner",
+      "candidateSet": [
+        "ahn cheol soo",
+        "cho eun hee",
+        "cho kuk",
+        "chong won oh",
+        "han dong hoon",
+        "hong ihk pyo",
+        "jeon hyun heui",
+        "kang hoon sik",
+        "na kyung won",
+        "oh se hoon",
+        "park hong keun",
+        "park ju min",
+        "park yong jin",
+        "seo young kyo"
+      ]
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "493225",
+      "title": "2026 Seoul Mayoral Election Winner",
+      "candidateSet": [
+        "chong won oh",
+        "na kyung won"
+      ]
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-seoul-mayoral-election-winner-1763484351054",
+      "title": "2026 Seoul Mayoral Election Winner",
+      "candidateSet": [
+        "ahn cheol soo",
+        "cho eun hee",
+        "cho kuk",
+        "chong won oh",
+        "han dong hoon",
+        "hong ihk pyo",
+        "jeon hyun heui",
+        "na kyung won",
+        "oh se hoon",
+        "other",
+        "park hong keun",
+        "park ju min",
+        "park yong jin",
+        "seo young kyo"
+      ]
+    }
+  ],
+  "familyComparabilitySourceArtifacts": {
+    "fetchSummary": "artifacts/politics/office-winner-family-pass/politics-office-winner-fetch-summary.json",
+    "admissionSummary": "artifacts/politics/office-winner-family-pass/politics-office-winner-admission-summary.json",
+    "normalizedTopics": "artifacts/politics/office-winner-family-pass/politics-office-winner-normalized-topics.json",
+    "comparabilitySummary": "artifacts/politics/office-winner-family-pass/politics-office-winner-comparability-summary.json",
+    "basisFragmentationSummary": "artifacts/politics/office-winner-family-pass/politics-office-winner-basis-fragmentation-summary.json",
+    "finalDecision": "artifacts/politics/office-winner-family-pass/politics-office-winner-final-decision.json"
+  },
+  "admittedVenues": [
+    "LIMITLESS",
+    "OPINION",
+    "POLYMARKET"
+  ],
+  "admittedCandidates": [
+    "ahn_cheol_soo",
+    "cho_eun_hee",
+    "cho_kuk",
+    "chong_won_oh",
+    "han_dong_hoon",
+    "hong_ihk_pyo",
+    "jeon_hyun_heui",
+    "na_kyung_won",
+    "oh_se_hoon",
+    "park_hong_keun",
+    "park_ju_min",
+    "park_yong_jin",
+    "seo_young_kyo"
+  ],
+  "exclusionsBeforeFinalLaneConstruction": [
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": null,
+      "normalizedCandidateName": "other",
+      "reason": "OTHERS_EXCLUDED",
+      "notes": "Outcome other is excluded by shared-core policy."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": null,
+      "normalizedCandidateName": "other",
+      "reason": "OTHERS_EXCLUDED",
+      "notes": "Outcome Other is excluded by shared-core policy."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "kang_hoon_sik",
+      "normalizedCandidateName": "kang hoon sik",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate kang hoon sik is not part of the exact shared Seoul office-winner core."
+    },
+    {
+      "scope": "venue",
+      "venue": "MYRIAD",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "reason": "VENUE_NOT_PRESENT_FOR_TOPIC",
+      "notes": "MYRIAD is not part of the freshly admitted venue truth for OFFICE_WINNER|SEOUL|MAYOR|2026."
+    },
+    {
+      "scope": "venue",
+      "venue": "PREDICT",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "reason": "VENUE_NOT_PRESENT_FOR_TOPIC",
+      "notes": "PREDICT is not part of the freshly admitted venue truth for OFFICE_WINNER|SEOUL|MAYOR|2026."
+    }
+  ]
+}

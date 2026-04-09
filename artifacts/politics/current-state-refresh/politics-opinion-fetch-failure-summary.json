@@ -1,0 +1,12 @@
+{
+  "observedAt": "2026-04-04T14:47:42.610Z",
+  "venue": "OPINION",
+  "status": "UNAVAILABLE",
+  "primaryDiscoveryPath": "opinion_clob_sdk_active_markets",
+  "fallbackDiscoveryPathUsed": "opinion_openapi_market_list",
+  "primaryPathFailure": "The operation was aborted due to timeout",
+  "warnings": [
+    "Fallback discovery path failed: The operation was aborted due to timeout",
+    "Primary discovery path failed: The operation was aborted due to timeout"
+  ]
+}

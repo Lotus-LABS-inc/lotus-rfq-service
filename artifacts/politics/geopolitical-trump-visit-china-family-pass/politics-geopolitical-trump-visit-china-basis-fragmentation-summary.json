@@ -1,0 +1,36 @@
+{
+  "observedAt": "2026-04-08T21:00:23.023Z",
+  "blockerCounts": {
+    "FRAGMENTED": 2
+  },
+  "topicBlockers": [
+    {
+      "topicKey": "GEOPOLITICAL_EVENT_BY_DATE|USA_CHINA|TRUMP_VISIT_CHINA|2026-05-31",
+      "blocker": "FRAGMENTED",
+      "venuesPresent": [
+        "OPINION"
+      ]
+    },
+    {
+      "topicKey": "GEOPOLITICAL_EVENT_BY_DATE|USA_CHINA|TRUMP_VISIT_CHINA|2026-06-30",
+      "blocker": "FRAGMENTED",
+      "venuesPresent": [
+        "OPINION"
+      ]
+    }
+  ],
+  "unresolvedRows": [
+    {
+      "venue": "OPINION",
+      "venueMarketId": "493245:march-31-2026",
+      "title": "Will Trump visit China by March 31, 2026?",
+      "reason": "DEADLINE_ALREADY_PASSED"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "16779",
+      "title": "Will Trump visit China by March 31, 2026?",
+      "reason": "DEADLINE_ALREADY_PASSED"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "observedAt": "2026-04-08T17:01:17.739Z",
+  "laneId": "POLITICS_PARTY_CONTROL_BALANCE_OF_POWER_2026_TRI_OPINION_POLYMARKET_PREDICT",
+  "topicKey": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+  "triVenueSet": "OPINION|POLYMARKET|PREDICT",
+  "outcomeScopeHash": "fe2cc4741290ec02",
+  "exactSafeTriOutcomes": [
+    "D_SENATE_R_HOUSE",
+    "DEMOCRATS_SWEEP",
+    "REPUBLICANS_SWEEP"
+  ],
+  "saferPairFallbackLaneId": "POLITICS_PARTY_CONTROL_BALANCE_OF_POWER_2026_PAIR_POLYMARKET_PREDICT",
+  "saferPairFallbackVenuePair": "POLYMARKET|PREDICT",
+  "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+  "supportedActions": [
+    "inspect",
+    "hold",
+    "promote",
+    "rollback"
+  ],
+  "userConsentCanWidenScope": false,
+  "narrowestEnforceableUnit": "LANE_SCOPE_LOCK",
+  "sourceArtifactRefs": [
+    "artifacts/politics/party-control-balance-of-power-2026-matcher/politics-party-control-balance-of-power-2026-matcher-input-summary.json",
+    "artifacts/politics/party-control-balance-of-power-2026-matcher/politics-party-control-balance-of-power-2026-pair-lanes.json",
+    "artifacts/politics/party-control-balance-of-power-2026-matcher/politics-party-control-balance-of-power-2026-tri-lanes.json",
+    "artifacts/politics/party-control-balance-of-power-2026-matcher/politics-party-control-balance-of-power-2026-rejections.json",
+    "artifacts/politics/party-control-balance-of-power-2026-matcher/politics-party-control-balance-of-power-2026-final-decision.json",
+    "artifacts/politics/party-control-balance-of-power-2026-matcher/politics-party-control-balance-of-power-2026-operator-summary.md"
+  ]
+}

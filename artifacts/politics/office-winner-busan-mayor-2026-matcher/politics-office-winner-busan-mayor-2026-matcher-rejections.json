@@ -1,0 +1,43 @@
+{
+  "observedAt": "2026-04-08T14:58:18.380Z",
+  "canonicalTopicKey": "OFFICE_WINNER|BUSAN|MAYOR|2026",
+  "rejections": [
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": null,
+      "normalizedCandidateName": "other",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "OTHERS_EXCLUDED",
+      "notes": "Outcome other is excluded by shared-core policy."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": null,
+      "normalizedCandidateName": "other",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "OTHERS_EXCLUDED",
+      "notes": "Outcome Other is excluded by shared-core policy."
+    },
+    {
+      "scope": "venue",
+      "venue": "MYRIAD",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "VENUE_NOT_PRESENT_FOR_TOPIC",
+      "notes": "MYRIAD is not part of the freshly admitted venue truth for OFFICE_WINNER|BUSAN|MAYOR|2026."
+    },
+    {
+      "scope": "venue",
+      "venue": "OPINION",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "VENUE_NOT_PRESENT_FOR_TOPIC",
+      "notes": "OPINION is not part of the freshly admitted venue truth for OFFICE_WINNER|BUSAN|MAYOR|2026."
+    },
+    {
+      "scope": "venue",
+      "venue": "PREDICT",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "VENUE_NOT_PRESENT_FOR_TOPIC",
+      "notes": "PREDICT is not part of the freshly admitted venue truth for OFFICE_WINNER|BUSAN|MAYOR|2026."
+    }
+  ]
+}

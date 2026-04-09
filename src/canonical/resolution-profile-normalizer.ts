@@ -17,19 +17,61 @@ export interface ResolutionProfileNormalizationInput {
     metadata?: Record<string, unknown> | null;
 }
 
+const authorityPhraseFamilies = Object.freeze([
+    {
+        canonical: "official_party_sources",
+        phrases: ["official democratic party sources", "official republican party sources", "official party sources"]
+    },
+    {
+        canonical: "official_election_sources",
+        phrases: ["official election sources", "official election result", "official election results"]
+    },
+    {
+        canonical: "official_nomination_sources",
+        phrases: [
+            "official democratic party",
+            "official republican party",
+            "democratic national convention",
+            "republican national convention",
+            "official dnc",
+            "official rnc",
+            "official party nomination"
+        ]
+    },
+    {
+        canonical: "official_league_sources",
+        phrases: ["official resolution source", "official premierleague com", "official nba sources", "official nfl sources", "official nhl sources"]
+    },
+    {
+        canonical: "exchange_price_feed",
+        phrases: ["pyth network", "binance", "coinbase", "price feed", "exchange as fallback"]
+    }
+]);
+
 export class CanonicalResolutionProfileNormalizer {
     public normalize(input: ResolutionProfileNormalizationInput): ResolutionProfile {
         const metadataCompleteness = this.computeMetadataCompleteness(input);
+        const normalizedSource = this.optionalText(input.resolutionSource);
+        const normalizedTitle = this.optionalText(input.resolutionTitle);
+        const normalizedAuthorityType = this.optionalText(input.resolutionAuthorityType);
+        const normalizedRuleText = this.optionalRuleText(input.ruleText);
+        const sourceHierarchy = input.sourceHierarchy ?? {};
+        const extractedAuthorityPhrases = this.extractAuthorityPhrases(normalizedRuleText, sourceHierarchy);
+        const normalizedAuthorityIdentity = this.buildAuthorityIdentity({
+            normalizedAuthorityType,
+            extractedAuthorityPhrases,
+            sourceHierarchy
+        });
         const now = new Date();
 
         return {
             id: buildStableTextId("crp_", input.venueMarketProfileId),
             venueMarketProfileId: input.venueMarketProfileId,
-            resolutionSource: this.optionalText(input.resolutionSource),
-            resolutionTitle: this.optionalText(input.resolutionTitle),
-            normalizedResolutionAuthorityType: this.optionalText(input.resolutionAuthorityType),
-            ruleText: this.optionalRuleText(input.ruleText),
-            sourceHierarchy: input.sourceHierarchy ?? {},
+            resolutionSource: normalizedSource,
+            resolutionTitle: normalizedTitle,
+            normalizedResolutionAuthorityType: normalizedAuthorityType,
+            ruleText: normalizedRuleText,
+            sourceHierarchy,
             disputeWindowHours: this.optionalDecimalString(input.disputeWindowHours),
             ambiguityFlags: {
                 ambiguousTimeBoundary: input.ambiguousTimeBoundary ?? false,
@@ -37,7 +79,16 @@ export class CanonicalResolutionProfileNormalizer {
                 ambiguousJurisdictionOrScope: input.ambiguousJurisdictionOrScope ?? false
             },
             metadataCompletenessScore: clampRatioString(metadataCompleteness),
-            metadata: input.metadata ?? {},
+            metadata: {
+                ...(input.metadata ?? {}),
+                semanticResolutionSourceClass: this.buildSemanticSourceClass(normalizedAuthorityType, extractedAuthorityPhrases),
+                normalizedAuthorityIdentity,
+                normalizedAuthorityPhrases: extractedAuthorityPhrases,
+                resolutionSourceOverrideEligible: normalizedAuthorityIdentity !== null && extractedAuthorityPhrases.length > 0,
+                resolutionSourceOverrideReason: normalizedAuthorityIdentity !== null && extractedAuthorityPhrases.length > 0
+                    ? "authority_type_and_rule_phrases_aligned"
+                    : "insufficient_authority_alignment"
+            },
             createdAt: now,
             updatedAt: now
         };
@@ -81,5 +132,60 @@ export class CanonicalResolutionProfileNormalizer {
         ];
 
         return flags.filter(Boolean).length / flags.length;
+    }
+
+    private extractAuthorityPhrases(
+        normalizedRuleText: string | null,
+        sourceHierarchy: Record<string, unknown>
+    ): readonly string[] {
+        const haystack = [
+            normalizedRuleText ?? "",
+            normalizeFreeText(JSON.stringify(sourceHierarchy))
+        ].join(" ");
+
+        const extracted = authorityPhraseFamilies
+            .filter((family) => family.phrases.some((phrase) => haystack.includes(normalizeFreeText(phrase))))
+            .map((family) => family.canonical);
+
+        return [...new Set(extracted)].sort((left, right) => left.localeCompare(right));
+    }
+
+    private buildAuthorityIdentity(input: {
+        normalizedAuthorityType: string | null;
+        extractedAuthorityPhrases: readonly string[];
+        sourceHierarchy: Record<string, unknown>;
+    }): string | null {
+        const hierarchyTokens = normalizeFreeText(JSON.stringify(input.sourceHierarchy));
+        const components = [
+            input.normalizedAuthorityType,
+            ...input.extractedAuthorityPhrases,
+            hierarchyTokens.length > 0 ? hierarchyTokens : null
+        ].filter((value): value is string => value !== null && value.length > 0);
+
+        if (components.length === 0) {
+            return null;
+        }
+
+        return components.join("|");
+    }
+
+    private buildSemanticSourceClass(
+        normalizedAuthorityType: string | null,
+        extractedAuthorityPhrases: readonly string[]
+    ): string {
+        if (normalizedAuthorityType === "exchange_price_feed" || extractedAuthorityPhrases.includes("exchange_price_feed")) {
+            return "MARKET_DATA_AUTHORITY";
+        }
+        if (
+            extractedAuthorityPhrases.includes("official_party_sources")
+            || extractedAuthorityPhrases.includes("official_election_sources")
+            || extractedAuthorityPhrases.includes("official_nomination_sources")
+        ) {
+            return "OFFICIAL_POLITICAL_AUTHORITY";
+        }
+        if (extractedAuthorityPhrases.includes("official_league_sources")) {
+            return "OFFICIAL_SPORT_AUTHORITY";
+        }
+        return "VENUE_DECLARED_AUTHORITY";
     }
 }

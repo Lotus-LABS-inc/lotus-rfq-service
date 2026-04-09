@@ -1,0 +1,282 @@
+{
+  "observedAt": "2026-04-08T01:00:47.620Z",
+  "republican": {
+    "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+    "sharedCoreTopicDecision": "TOPIC_SHARED_CORE_TRI_READY",
+    "bestPairLane": {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "pairDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "ruleDecision": "EXACT_RULE_COMPATIBLE",
+      "sharedNamedCandidateCount": 4,
+      "exactRouteableCandidateCount": 4,
+      "reviewRequiredCandidateCount": 0,
+      "matcherEvalJustified": true,
+      "excludedCandidates": []
+    },
+    "triLane": {
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "triDecision": "TRI_EXACT_AUTO_ROUTEABLE",
+      "ruleDecision": "EXACT_RULE_COMPATIBLE",
+      "safeCandidates": [
+        {
+          "candidateIdentityKey": "jd_vance",
+          "normalizedCandidateName": "jd vance",
+          "routeabilityClass": "EXACT_AUTO_ROUTEABLE",
+          "venueOutcomes": [
+            {
+              "venue": "LIMITLESS",
+              "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+              "rawOutcomeLabel": "J.D. Vance"
+            },
+            {
+              "venue": "OPINION",
+              "venueMarketId": "493225",
+              "rawOutcomeLabel": "J.D. Vance"
+            },
+            {
+              "venue": "POLYMARKET",
+              "venueMarketId": "0x18b1c135d0a40c5894da9412e77311827d9caf16cf4cd6591b247a34730af919",
+              "rawOutcomeLabel": "J.D. Vance"
+            }
+          ]
+        },
+        {
+          "candidateIdentityKey": "marco_rubio",
+          "normalizedCandidateName": "marco rubio",
+          "routeabilityClass": "EXACT_AUTO_ROUTEABLE",
+          "venueOutcomes": [
+            {
+              "venue": "LIMITLESS",
+              "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+              "rawOutcomeLabel": "Marco Rubio"
+            },
+            {
+              "venue": "OPINION",
+              "venueMarketId": "493225",
+              "rawOutcomeLabel": "Marco Rubio"
+            },
+            {
+              "venue": "POLYMARKET",
+              "venueMarketId": "0x21ad31a46bfaa51650766eff6dc69c866959e32d965ffb116020e37694b6317d",
+              "rawOutcomeLabel": "Marco Rubio"
+            }
+          ]
+        },
+        {
+          "candidateIdentityKey": "ron_desantis",
+          "normalizedCandidateName": "ron desantis",
+          "routeabilityClass": "EXACT_AUTO_ROUTEABLE",
+          "venueOutcomes": [
+            {
+              "venue": "LIMITLESS",
+              "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+              "rawOutcomeLabel": "Ron DeSantis"
+            },
+            {
+              "venue": "OPINION",
+              "venueMarketId": "493225",
+              "rawOutcomeLabel": "Ron DeSantis"
+            },
+            {
+              "venue": "POLYMARKET",
+              "venueMarketId": "0x64d31a2af85518c6718a5757a35b840f08eca20c1e22c0eb1e96ec01cc55b8b6",
+              "rawOutcomeLabel": "Ron DeSantis"
+            }
+          ]
+        }
+      ],
+      "excludedCandidates": [
+        {
+          "candidateIdentityKey": "tucker_carlson",
+          "normalizedCandidateName": "tucker carlson",
+          "exclusionReasons": [
+            "PAIR_ONLY"
+          ],
+          "sharedAcrossWhichVenues": [
+            "LIMITLESS",
+            "LIMITLESS",
+            "POLYMARKET",
+            "POLYMARKET"
+          ]
+        },
+        {
+          "candidateIdentityKey": "glenn_youngkin",
+          "normalizedCandidateName": "glenn youngkin",
+          "exclusionReasons": [
+            "PAIR_ONLY"
+          ],
+          "sharedAcrossWhichVenues": [
+            "OPINION",
+            "OPINION",
+            "POLYMARKET",
+            "POLYMARKET"
+          ]
+        },
+        {
+          "candidateIdentityKey": "donald_trump",
+          "normalizedCandidateName": "donald trump",
+          "exclusionReasons": [
+            "PAIR_ONLY"
+          ],
+          "sharedAcrossWhichVenues": [
+            "LIMITLESS",
+            "LIMITLESS",
+            "POLYMARKET",
+            "POLYMARKET"
+          ]
+        },
+        {
+          "candidateIdentityKey": "donald_trump_jr",
+          "normalizedCandidateName": "donald trump jr",
+          "exclusionReasons": [
+            "PAIR_ONLY"
+          ],
+          "sharedAcrossWhichVenues": [
+            "LIMITLESS",
+            "LIMITLESS",
+            "POLYMARKET",
+            "POLYMARKET"
+          ]
+        },
+        {
+          "candidateIdentityKey": "ted_cruz",
+          "normalizedCandidateName": "ted cruz",
+          "exclusionReasons": [
+            "PAIR_ONLY"
+          ],
+          "sharedAcrossWhichVenues": [
+            "LIMITLESS",
+            "LIMITLESS",
+            "POLYMARKET",
+            "POLYMARKET"
+          ]
+        }
+      ],
+      "matcherEvalJustified": true,
+      "thinness": "THIN"
+    },
+    "triSafeCandidateCount": 3,
+    "pairSafeCandidateCount": 4,
+    "topicFinalDecision": "TRI_READY_BUT_PAIR_FIRST",
+    "operatorCredible": true
+  },
+  "democratic": {
+    "topicKey": "NOMINEE|US_PRESIDENT|2028|DEMOCRATIC",
+    "sharedCoreTopicDecision": "TOPIC_SHARED_CORE_PAIR_ONLY",
+    "bestPairLane": {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "pairDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "ruleDecision": "EXACT_RULE_COMPATIBLE",
+      "sharedNamedCandidateCount": 6,
+      "exactRouteableCandidateCount": 6,
+      "reviewRequiredCandidateCount": 0,
+      "matcherEvalJustified": true,
+      "excludedCandidates": []
+    },
+    "triLane": {
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|DEMOCRATIC",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "triDecision": "TRI_NO_SHARED_CORE",
+      "ruleDecision": "EXACT_RULE_COMPATIBLE",
+      "safeCandidates": [],
+      "excludedCandidates": [
+        {
+          "candidateIdentityKey": "alexandria_ocasio_cortez",
+          "normalizedCandidateName": "alexandria ocasio cortez",
+          "exclusionReasons": [
+            "PAIR_ONLY"
+          ],
+          "sharedAcrossWhichVenues": [
+            "LIMITLESS",
+            "LIMITLESS",
+            "POLYMARKET",
+            "POLYMARKET"
+          ]
+        },
+        {
+          "candidateIdentityKey": "gavin_newsom",
+          "normalizedCandidateName": "gavin newsom",
+          "exclusionReasons": [
+            "PAIR_ONLY"
+          ],
+          "sharedAcrossWhichVenues": [
+            "LIMITLESS",
+            "LIMITLESS",
+            "POLYMARKET",
+            "POLYMARKET"
+          ]
+        },
+        {
+          "candidateIdentityKey": "josh_shapiro",
+          "normalizedCandidateName": "josh shapiro",
+          "exclusionReasons": [
+            "PAIR_ONLY"
+          ],
+          "sharedAcrossWhichVenues": [
+            "LIMITLESS",
+            "LIMITLESS",
+            "POLYMARKET",
+            "POLYMARKET"
+          ]
+        },
+        {
+          "candidateIdentityKey": "kamala_harris",
+          "normalizedCandidateName": "kamala harris",
+          "exclusionReasons": [
+            "PAIR_ONLY"
+          ],
+          "sharedAcrossWhichVenues": [
+            "LIMITLESS",
+            "LIMITLESS",
+            "POLYMARKET",
+            "POLYMARKET"
+          ]
+        },
+        {
+          "candidateIdentityKey": "andy_beshear",
+          "normalizedCandidateName": "andy beshear",
+          "exclusionReasons": [
+            "PAIR_ONLY"
+          ],
+          "sharedAcrossWhichVenues": [
+            "LIMITLESS",
+            "LIMITLESS",
+            "POLYMARKET",
+            "POLYMARKET"
+          ]
+        },
+        {
+          "candidateIdentityKey": "pete_buttigieg",
+          "normalizedCandidateName": "pete buttigieg",
+          "exclusionReasons": [
+            "PAIR_ONLY"
+          ],
+          "sharedAcrossWhichVenues": [
+            "LIMITLESS",
+            "LIMITLESS",
+            "POLYMARKET",
+            "POLYMARKET"
+          ]
+        }
+      ],
+      "matcherEvalJustified": false,
+      "thinness": "THIN"
+    },
+    "triSafeCandidateCount": 0,
+    "pairSafeCandidateCount": 6,
+    "topicFinalDecision": "PAIR_ONLY_STILL_BEST",
+    "operatorCredible": true
+  },
+  "recommendedStartingLane": {
+    "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+    "laneType": "TRI",
+    "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+    "safeCandidateCount": 3,
+    "exact": true
+  },
+  "overallTriDecision": "NOMINEE_2028_TRI_PARTIAL_PAIR_PREFERRED",
+  "triOperatorCredible": true,
+  "pairStillPreferred": true,
+  "nextBestAction": "Run the nominee matcher on NOMINEE|US_PRESIDENT|2028|REPUBLICAN using the exact tri lane LIMITLESS|OPINION|POLYMARKET."
+}

@@ -1,0 +1,10 @@
+{
+  "observedAt": "2026-04-08T22:00:10.954Z",
+  "venue": "LIMITLESS",
+  "status": "SUCCESS",
+  "primaryDiscoveryPath": "limitless_sdk_active_markets",
+  "fallbackDiscoveryPathUsed": "limitless_direct_market_page_office_winner_targeted",
+  "primaryPathFailure": null,
+  "warnings": [],
+  "rows": 6
+}

@@ -1,0 +1,60 @@
+{
+  "observedAt": "2026-04-08T19:43:59.098Z",
+  "exactTopic": "OFFICE_EXIT_BY_DATE|USA|US_PRESIDENT|DONALD_TRUMP|2026-12-31",
+  "refreshedRowsUsed": [
+    {
+      "venue": "OPINION",
+      "venueMarketId": "3062",
+      "title": "Trump out as President before 2027?",
+      "canonicalRuleMeaning": "OUT_OF_OFFICE_ANY_REASON_BY_DATE"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "trump-out-as-president-before-2027",
+      "title": "Trump out as President before 2027?",
+      "canonicalRuleMeaning": "OUT_OF_OFFICE_ANY_REASON_BY_DATE"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "starmer-out-in-2025",
+      "title": "Trump out as President before 2027?",
+      "canonicalRuleMeaning": "OUT_OF_OFFICE_ANY_REASON_BY_DATE"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "30939",
+      "title": "Trump out as President before 2027?",
+      "canonicalRuleMeaning": "OUT_OF_OFFICE_ANY_REASON_BY_DATE"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "trump-out-as-president-before-2027-1768933068297",
+      "title": "Trump out as President before 2027?",
+      "canonicalRuleMeaning": "OUT_OF_OFFICE_ANY_REASON_BY_DATE"
+    }
+  ],
+  "familyComparabilitySourceArtifacts": {
+    "fetchSummary": "artifacts/politics/office-exit-by-date-family-pass/politics-office-exit-by-date-fetch-summary.json",
+    "admissionSummary": "artifacts/politics/office-exit-by-date-family-pass/politics-office-exit-by-date-admission-summary.json",
+    "normalizedTopics": "artifacts/politics/office-exit-by-date-family-pass/politics-office-exit-by-date-normalized-topics.json",
+    "comparabilitySummary": "artifacts/politics/office-exit-by-date-family-pass/politics-office-exit-by-date-comparability-summary.json",
+    "basisFragmentationSummary": "artifacts/politics/office-exit-by-date-family-pass/politics-office-exit-by-date-basis-fragmentation-summary.json",
+    "finalDecision": "artifacts/politics/office-exit-by-date-family-pass/politics-office-exit-by-date-final-decision.json"
+  },
+  "admittedVenues": [
+    "LIMITLESS",
+    "OPINION",
+    "POLYMARKET",
+    "PREDICT"
+  ],
+  "admittedProposition": "trump_out_before_2027",
+  "exclusionsBeforeFinalLaneConstruction": [
+    {
+      "scope": "venue",
+      "venue": "MYRIAD",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "reason": "VENUE_NOT_PRESENT_FOR_TOPIC",
+      "notes": "MYRIAD is not part of the freshly admitted venue truth used for routeable Trump office-exit lanes."
+    }
+  ]
+}

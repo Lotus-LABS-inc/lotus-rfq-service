@@ -1,0 +1,41 @@
+{
+  "observedAt": "2026-04-09T09:53:13.045Z",
+  "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+  "matcherLanes": [
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "clubs": [
+        "arsenal",
+        "liverpool",
+        "manchester_city",
+        "manchester_united"
+      ]
+    },
+    {
+      "venueSet": "LIMITLESS|OPINION|PREDICT",
+      "clubs": [
+        "arsenal",
+        "liverpool",
+        "manchester_city"
+      ]
+    },
+    {
+      "venueSet": "LIMITLESS|POLYMARKET|PREDICT",
+      "clubs": [
+        "arsenal",
+        "aston_villa",
+        "chelsea",
+        "liverpool",
+        "manchester_city"
+      ]
+    },
+    {
+      "venueSet": "OPINION|POLYMARKET|PREDICT",
+      "clubs": [
+        "arsenal",
+        "liverpool",
+        "manchester_city"
+      ]
+    }
+  ]
+}

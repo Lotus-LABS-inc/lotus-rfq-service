@@ -1,0 +1,16 @@
+{
+  "observedAt": "2026-04-08T00:44:17.765Z",
+  "topic": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+  "canonicalTriVenueSet": "LIMITLESS|OPINION|POLYMARKET",
+  "overallDecision": "REPUBLICAN_TRI_MATCHER_READY_NARROW_SUBSET_ONLY",
+  "operatorCredible": true,
+  "exactTriLaneReady": true,
+  "pairFallbackStillPreferredOutsideSubset": true,
+  "approvedCandidates": [
+    "jd_vance",
+    "marco_rubio",
+    "ron_desantis"
+  ],
+  "recommendedStartingLane": "LIMITLESS|OPINION|POLYMARKET",
+  "singleBestNextAction": "Start limited-prod operator review on the exact Republican tri lane LIMITLESS|OPINION|POLYMARKET for jd_vance, marco_rubio, and ron_desantis only."
+}

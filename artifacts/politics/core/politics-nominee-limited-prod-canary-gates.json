@@ -1,0 +1,62 @@
+{
+  "observedAt": "2026-04-08T00:44:17.782Z",
+  "lanes": [
+    {
+      "laneId": "POLITICS_NOMINEE_REPUBLICAN_PAIR_LIMITLESS_POLYMARKET",
+      "readinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "gateDecision": "LIMITED_PROD_GATES_PASSED",
+      "gateReasons": [
+        "artifact_freshness_required",
+        "operator_approval_intent_required",
+        "no_candidate_or_rule_drift"
+      ],
+      "exactTopic": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "exactVenueSet": "LIMITLESS|POLYMARKET",
+      "exactCandidateSet": [
+        "donald_trump",
+        "donald_trump_jr",
+        "ted_cruz",
+        "tucker_carlson"
+      ]
+    },
+    {
+      "laneId": "POLITICS_NOMINEE_REPUBLICAN_TRI_LIMITLESS_OPINION_POLYMARKET",
+      "readinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "gateDecision": "LIMITED_PROD_GATES_PASSED",
+      "gateReasons": [
+        "artifact_freshness_required",
+        "operator_approval_intent_required",
+        "exact_scope_token_required_per_run",
+        "pair_fallback_should_remain_visible",
+        "no_candidate_or_rule_drift"
+      ],
+      "exactTopic": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "exactVenueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "exactCandidateSet": [
+        "jd_vance",
+        "marco_rubio",
+        "ron_desantis"
+      ]
+    },
+    {
+      "laneId": "POLITICS_NOMINEE_DEMOCRATIC_PAIR_LIMITLESS_POLYMARKET",
+      "readinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "gateDecision": "LIMITED_PROD_GATES_PASSED",
+      "gateReasons": [
+        "artifact_freshness_required",
+        "operator_approval_intent_required",
+        "no_candidate_or_rule_drift"
+      ],
+      "exactTopic": "NOMINEE|US_PRESIDENT|2028|DEMOCRATIC",
+      "exactVenueSet": "LIMITLESS|POLYMARKET",
+      "exactCandidateSet": [
+        "alexandria_ocasio_cortez",
+        "andy_beshear",
+        "gavin_newsom",
+        "josh_shapiro",
+        "kamala_harris",
+        "pete_buttigieg"
+      ]
+    }
+  ]
+}

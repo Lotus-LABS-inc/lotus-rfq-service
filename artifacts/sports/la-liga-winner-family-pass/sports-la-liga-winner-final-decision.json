@@ -1,0 +1,9 @@
+{
+  "observedAt": "2026-04-08T23:01:08.317Z",
+  "overallFamilyDecision": "SPORTS_LA_LIGA_WINNER_FAMILY_REFRESHED_MULTI_VENUE_MATCHER_CANDIDATE_FOUND",
+  "bestCandidateTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+  "familySupplyCredible": true,
+  "operatorCredible": true,
+  "matcherFollowUpJustified": true,
+  "singleBestNextAction": "Run a narrow matcher pass for SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026, preserving the strict shared club core and excluding venue-only tails."
+}

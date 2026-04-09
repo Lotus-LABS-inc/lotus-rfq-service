@@ -25,11 +25,15 @@ const timestampSchema = z.union([z.string(), z.number().finite()]).transform((va
 });
 
 const outcomeSchema = z.object({
-  id: z.union([z.string(), z.number().finite()]).transform((value) => String(value)),
+  id: z.union([z.string(), z.number().finite()]).optional().transform((value) => value === undefined ? undefined : String(value)),
+  indexSet: z.union([z.string(), z.number().finite()]).optional().transform((value) => value === undefined ? undefined : String(value)),
   label: z.string().optional(),
+  name: z.string().optional(),
   title: z.string().optional(),
   tokenId: z.string().optional(),
   token_id: z.string().optional(),
+  onChainId: z.string().optional(),
+  on_chain_id: z.string().optional(),
   outcomeType: z.string().optional(),
   outcome_type: z.string().optional()
 }).passthrough();
@@ -41,6 +45,8 @@ const marketSchema = z.object({
   status: z.string().nullable().optional(),
   state: z.string().nullable().optional(),
   category: z.string().nullable().optional(),
+  categorySlug: z.string().nullable().optional(),
+  category_slug: z.string().nullable().optional(),
   categories: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
   chainId: z.union([z.string(), z.number().finite()]).optional().transform((value) => value === undefined ? undefined : String(value)),
@@ -55,6 +61,12 @@ const marketSchema = z.object({
 const marketStatsSchema = z.object({
   volume: nullableNumericStringSchema,
   liquidity: nullableNumericStringSchema,
+  totalLiquidityUsd: nullableNumericStringSchema,
+  total_liquidity_usd: nullableNumericStringSchema,
+  volume24hUsd: nullableNumericStringSchema,
+  volume_24h_usd: nullableNumericStringSchema,
+  volumeTotalUsd: nullableNumericStringSchema,
+  volume_total_usd: nullableNumericStringSchema,
   openInterest: nullableNumericStringSchema,
   open_interest: nullableNumericStringSchema,
   feeRateBps: nullableNumericStringSchema,
@@ -63,6 +75,8 @@ const marketStatsSchema = z.object({
 
 const lastSaleSchema = z.object({
   price: nullableNumericStringSchema,
+  priceInCurrency: nullableNumericStringSchema,
+  price_in_currency: nullableNumericStringSchema,
   size: nullableNumericStringSchema,
   timestamp: timestampSchema.nullable().optional(),
   matchedAt: timestampSchema.nullable().optional(),
@@ -169,7 +183,8 @@ const arrayResponse = <T>(itemSchema: ZodType<T>) =>
     z.object({ markets: z.array(itemSchema) }).passthrough(),
     z.object({ orders: z.array(itemSchema) }).passthrough(),
     z.object({ positions: z.array(itemSchema) }).passthrough(),
-    z.object({ events: z.array(itemSchema) }).passthrough()
+    z.object({ events: z.array(itemSchema) }).passthrough(),
+    z.object({ cursor: z.string().optional(), data: z.array(itemSchema) }).passthrough()
   ]).transform((payload) => {
     if (Array.isArray(payload)) {
       return payload;

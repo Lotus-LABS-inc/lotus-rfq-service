@@ -1,0 +1,37 @@
+{
+  "observedAt": "2026-04-08T21:00:23.034Z",
+  "canonicalTopicKey": "GEOPOLITICAL_EVENT_BY_DATE|USA_CHINA|TRUMP_VISIT_CHINA|2026-04-30",
+  "venueSet": "OPINION|POLYMARKET|PREDICT",
+  "matcherLanes": [
+    {
+      "venueSet": "OPINION|POLYMARKET|PREDICT",
+      "proposition": "TRUMP_VISIT_CHINA_BY_2026_04_30",
+      "canonicalTopic": "GEOPOLITICAL_EVENT_BY_DATE|USA_CHINA|TRUMP_VISIT_CHINA|2026-04-30",
+      "routeabilityDecision": "TRI_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe strict 3-venue geopolitical proposition on OPINION|POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493245:april-30-2026",
+          "title": "Will Trump visit China by April 30, 2026?"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "will-trump-visit-china-by:april-30-2026",
+          "title": "Will Trump visit China by April 30, 2026?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "16780",
+          "title": "Will Trump visit China by April 30, 2026?"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Strict tri lane survived the currently admitted OPINION|POLYMARKET|PREDICT intersection."
+  ]
+}

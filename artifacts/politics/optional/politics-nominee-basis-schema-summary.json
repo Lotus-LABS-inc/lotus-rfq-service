@@ -1,0 +1,13 @@
+{
+  "observedAt": "2026-04-08T22:00:23.027Z",
+  "criticalFields": [
+    "jurisdiction",
+    "office",
+    "cycleYear",
+    "nominatingBody",
+    "candidateSetFingerprint"
+  ],
+  "wordingTypes": {
+    "WHO_WILL_BE_NOMINEE": 82
+  }
+}

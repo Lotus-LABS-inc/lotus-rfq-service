@@ -1,0 +1,47 @@
+{
+  "observedAt": "2026-04-08T18:43:20.813Z",
+  "reviewState": "READY_PENDING_OPERATOR_REVIEW",
+  "laneId": "POLITICS_OFFICE_EXIT_NETANYAHU_2026_TRI_LIMITLESS_POLYMARKET_PREDICT",
+  "topicKey": "OFFICE_EXIT_BY_DATE|ISRAEL|PRIME_MINISTER|BENJAMIN_NETANYAHU|2026-12-31",
+  "approvedTriVenueSet": "LIMITLESS|POLYMARKET|PREDICT",
+  "approvedTriPropositions": [
+    "NETANYAHU_OUT_BEFORE_2027"
+  ],
+  "saferPairFallback": {
+    "laneId": "POLITICS_OFFICE_EXIT_NETANYAHU_2026_PAIR_LIMITLESS_POLYMARKET",
+    "venuePair": "LIMITLESS|POLYMARKET",
+    "exactSafePropositions": [
+      "NETANYAHU_OUT_BEFORE_2027"
+    ]
+  },
+  "ruleCompatibilityState": "SEMANTICALLY_COMPATIBLE_REWORDING",
+  "routeabilityState": "TRI_REVIEW_REQUIRED",
+  "exactSafeOnly": true,
+  "exclusionsLocked": [
+    "NO_OPINION_FOR_THIS_TOPIC",
+    "NO_MYRIAD_FOR_THIS_TOPIC",
+    "NO_SCOPE_WIDENING_BEYOND_NETANYAHU_EXIT_PROPOSITION",
+    "PAIR_FALLBACK_MUST_REMAIN_EXPLICIT"
+  ],
+  "sourceArtifacts": {
+    "matcherInputSummary": "artifacts/politics/office-exit-netanyahu-2026-matcher/politics-office-exit-netanyahu-2026-matcher-input-summary.json",
+    "pairLanes": "artifacts/politics/office-exit-netanyahu-2026-matcher/politics-office-exit-netanyahu-2026-pair-lanes.json",
+    "triLanes": "artifacts/politics/office-exit-netanyahu-2026-matcher/politics-office-exit-netanyahu-2026-tri-lanes.json",
+    "rejections": "artifacts/politics/office-exit-netanyahu-2026-matcher/politics-office-exit-netanyahu-2026-rejections.json",
+    "finalDecision": "artifacts/politics/office-exit-netanyahu-2026-matcher/politics-office-exit-netanyahu-2026-final-decision.json"
+  },
+  "operatorChecks": [
+    "Confirm the scope is exactly OFFICE_EXIT_BY_DATE|ISRAEL|PRIME_MINISTER|BENJAMIN_NETANYAHU|2026-12-31.",
+    "Confirm the only approved tri venue set is LIMITLESS|POLYMARKET|PREDICT.",
+    "Confirm the approved proposition remains exactly NETANYAHU_OUT_BEFORE_2027.",
+    "Confirm the safer pair fallback remains LIMITLESS|POLYMARKET and is not discarded.",
+    "Confirm rule state remains SEMANTICALLY_COMPATIBLE_REWORDING and operator rule review is completed before any promotion.",
+    "Confirm OPINION and MYRIAD remain excluded."
+  ],
+  "holdBoundaries": [
+    "Do not widen beyond the exact Netanyahu office-exit topic.",
+    "Do not widen to Trump, Starmer, or Netanyahu variants with different deadlines.",
+    "Do not discard the explicit LIMITLESS|POLYMARKET pair fallback.",
+    "Do not treat this review package as activation authority."
+  ]
+}

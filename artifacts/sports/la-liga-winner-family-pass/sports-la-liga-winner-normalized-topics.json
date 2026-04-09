@@ -1,0 +1,354 @@
+[
+  {
+    "interpretedContractId": "opinion-la-liga-barcelona",
+    "venue": "OPINION",
+    "venueMarketId": "la-liga-winner-2026:barcelona",
+    "title": "La Liga Winner 2026",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "barcelona",
+    "interpretationNotes": [
+      "club_label=Barcelona",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "opinion-la-liga-real-madrid",
+    "venue": "OPINION",
+    "venueMarketId": "la-liga-winner-2026:real-madrid",
+    "title": "La Liga Winner 2026",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "real_madrid",
+    "interpretationNotes": [
+      "club_label=Real Madrid",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "opinion-la-liga-atletico-madrid",
+    "venue": "OPINION",
+    "venueMarketId": "la-liga-winner-2026:atletico-madrid",
+    "title": "La Liga Winner 2026",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "atletico_madrid",
+    "interpretationNotes": [
+      "club_label=Atletico Madrid",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-la-liga-real-madrid",
+    "venue": "POLYMARKET",
+    "venueMarketId": "la-liga-winner-114:real-madrid",
+    "title": "La Liga Winner",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "real_madrid",
+    "interpretationNotes": [
+      "club_label=Real Madrid",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-la-liga-barcelona",
+    "venue": "POLYMARKET",
+    "venueMarketId": "la-liga-winner-114:barcelona",
+    "title": "La Liga Winner",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "barcelona",
+    "interpretationNotes": [
+      "club_label=Barcelona",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-la-liga-villarreal",
+    "venue": "POLYMARKET",
+    "venueMarketId": "la-liga-winner-114:villarreal",
+    "title": "La Liga Winner",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "villarreal",
+    "interpretationNotes": [
+      "club_label=Villarreal",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-la-liga-atletico-madrid",
+    "venue": "POLYMARKET",
+    "venueMarketId": "la-liga-winner-114:atletico-madrid",
+    "title": "La Liga Winner",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "atletico_madrid",
+    "interpretationNotes": [
+      "club_label=Atletico Madrid",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-la-liga-real-betis",
+    "venue": "POLYMARKET",
+    "venueMarketId": "la-liga-winner-114:real-betis",
+    "title": "La Liga Winner",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "real_betis",
+    "interpretationNotes": [
+      "club_label=Real Betis",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-la-liga-athletic-bilbao",
+    "venue": "POLYMARKET",
+    "venueMarketId": "la-liga-winner-114:athletic-bilbao",
+    "title": "La Liga Winner",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "athletic_bilbao",
+    "interpretationNotes": [
+      "club_label=Athletic Bilbao",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-la-liga-real-sociedad",
+    "venue": "POLYMARKET",
+    "venueMarketId": "la-liga-winner-114:real-sociedad",
+    "title": "La Liga Winner",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "real_sociedad",
+    "interpretationNotes": [
+      "club_label=Real Sociedad",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-la-liga-girona",
+    "venue": "POLYMARKET",
+    "venueMarketId": "la-liga-winner-114:girona",
+    "title": "La Liga Winner",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "girona",
+    "interpretationNotes": [
+      "club_label=Girona",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-la-liga-valencia",
+    "venue": "POLYMARKET",
+    "venueMarketId": "la-liga-winner-114:valencia",
+    "title": "La Liga Winner",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "valencia",
+    "interpretationNotes": [
+      "club_label=Valencia",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-la-liga-sevilla",
+    "venue": "POLYMARKET",
+    "venueMarketId": "la-liga-winner-114:sevilla",
+    "title": "La Liga Winner",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "sevilla",
+    "interpretationNotes": [
+      "club_label=Sevilla",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-la-liga-barcelona",
+    "venue": "LIMITLESS",
+    "venueMarketId": "la-liga-winner-1765290337005:barcelona",
+    "title": "La Liga Winner",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "barcelona",
+    "interpretationNotes": [
+      "club_label=Barcelona",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-la-liga-real-madrid",
+    "venue": "LIMITLESS",
+    "venueMarketId": "la-liga-winner-1765290337005:real-madrid",
+    "title": "La Liga Winner",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "real_madrid",
+    "interpretationNotes": [
+      "club_label=Real Madrid",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-la-liga-atletico-madrid",
+    "venue": "LIMITLESS",
+    "venueMarketId": "la-liga-winner-1765290337005:atletico-madrid",
+    "title": "La Liga Winner",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "atletico_madrid",
+    "interpretationNotes": [
+      "club_label=Atletico Madrid",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-la-liga-villarreal",
+    "venue": "LIMITLESS",
+    "venueMarketId": "la-liga-winner-1765290337005:villarreal",
+    "title": "La Liga Winner",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "villarreal",
+    "interpretationNotes": [
+      "club_label=Villarreal",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-la-liga-other",
+    "venue": "LIMITLESS",
+    "venueMarketId": "la-liga-winner-1765290337005:other",
+    "title": "La Liga Winner",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "other",
+    "interpretationNotes": [
+      "club_label=Other",
+      "rules_present"
+    ],
+    "rejectionReason": "OTHERS_EXCLUDED"
+  },
+  {
+    "interpretedContractId": "predict-la-liga-1571",
+    "venue": "PREDICT",
+    "venueMarketId": "1571",
+    "title": "Will Barcelona win the 2025–26 La Liga?",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "barcelona",
+    "interpretationNotes": [
+      "club_label=Barcelona",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-la-liga-1572",
+    "venue": "PREDICT",
+    "venueMarketId": "1572",
+    "title": "Will Real Madrid win the 2025–26 La Liga?",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "real_madrid",
+    "interpretationNotes": [
+      "club_label=Real Madrid",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-la-liga-1573",
+    "venue": "PREDICT",
+    "venueMarketId": "1573",
+    "title": "Will Atletico Madrid win the 2025–26 La Liga?",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "atletico_madrid",
+    "interpretationNotes": [
+      "club_label=Atletico Madrid",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-la-liga-1574",
+    "venue": "PREDICT",
+    "venueMarketId": "1574",
+    "title": "Will Villarreal win the 2025–26 La Liga?",
+    "canonicalFamily": "LEAGUE_WINNER",
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "canonicalCompetition": "LA_LIGA",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "villarreal",
+    "interpretationNotes": [
+      "club_label=Villarreal",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  }
+]

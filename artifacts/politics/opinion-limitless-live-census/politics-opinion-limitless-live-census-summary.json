@@ -1,0 +1,57 @@
+{
+  "observedAt": "2026-04-08T01:01:27.498Z",
+  "venueStatuses": {
+    "OPINION": {
+      "fetchState": "SUCCESS",
+      "discoveryPath": "opinion_clob_sdk_active_markets",
+      "broadDiscoveryRowCount": 17,
+      "targetedDiscoveryRowCount": 1,
+      "targetedDiscoveryPathUsed": "opinion_direct_market_page_live_census",
+      "targetedQueryLabels": [
+        "Republican Presidential Nominee 2028",
+        "Democratic Presidential Nominee 2028",
+        "Republican nominee for U.S. president in 2028",
+        "Democratic nominee for U.S. president in 2028",
+        "win the 2028 Republican presidential nomination",
+        "win the 2028 Democratic presidential nomination",
+        "JD Vance",
+        "Donald Trump",
+        "Gavin Newsom",
+        "Kamala Harris"
+      ],
+      "warnings": []
+    },
+    "LIMITLESS": {
+      "fetchState": "SUCCESS",
+      "discoveryPath": "limitless_sdk_active_markets",
+      "broadDiscoveryRowCount": 75,
+      "targetedDiscoveryRowCount": 2,
+      "targetedDiscoveryPathUsed": "limitless_direct_market_page_live_census",
+      "targetedQueryLabels": [
+        "Republican Presidential Nominee 2028",
+        "Democratic Presidential Nominee 2028",
+        "Republican nominee for U.S. president in 2028",
+        "Democratic nominee for U.S. president in 2028",
+        "win the 2028 Republican presidential nomination",
+        "win the 2028 Democratic presidential nomination",
+        "JD Vance",
+        "Donald Trump",
+        "Gavin Newsom",
+        "Kamala Harris"
+      ],
+      "warnings": []
+    }
+  },
+  "rawLiveMarketCountsByVenue": {
+    "OPINION": 18,
+    "LIMITLESS": 77
+  },
+  "nominee2028CandidateRowsByVenue": {
+    "OPINION": 1,
+    "LIMITLESS": 2
+  },
+  "nominee2028AdmittedRowsByVenue": {
+    "OPINION": 1,
+    "LIMITLESS": 2
+  }
+}

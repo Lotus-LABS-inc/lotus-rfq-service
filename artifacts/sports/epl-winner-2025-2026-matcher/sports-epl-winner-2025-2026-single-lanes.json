@@ -1,0 +1,65 @@
+{
+  "observedAt": "2026-04-09T09:53:13.045Z",
+  "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+  "matcherLanes": [
+    {
+      "venue": "LIMITLESS",
+      "venueSet": "LIMITLESS",
+      "clubs": [
+        "arsenal",
+        "aston_villa",
+        "chelsea",
+        "liverpool",
+        "manchester_city",
+        "manchester_united"
+      ]
+    },
+    {
+      "venue": "OPINION",
+      "venueSet": "OPINION",
+      "clubs": [
+        "arsenal",
+        "liverpool",
+        "manchester_city",
+        "manchester_united"
+      ]
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueSet": "POLYMARKET",
+      "clubs": [
+        "arsenal",
+        "aston_villa",
+        "bournemouth",
+        "brentford",
+        "brighton",
+        "burnley",
+        "chelsea",
+        "crystal_palace",
+        "everton",
+        "fulham",
+        "leeds_united",
+        "liverpool",
+        "manchester_city",
+        "manchester_united",
+        "newcastle_united",
+        "nottingham_forest",
+        "sunderland",
+        "tottenham_hotspur",
+        "west_ham_united",
+        "wolverhampton_wanderers"
+      ]
+    },
+    {
+      "venue": "PREDICT",
+      "venueSet": "PREDICT",
+      "clubs": [
+        "arsenal",
+        "aston_villa",
+        "chelsea",
+        "liverpool",
+        "manchester_city"
+      ]
+    }
+  ]
+}

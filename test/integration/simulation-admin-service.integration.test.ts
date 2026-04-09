@@ -2,11 +2,17 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Pool } from "pg";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { config as loadDotenv } from "dotenv";
 
 import { HistoricalMarketClass, HistoricalSimulationRunStatus } from "../../src/core/historical-simulation/historical-simulation.types.js";
 import { SimulationAdminService } from "../../src/api/admin/simulation-admin-service.js";
 
-const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
+loadDotenv({
+  path: path.resolve(process.cwd(), ".env"),
+  override: true
+});
+
+const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? null;
 const ENV_READY = Boolean(TEST_DB_URL);
 
 const applyMigrations = async (pool: Pool): Promise<void> => {
@@ -26,7 +32,7 @@ const applyMigrations = async (pool: Pool): Promise<void> => {
         await pool.query(sql);
       } catch (error) {
         const code = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
-        if (code === "42P07" || code === "42710") {
+        if (code === "42P07" || code === "42710" || code === "42701") {
           continue;
         }
         throw error;
@@ -38,6 +44,7 @@ const applyMigrations = async (pool: Pool): Promise<void> => {
 describe.skipIf(!ENV_READY)("SimulationAdminService integration", () => {
   let pool: Pool | undefined;
   const canonicalEventId = "77777777-7777-4777-8777-777777777777";
+  const canonicalMarketId = "SIM-ADMIN-MARKET-1";
   const runId = "88888888-8888-4888-8888-888888888888";
 
   beforeAll(async () => {
@@ -58,6 +65,7 @@ describe.skipIf(!ENV_READY)("SimulationAdminService integration", () => {
     await pool!.query(
       `INSERT INTO historical_market_states (
          canonical_event_id,
+         canonical_market_id,
          canonical_category,
          venue,
          venue_market_id,
@@ -67,9 +75,9 @@ describe.skipIf(!ENV_READY)("SimulationAdminService integration", () => {
          metadata_version,
          source_timestamp
        ) VALUES
-       ($1, 'SPORTS', 'POLYMARKET', 'sports-poly', 'BINARY', $2, '0.55', 'hist-v1', $2),
-       ($1, 'SPORTS', 'LIMITLESS', 'sports-limitless', 'BINARY', $2, '0.54', 'hist-v1', $2)`,
-      [canonicalEventId, new Date("2026-03-13T00:00:00.000Z")]
+       ($1, $2, 'SPORTS', 'POLYMARKET', 'sports-poly', 'BINARY', $3, '0.55', 'hist-v1', $3),
+       ($1, $2, 'SPORTS', 'LIMITLESS', 'sports-limitless', 'BINARY', $3, '0.54', 'hist-v1', $3)`,
+      [canonicalEventId, canonicalMarketId, new Date("2026-03-13T00:00:00.000Z")]
     );
 
     await pool!.query(
@@ -154,7 +162,11 @@ describe.skipIf(!ENV_READY)("SimulationAdminService integration", () => {
       engineVersion: "eng-hist-v1"
     });
 
-    const scopes = await service.listScopes({ category: "SPORTS", marketClass: HistoricalMarketClass.BINARY });
+    const scopes = await service.listScopes({
+      category: "SPORTS",
+      marketClass: HistoricalMarketClass.BINARY,
+      routeMode: "POLYMARKET_ONLY"
+    });
     expect(scopes).toHaveLength(1);
     expect(scopes[0]?.canonicalEventId).toBe(canonicalEventId);
 

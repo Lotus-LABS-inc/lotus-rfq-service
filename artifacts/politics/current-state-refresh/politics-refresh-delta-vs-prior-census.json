@@ -1,0 +1,19 @@
+{
+  "observedAt": "2026-04-08T22:00:23.060Z",
+  "priorRowsByVenue": {
+    "LIMITLESS": 1,
+    "MYRIAD": 24,
+    "OPINION": 17,
+    "POLYMARKET": 507
+  },
+  "currentRowsByVenue": {
+    "LIMITLESS": 1,
+    "MYRIAD": 24,
+    "OPINION": 18,
+    "POLYMARKET": 507
+  },
+  "priorIdentifiableRows": 105,
+  "currentIdentifiableRows": 105,
+  "priorMatchingEligibleFamilies": 3,
+  "currentMatchingEligibleFamilies": 3
+}

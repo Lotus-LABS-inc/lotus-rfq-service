@@ -14,6 +14,7 @@ import {
   HistoricalSimulationRouteModeValues,
   HistoricalSimulationRunStatus
 } from "../../core/historical-simulation/historical-simulation.types.js";
+import { PredictHistoricalReadinessStateValues } from "../../integrations/predict/predict-types.js";
 
 const paramsSchema = z.object({
   id: z.string().uuid()
@@ -30,10 +31,23 @@ const canonicalQuerySchema = z.object({
 const canonicalCategorySchema = z.enum(["SPORTS", "CRYPTO", "POLITICS", "ESPORTS"]);
 const routeModeSchema = z.enum(HistoricalSimulationRouteModeValues);
 const orderSideSchema = z.enum(["BUY", "SELL"]);
+const catalogScopeSchema = z.enum(HistoricalSimulationCatalogScopeValues);
+const routeAvailabilityReasonSchema = z.enum([
+  "missing_required_venue",
+  "missing_historical_rows",
+  "missing_pair_assessment",
+  "incomplete_resolution_risk",
+  "stale_resolution_risk",
+  "unsafe_equivalence",
+  "ambiguous_venue_identity",
+  "opinion_historically_unqualified",
+  "predict_historically_unqualified"
+]);
 
 const scopeQuerySchema = z.object({
   category: canonicalCategorySchema.optional(),
   marketClass: z.nativeEnum(HistoricalMarketClass).optional(),
+  catalogScope: catalogScopeSchema.optional(),
   routeMode: routeModeSchema.optional(),
   venuePair: routeModeSchema.optional()
 }).refine(
@@ -43,6 +57,12 @@ const scopeQuerySchema = z.object({
     path: ["routeMode"]
   }
 );
+
+const routeabilitySummaryQuerySchema = z.object({
+  category: canonicalCategorySchema.optional(),
+  marketClass: z.nativeEnum(HistoricalMarketClass).optional(),
+  catalogScope: catalogScopeSchema.optional()
+});
 
 const isoDateSchema = z.string().datetime({ offset: true });
 
@@ -85,7 +105,96 @@ const scopeResponseSchema = z.object({
     polymarketRows: z.number().int(),
     limitlessRows: z.number().int(),
     opinionRows: z.number().int(),
-    myriadRows: z.number().int()
+    myriadRows: z.number().int(),
+    predictRows: z.number().int()
+  })
+});
+
+const routeabilitySummaryResponseSchema = z.object({
+  filters: z.object({
+    category: z.enum(["SPORTS", "CRYPTO", "POLITICS", "ESPORTS", "ALL"]),
+    catalogScope: z.enum(["live", "historical_simulation", "ALL"]),
+    marketClass: z.nativeEnum(HistoricalMarketClass).nullable()
+  }),
+  totals: z.object({
+    eventCount: z.number().int(),
+    canonicalMarketCount: z.number().int(),
+    runnableSingleCount: z.number().int(),
+    runnablePairCount: z.number().int(),
+    runnableTriCount: z.number().int()
+  }),
+  routeModes: z.array(
+    z.object({
+      routeMode: routeModeSchema,
+      label: z.string(),
+      cardinality: z.enum(["single", "pair", "tri"]),
+      routeableMarketCount: z.number().int(),
+      eventCount: z.number().int()
+    })
+  ),
+  blockReasons: z.array(
+    z.object({
+      reason: routeAvailabilityReasonSchema,
+      count: z.number().int()
+    })
+  ),
+  venueVisibility: z.object({
+    polymarketEvents: z.number().int(),
+    limitlessEvents: z.number().int(),
+    opinionEvents: z.number().int(),
+    myriadEvents: z.number().int(),
+    predictEvents: z.number().int()
+  }),
+  opinionRouteability: z.object({
+    eventsWithOpinionInventory: z.number().int(),
+    eventsWithRunnableOpinionOnly: z.number().int(),
+    eventsWithBlockedOpinionPairOrTri: z.number().int(),
+    semanticsRulepackVersion: z.string().nullable(),
+    exactLiveOnlyCount: z.number().int(),
+    exactHistoricalQualifiedCount: z.number().int(),
+    nearMissCount: z.number().int(),
+    blockedUnsafeCandidateCount: z.number().int(),
+    lowConfidenceCandidateCount: z.number().int(),
+    dominantBlockReasons: z.array(
+      z.object({
+        reason: routeAvailabilityReasonSchema,
+        count: z.number().int()
+      })
+    ),
+    dominantNearMissDimensions: z.array(
+      z.object({
+        dimension: z.string(),
+        count: z.number().int()
+      })
+    ),
+    dominantNearMissReasons: z.array(
+      z.object({
+        reason: z.string(),
+        count: z.number().int()
+      })
+    )
+  }),
+  predictRouteability: z.object({
+    eventsWithPredictInventory: z.number().int(),
+    eventsWithCurrentStateOnlyPredict: z.number().int(),
+    eventsWithHistoricallyQualifiedPredict: z.number().int(),
+    eventsWithBlockedPredictRoutes: z.number().int(),
+    dominantBlockReasons: z.array(
+      z.object({
+        reason: routeAvailabilityReasonSchema,
+        count: z.number().int()
+      })
+    )
+  }),
+  triRouteability: z.object({
+    candidateCount: z.number().int(),
+    runnableCount: z.number().int(),
+    dominantBlockReasons: z.array(
+      z.object({
+        reason: routeAvailabilityReasonSchema,
+        count: z.number().int()
+      })
+    )
   })
 });
 
@@ -148,6 +257,16 @@ const canonicalCoverageResponseSchema = z.object({
       coverageEnd: isoDateSchema
     })
   ),
+  predictReadinessOverview: z.object({
+    state: z.enum(PredictHistoricalReadinessStateValues),
+    historicalQualified: z.boolean(),
+    reasons: z.array(z.string()),
+    recorderAccumulatingMarkets: z.number().int(),
+    fallbackReadyMarkets: z.number().int(),
+    nativeReadyMarkets: z.number().int(),
+    currentStateOnlyMarkets: z.number().int(),
+    unusableMarkets: z.number().int()
+  }),
   pairedMarkets: z.array(
     z.object({
       venue: z.string(),
@@ -192,10 +311,35 @@ const canonicalCoverageResponseSchema = z.object({
             "incomplete_resolution_risk",
             "stale_resolution_risk",
             "unsafe_equivalence",
-            "ambiguous_venue_identity"
+            "ambiguous_venue_identity",
+            "opinion_historically_unqualified",
+            "predict_historically_unqualified"
           ]).nullable()
         })
-      )
+      ),
+      opinionExactMatch: z.object({
+        classification: z.enum([
+          "semantic_exact_historical_qualified",
+          "semantic_exact_live_only",
+          "semantic_near_exact",
+          "proxy_or_mismatch",
+          "unresolved_no_candidate"
+        ]),
+        historicalQualified: z.boolean(),
+        reason: z.string().nullable()
+      }).nullable().optional(),
+      predictReadiness: z.object({
+        state: z.enum(PredictHistoricalReadinessStateValues),
+        historicalQualified: z.boolean(),
+        reason: z.string().nullable(),
+        environments: z.array(z.enum(["mainnet", "testnet"])),
+        currentStateRowCount: z.number().int(),
+        nativeOrderbookSnapshotCount: z.number().int(),
+        nativeMatchEventCount: z.number().int(),
+        recorderCheckpointCount: z.number().int(),
+        fallbackSnapshotCount: z.number().int(),
+        fallbackCoveredWindowCount: z.number().int()
+      }).nullable().optional()
     })
   ),
   resolutionRiskInspection: z.object({
@@ -246,6 +390,7 @@ export const registerAdminSimulationRoutes = async (
       const scopes = await deps.simulationAdminService.listScopes({
         ...(parsedQuery.data.category ? { category: parsedQuery.data.category } : {}),
         ...(parsedQuery.data.marketClass ? { marketClass: parsedQuery.data.marketClass } : {}),
+        ...(parsedQuery.data.catalogScope ? { catalogScope: parsedQuery.data.catalogScope } : {}),
         ...(resolvedRouteMode ? { routeMode: resolvedRouteMode } : {})
       });
       return reply.send({
@@ -254,6 +399,27 @@ export const registerAdminSimulationRoutes = async (
     } catch (error) {
       app.log.error({ err: error, filters: parsedQuery.data }, "Failed to list simulation scopes.");
       return reply.status(500).send({ code: "SIMULATION_ADMIN_ERROR", message: "Failed to list simulation scopes." });
+    }
+  });
+
+  app.get("/admin/simulation/routeability-summary", { preHandler: adminMiddleware }, async (request, reply) => {
+    const parsedQuery = routeabilitySummaryQuerySchema.safeParse(request.query);
+    if (!parsedQuery.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: parsedQuery.error.flatten() });
+    }
+
+    try {
+      const summary = await deps.simulationAdminService.getRouteabilitySummary({
+        ...(parsedQuery.data.category ? { category: parsedQuery.data.category } : {}),
+        ...(parsedQuery.data.marketClass ? { marketClass: parsedQuery.data.marketClass } : {}),
+        ...(parsedQuery.data.catalogScope ? { catalogScope: parsedQuery.data.catalogScope } : {})
+      });
+      return reply.send({
+        summary: routeabilitySummaryResponseSchema.parse(summary)
+      });
+    } catch (error) {
+      app.log.error({ err: error, filters: parsedQuery.data }, "Failed to load routeability summary.");
+      return reply.status(500).send({ code: "SIMULATION_ADMIN_ERROR", message: "Failed to load routeability summary." });
     }
   });
 
@@ -390,7 +556,7 @@ const serializeScope = (scope: {
   coverageStart: Date;
   coverageEnd: Date;
   routeableMarketCount: number;
-  venueCoverage: { polymarketRows: number; limitlessRows: number; opinionRows: number; myriadRows: number };
+  venueCoverage: { polymarketRows: number; limitlessRows: number; opinionRows: number; myriadRows: number; predictRows: number };
 }) => ({
   ...scope,
   coverageStart: scope.coverageStart.toISOString(),
@@ -444,6 +610,16 @@ const serializeCanonicalCoverage = (coverage: {
   canonicalCategory: "SPORTS" | "CRYPTO" | "POLITICS" | "ESPORTS" | "OTHER" | null;
   marketClass: HistoricalMarketClass | null;
   venueCoverage: ReadonlyArray<{ venue: string; rowCount: number; coverageStart: Date; coverageEnd: Date }>;
+  predictReadinessOverview: {
+    state: (typeof PredictHistoricalReadinessStateValues)[number];
+    historicalQualified: boolean;
+    reasons: readonly string[];
+    recorderAccumulatingMarkets: number;
+    fallbackReadyMarkets: number;
+    nativeReadyMarkets: number;
+    currentStateOnlyMarkets: number;
+    unusableMarkets: number;
+  };
   pairedMarkets: ReadonlyArray<{ venue: string; venueMarketId: string; title: string | null }>;
   routeModeSummary: ReadonlyArray<{
     routeMode: typeof HistoricalSimulationRouteModeValues[number];
@@ -473,8 +649,32 @@ const serializeCanonicalCoverage = (coverage: {
         | "stale_resolution_risk"
         | "unsafe_equivalence"
         | "ambiguous_venue_identity"
+        | "opinion_historically_unqualified"
+        | "predict_historically_unqualified"
         | null;
     }>;
+    opinionExactMatch?: {
+      classification:
+        | "semantic_exact_historical_qualified"
+        | "semantic_exact_live_only"
+        | "semantic_near_exact"
+        | "proxy_or_mismatch"
+        | "unresolved_no_candidate";
+      historicalQualified: boolean;
+      reason: string | null;
+    } | null;
+    predictReadiness?: {
+      state: (typeof PredictHistoricalReadinessStateValues)[number];
+      historicalQualified: boolean;
+      reason: string | null;
+      environments: readonly ("mainnet" | "testnet")[];
+      currentStateRowCount: number;
+      nativeOrderbookSnapshotCount: number;
+      nativeMatchEventCount: number;
+      recorderCheckpointCount: number;
+      fallbackSnapshotCount: number;
+      fallbackCoveredWindowCount: number;
+    } | null;
   }>;
   resolutionRiskInspection: {
     canonicalEventId: string;
@@ -499,6 +699,10 @@ const serializeCanonicalCoverage = (coverage: {
     ...entry,
     coverageStart: entry.coverageStart.toISOString(),
     coverageEnd: entry.coverageEnd.toISOString()
+  })),
+  canonicalMarkets: coverage.canonicalMarkets.map((market) => ({
+    ...market,
+    predictReadiness: market.predictReadiness ?? null
   })),
   resolutionRiskInspection: {
     ...coverage.resolutionRiskInspection,

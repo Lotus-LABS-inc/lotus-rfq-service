@@ -64,6 +64,7 @@ import { CandidateGenerator } from "../../routing/candidate-generator.js";
 import { RouteScorer } from "../../routing/route-scorer.js";
 import type { RouteSelectionTraceWriter } from "../../routing/route-selection-trace.js";
 import type { CompatibilityOverrideService } from "../../canonical/compatibility-override-service.js";
+import type { PairShadowRuntimeHooks } from "../../shadow/pair-shadow-runtime-hooks.js";
 
 const DEFAULT_MIN_CHUNK = 0.000001;
 const DEFAULT_TICK_SIZE = 0.000001;
@@ -113,6 +114,7 @@ export interface OrderRouterDependencies {
   }) => Promise<SORDecisionOutput> | SORDecisionOutput;
   compatibilityOverrideService?: CompatibilityOverrideService;
   routeSelectionTraceWriter?: RouteSelectionTraceWriter;
+  pairShadowRuntimeHooks?: PairShadowRuntimeHooks;
 }
 
 
@@ -885,6 +887,17 @@ export class OrderRouter implements IOrderRouter {
         market: input.rfq.canonicalMarketId
       }
     });
+
+    if (this.deps.pairShadowRuntimeHooks) {
+      await this.deps.pairShadowRuntimeHooks.recordSorEvaluation({
+        rfq: input.rfq,
+        selectedQuote: input.selectedQuote,
+        routeCandidates: input.routeCandidates,
+        scoredCandidates: input.scoredCandidates,
+        allocations: input.allocations,
+        replayEnvelopeId: input.replayEnvelopeId
+      });
+    }
   }
 
   private toSORDecisionOutput(allocations: readonly SplitAllocation[]): SORDecisionOutput {

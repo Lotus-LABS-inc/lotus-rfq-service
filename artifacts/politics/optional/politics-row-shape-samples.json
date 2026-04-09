@@ -1,0 +1,205 @@
+{
+  "observedAt": "2026-04-08T22:00:22.320Z",
+  "samples": [
+    {
+      "venue": "POLYMARKET",
+      "interpretedContractId": "contract_b562cc452f84a630a639bd66",
+      "family": "NOMINEE_WINNER",
+      "title": "Will Jared Golden be the Democratic nominee for ME-02?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": "2028 democratic presidential nomination",
+      "office": null,
+      "cycleYear": "2028"
+    },
+    {
+      "venue": "POLYMARKET",
+      "interpretedContractId": "contract_fc0f007e079221146c0d7ac2",
+      "family": "NOMINEE_WINNER",
+      "title": "Will Brian Jaye be the Democratic Nominee for MI-10?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": "2028 democratic presidential nomination",
+      "office": null,
+      "cycleYear": "2028"
+    },
+    {
+      "venue": "POLYMARKET",
+      "interpretedContractId": "contract_f9380a52b5652bd81c0cf370",
+      "family": "NOMINEE_WINNER",
+      "title": "Will Nikki Haley win the 2028 Republican presidential nomination?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": "usa",
+      "office": "president",
+      "cycleYear": "2028"
+    },
+    {
+      "venue": "POLYMARKET",
+      "interpretedContractId": "contract_889574721eefe229d514935f",
+      "family": "NOMINEE_WINNER",
+      "title": "Will Alani Bankhead be the Democratic nominee for Senate in Montana?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": "usa",
+      "office": null,
+      "cycleYear": "2028"
+    },
+    {
+      "venue": "POLYMARKET",
+      "interpretedContractId": "contract_cd10f4d139fff9549e1c3fb4",
+      "family": "NOMINEE_WINNER",
+      "title": "Will Tracie Burke be the Democratic nominee for Senate in Louisiana?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": "usa",
+      "office": null,
+      "cycleYear": "2028"
+    },
+    {
+      "venue": "MYRIAD",
+      "interpretedContractId": "contract_8d53e0509a0b9deded08973b",
+      "family": "CONFIRMATION_APPOINTMENT",
+      "title": "Will Powell leave the Fed Chair before June?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": null,
+      "office": "president",
+      "cycleYear": "2025"
+    },
+    {
+      "venue": "POLYMARKET",
+      "interpretedContractId": "contract_4a76fa05f6a0c8cdab45cd57",
+      "family": "NOMINEE_WINNER",
+      "title": "Will Wende Kennedy be the Republican nominee for Senate in Kentucky?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": "usa",
+      "office": null,
+      "cycleYear": null
+    },
+    {
+      "venue": "POLYMARKET",
+      "interpretedContractId": "contract_e2949e6b651b5078a60664b2",
+      "family": "NOMINEE_WINNER",
+      "title": "Will Rick Jakious be the Democratic nominee for MA-06?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": "2028 democratic presidential nomination",
+      "office": null,
+      "cycleYear": "2028"
+    },
+    {
+      "venue": "POLYMARKET",
+      "interpretedContractId": "contract_61c154bb472dffcc92b7d0d8",
+      "family": "NOMINEE_WINNER",
+      "title": "Will Kari Lake be the Republican nominee for AZ-01?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": null,
+      "office": null,
+      "cycleYear": null
+    },
+    {
+      "venue": "POLYMARKET",
+      "interpretedContractId": "contract_8724c653bf44dd8fbc22c84b",
+      "family": "NOMINEE_WINNER",
+      "title": "Will Rick Temple be the Republican nominee for Senate in Georgia?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": "usa",
+      "office": null,
+      "cycleYear": null
+    },
+    {
+      "venue": "POLYMARKET",
+      "interpretedContractId": "contract_e0b00cdc048cb7af55f56f09",
+      "family": "NOMINEE_WINNER",
+      "title": "Will Adriano Espaillat be the Democratic Nominee for NY-13?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": "2028 democratic presidential nomination",
+      "office": null,
+      "cycleYear": "2028"
+    },
+    {
+      "venue": "POLYMARKET",
+      "interpretedContractId": "contract_531837512ada0499111f867e",
+      "family": "NOMINEE_WINNER",
+      "title": "Will Barry Moore be the Republican nominee for Senate in Alabama?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": "usa",
+      "office": null,
+      "cycleYear": null
+    },
+    {
+      "venue": "POLYMARKET",
+      "interpretedContractId": "contract_6865b91887c4547cfd7d24a3",
+      "family": "NOMINEE_WINNER",
+      "title": "Will Jason Duey be the Republican nominee for AZ-01?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": null,
+      "office": null,
+      "cycleYear": null
+    },
+    {
+      "venue": "POLYMARKET",
+      "interpretedContractId": "contract_2e1bb933262f60220bc4fb9e",
+      "family": "NOMINEE_WINNER",
+      "title": "Will Alexandria Ocasio-Cortez win the 2028 Democratic presidential nomination?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": "usa",
+      "office": "president",
+      "cycleYear": "2028"
+    },
+    {
+      "venue": "POLYMARKET",
+      "interpretedContractId": "contract_bddaa9b8dbcf01a141c07060",
+      "family": "NOMINEE_WINNER",
+      "title": "Will Annie Andrews be the Democratic nominee for Senate in North Carolina?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": "usa",
+      "office": null,
+      "cycleYear": "2028"
+    },
+    {
+      "venue": "POLYMARKET",
+      "interpretedContractId": "contract_4ceab7042ea8633d8ac00ad0",
+      "family": "NOMINEE_WINNER",
+      "title": "Will Alex De Paula be the Republican nominee for Senate in Virginia?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": "usa",
+      "office": null,
+      "cycleYear": null
+    },
+    {
+      "venue": "POLYMARKET",
+      "interpretedContractId": "contract_c033b72e41123e5b328de529",
+      "family": "NOMINEE_WINNER",
+      "title": "Will Eric Pratt be the Republican Nominee for MN-02?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": null,
+      "office": null,
+      "cycleYear": null
+    },
+    {
+      "venue": "POLYMARKET",
+      "interpretedContractId": "contract_f522171f53ab3b7ac720075d",
+      "family": "NOMINEE_WINNER",
+      "title": "Will Charles Booker be the Democratic nominee for Senate in Kentucky?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": "usa",
+      "office": null,
+      "cycleYear": "2028"
+    },
+    {
+      "venue": "MYRIAD",
+      "interpretedContractId": "contract_3a6ee574f127f37c34963899",
+      "family": "CONFIRMATION_APPOINTMENT",
+      "title": "Growth rate of apps using WalletConnect in April",
+      "outcomeStructureType": "BINARY_NAMED",
+      "jurisdiction": null,
+      "office": null,
+      "cycleYear": "2025"
+    },
+    {
+      "venue": "POLYMARKET",
+      "interpretedContractId": "contract_929b0c510d19e3beae2a8b97",
+      "family": "NOMINEE_WINNER",
+      "title": "Will Morgan Murphy be the Republican nominee for Senate in Alabama?",
+      "outcomeStructureType": "YES_NO",
+      "jurisdiction": "usa",
+      "office": null,
+      "cycleYear": null
+    }
+  ]
+}

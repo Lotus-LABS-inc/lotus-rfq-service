@@ -1,0 +1,115 @@
+{
+  "observedAt": "2026-04-08T16:54:04.883Z",
+  "rowsFetchedByVenue": {
+    "POLYMARKET": 504,
+    "OPINION": 8,
+    "PREDICT": 1
+  },
+  "rowsAdmittedByVenue": {
+    "POLYMARKET": 1,
+    "OPINION": 1,
+    "PREDICT": 1
+  },
+  "fetchStatusByVenue": {
+    "OPINION": {
+      "fetchStatus": "SUCCESS",
+      "warnings": [],
+      "discoveryPath": "opinion_clob_sdk_active_markets",
+      "primaryDiscoveryPath": "opinion_clob_sdk_active_markets",
+      "fallbackDiscoveryPathUsed": null,
+      "primaryPathFailure": null,
+      "broadDiscoveryRowCount": 2,
+      "targetedDiscoveryRowCount": 2,
+      "targetedDiscoveryPathUsed": "opinion_direct_market_page_office_winner_targeted",
+      "targetedQueryLabels": [
+        "Republican Presidential Nominee 2028",
+        "Democratic Presidential Nominee 2028",
+        "Republican nominee for U.S. president in 2028",
+        "Democratic nominee for U.S. president in 2028",
+        "win the 2028 Republican presidential nomination",
+        "win the 2028 Democratic presidential nomination",
+        "JD Vance",
+        "Donald Trump",
+        "Gavin Newsom",
+        "Kamala Harris",
+        "presidential election winner 2028",
+        "2028 U.S. presidential election winner",
+        "colombia presidential election",
+        "2026 busan mayoral election winner",
+        "2026 seoul mayoral election winner",
+        "balance of power 2026 midterms",
+        "2026 midterms balance of power",
+        "control of the house and senate after the 2026 midterms"
+      ]
+    },
+    "POLYMARKET": {
+      "fetchStatus": "SUCCESS",
+      "warnings": [],
+      "discoveryPath": "polymarket_direct_market_page_party_control_targeted",
+      "primaryDiscoveryPath": "predexon_polymarket_current_events",
+      "fallbackDiscoveryPathUsed": "polymarket_direct_market_page_party_control_targeted",
+      "primaryPathFailure": null,
+      "broadDiscoveryRowCount": 495,
+      "targetedDiscoveryRowCount": 5,
+      "targetedDiscoveryPathUsed": "polymarket_direct_market_page_party_control_targeted",
+      "targetedQueryLabels": [
+        "presidential election winner 2028",
+        "2028 U.S. presidential election winner",
+        "colombia presidential election",
+        "2026 busan mayoral election winner",
+        "2026 seoul mayoral election winner",
+        "balance of power 2026 midterms",
+        "2026 midterms balance of power",
+        "control of the house and senate after the 2026 midterms"
+      ]
+    },
+    "PREDICT": {
+      "fetchStatus": "SUCCESS",
+      "warnings": [],
+      "discoveryPath": "predict_exact_market_api_party_control_targeted",
+      "primaryDiscoveryPath": "predict_current_markets",
+      "fallbackDiscoveryPathUsed": "predict_exact_market_api_party_control_targeted",
+      "primaryPathFailure": null,
+      "broadDiscoveryRowCount": 0,
+      "targetedDiscoveryRowCount": 1,
+      "targetedDiscoveryPathUsed": "predict_exact_market_api_party_control_targeted",
+      "targetedQueryLabels": [
+        "balance of power 2026 midterms",
+        "2026 midterms balance of power",
+        "control of the house and senate after the 2026 midterms"
+      ]
+    },
+    "LIMITLESS": {
+      "fetchStatus": "SUCCESS",
+      "warnings": [],
+      "discoveryPath": "limitless_direct_market_page_office_winner_targeted",
+      "primaryDiscoveryPath": "limitless_sdk_active_markets",
+      "fallbackDiscoveryPathUsed": "limitless_direct_market_page_office_winner_targeted",
+      "primaryPathFailure": null,
+      "broadDiscoveryRowCount": 0,
+      "targetedDiscoveryRowCount": 4,
+      "targetedDiscoveryPathUsed": "limitless_direct_market_page_office_winner_targeted",
+      "targetedQueryLabels": [
+        "Republican Presidential Nominee 2028",
+        "Democratic Presidential Nominee 2028",
+        "Republican nominee for U.S. president in 2028",
+        "Democratic nominee for U.S. president in 2028",
+        "win the 2028 Republican presidential nomination",
+        "win the 2028 Democratic presidential nomination",
+        "JD Vance",
+        "Donald Trump",
+        "Gavin Newsom",
+        "Kamala Harris",
+        "presidential election winner 2028",
+        "2028 U.S. presidential election winner",
+        "colombia presidential election",
+        "2026 busan mayoral election winner",
+        "2026 seoul mayoral election winner"
+      ]
+    }
+  },
+  "familySupplyChangedMaterially": false,
+  "admittedTopicCandidates": {
+    "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER": 3
+  }
+}

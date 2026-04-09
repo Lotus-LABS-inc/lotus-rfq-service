@@ -1,0 +1,786 @@
+[
+  {
+    "interpretedContractId": "opinion-ucl-psg",
+    "venue": "OPINION",
+    "venueMarketId": "uefa-champions-league-winner-2026:psg",
+    "title": "UEFA Champions League Winner 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "paris_saint_germain",
+    "interpretationNotes": [
+      "club_label=PSG",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "opinion-ucl-arsenal",
+    "venue": "OPINION",
+    "venueMarketId": "uefa-champions-league-winner-2026:arsenal",
+    "title": "UEFA Champions League Winner 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "arsenal",
+    "interpretationNotes": [
+      "club_label=Arsenal",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "opinion-ucl-bayern-munich",
+    "venue": "OPINION",
+    "venueMarketId": "uefa-champions-league-winner-2026:bayern-munich",
+    "title": "UEFA Champions League Winner 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "bayern_munich",
+    "interpretationNotes": [
+      "club_label=Bayern Munich",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "opinion-ucl-real-madrid",
+    "venue": "OPINION",
+    "venueMarketId": "uefa-champions-league-winner-2026:real-madrid",
+    "title": "UEFA Champions League Winner 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "real_madrid",
+    "interpretationNotes": [
+      "club_label=Real Madrid",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-ucl-paris-saint-germain",
+    "venue": "POLYMARKET",
+    "venueMarketId": "uefa-champions-league-winner:paris-saint-germain",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "paris_saint_germain",
+    "interpretationNotes": [
+      "club_label=Paris Saint-Germain",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-ucl-arsenal",
+    "venue": "POLYMARKET",
+    "venueMarketId": "uefa-champions-league-winner:arsenal",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "arsenal",
+    "interpretationNotes": [
+      "club_label=Arsenal",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-ucl-bayern-munich",
+    "venue": "POLYMARKET",
+    "venueMarketId": "uefa-champions-league-winner:bayern-munich",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "bayern_munich",
+    "interpretationNotes": [
+      "club_label=Bayern Munich",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-ucl-atletico-madrid",
+    "venue": "POLYMARKET",
+    "venueMarketId": "uefa-champions-league-winner:atletico-madrid",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "atletico_madrid",
+    "interpretationNotes": [
+      "club_label=Atletico Madrid",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-ucl-barcelona",
+    "venue": "POLYMARKET",
+    "venueMarketId": "uefa-champions-league-winner:barcelona",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "barcelona",
+    "interpretationNotes": [
+      "club_label=Barcelona",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-ucl-real-madrid",
+    "venue": "POLYMARKET",
+    "venueMarketId": "uefa-champions-league-winner:real-madrid",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "real_madrid",
+    "interpretationNotes": [
+      "club_label=Real Madrid",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-ucl-liverpool",
+    "venue": "POLYMARKET",
+    "venueMarketId": "uefa-champions-league-winner:liverpool",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "liverpool",
+    "interpretationNotes": [
+      "club_label=Liverpool",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-ucl-borussia-dortmund",
+    "venue": "POLYMARKET",
+    "venueMarketId": "uefa-champions-league-winner:borussia-dortmund",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "borussia_dortmund",
+    "interpretationNotes": [
+      "club_label=Borussia Dortmund",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-ucl-chelsea",
+    "venue": "POLYMARKET",
+    "venueMarketId": "uefa-champions-league-winner:chelsea",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "chelsea",
+    "interpretationNotes": [
+      "club_label=Chelsea",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-ucl-inter-milan",
+    "venue": "POLYMARKET",
+    "venueMarketId": "uefa-champions-league-winner:inter-milan",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "inter_milan",
+    "interpretationNotes": [
+      "club_label=Inter Milan",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-ucl-juventus",
+    "venue": "POLYMARKET",
+    "venueMarketId": "uefa-champions-league-winner:juventus",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "juventus",
+    "interpretationNotes": [
+      "club_label=Juventus",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-ucl-arsenal",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:arsenal",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "arsenal",
+    "interpretationNotes": [
+      "club_label=Arsenal",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-ucl-bayern-munich",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:bayern-munich",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "bayern_munich",
+    "interpretationNotes": [
+      "club_label=Bayern Munich",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-ucl-psg",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:psg",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "paris_saint_germain",
+    "interpretationNotes": [
+      "club_label=PSG",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-ucl-real-madrid",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:real-madrid",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "real_madrid",
+    "interpretationNotes": [
+      "club_label=Real Madrid",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-ucl-man-city",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:man-city",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "manchester_city",
+    "interpretationNotes": [
+      "club_label=Man City",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-ucl-barcelona",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:barcelona",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "barcelona",
+    "interpretationNotes": [
+      "club_label=Barcelona",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-ucl-liverpool",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:liverpool",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "liverpool",
+    "interpretationNotes": [
+      "club_label=Liverpool",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-ucl-chelsea",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:chelsea",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "chelsea",
+    "interpretationNotes": [
+      "club_label=Chelsea",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-ucl-inter",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:inter",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "inter_milan",
+    "interpretationNotes": [
+      "club_label=Inter",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-ucl-atletico-madrid",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:atletico-madrid",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "atletico_madrid",
+    "interpretationNotes": [
+      "club_label=Atletico Madrid",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-ucl-dortmund",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:dortmund",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "borussia_dortmund",
+    "interpretationNotes": [
+      "club_label=Dortmund",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-ucl-tottenham",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:tottenham",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "other",
+    "interpretationNotes": [
+      "club_label=Tottenham",
+      "rules_present"
+    ],
+    "rejectionReason": "OTHERS_EXCLUDED"
+  },
+  {
+    "interpretedContractId": "limitless-ucl-newcastle",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:newcastle",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "other",
+    "interpretationNotes": [
+      "club_label=Newcastle",
+      "rules_present"
+    ],
+    "rejectionReason": "OTHERS_EXCLUDED"
+  },
+  {
+    "interpretedContractId": "limitless-ucl-napoli",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:napoli",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "other",
+    "interpretationNotes": [
+      "club_label=Napoli",
+      "rules_present"
+    ],
+    "rejectionReason": "OTHERS_EXCLUDED"
+  },
+  {
+    "interpretedContractId": "limitless-ucl-juventus",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:juventus",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "juventus",
+    "interpretationNotes": [
+      "club_label=Juventus",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-ucl-leverkusen",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:leverkusen",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "other",
+    "interpretationNotes": [
+      "club_label=Leverkusen",
+      "rules_present"
+    ],
+    "rejectionReason": "OTHERS_EXCLUDED"
+  },
+  {
+    "interpretedContractId": "limitless-ucl-galatasaray",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:galatasaray",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "other",
+    "interpretationNotes": [
+      "club_label=Galatasaray",
+      "rules_present"
+    ],
+    "rejectionReason": "OTHERS_EXCLUDED"
+  },
+  {
+    "interpretedContractId": "limitless-ucl-atalanta",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:atalanta",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "other",
+    "interpretationNotes": [
+      "club_label=Atalanta",
+      "rules_present"
+    ],
+    "rejectionReason": "OTHERS_EXCLUDED"
+  },
+  {
+    "interpretedContractId": "limitless-ucl-other",
+    "venue": "LIMITLESS",
+    "venueMarketId": "uefa-champions-league-winner-1765297468263:other",
+    "title": "UEFA Champions League Winner",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "other",
+    "interpretationNotes": [
+      "club_label=Other",
+      "rules_present"
+    ],
+    "rejectionReason": "OTHERS_EXCLUDED"
+  },
+  {
+    "interpretedContractId": "predict-ucl-1576",
+    "venue": "PREDICT",
+    "venueMarketId": "1576",
+    "title": "Will Arsenal win the 2025–26 Champions League?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "arsenal",
+    "interpretationNotes": [
+      "club_label=Arsenal",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-ucl-1577",
+    "venue": "PREDICT",
+    "venueMarketId": "1577",
+    "title": "Will Bayern Munich win the 2025–26 Champions League?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "bayern_munich",
+    "interpretationNotes": [
+      "club_label=Bayern Munich",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-ucl-1578",
+    "venue": "PREDICT",
+    "venueMarketId": "1578",
+    "title": "Will Man City win the 2025–26 Champions League?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "manchester_city",
+    "interpretationNotes": [
+      "club_label=Man City",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-ucl-1579",
+    "venue": "PREDICT",
+    "venueMarketId": "1579",
+    "title": "Will PSG win the 2025–26 Champions League?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "paris_saint_germain",
+    "interpretationNotes": [
+      "club_label=PSG",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-ucl-1580",
+    "venue": "PREDICT",
+    "venueMarketId": "1580",
+    "title": "Will Barcelona win the 2025–26 Champions League?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "barcelona",
+    "interpretationNotes": [
+      "club_label=Barcelona",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-ucl-1581",
+    "venue": "PREDICT",
+    "venueMarketId": "1581",
+    "title": "Will Real Madrid win the 2025–26 Champions League?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "real_madrid",
+    "interpretationNotes": [
+      "club_label=Real Madrid",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-ucl-1582",
+    "venue": "PREDICT",
+    "venueMarketId": "1582",
+    "title": "Will Liverpool win the 2025–26 Champions League?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "liverpool",
+    "interpretationNotes": [
+      "club_label=Liverpool",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-ucl-1583",
+    "venue": "PREDICT",
+    "venueMarketId": "1583",
+    "title": "Will Chelsea win the 2025–26 Champions League?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "chelsea",
+    "interpretationNotes": [
+      "club_label=Chelsea",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-ucl-1584",
+    "venue": "PREDICT",
+    "venueMarketId": "1584",
+    "title": "Will Inter win the 2025–26 Champions League?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "inter_milan",
+    "interpretationNotes": [
+      "club_label=Inter",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-ucl-1585",
+    "venue": "PREDICT",
+    "venueMarketId": "1585",
+    "title": "Will Atletico Madrid win the 2025–26 Champions League?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "atletico_madrid",
+    "interpretationNotes": [
+      "club_label=Atletico Madrid",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-ucl-1586",
+    "venue": "PREDICT",
+    "venueMarketId": "1586",
+    "title": "Will Newcastle win the 2025–26 Champions League?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "other",
+    "interpretationNotes": [
+      "club_label=Newcastle",
+      "rules_present"
+    ],
+    "rejectionReason": "OTHERS_EXCLUDED"
+  },
+  {
+    "interpretedContractId": "predict-ucl-1587",
+    "venue": "PREDICT",
+    "venueMarketId": "1587",
+    "title": "Will Tottenham win the 2025–26 Champions League?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "other",
+    "interpretationNotes": [
+      "club_label=Tottenham",
+      "rules_present"
+    ],
+    "rejectionReason": "OTHERS_EXCLUDED"
+  },
+  {
+    "interpretedContractId": "predict-ucl-1588",
+    "venue": "PREDICT",
+    "venueMarketId": "1588",
+    "title": "Will Dortmund win the 2025–26 Champions League?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "borussia_dortmund",
+    "interpretationNotes": [
+      "club_label=Dortmund",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-ucl-1589",
+    "venue": "PREDICT",
+    "venueMarketId": "1589",
+    "title": "Will Napoli win the 2025–26 Champions League?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "other",
+    "interpretationNotes": [
+      "club_label=Napoli",
+      "rules_present"
+    ],
+    "rejectionReason": "OTHERS_EXCLUDED"
+  },
+  {
+    "interpretedContractId": "predict-ucl-1590",
+    "venue": "PREDICT",
+    "venueMarketId": "1590",
+    "title": "Will Atalanta win the 2025–26 Champions League?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "canonicalCompetition": "UEFA_CHAMPIONS_LEAGUE",
+    "canonicalSeason": "2025_2026",
+    "canonicalClubId": "other",
+    "interpretationNotes": [
+      "club_label=Atalanta",
+      "rules_present"
+    ],
+    "rejectionReason": "OTHERS_EXCLUDED"
+  }
+]

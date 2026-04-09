@@ -1,0 +1,162 @@
+{
+  "observedAt": "2026-04-03T00:13:37.828Z",
+  "sportsFrontierPosition": "SECONDARY_PARALLEL_DISCOVERY_TRACK",
+  "activeScope": [
+    "SPORTS|MATCHUP_WINNER|EPL",
+    "SPORTS|MATCHUP_WINNER|LA_LIGA",
+    "ESPORTS|MATCHUP_WINNER|VALORANT",
+    "ESPORTS|MATCHUP_WINNER|LEAGUE_OF_LEGENDS"
+  ],
+  "venueInspection": [
+    {
+      "venue": "OPINION",
+      "inspectionMode": "LOCAL_INVENTORY_ONLY",
+      "fetchStatus": "NOT_ATTEMPTED",
+      "limitation": "This pass used the current local inventory snapshot instead of forcing a fresh scoped Opinion sync."
+    },
+    {
+      "venue": "POLYMARKET",
+      "inspectionMode": "SCOPED_REFRESH_UNAVAILABLE",
+      "fetchStatus": "NOT_ATTEMPTED",
+      "limitation": "Polymarket remains inventory-backed for this pass because no safe scoped sports refresh seam is wired."
+    },
+    {
+      "venue": "LIMITLESS",
+      "inspectionMode": "LOCAL_INVENTORY_ONLY",
+      "fetchStatus": "NOT_ATTEMPTED",
+      "limitation": "This pass used local Limitless live inventory rather than a fresh remote scoped fetch."
+    },
+    {
+      "venue": "PREDICT",
+      "inspectionMode": "LOCAL_INVENTORY_ONLY",
+      "fetchStatus": "NOT_ATTEMPTED",
+      "limitation": "This pass used the current local Predict inventory snapshot instead of forcing a fresh scoped sync."
+    }
+  ],
+  "pockets": {
+    "SPORTS|MATCHUP_WINNER|EPL": {
+      "targetFixtureCount": 0,
+      "venuesChecked": [
+        "OPINION",
+        "POLYMARKET",
+        "LIMITLESS",
+        "PREDICT"
+      ],
+      "discoveredRowsByVenue": {
+        "LIMITLESS": 0,
+        "OPINION": 0,
+        "POLYMARKET": 0,
+        "PREDICT": 0
+      },
+      "admittedRowsByVenue": {
+        "LIMITLESS": 0,
+        "OPINION": 0,
+        "POLYMARKET": 0,
+        "PREDICT": 0
+      },
+      "boundRowsByVenue": {
+        "LIMITLESS": 0,
+        "OPINION": 0,
+        "POLYMARKET": 0,
+        "PREDICT": 0
+      },
+      "competitionCounts": {},
+      "familyPurity": "MATCHUP_WINNER_ONLY",
+      "competitionPurity": "SCOPED_ONLY",
+      "dominantMissingRowClassification": "NO_VENUE_MARKET_PROVEN"
+    },
+    "SPORTS|MATCHUP_WINNER|LA_LIGA": {
+      "targetFixtureCount": 0,
+      "venuesChecked": [
+        "OPINION",
+        "POLYMARKET",
+        "LIMITLESS",
+        "PREDICT"
+      ],
+      "discoveredRowsByVenue": {
+        "LIMITLESS": 0,
+        "OPINION": 0,
+        "POLYMARKET": 0,
+        "PREDICT": 0
+      },
+      "admittedRowsByVenue": {
+        "LIMITLESS": 0,
+        "OPINION": 0,
+        "POLYMARKET": 0,
+        "PREDICT": 0
+      },
+      "boundRowsByVenue": {
+        "LIMITLESS": 0,
+        "OPINION": 0,
+        "POLYMARKET": 0,
+        "PREDICT": 0
+      },
+      "competitionCounts": {},
+      "familyPurity": "MATCHUP_WINNER_ONLY",
+      "competitionPurity": "SCOPED_ONLY",
+      "dominantMissingRowClassification": "NO_VENUE_MARKET_PROVEN"
+    },
+    "ESPORTS|MATCHUP_WINNER|VALORANT": {
+      "targetFixtureCount": 0,
+      "venuesChecked": [
+        "OPINION",
+        "POLYMARKET",
+        "LIMITLESS",
+        "PREDICT"
+      ],
+      "discoveredRowsByVenue": {
+        "LIMITLESS": 0,
+        "OPINION": 0,
+        "POLYMARKET": 0,
+        "PREDICT": 0
+      },
+      "admittedRowsByVenue": {
+        "LIMITLESS": 0,
+        "OPINION": 0,
+        "POLYMARKET": 0,
+        "PREDICT": 0
+      },
+      "boundRowsByVenue": {
+        "LIMITLESS": 0,
+        "OPINION": 0,
+        "POLYMARKET": 0,
+        "PREDICT": 0
+      },
+      "competitionCounts": {},
+      "familyPurity": "MATCHUP_WINNER_ONLY",
+      "competitionPurity": "SCOPED_ONLY",
+      "dominantMissingRowClassification": "NO_VENUE_MARKET_PROVEN"
+    },
+    "ESPORTS|MATCHUP_WINNER|LEAGUE_OF_LEGENDS": {
+      "targetFixtureCount": 0,
+      "venuesChecked": [
+        "OPINION",
+        "POLYMARKET",
+        "LIMITLESS",
+        "PREDICT"
+      ],
+      "discoveredRowsByVenue": {
+        "LIMITLESS": 0,
+        "OPINION": 0,
+        "POLYMARKET": 0,
+        "PREDICT": 0
+      },
+      "admittedRowsByVenue": {
+        "LIMITLESS": 0,
+        "OPINION": 0,
+        "POLYMARKET": 0,
+        "PREDICT": 0
+      },
+      "boundRowsByVenue": {
+        "LIMITLESS": 0,
+        "OPINION": 0,
+        "POLYMARKET": 0,
+        "PREDICT": 0
+      },
+      "competitionCounts": {},
+      "familyPurity": "MATCHUP_WINNER_ONLY",
+      "competitionPurity": "SCOPED_ONLY",
+      "dominantMissingRowClassification": "NO_VENUE_MARKET_PROVEN"
+    }
+  }
+}

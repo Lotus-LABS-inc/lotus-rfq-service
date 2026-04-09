@@ -1,0 +1,23 @@
+export const POLITICS_GEOPOLITICAL_ROLLOUT_STRATEGY_KEY = "politics-geopolitical-rollout-v1" as const;
+export const POLITICS_GEOPOLITICAL_ROLLOUT_SCOPE_TYPE = "POLITICS_GEOPOLITICAL_LANE" as const;
+
+export const geopoliticalTrumpVisitChina20260430TriLaneId =
+  "POLITICS_GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_TRI_OPINION_POLYMARKET_PREDICT" as const;
+
+export const geopoliticalTrumpVisitChina20260430OpinionPolymarketPairLaneId =
+  "POLITICS_GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_PAIR_OPINION_POLYMARKET" as const;
+
+export const geopoliticalTrumpVisitChina20260430OpinionPredictPairLaneId =
+  "POLITICS_GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_PAIR_OPINION_PREDICT" as const;
+
+export const geopoliticalTrumpVisitChina20260430PolymarketPredictPairLaneId =
+  "POLITICS_GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_PAIR_POLYMARKET_PREDICT" as const;
+
+export const politicsGeopoliticalLaneIds = [
+  geopoliticalTrumpVisitChina20260430TriLaneId,
+  geopoliticalTrumpVisitChina20260430OpinionPolymarketPairLaneId,
+  geopoliticalTrumpVisitChina20260430OpinionPredictPairLaneId,
+  geopoliticalTrumpVisitChina20260430PolymarketPredictPairLaneId
+] as const;
+
+export type PoliticsGeopoliticalLaneId = typeof politicsGeopoliticalLaneIds[number];

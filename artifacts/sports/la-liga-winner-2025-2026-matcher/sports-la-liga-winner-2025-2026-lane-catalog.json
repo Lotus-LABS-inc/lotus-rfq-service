@@ -1,0 +1,394 @@
+{
+  "observedAt": "2026-04-09T09:53:13.050Z",
+  "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+  "lanes": [
+    {
+      "laneId": "SPORTS_LA_LIGA_WINNER_2025_2026_SINGLE_LIMITLESS",
+      "topicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+      "laneCardinality": "SINGLE",
+      "venueSet": "LIMITLESS",
+      "exactSafeClubs": [
+        "atletico_madrid",
+        "barcelona",
+        "real_madrid",
+        "villarreal"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-matcher-input-summary.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-single-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-pair-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-tri-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-strict-all-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_LA_LIGA_WINNER_2025_2026_SINGLE_OPINION",
+      "topicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+      "laneCardinality": "SINGLE",
+      "venueSet": "OPINION",
+      "exactSafeClubs": [
+        "atletico_madrid",
+        "barcelona",
+        "real_madrid"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-matcher-input-summary.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-single-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-pair-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-tri-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-strict-all-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_LA_LIGA_WINNER_2025_2026_SINGLE_POLYMARKET",
+      "topicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+      "laneCardinality": "SINGLE",
+      "venueSet": "POLYMARKET",
+      "exactSafeClubs": [
+        "athletic_bilbao",
+        "atletico_madrid",
+        "barcelona",
+        "girona",
+        "real_betis",
+        "real_madrid",
+        "real_sociedad",
+        "sevilla",
+        "valencia",
+        "villarreal"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-matcher-input-summary.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-single-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-pair-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-tri-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-strict-all-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_LA_LIGA_WINNER_2025_2026_SINGLE_PREDICT",
+      "topicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+      "laneCardinality": "SINGLE",
+      "venueSet": "PREDICT",
+      "exactSafeClubs": [
+        "atletico_madrid",
+        "barcelona",
+        "real_madrid",
+        "villarreal"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-matcher-input-summary.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-single-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-pair-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-tri-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-strict-all-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_LIMITLESS_OPINION",
+      "topicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+      "laneCardinality": "PAIR",
+      "venueSet": "LIMITLESS|OPINION",
+      "exactSafeClubs": [
+        "atletico_madrid",
+        "barcelona",
+        "real_madrid"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-matcher-input-summary.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-single-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-pair-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-tri-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-strict-all-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET",
+      "topicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+      "laneCardinality": "PAIR",
+      "venueSet": "LIMITLESS|POLYMARKET",
+      "exactSafeClubs": [
+        "atletico_madrid",
+        "barcelona",
+        "real_madrid",
+        "villarreal"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-matcher-input-summary.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-single-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-pair-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-tri-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-strict-all-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_LIMITLESS_PREDICT",
+      "topicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+      "laneCardinality": "PAIR",
+      "venueSet": "LIMITLESS|PREDICT",
+      "exactSafeClubs": [
+        "atletico_madrid",
+        "barcelona",
+        "real_madrid",
+        "villarreal"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-matcher-input-summary.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-single-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-pair-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-tri-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-strict-all-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_OPINION_POLYMARKET",
+      "topicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+      "laneCardinality": "PAIR",
+      "venueSet": "OPINION|POLYMARKET",
+      "exactSafeClubs": [
+        "atletico_madrid",
+        "barcelona",
+        "real_madrid"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-matcher-input-summary.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-single-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-pair-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-tri-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-strict-all-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_OPINION_PREDICT",
+      "topicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+      "laneCardinality": "PAIR",
+      "venueSet": "OPINION|PREDICT",
+      "exactSafeClubs": [
+        "atletico_madrid",
+        "barcelona",
+        "real_madrid"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-matcher-input-summary.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-single-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-pair-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-tri-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-strict-all-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_POLYMARKET_PREDICT",
+      "topicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+      "laneCardinality": "PAIR",
+      "venueSet": "POLYMARKET|PREDICT",
+      "exactSafeClubs": [
+        "atletico_madrid",
+        "barcelona",
+        "real_madrid",
+        "villarreal"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-matcher-input-summary.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-single-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-pair-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-tri-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-strict-all-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_LA_LIGA_WINNER_2025_2026_TRI_LIMITLESS_OPINION_POLYMARKET",
+      "topicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+      "laneCardinality": "TRI",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "exactSafeClubs": [
+        "atletico_madrid",
+        "barcelona",
+        "real_madrid"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-matcher-input-summary.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-single-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-pair-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-tri-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-strict-all-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_LA_LIGA_WINNER_2025_2026_TRI_LIMITLESS_OPINION_PREDICT",
+      "topicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+      "laneCardinality": "TRI",
+      "venueSet": "LIMITLESS|OPINION|PREDICT",
+      "exactSafeClubs": [
+        "atletico_madrid",
+        "barcelona",
+        "real_madrid"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-matcher-input-summary.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-single-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-pair-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-tri-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-strict-all-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_LA_LIGA_WINNER_2025_2026_TRI_LIMITLESS_POLYMARKET_PREDICT",
+      "topicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+      "laneCardinality": "TRI",
+      "venueSet": "LIMITLESS|POLYMARKET|PREDICT",
+      "exactSafeClubs": [
+        "atletico_madrid",
+        "barcelona",
+        "real_madrid",
+        "villarreal"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-matcher-input-summary.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-single-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-pair-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-tri-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-strict-all-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_LA_LIGA_WINNER_2025_2026_TRI_OPINION_POLYMARKET_PREDICT",
+      "topicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+      "laneCardinality": "TRI",
+      "venueSet": "OPINION|POLYMARKET|PREDICT",
+      "exactSafeClubs": [
+        "atletico_madrid",
+        "barcelona",
+        "real_madrid"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-matcher-input-summary.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-single-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-pair-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-tri-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-strict-all-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_LA_LIGA_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT",
+      "topicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+      "laneCardinality": "STRICT_ALL",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "exactSafeClubs": [
+        "atletico_madrid",
+        "barcelona",
+        "real_madrid"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-matcher-input-summary.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-single-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-pair-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-tri-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-strict-all-lanes.json",
+        "artifacts/sports/la-liga-winner-2025-2026-matcher/sports-la-liga-winner-2025-2026-final-decision.json"
+      ]
+    }
+  ]
+}

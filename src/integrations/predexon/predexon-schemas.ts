@@ -164,6 +164,28 @@ export const predexonOpinionOrderbookSnapshotSchema = z
   })
   .passthrough()
 
+export const predexonPredictFunOrderbookSnapshotSchema = z
+  .object({
+    market_id: idStringSchema,
+    timestamp: timestampSchema,
+    bids: z.array(orderbookLevelSchema).default([]),
+    asks: z.array(orderbookLevelSchema).default([]),
+    best_bid: numericValueSchema,
+    best_ask: numericValueSchema,
+    bid_depth: numericValueSchema,
+    ask_depth: numericValueSchema
+  })
+  .passthrough()
+
+const cursorPaginationSchema = z
+  .object({
+    limit: z.number().int(),
+    count: z.number().int(),
+    has_more: z.boolean(),
+    pagination_key: z.string().nullable().optional()
+  })
+  .passthrough()
+
 export const predexonTradeSchema = z
   .object({
     token_id: z.string(),
@@ -270,6 +292,18 @@ export const parsePredexonLimitlessOrderbooksResponse = (payload: unknown) =>
 
 export const parsePredexonOpinionOrderbooksResponse = (payload: unknown) =>
   parseNamedArrayEnvelope(payload, predexonOpinionOrderbookSnapshotSchema, "opinion orderbooks", ["snapshots"])
+
+export const parsePredexonPredictFunOrderbooksResponse = (payload: unknown) =>
+  parseWithSchema(
+    z
+      .object({
+        snapshots: z.array(predexonPredictFunOrderbookSnapshotSchema),
+        pagination: cursorPaginationSchema
+      })
+      .passthrough(),
+    unwrapObjectEnvelope(payload),
+    "predictfun orderbooks"
+  )
 
 export const parsePredexonTradesResponse = (payload: unknown) =>
   parseNamedArrayEnvelope(payload, predexonTradeSchema, "trades", ["trades"])

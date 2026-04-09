@@ -14,7 +14,9 @@ export type HistoricalSimulationRouteAvailabilityReason =
     | "incomplete_resolution_risk"
     | "stale_resolution_risk"
     | "unsafe_equivalence"
-    | "ambiguous_venue_identity";
+    | "ambiguous_venue_identity"
+    | "opinion_historically_unqualified"
+    | "predict_historically_unqualified";
 
 export const HistoricalSimulationRouteModeValues = [
     "POLYMARKET_ONLY",
@@ -266,6 +268,28 @@ export interface CanonicalMarketOption {
     venues: ReadonlyArray<PairedMarketIdentity>;
     routeModes: ReadonlyArray<HistoricalSimulationRouteAvailability>;
     runnableRouteModes: ReadonlyArray<HistoricalSimulationRouteMode>;
+    predictReadiness?: {
+        state: "CURRENT_STATE_ONLY" | "RECORDER_ACCUMULATING" | "HISTORICAL_READY_NATIVE" | "HISTORICAL_READY_FALLBACK" | "UNUSABLE";
+        historicalQualified: boolean;
+        reason: string | null;
+        environments: readonly ("mainnet" | "testnet")[];
+        currentStateRowCount: number;
+        nativeOrderbookSnapshotCount: number;
+        nativeMatchEventCount: number;
+        recorderCheckpointCount: number;
+        fallbackSnapshotCount: number;
+        fallbackCoveredWindowCount: number;
+    } | null;
+    opinionExactMatch?: {
+        classification:
+          | "semantic_exact_historical_qualified"
+          | "semantic_exact_live_only"
+          | "semantic_near_exact"
+          | "proxy_or_mismatch"
+          | "unresolved_no_candidate";
+        historicalQualified: boolean;
+        reason: string | null;
+    } | null;
 }
 
 export interface HistoricalSimulationRouteAvailability {

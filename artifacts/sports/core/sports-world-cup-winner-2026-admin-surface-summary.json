@@ -1,0 +1,32 @@
+{
+  "observedAt": "2026-04-09T10:43:43.719Z",
+  "laneId": "SPORTS_WORLD_CUP_WINNER_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT",
+  "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+  "allVenueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+  "teamScopeHash": "44b421f58b424288",
+  "exactSafeAllVenueTeams": [
+    "brazil",
+    "england",
+    "france",
+    "spain"
+  ],
+  "peerPairLaneId": "SPORTS_WORLD_CUP_WINNER_2026_PAIR_LIMITLESS_POLYMARKET",
+  "peerPairVenuePair": "LIMITLESS|POLYMARKET",
+  "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+  "supportedActions": [
+    "inspect",
+    "hold",
+    "promote",
+    "rollback"
+  ],
+  "userConsentCanWidenScope": false,
+  "narrowestEnforceableUnit": "LANE_SCOPE_LOCK",
+  "sourceArtifactRefs": [
+    "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-matcher-input-summary.json",
+    "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-pair-lanes.json",
+    "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-all-venue-lanes.json",
+    "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-rejections.json",
+    "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-final-decision.json",
+    "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-operator-summary.md"
+  ]
+}

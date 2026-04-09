@@ -1,0 +1,466 @@
+{
+  "observedAt": "2026-04-09T10:35:50.918Z",
+  "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+  "lanes": [
+    {
+      "laneId": "SPORTS_WORLD_CUP_WINNER_2026_SINGLE_LIMITLESS",
+      "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "laneCardinality": "SINGLE",
+      "venueSet": "LIMITLESS",
+      "exactSafeClubs": [
+        "argentina",
+        "belgium",
+        "brazil",
+        "croatia",
+        "england",
+        "france",
+        "germany",
+        "italy",
+        "mexico",
+        "netherlands",
+        "portugal",
+        "spain",
+        "united_states",
+        "uruguay"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-matcher-input-summary.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-single-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-pair-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-tri-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-strict-all-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_WORLD_CUP_WINNER_2026_SINGLE_OPINION",
+      "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "laneCardinality": "SINGLE",
+      "venueSet": "OPINION",
+      "exactSafeClubs": [
+        "brazil",
+        "england",
+        "france",
+        "spain"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-matcher-input-summary.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-single-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-pair-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-tri-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-strict-all-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_WORLD_CUP_WINNER_2026_SINGLE_POLYMARKET",
+      "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "laneCardinality": "SINGLE",
+      "venueSet": "POLYMARKET",
+      "exactSafeClubs": [
+        "argentina",
+        "belgium",
+        "brazil",
+        "croatia",
+        "england",
+        "france",
+        "germany",
+        "italy",
+        "mexico",
+        "netherlands",
+        "portugal",
+        "spain",
+        "united_states",
+        "uruguay"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-matcher-input-summary.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-single-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-pair-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-tri-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-strict-all-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_WORLD_CUP_WINNER_2026_SINGLE_PREDICT",
+      "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "laneCardinality": "SINGLE",
+      "venueSet": "PREDICT",
+      "exactSafeClubs": [
+        "argentina",
+        "belgium",
+        "brazil",
+        "croatia",
+        "england",
+        "france",
+        "germany",
+        "italy",
+        "mexico",
+        "netherlands",
+        "portugal",
+        "spain",
+        "united_states",
+        "uruguay"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-matcher-input-summary.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-single-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-pair-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-tri-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-strict-all-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_WORLD_CUP_WINNER_2026_PAIR_LIMITLESS_OPINION",
+      "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "laneCardinality": "PAIR",
+      "venueSet": "LIMITLESS|OPINION",
+      "exactSafeClubs": [
+        "brazil",
+        "england",
+        "france",
+        "spain"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-matcher-input-summary.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-single-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-pair-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-tri-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-strict-all-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_WORLD_CUP_WINNER_2026_PAIR_LIMITLESS_POLYMARKET",
+      "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "laneCardinality": "PAIR",
+      "venueSet": "LIMITLESS|POLYMARKET",
+      "exactSafeClubs": [
+        "argentina",
+        "belgium",
+        "brazil",
+        "croatia",
+        "england",
+        "france",
+        "germany",
+        "italy",
+        "mexico",
+        "netherlands",
+        "portugal",
+        "spain",
+        "united_states",
+        "uruguay"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-matcher-input-summary.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-single-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-pair-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-tri-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-strict-all-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_WORLD_CUP_WINNER_2026_PAIR_LIMITLESS_PREDICT",
+      "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "laneCardinality": "PAIR",
+      "venueSet": "LIMITLESS|PREDICT",
+      "exactSafeClubs": [
+        "argentina",
+        "belgium",
+        "brazil",
+        "croatia",
+        "england",
+        "france",
+        "germany",
+        "italy",
+        "mexico",
+        "netherlands",
+        "portugal",
+        "spain",
+        "united_states",
+        "uruguay"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-matcher-input-summary.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-single-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-pair-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-tri-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-strict-all-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_WORLD_CUP_WINNER_2026_PAIR_OPINION_POLYMARKET",
+      "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "laneCardinality": "PAIR",
+      "venueSet": "OPINION|POLYMARKET",
+      "exactSafeClubs": [
+        "brazil",
+        "england",
+        "france",
+        "spain"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-matcher-input-summary.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-single-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-pair-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-tri-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-strict-all-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_WORLD_CUP_WINNER_2026_PAIR_OPINION_PREDICT",
+      "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "laneCardinality": "PAIR",
+      "venueSet": "OPINION|PREDICT",
+      "exactSafeClubs": [
+        "brazil",
+        "england",
+        "france",
+        "spain"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-matcher-input-summary.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-single-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-pair-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-tri-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-strict-all-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_WORLD_CUP_WINNER_2026_PAIR_POLYMARKET_PREDICT",
+      "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "laneCardinality": "PAIR",
+      "venueSet": "POLYMARKET|PREDICT",
+      "exactSafeClubs": [
+        "argentina",
+        "belgium",
+        "brazil",
+        "croatia",
+        "england",
+        "france",
+        "germany",
+        "italy",
+        "mexico",
+        "netherlands",
+        "portugal",
+        "spain",
+        "united_states",
+        "uruguay"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-matcher-input-summary.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-single-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-pair-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-tri-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-strict-all-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_WORLD_CUP_WINNER_2026_TRI_LIMITLESS_OPINION_POLYMARKET",
+      "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "laneCardinality": "TRI",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "exactSafeClubs": [
+        "brazil",
+        "england",
+        "france",
+        "spain"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-matcher-input-summary.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-single-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-pair-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-tri-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-strict-all-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_WORLD_CUP_WINNER_2026_TRI_LIMITLESS_OPINION_PREDICT",
+      "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "laneCardinality": "TRI",
+      "venueSet": "LIMITLESS|OPINION|PREDICT",
+      "exactSafeClubs": [
+        "brazil",
+        "england",
+        "france",
+        "spain"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-matcher-input-summary.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-single-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-pair-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-tri-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-strict-all-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_WORLD_CUP_WINNER_2026_TRI_LIMITLESS_POLYMARKET_PREDICT",
+      "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "laneCardinality": "TRI",
+      "venueSet": "LIMITLESS|POLYMARKET|PREDICT",
+      "exactSafeClubs": [
+        "argentina",
+        "belgium",
+        "brazil",
+        "croatia",
+        "england",
+        "france",
+        "germany",
+        "italy",
+        "mexico",
+        "netherlands",
+        "portugal",
+        "spain",
+        "united_states",
+        "uruguay"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-matcher-input-summary.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-single-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-pair-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-tri-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-strict-all-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_WORLD_CUP_WINNER_2026_TRI_OPINION_POLYMARKET_PREDICT",
+      "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "laneCardinality": "TRI",
+      "venueSet": "OPINION|POLYMARKET|PREDICT",
+      "exactSafeClubs": [
+        "brazil",
+        "england",
+        "france",
+        "spain"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-matcher-input-summary.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-single-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-pair-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-tri-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-strict-all-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-final-decision.json"
+      ]
+    },
+    {
+      "laneId": "SPORTS_WORLD_CUP_WINNER_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT",
+      "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "laneCardinality": "STRICT_ALL",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "exactSafeClubs": [
+        "brazil",
+        "england",
+        "france",
+        "spain"
+      ],
+      "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "operatorRuleReviewRequired": true,
+      "matcherReady": true,
+      "operatorCredible": true,
+      "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "finalReadinessLabel": "LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+      "sourceArtifactRefs": [
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-matcher-input-summary.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-single-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-pair-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-tri-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-strict-all-lanes.json",
+        "artifacts/sports/world-cup-winner-2026-matcher/sports-world-cup-winner-2026-final-decision.json"
+      ]
+    }
+  ]
+}

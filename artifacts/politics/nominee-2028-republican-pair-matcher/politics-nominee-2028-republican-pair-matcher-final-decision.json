@@ -1,0 +1,16 @@
+{
+  "observedAt": "2026-04-08T00:42:56.964Z",
+  "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+  "overallDecision": "REPUBLICAN_PAIR_MATCHER_READY",
+  "bestPair": "LIMITLESS|POLYMARKET",
+  "bestStartingCandidates": [
+    "donald_trump",
+    "donald_trump_jr",
+    "ted_cruz",
+    "tucker_carlson"
+  ],
+  "pairMatcherReady": true,
+  "operatorCredible": true,
+  "pairFallbackStillPreferred": true,
+  "singleBestNextAction": "Start limited-prod operator review on the Republican pair lane LIMITLESS|POLYMARKET with candidates donald_trump, donald_trump_jr, ted_cruz, tucker_carlson."
+}

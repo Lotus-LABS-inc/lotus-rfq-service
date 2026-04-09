@@ -1,0 +1,37 @@
+{
+  "observedAt": "2026-04-08T18:43:20.813Z",
+  "laneId": "POLITICS_OFFICE_EXIT_NETANYAHU_2026_TRI_LIMITLESS_POLYMARKET_PREDICT",
+  "matcherTruthConsumed": {
+    "topicKey": "OFFICE_EXIT_BY_DATE|ISRAEL|PRIME_MINISTER|BENJAMIN_NETANYAHU|2026-12-31",
+    "bestPair": "LIMITLESS|POLYMARKET",
+    "bestTriIfAny": "LIMITLESS|POLYMARKET|PREDICT",
+    "exactSafeTriPropositions": [
+      "NETANYAHU_OUT_BEFORE_2027"
+    ],
+    "exactSafePairFallbackPropositions": [
+      "NETANYAHU_OUT_BEFORE_2027"
+    ],
+    "overallDecision": "OFFICE_EXIT_NETANYAHU_2026_TRI_REVIEW_REQUIRED",
+    "triMatcherReady": true,
+    "pairMatcherReady": true,
+    "operatorCredible": true,
+    "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING"
+  },
+  "readinessConclusionsDerived": {
+    "finalReadinessLabel": "OFFICE_EXIT_NETANYAHU_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+    "readinessReviewJustified": true,
+    "operatorRuleReviewRequired": true,
+    "rolloutRecommended": false,
+    "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+    "exactLaneScopeLocked": true,
+    "pairFallbackStillExplicit": true
+  },
+  "intentionallyUnchanged": [
+    "matcher logic unchanged",
+    "exact proposition scope unchanged",
+    "no rollout activation"
+  ],
+  "stillBlocked": [
+    "operator_rule_review_required"
+  ]
+}

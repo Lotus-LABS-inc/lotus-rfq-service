@@ -49,6 +49,8 @@ import { ControlPlaneAdminService } from "./admin/control-plane-admin-service.js
 import { registerAdminReplayRoutes } from "./admin/replay.routes.js";
 import { ReplayAdminService } from "./admin/replay-admin-service.js";
 import { registerAdminCompatibilityReviewRoutes } from "./admin/compatibility-review.routes.js";
+import { registerAdminPairMatchReviewRoutes } from "./admin/pair-match-review.routes.js";
+import { registerAdminExecutionControlRoutes } from "./admin/execution-control.routes.js";
 import { registerAdminQualificationRoutes } from "./admin/qualification.routes.js";
 import { QualificationAdminService, createDefaultPromotionGateConfig } from "./admin/qualification-admin-service.js";
 import { registerAdminQualificationSafetyRoutes } from "./admin/qualification-safety.routes.js";
@@ -57,6 +59,26 @@ import { registerAdminSimulationRoutes } from "./admin/simulation.routes.js";
 import { registerAdminSimulationConsoleRoutes } from "./admin/simulation-console.routes.js";
 import { SimulationAdminService } from "./admin/simulation-admin-service.js";
 import { HistoricalSimulationCatalogService } from "./admin/historical-simulation-catalog-service.js";
+import { registerAdminPairRolloutRoutes } from "./admin/pair-rollout.routes.js";
+import { registerAdminPairQualificationRoutes } from "./admin/pair-qualification.routes.js";
+import { registerAdminPairShadowRoutes } from "./admin/pair-shadow.routes.js";
+import { registerAdminPairPromotionRoutes } from "./admin/pair-promotion.routes.js";
+import { PairRouteAdminService } from "./admin/pair-route-admin-service.js";
+import { registerAdminPoliticsNomineeRoutes } from "./admin/politics-nominee.routes.js";
+import { PoliticsNomineeAdminService } from "./admin/politics-nominee-admin-service.js";
+import { registerAdminPoliticsOfficeWinnerRoutes } from "./admin/politics-office-winner.routes.js";
+import { PoliticsOfficeWinnerAdminService } from "./admin/politics-office-winner-admin-service.js";
+import { registerAdminPoliticsPartyControlRoutes } from "./admin/politics-party-control.routes.js";
+import { PoliticsPartyControlAdminService } from "./admin/politics-party-control-admin-service.js";
+import { registerAdminPoliticsOfficeExitRoutes } from "./admin/politics-office-exit.routes.js";
+import { PoliticsOfficeExitAdminService } from "./admin/politics-office-exit-admin-service.js";
+import { registerAdminPoliticsGeopoliticalRoutes } from "./admin/politics-geopolitical.routes.js";
+import { PoliticsGeopoliticalAdminService } from "./admin/politics-geopolitical-admin-service.js";
+import { registerAdminSportsRoutes } from "./admin/sports.routes.js";
+import { SportsAdminService } from "./admin/sports-admin-service.js";
+import { PairShadowObservationRepository } from "../shadow/pair-shadow-observation-repository.js";
+import { PairShadowRuntimeWriter } from "../shadow/pair-shadow-runtime-writer.js";
+import { PairShadowRuntimeHooks } from "../shadow/pair-shadow-runtime-hooks.js";
 import { PromotionGateEvaluator } from "../core/qualification/promotion-gate-evaluator.js";
 import { EconomicQualityEngine } from "../core/qualification/economic-quality-engine.js";
 import { QualificationRunManager } from "../core/qualification/qualification-run-manager.js";
@@ -126,19 +148,33 @@ import { CanonicalCompatibilityRepository } from "../repositories/canonical-comp
 import { CompatibilityOverrideRepository } from "../repositories/compatibility-override.repository.js";
 import { ExecutionIntentRepository } from "../repositories/execution-intent.repository.js";
 import { ExecutionRecordRepository } from "../repositories/execution-record.repository.js";
+import { ExecutionControlRepository } from "../repositories/execution-control.repository.js";
+import { PairEdgeRepository } from "../repositories/pair-edge.repository.js";
 import { CompatibilityOverrideService } from "../canonical/compatibility-override-service.js";
+import { PairMatchReviewService } from "./admin/pair-match-review-service.js";
 import { RouteSelectionTraceWriter } from "../routing/route-selection-trace.js";
-import { ExecutionStateMachine } from "../execution/execution-state-machine.js";
-import type { ExecutionState } from "../execution/execution-state-types.js";
-import type { ExecutionIntent } from "../execution/execution-intent.js";
-import type { ExecutionRecord } from "../execution/execution-record.js";
 import { FailureRecoveryManager } from "../execution/failure-recovery-manager.js";
-import { selectRecoveryPolicy } from "../execution/recovery-policies.js";
+import { ExecutionPolicyValidator } from "../execution-control/execution-policy-validator.js";
+import { ExecutionFreshnessGuard } from "../execution-control/execution-freshness-guard.js";
+import { ExecutionApprovalGate } from "../execution-control/execution-approval-gate.js";
+import { ExecutionIdempotencyService } from "../execution-control/execution-idempotency-service.js";
+import { ExecutionReplayProtector } from "../execution-control/execution-replay-protector.js";
+import { ExecutionSubmissionOrchestrator } from "../execution-control/execution-submission-orchestrator.js";
+import { ExecutionFailSafeHandler } from "../execution-control/execution-fail-safe-handler.js";
+import { ExecutionAuditWriter } from "../execution-control/execution-audit-writer.js";
+import { ExecutionControlGateway } from "../execution-control/execution-control-gateway.js";
+import type { ExecutionControlRequest } from "../execution-control/execution-control-types.js";
+import {
+  ExecutionScopeAuthorityError,
+  ExecutionScopeTokenService
+} from "../execution-control/execution-scope-token.js";
+import { PoliticsNomineeExecutionScopeAuthority } from "../execution-control/politics-nominee-execution-scope-authority.js";
 
 export interface ServerDependencies {
   logger: Logger;
   redisClient: RedisClient;
   pgPool: Pool;
+  pairShadowPool?: Pool;
   db: AppDb;
   canonicalServiceBaseUrl: string;
   jwtSecret: string;
@@ -247,6 +283,14 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const executionIntentRepository = new ExecutionIntentRepository(dependencies.pgPool);
   const executionRecordRepository = new ExecutionRecordRepository(dependencies.pgPool);
   const failureRecoveryManager = new FailureRecoveryManager(dependencies.pgPool);
+  const executionControlRepository = new ExecutionControlRepository(dependencies.pgPool);
+  const executionAuditWriter = new ExecutionAuditWriter(
+    executionIntentRepository,
+    executionRecordRepository,
+    executionControlRepository,
+    failureRecoveryManager,
+    dependencies.logger
+  );
   const qualificationRuntimeConfig = dependencies.qualificationRuntimeConfig ?? { enabled: false };
   const qualificationRunManager = new QualificationRunManager({
     pool: dependencies.pgPool,
@@ -267,6 +311,15 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         logger: dependencies.logger
       })
     : undefined;
+  const pairShadowPool = dependencies.pairShadowPool ?? dependencies.pgPool;
+  const pairShadowRuntimeHooks = new PairShadowRuntimeHooks({
+    writer: new PairShadowRuntimeWriter({
+      repository: new PairShadowObservationRepository(pairShadowPool),
+      repoRoot: process.cwd(),
+      ...(dependencies.logger ? { logger: dependencies.logger } : {})
+    }),
+    ...(dependencies.logger ? { logger: dependencies.logger } : {})
+  });
   const performanceGuardrailConfig =
     dependencies.performanceGuardrailConfig ??
     createPerformanceGuardrailConfig({
@@ -475,7 +528,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     controlPlaneShardId: "sor-main",
     phase3AGuardrailShadowResolver,
     ...(qualificationHook ? { qualificationHook } : {}),
-    ...(qualificationRuntimeConfig.sor ? { qualificationConfig: qualificationRuntimeConfig.sor } : {})
+    ...(qualificationRuntimeConfig.sor ? { qualificationConfig: qualificationRuntimeConfig.sor } : {}),
+    pairShadowRuntimeHooks
   });
 
   const sorExecutionRouter = {
@@ -553,6 +607,160 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     });
   };
 
+  const executionControlGateway = new ExecutionControlGateway({
+    policyValidator: new ExecutionPolicyValidator(),
+    freshnessGuard: new ExecutionFreshnessGuard(),
+    approvalGate: new ExecutionApprovalGate(),
+    idempotencyService: new ExecutionIdempotencyService(executionControlRepository),
+    replayProtector: new ExecutionReplayProtector(executionControlRepository),
+    submissionOrchestrator: new ExecutionSubmissionOrchestrator(
+      {
+        INTERNAL_CROSS: {
+          execute: async ({ request }) => {
+            const payload = request.submissionPayload as {
+              sessionId: string;
+              reservationToken: string;
+              filledSize: string;
+              trades: readonly unknown[];
+            };
+            if (riskEngine.rollbackReservation) {
+              await riskEngine.rollbackReservation(payload.reservationToken);
+            }
+            await transitionRFQState(payload.sessionId, "ACCEPTED", "internal_match_full");
+            await transitionRFQState(payload.sessionId, "SETTLED", "internal_match_full");
+            return {
+              status: "COMPLETED",
+              payload: {
+                filledSize: payload.filledSize,
+                trades: payload.trades
+              }
+            };
+          }
+        },
+        SOR_PLAN: {
+          execute: async ({ request }) => {
+            const payload = request.submissionPayload as {
+              sessionId: string;
+              plan: Parameters<typeof planRunner.run>[0];
+              acceptancePolicy: SORAcceptancePolicy;
+              awaitExecution: boolean;
+            };
+            const runPlan = async () => {
+              await transitionRFQState(payload.sessionId, "ACCEPTED", "sor_plan_created");
+              await transitionRFQState(payload.sessionId, "EXECUTING", "sor_plan_running");
+              const result = await planRunner.run(payload.plan);
+              if (result.status === "COMPLETED" || result.status === "PARTIAL") {
+                await transitionRFQState(payload.sessionId, "SETTLED", "sor_plan_completed");
+              } else {
+                await transitionRFQState(payload.sessionId, "FAILED", "sor_plan_failed");
+              }
+              return result;
+            };
+
+            if (!payload.awaitExecution) {
+              void runPlan().catch((error: unknown) => {
+                dependencies.logger.error(
+                  { err: error, sessionId: payload.sessionId, planId: payload.plan.id },
+                  "Background SOR plan execution failed."
+                );
+              });
+              return {
+                status: "SUBMITTED",
+                payload: {
+                  planId: payload.plan.id,
+                  dispatchMode: "background"
+                }
+              };
+            }
+
+            const result = await runPlan();
+            return {
+              status:
+                result.status === "COMPLETED"
+                  ? "COMPLETED"
+                  : result.status === "PARTIAL"
+                    ? "PARTIAL"
+                    : "FAILED",
+              payload: {
+                planId: payload.plan.id,
+                finalStatus: result.status,
+                ...(result.failureReason ? { failureReason: result.failureReason } : {})
+              }
+            };
+          }
+        },
+        LEGACY_RFQ: {
+          execute: async ({ request }) => {
+            const payload = request.submissionPayload as {
+              sessionId: string;
+              rankedQuotes: Parameters<typeof legacyExecutionRouter.execute>[0]["rankedQuotes"];
+              reservationToken: string;
+            };
+            await transitionRFQState(payload.sessionId, "ACCEPTED", "legacy_execution_requested");
+            const legacyResult = await legacyExecutionRouter.execute({
+              sessionId: payload.sessionId,
+              rankedQuotes: payload.rankedQuotes,
+              fallbackToNextQuote: true,
+              reservationToken: payload.reservationToken
+            });
+            if (legacyResult.ok) {
+              await transitionRFQState(payload.sessionId, "SETTLED", "legacy_execution_success");
+              return {
+                status: "COMPLETED",
+                payload: {
+                  executedQuoteId: legacyResult.executedQuoteId ?? null
+                }
+              };
+            }
+            await transitionRFQState(payload.sessionId, "FAILED", "legacy_execution_failed");
+            return {
+              status: "FAILED",
+              payload: {
+                attempts: legacyResult.attempts
+              }
+            };
+          }
+        }
+      },
+      executionControlRepository,
+      dependencies.logger
+    ),
+    failSafeHandler: new ExecutionFailSafeHandler(),
+    auditWriter: executionAuditWriter,
+    executionControlRepository,
+    logger: dependencies.logger
+  });
+  const politicsNomineeAdminService = new PoliticsNomineeAdminService({
+    pool: dependencies.pgPool,
+    repoRoot: process.cwd()
+  });
+  const politicsOfficeWinnerAdminService = new PoliticsOfficeWinnerAdminService({
+    pool: dependencies.pgPool,
+    repoRoot: process.cwd()
+  });
+  const politicsPartyControlAdminService = new PoliticsPartyControlAdminService({
+    pool: dependencies.pgPool,
+    repoRoot: process.cwd()
+  });
+  const politicsOfficeExitAdminService = new PoliticsOfficeExitAdminService({
+    pool: dependencies.pgPool,
+    repoRoot: process.cwd()
+  });
+  const politicsGeopoliticalAdminService = new PoliticsGeopoliticalAdminService({
+    pool: dependencies.pgPool,
+    repoRoot: process.cwd()
+  });
+  const sportsAdminService = new SportsAdminService({
+    pool: dependencies.pgPool,
+    repoRoot: process.cwd()
+  });
+  const executionScopeTokenService = new ExecutionScopeTokenService(
+    process.env.EXECUTION_SCOPE_TOKEN_SECRET ?? dependencies.jwtSecret
+  );
+  const executionScopeAuthorities = {
+    POLITICS_NOMINEE_LANE: new PoliticsNomineeExecutionScopeAuthority(politicsNomineeAdminService)
+  } as const;
+
   const wsGateway = await registerWebSocketPlugin(app, {
     redisClient: dependencies.redisClient,
     logger: dependencies.logger
@@ -576,6 +784,56 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           failureWeight: dependencies.failureWeight
         }
       }),
+    createExecutionScopeToken: async (sessionId, request) => {
+      const session = await sessionRepository.findById(sessionId);
+      if (!session) throw new Error("Session not found");
+
+      const quote = await quoteRepository.findByExternalQuoteId(sessionId, request.quoteId);
+      if (!quote) throw new Error("Quote not found");
+
+      const authority = executionScopeAuthorities[request.scopeKind];
+      if (!authority) {
+        throw new ExecutionScopeAuthorityError(`Execution scope kind ${request.scopeKind} is not configured.`);
+      }
+
+      const snapshot = await authority.getScopeSnapshot(request.scopeId);
+      if (!snapshot) {
+        throw new ExecutionScopeAuthorityError(`Execution scope ${request.scopeId} not found.`);
+      }
+      if (!snapshot.operatorApprovedToOffer) {
+        throw new ExecutionScopeAuthorityError(`Execution scope ${request.scopeId} is not currently operator-approved.`);
+      }
+
+      const issued = executionScopeTokenService.issue({
+        scopeKind: request.scopeKind,
+        scopeId: request.scopeId,
+        principalId: session.taker_id,
+        sessionId,
+        quoteId: request.quoteId,
+        canonicalMarketId: session.canonical_market_id,
+        ttlSeconds: request.ttlSeconds ?? 120,
+        scope: {
+          topicKey: snapshot.topicKey,
+          laneType: snapshot.laneType,
+          venueSet: snapshot.venueSet,
+          candidateSet: snapshot.candidateSet
+        }
+      });
+
+      return {
+        token: issued.token,
+        expiresAt: issued.claims.expiresAt,
+        singleUse: true as const,
+        scope: {
+          scopeKind: snapshot.scopeKind,
+          scopeId: snapshot.scopeId,
+          topicKey: snapshot.topicKey,
+          laneType: snapshot.laneType,
+          venueSet: snapshot.venueSet,
+          candidateSet: snapshot.candidateSet
+        }
+      };
+    },
     acceptRFQ: async (sessionId, request) => {
       const session = await sessionRepository.findById(sessionId);
       if (!session) throw new Error("Session not found");
@@ -620,263 +878,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       const requestedNotional = (
         Number.parseFloat(session.quantity) * Number.parseFloat(quote.price)
       ).toFixed(8);
-      const executionReplayConfig = {
-        mode: "BEST_EFFORT" as const,
-        configVersion: "replay-capture-v1",
-        engineVersion: "execution-infra-v1",
-        featureFlags: {
-          compatibilityExecutionInfra: true
-        }
-      };
-      const captureOperationalReplay = async (
-        decisionType: "EXECUTION_STATE_TRANSITION" | "FAILURE_RECOVERY_DECISION",
-        entityId: string,
-        inputSnapshot: Record<string, unknown>,
-        decisionTrace: Record<string, unknown>,
-        outputSnapshot: Record<string, unknown>
-      ) => {
-        if (!replayDecisionCaptureService) {
-          return null;
-        }
-
-        return replayDecisionCaptureService.capture({
-          config: executionReplayConfig,
-          buildEnvelope: (config) => ({
-            decisionType,
-            entityId,
-            correlationId: sessionId,
-            configVersion: config.configVersion,
-            engineVersion: config.engineVersion,
-            featureFlags: config.featureFlags,
-            inputSnapshot,
-            decisionTrace,
-            outputSnapshot
-          })
-        });
-      };
-      const createExecutionAuditContext = async (input: {
-        routeType: string;
-        routePlanId?: string | null;
-        routeSelectionTraceId?: string | null;
-        compatibilityDecisionIds?: readonly string[];
-        compatibilityVersionIds?: readonly string[];
-        replayEnvelopeId?: string | null;
-        intendedVenues: readonly string[];
-        executionVenue: string;
-        providerExecutionKey: string;
-        metadata?: Record<string, unknown>;
-      }): Promise<{
-        intent: ExecutionIntent;
-        getRecord: () => ExecutionRecord;
-        transition: (
-          nextState: ExecutionState,
-          reason: string,
-          options?: {
-            payload?: Record<string, unknown>;
-            syncStatus?: string;
-            settlementStatus?: string;
-            fillDetails?: Record<string, unknown>;
-            metadata?: Record<string, unknown>;
-          }
-        ) => Promise<ExecutionRecord>;
-        recordRecovery: (flags?: {
-          quoteExpired?: boolean;
-          localSyncFailed?: boolean;
-          duplicateSubmissionRisk?: boolean;
-        }) => Promise<void>;
-      }> => {
-        const intent = await executionIntentRepository.create({
-          requestKey: `${session.idempotency_key}:${input.routeType}`,
-          routePlanId: input.routePlanId ?? null,
-          routeSelectionTraceId: input.routeSelectionTraceId ?? null,
-          initiatingPrincipal: session.taker_id,
-          requestedAction: session.side.toUpperCase(),
-          requestedNotional,
-          requestedSize: session.quantity,
-          routeType: input.routeType,
-          approvalState: "APPROVED",
-          intendedVenues: input.intendedVenues,
-          compatibilityDecisionIds: input.compatibilityDecisionIds ?? [],
-          compatibilityVersionIds: input.compatibilityVersionIds ?? [],
-          replayEnvelopeId: input.replayEnvelopeId ?? null,
-          metadata: {
-            sessionId,
-            quoteId: request.quoteId,
-            canonicalMarketId: session.canonical_market_id,
-            ...(input.metadata ?? {})
-          }
-        });
-
-        let record = await executionRecordRepository.create({
-          executionIntentId: intent.id,
-          venue: input.executionVenue,
-          executionState: "CREATED",
-          syncStatus: "pending",
-          settlementStatus: "pending",
-          providerExecutionKey: input.providerExecutionKey,
-          replayEnvelopeId: input.replayEnvelopeId ?? null,
-          metadata: {
-            routeSelectionTraceId: input.routeSelectionTraceId ?? null,
-            routePlanId: input.routePlanId ?? null,
-            compatibilityDecisionIds: input.compatibilityDecisionIds ?? [],
-            compatibilityVersionIds: input.compatibilityVersionIds ?? [],
-            ...(input.metadata ?? {})
-          }
-        });
-        const stateMachine = new ExecutionStateMachine();
-
-        const transition = async (
-          nextState: ExecutionState,
-          reason: string,
-          options: {
-            payload?: Record<string, unknown>;
-            syncStatus?: string;
-            settlementStatus?: string;
-            fillDetails?: Record<string, unknown>;
-            metadata?: Record<string, unknown>;
-          } = {}
-        ): Promise<ExecutionRecord> => {
-          const fromState = stateMachine.getState();
-          stateMachine.transitionTo(nextState, {
-            reason,
-            ...(options.payload ? { payload: options.payload } : {})
-          });
-
-          const nextSyncStatus = options.syncStatus ?? record.syncStatus;
-          const nextSettlementStatus = options.settlementStatus ?? record.settlementStatus;
-          const nextFillDetails = options.fillDetails ?? (record.fillDetails as Record<string, unknown>);
-          const nextMetadata = {
-            ...(record.metadata as Record<string, unknown>),
-            ...(options.metadata ?? {})
-          };
-          const transitionReplay = await captureOperationalReplay(
-            "EXECUTION_STATE_TRANSITION",
-            record.id,
-            {
-              executionIntentId: intent.id,
-              executionRecordId: record.id,
-              routePlanId: intent.routePlanId,
-              routeSelectionTraceId: intent.routeSelectionTraceId,
-              compatibilityDecisionIds: intent.compatibilityDecisionIds,
-              compatibilityVersionIds: intent.compatibilityVersionIds,
-              replayEnvelopeId: record.replayEnvelopeId
-            },
-            {
-              fromState,
-              toState: nextState,
-              reason,
-              payload: options.payload ?? {}
-            },
-            {
-              executionState: nextState,
-              syncStatus: nextSyncStatus,
-              settlementStatus: nextSettlementStatus,
-              fillDetails: nextFillDetails
-            }
-          );
-
-          if (
-            fromState !== null ||
-            record.executionState !== nextState ||
-            nextSyncStatus !== record.syncStatus ||
-            nextSettlementStatus !== record.settlementStatus ||
-            nextFillDetails !== record.fillDetails ||
-            nextMetadata !== record.metadata
-          ) {
-            record = await executionRecordRepository.create({
-              executionIntentId: intent.id,
-              venue: record.venue,
-              venueExecutionRef: record.venueExecutionRef,
-              executionState: nextState,
-              syncStatus: nextSyncStatus,
-              settlementStatus: nextSettlementStatus,
-              fillDetails: nextFillDetails,
-              retryLineage: record.retryLineage,
-              providerExecutionKey: record.providerExecutionKey,
-              replayEnvelopeId: transitionReplay?.id ?? record.replayEnvelopeId,
-              metadata: nextMetadata
-            });
-          }
-
-          await executionRecordRepository.appendStateTransition(
-            record.id,
-            fromState,
-            nextState,
-            {
-              reason,
-              ...(options.payload ? { payload: options.payload } : {})
-            },
-            transitionReplay?.id ?? null
-          );
-
-          return record;
-        };
-
-        const recordRecovery = async (flags: {
-          quoteExpired?: boolean;
-          localSyncFailed?: boolean;
-          duplicateSubmissionRisk?: boolean;
-        } = {}): Promise<void> => {
-          const policy = selectRecoveryPolicy({
-            intent,
-            record,
-            ...(flags.quoteExpired !== undefined ? { quoteExpired: flags.quoteExpired } : {}),
-            ...(flags.localSyncFailed !== undefined ? { localSyncFailed: flags.localSyncFailed } : {}),
-            ...(flags.duplicateSubmissionRisk !== undefined
-              ? { duplicateSubmissionRisk: flags.duplicateSubmissionRisk }
-              : {})
-          });
-          const recoveryReplay = await captureOperationalReplay(
-            "FAILURE_RECOVERY_DECISION",
-            record.id,
-            {
-              executionIntentId: intent.id,
-              executionRecordId: record.id,
-              routePlanId: intent.routePlanId,
-              routeSelectionTraceId: intent.routeSelectionTraceId,
-              compatibilityDecisionIds: intent.compatibilityDecisionIds,
-              compatibilityVersionIds: intent.compatibilityVersionIds
-            },
-            {
-              currentState: record.executionState,
-              flags
-            },
-            {
-              policyName: policy.policyName,
-              actionType: policy.actionType,
-              safeToAutoApply: policy.safeToAutoApply,
-              rationale: policy.rationale,
-              syncStatus: record.syncStatus,
-              settlementStatus: record.settlementStatus
-            }
-          );
-
-          await failureRecoveryManager.recordRecoveryAction({
-            intent,
-            record,
-            replayEnvelopeId: recoveryReplay?.id ?? null,
-            ...(flags.quoteExpired !== undefined ? { quoteExpired: flags.quoteExpired } : {}),
-            ...(flags.localSyncFailed !== undefined ? { localSyncFailed: flags.localSyncFailed } : {}),
-            ...(flags.duplicateSubmissionRisk !== undefined
-              ? { duplicateSubmissionRisk: flags.duplicateSubmissionRisk }
-              : {})
-          });
-        };
-
-        await transition("CREATED", "execution_intent_created", {
-          payload: {
-            routeType: input.routeType
-          }
-        });
-
-        return {
-          intent,
-          getRecord: () => record,
-          transition,
-          recordRecovery
-        };
-      };
-
+      const canonicalIdentity = await resolveCanonicalIdentity(
+        dependencies.pgPool,
+        session.canonical_market_id
+      );
       let buildResult;
       try {
         buildResult = await orderRouter.buildPlan(rfqInput, selectedQuoteInput, acceptancePolicy);
@@ -892,44 +897,100 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         throw error;
       }
 
+      const routeGeneratedAt = new Date();
+      const baseExecutionRequest = {
+        canonicalEventId: canonicalIdentity.canonicalEventId,
+        canonicalExecutableMarketId: canonicalIdentity.canonicalMarketId,
+        userWalletReference: {
+          principalId: session.taker_id,
+          walletRef: null
+        },
+        requestedSize: session.quantity,
+        requestedNotional,
+        configVersion: "execution-control-v1",
+        engineVersion: "execution-infra-v2",
+        routeFreshnessMetadata: {
+          routeGeneratedAt,
+          quoteObservedAt: quote.created_at ?? routeGeneratedAt,
+          quoteValidUntil: quote.valid_until,
+          marketStateObservedAt: routeGeneratedAt,
+          compatibilityEvaluatedAt: routeGeneratedAt,
+          approvalGrantedAt: routeGeneratedAt,
+          maxRouteAgeMs: 30_000,
+          maxQuoteAgeMs: 30_000,
+          maxMarketStateAgeMs: 30_000,
+          maxCompatibilityAgeMs: 60_000,
+          maxApprovalAgeMs: 300_000
+        },
+        approvalRequirements: {
+          required: false,
+          approvalGrantedAt: routeGeneratedAt,
+          approvalContextVersion: "server-rfq-accept-v1",
+          approvalActorRef: session.taker_id
+        },
+        idempotencyKey: `${session.idempotency_key}:execution-control`,
+        metadata: {
+          sessionId,
+          quoteId: request.quoteId
+        },
+        policyContext: {
+          routeTypeAllowed: true,
+          venuesAllowed: true,
+          compatibilityAllowed: true,
+          settlementAllowed: true,
+          killSwitchActive: false,
+          accountAllowed: true,
+          scopeAllowed: true,
+          rolloutAllowed: true
+        }
+      } satisfies Omit<
+        ExecutionControlRequest,
+        | "routePlanId"
+        | "venueTargets"
+        | "compatibilityReferences"
+        | "routeType"
+        | "submissionKind"
+        | "submissionPayload"
+        | "routeSelectionTraceId"
+        | "replayEnvelopeId"
+      >;
+
+      const toPlanAcceptedResponse = (
+        planId: string,
+        dispatchMode: "awaited" | "background",
+        finalStatus?: "COMPLETED" | "PARTIAL" | "FAILED" | "UNWOUND"
+      ) => ({
+        status: "PLAN_ACCEPTED" as const,
+        plan_id: planId,
+        plan_state: "DRAFT" as const,
+        dispatch_mode: dispatchMode,
+        ...(finalStatus ? { final_status: finalStatus } : {})
+      });
+
       if (buildResult.kind === "internal_filled") {
-        const executionAudit = await createExecutionAuditContext({
-          routeType: "INTERNAL_CROSS",
+        const outcome = await executionControlGateway.execute({
+          ...baseExecutionRequest,
           routePlanId: null,
+          venueTargets: ["INTERNAL_CROSS"],
+          compatibilityReferences: {
+            decisionIds: buildResult.compatibilityDecisionIds ?? [],
+            versionIds: buildResult.compatibilityVersionIds ?? [],
+            compatibilityClass: "SAFE_EQUIVALENT"
+          },
+          routeType: "INTERNAL_CROSS",
           routeSelectionTraceId: buildResult.routeSelectionTraceId ?? null,
-          compatibilityDecisionIds: buildResult.compatibilityDecisionIds ?? [],
-          compatibilityVersionIds: buildResult.compatibilityVersionIds ?? [],
           replayEnvelopeId: buildResult.replayEnvelopeId ?? null,
-          intendedVenues: ["INTERNAL_CROSS"],
-          executionVenue: "INTERNAL_CROSS",
-          providerExecutionKey: `internal:${sessionId}`,
-          metadata: {
-            crossingFilledSize: buildResult.filledSize
-          }
-        });
-        await executionAudit.transition("CHECKED", "reservation_validated");
-        await executionAudit.transition("QUOTED", "quote_selected");
-        await executionAudit.transition("APPROVED", "internal_cross_ready");
-        await executionAudit.transition("EXECUTING", "internal_cross_executing", {
-          payload: {
-            tradeCount: buildResult.trades.length
-          }
-        });
-        await executionAudit.transition("FILLED", "internal_cross_filled", {
-          fillDetails: {
+          submissionKind: "INTERNAL_CROSS",
+          submissionPayload: {
+            sessionId,
+            reservationToken,
             filledSize: buildResult.filledSize,
             trades: buildResult.trades
-          },
-          syncStatus: "synced"
+          }
         });
-        await executionAudit.transition("SETTLED", "internal_cross_settled", {
-          settlementStatus: "settled"
-        });
-        if (riskEngine.rollbackReservation) {
-          await riskEngine.rollbackReservation(reservationToken);
+        if (outcome.status === "FAILED" || outcome.status === "BLOCKED") {
+          throw new Error(`execution_control_blocked:${outcome.rationale.join(",")}`);
         }
-        await transitionRFQState(sessionId, "ACCEPTED", "internal_match_full");
-        await transitionRFQState(sessionId, "SETTLED", "internal_match_full");
         return {
           status: "PLAN_ACCEPTED" as const,
           plan_id: `internal-${sessionId}`,
@@ -939,211 +1000,108 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         };
       }
 
-      const executeSORAccept = async () => {
-        const plan = buildResult.plan;
-        const executionAudit = await createExecutionAuditContext({
-          routeType: "SOR_PLAN",
-          routePlanId: plan.id,
-          routeSelectionTraceId: buildResult.routeSelectionTraceId ?? null,
-          compatibilityDecisionIds: buildResult.compatibilityDecisionIds ?? [],
-          compatibilityVersionIds: buildResult.compatibilityVersionIds ?? [],
-          replayEnvelopeId: buildResult.replayEnvelopeId ?? null,
-          intendedVenues: [...new Set(plan.steps.map((step) => step.providerId))],
-          executionVenue: plan.steps.length > 1 ? "MULTI_VENUE" : (plan.steps[0]?.providerType ?? "VENUE"),
-          providerExecutionKey: `sor:${plan.id}`,
-          metadata: {
-            acceptancePolicy,
-            stepCount: plan.steps.length
-          }
-        });
-        await executionAudit.transition("CHECKED", "reservation_validated");
-        await executionAudit.transition("QUOTED", "quote_selected");
-        await executionAudit.transition("APPROVED", "sor_plan_ready", {
-          payload: {
-            routePlanId: plan.id,
-            routeSelectionTraceId: buildResult.routeSelectionTraceId ?? null
-          }
-        });
-
-        const runPlanAndTransition = async (): Promise<"COMPLETED" | "PARTIAL" | "FAILED" | "UNWOUND"> => {
-          await transitionRFQState(sessionId, "ACCEPTED", "sor_plan_created");
-          await transitionRFQState(sessionId, "EXECUTING", "sor_plan_running");
-          await executionAudit.transition("EXECUTING", "sor_plan_running", {
-            payload: {
-              routePlanId: plan.id
-            }
-          });
-
-          let result;
-          try {
-            result = await planRunner.run(plan);
-          } catch (error) {
-            await executionAudit.transition("SYNC_PENDING", "sor_plan_sync_ambiguous", {
-              payload: {
-                routePlanId: plan.id,
-                error: error instanceof Error ? error.message : "unknown_error"
+      const rawQuotes = await quoteRepository.listBySessionId(sessionId, 100);
+      const rankedQuotes = rankQuotesByEffectiveCost(
+        rawQuotes.map((row) => ({
+          quoteId: String(row.quote_payload.quoteId ?? row.id),
+          ...(typeof row.quote_payload.lpId === "string" ? { lpId: row.quote_payload.lpId } : {}),
+          basePrice: Number.parseFloat(row.price),
+          venueFee: row.fee_bps / 10000,
+          protocolFee: 0,
+          gasCost: 0,
+          slippageEstimate: 0,
+          reliabilityScore: 100,
+          latencyScore: 100,
+          expires_at: row.valid_until.toISOString(),
+          soft_refresh_flag: false
+        }))
+      );
+      const shouldAwait =
+        acceptancePolicy === "ALL_OR_NONE"
+          ? dependencies.sorAcceptAonAwait
+          : !dependencies.sorAcceptNonAonBackground;
+      const executionRequest: ExecutionControlRequest =
+        sorEnabled
+          ? {
+              ...baseExecutionRequest,
+              routePlanId: buildResult.plan.id,
+              venueTargets: [...new Set(buildResult.plan.steps.map((step) => step.providerId))],
+              compatibilityReferences: {
+                decisionIds: buildResult.compatibilityDecisionIds ?? [],
+                versionIds: buildResult.compatibilityVersionIds ?? [],
+                compatibilityClass: "SAFE_EQUIVALENT"
               },
-              syncStatus: "sync_pending"
-            });
-            await executionAudit.recordRecovery({ localSyncFailed: true });
-            await executionAudit.transition("RECONCILING", "manual_reconciliation_required", {
-              payload: {
-                routePlanId: plan.id
+              routeType: "SOR_PLAN",
+              routeSelectionTraceId: buildResult.routeSelectionTraceId ?? null,
+              replayEnvelopeId: buildResult.replayEnvelopeId ?? null,
+              submissionKind: "SOR_PLAN",
+              submissionPayload: {
+                sessionId,
+                plan: buildResult.plan,
+                acceptancePolicy,
+                awaitExecution: shouldAwait
               }
-            });
-            throw error;
-          }
-          if (result.status === "COMPLETED" || result.status === "PARTIAL") {
-            await transitionRFQState(sessionId, "SETTLED", "sor_plan_completed");
-          } else {
-            await transitionRFQState(sessionId, "FAILED", "sor_plan_failed");
-          }
-
-          if (result.status === "COMPLETED") {
-            await executionAudit.transition("FILLED", "sor_plan_completed", {
-              syncStatus: "synced",
-              fillDetails: {
-                planId: plan.id,
-                status: result.status
-              }
-            });
-            await executionAudit.transition("SETTLED", "sor_execution_settled", {
-              settlementStatus: "settled"
-            });
-          } else if (result.status === "PARTIAL") {
-            await executionAudit.transition("PARTIALLY_FILLED", "sor_plan_partially_filled", {
-              syncStatus: "synced",
-              fillDetails: {
-                planId: plan.id,
-                status: result.status
-              }
-            });
-            await executionAudit.recordRecovery();
-          } else {
-            await executionAudit.transition("FAILED", "sor_plan_failed", {
-              syncStatus: "synced",
-              fillDetails: {
-                planId: plan.id,
-                status: result.status,
-                ...(result.failureReason ? { failureReason: result.failureReason } : {})
-              }
-            });
-            await executionAudit.recordRecovery();
-          }
-          return result.status;
-        };
-
-        const shouldAwait =
-          acceptancePolicy === "ALL_OR_NONE"
-            ? dependencies.sorAcceptAonAwait
-            : !dependencies.sorAcceptNonAonBackground;
-
-        if (shouldAwait) {
-          const finalStatus = await runPlanAndTransition();
-          return {
-            status: "PLAN_ACCEPTED" as const,
-            plan_id: plan.id,
-            plan_state: "DRAFT" as const,
-            dispatch_mode: "awaited" as const,
-            final_status: finalStatus
-          };
-        }
-
-        void runPlanAndTransition().catch((error: unknown) => {
-          dependencies.logger.error(
-            { err: error, sessionId, planId: plan.id },
-            "Background SOR plan execution failed."
-          );
-        });
-
-        return {
-          status: "PLAN_ACCEPTED" as const,
-          plan_id: plan.id,
-          plan_state: "DRAFT" as const,
-          dispatch_mode: "background" as const
-        };
-      };
-
-      const executeLegacyAccept = async () => {
-        const rawQuotes = await quoteRepository.listBySessionId(sessionId, 100);
-        const rankedQuotes = rankQuotesByEffectiveCost(
-          rawQuotes.map((row) => ({
-            quoteId: String(row.quote_payload.quoteId ?? row.id),
-            ...(typeof row.quote_payload.lpId === "string" ? { lpId: row.quote_payload.lpId } : {}),
-            basePrice: Number.parseFloat(row.price),
-            venueFee: row.fee_bps / 10000,
-            protocolFee: 0,
-            gasCost: 0,
-            slippageEstimate: 0,
-            reliabilityScore: 100,
-            latencyScore: 100,
-            expires_at: row.valid_until.toISOString(),
-            soft_refresh_flag: false
-          }))
-        );
-        const executionAudit = await createExecutionAuditContext({
-          routeType: "LEGACY_EXECUTION",
-          routePlanId: null,
-          routeSelectionTraceId: null,
-          compatibilityDecisionIds: [],
-          compatibilityVersionIds: [],
-          replayEnvelopeId: null,
-          intendedVenues: rankedQuotes.flatMap((quote) => (quote.lpId ? [quote.lpId] : [])),
-          executionVenue: "LEGACY_EXECUTION",
-          providerExecutionKey: `legacy:${sessionId}`,
-          metadata: {
-            quoteCount: rankedQuotes.length
-          }
-        });
-        await executionAudit.transition("CHECKED", "reservation_validated");
-        await executionAudit.transition("QUOTED", "quote_selected");
-        await executionAudit.transition("APPROVED", "legacy_execution_ready");
-
-        await transitionRFQState(sessionId, "ACCEPTED", "legacy_execution_requested");
-        await executionAudit.transition("EXECUTING", "legacy_execution_requested");
-        const legacyResult = await legacyExecutionRouter.execute({
-          sessionId,
-          rankedQuotes,
-          fallbackToNextQuote: true,
-          reservationToken
-        });
-
-        if (legacyResult.ok) {
-          await executionAudit.transition("FILLED", "legacy_execution_success", {
-            syncStatus: "synced",
-            fillDetails: {
-              executedQuoteId: legacyResult.executedQuoteId ?? null
             }
-          });
-          await executionAudit.transition("SETTLED", "legacy_execution_settled", {
-            settlementStatus: "settled"
-          });
-          await transitionRFQState(sessionId, "SETTLED", "legacy_execution_success");
-          return {
-            status: "PLAN_ACCEPTED" as const,
-            plan_id: `legacy-${sessionId}`,
-            plan_state: "LEGACY_EXECUTED" as const,
-            dispatch_mode: "awaited" as const,
-            final_status: "COMPLETED" as const
-          };
-        }
+          : {
+              ...baseExecutionRequest,
+              routePlanId: null,
+              venueTargets: rankedQuotes.flatMap((entry) => (entry.lpId ? [entry.lpId] : [])),
+              compatibilityReferences: {
+                decisionIds: [],
+                versionIds: []
+              },
+              routeType: "LEGACY_EXECUTION",
+              routeSelectionTraceId: null,
+              replayEnvelopeId: null,
+              submissionKind: "LEGACY_RFQ",
+              submissionPayload: {
+                sessionId,
+                rankedQuotes,
+                reservationToken
+              }
+            };
 
-        await executionAudit.transition("FAILED", "legacy_execution_failed", {
-          syncStatus: "synced",
-          fillDetails: {
-            attempts: legacyResult.attempts
-          }
-        });
-        await executionAudit.recordRecovery();
-        await transitionRFQState(sessionId, "FAILED", "legacy_execution_failed");
-        return {
+      const validatedScope = request.executionScopeToken
+        ? await executionScopeTokenService.validate({
+            token: request.executionScopeToken,
+            principalId: session.taker_id,
+            sessionId,
+            quoteId: request.quoteId,
+            canonicalMarketId: session.canonical_market_id,
+            actualVenueTargets: executionRequest.venueTargets,
+            authorities: executionScopeAuthorities
+          })
+        : null;
+
+      if (validatedScope) {
+        executionRequest.executionScopeBinding = validatedScope.binding;
+        executionRequest.metadata = {
+          ...(executionRequest.metadata ?? {}),
+          executionScopeTokenRef: `${validatedScope.binding.scopeKind}:${validatedScope.binding.scopeId}`,
+          executionScopeTopicKey: validatedScope.binding.topicKey,
+          executionScopeLaneType: validatedScope.binding.laneType,
+          executionScopeVenueSet: validatedScope.binding.venueSet,
+          executionScopeCandidateSet: validatedScope.binding.candidateSet
+        };
+      }
+
+      const outcome = await executionControlGateway.execute(executionRequest);
+      if (outcome.status === "FAILED" || outcome.status === "BLOCKED" || outcome.status === "RECONCILING") {
+        throw new Error(`execution_control_failed:${outcome.rationale.join(",")}`);
+      }
+      const authoritativeResponse = !sorEnabled
+        ? {
           status: "PLAN_ACCEPTED" as const,
           plan_id: `legacy-${sessionId}`,
           plan_state: "LEGACY_EXECUTED" as const,
           dispatch_mode: "awaited" as const,
-          final_status: "FAILED" as const
-        };
-      };
+          final_status: outcome.status === "SUBMITTED" ? ("COMPLETED" as const) : ("FAILED" as const)
+        }
+        : toPlanAcceptedResponse(
+            buildResult.plan.id,
+            shouldAwait ? "awaited" : "background",
+            shouldAwait ? "COMPLETED" : undefined
+          );
 
       const isShadowSampled = isCanaryWindowActive({
         enabled: sorCanaryShadowEnabled,
@@ -1301,19 +1259,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         );
       };
 
-      if (sorEnabled) {
-        const response = await executeSORAccept();
-        if (isShadowSampled) {
-          void runShadowComparison("sor_authoritative");
-        }
-        return response;
-      }
-
-      const legacyResponse = await executeLegacyAccept();
       if (isShadowSampled) {
-        void runShadowComparison("legacy_authoritative");
+        void runShadowComparison(sorEnabled ? "sor_authoritative" : "legacy_authoritative");
       }
-      return legacyResponse;
+      return authoritativeResponse;
     }
   });
   const adminAuthMiddleware = createAdminAuthMiddleware();
@@ -1405,6 +1354,14 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   await registerAdminCompatibilityReviewRoutes(app, adminAuthMiddleware, {
     compatibilityOverrideService
   });
+  await registerAdminPairMatchReviewRoutes(app, adminAuthMiddleware, {
+    pairMatchReviewService: new PairMatchReviewService(new PairEdgeRepository(dependencies.pgPool))
+  });
+  await registerAdminExecutionControlRoutes(app, adminAuthMiddleware, {
+    executionIntentRepository,
+    executionRecordRepository,
+    executionControlRepository
+  });
   await registerAdminQualificationRoutes(app, adminAuthMiddleware, {
     qualificationAdminService: new QualificationAdminService({
       pool: dependencies.pgPool,
@@ -1423,6 +1380,41 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       }),
       logger: dependencies.logger
     })
+  });
+  const pairRouteAdminService = new PairRouteAdminService({
+    pool: dependencies.pgPool,
+    shadowPool: pairShadowPool,
+    logger: dependencies.logger,
+  });
+  await registerAdminPairRolloutRoutes(app, adminAuthMiddleware, {
+    pairRouteAdminService
+  });
+  await registerAdminPairQualificationRoutes(app, adminAuthMiddleware, {
+    pairRouteAdminService
+  });
+  await registerAdminPairShadowRoutes(app, adminAuthMiddleware, {
+    pairRouteAdminService
+  });
+  await registerAdminPairPromotionRoutes(app, adminAuthMiddleware, {
+    pairRouteAdminService
+  });
+  await registerAdminPoliticsNomineeRoutes(app, adminAuthMiddleware, {
+    politicsNomineeAdminService
+  });
+  await registerAdminPoliticsOfficeWinnerRoutes(app, adminAuthMiddleware, {
+    politicsOfficeWinnerAdminService
+  });
+  await registerAdminPoliticsPartyControlRoutes(app, adminAuthMiddleware, {
+    politicsPartyControlAdminService
+  });
+  await registerAdminPoliticsOfficeExitRoutes(app, adminAuthMiddleware, {
+    politicsOfficeExitAdminService
+  });
+  await registerAdminPoliticsGeopoliticalRoutes(app, adminAuthMiddleware, {
+    politicsGeopoliticalAdminService
+  });
+  await registerAdminSportsRoutes(app, adminAuthMiddleware, {
+    sportsAdminService
   });
   await registerAdminSimulationRoutes(app, simulationPreviewAdminMiddleware, {
     simulationAdminService: new SimulationAdminService({
@@ -1534,6 +1526,35 @@ interface ResolutionProfileLookupRow {
   created_at: Date;
   updated_at: Date;
 }
+
+const resolveCanonicalIdentity = async (
+  pool: Pool,
+  canonicalMarketId: string
+): Promise<{
+  canonicalEventId: string | null;
+  canonicalMarketId: string;
+}> => {
+  const result = await pool.query<{ canonical_event_id: string; canonical_market_id: string }>(
+    `SELECT canonical_event_id::text, canonical_market_id
+       FROM resolution_profiles
+      WHERE canonical_market_id = $1
+      LIMIT 1`,
+    [canonicalMarketId]
+  );
+
+  const row = result.rows[0];
+  if (!row) {
+    return {
+      canonicalEventId: null,
+      canonicalMarketId
+    };
+  }
+
+  return {
+    canonicalEventId: row.canonical_event_id,
+    canonicalMarketId: row.canonical_market_id
+  };
+};
 
 const findResolutionProfileByVenueMarket = async (
   pool: Pool,

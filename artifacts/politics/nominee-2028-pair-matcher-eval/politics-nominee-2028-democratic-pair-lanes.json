@@ -1,0 +1,238 @@
+{
+  "topicKey": "NOMINEE|US_PRESIDENT|2028|DEMOCRATIC",
+  "sharedCoreTopicDecision": "TOPIC_SHARED_CORE_PAIR_ONLY",
+  "routeablePairLaneCount": 1,
+  "matcherEvalJustified": true,
+  "bestPairLane": {
+    "topicKey": "NOMINEE|US_PRESIDENT|2028|DEMOCRATIC",
+    "venuePair": "LIMITLESS|POLYMARKET",
+    "pairDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+    "ruleDecision": "EXACT_RULE_COMPATIBLE",
+    "sharedNamedCandidateCount": 6,
+    "exactRouteableCandidateCount": 6,
+    "reviewRequiredCandidateCount": 0,
+    "matcherEvalJustified": true,
+    "candidates": [
+      {
+        "candidateIdentityKey": "alexandria_ocasio_cortez",
+        "normalizedCandidateName": "alexandria ocasio cortez",
+        "routeabilityClass": "EXACT_AUTO_ROUTEABLE",
+        "venueOutcomes": [
+          {
+            "venue": "LIMITLESS",
+            "venueMarketId": "democratic-presidential-nominee-2028-1768929458278",
+            "rawOutcomeLabel": "Alexandria Ocasio-Cortez"
+          },
+          {
+            "venue": "POLYMARKET",
+            "venueMarketId": "0xe6bcc2f1dd025ce5e1833190f7c60a71171c94f805df55b9ab0ded695ec93565",
+            "rawOutcomeLabel": "Alexandria Ocasio-Cortez"
+          }
+        ]
+      },
+      {
+        "candidateIdentityKey": "andy_beshear",
+        "normalizedCandidateName": "andy beshear",
+        "routeabilityClass": "EXACT_AUTO_ROUTEABLE",
+        "venueOutcomes": [
+          {
+            "venue": "LIMITLESS",
+            "venueMarketId": "democratic-presidential-nominee-2028-1768929458278",
+            "rawOutcomeLabel": "Andy Beshear"
+          },
+          {
+            "venue": "POLYMARKET",
+            "venueMarketId": "0x1d519b87999e3d4e90e1e8f57b5eee73a0ba488ff3fdb70867f294733aba84a9",
+            "rawOutcomeLabel": "Andy Beshear"
+          }
+        ]
+      },
+      {
+        "candidateIdentityKey": "gavin_newsom",
+        "normalizedCandidateName": "gavin newsom",
+        "routeabilityClass": "EXACT_AUTO_ROUTEABLE",
+        "venueOutcomes": [
+          {
+            "venue": "LIMITLESS",
+            "venueMarketId": "democratic-presidential-nominee-2028-1768929458278",
+            "rawOutcomeLabel": "Gavin Newsom"
+          },
+          {
+            "venue": "POLYMARKET",
+            "venueMarketId": "0x0f49db97f71c68b1e42a6d16e3de93d85dbf7d4148e3f018eb79e88554be9f75",
+            "rawOutcomeLabel": "gavin newsom"
+          }
+        ]
+      },
+      {
+        "candidateIdentityKey": "josh_shapiro",
+        "normalizedCandidateName": "josh shapiro",
+        "routeabilityClass": "EXACT_AUTO_ROUTEABLE",
+        "venueOutcomes": [
+          {
+            "venue": "LIMITLESS",
+            "venueMarketId": "democratic-presidential-nominee-2028-1768929458278",
+            "rawOutcomeLabel": "Josh Shapiro"
+          },
+          {
+            "venue": "POLYMARKET",
+            "venueMarketId": "0xd65891729ce093cc12236856837eba1a0872fc7998fd4294c21346f7db68079c",
+            "rawOutcomeLabel": "Josh Shapiro"
+          }
+        ]
+      },
+      {
+        "candidateIdentityKey": "kamala_harris",
+        "normalizedCandidateName": "kamala harris",
+        "routeabilityClass": "EXACT_AUTO_ROUTEABLE",
+        "venueOutcomes": [
+          {
+            "venue": "LIMITLESS",
+            "venueMarketId": "democratic-presidential-nominee-2028-1768929458278",
+            "rawOutcomeLabel": "Kamala Harris"
+          },
+          {
+            "venue": "POLYMARKET",
+            "venueMarketId": "0x909659c9436228e2be56d5582ba6188166f2f8bf3c596335512c8f2e380d01ec",
+            "rawOutcomeLabel": "Kamala Harris"
+          }
+        ]
+      },
+      {
+        "candidateIdentityKey": "pete_buttigieg",
+        "normalizedCandidateName": "pete buttigieg",
+        "routeabilityClass": "EXACT_AUTO_ROUTEABLE",
+        "venueOutcomes": [
+          {
+            "venue": "LIMITLESS",
+            "venueMarketId": "democratic-presidential-nominee-2028-1768929458278",
+            "rawOutcomeLabel": "Pete Buttigieg"
+          },
+          {
+            "venue": "POLYMARKET",
+            "venueMarketId": "0x4c325469d9b516ef4e6b8f73a81a12607dec075e3c2fd454f91765aaeafc4760",
+            "rawOutcomeLabel": "Pete Buttigieg"
+          }
+        ]
+      }
+    ],
+    "excludedCandidates": []
+  },
+  "pairLanes": [
+    {
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|DEMOCRATIC",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "pairDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "ruleDecision": "EXACT_RULE_COMPATIBLE",
+      "sharedNamedCandidateCount": 6,
+      "exactRouteableCandidateCount": 6,
+      "reviewRequiredCandidateCount": 0,
+      "matcherEvalJustified": true,
+      "candidates": [
+        {
+          "candidateIdentityKey": "alexandria_ocasio_cortez",
+          "normalizedCandidateName": "alexandria ocasio cortez",
+          "routeabilityClass": "EXACT_AUTO_ROUTEABLE",
+          "venueOutcomes": [
+            {
+              "venue": "LIMITLESS",
+              "venueMarketId": "democratic-presidential-nominee-2028-1768929458278",
+              "rawOutcomeLabel": "Alexandria Ocasio-Cortez"
+            },
+            {
+              "venue": "POLYMARKET",
+              "venueMarketId": "0xe6bcc2f1dd025ce5e1833190f7c60a71171c94f805df55b9ab0ded695ec93565",
+              "rawOutcomeLabel": "Alexandria Ocasio-Cortez"
+            }
+          ]
+        },
+        {
+          "candidateIdentityKey": "andy_beshear",
+          "normalizedCandidateName": "andy beshear",
+          "routeabilityClass": "EXACT_AUTO_ROUTEABLE",
+          "venueOutcomes": [
+            {
+              "venue": "LIMITLESS",
+              "venueMarketId": "democratic-presidential-nominee-2028-1768929458278",
+              "rawOutcomeLabel": "Andy Beshear"
+            },
+            {
+              "venue": "POLYMARKET",
+              "venueMarketId": "0x1d519b87999e3d4e90e1e8f57b5eee73a0ba488ff3fdb70867f294733aba84a9",
+              "rawOutcomeLabel": "Andy Beshear"
+            }
+          ]
+        },
+        {
+          "candidateIdentityKey": "gavin_newsom",
+          "normalizedCandidateName": "gavin newsom",
+          "routeabilityClass": "EXACT_AUTO_ROUTEABLE",
+          "venueOutcomes": [
+            {
+              "venue": "LIMITLESS",
+              "venueMarketId": "democratic-presidential-nominee-2028-1768929458278",
+              "rawOutcomeLabel": "Gavin Newsom"
+            },
+            {
+              "venue": "POLYMARKET",
+              "venueMarketId": "0x0f49db97f71c68b1e42a6d16e3de93d85dbf7d4148e3f018eb79e88554be9f75",
+              "rawOutcomeLabel": "gavin newsom"
+            }
+          ]
+        },
+        {
+          "candidateIdentityKey": "josh_shapiro",
+          "normalizedCandidateName": "josh shapiro",
+          "routeabilityClass": "EXACT_AUTO_ROUTEABLE",
+          "venueOutcomes": [
+            {
+              "venue": "LIMITLESS",
+              "venueMarketId": "democratic-presidential-nominee-2028-1768929458278",
+              "rawOutcomeLabel": "Josh Shapiro"
+            },
+            {
+              "venue": "POLYMARKET",
+              "venueMarketId": "0xd65891729ce093cc12236856837eba1a0872fc7998fd4294c21346f7db68079c",
+              "rawOutcomeLabel": "Josh Shapiro"
+            }
+          ]
+        },
+        {
+          "candidateIdentityKey": "kamala_harris",
+          "normalizedCandidateName": "kamala harris",
+          "routeabilityClass": "EXACT_AUTO_ROUTEABLE",
+          "venueOutcomes": [
+            {
+              "venue": "LIMITLESS",
+              "venueMarketId": "democratic-presidential-nominee-2028-1768929458278",
+              "rawOutcomeLabel": "Kamala Harris"
+            },
+            {
+              "venue": "POLYMARKET",
+              "venueMarketId": "0x909659c9436228e2be56d5582ba6188166f2f8bf3c596335512c8f2e380d01ec",
+              "rawOutcomeLabel": "Kamala Harris"
+            }
+          ]
+        },
+        {
+          "candidateIdentityKey": "pete_buttigieg",
+          "normalizedCandidateName": "pete buttigieg",
+          "routeabilityClass": "EXACT_AUTO_ROUTEABLE",
+          "venueOutcomes": [
+            {
+              "venue": "LIMITLESS",
+              "venueMarketId": "democratic-presidential-nominee-2028-1768929458278",
+              "rawOutcomeLabel": "Pete Buttigieg"
+            },
+            {
+              "venue": "POLYMARKET",
+              "venueMarketId": "0x4c325469d9b516ef4e6b8f73a81a12607dec075e3c2fd454f91765aaeafc4760",
+              "rawOutcomeLabel": "Pete Buttigieg"
+            }
+          ]
+        }
+      ],
+      "excludedCandidates": []
+    }
+  ]
+}

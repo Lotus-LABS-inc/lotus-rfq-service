@@ -1,0 +1,49 @@
+{
+  "observedAt": "2026-04-08T14:58:18.384Z",
+  "laneId": "POLITICS_OFFICE_WINNER_BUSAN_MAYOR_2026_PAIR_LIMITLESS_POLYMARKET",
+  "matcherTruthConsumed": {
+    "topicKey": "OFFICE_WINNER|BUSAN|MAYOR|2026",
+    "bestPair": "LIMITLESS|POLYMARKET",
+    "exactSafeCandidates": [
+      "cho_kuk",
+      "cho_kyoung_tae",
+      "choi_in_ho",
+      "chun_jae_soo",
+      "hong_soon_heon",
+      "kim_do_eup",
+      "kim_young_choon",
+      "lee_jae_sung",
+      "park_heong_joon",
+      "park_jae_ho",
+      "park_seong_hoon",
+      "suh_byung_soo"
+    ],
+    "overallDecision": "OFFICE_WINNER_BUSAN_MAYOR_2026_PAIR_MATCHER_READY_PENDING_OPERATOR_REVIEW",
+    "pairMatcherReady": true,
+    "operatorCredible": true,
+    "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING"
+  },
+  "readinessConclusionsDerived": {
+    "finalReadinessLabel": "OFFICE_WINNER_BUSAN_MAYOR_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+    "readinessReviewJustified": true,
+    "operatorRuleReviewRequired": true,
+    "rolloutRecommended": false,
+    "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+    "exactLaneScopeLocked": true
+  },
+  "intentionallyUnchanged": [
+    "no_tri_allowed",
+    "no_venue_widening_beyond_limitless_polymarket",
+    "no_matcher_logic_changes",
+    "no_broad_politics_activation"
+  ],
+  "stillBlocked": [
+    "live_promotion_remains_operator_controlled_only",
+    "operator_rule_review_not_completed",
+    "others_remains_excluded",
+    "others_remains_excluded",
+    "venue_excluded_myriad",
+    "venue_excluded_opinion",
+    "venue_excluded_predict"
+  ]
+}

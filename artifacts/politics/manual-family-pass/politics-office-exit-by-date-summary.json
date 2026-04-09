@@ -1,0 +1,65 @@
+{
+  "observedAt": "2026-04-03T13:35:17.406Z",
+  "family": "OFFICE_EXIT_BY_DATE",
+  "totalRows": 2,
+  "venues": [
+    "MYRIAD"
+  ],
+  "normalizedRows": [
+    {
+      "interpretedContractId": "145e4129-96e2-536d-9bc0-17eefcb363ea",
+      "canonicalFamily": "OFFICE_EXIT_BY_DATE",
+      "venue": "MYRIAD",
+      "venueMarketId": "2741:858",
+      "title": "Keir Starmer out before July?",
+      "canonicalSubject": "after market close",
+      "canonicalJurisdiction": "uk",
+      "canonicalCycle": "2026",
+      "canonicalOffice": "prime_minister",
+      "canonicalOfficeLevel": "national",
+      "canonicalElectionType": null,
+      "canonicalEventActors": [
+        "after market close"
+      ],
+      "canonicalOutcomeBasis": "office_exit",
+      "canonicalTemporalBasis": "DATE_BOUND",
+      "interpretationConfidence": "HIGH",
+      "interpretationNotes": [],
+      "rejectionReason": null,
+      "exitConditionType": "RESIGNS",
+      "deadlineDate": "june 30, 2026",
+      "deadlineBoundaryType": "EXCLUSIVE",
+      "conditionScope": null
+    },
+    {
+      "interpretedContractId": "b8709757-dc9f-532b-ba42-f362eef7e5d5",
+      "canonicalFamily": "OFFICE_EXIT_BY_DATE",
+      "venue": "MYRIAD",
+      "venueMarketId": "56:84254",
+      "title": "Keir Starmer out before July?",
+      "canonicalSubject": "after market close",
+      "canonicalJurisdiction": "uk",
+      "canonicalCycle": "2026",
+      "canonicalOffice": "prime_minister",
+      "canonicalOfficeLevel": "national",
+      "canonicalElectionType": null,
+      "canonicalEventActors": [
+        "after market close"
+      ],
+      "canonicalOutcomeBasis": "office_exit",
+      "canonicalTemporalBasis": "DATE_BOUND",
+      "interpretationConfidence": "HIGH",
+      "interpretationNotes": [],
+      "rejectionReason": null,
+      "exitConditionType": "RESIGNS",
+      "deadlineDate": "june 30, 2026",
+      "deadlineBoundaryType": "EXCLUSIVE",
+      "conditionScope": null
+    }
+  ],
+  "comparableClusters": [],
+  "comparabilityBreakdown": {},
+  "decision": "FAMILY_REFRESHED_SINGLE_VENUE_ONLY",
+  "matcherReady": false,
+  "dominantBlocker": null
+}

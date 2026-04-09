@@ -1,0 +1,30 @@
+{
+  "observedAt": "2026-04-03T00:13:37.828Z",
+  "fixtures": [],
+  "pockets": {
+    "SPORTS|MATCHUP_WINNER|EPL": {
+      "twoPlusVenueOverlapCount": 0,
+      "threePlusVenueOverlapCount": 0,
+      "comparableOverlapCount": 0,
+      "nonComparableOverlapCount": 0
+    },
+    "SPORTS|MATCHUP_WINNER|LA_LIGA": {
+      "twoPlusVenueOverlapCount": 0,
+      "threePlusVenueOverlapCount": 0,
+      "comparableOverlapCount": 0,
+      "nonComparableOverlapCount": 0
+    },
+    "ESPORTS|MATCHUP_WINNER|VALORANT": {
+      "twoPlusVenueOverlapCount": 0,
+      "threePlusVenueOverlapCount": 0,
+      "comparableOverlapCount": 0,
+      "nonComparableOverlapCount": 0
+    },
+    "ESPORTS|MATCHUP_WINNER|LEAGUE_OF_LEGENDS": {
+      "twoPlusVenueOverlapCount": 0,
+      "threePlusVenueOverlapCount": 0,
+      "comparableOverlapCount": 0,
+      "nonComparableOverlapCount": 0
+    }
+  }
+}

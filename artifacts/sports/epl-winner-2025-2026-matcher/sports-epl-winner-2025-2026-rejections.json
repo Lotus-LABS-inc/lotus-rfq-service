@@ -1,0 +1,240 @@
+{
+  "observedAt": "2026-04-09T09:53:13.027Z",
+  "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+  "rejections": [
+    {
+      "scope": "club",
+      "clubIdentityKey": "BRENTFORD",
+      "normalizedClubName": "Brentford",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Brentford is not part of the exact shared EPL winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "NEWCASTLE_UNITED",
+      "normalizedClubName": "Newcastle United",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Newcastle United is not part of the exact shared EPL winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "CRYSTAL_PALACE",
+      "normalizedClubName": "Crystal Palace",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Crystal Palace is not part of the exact shared EPL winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "NOTTINGHAM_FOREST",
+      "normalizedClubName": "Nottingham Forest",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Nottingham Forest is not part of the exact shared EPL winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "BRIGHTON",
+      "normalizedClubName": "Brighton",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Brighton is not part of the exact shared EPL winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "BURNLEY",
+      "normalizedClubName": "Burnley",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Burnley is not part of the exact shared EPL winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "SUNDERLAND",
+      "normalizedClubName": "Sunderland",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Sunderland is not part of the exact shared EPL winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "TOTTENHAM_HOTSPUR",
+      "normalizedClubName": "Tottenham Hotspur",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Tottenham Hotspur is not part of the exact shared EPL winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "BOURNEMOUTH",
+      "normalizedClubName": "Bournemouth",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Bournemouth is not part of the exact shared EPL winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "EVERTON",
+      "normalizedClubName": "Everton",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Everton is not part of the exact shared EPL winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "WEST_HAM_UNITED",
+      "normalizedClubName": "West Ham United",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg West Ham United is not part of the exact shared EPL winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "FULHAM",
+      "normalizedClubName": "Fulham",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Fulham is not part of the exact shared EPL winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "WOLVERHAMPTON_WANDERERS",
+      "normalizedClubName": "Wolverhampton Wanderers",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Wolverhampton Wanderers is not part of the exact shared EPL winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "LEEDS_UNITED",
+      "normalizedClubName": "Leeds United",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Leeds United is not part of the exact shared EPL winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "MANCHESTER_UNITED",
+      "normalizedClubName": "manchester_united",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg manchester_united is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "ASTON_VILLA",
+      "normalizedClubName": "aston_villa",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg aston_villa is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "BRENTFORD",
+      "normalizedClubName": "brentford",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg brentford is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "NEWCASTLE_UNITED",
+      "normalizedClubName": "newcastle_united",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg newcastle_united is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "CRYSTAL_PALACE",
+      "normalizedClubName": "crystal_palace",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg crystal_palace is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "NOTTINGHAM_FOREST",
+      "normalizedClubName": "nottingham_forest",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg nottingham_forest is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "BRIGHTON",
+      "normalizedClubName": "brighton",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg brighton is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "BURNLEY",
+      "normalizedClubName": "burnley",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg burnley is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "CHELSEA",
+      "normalizedClubName": "chelsea",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg chelsea is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "SUNDERLAND",
+      "normalizedClubName": "sunderland",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg sunderland is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "TOTTENHAM_HOTSPUR",
+      "normalizedClubName": "tottenham_hotspur",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg tottenham_hotspur is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "BOURNEMOUTH",
+      "normalizedClubName": "bournemouth",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg bournemouth is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "EVERTON",
+      "normalizedClubName": "everton",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg everton is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "WEST_HAM_UNITED",
+      "normalizedClubName": "west_ham_united",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg west_ham_united is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "FULHAM",
+      "normalizedClubName": "fulham",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg fulham is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "WOLVERHAMPTON_WANDERERS",
+      "normalizedClubName": "wolverhampton_wanderers",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg wolverhampton_wanderers is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "LEEDS_UNITED",
+      "normalizedClubName": "leeds_united",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg leeds_united is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    }
+  ]
+}

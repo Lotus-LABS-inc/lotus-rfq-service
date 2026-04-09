@@ -28,11 +28,17 @@ const normalizeOutcomes = (market: Record<string, unknown>): PredictNormalizedMa
   return outcomes
     .filter((value): value is Record<string, unknown> => typeof value === "object" && value !== null)
     .map((outcome, index) => ({
-      id: String(outcome.id ?? index),
-      label: typeof outcome.label === "string" ? outcome.label : typeof outcome.title === "string" ? outcome.title : `Outcome ${index + 1}`,
+      id: String(outcome.id ?? outcome.indexSet ?? index),
+      label:
+        typeof outcome.label === "string" ? outcome.label :
+        typeof outcome.name === "string" ? outcome.name :
+        typeof outcome.title === "string" ? outcome.title :
+        `Outcome ${index + 1}`,
       tokenId:
         typeof outcome.tokenId === "string" ? outcome.tokenId :
         typeof outcome.token_id === "string" ? outcome.token_id :
+        typeof outcome.onChainId === "string" ? outcome.onChainId :
+        typeof outcome.on_chain_id === "string" ? outcome.on_chain_id :
         null,
       outcomeType:
         typeof outcome.outcomeType === "string" ? outcome.outcomeType :
@@ -43,8 +49,26 @@ const normalizeOutcomes = (market: Record<string, unknown>): PredictNormalizedMa
 };
 
 const normalizeStatistics = (payload: Record<string, unknown>): PredictNormalizedMarketStatistics => ({
-  volume: typeof payload.volume === "string" || typeof payload.volume === "number" ? String(payload.volume) : null,
-  liquidity: typeof payload.liquidity === "string" || typeof payload.liquidity === "number" ? String(payload.liquidity) : null,
+  volume:
+    typeof payload.volume === "string" || typeof payload.volume === "number"
+      ? String(payload.volume)
+      : typeof payload.volumeTotalUsd === "string" || typeof payload.volumeTotalUsd === "number"
+        ? String(payload.volumeTotalUsd)
+        : typeof payload.volume_total_usd === "string" || typeof payload.volume_total_usd === "number"
+          ? String(payload.volume_total_usd)
+          : typeof payload.volume24hUsd === "string" || typeof payload.volume24hUsd === "number"
+            ? String(payload.volume24hUsd)
+            : typeof payload.volume_24h_usd === "string" || typeof payload.volume_24h_usd === "number"
+              ? String(payload.volume_24h_usd)
+              : null,
+  liquidity:
+    typeof payload.liquidity === "string" || typeof payload.liquidity === "number"
+      ? String(payload.liquidity)
+      : typeof payload.totalLiquidityUsd === "string" || typeof payload.totalLiquidityUsd === "number"
+        ? String(payload.totalLiquidityUsd)
+        : typeof payload.total_liquidity_usd === "string" || typeof payload.total_liquidity_usd === "number"
+          ? String(payload.total_liquidity_usd)
+          : null,
   openInterest:
     typeof payload.openInterest === "string" || typeof payload.openInterest === "number"
       ? String(payload.openInterest)
@@ -74,8 +98,175 @@ const toDate = (value: unknown): Date | null => {
   return null;
 };
 
+const monthNames = "(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)";
+
+const normalizeDatePhrase = (value: string): string =>
+  value
+    .replace(/(\d{1,2})(st|nd|rd|th)\b/gi, "$1")
+    .replace(/\bET\b/gi, "GMT-0500")
+    .replace(/\bEST\b/gi, "GMT-0500")
+    .replace(/\bEDT\b/gi, "GMT-0400")
+    .replace(/\bCT\b/gi, "GMT-0600")
+    .replace(/\bCST\b/gi, "GMT-0600")
+    .replace(/\bCDT\b/gi, "GMT-0500")
+    .replace(/\bMT\b/gi, "GMT-0700")
+    .replace(/\bMST\b/gi, "GMT-0700")
+    .replace(/\bMDT\b/gi, "GMT-0600")
+    .replace(/\bPT\b/gi, "GMT-0800")
+    .replace(/\bPST\b/gi, "GMT-0800")
+    .replace(/\bPDT\b/gi, "GMT-0700")
+    .replace(/\bUTC\b/gi, "UTC")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const parseDateOnlyToUtcClose = (value: string): Date | null => {
+  const normalized = normalizeDatePhrase(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    const parsed = new Date(`${normalized}T23:59:59.000Z`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  const parsed = new Date(`${normalized} 23:59:59 UTC`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const parseLooseTimestamp = (value: string): Date | null => {
+    const normalized = normalizeDatePhrase(value.replace(/,\s+/g, " "));
+    const parsed = new Date(normalized);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const extractYearFromCategorySlug = (market: Record<string, unknown>): string | null => {
+    const slugCandidates = [
+        typeof market.categorySlug === "string" ? market.categorySlug : null,
+        typeof market.category_slug === "string" ? market.category_slug : null
+    ].filter((value): value is string => value !== null && value.length > 0);
+
+    for (const slug of slugCandidates) {
+        const match = slug.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
+        if (match?.[1]) {
+            return match[1];
+        }
+    }
+
+    return null;
+};
+
+const extractPredictTiming = (market: Record<string, unknown>): {
+  createdAt: Date | null;
+  closesAt: Date | null;
+  resolvesAt: Date | null;
+  ambiguousTimeBoundary: boolean;
+} => {
+  const createdAt = toDate(market.createdAt ?? market.created_at);
+  const explicitClose =
+    toDate(market.expiresAt ?? market.expires_at ?? market.resolveAt ?? market.resolve_at ?? market.closesAt ?? market.closes_at ?? market.endAt ?? market.end_at ?? market.endTime ?? market.end_time);
+  if (explicitClose) {
+    return {
+      createdAt,
+      closesAt: explicitClose,
+      resolvesAt: explicitClose,
+      ambiguousTimeBoundary: false
+    };
+  }
+
+  const title = typeof market.title === "string" ? market.title : "";
+  const description = typeof market.description === "string" ? market.description : "";
+  const question = typeof market.question === "string" ? market.question : "";
+  const combined = `${title}\n${question}\n${description}`;
+
+  const timestampPattern = new RegExp(
+    `${monthNames}\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,)?\\s+\\d{4}\\s+at\\s+\\d{1,2}:\\d{2}(?::\\d{2})?\\s*(?:AM|PM)?\\s*(?:UTC|ET|EST|EDT|CT|CST|CDT|MT|MST|MDT|PT|PST|PDT|\\+\\d{2}:\\d{2})?`,
+    "gi"
+  );
+  const timestampMatches = [...combined.matchAll(timestampPattern)]
+    .map((match) => parseLooseTimestamp(match[0]))
+    .filter((value): value is Date => value !== null);
+  if (timestampMatches.length > 0) {
+    const latest = timestampMatches.reduce((left, right) => left.getTime() >= right.getTime() ? left : right);
+    return {
+      createdAt,
+      closesAt: latest,
+      resolvesAt: latest,
+      ambiguousTimeBoundary: false
+    };
+  }
+
+  const isoDateMatches = [...combined.matchAll(/\b(20\d{2}-\d{2}-\d{2})\b/g)]
+    .map((match) => parseDateOnlyToUtcClose(match[1]!))
+    .filter((value): value is Date => value !== null);
+  if (isoDateMatches.length > 0) {
+    const latest = isoDateMatches.reduce((left, right) => left.getTime() >= right.getTime() ? left : right);
+    return {
+      createdAt,
+      closesAt: latest,
+      resolvesAt: latest,
+      ambiguousTimeBoundary: true
+    };
+  }
+
+  const monthDateMatches = [...combined.matchAll(new RegExp(`${monthNames}\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,)?\\s+\\d{4}`, "gi"))]
+    .map((match) => parseDateOnlyToUtcClose(match[0]))
+    .filter((value): value is Date => value !== null);
+  if (monthDateMatches.length > 0) {
+    const latest = monthDateMatches.reduce((left, right) => left.getTime() >= right.getTime() ? left : right);
+    return {
+      createdAt,
+      closesAt: latest,
+      resolvesAt: latest,
+      ambiguousTimeBoundary: true
+    };
+  }
+
+  const inferredYear = extractYearFromCategorySlug(market);
+  if (inferredYear) {
+    const monthDateWithoutYearMatches = [
+      ...combined.matchAll(new RegExp(`${monthNames}\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,)?\\s+at\\s+\\d{1,2}:\\d{2}(?::\\d{2})?\\s*(?:AM|PM)?\\s*(?:UTC|ET|EST|EDT|CT|CST|CDT|MT|MST|MDT|PT|PST|PDT|\\+\\d{2}:\\d{2})?`, "gi"))
+    ]
+      .map((match) => parseLooseTimestamp(`${match[0]} ${inferredYear}`))
+      .filter((value): value is Date => value !== null);
+    if (monthDateWithoutYearMatches.length > 0) {
+      const latest = monthDateWithoutYearMatches.reduce((left, right) => left.getTime() >= right.getTime() ? left : right);
+      return {
+        createdAt,
+        closesAt: latest,
+        resolvesAt: latest,
+        ambiguousTimeBoundary: true
+      };
+    }
+
+    const monthDayOnlyMatches = [
+      ...combined.matchAll(new RegExp(`${monthNames}\\s+\\d{1,2}(?:st|nd|rd|th)?`, "gi"))
+    ]
+      .map((match) => parseDateOnlyToUtcClose(`${match[0]} ${inferredYear}`))
+      .filter((value): value is Date => value !== null);
+    if (monthDayOnlyMatches.length > 0) {
+      const latest = monthDayOnlyMatches.reduce((left, right) => left.getTime() >= right.getTime() ? left : right);
+      return {
+        createdAt,
+        closesAt: latest,
+        resolvesAt: latest,
+        ambiguousTimeBoundary: true
+      };
+    }
+  }
+
+  return {
+    createdAt,
+    closesAt: null,
+    resolvesAt: null,
+    ambiguousTimeBoundary: false
+  };
+};
+
 const normalizeLastSale = (payload: Record<string, unknown>): PredictNormalizedLastSale => ({
-  price: typeof payload.price === "string" || typeof payload.price === "number" ? String(payload.price) : null,
+  price:
+    typeof payload.price === "string" || typeof payload.price === "number"
+      ? String(payload.price)
+      : typeof payload.priceInCurrency === "string" || typeof payload.priceInCurrency === "number"
+        ? String(payload.priceInCurrency)
+        : typeof payload.price_in_currency === "string" || typeof payload.price_in_currency === "number"
+          ? String(payload.price_in_currency)
+          : null,
   size: typeof payload.size === "string" || typeof payload.size === "number" ? String(payload.size) : null,
   timestamp: toDate(payload.timestamp ?? payload.matchedAt ?? payload.matched_at),
   raw: payload
@@ -90,8 +281,24 @@ const buildCanonicalOutcomes = (market: PredictNormalizedMarket): readonly Canon
     metadata: {
       venue: "PREDICT",
       environment: market.environment
-    }
+      }
   }));
+
+const detectPredictCategoryFromText = (text: string): string => {
+  if (/\b(PRESIDENT|ELECTION|SENATE|TRUMP|DEMOCRAT|REPUBLICAN|GOVERNOR|POLITIC\S*|IRAN|COUNTRY)\b/.test(text)) {
+    return "POLITICS";
+  }
+  if (/\b(BTC|ETH|BNB|SOL|CRYPTO)\b|USD UP OR DOWN|PRICE FEED|BTC\/USD|ETH\/USD|BNB\/USD/.test(text)) {
+    return "CRYPTO";
+  }
+  if (/\b(DOTA|LOL|LCK|VALORANT|CS2|ESPORT\S*|KPL|GEN\\.G|T1)\b|LEAGUE OF LEGENDS/.test(text)) {
+    return "ESPORTS";
+  }
+  if (/\b(NBA|NFL|NHL|MLB|FC|MATCH|STANLEY|FINALS|SPORTS_MATCH)\b|PREMIER LEAGUE|WIN ON/.test(text)) {
+    return "SPORTS";
+  }
+  return "OTHER";
+};
 
 export class PredictMarketAdapter {
   public constructor(private readonly config: PredictMarketAdapterConfig) {}
@@ -113,9 +320,9 @@ export class PredictMarketAdapter {
     canonicalMarketId?: string;
   }): CuratedCanonicalGraphSeed {
     const normalizedTitle = normalizeFreeText(input.market.title);
-    const category = normalizeCategory(input.canonicalCategory ?? input.market.categories[0] ?? "OTHER");
+    const category = normalizeCategory(input.canonicalCategory ?? this.inferCanonicalCategory(input.market));
     const outcomes = buildCanonicalOutcomes(input.market);
-    const eventId = input.canonicalEventId ?? buildStableTextId("predict-event-", `${this.config.environment}:${normalizedTitle}`);
+    const eventId = input.canonicalEventId ?? buildStableUuid(`predict-event:${this.config.environment}:${normalizedTitle}`);
     const marketId = input.canonicalMarketId ?? buildStableTextId("predict-market-", `${this.config.environment}:${input.market.venueMarketId}`);
 
     return {
@@ -134,9 +341,9 @@ export class PredictMarketAdapter {
         outcomeLabels: outcomes.map((outcome) => outcome.label)
       },
       topics: [...input.market.categories, ...input.market.tags],
-      publishedAt: null,
-      expiresAt: null,
-      resolvesAt: null,
+      publishedAt: input.market.createdAt,
+      expiresAt: input.market.closesAt,
+      resolvesAt: input.market.resolvesAt,
       fees: {
         takerFeeBps: input.market.statistics?.feeRateBps ?? null
       },
@@ -174,6 +381,7 @@ export class PredictMarketAdapter {
           categories: input.market.categories
         }
       },
+      ...(input.market.ambiguousTimeBoundary ? { ambiguousTimeBoundary: true } : {}),
       executableDisplayName: input.market.title,
       executableMetadata: {
         simulationOnly: true,
@@ -183,12 +391,27 @@ export class PredictMarketAdapter {
     };
   }
 
+  public inferCanonicalCategory(market: PredictNormalizedMarket): string {
+    const categoryTokens = [...market.categories, ...market.tags]
+      .map((value) => value.trim().toUpperCase())
+      .filter((value) => value.length > 0);
+    const directHit = categoryTokens.find((value) => ["SPORTS", "CRYPTO", "POLITICS", "ESPORTS"].includes(value));
+    if (directHit) {
+      return directHit;
+    }
+
+    return detectPredictCategoryFromText(
+      `${market.title.toUpperCase()} ${market.description?.toUpperCase() ?? ""} ${categoryTokens.join(" ")}`
+    );
+  }
+
   private async enrichMarket(market: Record<string, unknown>): Promise<PredictNormalizedMarket> {
     const marketId = String(market.id);
     const [statistics, lastSale] = await Promise.all([
       this.config.client.getMarketStatistics(marketId).then((value) => normalizeStatistics(asRecord(value))).catch(() => null),
       this.config.client.getMarketLastSale(marketId).then((value) => normalizeLastSale(asRecord(value))).catch(() => null)
     ]);
+    const timing = extractPredictTiming(market);
 
     return {
       venue: "PREDICT",
@@ -196,9 +419,12 @@ export class PredictMarketAdapter {
       venueMarketId: marketId,
       title: typeof market.title === "string" ? market.title : marketId,
       description: typeof market.description === "string" ? market.description : null,
+      question: typeof market.question === "string" ? market.question : null,
       status: typeof market.status === "string" ? market.status : typeof market.state === "string" ? market.state : null,
       categories: [
         ...(typeof market.category === "string" ? [market.category] : []),
+        ...(typeof market.categorySlug === "string" ? [market.categorySlug] : []),
+        ...(typeof market.category_slug === "string" ? [market.category_slug] : []),
         ...(Array.isArray(market.categories) ? market.categories.filter((value): value is string => typeof value === "string") : [])
       ],
       tags: Array.isArray(market.tags) ? market.tags.filter((value): value is string => typeof value === "string") : [],
@@ -221,6 +447,10 @@ export class PredictMarketAdapter {
       outcomes: normalizeOutcomes(market),
       statistics,
       lastSale,
+      createdAt: timing.createdAt,
+      closesAt: timing.closesAt,
+      resolvesAt: timing.resolvesAt,
+      ambiguousTimeBoundary: timing.ambiguousTimeBoundary,
       sourceMetadataVersion: this.config.metadataVersion,
       raw: market
     };

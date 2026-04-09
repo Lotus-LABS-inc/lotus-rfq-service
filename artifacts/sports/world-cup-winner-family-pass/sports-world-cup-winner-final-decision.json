@@ -1,0 +1,9 @@
+{
+  "observedAt": "2026-04-09T10:32:37.499Z",
+  "overallFamilyDecision": "SPORTS_WORLD_CUP_WINNER_FAMILY_REFRESHED_MULTI_VENUE_MATCHER_CANDIDATE_FOUND",
+  "bestCandidateTopicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+  "familySupplyCredible": true,
+  "operatorCredible": true,
+  "matcherFollowUpJustified": true,
+  "singleBestNextAction": "run a narrow matcher pass for SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026, preserving the strict shared core and excluding venue-only tails."
+}

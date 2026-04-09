@@ -1,0 +1,65 @@
+{
+  "observedAt": "2026-04-09T10:43:43.717Z",
+  "laneId": "SPORTS_WORLD_CUP_WINNER_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT",
+  "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+  "allVenueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+  "exactSafeAllVenueTeams": [
+    "brazil",
+    "england",
+    "france",
+    "spain"
+  ],
+  "peerPairRoute": {
+    "laneId": "SPORTS_WORLD_CUP_WINNER_2026_PAIR_LIMITLESS_POLYMARKET",
+    "venuePair": "LIMITLESS|POLYMARKET",
+    "exactSafeTeams": [
+      "argentina",
+      "belgium",
+      "brazil",
+      "croatia",
+      "england",
+      "france",
+      "germany",
+      "italy",
+      "mexico",
+      "netherlands",
+      "portugal",
+      "spain",
+      "united_states",
+      "uruguay"
+    ]
+  },
+  "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+  "operatorRuleReviewRequired": true,
+  "matcherReady": true,
+  "operatorCredible": true,
+  "readinessReviewJustified": true,
+  "rolloutRecommended": false,
+  "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+  "holdPolicy": {
+    "scope": "LANE_ONLY",
+    "holdConditions": [
+      "Any drift in the strict all-venue 4-team World Cup core",
+      "Any venue withdrawal from LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "Any rule-compatibility downgrade beyond semantically compatible rewording"
+    ],
+    "userConsentCanWidenScope": false
+  },
+  "rollbackPolicy": {
+    "scope": "LANE_ONLY",
+    "targetMode": "PAIR_ROUTE_INTERNAL_REVIEW_ONLY",
+    "fallbackLaneId": "SPORTS_WORLD_CUP_WINNER_2026_PAIR_LIMITLESS_POLYMARKET",
+    "operatorSteps": [
+      "Hold the strict all-venue lane only.",
+      "Leave LIMITLESS|POLYMARKET explicit as the narrower World Cup route.",
+      "Do not widen beyond the exact 4-team strict all-venue core during rollback."
+    ]
+  },
+  "exclusionsStillMandatory": [
+    "OTHERS_EXCLUDED",
+    "VENUE_ONLY_TAILS_EXCLUDED",
+    "NO_SCOPE_WIDENING_BEYOND_FIFA_WORLD_CUP_2026",
+    "STRICT_ALL_VENUE_CORE_REMAINS_4_TEAMS"
+  ],
+  "finalReadinessLabel": "SPORTS_WORLD_CUP_WINNER_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW"
+}

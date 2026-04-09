@@ -29,6 +29,10 @@ export class PredictMatchEventRecorder {
     this.unsubscribe = null;
   }
 
+  public getCheckpoints(): readonly PredictRecorderCheckpoint[] {
+    return [...this.checkpoints.values()];
+  }
+
   public async recordEvent(event: PredictNormalizedExecutionEvent): Promise<void> {
     if (!this.config.pool) {
       return;
@@ -79,5 +83,42 @@ export class PredictMatchEventRecorder {
         eventId: event.eventId
       }
     });
+  }
+
+  public async flushCheckpoints(): Promise<number> {
+    if (!this.config.pool || this.checkpoints.size === 0) {
+      return 0;
+    }
+
+    let persisted = 0;
+    for (const checkpoint of this.checkpoints.values()) {
+      const result = await this.config.pool.query(
+        `INSERT INTO predict_recorder_checkpoints (
+           recorder_type,
+           environment,
+           market_id,
+           checkpoint_key,
+           event_sequence,
+           checkpoint_metadata
+         ) VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+         ON CONFLICT (recorder_type, checkpoint_key) DO UPDATE SET
+           environment = EXCLUDED.environment,
+           market_id = EXCLUDED.market_id,
+           event_sequence = EXCLUDED.event_sequence,
+           checkpoint_metadata = EXCLUDED.checkpoint_metadata,
+           updated_at = NOW()`,
+        [
+          checkpoint.recorderType,
+          checkpoint.environment,
+          checkpoint.marketId,
+          checkpoint.checkpointKey,
+          checkpoint.sequence,
+          JSON.stringify(checkpoint.metadata)
+        ]
+      );
+      persisted += result.rowCount ?? 0;
+    }
+
+    return persisted;
   }
 }

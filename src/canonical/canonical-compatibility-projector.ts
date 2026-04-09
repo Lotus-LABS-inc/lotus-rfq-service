@@ -48,8 +48,11 @@ export class CanonicalCompatibilityProjector {
                 resolutionProfile,
                 settlementProfile
             });
-            interpretedContracts.set(market.id, contract);
-            await this.repository.upsertInterpretedContract(contract);
+            const persistedId = await this.repository.upsertInterpretedContract(contract);
+            interpretedContracts.set(market.id, {
+                ...contract,
+                id: persistedId
+            });
         }
 
         for (const edge of snapshot.compatibilityEdges) {

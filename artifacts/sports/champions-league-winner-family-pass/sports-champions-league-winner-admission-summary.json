@@ -1,0 +1,16 @@
+{
+  "observedAt": "2026-04-08T23:34:27.606Z",
+  "totalAdmittedTournamentWinnerRows": 38,
+  "rowsRejectedByReason": {
+    "OTHERS_EXCLUDED": 11
+  },
+  "rowsAdmittedByTopicCandidate": {
+    "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026": 38
+  },
+  "venueBreakdown": {
+    "OPINION": 4,
+    "POLYMARKET": 11,
+    "LIMITLESS": 12,
+    "PREDICT": 11
+  }
+}

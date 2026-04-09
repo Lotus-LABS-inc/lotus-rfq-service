@@ -67,6 +67,30 @@ export class ExecutionIntentRepository {
         );
         return mapExecutionIntentRow(result.rows[0]!);
     }
+
+    public async findByRequestKey(requestKey: string): Promise<ExecutionIntent | null> {
+        const result = await this.pool.query<ExecutionIntentRow>(
+            `SELECT * FROM execution_intents WHERE request_key = $1`,
+            [requestKey]
+        );
+        return result.rows[0] ? mapExecutionIntentRow(result.rows[0]) : null;
+    }
+
+    public async findById(id: string): Promise<ExecutionIntent | null> {
+        const result = await this.pool.query<ExecutionIntentRow>(
+            `SELECT * FROM execution_intents WHERE id = $1::uuid`,
+            [id]
+        );
+        return result.rows[0] ? mapExecutionIntentRow(result.rows[0]) : null;
+    }
+
+    public async list(limit = 100): Promise<ExecutionIntent[]> {
+        const result = await this.pool.query<ExecutionIntentRow>(
+            `SELECT * FROM execution_intents ORDER BY created_at DESC LIMIT $1`,
+            [limit]
+        );
+        return result.rows.map(mapExecutionIntentRow);
+    }
 }
 
 const mapExecutionIntentRow = (row: ExecutionIntentRow): ExecutionIntent => ({

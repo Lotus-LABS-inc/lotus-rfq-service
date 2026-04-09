@@ -1,0 +1,68 @@
+{
+  "observedAt": "2026-04-09T09:53:13.041Z",
+  "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+  "matcherLanes": [
+    {
+      "venue": "LIMITLESS",
+      "venueSet": "LIMITLESS",
+      "clubs": [
+        "arsenal",
+        "atletico_madrid",
+        "barcelona",
+        "bayern_munich",
+        "borussia_dortmund",
+        "chelsea",
+        "inter_milan",
+        "juventus",
+        "liverpool",
+        "manchester_city",
+        "paris_saint_germain",
+        "real_madrid"
+      ]
+    },
+    {
+      "venue": "OPINION",
+      "venueSet": "OPINION",
+      "clubs": [
+        "arsenal",
+        "bayern_munich",
+        "paris_saint_germain",
+        "real_madrid"
+      ]
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueSet": "POLYMARKET",
+      "clubs": [
+        "arsenal",
+        "atletico_madrid",
+        "barcelona",
+        "bayern_munich",
+        "borussia_dortmund",
+        "chelsea",
+        "inter_milan",
+        "juventus",
+        "liverpool",
+        "paris_saint_germain",
+        "real_madrid"
+      ]
+    },
+    {
+      "venue": "PREDICT",
+      "venueSet": "PREDICT",
+      "clubs": [
+        "arsenal",
+        "atletico_madrid",
+        "barcelona",
+        "bayern_munich",
+        "borussia_dortmund",
+        "chelsea",
+        "inter_milan",
+        "liverpool",
+        "manchester_city",
+        "paris_saint_germain",
+        "real_madrid"
+      ]
+    }
+  ]
+}

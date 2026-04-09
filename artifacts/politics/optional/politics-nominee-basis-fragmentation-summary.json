@@ -1,0 +1,10 @@
+{
+  "observedAt": "2026-04-08T22:00:23.027Z",
+  "labels": {
+    "PARTY_BASIS_FRAGMENTED": 35,
+    "CANDIDATE_SET_FRAGMENTED": 43,
+    "OFFICE_FRAGMENTED": 2,
+    "COMPARABLE_EXACT_CANDIDATE": 1
+  },
+  "dominantFragmentation": "CANDIDATE_SET_FRAGMENTED"
+}

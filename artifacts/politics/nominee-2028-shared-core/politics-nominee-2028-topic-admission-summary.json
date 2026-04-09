@@ -1,0 +1,14 @@
+{
+  "observedAt": "2026-04-08T01:01:28.558Z",
+  "admittedRowsByVenue": {
+    "POLYMARKET": 79,
+    "OPINION": 1,
+    "LIMITLESS": 2
+  },
+  "republicanTopicRows": 37,
+  "democraticTopicRows": 45,
+  "rejectedMarketCount": 510,
+  "rejectedReasons": {
+    "OUT_OF_SCOPE_FOR_NOMINEE_2028_SHARED_CORE_PASS": 510
+  }
+}

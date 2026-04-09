@@ -1,0 +1,12 @@
+{
+  "observedAt": "2026-04-03T13:35:17.411Z",
+  "family": "GEOPOLITICAL_EVENT",
+  "totalRows": 0,
+  "venues": [],
+  "normalizedRows": [],
+  "comparableClusters": [],
+  "comparabilityBreakdown": {},
+  "decision": "FAMILY_REFRESHED_NO_SUPPLY",
+  "matcherReady": false,
+  "dominantBlocker": null
+}

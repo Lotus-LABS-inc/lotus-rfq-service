@@ -1,0 +1,50 @@
+{
+  "observedAt": "2026-04-08T23:51:04.124Z",
+  "laneId": "SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT",
+  "matcherTruthConsumed": {
+    "topicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "bestPair": "LIMITLESS|POLYMARKET",
+    "bestAllVenueIfAny": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+    "exactSafeAllVenueClubs": [
+      "arsenal",
+      "bayern_munich",
+      "paris_saint_germain",
+      "real_madrid"
+    ],
+    "exactSafePairClubs": [
+      "arsenal",
+      "atletico_madrid",
+      "barcelona",
+      "bayern_munich",
+      "borussia_dortmund",
+      "chelsea",
+      "inter_milan",
+      "juventus",
+      "liverpool",
+      "paris_saint_germain",
+      "real_madrid"
+    ],
+    "overallDecision": "SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_ALL_VENUE_REVIEW_REQUIRED_PAIR_FIRST",
+    "allVenueMatcherReady": true,
+    "pairMatcherReady": true,
+    "operatorCredible": true,
+    "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING"
+  },
+  "readinessConclusionsDerived": {
+    "finalReadinessLabel": "SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+    "readinessReviewJustified": true,
+    "operatorRuleReviewRequired": true,
+    "rolloutRecommended": false,
+    "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+    "exactLaneScopeLocked": true,
+    "peerPairRouteStillExplicit": true
+  },
+  "intentionallyUnchanged": [
+    "matcher logic unchanged",
+    "strict 4-club all-venue core unchanged",
+    "no rollout activation"
+  ],
+  "stillBlocked": [
+    "operator_rule_review_required"
+  ]
+}

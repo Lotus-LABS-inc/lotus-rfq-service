@@ -1,0 +1,51 @@
+{
+  "observedAt": "2026-04-09T09:53:13.050Z",
+  "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+  "matcherLanes": [
+    {
+      "venue": "LIMITLESS",
+      "venueSet": "LIMITLESS",
+      "clubs": [
+        "atletico_madrid",
+        "barcelona",
+        "real_madrid",
+        "villarreal"
+      ]
+    },
+    {
+      "venue": "OPINION",
+      "venueSet": "OPINION",
+      "clubs": [
+        "atletico_madrid",
+        "barcelona",
+        "real_madrid"
+      ]
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueSet": "POLYMARKET",
+      "clubs": [
+        "athletic_bilbao",
+        "atletico_madrid",
+        "barcelona",
+        "girona",
+        "real_betis",
+        "real_madrid",
+        "real_sociedad",
+        "sevilla",
+        "valencia",
+        "villarreal"
+      ]
+    },
+    {
+      "venue": "PREDICT",
+      "venueSet": "PREDICT",
+      "clubs": [
+        "atletico_madrid",
+        "barcelona",
+        "real_madrid",
+        "villarreal"
+      ]
+    }
+  ]
+}

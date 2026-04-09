@@ -72,7 +72,8 @@ export const historicalCatalogManifestEntrySchema = z.object({
         "archived_known_id",
         "public_site",
         "search_query",
-        "predexon_validation"
+        "predexon_validation",
+        "semantic_validation"
       ]),
       reference: z.string(),
       observation: z.string()

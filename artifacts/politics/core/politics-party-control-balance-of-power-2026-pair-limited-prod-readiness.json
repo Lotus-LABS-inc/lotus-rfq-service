@@ -1,0 +1,47 @@
+{
+  "observedAt": "2026-04-08T17:01:17.739Z",
+  "laneId": "POLITICS_PARTY_CONTROL_BALANCE_OF_POWER_2026_PAIR_POLYMARKET_PREDICT",
+  "topicKey": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+  "venuePair": "POLYMARKET|PREDICT",
+  "exactSafeOutcomes": [
+    "D_SENATE_R_HOUSE",
+    "DEMOCRATS_SWEEP",
+    "R_SENATE_D_HOUSE",
+    "REPUBLICANS_SWEEP"
+  ],
+  "ruleStatus": "EXACT_RULE_COMPATIBLE",
+  "operatorRuleReviewRequired": false,
+  "matcherReady": true,
+  "operatorCredible": true,
+  "readinessReviewJustified": true,
+  "rolloutRecommended": false,
+  "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+  "holdPolicy": {
+    "scope": "LANE_ONLY",
+    "holdConditions": [
+      "outcome_scope_drift",
+      "venue_pair_drift",
+      "rule_status_drift",
+      "operator_confidence_lost"
+    ],
+    "userConsentCanWidenScope": false
+  },
+  "rollbackPolicy": {
+    "scope": "LANE_ONLY",
+    "targetMode": "DISABLED_INTERNAL_ONLY",
+    "fallbackLaneId": null,
+    "operatorSteps": [
+      "Record a lane-scoped rollback or hold event for POLITICS_PARTY_CONTROL_BALANCE_OF_POWER_2026_PAIR_POLYMARKET_PREDICT.",
+      "Keep the pair lane disabled/internal-only until refreshed matcher and readiness artifacts are regenerated.",
+      "Do not widen to OPINION tri, LIMITLESS, or any other PARTY_CONTROL topic during rollback."
+    ]
+  },
+  "exclusionsStillMandatory": [
+    "OTHERS_EXCLUDED",
+    "VENUE_ONLY_TAILS_EXCLUDED",
+    "UNKNOWN_COMPOSITE_EXCLUDED",
+    "NO_LIMITLESS_FOR_THIS_TOPIC",
+    "NO_MYRIAD_FOR_THIS_TOPIC"
+  ],
+  "finalReadinessLabel": "PARTY_CONTROL_BALANCE_OF_POWER_2026_LIMITED_PROD_READY_FOR_REVIEW"
+}

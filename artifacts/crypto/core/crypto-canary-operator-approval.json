@@ -1,0 +1,11 @@
+{
+  "observedAt": "2026-04-03T00:18:21.522Z",
+  "routeClass": "PAIR_PM_OPINION",
+  "approvalState": "NOT_APPROVED",
+  "latestApprovalIntent": null,
+  "activationMode": "CANARY",
+  "scopeLabel": "btc_exact_slice_only",
+  "allowedFamilies": [
+    "CRYPTO:SAME_DAY_DIRECTIONAL"
+  ]
+}

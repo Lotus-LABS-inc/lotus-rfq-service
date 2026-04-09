@@ -1,0 +1,50 @@
+{
+  "observedAt": "2026-04-08T22:00:29.980Z",
+  "exactTopic": "GEOPOLITICAL_EVENT_BY_DATE|USA_GREENLAND|TRUMP_ACQUIRE_GREENLAND|2026-12-31",
+  "refreshedRowsUsed": [
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "will-trump-acquire-greenland-before-2027-1768930762585",
+      "title": "💎 Will Trump acquire Greenland before 2027? | Limitless"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "493246",
+      "title": "Will the US acquire part of Greenland in 2026?"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "will-trump-acquire-greenland-before-2027",
+      "title": "Will Trump acquire Greenland before 2027? Trading Odds &amp;"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "2107",
+      "title": "Will Trump acquire Greenland before 2027?"
+    }
+  ],
+  "familyComparabilitySourceArtifacts": {
+    "fetchSummary": "artifacts/politics/geopolitical-trump-acquire-greenland-family-pass/politics-geopolitical-trump-acquire-greenland-fetch-summary.json",
+    "admissionSummary": "artifacts/politics/geopolitical-trump-acquire-greenland-family-pass/politics-geopolitical-trump-acquire-greenland-admission-summary.json",
+    "normalizedTopics": "artifacts/politics/geopolitical-trump-acquire-greenland-family-pass/politics-geopolitical-trump-acquire-greenland-normalized-topics.json",
+    "comparabilitySummary": "artifacts/politics/geopolitical-trump-acquire-greenland-family-pass/politics-geopolitical-trump-acquire-greenland-comparability-summary.json",
+    "basisFragmentationSummary": "artifacts/politics/geopolitical-trump-acquire-greenland-family-pass/politics-geopolitical-trump-acquire-greenland-basis-fragmentation-summary.json",
+    "finalDecision": "artifacts/politics/geopolitical-trump-acquire-greenland-family-pass/politics-geopolitical-trump-acquire-greenland-final-decision.json"
+  },
+  "admittedVenues": [
+    "LIMITLESS",
+    "OPINION",
+    "POLYMARKET",
+    "PREDICT"
+  ],
+  "admittedProposition": "trump_acquire_greenland_by_2026_12_31",
+  "exclusionsBeforeFinalLaneConstruction": [
+    {
+      "scope": "venue",
+      "venue": "MYRIAD",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "VENUE_NOT_PRESENT_FOR_TOPIC",
+      "notes": "MYRIAD is not part of the freshly admitted venue truth for GEOPOLITICAL_EVENT_BY_DATE|USA_GREENLAND|TRUMP_ACQUIRE_GREENLAND|2026-12-31."
+    }
+  ]
+}

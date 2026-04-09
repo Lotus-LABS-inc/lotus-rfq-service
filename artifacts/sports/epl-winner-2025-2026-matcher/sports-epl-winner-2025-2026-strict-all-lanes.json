@@ -1,0 +1,14 @@
+{
+  "observedAt": "2026-04-09T09:53:13.045Z",
+  "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+  "matcherLanes": [
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "clubs": [
+        "arsenal",
+        "liverpool",
+        "manchester_city"
+      ]
+    }
+  ]
+}

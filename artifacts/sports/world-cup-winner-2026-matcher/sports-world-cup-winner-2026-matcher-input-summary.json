@@ -1,0 +1,526 @@
+{
+  "observedAt": "2026-04-09T10:35:50.890Z",
+  "exactTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+  "refreshedRowsUsed": [
+    {
+      "venue": "OPINION",
+      "venueMarketId": "2026-fifa-world-cup-winner:spain",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "spain"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "2026-fifa-world-cup-winner:france",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "france"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "2026-fifa-world-cup-winner:england",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "england"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "2026-fifa-world-cup-winner:brazil",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "brazil"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-fifa-world-cup-winner:spain",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "spain"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-fifa-world-cup-winner:france",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "france"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-fifa-world-cup-winner:england",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "england"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-fifa-world-cup-winner:argentina",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "argentina"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-fifa-world-cup-winner:brazil",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "brazil"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-fifa-world-cup-winner:portugal",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "portugal"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-fifa-world-cup-winner:germany",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "germany"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-fifa-world-cup-winner:netherlands",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "netherlands"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-fifa-world-cup-winner:belgium",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "belgium"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-fifa-world-cup-winner:united-states",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "united_states"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-fifa-world-cup-winner:uruguay",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "uruguay"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-fifa-world-cup-winner:mexico",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "mexico"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-fifa-world-cup-winner:croatia",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "croatia"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-fifa-world-cup-winner:italy",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "italy"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:spain",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "spain"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:france",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "france"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:england",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "england"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:portugal",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "portugal"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:argentina",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "argentina"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:brazil",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "brazil"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:germany",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "germany"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:norway",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:netherlands",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "netherlands"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:morocco",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:italy",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "italy"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:colombia",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:japan",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:belgium",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "belgium"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:usa",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "united_states"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:uruguay",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "uruguay"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:mexico",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "mexico"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:croatia",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "croatia"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:switzerland",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:south-korea",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:ecuador",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:canada",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:senegal",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:austria",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:other",
+      "title": "2026 FIFA World Cup Winner",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1518",
+      "title": "Will Spain win the 2026 FIFA World Cup?",
+      "canonicalClubId": "spain"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1519",
+      "title": "Will England win the 2026 FIFA World Cup?",
+      "canonicalClubId": "england"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1520",
+      "title": "Will France win the 2026 FIFA World Cup?",
+      "canonicalClubId": "france"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1521",
+      "title": "Will Argentina win the 2026 FIFA World Cup?",
+      "canonicalClubId": "argentina"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1522",
+      "title": "Will Brazil win the 2026 FIFA World Cup?",
+      "canonicalClubId": "brazil"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1523",
+      "title": "Will Portugal win the 2026 FIFA World Cup?",
+      "canonicalClubId": "portugal"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1524",
+      "title": "Will Germany win the 2026 FIFA World Cup?",
+      "canonicalClubId": "germany"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1525",
+      "title": "Will Netherlands win the 2026 FIFA World Cup?",
+      "canonicalClubId": "netherlands"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1526",
+      "title": "Will Norway win the 2026 FIFA World Cup?",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1527",
+      "title": "Will Italy win the 2026 FIFA World Cup?",
+      "canonicalClubId": "italy"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1528",
+      "title": "Will Belgium win the 2026 FIFA World Cup?",
+      "canonicalClubId": "belgium"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1529",
+      "title": "Will USA win the 2026 FIFA World Cup?",
+      "canonicalClubId": "united_states"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1530",
+      "title": "Will Morocco win the 2026 FIFA World Cup?",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1531",
+      "title": "Will Colombia win the 2026 FIFA World Cup?",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1532",
+      "title": "Will Japan win the 2026 FIFA World Cup?",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1533",
+      "title": "Will Uruguay win the 2026 FIFA World Cup?",
+      "canonicalClubId": "uruguay"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1534",
+      "title": "Will Croatia win the 2026 FIFA World Cup?",
+      "canonicalClubId": "croatia"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1535",
+      "title": "Will Mexico win the 2026 FIFA World Cup?",
+      "canonicalClubId": "mexico"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1536",
+      "title": "Will Switzerland win the 2026 FIFA World Cup?",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1537",
+      "title": "Will Ecuador win the 2026 FIFA World Cup?",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1538",
+      "title": "Will Senegal win the 2026 FIFA World Cup?",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1539",
+      "title": "Will Australia win the 2026 FIFA World Cup?",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1540",
+      "title": "Will Canada win the 2026 FIFA World Cup?",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1541",
+      "title": "Will Scotland win the 2026 FIFA World Cup?",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1542",
+      "title": "Will South Korea win the 2026 FIFA World Cup?",
+      "canonicalClubId": "other"
+    }
+  ],
+  "familyComparabilitySourceArtifacts": {
+    "fetchSummary": "artifacts/sports/world-cup-winner-family-pass/sports-world-cup-winner-fetch-summary.json",
+    "admissionSummary": "artifacts/sports/world-cup-winner-family-pass/sports-world-cup-winner-admission-summary.json",
+    "normalizedTopics": "artifacts/sports/world-cup-winner-family-pass/sports-world-cup-winner-normalized-topics.json",
+    "comparabilitySummary": "artifacts/sports/world-cup-winner-family-pass/sports-world-cup-winner-comparability-summary.json",
+    "basisFragmentationSummary": "artifacts/sports/world-cup-winner-family-pass/sports-world-cup-winner-basis-fragmentation-summary.json",
+    "finalDecision": "artifacts/sports/world-cup-winner-family-pass/sports-world-cup-winner-final-decision.json"
+  },
+  "admittedVenues": [
+    "LIMITLESS",
+    "OPINION",
+    "POLYMARKET",
+    "PREDICT"
+  ],
+  "admittedTeams": [
+    "argentina",
+    "belgium",
+    "brazil",
+    "croatia",
+    "england",
+    "france",
+    "germany",
+    "italy",
+    "mexico",
+    "netherlands",
+    "portugal",
+    "spain",
+    "united_states",
+    "uruguay"
+  ],
+  "exclusionsBeforeFinalLaneConstruction": [
+    {
+      "scope": "team",
+      "teamIdentityKey": "ARGENTINA",
+      "normalizedTeamName": "argentina",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg argentina is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "PORTUGAL",
+      "normalizedTeamName": "portugal",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg portugal is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "GERMANY",
+      "normalizedTeamName": "germany",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg germany is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "NETHERLANDS",
+      "normalizedTeamName": "netherlands",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg netherlands is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "BELGIUM",
+      "normalizedTeamName": "belgium",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg belgium is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "UNITED_STATES",
+      "normalizedTeamName": "united_states",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg united_states is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "URUGUAY",
+      "normalizedTeamName": "uruguay",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg uruguay is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "MEXICO",
+      "normalizedTeamName": "mexico",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg mexico is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "CROATIA",
+      "normalizedTeamName": "croatia",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg croatia is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "ITALY",
+      "normalizedTeamName": "italy",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg italy is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    }
+  ]
+}

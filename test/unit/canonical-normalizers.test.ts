@@ -23,6 +23,28 @@ describe("canonical normalizers", () => {
         expect(profile.disputeWindowHours).toBe("24");
         expect(profile.ambiguityFlags.ambiguousSourceReference).toBe(true);
         expect(profile.metadataCompletenessScore).toBe("0.833333");
+        expect(profile.metadata.semanticResolutionSourceClass).toBe("MARKET_DATA_AUTHORITY");
+    });
+
+    it("extracts normalized authority identity from aligned political authority rules", () => {
+        const normalizer = new CanonicalResolutionProfileNormalizer();
+
+        const profile = normalizer.normalize({
+            venueMarketProfileId: "vmp_limitless_newsom",
+            resolutionSource: "LIMITLESS",
+            resolutionTitle: "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
+            resolutionAuthorityType: "CENTRAL",
+            ruleText: "This market resolves according to official Democratic Party sources and the Democratic National Convention.",
+            metadata: { from: "test" }
+        });
+
+        expect(profile.metadata.semanticResolutionSourceClass).toBe("OFFICIAL_POLITICAL_AUTHORITY");
+        expect(profile.metadata.normalizedAuthorityPhrases).toEqual([
+            "official_nomination_sources",
+            "official_party_sources"
+        ]);
+        expect(profile.metadata.normalizedAuthorityIdentity).toContain("CENTRAL");
+        expect(profile.metadata.resolutionSourceOverrideEligible).toBe(true);
     });
 
     it("normalizes settlement profiles with unknown-safe defaults", () => {
@@ -39,5 +61,20 @@ describe("canonical normalizers", () => {
         expect(profile.settlementLagHours).toBe("48");
         expect(profile.feeOnEntry).toBe(true);
         expect(profile.metadataCompletenessScore).toBe("0.333333");
+    });
+
+    it("infers polymarket settlement as onchain when venue metadata is present", () => {
+        const normalizer = new CanonicalSettlementProfileNormalizer();
+
+        const profile = normalizer.normalize({
+            venueMarketProfileId: "vmp_polymarket_btc",
+            metadata: {
+                venue: "POLYMARKET",
+                chain: "polygon"
+            }
+        });
+
+        expect(profile.settlementType).toBe("onchain");
+        expect(profile.metadata.venue).toBe("POLYMARKET");
     });
 });

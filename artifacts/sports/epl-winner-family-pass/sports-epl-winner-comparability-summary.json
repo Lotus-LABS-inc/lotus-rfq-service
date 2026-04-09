@@ -1,0 +1,131 @@
+[
+  {
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+    "venuesPresent": [
+      "LIMITLESS",
+      "OPINION",
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "pairSharedNamedOutcomesCount": 6,
+    "triSharedNamedOutcomesCount": 6,
+    "quadSharedNamedOutcomesCount": 3,
+    "excludedOutcomesCount": 14,
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_CORE_EXISTS",
+    "matcherCandidate": true,
+    "sharedNamedOutcomes": [
+      "Arsenal",
+      "Aston Villa",
+      "Chelsea",
+      "Liverpool",
+      "Manchester City",
+      "Manchester United"
+    ],
+    "excludedOutcomes": [
+      {
+        "label": "Brentford",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "Newcastle United",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "Crystal Palace",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "Nottingham Forest",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "Brighton",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "Burnley",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "Sunderland",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "Tottenham Hotspur",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "Bournemouth",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "Everton",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "West Ham United",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "Fulham",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "Wolverhampton Wanderers",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "Leeds United",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      }
+    ],
+    "notes": [
+      "target_venues=LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "quad_shared_core=Arsenal|Liverpool|Manchester City",
+      "grouped_sibling_binary_market_reconstruction"
+    ]
+  }
+]

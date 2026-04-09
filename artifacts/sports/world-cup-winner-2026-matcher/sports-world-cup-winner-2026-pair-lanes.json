@@ -1,0 +1,1248 @@
+{
+  "observedAt": "2026-04-09T10:35:50.891Z",
+  "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+  "matcherLanes": [
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "argentina",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:argentina",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:argentina",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "belgium",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:belgium",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:belgium",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "brazil",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:brazil",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:brazil",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "croatia",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:croatia",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:croatia",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "england",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:england",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:england",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "france",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:france",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:france",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "germany",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:germany",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:germany",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "italy",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:italy",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:italy",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "mexico",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:mexico",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:mexico",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "netherlands",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:netherlands",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:netherlands",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "portugal",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:portugal",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:portugal",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "spain",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:spain",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:spain",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "united_states",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:usa",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:united-states",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "uruguay",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:uruguay",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:uruguay",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "club": "brazil",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:brazil",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-fifa-world-cup-winner:brazil",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "club": "england",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:england",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-fifa-world-cup-winner:england",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "club": "france",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:france",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-fifa-world-cup-winner:france",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "club": "spain",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:spain",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-fifa-world-cup-winner:spain",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "argentina",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:argentina",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1521",
+          "rawTeamLabel": "Will Argentina win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "belgium",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:belgium",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1528",
+          "rawTeamLabel": "Will Belgium win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "brazil",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:brazil",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1522",
+          "rawTeamLabel": "Will Brazil win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "croatia",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:croatia",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1534",
+          "rawTeamLabel": "Will Croatia win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "england",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:england",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1519",
+          "rawTeamLabel": "Will England win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "france",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:france",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1520",
+          "rawTeamLabel": "Will France win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "germany",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:germany",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1524",
+          "rawTeamLabel": "Will Germany win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "italy",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:italy",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1527",
+          "rawTeamLabel": "Will Italy win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "mexico",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:mexico",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1535",
+          "rawTeamLabel": "Will Mexico win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "netherlands",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:netherlands",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1525",
+          "rawTeamLabel": "Will Netherlands win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "portugal",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:portugal",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1523",
+          "rawTeamLabel": "Will Portugal win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "spain",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:spain",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1518",
+          "rawTeamLabel": "Will Spain win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "united_states",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:usa",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1529",
+          "rawTeamLabel": "Will USA win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "uruguay",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:uruguay",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1533",
+          "rawTeamLabel": "Will Uruguay win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "club": "brazil",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-fifa-world-cup-winner:brazil",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:brazil",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "club": "england",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-fifa-world-cup-winner:england",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:england",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "club": "france",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-fifa-world-cup-winner:france",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:france",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "club": "spain",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-fifa-world-cup-winner:spain",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:spain",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "club": "brazil",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-fifa-world-cup-winner:brazil",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1522",
+          "rawTeamLabel": "Will Brazil win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "club": "england",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-fifa-world-cup-winner:england",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1519",
+          "rawTeamLabel": "Will England win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "club": "france",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-fifa-world-cup-winner:france",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1520",
+          "rawTeamLabel": "Will France win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "club": "spain",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-fifa-world-cup-winner:spain",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1518",
+          "rawTeamLabel": "Will Spain win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "argentina",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:argentina",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1521",
+          "rawTeamLabel": "Will Argentina win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "belgium",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:belgium",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1528",
+          "rawTeamLabel": "Will Belgium win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "brazil",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:brazil",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1522",
+          "rawTeamLabel": "Will Brazil win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "croatia",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:croatia",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1534",
+          "rawTeamLabel": "Will Croatia win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "england",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:england",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1519",
+          "rawTeamLabel": "Will England win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "france",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:france",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1520",
+          "rawTeamLabel": "Will France win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "germany",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:germany",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1524",
+          "rawTeamLabel": "Will Germany win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "italy",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:italy",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1527",
+          "rawTeamLabel": "Will Italy win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "mexico",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:mexico",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1535",
+          "rawTeamLabel": "Will Mexico win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "netherlands",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:netherlands",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1525",
+          "rawTeamLabel": "Will Netherlands win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "portugal",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:portugal",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1523",
+          "rawTeamLabel": "Will Portugal win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "spain",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:spain",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1518",
+          "rawTeamLabel": "Will Spain win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "united_states",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:united-states",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1529",
+          "rawTeamLabel": "Will USA win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "uruguay",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:uruguay",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1533",
+          "rawTeamLabel": "Will Uruguay win the 2026 FIFA World Cup?"
+        }
+      ]
+    }
+  ]
+}

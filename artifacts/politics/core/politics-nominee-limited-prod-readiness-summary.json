@@ -1,0 +1,116 @@
+{
+  "observedAt": "2026-04-08T00:44:17.780Z",
+  "overallReadinessPosture": "POLITICS_NOMINEE_LIMITED_PROD_NARROW_READY_PAIR_PREFERRED",
+  "operatorCredible": true,
+  "lanes": [
+    {
+      "laneId": "POLITICS_NOMINEE_REPUBLICAN_PAIR_LIMITLESS_POLYMARKET",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "laneType": "PAIR",
+      "venueSet": "LIMITLESS|POLYMARKET",
+      "candidateSet": [
+        "donald_trump",
+        "donald_trump_jr",
+        "ted_cruz",
+        "tucker_carlson"
+      ],
+      "readinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "operatorCredible": true,
+      "pairPreferred": true,
+      "triAllowed": false,
+      "blockers": [],
+      "sourceArtifactRefs": [
+        "artifacts/politics/nominee-2028-republican-pair-matcher/politics-nominee-2028-republican-pair-matcher-final-decision.json",
+        "artifacts/politics/nominee-2028-republican-pair-matcher/politics-nominee-2028-republican-pair-matcher-lanes.json",
+        "artifacts/politics/nominee-2028-republican-pair-matcher/politics-nominee-2028-republican-pair-review-package.json"
+      ],
+      "canaryOnly": false,
+      "limitedProdReady": true,
+      "exactTopic": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "exactVenues": [
+        "LIMITLESS",
+        "POLYMARKET"
+      ],
+      "exactCandidates": [
+        "donald_trump",
+        "donald_trump_jr",
+        "ted_cruz",
+        "tucker_carlson"
+      ]
+    },
+    {
+      "laneId": "POLITICS_NOMINEE_REPUBLICAN_TRI_LIMITLESS_OPINION_POLYMARKET",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "laneType": "TRI",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "candidateSet": [
+        "jd_vance",
+        "marco_rubio",
+        "ron_desantis"
+      ],
+      "readinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "operatorCredible": true,
+      "pairPreferred": true,
+      "triAllowed": true,
+      "blockers": [],
+      "sourceArtifactRefs": [
+        "artifacts/politics/nominee-2028-republican-tri-matcher/politics-nominee-2028-republican-tri-matcher-final-decision.json",
+        "artifacts/politics/nominee-2028-republican-tri-matcher/politics-nominee-2028-republican-tri-matcher-lanes.json",
+        "artifacts/politics/nominee-2028-republican-tri-matcher/politics-nominee-2028-republican-tri-review-package.json"
+      ],
+      "canaryOnly": false,
+      "limitedProdReady": true,
+      "exactTopic": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "exactVenues": [
+        "LIMITLESS",
+        "OPINION",
+        "POLYMARKET"
+      ],
+      "exactCandidates": [
+        "jd_vance",
+        "marco_rubio",
+        "ron_desantis"
+      ]
+    },
+    {
+      "laneId": "POLITICS_NOMINEE_DEMOCRATIC_PAIR_LIMITLESS_POLYMARKET",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|DEMOCRATIC",
+      "laneType": "PAIR",
+      "venueSet": "LIMITLESS|POLYMARKET",
+      "candidateSet": [
+        "alexandria_ocasio_cortez",
+        "andy_beshear",
+        "gavin_newsom",
+        "josh_shapiro",
+        "kamala_harris",
+        "pete_buttigieg"
+      ],
+      "readinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      "operatorCredible": true,
+      "pairPreferred": true,
+      "triAllowed": false,
+      "blockers": [],
+      "sourceArtifactRefs": [
+        "artifacts/politics/nominee-2028-democratic-pair-matcher/politics-nominee-2028-democratic-pair-matcher-final-decision.json",
+        "artifacts/politics/nominee-2028-democratic-pair-matcher/politics-nominee-2028-democratic-pair-matcher-lanes.json",
+        "artifacts/politics/nominee-2028-democratic-pair-matcher/politics-nominee-2028-democratic-pair-matcher-rejections.json",
+        "artifacts/politics/nominee-2028-democratic-pair-matcher/politics-nominee-2028-democratic-pair-matcher-operator-summary.md"
+      ],
+      "canaryOnly": false,
+      "limitedProdReady": true,
+      "exactTopic": "NOMINEE|US_PRESIDENT|2028|DEMOCRATIC",
+      "exactVenues": [
+        "LIMITLESS",
+        "POLYMARKET"
+      ],
+      "exactCandidates": [
+        "alexandria_ocasio_cortez",
+        "andy_beshear",
+        "gavin_newsom",
+        "josh_shapiro",
+        "kamala_harris",
+        "pete_buttigieg"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "observedAt": "2026-04-08T01:01:28.549Z",
+  "pairFirstOnly": true,
+  "triConsidered": false,
+  "freshCandidateMarketsByVenue": {
+    "POLYMARKET": 79,
+    "OPINION": 1,
+    "LIMITLESS": 2
+  },
+  "fetchStates": {
+    "POLYMARKET": "SUCCESS",
+    "OPINION": "SUCCESS",
+    "LIMITLESS": "SUCCESS"
+  }
+}

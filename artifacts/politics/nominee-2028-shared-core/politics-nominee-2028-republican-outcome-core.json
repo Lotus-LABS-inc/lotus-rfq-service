@@ -1,0 +1,1223 @@
+{
+  "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+  "triSharedNamedOutcomes": [
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x21ad31a46bfaa51650766eff6dc69c866959e32d965ffb116020e37694b6317d",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Marco Rubio",
+      "normalizedCandidateName": "marco rubio",
+      "candidateIdentityKey": "marco_rubio",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 3,
+      "sharedAcrossWhichVenues": [
+        "LIMITLESS",
+        "OPINION",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x18b1c135d0a40c5894da9412e77311827d9caf16cf4cd6591b247a34730af919",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "J.D. Vance",
+      "normalizedCandidateName": "jd vance",
+      "candidateIdentityKey": "jd_vance",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 3,
+      "sharedAcrossWhichVenues": [
+        "LIMITLESS",
+        "OPINION",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x64d31a2af85518c6718a5757a35b840f08eca20c1e22c0eb1e96ec01cc55b8b6",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Ron DeSantis",
+      "normalizedCandidateName": "ron desantis",
+      "candidateIdentityKey": "ron_desantis",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 3,
+      "sharedAcrossWhichVenues": [
+        "LIMITLESS",
+        "OPINION",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "493225",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "J.D. Vance",
+      "normalizedCandidateName": "jd vance",
+      "candidateIdentityKey": "jd_vance",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 3,
+      "sharedAcrossWhichVenues": [
+        "LIMITLESS",
+        "OPINION",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "493225",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Marco Rubio",
+      "normalizedCandidateName": "marco rubio",
+      "candidateIdentityKey": "marco_rubio",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 3,
+      "sharedAcrossWhichVenues": [
+        "LIMITLESS",
+        "OPINION",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "493225",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Ron DeSantis",
+      "normalizedCandidateName": "ron desantis",
+      "candidateIdentityKey": "ron_desantis",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 3,
+      "sharedAcrossWhichVenues": [
+        "LIMITLESS",
+        "OPINION",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "J.D. Vance",
+      "normalizedCandidateName": "jd vance",
+      "candidateIdentityKey": "jd_vance",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 3,
+      "sharedAcrossWhichVenues": [
+        "LIMITLESS",
+        "OPINION",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Marco Rubio",
+      "normalizedCandidateName": "marco rubio",
+      "candidateIdentityKey": "marco_rubio",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 3,
+      "sharedAcrossWhichVenues": [
+        "LIMITLESS",
+        "OPINION",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Ron DeSantis",
+      "normalizedCandidateName": "ron desantis",
+      "candidateIdentityKey": "ron_desantis",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 3,
+      "sharedAcrossWhichVenues": [
+        "LIMITLESS",
+        "OPINION",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    }
+  ],
+  "pairSharedNamedOutcomes": [
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x4273517fc8141d57ad1528ede46efdceebdb6a4da746d5de5bad216564209a1e",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Tucker Carlson",
+      "normalizedCandidateName": "tucker carlson",
+      "candidateIdentityKey": "tucker_carlson",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 2,
+      "sharedAcrossWhichVenues": [
+        "LIMITLESS",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xd0c4c60c8e68ee15974df3aa7d217225e98020fab9fcdb32d10f8e3d285e1619",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Glenn Youngkin",
+      "normalizedCandidateName": "glenn youngkin",
+      "candidateIdentityKey": "glenn_youngkin",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 2,
+      "sharedAcrossWhichVenues": [
+        "OPINION",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x895e01dbf3e6a33cd9a44ca0f8cdb5df1bd2b0b6ebed5300d28f8da7145145e4",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Donald Trump",
+      "normalizedCandidateName": "donald trump",
+      "candidateIdentityKey": "donald_trump",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 2,
+      "sharedAcrossWhichVenues": [
+        "LIMITLESS",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x4a9d58d4da874e26708f5bdb014eb07a06aeebb927068d169d43831595386557",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Donald Trump Jr.",
+      "normalizedCandidateName": "donald trump jr",
+      "candidateIdentityKey": "donald_trump_jr",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 2,
+      "sharedAcrossWhichVenues": [
+        "LIMITLESS",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x0ac23db1e56971022bc7e822b907a2466c618b34104ea72bc9fa95e41c86a9c6",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Ted Cruz",
+      "normalizedCandidateName": "ted cruz",
+      "candidateIdentityKey": "ted_cruz",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 2,
+      "sharedAcrossWhichVenues": [
+        "LIMITLESS",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "493225",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Glenn Youngkin",
+      "normalizedCandidateName": "glenn youngkin",
+      "candidateIdentityKey": "glenn_youngkin",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 2,
+      "sharedAcrossWhichVenues": [
+        "OPINION",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Donald Trump",
+      "normalizedCandidateName": "donald trump",
+      "candidateIdentityKey": "donald_trump",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 2,
+      "sharedAcrossWhichVenues": [
+        "LIMITLESS",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Donald Trump Jr.",
+      "normalizedCandidateName": "donald trump jr",
+      "candidateIdentityKey": "donald_trump_jr",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 2,
+      "sharedAcrossWhichVenues": [
+        "LIMITLESS",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Ted Cruz",
+      "normalizedCandidateName": "ted cruz",
+      "candidateIdentityKey": "ted_cruz",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 2,
+      "sharedAcrossWhichVenues": [
+        "LIMITLESS",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Tucker Carlson",
+      "normalizedCandidateName": "tucker carlson",
+      "candidateIdentityKey": "tucker_carlson",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 2,
+      "sharedAcrossWhichVenues": [
+        "LIMITLESS",
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXACT_AUTO_ROUTEABLE"
+    }
+  ],
+  "singleVenueOnlyOutcomes": [
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xd7a0d72b19ca48b06b0029684677f581e32f133c367d7a19c2f1e4ad07066af7",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Nikki Haley",
+      "normalizedCandidateName": "nikki haley",
+      "candidateIdentityKey": "nikki_haley",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xfbb80ea5f8fc02ee7df8bd4f58790e1d04b874078a49a7b7028a74a2075100c9",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Elon Musk",
+      "normalizedCandidateName": "elon musk",
+      "candidateIdentityKey": "elon_musk",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xd10bc768ede58b53ed400594240b0a0603134a32dab89ec823a18759cbc180ca",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Rand Paul",
+      "normalizedCandidateName": "rand paul",
+      "candidateIdentityKey": "rand_paul",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xd5659eea81cada0bac656f5a9099861786cbae6755e2e1ac2c9e9441908b551f",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Steve Bannon",
+      "normalizedCandidateName": "steve bannon",
+      "candidateIdentityKey": "steve_bannon",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x655b4bfdfa55a95c24d6e9bf7e7cd62f1b57da9a1f4c7f40f090b8ba847dffa2",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Elise Stefanik",
+      "normalizedCandidateName": "elise stefanik",
+      "candidateIdentityKey": "elise_stefanik",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x24258776d0a926b4550b0f213267b95ba0a7741fc972d0b3c2b5f6bf8ced2c50",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Thomas Massie",
+      "normalizedCandidateName": "thomas massie",
+      "candidateIdentityKey": "thomas_massie",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xd1747284d6048b2a3dcfbee489db405f36de18f9590197dd0e5c9f0c246bf050",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Byron Donalds",
+      "normalizedCandidateName": "byron donalds",
+      "candidateIdentityKey": "byron_donalds",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x61a1278884fa70d68d4bcaaf72fad55bbdb063cac28c6947472ca91635fab10f",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Katie Britt",
+      "normalizedCandidateName": "katie britt",
+      "candidateIdentityKey": "katie_britt",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x9cd77217b2ab264fe4f6d302f662c0a91f349fe5798f1f98d70bb2311712791b",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Tulsi Gabbard",
+      "normalizedCandidateName": "tulsi gabbard",
+      "candidateIdentityKey": "tulsi_gabbard",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x4d4bceee5f59f75230c6438f69fc913a6da7afa4098ce0734655045c02a730fc",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Josh Hawley",
+      "normalizedCandidateName": "josh hawley",
+      "candidateIdentityKey": "josh_hawley",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xf2cb33c6634ee4676b642e728715c68441fb8d8c90f730ba0b5c3cd1f436a4be",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Joe Kent",
+      "normalizedCandidateName": "joe kent",
+      "candidateIdentityKey": "joe_kent",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xca68152902c3581ab42feb04921b8b1cd3c4e80d06f255ae077259fca0bba15c",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Eric Trump",
+      "normalizedCandidateName": "eric trump",
+      "candidateIdentityKey": "eric_trump",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xd997dc2a212a7d6673375a3b016db1fb214247142f8cde0cbf07f8e6d789877c",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Vivek Ramaswamy",
+      "normalizedCandidateName": "vivek ramaswamy",
+      "candidateIdentityKey": "vivek_ramaswamy",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x41c6341dd79903aca4bb0c29f5a7976946c3774d2fd72f38cbb7de7092144520",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Mike Pence",
+      "normalizedCandidateName": "mike pence",
+      "candidateIdentityKey": "mike_pence",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x4f02b9cf70e514964fcb9aa2f7873d2b0d1aa0986da096cce7e6687e78da00f3",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Ivanka Trump",
+      "normalizedCandidateName": "ivanka trump",
+      "candidateIdentityKey": "ivanka_trump",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x5f3b3456b2d6ef0d6f15d7492162725057be78d738d2465456e2835f1d89046c",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Pete Hegseth",
+      "normalizedCandidateName": "pete hegseth",
+      "candidateIdentityKey": "pete_hegseth",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x7abed80b88301210ee83b7b14ec41bc9a5161e1af07254fbb26c6e2bf7182766",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Erika Kirk",
+      "normalizedCandidateName": "erika kirk",
+      "candidateIdentityKey": "erika_kirk",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xc510176cf39d73295354fc797d84b510d050b45d29d6c9735ee18cdbc4fd6463",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Robert F. Kennedy Jr.",
+      "normalizedCandidateName": "robert f kennedy jr",
+      "candidateIdentityKey": "robert_f_kennedy_jr",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x5f1b1caf70eb994bfff2986727a05a3ac9f7ec8b0da4017f7732596d023e5a07",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Kristi Noem",
+      "normalizedCandidateName": "kristi noem",
+      "candidateIdentityKey": "kristi_noem",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x7190eccbd0677d5d0ae8cdf598b37e945a346915c666dda11468dc9970657a56",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "John Thune",
+      "normalizedCandidateName": "john thune",
+      "candidateIdentityKey": "john_thune",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x42631e1a8c8e6389422b58b8e15b1b551892b9833651aa3bab25afab124354b5",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Brian Kemp",
+      "normalizedCandidateName": "brian kemp",
+      "candidateIdentityKey": "brian_kemp",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xf2cea45ec282af4f302d2ab85ede73678cd692ebf8c3ab6d52bfa5e19f44c553",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Matt Gaetz",
+      "normalizedCandidateName": "matt gaetz",
+      "candidateIdentityKey": "matt_gaetz",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x00ad3bb5284b0b2314b1a2d42812fe292f606619c6278bd95c9d905816c240f6",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Sarah Huckabee Sanders",
+      "normalizedCandidateName": "sarah huckabee sanders",
+      "candidateIdentityKey": "sarah_huckabee_sanders",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x214093035e429b91df322bd20c55d9f611f741f67472a63f7623a9afc0cffa57",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Greg Abbott",
+      "normalizedCandidateName": "greg abbott",
+      "candidateIdentityKey": "greg_abbott",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x414378275cb214b747245942be889ee1e077c56d1c00eb4d726629c95f22b5a5",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Kim Kardashian",
+      "normalizedCandidateName": "kim kardashian",
+      "candidateIdentityKey": "kim_kardashian",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x17902b9490c6a73152772316b4705935c5c6801ba269f2afc81686532e34fb9a",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Marjorie Taylor Greene",
+      "normalizedCandidateName": "marjorie taylor greene",
+      "candidateIdentityKey": "marjorie_taylor_greene",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xf8dbde8b6e038775a673947e59da2de15a2127272b50b9877400fdbf7cfc3026",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Tom Brady",
+      "normalizedCandidateName": "tom brady",
+      "candidateIdentityKey": "tom_brady",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    }
+  ],
+  "excludedOutcomes": [
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xd7a0d72b19ca48b06b0029684677f581e32f133c367d7a19c2f1e4ad07066af7",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Nikki Haley",
+      "normalizedCandidateName": "nikki haley",
+      "candidateIdentityKey": "nikki_haley",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xfbb80ea5f8fc02ee7df8bd4f58790e1d04b874078a49a7b7028a74a2075100c9",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Elon Musk",
+      "normalizedCandidateName": "elon musk",
+      "candidateIdentityKey": "elon_musk",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xd10bc768ede58b53ed400594240b0a0603134a32dab89ec823a18759cbc180ca",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Rand Paul",
+      "normalizedCandidateName": "rand paul",
+      "candidateIdentityKey": "rand_paul",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xd5659eea81cada0bac656f5a9099861786cbae6755e2e1ac2c9e9441908b551f",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Steve Bannon",
+      "normalizedCandidateName": "steve bannon",
+      "candidateIdentityKey": "steve_bannon",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x655b4bfdfa55a95c24d6e9bf7e7cd62f1b57da9a1f4c7f40f090b8ba847dffa2",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Elise Stefanik",
+      "normalizedCandidateName": "elise stefanik",
+      "candidateIdentityKey": "elise_stefanik",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x24258776d0a926b4550b0f213267b95ba0a7741fc972d0b3c2b5f6bf8ced2c50",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Thomas Massie",
+      "normalizedCandidateName": "thomas massie",
+      "candidateIdentityKey": "thomas_massie",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xd1747284d6048b2a3dcfbee489db405f36de18f9590197dd0e5c9f0c246bf050",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Byron Donalds",
+      "normalizedCandidateName": "byron donalds",
+      "candidateIdentityKey": "byron_donalds",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x61a1278884fa70d68d4bcaaf72fad55bbdb063cac28c6947472ca91635fab10f",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Katie Britt",
+      "normalizedCandidateName": "katie britt",
+      "candidateIdentityKey": "katie_britt",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x9cd77217b2ab264fe4f6d302f662c0a91f349fe5798f1f98d70bb2311712791b",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Tulsi Gabbard",
+      "normalizedCandidateName": "tulsi gabbard",
+      "candidateIdentityKey": "tulsi_gabbard",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x4d4bceee5f59f75230c6438f69fc913a6da7afa4098ce0734655045c02a730fc",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Josh Hawley",
+      "normalizedCandidateName": "josh hawley",
+      "candidateIdentityKey": "josh_hawley",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xf2cb33c6634ee4676b642e728715c68441fb8d8c90f730ba0b5c3cd1f436a4be",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Joe Kent",
+      "normalizedCandidateName": "joe kent",
+      "candidateIdentityKey": "joe_kent",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xca68152902c3581ab42feb04921b8b1cd3c4e80d06f255ae077259fca0bba15c",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Eric Trump",
+      "normalizedCandidateName": "eric trump",
+      "candidateIdentityKey": "eric_trump",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xd997dc2a212a7d6673375a3b016db1fb214247142f8cde0cbf07f8e6d789877c",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Vivek Ramaswamy",
+      "normalizedCandidateName": "vivek ramaswamy",
+      "candidateIdentityKey": "vivek_ramaswamy",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x41c6341dd79903aca4bb0c29f5a7976946c3774d2fd72f38cbb7de7092144520",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Mike Pence",
+      "normalizedCandidateName": "mike pence",
+      "candidateIdentityKey": "mike_pence",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x4f02b9cf70e514964fcb9aa2f7873d2b0d1aa0986da096cce7e6687e78da00f3",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Ivanka Trump",
+      "normalizedCandidateName": "ivanka trump",
+      "candidateIdentityKey": "ivanka_trump",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x5f3b3456b2d6ef0d6f15d7492162725057be78d738d2465456e2835f1d89046c",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Pete Hegseth",
+      "normalizedCandidateName": "pete hegseth",
+      "candidateIdentityKey": "pete_hegseth",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x7abed80b88301210ee83b7b14ec41bc9a5161e1af07254fbb26c6e2bf7182766",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Erika Kirk",
+      "normalizedCandidateName": "erika kirk",
+      "candidateIdentityKey": "erika_kirk",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xc510176cf39d73295354fc797d84b510d050b45d29d6c9735ee18cdbc4fd6463",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Robert F. Kennedy Jr.",
+      "normalizedCandidateName": "robert f kennedy jr",
+      "candidateIdentityKey": "robert_f_kennedy_jr",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x5f1b1caf70eb994bfff2986727a05a3ac9f7ec8b0da4017f7732596d023e5a07",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Kristi Noem",
+      "normalizedCandidateName": "kristi noem",
+      "candidateIdentityKey": "kristi_noem",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x7190eccbd0677d5d0ae8cdf598b37e945a346915c666dda11468dc9970657a56",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "John Thune",
+      "normalizedCandidateName": "john thune",
+      "candidateIdentityKey": "john_thune",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x42631e1a8c8e6389422b58b8e15b1b551892b9833651aa3bab25afab124354b5",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Brian Kemp",
+      "normalizedCandidateName": "brian kemp",
+      "candidateIdentityKey": "brian_kemp",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xf2cea45ec282af4f302d2ab85ede73678cd692ebf8c3ab6d52bfa5e19f44c553",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Matt Gaetz",
+      "normalizedCandidateName": "matt gaetz",
+      "candidateIdentityKey": "matt_gaetz",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x00ad3bb5284b0b2314b1a2d42812fe292f606619c6278bd95c9d905816c240f6",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Sarah Huckabee Sanders",
+      "normalizedCandidateName": "sarah huckabee sanders",
+      "candidateIdentityKey": "sarah_huckabee_sanders",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x214093035e429b91df322bd20c55d9f611f741f67472a63f7623a9afc0cffa57",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Greg Abbott",
+      "normalizedCandidateName": "greg abbott",
+      "candidateIdentityKey": "greg_abbott",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x414378275cb214b747245942be889ee1e077c56d1c00eb4d726629c95f22b5a5",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Kim Kardashian",
+      "normalizedCandidateName": "kim kardashian",
+      "candidateIdentityKey": "kim_kardashian",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x17902b9490c6a73152772316b4705935c5c6801ba269f2afc81686532e34fb9a",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Marjorie Taylor Greene",
+      "normalizedCandidateName": "marjorie taylor greene",
+      "candidateIdentityKey": "marjorie_taylor_greene",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xf8dbde8b6e038775a673947e59da2de15a2127272b50b9877400fdbf7cfc3026",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Tom Brady",
+      "normalizedCandidateName": "tom brady",
+      "candidateIdentityKey": "tom_brady",
+      "outcomeType": "NAMED_CANDIDATE",
+      "isNamedCandidate": true,
+      "isOthersBucket": false,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "POLYMARKET"
+      ],
+      "routeabilityClass": "EXCLUDED_NOT_SHARED"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "rawOutcomeLabel": "Other",
+      "normalizedCandidateName": null,
+      "candidateIdentityKey": null,
+      "outcomeType": "OTHERS_BUCKET",
+      "isNamedCandidate": false,
+      "isOthersBucket": true,
+      "sharedAcrossVenueCount": 1,
+      "sharedAcrossWhichVenues": [
+        "LIMITLESS"
+      ],
+      "routeabilityClass": "EXCLUDED_OTHER_BUCKET"
+    }
+  ]
+}

@@ -1,0 +1,112 @@
+{
+  "observedAt": "2026-04-08T15:30:40.067Z",
+  "rowsFetchedByVenue": {
+    "POLYMARKET": 503,
+    "OPINION": 7,
+    "LIMITLESS": 4,
+    "MYRIAD": 14
+  },
+  "rowsAdmittedByVenue": {
+    "OPINION": 5,
+    "POLYMARKET": 4,
+    "LIMITLESS": 4
+  },
+  "fetchStatusByVenue": {
+    "OPINION": {
+      "fetchStatus": "SUCCESS",
+      "warnings": [],
+      "discoveryPath": "opinion_clob_sdk_active_markets",
+      "primaryDiscoveryPath": "opinion_clob_sdk_active_markets",
+      "fallbackDiscoveryPathUsed": null,
+      "primaryPathFailure": null,
+      "broadDiscoveryRowCount": 2,
+      "targetedDiscoveryRowCount": 1,
+      "targetedDiscoveryPathUsed": "opinion_direct_market_page_office_winner_targeted",
+      "targetedQueryLabels": [
+        "Republican Presidential Nominee 2028",
+        "Democratic Presidential Nominee 2028",
+        "Republican nominee for U.S. president in 2028",
+        "Democratic nominee for U.S. president in 2028",
+        "win the 2028 Republican presidential nomination",
+        "win the 2028 Democratic presidential nomination",
+        "JD Vance",
+        "Donald Trump",
+        "Gavin Newsom",
+        "Kamala Harris",
+        "presidential election winner 2028",
+        "2028 U.S. presidential election winner",
+        "colombia presidential election",
+        "2026 busan mayoral election winner",
+        "2026 seoul mayoral election winner"
+      ]
+    },
+    "POLYMARKET": {
+      "fetchStatus": "SUCCESS",
+      "warnings": [],
+      "discoveryPath": "polymarket_direct_market_page_office_winner_targeted",
+      "primaryDiscoveryPath": "predexon_polymarket_current_events",
+      "fallbackDiscoveryPathUsed": "polymarket_direct_market_page_office_winner_targeted",
+      "primaryPathFailure": null,
+      "broadDiscoveryRowCount": 495,
+      "targetedDiscoveryRowCount": 4,
+      "targetedDiscoveryPathUsed": "polymarket_direct_market_page_office_winner_targeted",
+      "targetedQueryLabels": [
+        "presidential election winner 2028",
+        "2028 U.S. presidential election winner",
+        "colombia presidential election",
+        "2026 busan mayoral election winner",
+        "2026 seoul mayoral election winner"
+      ]
+    },
+    "PREDICT": {
+      "fetchStatus": "EMPTY",
+      "warnings": [],
+      "discoveryPath": "predict_current_markets",
+      "primaryDiscoveryPath": "predict_current_markets",
+      "fallbackDiscoveryPathUsed": null,
+      "primaryPathFailure": null,
+      "broadDiscoveryRowCount": 0,
+      "targetedDiscoveryRowCount": 0,
+      "targetedDiscoveryPathUsed": null,
+      "targetedQueryLabels": []
+    },
+    "LIMITLESS": {
+      "fetchStatus": "SUCCESS",
+      "warnings": [],
+      "discoveryPath": "limitless_direct_market_page_office_winner_targeted",
+      "primaryDiscoveryPath": "limitless_sdk_active_markets",
+      "fallbackDiscoveryPathUsed": "limitless_direct_market_page_office_winner_targeted",
+      "primaryPathFailure": null,
+      "broadDiscoveryRowCount": 0,
+      "targetedDiscoveryRowCount": 4,
+      "targetedDiscoveryPathUsed": "limitless_direct_market_page_office_winner_targeted",
+      "targetedQueryLabels": [
+        "Republican Presidential Nominee 2028",
+        "Democratic Presidential Nominee 2028",
+        "Republican nominee for U.S. president in 2028",
+        "Democratic nominee for U.S. president in 2028",
+        "win the 2028 Republican presidential nomination",
+        "win the 2028 Democratic presidential nomination",
+        "JD Vance",
+        "Donald Trump",
+        "Gavin Newsom",
+        "Kamala Harris",
+        "presidential election winner 2028",
+        "2028 U.S. presidential election winner",
+        "colombia presidential election",
+        "2026 busan mayoral election winner",
+        "2026 seoul mayoral election winner"
+      ]
+    },
+    "MYRIAD": {
+      "fetchStatus": "MYRIAD_WIRED_SUCCESS"
+    }
+  },
+  "familySupplyChangedMaterially": false,
+  "admittedTopicCandidates": {
+    "OFFICE_WINNER|SEOUL|MAYOR|2026": 7,
+    "OFFICE_WINNER|COLOMBIA|US_PRESIDENT|2026": 2,
+    "OFFICE_WINNER|BUSAN|MAYOR|2026": 2,
+    "OFFICE_WINNER|USA|US_PRESIDENT|2028": 2
+  }
+}

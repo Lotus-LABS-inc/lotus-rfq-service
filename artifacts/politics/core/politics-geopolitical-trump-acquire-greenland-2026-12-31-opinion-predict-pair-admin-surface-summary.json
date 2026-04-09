@@ -1,0 +1,26 @@
+{
+  "observedAt": "2026-04-08T22:00:32.373Z",
+  "laneId": "POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_OPINION_PREDICT",
+  "topicKey": "GEOPOLITICAL_EVENT_BY_DATE|USA_GREENLAND|TRUMP_ACQUIRE_GREENLAND|2026-12-31",
+  "venuePair": "OPINION|PREDICT",
+  "propositionScopeHash": "90a628bbdee36787",
+  "exactSafePropositions": [
+    "TRUMP_ACQUIRE_GREENLAND_BY_2026_12_31"
+  ],
+  "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+  "supportedActions": [
+    "inspect",
+    "hold",
+    "promote",
+    "rollback"
+  ],
+  "userConsentCanWidenScope": false,
+  "narrowestEnforceableUnit": "LANE_SCOPE_LOCK",
+  "sourceArtifactRefs": [
+    "artifacts/politics/geopolitical-trump-acquire-greenland-2026-12-31-matcher/politics-geopolitical-trump-acquire-greenland-2026-12-31-matcher-input-summary.json",
+    "artifacts/politics/geopolitical-trump-acquire-greenland-2026-12-31-matcher/politics-geopolitical-trump-acquire-greenland-2026-12-31-pair-lanes.json",
+    "artifacts/politics/geopolitical-trump-acquire-greenland-2026-12-31-matcher/politics-geopolitical-trump-acquire-greenland-2026-12-31-rejections.json",
+    "artifacts/politics/geopolitical-trump-acquire-greenland-2026-12-31-matcher/politics-geopolitical-trump-acquire-greenland-2026-12-31-final-decision.json",
+    "artifacts/politics/geopolitical-trump-acquire-greenland-2026-12-31-matcher/politics-geopolitical-trump-acquire-greenland-2026-12-31-operator-summary.md"
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "CONFIRMATION_APPOINTMENT": [
+    "jurisdiction",
+    "institution",
+    "eventType"
+  ],
+  "DIRECTIONAL_RESIDUAL": [
+    "jurisdiction"
+  ],
+  "GEOPOLITICAL_EVENT": [
+    "eventType"
+  ],
+  "GEOPOLITICAL_EVENT_BY_DATE": [
+    "jurisdiction",
+    "eventType",
+    "dateBoundarySemantics"
+  ],
+  "NOMINEE_WINNER": [
+    "jurisdiction",
+    "office",
+    "cycleYear",
+    "candidateSetFingerprint"
+  ],
+  "OFFICE_EXIT_BY_DATE": [
+    "jurisdiction",
+    "office",
+    "dateBoundarySemantics"
+  ],
+  "OFFICE_WINNER": [
+    "jurisdiction",
+    "office",
+    "cycleYear",
+    "candidateSetFingerprint"
+  ],
+  "OUT_OF_SCOPE": [],
+  "PARTY_CONTROL": [
+    "jurisdiction",
+    "office",
+    "cycleYear"
+  ],
+  "THRESHOLD_BY_DATE": [
+    "jurisdiction",
+    "thresholdSemantics",
+    "dateBoundarySemantics"
+  ]
+}

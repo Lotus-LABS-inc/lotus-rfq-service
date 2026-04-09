@@ -1,0 +1,86 @@
+{
+  "observedAt": "2026-04-03T13:35:17.379Z",
+  "labels": {
+    "NOMINEE_WINNER": 492,
+    "UNKNOWN_POLITICS_FAMILY": 3,
+    "INSUFFICIENT_EVIDENCE": 2,
+    "OUT_OF_SCOPE": 8,
+    "OFFICE_WINNER": 1,
+    "GEOPOLITICAL_EVENT_BY_DATE": 8,
+    "OFFICE_EXIT_BY_DATE": 2
+  },
+  "admittedSamples": [
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x100c115dd2e12e0f4e1822c30529ca1c5f9249c68b5c2ac806488ff1d96f25f0",
+      "title": "Will Jared Golden be the Democratic nominee for ME-02?",
+      "family": "NOMINEE_WINNER"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x44f3b73a94ceaccc0e3097b264e76ff33ab56bb9517ae730ea320d0eb0f51de3",
+      "title": "Will Brian Jaye be the Democratic Nominee for MI-10?",
+      "family": "NOMINEE_WINNER"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xd7a0d72b19ca48b06b0029684677f581e32f133c367d7a19c2f1e4ad07066af7",
+      "title": "Will Nikki Haley win the 2028 Republican presidential nomination?",
+      "family": "NOMINEE_WINNER"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x1d7f4a41fc4406acc8c8f7aa9dd8d1a3113b217b265cc15289437b4ade8b47cc",
+      "title": "Will Alani Bankhead be the Democratic nominee for Senate in Montana?",
+      "family": "NOMINEE_WINNER"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x381d4dbc31885a6d2af5cd3561324c0b1c37712c2e65418bc06d36e3110f42ea",
+      "title": "Will Tracie Burke be the Democratic nominee for Senate in Louisiana?",
+      "family": "NOMINEE_WINNER"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xdc8286903ff3291ae11807927723844db0add41be28604fba981a3961fb5ba53",
+      "title": "Will Wende Kennedy be the Republican nominee for Senate in Kentucky?",
+      "family": "NOMINEE_WINNER"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xcb2d9b9dd752d0eadaeafa2a226e1354302ffd205007fa514d097f593e0bcd2a",
+      "title": "Will Rick Jakious be the Democratic nominee for MA-06?",
+      "family": "NOMINEE_WINNER"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x61e6c828abcad1240db85dcf25456f085f6cba5f7c82f1e18732a353ae0a529e",
+      "title": "Will Kari Lake be the Republican nominee for AZ-01?",
+      "family": "NOMINEE_WINNER"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x4c7778d334643032fb53612b40a45e836a9954250f5d94dbbdc3f58ea2b1d0ee",
+      "title": "Will Rick Temple be the Republican nominee for Senate in Georgia?",
+      "family": "NOMINEE_WINNER"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0xba8526e4bf87c26c043d7048d364508d066117c173a91f2c56a82128fdc9102c",
+      "title": "Will Adriano Espaillat be the Democratic Nominee for NY-13?",
+      "family": "NOMINEE_WINNER"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x11d4960a26b0696cb8c854e409944e8a69fefba21c68554187f29615ff5d3457",
+      "title": "Will Barry Moore be the Republican nominee for Senate in Alabama?",
+      "family": "NOMINEE_WINNER"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "0x0d8c056eda67995c33791be4e94342fe03cd21af6ef091c707039c410341004a",
+      "title": "Will Jason Duey be the Republican nominee for AZ-01?",
+      "family": "NOMINEE_WINNER"
+    }
+  ]
+}

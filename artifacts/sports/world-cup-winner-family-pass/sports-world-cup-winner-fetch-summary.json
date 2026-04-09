@@ -1,0 +1,19 @@
+{
+  "observedAt": "2026-04-09T10:32:37.498Z",
+  "rowsFetchedByVenue": {
+    "OPINION": 4,
+    "POLYMARKET": 14,
+    "LIMITLESS": 25,
+    "PREDICT": 25
+  },
+  "rowsAdmittedByVenue": {
+    "OPINION": 4,
+    "POLYMARKET": 14,
+    "LIMITLESS": 14,
+    "PREDICT": 14
+  },
+  "familySupplyChangedMaterially": true,
+  "admittedTopicCandidates": {
+    "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026": 46
+  }
+}

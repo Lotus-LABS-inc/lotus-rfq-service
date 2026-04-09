@@ -1,0 +1,38 @@
+{
+  "observedAt": "2026-04-08T18:34:04.791Z",
+  "canonicalTopicKey": "OFFICE_EXIT_BY_DATE|ISRAEL|PRIME_MINISTER|BENJAMIN_NETANYAHU|2026-12-31",
+  "venueSet": "LIMITLESS|POLYMARKET|PREDICT",
+  "matcherLanes": [
+    {
+      "venueSet": "LIMITLESS|POLYMARKET|PREDICT",
+      "proposition": "NETANYAHU_OUT_BEFORE_2027",
+      "canonicalTopic": "OFFICE_EXIT_BY_DATE|ISRAEL|PRIME_MINISTER|BENJAMIN_NETANYAHU|2026-12-31",
+      "routeabilityDecision": "TRI_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Office-exit proposition survives the strict 3-venue intersection, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this tri lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "netanyahu-out-by-end-of-2026-1768997302182",
+          "title": "Netanyahu out before 2027?"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "netanyahu-out-before-2027",
+          "title": "Netanyahu out before 2027?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "19740",
+          "title": "Netanyahu out before 2027?"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Strict tri lane survived the currently admitted LIMITLESS|POLYMARKET|PREDICT intersection."
+  ]
+}

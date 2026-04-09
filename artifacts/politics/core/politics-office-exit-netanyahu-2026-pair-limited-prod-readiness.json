@@ -1,0 +1,43 @@
+{
+  "observedAt": "2026-04-08T18:43:20.813Z",
+  "laneId": "POLITICS_OFFICE_EXIT_NETANYAHU_2026_PAIR_LIMITLESS_POLYMARKET",
+  "topicKey": "OFFICE_EXIT_BY_DATE|ISRAEL|PRIME_MINISTER|BENJAMIN_NETANYAHU|2026-12-31",
+  "venuePair": "LIMITLESS|POLYMARKET",
+  "exactSafePropositions": [
+    "NETANYAHU_OUT_BEFORE_2027"
+  ],
+  "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+  "operatorRuleReviewRequired": true,
+  "matcherReady": true,
+  "operatorCredible": true,
+  "readinessReviewJustified": true,
+  "rolloutRecommended": false,
+  "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+  "holdPolicy": {
+    "scope": "LANE_ONLY",
+    "holdConditions": [
+      "proposition_scope_drift",
+      "pair_venue_set_drift",
+      "rule_status_drift",
+      "operator_rule_review_not_completed",
+      "operator_confidence_lost"
+    ],
+    "userConsentCanWidenScope": false
+  },
+  "rollbackPolicy": {
+    "scope": "LANE_ONLY",
+    "targetMode": "DISABLED_INTERNAL_ONLY",
+    "fallbackLaneId": null,
+    "operatorSteps": [
+      "Record a lane-scoped rollback or hold event for POLITICS_OFFICE_EXIT_NETANYAHU_2026_PAIR_LIMITLESS_POLYMARKET.",
+      "Keep this office-exit pair lane disabled/internal-only until refreshed matcher and readiness artifacts are regenerated.",
+      "Do not widen to PREDICT tri, OPINION, MYRIAD, Trump, Starmer, or any other office-exit topic during rollback."
+    ]
+  },
+  "exclusionsStillMandatory": [
+    "NO_OPINION_FOR_THIS_TOPIC",
+    "NO_MYRIAD_FOR_THIS_TOPIC",
+    "NO_SCOPE_WIDENING_BEYOND_NETANYAHU_EXIT_PROPOSITION"
+  ],
+  "finalReadinessLabel": "OFFICE_EXIT_NETANYAHU_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW"
+}

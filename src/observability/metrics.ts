@@ -601,6 +601,20 @@ export const shadowDecisionDiffTotal = new Counter({
   ...counterConfig
 });
 
+export const pairShadowRuntimeWritesTotal = new Counter({
+  name: "pair_shadow_runtime_writes_total",
+  help: "Total pair shadow runtime observation write attempts by route class and outcome.",
+  labelNames: ["route_class", "outcome"],
+  ...counterConfig
+});
+
+export const pairShadowRuntimeSkipsTotal = new Counter({
+  name: "pair_shadow_runtime_skips_total",
+  help: "Total skipped pair shadow runtime observations by reason.",
+  labelNames: ["reason"],
+  ...counterConfig
+});
+
 export const promotionGateFailTotal = new Counter({
   name: "promotion_gate_fail_total",
   help: "Total promotion gate failures by current stage and gate.",

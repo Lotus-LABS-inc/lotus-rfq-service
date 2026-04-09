@@ -3,3 +3,9 @@ dist/
 .env
 .DS_Store
 coverage/
+
+# Local temp/debug artifacts
+.tmp/
+.tmp-*
+.local-pg.log
+.local-pgdata/

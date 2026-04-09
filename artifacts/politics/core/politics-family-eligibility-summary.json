@@ -1,0 +1,42 @@
+{
+  "CONFIRMATION_APPOINTMENT": {
+    "eligibility": "ELIGIBLE_AFTER_SPLIT",
+    "reason": "The family recurs, but the observed rows still mix substructures that need further splitting before exact-safe matching."
+  },
+  "DIRECTIONAL_RESIDUAL": {
+    "eligibility": "ELIGIBLE_AFTER_SPLIT",
+    "reason": "The family recurs, but the observed rows still mix substructures that need further splitting before exact-safe matching."
+  },
+  "GEOPOLITICAL_EVENT": {
+    "eligibility": "TOO_THIN",
+    "reason": "The family does not recur across at least two venues in the observed inventory."
+  },
+  "GEOPOLITICAL_EVENT_BY_DATE": {
+    "eligibility": "TOO_THIN",
+    "reason": "The family does not recur across at least two venues in the observed inventory."
+  },
+  "NOMINEE_WINNER": {
+    "eligibility": "BASIS_FRAGMENTED",
+    "reason": "The family recurs across venues but not on a clean common basis slice."
+  },
+  "OFFICE_EXIT_BY_DATE": {
+    "eligibility": "MATCHING_ELIGIBLE",
+    "reason": "The family recurs across venues with enough structural clarity for exact-safe matching."
+  },
+  "OFFICE_WINNER": {
+    "eligibility": "MATCHING_ELIGIBLE",
+    "reason": "The family recurs across venues with enough structural clarity for exact-safe matching."
+  },
+  "OUT_OF_SCOPE": {
+    "eligibility": "OUT_OF_SCOPE",
+    "reason": "The rows do not resolve into a stable politics structure."
+  },
+  "PARTY_CONTROL": {
+    "eligibility": "MATCHING_ELIGIBLE",
+    "reason": "The family recurs across venues with enough structural clarity for exact-safe matching."
+  },
+  "THRESHOLD_BY_DATE": {
+    "eligibility": "TOO_THIN",
+    "reason": "The family does not recur across at least two venues in the observed inventory."
+  }
+}

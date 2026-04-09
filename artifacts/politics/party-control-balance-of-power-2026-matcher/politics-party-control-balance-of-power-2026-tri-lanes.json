@@ -1,0 +1,91 @@
+{
+  "observedAt": "2026-04-08T16:54:04.897Z",
+  "canonicalTopicKey": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+  "venueSet": "OPINION|POLYMARKET|PREDICT",
+  "matcherLanes": [
+    {
+      "venueSet": "OPINION|POLYMARKET|PREDICT",
+      "outcome": "D_SENATE_R_HOUSE",
+      "canonicalTopic": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+      "routeabilityDecision": "TRI_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe strict 3-venue party-control outcome on OPINION|POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493240",
+          "rawOutcomeLabel": "D_SENATE_R_HOUSE"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "balance-of-power-2026-midterms",
+          "rawOutcomeLabel": "D_SENATE_R_HOUSE"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "balance-of-power-2026-midterm-elections",
+          "rawOutcomeLabel": "D_SENATE_R_HOUSE"
+        }
+      ]
+    },
+    {
+      "venueSet": "OPINION|POLYMARKET|PREDICT",
+      "outcome": "DEMOCRATS_SWEEP",
+      "canonicalTopic": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+      "routeabilityDecision": "TRI_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe strict 3-venue party-control outcome on OPINION|POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493240",
+          "rawOutcomeLabel": "DEMOCRATS_SWEEP"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "balance-of-power-2026-midterms",
+          "rawOutcomeLabel": "DEMOCRATS_SWEEP"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "balance-of-power-2026-midterm-elections",
+          "rawOutcomeLabel": "DEMOCRATS_SWEEP"
+        }
+      ]
+    },
+    {
+      "venueSet": "OPINION|POLYMARKET|PREDICT",
+      "outcome": "REPUBLICANS_SWEEP",
+      "canonicalTopic": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+      "routeabilityDecision": "TRI_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe strict 3-venue party-control outcome on OPINION|POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493240",
+          "rawOutcomeLabel": "REPUBLICANS_SWEEP"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "balance-of-power-2026-midterms",
+          "rawOutcomeLabel": "REPUBLICANS_SWEEP"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "balance-of-power-2026-midterm-elections",
+          "rawOutcomeLabel": "REPUBLICANS_SWEEP"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Strict tri lane survived the currently admitted OPINION|POLYMARKET|PREDICT intersection."
+  ]
+}

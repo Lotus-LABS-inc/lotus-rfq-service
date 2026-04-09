@@ -1,0 +1,57 @@
+{
+  "observedAt": "2026-04-08T14:30:01.182Z",
+  "laneId": "POLITICS_OFFICE_WINNER_SEOUL_MAYOR_2026_PAIR_LIMITLESS_POLYMARKET",
+  "topicKey": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+  "venuePair": "LIMITLESS|POLYMARKET",
+  "exactSafeCandidates": [
+    "ahn_cheol_soo",
+    "cho_eun_hee",
+    "cho_kuk",
+    "chong_won_oh",
+    "han_dong_hoon",
+    "hong_ihk_pyo",
+    "jeon_hyun_heui",
+    "na_kyung_won",
+    "oh_se_hoon",
+    "park_hong_keun",
+    "park_ju_min",
+    "park_yong_jin",
+    "seo_young_kyo"
+  ],
+  "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+  "operatorRuleReviewRequired": true,
+  "matcherReady": true,
+  "operatorCredible": true,
+  "readinessReviewJustified": true,
+  "rolloutRecommended": false,
+  "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+  "holdPolicy": {
+    "scope": "LANE_ONLY",
+    "holdConditions": [
+      "pair_candidate_set_drift",
+      "pair_venue_set_drift",
+      "rule_status_drift",
+      "operator_rule_review_not_completed",
+      "operator_confidence_lost"
+    ],
+    "userConsentCanWidenScope": false
+  },
+  "rollbackPolicy": {
+    "scope": "LANE_ONLY",
+    "targetMode": "DISABLED_INTERNAL_ONLY",
+    "fallbackLaneId": null,
+    "operatorSteps": [
+      "Record a lane-scoped rollback or hold event for POLITICS_OFFICE_WINNER_SEOUL_MAYOR_2026_PAIR_LIMITLESS_POLYMARKET.",
+      "Keep this Seoul pair lane disabled/internal-only until refreshed matcher and readiness artifacts are regenerated.",
+      "Do not widen beyond the exact Seoul topic, the exact pair LIMITLESS|POLYMARKET, or the exact candidate set."
+    ]
+  },
+  "exclusionsStillMandatory": [
+    "OTHERS_EXCLUDED",
+    "VENUE_ONLY_TAILS_EXCLUDED",
+    "UNKNOWN_COMPOSITE_EXCLUDED",
+    "NO_MYRIAD_FOR_THIS_TOPIC",
+    "NO_PREDICT_FOR_THIS_TOPIC"
+  ],
+  "finalReadinessLabel": "OFFICE_WINNER_SEOUL_MAYOR_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW"
+}

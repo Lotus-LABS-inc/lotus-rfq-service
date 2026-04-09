@@ -1,0 +1,13 @@
+{
+  "observedAt": "2026-04-04T01:52:54.771Z",
+  "admittedRowsByVenue": {
+    "POLYMARKET": 79,
+    "OPINION": 1,
+    "LIMITLESS": 2
+  },
+  "admittedRowsBySubgroup": {
+    "NOMINEE|US_PRESIDENT|2028|REPUBLICAN": 37,
+    "NOMINEE|US_PRESIDENT|2028|DEMOCRATIC": 45
+  },
+  "rejectedCount": 509
+}

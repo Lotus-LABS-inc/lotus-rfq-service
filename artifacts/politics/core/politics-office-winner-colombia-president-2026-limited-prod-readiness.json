@@ -1,0 +1,52 @@
+{
+  "observedAt": "2026-04-08T15:30:40.078Z",
+  "laneId": "POLITICS_OFFICE_WINNER_COLOMBIA_PRESIDENT_2026_PAIR_LIMITLESS_POLYMARKET",
+  "topicKey": "OFFICE_WINNER|COLOMBIA|US_PRESIDENT|2026",
+  "venuePair": "LIMITLESS|POLYMARKET",
+  "exactSafeCandidates": [
+    "abelardo_de_la_espriella",
+    "iván_cepeda_castro",
+    "juan_carlos_pinzón",
+    "paloma_valencia",
+    "sergio_fajardo_dc",
+    "vicky_dávila_ind"
+  ],
+  "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+  "operatorRuleReviewRequired": true,
+  "matcherReady": true,
+  "operatorCredible": true,
+  "readinessReviewJustified": true,
+  "rolloutRecommended": false,
+  "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+  "holdPolicy": {
+    "scope": "LANE_ONLY",
+    "holdConditions": [
+      "candidate_set_drift",
+      "venue_pair_drift",
+      "rule_status_drift",
+      "operator_rule_review_not_completed",
+      "operator_confidence_lost"
+    ],
+    "userConsentCanWidenScope": false
+  },
+  "rollbackPolicy": {
+    "scope": "LANE_ONLY",
+    "targetMode": "DISABLED_INTERNAL_ONLY",
+    "fallbackLaneId": null,
+    "operatorSteps": [
+      "Record a lane-scoped rollback or hold event for POLITICS_OFFICE_WINNER_COLOMBIA_PRESIDENT_2026_PAIR_LIMITLESS_POLYMARKET.",
+      "Keep the office-winner lane disabled/internal-only until refreshed matcher and readiness artifacts are regenerated.",
+      "Do not widen to OPINION, MYRIAD, PREDICT, tri, or other office-winner topics during rollback."
+    ]
+  },
+  "exclusionsStillMandatory": [
+    "OTHERS_EXCLUDED",
+    "VENUE_ONLY_TAILS_EXCLUDED",
+    "UNKNOWN_COMPOSITE_EXCLUDED",
+    "NO_MYRIAD_FOR_THIS_TOPIC",
+    "NO_OPINION_FOR_THIS_TOPIC",
+    "NO_PREDICT_FOR_THIS_TOPIC",
+    "NO_TRI_IMPLICATION"
+  ],
+  "finalReadinessLabel": "OFFICE_WINNER_COLOMBIA_PRESIDENT_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW"
+}

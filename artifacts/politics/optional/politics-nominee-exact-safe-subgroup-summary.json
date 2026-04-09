@@ -1,0 +1,10 @@
+[
+  {
+    "clusterKey": "usa|president|2028|democratic|democratic|jon ossoff|yes no",
+    "readinessClass": "EXACT_SAFE",
+    "venues": [
+      "OPINION",
+      "POLYMARKET"
+    ]
+  }
+]

@@ -20,12 +20,13 @@ export interface SettlementProfileNormalizationInput {
 export class CanonicalSettlementProfileNormalizer {
     public normalize(input: SettlementProfileNormalizationInput): SettlementProfile {
         const now = new Date();
+        const settlementType = this.resolveSettlementType(input);
         const completeness = this.computeMetadataCompleteness(input);
 
         return {
             id: buildStableTextId("csp_", input.venueMarketProfileId),
             venueMarketProfileId: input.venueMarketProfileId,
-            settlementType: input.settlementType ?? "unknown",
+            settlementType,
             settlementLagHours: this.optionalDecimalString(input.settlementLagHours),
             disputeWindowHours: this.optionalDecimalString(input.disputeWindowHours),
             finalityLagHours: this.optionalDecimalString(input.finalityLagHours),
@@ -39,6 +40,20 @@ export class CanonicalSettlementProfileNormalizer {
             createdAt: now,
             updatedAt: now
         };
+    }
+
+    private resolveSettlementType(input: SettlementProfileNormalizationInput): SettlementType {
+        if (input.settlementType) {
+            return input.settlementType;
+        }
+
+        const metadata = input.metadata ?? {};
+        const venue = typeof metadata.venue === "string" ? metadata.venue.toUpperCase() : null;
+        if (venue === "POLYMARKET") {
+            return "onchain";
+        }
+
+        return "unknown";
     }
 
     private optionalDecimalString(value: string | number | null | undefined): string | null {

@@ -16,6 +16,15 @@ export const PredictSimulationProvenanceValues = [
 ] as const;
 export type PredictSimulationProvenance = (typeof PredictSimulationProvenanceValues)[number];
 
+export const PredictHistoricalReadinessStateValues = [
+  "CURRENT_STATE_ONLY",
+  "RECORDER_ACCUMULATING",
+  "HISTORICAL_READY_NATIVE",
+  "HISTORICAL_READY_FALLBACK",
+  "UNUSABLE"
+] as const;
+export type PredictHistoricalReadinessState = (typeof PredictHistoricalReadinessStateValues)[number];
+
 export interface PredictOrderbookLevel {
   price: string;
   size: string;
@@ -43,6 +52,7 @@ export interface PredictNormalizedMarket {
   venueMarketId: string;
   title: string;
   description: string | null;
+  question: string | null;
   status: string | null;
   categories: readonly string[];
   tags: readonly string[];
@@ -58,6 +68,10 @@ export interface PredictNormalizedMarket {
   }[];
   statistics: PredictNormalizedMarketStatistics | null;
   lastSale: PredictNormalizedLastSale | null;
+  createdAt: Date | null;
+  closesAt: Date | null;
+  resolvesAt: Date | null;
+  ambiguousTimeBoundary: boolean;
   sourceMetadataVersion: string;
   raw: Record<string, unknown>;
 }
@@ -127,6 +141,35 @@ export interface PredictSimulationSurface {
   precision: PredictSimulationPrecision;
   provenance: PredictSimulationProvenance;
   metadata: Record<string, unknown>;
+}
+
+export interface PredictFallbackCoverageScanArtifact {
+  environment: PredictEnvironment;
+  marketId: string;
+  windowStart: Date;
+  windowEnd: Date;
+  snapshotCount: number;
+  firstSnapshotAt: Date | null;
+  lastSnapshotAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  metadata: Record<string, unknown>;
+}
+
+export interface PredictHistoricalReadinessSummary {
+  marketId: string;
+  state: PredictHistoricalReadinessState;
+  historicalQualified: boolean;
+  reason: string | null;
+  environments: readonly PredictEnvironment[];
+  currentStateRowCount: number;
+  currentStateCoverageStart: Date | null;
+  currentStateCoverageEnd: Date | null;
+  nativeOrderbookSnapshotCount: number;
+  nativeMatchEventCount: number;
+  recorderCheckpointCount: number;
+  fallbackSnapshotCount: number;
+  fallbackCoveredWindowCount: number;
 }
 
 export interface PredictSizeEstimate {

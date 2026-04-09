@@ -1,0 +1,16 @@
+{
+  "observedAt": "2026-04-08T16:54:04.883Z",
+  "blockerCounts": {},
+  "topicBlockers": [
+    {
+      "canonicalTopicKey": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+      "reasons": [],
+      "venuesPresent": [
+        "OPINION",
+        "POLYMARKET",
+        "PREDICT"
+      ]
+    }
+  ],
+  "unresolvedRows": []
+}

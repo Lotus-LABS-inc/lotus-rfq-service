@@ -1,0 +1,15 @@
+{
+  "observedAt": "2026-04-04T01:52:54.771Z",
+  "subgroupDecisions": {
+    "republican": "CANDIDATE_SET_MISMATCH",
+    "democratic": "CANDIDATE_SET_MISMATCH"
+  },
+  "blockers": {
+    "republican": [
+      "candidate-set basis differs across venues"
+    ],
+    "democratic": [
+      "candidate-set basis differs across venues"
+    ]
+  }
+}

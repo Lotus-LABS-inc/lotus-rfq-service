@@ -23,6 +23,17 @@ const asDate = (value: unknown): Date | null => {
 };
 
 const normalizeLevel = (value: unknown): PredictOrderbookLevel | null => {
+  if (Array.isArray(value) && value.length >= 2) {
+    const [price, size] = value;
+    if ((typeof price === "string" || typeof price === "number") && (typeof size === "string" || typeof size === "number")) {
+      return {
+        price: String(price),
+        size: String(size),
+        raw: { price, size }
+      };
+    }
+    return null;
+  }
   const record = asRecord(value);
   const price = record.price;
   const size = record.size;

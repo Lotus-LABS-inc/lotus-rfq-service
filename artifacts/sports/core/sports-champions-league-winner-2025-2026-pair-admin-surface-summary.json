@@ -1,0 +1,37 @@
+{
+  "observedAt": "2026-04-08T23:51:04.123Z",
+  "laneId": "SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET",
+  "topicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+  "venuePair": "LIMITLESS|POLYMARKET",
+  "clubScopeHash": "3a5afc3077efbee4",
+  "exactSafeClubs": [
+    "arsenal",
+    "atletico_madrid",
+    "barcelona",
+    "bayern_munich",
+    "borussia_dortmund",
+    "chelsea",
+    "inter_milan",
+    "juventus",
+    "liverpool",
+    "paris_saint_germain",
+    "real_madrid"
+  ],
+  "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+  "supportedActions": [
+    "inspect",
+    "hold",
+    "promote",
+    "rollback"
+  ],
+  "userConsentCanWidenScope": false,
+  "narrowestEnforceableUnit": "LANE_SCOPE_LOCK",
+  "sourceArtifactRefs": [
+    "artifacts/sports/champions-league-winner-2025-2026-matcher/sports-champions-league-winner-2025-2026-matcher-input-summary.json",
+    "artifacts/sports/champions-league-winner-2025-2026-matcher/sports-champions-league-winner-2025-2026-pair-lanes.json",
+    "artifacts/sports/champions-league-winner-2025-2026-matcher/sports-champions-league-winner-2025-2026-all-venue-lanes.json",
+    "artifacts/sports/champions-league-winner-2025-2026-matcher/sports-champions-league-winner-2025-2026-rejections.json",
+    "artifacts/sports/champions-league-winner-2025-2026-matcher/sports-champions-league-winner-2025-2026-final-decision.json",
+    "artifacts/sports/champions-league-winner-2025-2026-matcher/sports-champions-league-winner-2025-2026-operator-summary.md"
+  ]
+}

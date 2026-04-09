@@ -1,0 +1,97 @@
+{
+  "basis": "HISTORICAL_ONLY",
+  "routeModes": [
+    {
+      "routeMode": "POLYMARKET_ONLY",
+      "label": "Predexon Only",
+      "cardinality": "single",
+      "routeableMarketCount": 0,
+      "eventCount": 0
+    },
+    {
+      "routeMode": "LIMITLESS_ONLY",
+      "label": "Limitless Only",
+      "cardinality": "single",
+      "routeableMarketCount": 6,
+      "eventCount": 6
+    },
+    {
+      "routeMode": "OPINION_ONLY",
+      "label": "Opinion Only",
+      "cardinality": "single",
+      "routeableMarketCount": 12,
+      "eventCount": 12
+    },
+    {
+      "routeMode": "MYRIAD_ONLY",
+      "label": "Myriad Only",
+      "cardinality": "single",
+      "routeableMarketCount": 0,
+      "eventCount": 0
+    },
+    {
+      "routeMode": "PREDICT_ONLY",
+      "label": "Predict Only",
+      "cardinality": "single",
+      "routeableMarketCount": 0,
+      "eventCount": 0
+    },
+    {
+      "routeMode": "POLYMARKET_LIMITLESS",
+      "label": "Predexon + Limitless",
+      "cardinality": "pair",
+      "routeableMarketCount": 0,
+      "eventCount": 0
+    },
+    {
+      "routeMode": "POLYMARKET_OPINION",
+      "label": "Predexon + Opinion",
+      "cardinality": "pair",
+      "routeableMarketCount": 0,
+      "eventCount": 0
+    },
+    {
+      "routeMode": "LIMITLESS_OPINION",
+      "label": "Limitless + Opinion",
+      "cardinality": "pair",
+      "routeableMarketCount": 0,
+      "eventCount": 0
+    },
+    {
+      "routeMode": "POLYMARKET_LIMITLESS_OPINION",
+      "label": "Predexon + Limitless + Opinion",
+      "cardinality": "tri",
+      "routeableMarketCount": 0,
+      "eventCount": 0
+    },
+    {
+      "routeMode": "POLYMARKET_PREDICT",
+      "label": "Predexon + Predict",
+      "cardinality": "pair",
+      "routeableMarketCount": 0,
+      "eventCount": 0
+    },
+    {
+      "routeMode": "LIMITLESS_PREDICT",
+      "label": "Limitless + Predict",
+      "cardinality": "pair",
+      "routeableMarketCount": 0,
+      "eventCount": 0
+    },
+    {
+      "routeMode": "OPINION_PREDICT",
+      "label": "Opinion + Predict",
+      "cardinality": "pair",
+      "routeableMarketCount": 0,
+      "eventCount": 0
+    }
+  ],
+  "totals": {
+    "eventCount": 18,
+    "canonicalMarketCount": 18,
+    "runnableSingleCount": 18,
+    "runnablePairCount": 1,
+    "runnableTriCount": 0
+  },
+  "blockReasons": []
+}

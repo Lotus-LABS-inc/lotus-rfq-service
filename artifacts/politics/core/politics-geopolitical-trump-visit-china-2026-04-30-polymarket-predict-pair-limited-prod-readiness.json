@@ -1,0 +1,43 @@
+{
+  "observedAt": "2026-04-08T21:07:51.946Z",
+  "laneId": "POLITICS_GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_PAIR_POLYMARKET_PREDICT",
+  "topicKey": "GEOPOLITICAL_EVENT_BY_DATE|USA_CHINA|TRUMP_VISIT_CHINA|2026-04-30",
+  "venuePair": "POLYMARKET|PREDICT",
+  "exactSafePropositions": [
+    "TRUMP_VISIT_CHINA_BY_2026_04_30"
+  ],
+  "ruleStatus": "EXACT_RULE_COMPATIBLE",
+  "operatorRuleReviewRequired": false,
+  "matcherReady": true,
+  "operatorCredible": true,
+  "readinessReviewJustified": true,
+  "rolloutRecommended": false,
+  "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+  "holdPolicy": {
+    "scope": "LANE_ONLY",
+    "holdConditions": [
+      "proposition_scope_drift",
+      "pair_venue_set_drift",
+      "rule_status_drift",
+      "operator_confidence_lost"
+    ],
+    "userConsentCanWidenScope": false
+  },
+  "rollbackPolicy": {
+    "scope": "LANE_ONLY",
+    "targetMode": "DISABLED_INTERNAL_ONLY",
+    "fallbackLaneId": null,
+    "operatorSteps": [
+      "Record a lane-scoped rollback or hold event for POLITICS_GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_PAIR_POLYMARKET_PREDICT.",
+      "Keep this pair lane disabled/internal-only until refreshed matcher and readiness artifacts are regenerated.",
+      "Do not widen this pair route into tri, LIMITLESS, MYRIAD, or the May/June deadline buckets during rollback."
+    ]
+  },
+  "exclusionsStillMandatory": [
+    "NO_LIMITLESS_FOR_THIS_TOPIC",
+    "NO_MYRIAD_FOR_THIS_TOPIC",
+    "NO_SCOPE_WIDENING_BEYOND_TRUMP_VISIT_CHINA_2026_04_30",
+    "NO_DEADLINE_WIDENING_TO_MAY_OR_JUNE_BUCKETS"
+  ],
+  "finalReadinessLabel": "GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_LIMITED_PROD_READY_FOR_REVIEW"
+}

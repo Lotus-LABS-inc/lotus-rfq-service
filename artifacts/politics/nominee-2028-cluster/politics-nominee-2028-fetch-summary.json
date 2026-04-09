@@ -1,0 +1,66 @@
+{
+  "observedAt": "2026-04-04T01:52:54.770Z",
+  "rawInScopeCandidateRowsByVenue": {
+    "POLYMARKET": 79,
+    "OPINION": 1,
+    "LIMITLESS": 2
+  },
+  "liveCensusCandidateRowsByVenue": {
+    "OPINION": 1,
+    "LIMITLESS": 2
+  },
+  "fetchStatuses": {
+    "POLYMARKET": {
+      "fetchStatus": "SUCCESS",
+      "warnings": [],
+      "discoveryPath": "predexon_polymarket_current_events",
+      "primaryDiscoveryPath": "predexon_polymarket_current_events",
+      "fallbackDiscoveryPathUsed": null,
+      "primaryPathFailure": null,
+      "broadDiscoveryRowCount": 494,
+      "targetedDiscoveryRowCount": 0,
+      "targetedDiscoveryPathUsed": null,
+      "targetedQueryLabels": []
+    },
+    "OPINION": {
+      "fetchStatus": "SUCCESS",
+      "discoveryPath": "opinion_clob_sdk_active_markets",
+      "broadDiscoveryRowCount": 18,
+      "targetedDiscoveryRowCount": 1,
+      "targetedDiscoveryPathUsed": "opinion_direct_market_page_live_census",
+      "targetedQueryLabels": [
+        "Republican Presidential Nominee 2028",
+        "Democratic Presidential Nominee 2028",
+        "Republican nominee for U.S. president in 2028",
+        "Democratic nominee for U.S. president in 2028",
+        "win the 2028 Republican presidential nomination",
+        "win the 2028 Democratic presidential nomination",
+        "JD Vance",
+        "Donald Trump",
+        "Gavin Newsom",
+        "Kamala Harris"
+      ],
+      "warnings": []
+    },
+    "LIMITLESS": {
+      "fetchStatus": "SUCCESS",
+      "discoveryPath": "limitless_sdk_active_markets",
+      "broadDiscoveryRowCount": 75,
+      "targetedDiscoveryRowCount": 2,
+      "targetedDiscoveryPathUsed": "limitless_direct_market_page_live_census",
+      "targetedQueryLabels": [
+        "Republican Presidential Nominee 2028",
+        "Democratic Presidential Nominee 2028",
+        "Republican nominee for U.S. president in 2028",
+        "Democratic nominee for U.S. president in 2028",
+        "win the 2028 Republican presidential nomination",
+        "win the 2028 Democratic presidential nomination",
+        "JD Vance",
+        "Donald Trump",
+        "Gavin Newsom",
+        "Kamala Harris"
+      ],
+      "warnings": []
+    }
+  }
+}

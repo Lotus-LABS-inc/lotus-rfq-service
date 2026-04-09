@@ -5,7 +5,7 @@ import { MyriadMarketCrawler } from "../../src/integrations/myriad/myriad-market
 import { MyriadMarketDetailEnricher } from "../../src/integrations/myriad/myriad-market-detail-enricher.js"
 import { MyriadMarketEventsBackfill } from "../../src/integrations/myriad/myriad-market-events-backfill.js"
 import { buildMyriadPhase4Candidates, generateMyriadPhase4Shortlists } from "../../src/integrations/myriad/myriad-phase4-shortlist.js"
-import { normalizeMyriadTopicCategory } from "../../src/integrations/myriad/myriad-topic-normalizer.js"
+import { classifyMyriadPreviewCategory, normalizeMyriadTopicCategory } from "../../src/integrations/myriad/myriad-topic-normalizer.js"
 
 describe("Myriad extraction modules", () => {
   it("crawls paginated questions and markets deterministically", async () => {
@@ -82,7 +82,7 @@ describe("Myriad extraction modules", () => {
           resolutionSource: "Official election authority",
           resolutionTitle: "Election result",
           outcomes: [
-            { id: 0, title: "Yes", price_charts: [{ timeframe: "24h", prices: [{ timestamp: 1710000000, value: 0.52, date: "2024-03-09T00:00:00.000Z" }] }] },
+            { id: 0, title: "Yes", price_charts: [{ timeframe: "24h", prices: [{ timestamp: 1710000000, price: 0.52, date: "2024-03-09T00:00:00.000Z" }] }] },
             { id: 1, title: "No" }
           ]
         }))
@@ -264,6 +264,22 @@ describe("Myriad extraction modules", () => {
         slug: "candidate-election"
       })
     ).toBe("POLITICS")
+    expect(
+      classifyMyriadPreviewCategory({
+        topics: ["gaming", "lck"],
+        title: "Will T1 win Worlds?",
+        description: "League of Legends esports final",
+        slug: "t1-worlds"
+      })
+    ).toBe("ESPORTS")
+    expect(
+      normalizeMyriadTopicCategory({
+        topics: ["ai"],
+        title: "Will OpenAI launch a new model?",
+        description: "AI release prediction market",
+        slug: "openai-model-launch"
+      })
+    ).toBe("TECH")
 
     const questions = [{
       id: 1,

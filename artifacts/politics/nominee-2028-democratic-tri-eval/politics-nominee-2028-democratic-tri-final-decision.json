@@ -1,0 +1,25 @@
+{
+  "observedAt": "2026-04-08T01:01:28.594Z",
+  "topicKey": "NOMINEE|US_PRESIDENT|2028|DEMOCRATIC",
+  "overallDecision": "DEMOCRATIC_TRI_NOT_JUSTIFIED_PAIR_ONLY",
+  "triReady": false,
+  "pairStillPreferred": true,
+  "bestTriLaneIfAny": null,
+  "bestPairFallback": {
+    "venuePair": "LIMITLESS|POLYMARKET",
+    "candidates": [
+      "alexandria_ocasio_cortez",
+      "andy_beshear",
+      "gavin_newsom",
+      "josh_shapiro",
+      "kamala_harris",
+      "pete_buttigieg"
+    ]
+  },
+  "exactSafeTriCandidateCount": 0,
+  "exactSafePairFallbackCandidateCount": 6,
+  "ruleStatus": "EXACT_RULE_COMPATIBLE",
+  "operatorCredible": true,
+  "readinessReviewJustified": false,
+  "singleBestNextAction": "Keep Democratic on the exact pair fallback LIMITLESS|POLYMARKET and do not start Democratic tri limited-prod review unless OPINION adds a real strict tri edge."
+}

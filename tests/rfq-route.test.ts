@@ -12,6 +12,7 @@ describe("POST /rfq", () => {
     const passThroughAuth: preHandlerHookHandler = async () => { };
     await registerRFQRoute(app, passThroughAuth, {
       createRFQ: vi.fn(),
+      createExecutionScopeToken: vi.fn(),
       acceptRFQ: vi.fn()
     });
 
@@ -39,6 +40,7 @@ describe("POST /rfq", () => {
     const passThroughAuth: preHandlerHookHandler = async () => { };
     await registerRFQRoute(app, passThroughAuth, {
       createRFQ,
+      createExecutionScopeToken: vi.fn(),
       acceptRFQ: vi.fn()
     });
 
@@ -71,6 +73,7 @@ describe("POST /rfq", () => {
       createRFQ: vi.fn(async () => {
         throw new MarketInactiveError("mkt-closed");
       }),
+      createExecutionScopeToken: vi.fn(),
       acceptRFQ: vi.fn()
     });
 
@@ -98,6 +101,7 @@ describe("POST /rfq", () => {
       createRFQ: vi.fn(async () => {
         throw new CanonicalMarketFetchError("canonical service unavailable");
       }),
+      createExecutionScopeToken: vi.fn(),
       acceptRFQ: vi.fn()
     });
 
@@ -120,24 +124,68 @@ describe("POST /rfq", () => {
 });
 
 describe("POST /rfq/:id/accept", () => {
+  it("issues execution scope tokens for exact approved lanes", async () => {
+    const app = Fastify({ logger: false });
+    const passThroughAuth: preHandlerHookHandler = async () => { };
+    const createExecutionScopeToken = vi.fn(async () => ({
+      token: "signed-token",
+      expiresAt: "2026-04-04T12:00:00.000Z",
+      singleUse: true as const,
+      scope: {
+        scopeKind: "POLITICS_NOMINEE_LANE",
+        scopeId: "POLITICS_NOMINEE_REPUBLICAN_TRI_LIMITLESS_OPINION_POLYMARKET",
+        topicKey: "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+        laneType: "TRI",
+        venueSet: ["LIMITLESS", "OPINION", "POLYMARKET"],
+        candidateSet: ["jd_vance", "marco_rubio", "ron_desantis"]
+      }
+    }));
+    await registerRFQRoute(app, passThroughAuth, {
+      createRFQ: vi.fn(),
+      createExecutionScopeToken,
+      acceptRFQ: vi.fn()
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/rfq/session-1/execution-scope-token",
+      payload: {
+        quoteId: "quote-1",
+        scopeKind: "POLITICS_NOMINEE_LANE",
+        scopeId: "POLITICS_NOMINEE_REPUBLICAN_TRI_LIMITLESS_OPINION_POLYMARKET"
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(createExecutionScopeToken).toHaveBeenCalledWith("session-1", {
+      quoteId: "quote-1",
+      scopeKind: "POLITICS_NOMINEE_LANE",
+      scopeId: "POLITICS_NOMINEE_REPUBLICAN_TRI_LIMITLESS_OPINION_POLYMARKET"
+    });
+    await app.close();
+  });
+
   it("returns 202 with plan response when accepted", async () => {
     const app = Fastify({ logger: false });
     const passThroughAuth: preHandlerHookHandler = async () => { };
+    const acceptRFQ = vi.fn(async () => ({
+      status: "PLAN_ACCEPTED" as const,
+      plan_id: "plan-1",
+      plan_state: "DRAFT",
+      dispatch_mode: "background" as const
+    }));
     await registerRFQRoute(app, passThroughAuth, {
       createRFQ: vi.fn(),
-      acceptRFQ: vi.fn(async () => ({
-        status: "PLAN_ACCEPTED" as const,
-        plan_id: "plan-1",
-        plan_state: "DRAFT",
-        dispatch_mode: "background" as const
-      }))
+      createExecutionScopeToken: vi.fn(),
+      acceptRFQ
     });
 
     const response = await app.inject({
       method: "POST",
       url: "/rfq/session-1/accept",
       payload: {
-        quoteId: "quote-1"
+        quoteId: "quote-1",
+        executionScopeToken: "signed-scope-token"
       }
     });
 
@@ -145,6 +193,10 @@ describe("POST /rfq/:id/accept", () => {
     expect(response.json()).toMatchObject({
       status: "PLAN_ACCEPTED",
       plan_id: "plan-1"
+    });
+    expect(acceptRFQ).toHaveBeenCalledWith("session-1", {
+      quoteId: "quote-1",
+      executionScopeToken: "signed-scope-token"
     });
     await app.close();
   });
@@ -154,6 +206,7 @@ describe("POST /rfq/:id/accept", () => {
     const passThroughAuth: preHandlerHookHandler = async () => { };
     await registerRFQRoute(app, passThroughAuth, {
       createRFQ: vi.fn(),
+      createExecutionScopeToken: vi.fn(),
       acceptRFQ: vi.fn(async () => {
         throw new InsufficientLiquidityError("a0eb58b9-a89c-48a7-bda8-b08a050ad95e", 2);
       })
@@ -180,6 +233,7 @@ describe("POST /rfq/:id/accept", () => {
     const passThroughAuth: preHandlerHookHandler = async () => { };
     await registerRFQRoute(app, passThroughAuth, {
       createRFQ: vi.fn(),
+      createExecutionScopeToken: vi.fn(),
       acceptRFQ: vi.fn(async () => {
         throw new RiskRejectedError("quota_exceeded");
       })

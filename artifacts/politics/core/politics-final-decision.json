@@ -1,0 +1,12 @@
+{
+  "observedAt": "2026-04-08T22:00:22.372Z",
+  "primaryDecision": "POLITICS_INVENTORY_PROVEN_MATCHING_READY",
+  "sportsComparison": "POLITICS_DOES_NOT_BEAT_SPORTS",
+  "cryptoPriority": "POLITICS_BELOW_CRYPTO_PRIORITY",
+  "promisingFamilies": [
+    "OFFICE_EXIT_BY_DATE",
+    "OFFICE_WINNER",
+    "PARTY_CONTROL"
+  ],
+  "dominantWeakness": "NONE"
+}

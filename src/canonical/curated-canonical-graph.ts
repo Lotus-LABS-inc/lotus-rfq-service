@@ -184,6 +184,9 @@ export class CuratedCanonicalGraphSnapshotBuilder {
                 ? { requiresConservativeAnchor: seed.requiresConservativeAnchor }
                 : {}),
             metadata: {
+                venue: profile.venue,
+                network: profile.network,
+                chain: profile.chain,
                 canonicalCategory: normalizeCategory(seed.canonicalCategory),
                 canonicalMarketId: seed.canonicalMarketId
             }

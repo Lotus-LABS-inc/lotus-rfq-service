@@ -1,0 +1,32 @@
+{
+  "observedAt": "2026-04-08T22:38:31.025Z",
+  "laneId": "SPORTS_EPL_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET",
+  "topicKey": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+  "venuePair": "LIMITLESS|POLYMARKET",
+  "clubScopeHash": "52b4f50c6e36e7dd",
+  "exactSafeClubs": [
+    "arsenal",
+    "aston_villa",
+    "chelsea",
+    "liverpool",
+    "manchester_city",
+    "manchester_united"
+  ],
+  "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+  "supportedActions": [
+    "inspect",
+    "hold",
+    "promote",
+    "rollback"
+  ],
+  "userConsentCanWidenScope": false,
+  "narrowestEnforceableUnit": "LANE_SCOPE_LOCK",
+  "sourceArtifactRefs": [
+    "artifacts/sports/epl-winner-2025-2026-matcher/sports-epl-winner-2025-2026-matcher-input-summary.json",
+    "artifacts/sports/epl-winner-2025-2026-matcher/sports-epl-winner-2025-2026-pair-lanes.json",
+    "artifacts/sports/epl-winner-2025-2026-matcher/sports-epl-winner-2025-2026-all-venue-lanes.json",
+    "artifacts/sports/epl-winner-2025-2026-matcher/sports-epl-winner-2025-2026-rejections.json",
+    "artifacts/sports/epl-winner-2025-2026-matcher/sports-epl-winner-2025-2026-final-decision.json",
+    "artifacts/sports/epl-winner-2025-2026-matcher/sports-epl-winner-2025-2026-operator-summary.md"
+  ]
+}

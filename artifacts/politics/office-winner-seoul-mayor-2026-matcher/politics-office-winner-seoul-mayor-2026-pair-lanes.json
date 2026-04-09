@@ -1,0 +1,489 @@
+{
+  "observedAt": "2026-04-08T14:00:33.842Z",
+  "canonicalTopicKey": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+  "matcherLanes": [
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "candidate": "chong_won_oh",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|OPINION, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-seoul-mayoral-election-winner-1763484351054",
+          "rawOutcomeLabel": "chong won oh"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493238",
+          "rawOutcomeLabel": "chong won oh"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "candidate": "na_kyung_won",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|OPINION, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-seoul-mayoral-election-winner-1763484351054",
+          "rawOutcomeLabel": "na kyung won"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493238",
+          "rawOutcomeLabel": "na kyung won"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "candidate": "oh_se_hoon",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|OPINION, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-seoul-mayoral-election-winner-1763484351054",
+          "rawOutcomeLabel": "oh se hoon"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493238",
+          "rawOutcomeLabel": "oh se hoon"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "candidate": "park_ju_min",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|OPINION, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-seoul-mayoral-election-winner-1763484351054",
+          "rawOutcomeLabel": "park ju min"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493238",
+          "rawOutcomeLabel": "park ju min"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "ahn_cheol_soo",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-seoul-mayoral-election-winner-1763484351054",
+          "rawOutcomeLabel": "ahn cheol soo"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-seoul-mayoral-election-winner",
+          "rawOutcomeLabel": "ahn cheol soo"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "cho_eun_hee",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-seoul-mayoral-election-winner-1763484351054",
+          "rawOutcomeLabel": "cho eun hee"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-seoul-mayoral-election-winner",
+          "rawOutcomeLabel": "cho eun hee"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "cho_kuk",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-seoul-mayoral-election-winner-1763484351054",
+          "rawOutcomeLabel": "cho kuk"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-seoul-mayoral-election-winner",
+          "rawOutcomeLabel": "cho kuk"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "chong_won_oh",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-seoul-mayoral-election-winner-1763484351054",
+          "rawOutcomeLabel": "chong won oh"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-seoul-mayoral-election-winner",
+          "rawOutcomeLabel": "chong won oh"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "han_dong_hoon",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-seoul-mayoral-election-winner-1763484351054",
+          "rawOutcomeLabel": "han dong hoon"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-seoul-mayoral-election-winner",
+          "rawOutcomeLabel": "han dong hoon"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "hong_ihk_pyo",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-seoul-mayoral-election-winner-1763484351054",
+          "rawOutcomeLabel": "hong ihk pyo"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-seoul-mayoral-election-winner",
+          "rawOutcomeLabel": "hong ihk pyo"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "jeon_hyun_heui",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-seoul-mayoral-election-winner-1763484351054",
+          "rawOutcomeLabel": "jeon hyun heui"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-seoul-mayoral-election-winner",
+          "rawOutcomeLabel": "jeon hyun heui"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "na_kyung_won",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-seoul-mayoral-election-winner-1763484351054",
+          "rawOutcomeLabel": "na kyung won"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-seoul-mayoral-election-winner",
+          "rawOutcomeLabel": "na kyung won"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "oh_se_hoon",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-seoul-mayoral-election-winner-1763484351054",
+          "rawOutcomeLabel": "oh se hoon"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-seoul-mayoral-election-winner",
+          "rawOutcomeLabel": "oh se hoon"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "park_hong_keun",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-seoul-mayoral-election-winner-1763484351054",
+          "rawOutcomeLabel": "park hong keun"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-seoul-mayoral-election-winner",
+          "rawOutcomeLabel": "park hong keun"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "park_ju_min",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-seoul-mayoral-election-winner-1763484351054",
+          "rawOutcomeLabel": "park ju min"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-seoul-mayoral-election-winner",
+          "rawOutcomeLabel": "park ju min"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "park_yong_jin",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-seoul-mayoral-election-winner-1763484351054",
+          "rawOutcomeLabel": "park yong jin"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-seoul-mayoral-election-winner",
+          "rawOutcomeLabel": "park yong jin"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "seo_young_kyo",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-seoul-mayoral-election-winner-1763484351054",
+          "rawOutcomeLabel": "seo young kyo"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-seoul-mayoral-election-winner",
+          "rawOutcomeLabel": "seo young kyo"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "candidate": "chong_won_oh",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across OPINION|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493238",
+          "rawOutcomeLabel": "chong won oh"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-seoul-mayoral-election-winner",
+          "rawOutcomeLabel": "chong won oh"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "candidate": "na_kyung_won",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across OPINION|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493238",
+          "rawOutcomeLabel": "na kyung won"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-seoul-mayoral-election-winner",
+          "rawOutcomeLabel": "na kyung won"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "candidate": "oh_se_hoon",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across OPINION|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493238",
+          "rawOutcomeLabel": "oh se hoon"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-seoul-mayoral-election-winner",
+          "rawOutcomeLabel": "oh se hoon"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "candidate": "park_ju_min",
+      "canonicalTopic": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across OPINION|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493238",
+          "rawOutcomeLabel": "park ju min"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-seoul-mayoral-election-winner",
+          "rawOutcomeLabel": "park ju min"
+        }
+      ]
+    }
+  ]
+}

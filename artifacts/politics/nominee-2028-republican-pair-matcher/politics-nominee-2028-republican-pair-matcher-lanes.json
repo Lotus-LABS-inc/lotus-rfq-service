@@ -1,0 +1,152 @@
+{
+  "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+  "bestPair": "LIMITLESS|POLYMARKET",
+  "matcherLanes": [
+    {
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidateIdentityKey": "donald_trump",
+      "normalizedCandidateName": "donald trump",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "matcherReady": true,
+      "evidenceSources": [
+        "artifacts/politics/nominee-2028-shared-core",
+        "artifacts/politics/nominee-2028-pair-matcher-eval",
+        "artifacts/politics/nominee-2028-tri-eval"
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+          "rawOutcomeLabel": "Donald Trump"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "0x895e01dbf3e6a33cd9a44ca0f8cdb5df1bd2b0b6ebed5300d28f8da7145145e4",
+          "rawOutcomeLabel": "Donald Trump"
+        }
+      ],
+      "notes": [
+        "Best exact-safe Republican pair lane by current pair-eval evidence."
+      ]
+    },
+    {
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidateIdentityKey": "donald_trump_jr",
+      "normalizedCandidateName": "donald trump jr",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "matcherReady": true,
+      "evidenceSources": [
+        "artifacts/politics/nominee-2028-shared-core",
+        "artifacts/politics/nominee-2028-pair-matcher-eval",
+        "artifacts/politics/nominee-2028-tri-eval"
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+          "rawOutcomeLabel": "Donald Trump Jr."
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "0x4a9d58d4da874e26708f5bdb014eb07a06aeebb927068d169d43831595386557",
+          "rawOutcomeLabel": "Donald Trump Jr."
+        }
+      ],
+      "notes": [
+        "Best exact-safe Republican pair lane by current pair-eval evidence."
+      ]
+    },
+    {
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidateIdentityKey": "ted_cruz",
+      "normalizedCandidateName": "ted cruz",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "matcherReady": true,
+      "evidenceSources": [
+        "artifacts/politics/nominee-2028-shared-core",
+        "artifacts/politics/nominee-2028-pair-matcher-eval",
+        "artifacts/politics/nominee-2028-tri-eval"
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+          "rawOutcomeLabel": "Ted Cruz"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "0x0ac23db1e56971022bc7e822b907a2466c618b34104ea72bc9fa95e41c86a9c6",
+          "rawOutcomeLabel": "Ted Cruz"
+        }
+      ],
+      "notes": [
+        "Best exact-safe Republican pair lane by current pair-eval evidence."
+      ]
+    },
+    {
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidateIdentityKey": "tucker_carlson",
+      "normalizedCandidateName": "tucker carlson",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "matcherReady": true,
+      "evidenceSources": [
+        "artifacts/politics/nominee-2028-shared-core",
+        "artifacts/politics/nominee-2028-pair-matcher-eval",
+        "artifacts/politics/nominee-2028-tri-eval"
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+          "rawOutcomeLabel": "Tucker Carlson"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "0x4273517fc8141d57ad1528ede46efdceebdb6a4da746d5de5bad216564209a1e",
+          "rawOutcomeLabel": "Tucker Carlson"
+        }
+      ],
+      "notes": [
+        "Best exact-safe Republican pair lane by current pair-eval evidence."
+      ]
+    },
+    {
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "venuePair": "OPINION|POLYMARKET",
+      "candidateIdentityKey": "glenn_youngkin",
+      "normalizedCandidateName": "glenn youngkin",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "matcherReady": true,
+      "evidenceSources": [
+        "artifacts/politics/nominee-2028-shared-core",
+        "artifacts/politics/nominee-2028-pair-matcher-eval",
+        "artifacts/politics/nominee-2028-tri-eval"
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493224",
+          "rawOutcomeLabel": "Glenn Youngkin"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "0xd0c4c60c8e68ee15974df3aa7d217225e98020fab9fcdb32d10f8e3d285e1619",
+          "rawOutcomeLabel": "Glenn Youngkin"
+        }
+      ],
+      "notes": [
+        "Secondary exact-safe Republican pair lane from current pair-eval evidence.",
+        "Thin but valid lane."
+      ]
+    }
+  ]
+}

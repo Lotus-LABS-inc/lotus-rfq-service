@@ -65,6 +65,22 @@ export class ExecutionRecordRepository {
         return mapExecutionRecordRow(result.rows[0]!);
     }
 
+    public async findById(id: string): Promise<ExecutionRecord | null> {
+        const result = await this.pool.query<ExecutionRecordRow>(
+            `SELECT * FROM execution_records WHERE id = $1::uuid`,
+            [id]
+        );
+        return result.rows[0] ? mapExecutionRecordRow(result.rows[0]) : null;
+    }
+
+    public async list(limit = 100): Promise<ExecutionRecord[]> {
+        const result = await this.pool.query<ExecutionRecordRow>(
+            `SELECT * FROM execution_records ORDER BY created_at DESC LIMIT $1`,
+            [limit]
+        );
+        return result.rows.map(mapExecutionRecordRow);
+    }
+
     public async appendStateTransition(
         executionRecordId: string,
         fromState: string | null,

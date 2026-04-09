@@ -1,0 +1,16 @@
+{
+  "observedAt": "2026-04-09T09:53:13.041Z",
+  "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+  "overallDecision": "SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_ALL_VENUE_REVIEW_REQUIRED_PAIR_FIRST",
+  "bestPair": "LIMITLESS|POLYMARKET",
+  "bestAllVenueIfAny": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+  "pairMatcherReady": true,
+  "allVenueMatcherReady": true,
+  "pairStillPreferred": true,
+  "exactSafePairCandidateCount": 11,
+  "exactSafeAllVenueCandidateCount": 4,
+  "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+  "operatorCredible": true,
+  "matcherFollowUpJustified": true,
+  "singleBestNextAction": "Run a narrow readiness pass for SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026 with LIMITLESS|POLYMARKET kept explicit and the strict all-venue lane review-gated."
+}

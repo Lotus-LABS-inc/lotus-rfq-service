@@ -1,0 +1,109 @@
+{
+  "observedAt": "2026-04-09T09:53:13.033Z",
+  "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+  "canonicalVenueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+  "matcherLanes": [
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "club": "atletico_madrid",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+      "routeabilityDecision": "ALL_VENUE_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg survives the strict 4-venue intersection, but wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this all-venue lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "la-liga-winner-1765290337005:atletico-madrid",
+          "rawClubLabel": "La Liga Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "la-liga-winner-2026:atletico-madrid",
+          "rawClubLabel": "La Liga Winner 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "la-liga-winner-114:atletico-madrid",
+          "rawClubLabel": "La Liga Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1573",
+          "rawClubLabel": "Will Atletico Madrid win the 2025–26 La Liga?"
+        }
+      ]
+    },
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "club": "barcelona",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+      "routeabilityDecision": "ALL_VENUE_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg survives the strict 4-venue intersection, but wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this all-venue lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "la-liga-winner-1765290337005:barcelona",
+          "rawClubLabel": "La Liga Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "la-liga-winner-2026:barcelona",
+          "rawClubLabel": "La Liga Winner 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "la-liga-winner-114:barcelona",
+          "rawClubLabel": "La Liga Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1571",
+          "rawClubLabel": "Will Barcelona win the 2025–26 La Liga?"
+        }
+      ]
+    },
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "club": "real_madrid",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+      "routeabilityDecision": "ALL_VENUE_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg survives the strict 4-venue intersection, but wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this all-venue lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "la-liga-winner-1765290337005:real-madrid",
+          "rawClubLabel": "La Liga Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "la-liga-winner-2026:real-madrid",
+          "rawClubLabel": "La Liga Winner 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "la-liga-winner-114:real-madrid",
+          "rawClubLabel": "La Liga Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1572",
+          "rawClubLabel": "Will Real Madrid win the 2025–26 La Liga?"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Strict all-venue lane survived the LIMITLESS|OPINION|POLYMARKET|PREDICT intersection on a 3-club core."
+  ]
+}

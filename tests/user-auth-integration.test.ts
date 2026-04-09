@@ -18,6 +18,19 @@ describe("RFQ Route JWT Integration", () => {
                 state: "BROADCAST" as const,
                 expiresAt: new Date().toISOString()
             })),
+            createExecutionScopeToken: vi.fn(async () => ({
+                token: "scope-token",
+                expiresAt: new Date(Date.now() + 60_000).toISOString(),
+                singleUse: true as const,
+                scope: {
+                    scopeKind: "POLITICS_NOMINEE_LANE",
+                    scopeId: "POLITICS_NOMINEE_REPUBLICAN_TRI_LIMITLESS_OPINION_POLYMARKET",
+                    topicKey: "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+                    laneType: "TRI",
+                    venueSet: ["LIMITLESS", "OPINION", "POLYMARKET"],
+                    candidateSet: ["jd_vance", "marco_rubio", "ron_desantis"]
+                }
+            })),
             acceptRFQ: vi.fn(async () => ({
                 status: "PLAN_ACCEPTED" as const,
                 plan_id: "plan-1",

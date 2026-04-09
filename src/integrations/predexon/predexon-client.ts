@@ -10,6 +10,7 @@ import {
   parsePredexonOpenInterestResponse,
   parsePredexonOpinionOrderbooksResponse,
   parsePredexonOrderbooksResponse,
+  parsePredexonPredictFunOrderbooksResponse,
   parsePredexonTradesResponse,
   parsePredexonVolumeResponse
 } from "./predexon-schemas.js"
@@ -109,6 +110,14 @@ export type PredexonOpinionOrderbooksQuery = Readonly<{
   pagination_key?: string;
 }>
 
+export type PredexonPredictFunOrderbooksQuery = Readonly<{
+  market_id: string | number;
+  start_time: number;
+  end_time: number;
+  limit?: number;
+  pagination_key?: string;
+}>
+
 export type PredexonTradesQuery = Readonly<{
   market_slug?: string;
   condition_id?: string;
@@ -190,6 +199,7 @@ export const PREDExonHistoricalEndpoints = Object.freeze({
   orderbooks: "/v2/polymarket/orderbooks",
   limitlessOrderbooks: "/v2/limitless/orderbooks",
   opinionOrderbooks: "/v2/opinion/orderbooks",
+  predictFunOrderbooks: "/v2/predictfun/orderbooks",
   trades: "/v2/polymarket/trades",
   volume: (tokenId: string) => `/v2/polymarket/markets/${encodeURIComponent(tokenId)}/volume`,
   openInterest: (conditionId: string) =>
@@ -243,6 +253,8 @@ export type PredexonMarketPrice = ReturnType<typeof parsePredexonMarketPriceResp
 export type PredexonOrderbookSnapshot = ArrayElement<ReturnType<typeof parsePredexonOrderbooksResponse>>
 export type PredexonLimitlessOrderbookSnapshot = ArrayElement<ReturnType<typeof parsePredexonLimitlessOrderbooksResponse>>
 export type PredexonOpinionOrderbookSnapshot = ArrayElement<ReturnType<typeof parsePredexonOpinionOrderbooksResponse>>
+export type PredexonPredictFunOrderbooksResponse = ReturnType<typeof parsePredexonPredictFunOrderbooksResponse>
+export type PredexonPredictFunOrderbookSnapshot = ArrayElement<PredexonPredictFunOrderbooksResponse["snapshots"]>
 export type PredexonTrade = ArrayElement<ReturnType<typeof parsePredexonTradesResponse>>
 export type PredexonVolumePoint = ArrayElement<ReturnType<typeof parsePredexonVolumeResponse>>
 export type PredexonOpenInterestPoint = ArrayElement<ReturnType<typeof parsePredexonOpenInterestResponse>>
@@ -303,6 +315,17 @@ export class PredexonHistoricalClient {
       PREDExonHistoricalEndpoints.opinionOrderbooks,
       query,
       parsePredexonOpinionOrderbooksResponse
+    )
+  }
+
+  public getPredictFunOrderbookHistory(
+    query: PredexonPredictFunOrderbooksQuery
+  ): Promise<PredexonPredictFunOrderbooksResponse> {
+    return this.request(
+      "getPredictFunOrderbookHistory",
+      PREDExonHistoricalEndpoints.predictFunOrderbooks,
+      query,
+      parsePredexonPredictFunOrderbooksResponse
     )
   }
 

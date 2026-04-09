@@ -1,0 +1,16 @@
+{
+  "observedAt": "2026-04-08T14:00:33.842Z",
+  "canonicalTopicKey": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+  "overallDecision": "OFFICE_WINNER_SEOUL_MAYOR_2026_TRI_REVIEW_REQUIRED",
+  "bestPair": "LIMITLESS|POLYMARKET",
+  "bestTriIfAny": "LIMITLESS|OPINION|POLYMARKET",
+  "pairMatcherReady": true,
+  "triMatcherReady": true,
+  "pairStillPreferred": true,
+  "exactSafePairCandidateCount": 13,
+  "exactSafeTriCandidateCount": 4,
+  "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+  "operatorCredible": true,
+  "matcherFollowUpJustified": true,
+  "singleBestNextAction": "Review the strict Seoul tri lane LIMITLESS|OPINION|POLYMARKET before any readiness follow-up, while keeping LIMITLESS|POLYMARKET as the safer fallback."
+}

@@ -1,0 +1,200 @@
+{
+  "observedAt": "2026-04-08T15:30:40.074Z",
+  "exactTopic": "OFFICE_WINNER|COLOMBIA|US_PRESIDENT|2026",
+  "refreshedRowsUsed": [
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "colombia-presidential-election",
+      "title": "Colombia Presidential Election",
+      "candidateSet": [
+        "abelardo de la espriella",
+        "carlos felipe córdoba",
+        "claudia lópez ind",
+        "daniel quintero",
+        "david luna sánchez ind",
+        "enrique peñalosa",
+        "germán vargas lleras rc",
+        "gustavo bolívar hc",
+        "iván cepeda castro",
+        "juan carlos pinzón",
+        "juan daniel oviedo ind",
+        "juan manuel galán nl",
+        "luis gilberto murillo crb",
+        "mauricio cárdenas",
+        "paloma valencia",
+        "roy barreras",
+        "sergio fajardo dc",
+        "vicky dávila ind"
+      ]
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "colombia-presidential-election-1769094546695",
+      "title": "Colombia Presidential Election",
+      "candidateSet": [
+        "abelardo de la espriella",
+        "iván cepeda castro",
+        "juan carlos pinzón",
+        "other",
+        "paloma valencia",
+        "sergio fajardo dc",
+        "vicky dávila ind"
+      ]
+    }
+  ],
+  "familyComparabilitySourceArtifacts": {
+    "fetchSummary": "artifacts/politics/office-winner-family-pass/politics-office-winner-fetch-summary.json",
+    "admissionSummary": "artifacts/politics/office-winner-family-pass/politics-office-winner-admission-summary.json",
+    "normalizedTopics": "artifacts/politics/office-winner-family-pass/politics-office-winner-normalized-topics.json",
+    "comparabilitySummary": "artifacts/politics/office-winner-family-pass/politics-office-winner-comparability-summary.json",
+    "basisFragmentationSummary": "artifacts/politics/office-winner-family-pass/politics-office-winner-basis-fragmentation-summary.json",
+    "finalDecision": "artifacts/politics/office-winner-family-pass/politics-office-winner-final-decision.json"
+  },
+  "admittedVenues": [
+    "LIMITLESS",
+    "POLYMARKET"
+  ],
+  "admittedCandidates": [
+    "abelardo_de_la_espriella",
+    "iván_cepeda_castro",
+    "juan_carlos_pinzón",
+    "paloma_valencia",
+    "sergio_fajardo_dc",
+    "vicky_dávila_ind"
+  ],
+  "exclusionsBeforeFinalMatcherConstruction": [
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": null,
+      "normalizedCandidateName": "other",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "OTHERS_EXCLUDED",
+      "notes": "Outcome other is excluded by shared-core policy."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": null,
+      "normalizedCandidateName": "other",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "OTHERS_EXCLUDED",
+      "notes": "Outcome Other is excluded by shared-core policy."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "carlos_felipe_córdoba",
+      "normalizedCandidateName": "carlos felipe córdoba",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate carlos felipe córdoba is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "claudia_lópez_ind",
+      "normalizedCandidateName": "claudia lópez ind",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate claudia lópez ind is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "daniel_quintero",
+      "normalizedCandidateName": "daniel quintero",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate daniel quintero is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "david_luna_sánchez_ind",
+      "normalizedCandidateName": "david luna sánchez ind",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate david luna sánchez ind is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "enrique_peñalosa",
+      "normalizedCandidateName": "enrique peñalosa",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate enrique peñalosa is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "germán_vargas_lleras_rc",
+      "normalizedCandidateName": "germán vargas lleras rc",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate germán vargas lleras rc is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "gustavo_bolívar_hc",
+      "normalizedCandidateName": "gustavo bolívar hc",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate gustavo bolívar hc is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "juan_daniel_oviedo_ind",
+      "normalizedCandidateName": "juan daniel oviedo ind",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate juan daniel oviedo ind is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "juan_manuel_galán_nl",
+      "normalizedCandidateName": "juan manuel galán nl",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate juan manuel galán nl is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "luis_gilberto_murillo_crb",
+      "normalizedCandidateName": "luis gilberto murillo crb",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate luis gilberto murillo crb is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "mauricio_cárdenas",
+      "normalizedCandidateName": "mauricio cárdenas",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate mauricio cárdenas is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "roy_barreras",
+      "normalizedCandidateName": "roy barreras",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate roy barreras is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "venue",
+      "venue": "MYRIAD",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "VENUE_NOT_PRESENT_FOR_TOPIC",
+      "notes": "MYRIAD is not part of the freshly admitted venue truth for OFFICE_WINNER|COLOMBIA|US_PRESIDENT|2026."
+    },
+    {
+      "scope": "venue",
+      "venue": "OPINION",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "VENUE_NOT_PRESENT_FOR_TOPIC",
+      "notes": "OPINION is not part of the freshly admitted venue truth for OFFICE_WINNER|COLOMBIA|US_PRESIDENT|2026."
+    },
+    {
+      "scope": "venue",
+      "venue": "PREDICT",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "VENUE_NOT_PRESENT_FOR_TOPIC",
+      "notes": "PREDICT is not part of the freshly admitted venue truth for OFFICE_WINNER|COLOMBIA|US_PRESIDENT|2026."
+    }
+  ]
+}

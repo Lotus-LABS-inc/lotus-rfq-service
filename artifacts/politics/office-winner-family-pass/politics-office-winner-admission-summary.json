@@ -1,0 +1,23 @@
+{
+  "observedAt": "2026-04-08T15:30:40.067Z",
+  "totalAdmittedOfficeWinnerRows": 13,
+  "rowsRejectedByReason": {
+    "NOMINEE_NOT_OFFICE_WINNER": 494,
+    "not in scoped families": 3,
+    "MISSING_JURISDICTION": 2,
+    "excluded family CONFIRMATION_APPOINTMENT": 7,
+    "GEOPOLITICAL_NOT_OFFICE_WINNER": 7,
+    "OFFICE_EXIT_NOT_OFFICE_WINNER": 2
+  },
+  "rowsAdmittedByTopicCandidate": {
+    "OFFICE_WINNER|SEOUL|MAYOR|2026": 7,
+    "OFFICE_WINNER|COLOMBIA|US_PRESIDENT|2026": 2,
+    "OFFICE_WINNER|BUSAN|MAYOR|2026": 2,
+    "OFFICE_WINNER|USA|US_PRESIDENT|2028": 2
+  },
+  "venueBreakdown": {
+    "OPINION": 5,
+    "POLYMARKET": 4,
+    "LIMITLESS": 4
+  }
+}

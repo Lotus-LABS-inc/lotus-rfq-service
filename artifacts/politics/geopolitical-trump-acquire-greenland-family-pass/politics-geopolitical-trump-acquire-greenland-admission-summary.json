@@ -1,0 +1,14 @@
+{
+  "observedAt": "2026-04-08T22:00:29.915Z",
+  "totalAdmittedRows": 4,
+  "rowsRejectedByReason": {},
+  "rowsAdmittedByTopicCandidate": {
+    "GEOPOLITICAL_EVENT_BY_DATE|USA_GREENLAND|TRUMP_ACQUIRE_GREENLAND|2026-12-31": 4
+  },
+  "venueBreakdown": {
+    "LIMITLESS": 1,
+    "OPINION": 1,
+    "POLYMARKET": 1,
+    "PREDICT": 1
+  }
+}

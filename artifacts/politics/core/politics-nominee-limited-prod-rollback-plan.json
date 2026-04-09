@@ -1,0 +1,53 @@
+{
+  "observedAt": "2026-04-08T00:44:17.782Z",
+  "lanes": [
+    {
+      "laneId": "POLITICS_NOMINEE_REPUBLICAN_PAIR_LIMITLESS_POLYMARKET",
+      "rollbackTarget": "INTERNAL_ONLY",
+      "fallbackLaneId": null,
+      "holdConditions": [
+        "rule_status_drift",
+        "candidate_set_drift",
+        "venue_set_drift",
+        "operator_confidence_lost"
+      ],
+      "operatorSteps": [
+        "Record a hold or rollback event for the Republican pair lane.",
+        "Keep the lane disabled until refreshed matcher artifacts are regenerated.",
+        "Regenerate politics nominee limited-prod readiness artifacts."
+      ]
+    },
+    {
+      "laneId": "POLITICS_NOMINEE_REPUBLICAN_TRI_LIMITLESS_OPINION_POLYMARKET",
+      "rollbackTarget": "PAIR_FALLBACK",
+      "fallbackLaneId": "POLITICS_NOMINEE_REPUBLICAN_PAIR_LIMITLESS_POLYMARKET",
+      "holdConditions": [
+        "tri_candidate_set_drift",
+        "tri_rule_status_drift",
+        "opinion_supply_loss",
+        "operator_confidence_lost"
+      ],
+      "operatorSteps": [
+        "Record a rollback event for the Republican tri lane.",
+        "Revert the narrow tri lane to hold/internal-only.",
+        "Fall back operationally to the Republican pair lane LIMITLESS|POLYMARKET.",
+        "Regenerate politics nominee limited-prod readiness artifacts."
+      ]
+    },
+    {
+      "laneId": "POLITICS_NOMINEE_DEMOCRATIC_PAIR_LIMITLESS_POLYMARKET",
+      "rollbackTarget": "LANE_HOLD",
+      "fallbackLaneId": null,
+      "holdConditions": [
+        "democratic_candidate_set_drift",
+        "democratic_rule_status_drift",
+        "democratic_pair_operator_confidence_lost"
+      ],
+      "operatorSteps": [
+        "Record a hold or rollback event for the Democratic pair lane.",
+        "Keep the Democratic pair lane disabled until refreshed matcher artifacts are regenerated.",
+        "Regenerate politics nominee limited-prod readiness artifacts."
+      ]
+    }
+  ]
+}

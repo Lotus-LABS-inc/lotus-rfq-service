@@ -1,0 +1,73 @@
+[
+  {
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+    "venuesPresent": [
+      "LIMITLESS",
+      "OPINION",
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "pairSharedNamedOutcomesCount": 4,
+    "triSharedNamedOutcomesCount": 4,
+    "quadSharedNamedOutcomesCount": 3,
+    "excludedOutcomesCount": 6,
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_CORE_EXISTS",
+    "matcherCandidate": true,
+    "sharedNamedOutcomes": [
+      "Atletico Madrid",
+      "Barcelona",
+      "Real Madrid",
+      "Villarreal"
+    ],
+    "excludedOutcomes": [
+      {
+        "label": "Real Betis",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "Athletic Bilbao",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "Real Sociedad",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "Girona",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "Valencia",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "Sevilla",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      }
+    ],
+    "notes": [
+      "target_venues=LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "quad_shared_core=Atletico Madrid|Barcelona|Real Madrid",
+      "grouped_sibling_binary_market_reconstruction"
+    ]
+  }
+]

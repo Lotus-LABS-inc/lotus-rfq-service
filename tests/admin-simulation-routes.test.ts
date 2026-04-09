@@ -31,6 +31,68 @@ describe("Admin Simulation Routes", () => {
           venueCoverage: { polymarketRows: 10, limitlessRows: 8, opinionRows: 0, myriadRows: 0, predictRows: 0 }
         }
       ])),
+      getRouteabilitySummary: vi.fn(async () => ({
+        filters: {
+          category: "SPORTS",
+          catalogScope: "ALL",
+          marketClass: HistoricalMarketClass.BINARY
+        },
+        totals: {
+          eventCount: 1,
+          canonicalMarketCount: 1,
+          runnableSingleCount: 2,
+          runnablePairCount: 1,
+          runnableTriCount: 0
+        },
+        routeModes: [
+          {
+            routeMode: "POLYMARKET_LIMITLESS",
+            label: "Predexon + Limitless",
+            cardinality: "pair",
+            routeableMarketCount: 1,
+            eventCount: 1
+          }
+        ],
+        blockReasons: [
+          {
+            reason: "missing_required_venue",
+            count: 3
+          }
+        ],
+        venueVisibility: {
+          polymarketEvents: 1,
+          limitlessEvents: 1,
+          opinionEvents: 0,
+          myriadEvents: 0,
+          predictEvents: 0
+        },
+        opinionRouteability: {
+          eventsWithOpinionInventory: 0,
+          eventsWithRunnableOpinionOnly: 0,
+          eventsWithBlockedOpinionPairOrTri: 0,
+          semanticsRulepackVersion: "semantic-rulepack-v1",
+          exactLiveOnlyCount: 0,
+          exactHistoricalQualifiedCount: 0,
+          nearMissCount: 0,
+          blockedUnsafeCandidateCount: 0,
+          lowConfidenceCandidateCount: 0,
+          dominantBlockReasons: [],
+          dominantNearMissDimensions: [],
+          dominantNearMissReasons: []
+        },
+        predictRouteability: {
+          eventsWithPredictInventory: 0,
+          eventsWithCurrentStateOnlyPredict: 0,
+          eventsWithHistoricallyQualifiedPredict: 0,
+          eventsWithBlockedPredictRoutes: 0,
+          dominantBlockReasons: []
+        },
+        triRouteability: {
+          candidateCount: 0,
+          runnableCount: 0,
+          dominantBlockReasons: []
+        }
+      })),
       runSimulation: vi.fn(async () => ({
         run: {
           id: runId,
@@ -90,6 +152,16 @@ describe("Admin Simulation Routes", () => {
           coverageStart: new Date("2026-03-13T00:00:00.000Z"),
           coverageEnd: new Date("2026-03-13T01:00:00.000Z")
         }],
+        predictReadinessOverview: {
+          state: "UNUSABLE",
+          historicalQualified: false,
+          reasons: ["no_predict_evidence_available"],
+          recorderAccumulatingMarkets: 0,
+          fallbackReadyMarkets: 0,
+          nativeReadyMarkets: 0,
+          currentStateOnlyMarkets: 0,
+          unusableMarkets: 0
+        },
         resolutionRiskInspection: {
           canonicalEventId,
           profiles: [],
@@ -152,7 +224,8 @@ describe("Admin Simulation Routes", () => {
                 runnable: true,
                 reason: null
               }
-            ]
+            ],
+            predictReadiness: null
           }
         ],
         routeModeSummary: [
@@ -181,6 +254,7 @@ describe("Admin Simulation Routes", () => {
 
     const responses = await Promise.all([
       app.inject({ method: "GET", url: "/admin/simulation/scopes" }),
+      app.inject({ method: "GET", url: "/admin/simulation/routeability-summary" }),
       app.inject({
         method: "POST",
         url: "/admin/simulation/run",
@@ -255,9 +329,22 @@ describe("Admin Simulation Routes", () => {
     const scopes = await app.inject({ method: "GET", url: "/admin/simulation/scopes?category=SPORTS&marketClass=BINARY" });
     expect(scopes.statusCode).toBe(200);
 
+    const routeabilitySummary = await app.inject({
+      method: "GET",
+      url: "/admin/simulation/routeability-summary?category=SPORTS&marketClass=BINARY&catalogScope=historical_simulation"
+    });
+    expect(routeabilitySummary.statusCode).toBe(200);
+    expect(
+      (simulationAdminService as unknown as { getRouteabilitySummary: ReturnType<typeof vi.fn> }).getRouteabilitySummary
+    ).toHaveBeenCalledWith({
+      category: "SPORTS",
+      marketClass: HistoricalMarketClass.BINARY,
+      catalogScope: "historical_simulation"
+    });
+
     const triVenueScopes = await app.inject({
       method: "GET",
-      url: "/admin/simulation/scopes?category=SPORTS&marketClass=BINARY&routeMode=POLYMARKET_LIMITLESS_OPINION"
+      url: "/admin/simulation/scopes?category=SPORTS&marketClass=BINARY&catalogScope=live&routeMode=POLYMARKET_LIMITLESS_OPINION"
     });
     expect(triVenueScopes.statusCode).toBe(200);
     expect(
@@ -265,6 +352,7 @@ describe("Admin Simulation Routes", () => {
     ).toHaveBeenCalledWith({
       category: "SPORTS",
       marketClass: HistoricalMarketClass.BINARY,
+      catalogScope: "live",
       routeMode: "POLYMARKET_LIMITLESS_OPINION"
     });
 

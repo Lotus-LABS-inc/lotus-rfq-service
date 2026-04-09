@@ -1,0 +1,365 @@
+{
+  "observedAt": "2026-04-08T13:20:48.850Z",
+  "exactTopic": "OFFICE_WINNER|USA|US_PRESIDENT|2028",
+  "refreshedRowsUsed": [
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "presidential-election-winner-2028",
+      "title": "Presidential Election Winner 2028",
+      "candidateSet": [
+        "alexandria ocasio cortez",
+        "andy beshear",
+        "beware of external links",
+        "donald trump",
+        "donald trump jr",
+        "dwayne rock johnson",
+        "elon musk",
+        "eric trump",
+        "gavin newsom",
+        "glenn youngkin",
+        "greg abbott",
+        "gretchen whitmer",
+        "ivanka trump",
+        "james talarico",
+        "jamie dimon",
+        "jb pritzker",
+        "jd vance",
+        "jon ossoff",
+        "josh shapiro",
+        "kamala harris",
+        "kim kardashian",
+        "lebron james",
+        "marco rubio",
+        "michelle obama",
+        "nikki haley",
+        "pete buttigieg",
+        "pete hegseth",
+        "ro khanna",
+        "ron desantis",
+        "stephen smith",
+        "thomas massie",
+        "tim walz",
+        "tucker carlson",
+        "tulsi gabbard",
+        "vivek ramaswamy",
+        "wes moore",
+        "zohran mamdani"
+      ]
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "presidential-election-winner-2028-1769010522121",
+      "title": "Presidential Election Winner 2028",
+      "candidateSet": [
+        "alexandria ocasio cortez",
+        "donald trump",
+        "gavin newsom",
+        "jd vance",
+        "josh shapiro",
+        "kamala harris",
+        "marco rubio",
+        "other"
+      ]
+    }
+  ],
+  "familyComparabilitySourceArtifacts": {
+    "fetchSummary": "artifacts/politics/office-winner-family-pass/politics-office-winner-fetch-summary.json",
+    "admissionSummary": "artifacts/politics/office-winner-family-pass/politics-office-winner-admission-summary.json",
+    "normalizedTopics": "artifacts/politics/office-winner-family-pass/politics-office-winner-normalized-topics.json",
+    "comparabilitySummary": "artifacts/politics/office-winner-family-pass/politics-office-winner-comparability-summary.json",
+    "basisFragmentationSummary": "artifacts/politics/office-winner-family-pass/politics-office-winner-basis-fragmentation-summary.json",
+    "finalDecision": "artifacts/politics/office-winner-family-pass/politics-office-winner-final-decision.json"
+  },
+  "admittedVenues": [
+    "LIMITLESS",
+    "POLYMARKET"
+  ],
+  "admittedCandidates": [
+    "alexandria_ocasio_cortez",
+    "donald_trump",
+    "gavin_newsom",
+    "jd_vance",
+    "josh_shapiro",
+    "kamala_harris",
+    "marco_rubio"
+  ],
+  "exclusionsBeforeFinalMatcherConstruction": [
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": null,
+      "normalizedCandidateName": "other",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "OTHERS_EXCLUDED",
+      "notes": "Outcome other is excluded by shared-core policy."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": null,
+      "normalizedCandidateName": "other",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "OTHERS_EXCLUDED",
+      "notes": "Outcome Other is excluded by shared-core policy."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "andy_beshear",
+      "normalizedCandidateName": "andy beshear",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate andy beshear is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "beware_of_external_links",
+      "normalizedCandidateName": "beware of external links",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate beware of external links is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "donald_trump_jr",
+      "normalizedCandidateName": "donald trump jr",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate donald trump jr is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "dwayne_rock_johnson",
+      "normalizedCandidateName": "dwayne rock johnson",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate dwayne rock johnson is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "elon_musk",
+      "normalizedCandidateName": "elon musk",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate elon musk is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "eric_trump",
+      "normalizedCandidateName": "eric trump",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate eric trump is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "glenn_youngkin",
+      "normalizedCandidateName": "glenn youngkin",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate glenn youngkin is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "greg_abbott",
+      "normalizedCandidateName": "greg abbott",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate greg abbott is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "gretchen_whitmer",
+      "normalizedCandidateName": "gretchen whitmer",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate gretchen whitmer is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "ivanka_trump",
+      "normalizedCandidateName": "ivanka trump",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate ivanka trump is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "james_talarico",
+      "normalizedCandidateName": "james talarico",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate james talarico is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "jamie_dimon",
+      "normalizedCandidateName": "jamie dimon",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate jamie dimon is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "jb_pritzker",
+      "normalizedCandidateName": "jb pritzker",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate jb pritzker is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "jon_ossoff",
+      "normalizedCandidateName": "jon ossoff",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate jon ossoff is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "kim_kardashian",
+      "normalizedCandidateName": "kim kardashian",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate kim kardashian is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "lebron_james",
+      "normalizedCandidateName": "lebron james",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate lebron james is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "michelle_obama",
+      "normalizedCandidateName": "michelle obama",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate michelle obama is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "nikki_haley",
+      "normalizedCandidateName": "nikki haley",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate nikki haley is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "pete_buttigieg",
+      "normalizedCandidateName": "pete buttigieg",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate pete buttigieg is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "pete_hegseth",
+      "normalizedCandidateName": "pete hegseth",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate pete hegseth is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "ro_khanna",
+      "normalizedCandidateName": "ro khanna",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate ro khanna is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "ron_desantis",
+      "normalizedCandidateName": "ron desantis",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate ron desantis is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "stephen_smith",
+      "normalizedCandidateName": "stephen smith",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate stephen smith is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "thomas_massie",
+      "normalizedCandidateName": "thomas massie",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate thomas massie is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "tim_walz",
+      "normalizedCandidateName": "tim walz",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate tim walz is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "tucker_carlson",
+      "normalizedCandidateName": "tucker carlson",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate tucker carlson is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "tulsi_gabbard",
+      "normalizedCandidateName": "tulsi gabbard",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate tulsi gabbard is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "vivek_ramaswamy",
+      "normalizedCandidateName": "vivek ramaswamy",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate vivek ramaswamy is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "wes_moore",
+      "normalizedCandidateName": "wes moore",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate wes moore is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "candidate",
+      "candidateIdentityKey": "zohran_mamdani",
+      "normalizedCandidateName": "zohran mamdani",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "NOT_SHARED",
+      "notes": "Candidate zohran mamdani is not part of the exact shared LIMITLESS|POLYMARKET office-winner core."
+    },
+    {
+      "scope": "venue",
+      "venue": "MYRIAD",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "VENUE_NOT_PRESENT_FOR_TOPIC",
+      "notes": "MYRIAD is not part of the freshly admitted venue truth for OFFICE_WINNER|USA|US_PRESIDENT|2028."
+    },
+    {
+      "scope": "venue",
+      "venue": "OPINION",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "VENUE_NOT_PRESENT_FOR_TOPIC",
+      "notes": "OPINION is not part of the freshly admitted venue truth for OFFICE_WINNER|USA|US_PRESIDENT|2028."
+    },
+    {
+      "scope": "venue",
+      "venue": "PREDICT",
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "reason": "VENUE_NOT_PRESENT_FOR_TOPIC",
+      "notes": "PREDICT is not part of the freshly admitted venue truth for OFFICE_WINNER|USA|US_PRESIDENT|2028."
+    }
+  ]
+}

@@ -1,0 +1,137 @@
+{
+  "observedAt": "2026-04-08T22:00:29.915Z",
+  "rowsFetchedByVenue": {
+    "LIMITLESS": 1,
+    "OPINION": 1,
+    "POLYMARKET": 1,
+    "PREDICT": 1
+  },
+  "rowsAdmittedByVenue": {
+    "LIMITLESS": 1,
+    "OPINION": 1,
+    "POLYMARKET": 1,
+    "PREDICT": 1
+  },
+  "fetchStatusByVenue": {
+    "OPINION": {
+      "fetchStatus": "SUCCESS",
+      "warnings": [],
+      "discoveryPath": "opinion_clob_sdk_active_markets",
+      "primaryDiscoveryPath": "opinion_clob_sdk_active_markets",
+      "fallbackDiscoveryPathUsed": null,
+      "primaryPathFailure": null,
+      "broadDiscoveryRowCount": 2,
+      "targetedDiscoveryRowCount": 4,
+      "targetedDiscoveryPathUsed": "opinion_clob_sdk_active_markets",
+      "targetedQueryLabels": [
+        "Republican Presidential Nominee 2028",
+        "Democratic Presidential Nominee 2028",
+        "Republican nominee for U.S. president in 2028",
+        "Democratic nominee for U.S. president in 2028",
+        "win the 2028 Republican presidential nomination",
+        "win the 2028 Democratic presidential nomination",
+        "JD Vance",
+        "Donald Trump",
+        "Gavin Newsom",
+        "Kamala Harris",
+        "presidential election winner 2028",
+        "2028 U.S. presidential election winner",
+        "colombia presidential election",
+        "2026 busan mayoral election winner",
+        "2026 seoul mayoral election winner",
+        "trump out as president before 2027",
+        "netanyahu out before 2027",
+        "keir starmer out before july",
+        "starmer out by",
+        "netanyahu out by",
+        "balance of power 2026 midterms",
+        "2026 midterms balance of power",
+        "control of the house and senate after the 2026 midterms"
+      ]
+    },
+    "POLYMARKET": {
+      "fetchStatus": "SUCCESS",
+      "warnings": [],
+      "discoveryPath": "polymarket_direct_market_page_party_control_targeted",
+      "primaryDiscoveryPath": "predexon_polymarket_current_events",
+      "fallbackDiscoveryPathUsed": "polymarket_direct_market_page_party_control_targeted",
+      "primaryPathFailure": null,
+      "broadDiscoveryRowCount": 495,
+      "targetedDiscoveryRowCount": 8,
+      "targetedDiscoveryPathUsed": "polymarket_direct_market_page_party_control_targeted",
+      "targetedQueryLabels": [
+        "presidential election winner 2028",
+        "2028 U.S. presidential election winner",
+        "colombia presidential election",
+        "2026 busan mayoral election winner",
+        "2026 seoul mayoral election winner",
+        "trump out as president before 2027",
+        "netanyahu out before 2027",
+        "keir starmer out before july",
+        "starmer out by",
+        "netanyahu out by",
+        "balance of power 2026 midterms",
+        "2026 midterms balance of power",
+        "control of the house and senate after the 2026 midterms"
+      ]
+    },
+    "PREDICT": {
+      "fetchStatus": "SUCCESS",
+      "warnings": [],
+      "discoveryPath": "predict_exact_market_api_party_control_targeted",
+      "primaryDiscoveryPath": "predict_current_markets",
+      "fallbackDiscoveryPathUsed": "predict_exact_market_api_party_control_targeted",
+      "primaryPathFailure": null,
+      "broadDiscoveryRowCount": 0,
+      "targetedDiscoveryRowCount": 3,
+      "targetedDiscoveryPathUsed": "predict_exact_market_api_party_control_targeted",
+      "targetedQueryLabels": [
+        "trump out as president before 2027",
+        "netanyahu out before 2027",
+        "keir starmer out before july",
+        "starmer out by",
+        "netanyahu out by",
+        "balance of power 2026 midterms",
+        "2026 midterms balance of power",
+        "control of the house and senate after the 2026 midterms"
+      ]
+    },
+    "LIMITLESS": {
+      "fetchStatus": "SUCCESS",
+      "warnings": [],
+      "discoveryPath": "limitless_direct_market_page_office_winner_targeted",
+      "primaryDiscoveryPath": "limitless_sdk_active_markets",
+      "fallbackDiscoveryPathUsed": "limitless_direct_market_page_office_winner_targeted",
+      "primaryPathFailure": null,
+      "broadDiscoveryRowCount": 0,
+      "targetedDiscoveryRowCount": 6,
+      "targetedDiscoveryPathUsed": "limitless_direct_market_page_office_winner_targeted",
+      "targetedQueryLabels": [
+        "Republican Presidential Nominee 2028",
+        "Democratic Presidential Nominee 2028",
+        "Republican nominee for U.S. president in 2028",
+        "Democratic nominee for U.S. president in 2028",
+        "win the 2028 Republican presidential nomination",
+        "win the 2028 Democratic presidential nomination",
+        "JD Vance",
+        "Donald Trump",
+        "Gavin Newsom",
+        "Kamala Harris",
+        "presidential election winner 2028",
+        "2028 U.S. presidential election winner",
+        "colombia presidential election",
+        "2026 busan mayoral election winner",
+        "2026 seoul mayoral election winner",
+        "trump out as president before 2027",
+        "netanyahu out before 2027",
+        "keir starmer out before july",
+        "starmer out by",
+        "netanyahu out by"
+      ]
+    }
+  },
+  "familySupplyChangedMaterially": false,
+  "admittedTopicCandidates": {
+    "GEOPOLITICAL_EVENT_BY_DATE|USA_GREENLAND|TRUMP_ACQUIRE_GREENLAND|2026-12-31": 4
+  }
+}

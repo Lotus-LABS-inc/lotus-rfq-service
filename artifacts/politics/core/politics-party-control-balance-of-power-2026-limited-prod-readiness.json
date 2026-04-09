@@ -1,0 +1,58 @@
+{
+  "observedAt": "2026-04-08T17:01:17.738Z",
+  "laneId": "POLITICS_PARTY_CONTROL_BALANCE_OF_POWER_2026_TRI_OPINION_POLYMARKET_PREDICT",
+  "topicKey": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+  "triVenueSet": "OPINION|POLYMARKET|PREDICT",
+  "exactSafeTriOutcomes": [
+    "D_SENATE_R_HOUSE",
+    "DEMOCRATS_SWEEP",
+    "REPUBLICANS_SWEEP"
+  ],
+  "saferPairFallback": {
+    "laneId": "POLITICS_PARTY_CONTROL_BALANCE_OF_POWER_2026_PAIR_POLYMARKET_PREDICT",
+    "venuePair": "POLYMARKET|PREDICT",
+    "exactSafeOutcomes": [
+      "D_SENATE_R_HOUSE",
+      "DEMOCRATS_SWEEP",
+      "R_SENATE_D_HOUSE",
+      "REPUBLICANS_SWEEP"
+    ]
+  },
+  "ruleStatus": "EXACT_RULE_COMPATIBLE",
+  "operatorRuleReviewRequired": false,
+  "matcherReady": true,
+  "operatorCredible": true,
+  "readinessReviewJustified": true,
+  "rolloutRecommended": false,
+  "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+  "holdPolicy": {
+    "scope": "LANE_ONLY",
+    "holdConditions": [
+      "outcome_scope_drift",
+      "venue_set_drift",
+      "rule_status_drift",
+      "operator_rule_review_not_completed",
+      "operator_confidence_lost"
+    ],
+    "userConsentCanWidenScope": false
+  },
+  "rollbackPolicy": {
+    "scope": "LANE_ONLY",
+    "targetMode": "PAIR_FALLBACK_INTERNAL_REVIEW_ONLY",
+    "fallbackLaneId": "POLITICS_PARTY_CONTROL_BALANCE_OF_POWER_2026_PAIR_POLYMARKET_PREDICT",
+    "operatorSteps": [
+      "Record a lane-scoped rollback or hold event for POLITICS_PARTY_CONTROL_BALANCE_OF_POWER_2026_TRI_OPINION_POLYMARKET_PREDICT.",
+      "Revert this party-control tri lane to the safer pair fallback POLYMARKET|PREDICT in internal-review-only posture.",
+      "Do not widen to LIMITLESS, MYRIAD, or any other PARTY_CONTROL topic during rollback."
+    ]
+  },
+  "exclusionsStillMandatory": [
+    "OTHERS_EXCLUDED",
+    "VENUE_ONLY_TAILS_EXCLUDED",
+    "UNKNOWN_COMPOSITE_EXCLUDED",
+    "NO_LIMITLESS_FOR_THIS_TOPIC",
+    "NO_MYRIAD_FOR_THIS_TOPIC",
+    "PAIR_FALLBACK_REMAINS_EXPLICIT"
+  ],
+  "finalReadinessLabel": "PARTY_CONTROL_BALANCE_OF_POWER_2026_LIMITED_PROD_READY_FOR_REVIEW"
+}

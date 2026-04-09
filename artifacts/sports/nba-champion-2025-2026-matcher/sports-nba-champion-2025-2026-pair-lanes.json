@@ -1,0 +1,1524 @@
+{
+  "observedAt": "2026-04-09T11:09:27.371Z",
+  "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+  "matcherLanes": [
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "boston_celtics",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:boston-celtics",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:boston-celtics",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "cleveland_cavaliers",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:cleveland-cavaliers",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:cleveland-cavaliers",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "denver_nuggets",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:denver-nuggets",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:denver-nuggets",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "detroit_pistons",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:detroit-pistons",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:detroit-pistons",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "golden_state_warriors",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:golden-state-warriors",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:golden-state-warriors",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "houston_rockets",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:houston-rockets",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:houston-rockets",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "los_angeles_lakers",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:los-angeles-lakers",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:los-angeles-lakers",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "minnesota_timberwolves",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:minnesota-timberwolves",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:minnesota-timberwolves",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "new_york_knicks",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:new-york-knicks",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:new-york-knicks",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "oklahoma_city_thunder",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:oklahoma-city-thunder",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:oklahoma-city-thunder",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "orlando_magic",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:orlando-magic",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:orlando-magic",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "san_antonio_spurs",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:san-antonio-spurs",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:san-antonio-spurs",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "club": "boston_celtics",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:boston-celtics",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-nba-champion:boston-celtics",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "club": "detroit_pistons",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:detroit-pistons",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-nba-champion:detroit-pistons",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "club": "oklahoma_city_thunder",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:oklahoma-city-thunder",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-nba-champion:oklahoma-city-thunder",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "club": "san_antonio_spurs",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:san-antonio-spurs",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-nba-champion:san-antonio-spurs",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "boston_celtics",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:boston-celtics",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1474",
+          "rawTeamLabel": "Will the Boston Celtics win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "cleveland_cavaliers",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:cleveland-cavaliers",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1478",
+          "rawTeamLabel": "Will the Cleveland Cavaliers win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "denver_nuggets",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:denver-nuggets",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1470",
+          "rawTeamLabel": "Will the Denver Nuggets win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "detroit_pistons",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:detroit-pistons",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1476",
+          "rawTeamLabel": "Will the Detroit Pistons win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "golden_state_warriors",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:golden-state-warriors",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1480",
+          "rawTeamLabel": "Will the Golden State Warriors win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "houston_rockets",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:houston-rockets",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1473",
+          "rawTeamLabel": "Will the Houston Rockets win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "los_angeles_lakers",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:los-angeles-lakers",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1477",
+          "rawTeamLabel": "Will the Los Angeles Lakers win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "minnesota_timberwolves",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:minnesota-timberwolves",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1479",
+          "rawTeamLabel": "Will the Minnesota Timberwolves win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "new_york_knicks",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:new-york-knicks",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1471",
+          "rawTeamLabel": "Will the New York Knicks win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "oklahoma_city_thunder",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:oklahoma-city-thunder",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1469",
+          "rawTeamLabel": "Will the Oklahoma City Thunder win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "orlando_magic",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:orlando-magic",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1482",
+          "rawTeamLabel": "Will the Orlando Magic win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "san_antonio_spurs",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-nba-champion-1766486796462:san-antonio-spurs",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1472",
+          "rawTeamLabel": "Will the San Antonio Spurs win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "club": "boston_celtics",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-nba-champion:boston-celtics",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:boston-celtics",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "club": "detroit_pistons",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-nba-champion:detroit-pistons",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:detroit-pistons",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "club": "oklahoma_city_thunder",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-nba-champion:oklahoma-city-thunder",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:oklahoma-city-thunder",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "club": "san_antonio_spurs",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-nba-champion:san-antonio-spurs",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:san-antonio-spurs",
+          "rawTeamLabel": "2026 NBA Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "club": "boston_celtics",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-nba-champion:boston-celtics",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1474",
+          "rawTeamLabel": "Will the Boston Celtics win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "club": "detroit_pistons",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-nba-champion:detroit-pistons",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1476",
+          "rawTeamLabel": "Will the Detroit Pistons win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "club": "oklahoma_city_thunder",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-nba-champion:oklahoma-city-thunder",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1469",
+          "rawTeamLabel": "Will the Oklahoma City Thunder win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "club": "san_antonio_spurs",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-nba-champion:san-antonio-spurs",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1472",
+          "rawTeamLabel": "Will the San Antonio Spurs win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "atlanta_hawks",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:atlanta-hawks",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1490",
+          "rawTeamLabel": "Will the Atlanta Hawks win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "boston_celtics",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:boston-celtics",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1474",
+          "rawTeamLabel": "Will the Boston Celtics win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "brooklyn_nets",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:brooklyn-nets",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1501",
+          "rawTeamLabel": "Will the Brooklyn Nets win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "charlotte_hornets",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:charlotte-hornets",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1502",
+          "rawTeamLabel": "Will the Charlotte Hornets win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "chicago_bulls",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:chicago-bulls",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1495",
+          "rawTeamLabel": "Will the Chicago Bulls win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "cleveland_cavaliers",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:cleveland-cavaliers",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1478",
+          "rawTeamLabel": "Will the Cleveland Cavaliers win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "dallas_mavericks",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:dallas-mavericks",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1487",
+          "rawTeamLabel": "Will the Dallas Mavericks win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "denver_nuggets",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:denver-nuggets",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1470",
+          "rawTeamLabel": "Will the Denver Nuggets win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "detroit_pistons",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:detroit-pistons",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1476",
+          "rawTeamLabel": "Will the Detroit Pistons win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "golden_state_warriors",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:golden-state-warriors",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1480",
+          "rawTeamLabel": "Will the Golden State Warriors win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "houston_rockets",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:houston-rockets",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1473",
+          "rawTeamLabel": "Will the Houston Rockets win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "indiana_pacers",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:indiana-pacers",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1499",
+          "rawTeamLabel": "Will the Indiana Pacers win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "los_angeles_clippers",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:los-angeles-clippers",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1489",
+          "rawTeamLabel": "Will the Los Angeles Clippers win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "los_angeles_lakers",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:los-angeles-lakers",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1477",
+          "rawTeamLabel": "Will the Los Angeles Lakers win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "memphis_grizzlies",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:memphis-grizzlies",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1494",
+          "rawTeamLabel": "Will the Memphis Grizzlies win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "miami_heat",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:miami-heat",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1484",
+          "rawTeamLabel": "Will the Miami Heat win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "milwaukee_bucks",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:milwaukee-bucks",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1493",
+          "rawTeamLabel": "Will the Milwaukee Bucks win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "minnesota_timberwolves",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:minnesota-timberwolves",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1479",
+          "rawTeamLabel": "Will the Minnesota Timberwolves win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "new_orleans_pelicans",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:new-orleans-pelicans",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1497",
+          "rawTeamLabel": "Will the New Orleans Pelicans win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "new_york_knicks",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:new-york-knicks",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1471",
+          "rawTeamLabel": "Will the New York Knicks win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "oklahoma_city_thunder",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:oklahoma-city-thunder",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1469",
+          "rawTeamLabel": "Will the Oklahoma City Thunder win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "orlando_magic",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:orlando-magic",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1482",
+          "rawTeamLabel": "Will the Orlando Magic win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "philadelphia_76ers",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:philadelphia-76ers",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1485",
+          "rawTeamLabel": "Will the Philadelphia 76ers win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "phoenix_suns",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:phoenix-suns",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1486",
+          "rawTeamLabel": "Will the Phoenix Suns win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "portland_trail_blazers",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:portland-trail-blazers",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1496",
+          "rawTeamLabel": "Will the Portland Trail Blazers win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "sacramento_kings",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:sacramento-kings",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1504",
+          "rawTeamLabel": "Will the Sacramento Kings win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "san_antonio_spurs",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:san-antonio-spurs",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1472",
+          "rawTeamLabel": "Will the San Antonio Spurs win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "toronto_raptors",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:toronto-raptors",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1488",
+          "rawTeamLabel": "Will the Toronto Raptors win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "utah_jazz",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:utah-jazz",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1503",
+          "rawTeamLabel": "Will the Utah Jazz win the 2026 NBA Finals?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "washington_wizards",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-nba-champion:washington-wizards",
+          "rawTeamLabel": "2026 NBA Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1505",
+          "rawTeamLabel": "Will the Washington Wizards win the 2026 NBA Finals?"
+        }
+      ]
+    }
+  ]
+}

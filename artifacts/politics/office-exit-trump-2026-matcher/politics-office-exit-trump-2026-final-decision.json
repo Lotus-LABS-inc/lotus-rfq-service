@@ -1,0 +1,16 @@
+{
+  "observedAt": "2026-04-08T19:43:59.099Z",
+  "canonicalTopicKey": "OFFICE_EXIT_BY_DATE|USA|US_PRESIDENT|DONALD_TRUMP|2026-12-31",
+  "overallDecision": "OFFICE_EXIT_TRUMP_2026_TRI_READY_BUT_PAIR_FIRST",
+  "bestPair": "LIMITLESS|POLYMARKET",
+  "bestTriIfAny": "LIMITLESS|OPINION|POLYMARKET",
+  "pairMatcherReady": true,
+  "triMatcherReady": true,
+  "pairStillPreferred": true,
+  "exactSafePairCandidateCount": 6,
+  "exactSafeTriCandidateCount": 1,
+  "ruleStatus": "EXACT_RULE_COMPATIBLE",
+  "operatorCredible": true,
+  "matcherFollowUpJustified": true,
+  "singleBestNextAction": "Start narrow limited-prod readiness on the strict tri lane LIMITLESS|OPINION|POLYMARKET, while keeping LIMITLESS|POLYMARKET as a separate peer pair route."
+}

@@ -38,6 +38,43 @@ Environments:
 - BNB mainnet
 - BNB testnet
 
+## Bootstrap Paths
+
+Current-state bootstrap:
+- `npm run sync:predict:current-state -- --environment=mainnet`
+- purpose:
+  - populate `predict_market_metadata`
+  - populate current `predict_orderbook_snapshots` when documented orderbooks are available
+  - project Predict markets through canonical graph persistence
+  - seed `historical_market_states` with current-state evidence only
+- result:
+  - Predict enters local simulation inventory as current-state evidence
+  - precision remains conservative unless recorder or realized-event history exists
+
+Live market probe:
+- `npm run scan:predict:live-markets -- --environment=mainnet --maxMarkets=10 --maxPages=10`
+- purpose:
+  - identify currently reachable Predict market ids that actually return live orderbooks
+  - feed explicit market ids into the recorder instead of guessing
+
+Predexon fallback bootstrap:
+- `npm run ingest:predict:predexon-fallback -- --environment=mainnet --marketIds=<ids> --start=<iso> --end=<iso>`
+- purpose:
+  - ingest documented Predexon Predict orderbook history when it actually exists
+- important:
+  - this is orderbook-only
+  - this is YES-side-only per the documented Predexon endpoint
+  - zero-row ingests are valid and must not be treated as hidden success
+
+Predexon fallback coverage scan:
+- `npm run scan:predict:predexon-fallback -- --environment=mainnet --marketIds=<ids> --start=<iso> --end=<iso>`
+- purpose:
+  - persist explicit fallback window evidence in `predict_fallback_coverage_scans`
+  - distinguish:
+    - no documented fallback rows
+    - non-empty fallback-covered windows
+  - keep fallback admission auditable per market/window
+
 ## Precision Labels
 
 - `REALIZED`
@@ -69,12 +106,38 @@ Recorder components:
 - `predict-ws-client.ts`
 - `predict-orderbook-recorder.ts`
 - `predict-match-event-recorder.ts`
+- bootstrap command:
+  - `npm run record:predict:orderbooks -- --environment=mainnet --durationMs=60000 --maxMarkets=5`
 
 Operational expectations:
 - subscribe only to documented Predict websocket topics/request formats
 - maintain deterministic event ordering
 - checkpoint by environment + market
 - keep mainnet and testnet archives separated
+- if the command reports `no_recordable_predict_markets_found`, that is an honest zero-coverage result, not a hidden recorder failure
+- a recorder checkpoint without historical rows means `RECORDER_ACCUMULATING`, not historical qualification
+
+## Historical Admission Gate
+
+Predict is not automatically admitted into cross-venue historical simulation just because it has canonical overlap.
+
+Admission states:
+- `CURRENT_STATE_ONLY`
+  - current-state bootstrap exists, but there is no recorder or ingested fallback history
+- `RECORDER_ACCUMULATING`
+  - recorder checkpoints exist, but the requested historical window is still not backed by usable rows
+- `HISTORICAL_READY_NATIVE`
+  - native recorder or native realized-event evidence exists for the market/window
+- `HISTORICAL_READY_FALLBACK`
+  - ingested Predexon fallback snapshots exist for the market/window
+- `UNUSABLE`
+  - no reliable Predict evidence exists
+
+Promotion rule:
+- `PREDICT_ONLY` may remain visible as conservative current-state evidence
+- `POLYMARKET_PREDICT`, `LIMITLESS_PREDICT`, and `OPINION_PREDICT` must remain blocked until the exact Predict market is historically qualified
+- current-state-only Predict rows must never make pair-mode historical routes runnable by themselves
+- no historical run may silently substitute current-state Predict data for a missing historical window
 
 ## Simulation Readiness
 
@@ -101,6 +164,7 @@ Qualification outputs should treat Predict readiness using:
 - fallback usage
 - precision level
 - environment-specific readiness
+- explicit readiness state from admin canonical coverage / route availability
 
 Do not treat a Predict market as high-confidence historical evidence without recorder or realized-event support.
 

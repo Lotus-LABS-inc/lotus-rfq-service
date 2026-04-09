@@ -1,0 +1,69 @@
+{
+  "observedAt": "2026-04-08T14:30:01.181Z",
+  "laneId": "POLITICS_OFFICE_WINNER_SEOUL_MAYOR_2026_TRI_LIMITLESS_OPINION_POLYMARKET",
+  "topicKey": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+  "triVenueSet": "LIMITLESS|OPINION|POLYMARKET",
+  "exactSafeTriCandidates": [
+    "chong_won_oh",
+    "na_kyung_won",
+    "oh_se_hoon",
+    "park_ju_min"
+  ],
+  "saferPairFallback": {
+    "laneId": "POLITICS_OFFICE_WINNER_SEOUL_MAYOR_2026_PAIR_LIMITLESS_POLYMARKET",
+    "venuePair": "LIMITLESS|POLYMARKET",
+    "exactSafeCandidates": [
+      "ahn_cheol_soo",
+      "cho_eun_hee",
+      "cho_kuk",
+      "chong_won_oh",
+      "han_dong_hoon",
+      "hong_ihk_pyo",
+      "jeon_hyun_heui",
+      "na_kyung_won",
+      "oh_se_hoon",
+      "park_hong_keun",
+      "park_ju_min",
+      "park_yong_jin",
+      "seo_young_kyo"
+    ]
+  },
+  "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+  "operatorRuleReviewRequired": true,
+  "matcherReady": true,
+  "operatorCredible": true,
+  "readinessReviewJustified": true,
+  "rolloutRecommended": false,
+  "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+  "holdPolicy": {
+    "scope": "LANE_ONLY",
+    "holdConditions": [
+      "tri_candidate_set_drift",
+      "tri_venue_set_drift",
+      "rule_status_drift",
+      "operator_rule_review_not_completed",
+      "operator_confidence_lost"
+    ],
+    "userConsentCanWidenScope": false
+  },
+  "rollbackPolicy": {
+    "scope": "LANE_ONLY",
+    "targetMode": "PAIR_FALLBACK_INTERNAL_REVIEW_ONLY",
+    "fallbackLaneId": "POLITICS_OFFICE_WINNER_SEOUL_MAYOR_2026_PAIR_LIMITLESS_POLYMARKET",
+    "operatorSteps": [
+      "Record a lane-scoped rollback or hold event for POLITICS_OFFICE_WINNER_SEOUL_MAYOR_2026_TRI_LIMITLESS_OPINION_POLYMARKET.",
+      "Revert this Seoul tri lane to the safer pair fallback LIMITLESS|POLYMARKET in internal-review-only posture.",
+      "Regenerate refreshed Seoul matcher and readiness artifacts before any new promotion attempt.",
+      "Do not widen beyond the exact Seoul topic, tri venue set, or explicit LIMITLESS|POLYMARKET fallback."
+    ]
+  },
+  "exclusionsStillMandatory": [
+    "OTHERS_EXCLUDED",
+    "VENUE_ONLY_TAILS_EXCLUDED",
+    "UNKNOWN_COMPOSITE_EXCLUDED",
+    "NO_MYRIAD_FOR_THIS_TOPIC",
+    "NO_PREDICT_FOR_THIS_TOPIC",
+    "PAIR_FALLBACK_MUST_REMAIN_EXPLICIT"
+  ],
+  "finalReadinessLabel": "OFFICE_WINNER_SEOUL_MAYOR_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW"
+}

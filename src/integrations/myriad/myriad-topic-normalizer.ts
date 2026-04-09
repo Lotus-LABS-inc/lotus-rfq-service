@@ -1,15 +1,10 @@
+import {
+  rankSemanticCategories,
+  type SemanticDiscoveryCategory
+} from "../../simulation/semantic-rulepack.js"
 import type { LotusNormalizedMarketCategory, MyriadMarketDetail, MyriadMarketSummary } from "./myriad-schemas.js"
 
 export type MyriadPreviewCategory = LotusNormalizedMarketCategory | "ESPORTS"
-
-const topicMap: ReadonlyArray<[LotusNormalizedMarketCategory, readonly string[]]> = [
-  ["SPORTS", ["sports", "soccer", "nba", "nfl", "mlb", "ufc", "tennis", "football", "esports"]],
-  ["CRYPTO", ["crypto", "bitcoin", "btc", "ethereum", "eth", "solana", "token"]],
-  ["POLITICS", ["politics", "election", "government", "president", "senate", "parliament"]],
-  ["CULTURE", ["entertainment", "movie", "music", "television", "celebrity", "culture"]],
-  ["TECH", ["technology", "ai", "startup", "software", "chip", "tech"]],
-  ["WEATHER", ["weather", "rain", "temperature", "storm", "hurricane", "snow"]]
-]
 
 const normalizedTokens = (value: string): string[] =>
   value
@@ -27,26 +22,41 @@ const collectSignals = (market: Pick<MyriadMarketSummary, "topics" | "title" | "
   return signals.flatMap(normalizedTokens)
 }
 
+const mapSemanticCategoryToLotus = (category: SemanticDiscoveryCategory): LotusNormalizedMarketCategory =>
+  category === "ESPORTS"
+    ? "SPORTS"
+    : category === "CULTURE" || category === "TECH" || category === "WEATHER" || category === "CRYPTO" || category === "POLITICS" || category === "SPORTS"
+      ? category
+      : "OTHER"
+
+const collectSemanticRankings = (
+  market: Pick<MyriadMarketSummary, "topics" | "title" | "description" | "slug">
+) => rankSemanticCategories(collectSignals(market).join(" "), [
+  "ESPORTS",
+  "SPORTS",
+  "CRYPTO",
+  "POLITICS",
+  "CULTURE",
+  "TECH",
+  "WEATHER",
+  "OTHER"
+])
+
 export const normalizeMyriadTopicCategory = (
   market: Pick<MyriadMarketSummary, "topics" | "title" | "description" | "slug">
 ): LotusNormalizedMarketCategory => {
-  const signals = collectSignals(market)
-  for (const [category, keywords] of topicMap) {
-    if (keywords.some((keyword) => signals.includes(keyword))) {
-      return category
-    }
-  }
-  return "OTHER"
+  const ranking = collectSemanticRankings(market)[0]
+  return ranking ? mapSemanticCategoryToLotus(ranking.category) : "OTHER"
 }
 
 export const classifyMyriadPreviewCategory = (
   market: Pick<MyriadMarketSummary, "topics" | "title" | "description" | "slug">
 ): MyriadPreviewCategory => {
-  const signals = collectSignals(market)
-  if (["gaming", "esports", "league", "legends", "lck", "lpl", "worlds", "valorant"].some((keyword) => signals.includes(keyword))) {
-    return "ESPORTS"
+  const ranking = collectSemanticRankings(market)[0]
+  if (!ranking) {
+    return "OTHER"
   }
-  return normalizeMyriadTopicCategory(market)
+  return ranking.category === "ESPORTS" ? "ESPORTS" : mapSemanticCategoryToLotus(ranking.category)
 }
 
 export const isSimpleBinaryOutcomeMarket = (market: Pick<MyriadMarketDetail, "outcomes">): boolean =>

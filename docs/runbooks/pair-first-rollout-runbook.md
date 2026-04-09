@@ -1,0 +1,601 @@
+# Pair-First Rollout Runbook
+
+## Why Lotus Is Moving Pair-First
+
+Lotus is moving pair-first because the clean-basis routeability audits now show:
+- `LIMITLESS_OPINION = 0` in `HISTORICAL_ONLY`
+- `LIMITLESS_OPINION = 0` in `LIVE_ONLY`
+- `POLYMARKET_LIMITLESS_OPINION = 0` in `HISTORICAL_ONLY`
+- `POLYMARKET_LIMITLESS_OPINION = 0` in `LIVE_ONLY`
+
+That zero is no longer explained by downstream bugs, silent basis mixing, or obvious ingestion gaps. Tri remains blocked on available data, so rollout should no longer wait on tri.
+
+## Pair Route Classes In Scope
+
+- `PAIR_PM_LIMITLESS`
+- `PAIR_PM_OPINION`
+
+Tri is explicitly out of rollout scope for this phase.
+
+## How Historical Vs Live Basis Affects Qualification
+
+- `HISTORICAL_ONLY` is the authoritative simulation and backtest basis.
+- `LIVE_ONLY` is the authoritative production-rollout basis.
+- `MIXED_BASIS_DIAGNOSTIC` is operator-visible, but it must never drive promotion.
+
+## How To Read Pair-Route Readiness
+
+- `SHADOW_READY`
+  - enough evidence exists to observe and audit the route class safely
+  - not enough clean live evidence exists for canary
+- `CANARY_READY`
+  - clean live exact evidence exists for the allowed subset
+- `LIMITED_PROD_READY`
+  - live canary evidence and operational controls are strong enough for limited production
+- `BLOCKED`
+  - evidence or controls are insufficient
+
+## Promotion Path
+
+### Shadow
+
+Use when:
+- route class readiness is `SHADOW_READY` or better
+- family/category is allowlisted for the class
+- admin mutation is performed by `ADMIN + 2FA`
+
+### Canary
+
+Use only when:
+- route class readiness is `CANARY_READY` or better
+- clean `LIVE_ONLY` pair evidence exists
+- family/category remains inside the canary allowlist
+
+### Limited Production
+
+Use only after:
+- canary health is stable
+- replay/reconciliation health stays clean
+- demotion hooks and operator controls are validated
+
+## When To Demote Or Block
+
+Demote or block when:
+- live basis cleanliness regresses
+- venue health degrades
+- replay/reconciliation drift appears
+- the route leaves its allowlisted family/category
+- operators lose confidence in evidence freshness or execution controls
+
+## Precision And Provenance Interpretation
+
+- historical exact overlaps are strong simulation evidence
+- live-only exact overlaps are the only safe basis for canary/prod promotion
+- mixed-basis overlaps remain diagnostic only
+- near-exacts are evidence, not promotion authority
+
+## Venue And Family Limitations
+
+### `PAIR_PM_LIMITLESS`
+
+- broad shadow visibility is allowed
+- canary and production are restricted to the compatibility-safe exact subset
+- BTC same-day directional work remains blocked and does not gate this class
+
+### `PAIR_PM_OPINION`
+
+- the exact BTC March 21 slice is the first promotable family
+- broader PM+Opinion near-exact crypto inventory remains shadow-only or blocked
+
+## What Remains Tri-Blocked
+
+Tri remains blocked because:
+- `LIMITLESS_OPINION` is still zero on clean bases
+- the BTC tri family is not recoverable from currently available safe overlap
+- pair rollout should proceed without tri as a dependency
+
+## Politics Nominee Narrow Rollout Addendum
+
+Politics nominee rollout is now allowed only as a narrow artifact-backed extension of the pair-first framework.
+
+Current approved posture:
+- Republican pair lane:
+  - `NOMINEE|US_PRESIDENT|2028|REPUBLICAN`
+  - `LIMITLESS|POLYMARKET`
+  - status: `READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION`
+  - candidates locked to:
+    - `donald_trump`
+    - `donald_trump_jr`
+    - `ted_cruz`
+    - `tucker_carlson`
+- Republican tri lane:
+  - `NOMINEE|US_PRESIDENT|2028|REPUBLICAN`
+  - `LIMITLESS|OPINION|POLYMARKET`
+  - status: `READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION`
+  - candidates locked to:
+    - `jd_vance`
+    - `marco_rubio`
+    - `ron_desantis`
+- Democratic pair:
+  - `NOMINEE|US_PRESIDENT|2028|DEMOCRATIC`
+  - `LIMITLESS|POLYMARKET`
+  - status: `READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION`
+  - candidates locked to:
+    - `alexandria_ocasio_cortez`
+    - `andy_beshear`
+    - `gavin_newsom`
+    - `josh_shapiro`
+    - `kamala_harris`
+    - `pete_buttigieg`
+
+Operational rules:
+- pair remains preferred overall
+- tri is allowed only for the narrow Republican subset above
+- no Democratic tri implication is allowed from this addendum
+- no Democratic Opinion lane is allowed from this addendum
+- Republican tri must be offered only through exact-scope per-run consent:
+  - mint `POST /rfq/:id/execution-scope-token`
+  - pass the returned token into `POST /rfq/:id/accept`
+  - fail closed if live admin authority, venue set, or candidate set drifted
+- `Others`, venue-only tails, and unknown/composite outcomes remain excluded
+- operator action must be lane-scoped, not broad-politics scoped
+- Republican tri rollback must fall back to the Republican pair lane, not broad disable-only
+- Democratic pair rollback must return to lane hold/internal-only, not category-wide disable
+
+Politics nominee admin/operator surface:
+- `GET /admin/politics-nominee-lanes`
+- `GET /admin/politics-nominee-lanes/:laneId`
+- `GET /admin/politics-nominee-lanes/:laneId/readiness`
+- `GET /admin/politics-nominee-lanes/:laneId/canary-gates`
+- `GET /admin/politics-nominee-lanes/:laneId/rollback-plan`
+- `POST /admin/politics-nominee-lanes/:laneId/operator-approval-intent`
+- `POST /admin/politics-nominee-lanes/:laneId/hold`
+- `POST /admin/politics-nominee-lanes/:laneId/rollback`
+
+Mutation rules:
+- `ADMIN + 2FA` required
+- narrowest supported control is lane-level scope lock
+- no broad-politics enable switch is available from this surface
+
+Office-winner narrow review package:
+- topic: `OFFICE_WINNER|USA|US_PRESIDENT|2028`
+- pair: `LIMITLESS|POLYMARKET`
+- candidate scope:
+  - `alexandria_ocasio_cortez`
+  - `donald_trump`
+  - `gavin_newsom`
+  - `jd_vance`
+  - `josh_shapiro`
+  - `kamala_harris`
+  - `marco_rubio`
+- readiness label: `OFFICE_WINNER_US_PRESIDENT_2028_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- rule state: `SEMANTICALLY_COMPATIBLE_REWORDING`
+- operator rule review is required before promotion
+- no tri implication or venue widening is allowed
+- hold / rollback stay lane-aware and return this lane to internal-only
+
+Additional office-winner narrow review packages:
+- Seoul tri:
+  - topic: `OFFICE_WINNER|SEOUL|MAYOR|2026`
+  - venues: `LIMITLESS|OPINION|POLYMARKET`
+  - candidate scope:
+    - `chong_won_oh`
+    - `na_kyung_won`
+    - `oh_se_hoon`
+    - `park_ju_min`
+  - readiness label: `OFFICE_WINNER_SEOUL_MAYOR_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+  - explicit pair fallback:
+    - `LIMITLESS|POLYMARKET`
+- Seoul pair:
+  - topic: `OFFICE_WINNER|SEOUL|MAYOR|2026`
+  - venues: `LIMITLESS|POLYMARKET`
+  - posture:
+    - separate limited-prod pair choice
+    - no user-scope widening into tri
+- Busan pair:
+  - topic: `OFFICE_WINNER|BUSAN|MAYOR|2026`
+  - venues: `LIMITLESS|POLYMARKET`
+  - readiness label: `OFFICE_WINNER_BUSAN_MAYOR_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- Colombia pair:
+  - topic: `OFFICE_WINNER|COLOMBIA|US_PRESIDENT|2026`
+  - venues: `LIMITLESS|POLYMARKET`
+  - readiness label: `OFFICE_WINNER_COLOMBIA_PRESIDENT_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+
+Office-winner local-lane operating rules:
+- rule state for current Seoul/Busan/Colombia lanes remains `SEMANTICALLY_COMPATIBLE_REWORDING`
+- operator rule review is required before promotion
+- no venue widening beyond the exact lane
+- no candidate widening beyond the exact shared core
+- Busan has no tri implication
+- Colombia has no tri implication
+- rollback remains lane-aware only
+
+## Office-Exit Narrow Review Addendum
+
+Office-exit now follows the same lane-scoped posture:
+
+- Netanyahu:
+  - topic:
+    - `OFFICE_EXIT_BY_DATE|ISRAEL|PRIME_MINISTER|BENJAMIN_NETANYAHU|2026-12-31`
+  - tri lane:
+    - `LIMITLESS|POLYMARKET|PREDICT`
+  - pair lane:
+    - `LIMITLESS|POLYMARKET`
+  - proposition:
+    - `NETANYAHU_OUT_BEFORE_2027`
+  - readiness:
+    - `OFFICE_EXIT_NETANYAHU_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+
+- Trump:
+  - topic:
+    - `OFFICE_EXIT_BY_DATE|USA|US_PRESIDENT|DONALD_TRUMP|2026-12-31`
+  - strict tri lane:
+    - `LIMITLESS|OPINION|POLYMARKET`
+  - peer pair lane:
+    - `LIMITLESS|POLYMARKET`
+  - proposition:
+    - `TRUMP_OUT_BEFORE_2027`
+  - readiness:
+    - `OFFICE_EXIT_TRUMP_2026_LIMITED_PROD_READY_FOR_REVIEW`
+
+Office-exit operating rules:
+- pair and tri may both be surfaced as first-class lanes when exact topic and proposition truth support them
+- pair must remain separately offerable for users who do not want tri
+- no silent four-venue tri implication is allowed for Trump
+- no widening beyond the exact office-exit topic, exact venue set, and exact proposition
+- rollback remains lane-scoped
+
+Office-exit admin/operator surface:
+- `GET /admin/politics-office-exit-lanes`
+- `GET /admin/politics-office-exit-lanes/:laneId`
+- `GET /admin/politics-office-exit-lanes/:laneId/readiness`
+- `GET /admin/politics-office-exit-lanes/:laneId/rollback-plan`
+- `POST /admin/politics-office-exit-lanes/:laneId/operator-approval-intent`
+- `POST /admin/politics-office-exit-lanes/:laneId/hold`
+- `POST /admin/politics-office-exit-lanes/:laneId/rollback`
+
+Current office-exit lane ids:
+- `POLITICS_OFFICE_EXIT_NETANYAHU_2026_TRI_LIMITLESS_POLYMARKET_PREDICT`
+- `POLITICS_OFFICE_EXIT_NETANYAHU_2026_PAIR_LIMITLESS_POLYMARKET`
+- `POLITICS_OFFICE_EXIT_TRUMP_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+- `POLITICS_OFFICE_EXIT_TRUMP_2026_PAIR_LIMITLESS_POLYMARKET`
+
+## Geopolitical Event-By-Date Narrow Review Addendum
+
+Geopolitical event-by-date now follows the same lane-scoped posture:
+
+- Trump visits China by April 30, 2026:
+  - topic:
+    - `GEOPOLITICAL_EVENT_BY_DATE|USA_CHINA|TRUMP_VISIT_CHINA|2026-04-30`
+  - primary tri lane:
+    - `OPINION|POLYMARKET|PREDICT`
+  - first-class pair lanes:
+    - `OPINION|POLYMARKET`
+    - `OPINION|PREDICT`
+    - `POLYMARKET|PREDICT`
+  - proposition:
+    - `TRUMP_VISIT_CHINA_BY_2026_04_30`
+  - readiness:
+    - `GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_LIMITED_PROD_READY_FOR_REVIEW`
+
+Geopolitical operating rules:
+- pair and tri may both be surfaced as first-class lanes when exact topic, proposition, and deadline truth support them
+- pair must remain separately offerable for users who do not want tri
+- no widening beyond the exact geopolitical topic, exact venue set, and exact proposition
+- no widening to the May/June deadline buckets
+- no `LIMITLESS` or `MYRIAD` implication for this topic
+- rollback remains lane-scoped
+
+Geopolitical admin/operator surface:
+- `GET /admin/politics-geopolitical-lanes`
+- `GET /admin/politics-geopolitical-lanes/:laneId`
+- `GET /admin/politics-geopolitical-lanes/:laneId/readiness`
+- `GET /admin/politics-geopolitical-lanes/:laneId/rollback-plan`
+- `POST /admin/politics-geopolitical-lanes/:laneId/operator-approval-intent`
+- `POST /admin/politics-geopolitical-lanes/:laneId/hold`
+- `POST /admin/politics-geopolitical-lanes/:laneId/rollback`
+
+Current geopolitical lane ids:
+- `POLITICS_GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_TRI_OPINION_POLYMARKET_PREDICT`
+- `POLITICS_GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_PAIR_OPINION_POLYMARKET`
+- `POLITICS_GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_PAIR_OPINION_PREDICT`
+- `POLITICS_GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_PAIR_POLYMARKET_PREDICT`
+
+Additional geopolitical lane set:
+- topic:
+  - `GEOPOLITICAL_EVENT_BY_DATE|USA_GREENLAND|TRUMP_ACQUIRE_GREENLAND|2026-12-31`
+- tri lane:
+  - `POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_TRI_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+  - readiness:
+    - `GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- first-class pair lanes:
+  - `POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_LIMITLESS_POLYMARKET`
+  - `POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_LIMITLESS_OPINION`
+  - `POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_LIMITLESS_PREDICT`
+  - `POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_OPINION_POLYMARKET`
+  - `POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_OPINION_PREDICT`
+  - `POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_POLYMARKET_PREDICT`
+- proposition:
+  - `TRUMP_ACQUIRE_GREENLAND_BY_2026_12_31`
+- rule state:
+  - `SEMANTICALLY_COMPATIBLE_REWORDING`
+- operating rule:
+  - keep pair and tri as separate first-class routes
+  - no widening beyond the exact Greenland topic
+  - no `MYRIAD` implication
+
+## Sports EPL Narrow Review Addendum
+
+Sports now has one exact lane-scoped extension of the rollout model:
+
+- Topic:
+  - `SPORTS|LEAGUE_WINNER|EPL|2025_2026`
+- All-venue lane:
+  - `LIMITLESS|OPINION|POLYMARKET|PREDICT`
+  - lane id:
+    - `SPORTS_EPL_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+  - exact-safe clubs:
+    - `arsenal`
+    - `liverpool`
+    - `manchester_city`
+  - readiness:
+    - `SPORTS_EPL_WINNER_2025_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- Pair lane:
+  - `LIMITLESS|POLYMARKET`
+  - lane id:
+    - `SPORTS_EPL_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET`
+  - exact-safe clubs:
+    - `arsenal`
+    - `aston_villa`
+    - `chelsea`
+    - `liverpool`
+    - `manchester_city`
+    - `manchester_united`
+  - readiness:
+    - `SPORTS_EPL_WINNER_2025_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+
+Sports EPL operating rules:
+- pair and all-venue may both be surfaced as first-class lanes when exact topic and club truth support them
+- pair must remain separately offerable for users who do not want the all-venue route
+- no widening beyond the exact `SPORTS|LEAGUE_WINNER|EPL|2025_2026` topic
+- strict all-venue core remains exactly 3 clubs
+- venue-only tails remain excluded
+- rollback remains lane-scoped
+
+Sports admin/operator surface:
+- `GET /admin/sports-lanes`
+- `GET /admin/sports-lanes/:laneId`
+- `GET /admin/sports-lanes/:laneId/readiness`
+- `GET /admin/sports-lanes/:laneId/rollback-plan`
+- `POST /admin/sports-lanes/:laneId/operator-approval-intent`
+- `POST /admin/sports-lanes/:laneId/hold`
+- `POST /admin/sports-lanes/:laneId/rollback`
+
+## Sports La Liga Narrow Review Addendum
+
+Sports now also has an exact lane-scoped La Liga extension of the rollout model:
+
+- Topic:
+  - `SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026`
+- All-venue lane:
+  - `LIMITLESS|OPINION|POLYMARKET|PREDICT`
+  - lane id:
+    - `SPORTS_LA_LIGA_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+  - exact-safe clubs:
+    - `atletico_madrid`
+    - `barcelona`
+    - `real_madrid`
+  - readiness:
+    - `SPORTS_LA_LIGA_WINNER_2025_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- Pair lane:
+  - `LIMITLESS|POLYMARKET`
+  - lane id:
+    - `SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET`
+  - exact-safe clubs:
+    - `atletico_madrid`
+    - `barcelona`
+    - `real_madrid`
+    - `villarreal`
+  - readiness:
+    - `SPORTS_LA_LIGA_WINNER_2025_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+
+Sports La Liga operating rules:
+- pair and all-venue may both be surfaced as first-class lanes when exact topic and club truth support them
+- pair must remain separately offerable for users who do not want the all-venue route
+- no widening beyond the exact `SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026` topic
+- strict all-venue core remains exactly 3 clubs
+- venue-only tails remain excluded
+- rollback remains lane-scoped
+
+## Sports Lane Cardinality Addendum
+
+Sports now uses an explicit route ladder:
+- `SINGLE`
+- `PAIR`
+- `TRI`
+- `STRICT_ALL`
+
+Operating rules:
+- safety preference order is:
+  - `STRICT_ALL > TRI > PAIR > SINGLE`
+- lower-cardinality lanes may still be offered as first-class routes
+- `SINGLE` remains fail-closed:
+  - `Others` excluded
+  - unknown/composite outcomes excluded
+- `/admin/sports-lanes` is dynamic and exposes generated lane ids from the matcher lane catalogs
+
+Current completed sports topics under this model:
+- `SPORTS|LEAGUE_WINNER|EPL|2025_2026`
+- `SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026`
+- `SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026`
+- `SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026`
+- `SPORTS|TOURNAMENT_WINNER|NBA|2025_2026`
+
+Per-topic lane counts:
+- `4` single
+- `6` pair
+- `4` tri
+- `1` strict_all
+
+Generated lane ids:
+- EPL:
+  - `SPORTS_EPL_WINNER_2025_2026_SINGLE_LIMITLESS`
+  - `SPORTS_EPL_WINNER_2025_2026_SINGLE_OPINION`
+  - `SPORTS_EPL_WINNER_2025_2026_SINGLE_POLYMARKET`
+  - `SPORTS_EPL_WINNER_2025_2026_SINGLE_PREDICT`
+  - `SPORTS_EPL_WINNER_2025_2026_PAIR_LIMITLESS_OPINION`
+  - `SPORTS_EPL_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET`
+  - `SPORTS_EPL_WINNER_2025_2026_PAIR_LIMITLESS_PREDICT`
+  - `SPORTS_EPL_WINNER_2025_2026_PAIR_OPINION_POLYMARKET`
+  - `SPORTS_EPL_WINNER_2025_2026_PAIR_OPINION_PREDICT`
+  - `SPORTS_EPL_WINNER_2025_2026_PAIR_POLYMARKET_PREDICT`
+  - `SPORTS_EPL_WINNER_2025_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+  - `SPORTS_EPL_WINNER_2025_2026_TRI_LIMITLESS_OPINION_PREDICT`
+  - `SPORTS_EPL_WINNER_2025_2026_TRI_LIMITLESS_POLYMARKET_PREDICT`
+  - `SPORTS_EPL_WINNER_2025_2026_TRI_OPINION_POLYMARKET_PREDICT`
+  - `SPORTS_EPL_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+- La Liga:
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_SINGLE_LIMITLESS`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_SINGLE_OPINION`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_SINGLE_POLYMARKET`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_SINGLE_PREDICT`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_LIMITLESS_OPINION`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_LIMITLESS_PREDICT`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_OPINION_POLYMARKET`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_OPINION_PREDICT`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_POLYMARKET_PREDICT`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_TRI_LIMITLESS_OPINION_PREDICT`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_TRI_LIMITLESS_POLYMARKET_PREDICT`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_TRI_OPINION_POLYMARKET_PREDICT`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+- Champions League:
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_SINGLE_LIMITLESS`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_SINGLE_OPINION`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_SINGLE_POLYMARKET`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_SINGLE_PREDICT`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_PAIR_LIMITLESS_OPINION`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_PAIR_LIMITLESS_PREDICT`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_PAIR_OPINION_POLYMARKET`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_PAIR_OPINION_PREDICT`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_PAIR_POLYMARKET_PREDICT`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_TRI_LIMITLESS_OPINION_PREDICT`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_TRI_LIMITLESS_POLYMARKET_PREDICT`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_TRI_OPINION_POLYMARKET_PREDICT`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+- World Cup:
+  - `SPORTS_WORLD_CUP_WINNER_2026_SINGLE_LIMITLESS`
+  - `SPORTS_WORLD_CUP_WINNER_2026_SINGLE_OPINION`
+  - `SPORTS_WORLD_CUP_WINNER_2026_SINGLE_POLYMARKET`
+  - `SPORTS_WORLD_CUP_WINNER_2026_SINGLE_PREDICT`
+  - `SPORTS_WORLD_CUP_WINNER_2026_PAIR_LIMITLESS_OPINION`
+  - `SPORTS_WORLD_CUP_WINNER_2026_PAIR_LIMITLESS_POLYMARKET`
+  - `SPORTS_WORLD_CUP_WINNER_2026_PAIR_LIMITLESS_PREDICT`
+  - `SPORTS_WORLD_CUP_WINNER_2026_PAIR_OPINION_POLYMARKET`
+  - `SPORTS_WORLD_CUP_WINNER_2026_PAIR_OPINION_PREDICT`
+  - `SPORTS_WORLD_CUP_WINNER_2026_PAIR_POLYMARKET_PREDICT`
+  - `SPORTS_WORLD_CUP_WINNER_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+  - `SPORTS_WORLD_CUP_WINNER_2026_TRI_LIMITLESS_OPINION_PREDICT`
+  - `SPORTS_WORLD_CUP_WINNER_2026_TRI_LIMITLESS_POLYMARKET_PREDICT`
+  - `SPORTS_WORLD_CUP_WINNER_2026_TRI_OPINION_POLYMARKET_PREDICT`
+  - `SPORTS_WORLD_CUP_WINNER_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+- NBA Champion:
+  - `SPORTS_NBA_CHAMPION_2025_2026_SINGLE_LIMITLESS`
+  - `SPORTS_NBA_CHAMPION_2025_2026_SINGLE_OPINION`
+  - `SPORTS_NBA_CHAMPION_2025_2026_SINGLE_POLYMARKET`
+  - `SPORTS_NBA_CHAMPION_2025_2026_SINGLE_PREDICT`
+  - `SPORTS_NBA_CHAMPION_2025_2026_PAIR_LIMITLESS_OPINION`
+  - `SPORTS_NBA_CHAMPION_2025_2026_PAIR_LIMITLESS_POLYMARKET`
+  - `SPORTS_NBA_CHAMPION_2025_2026_PAIR_LIMITLESS_PREDICT`
+  - `SPORTS_NBA_CHAMPION_2025_2026_PAIR_OPINION_POLYMARKET`
+  - `SPORTS_NBA_CHAMPION_2025_2026_PAIR_OPINION_PREDICT`
+  - `SPORTS_NBA_CHAMPION_2025_2026_PAIR_POLYMARKET_PREDICT`
+  - `SPORTS_NBA_CHAMPION_2025_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+  - `SPORTS_NBA_CHAMPION_2025_2026_TRI_LIMITLESS_OPINION_PREDICT`
+  - `SPORTS_NBA_CHAMPION_2025_2026_TRI_LIMITLESS_POLYMARKET_PREDICT`
+  - `SPORTS_NBA_CHAMPION_2025_2026_TRI_OPINION_POLYMARKET_PREDICT`
+  - `SPORTS_NBA_CHAMPION_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+
+## Sports World Cup Narrow Review Addendum
+
+Sports now also has an exact lane-scoped FIFA World Cup extension of the rollout model:
+
+- Topic:
+  - `SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026`
+- Strict-all lane:
+  - `LIMITLESS|OPINION|POLYMARKET|PREDICT`
+  - lane id:
+    - `SPORTS_WORLD_CUP_WINNER_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+  - exact-safe teams:
+    - `brazil`
+    - `england`
+    - `france`
+    - `spain`
+  - readiness:
+    - `SPORTS_WORLD_CUP_WINNER_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- Pair lane:
+  - `LIMITLESS|POLYMARKET`
+  - lane id:
+    - `SPORTS_WORLD_CUP_WINNER_2026_PAIR_LIMITLESS_POLYMARKET`
+  - exact-safe teams:
+    - `argentina`
+    - `belgium`
+    - `brazil`
+    - `croatia`
+    - `england`
+    - `france`
+    - `germany`
+    - `italy`
+    - `mexico`
+    - `netherlands`
+    - `portugal`
+    - `spain`
+    - `united_states`
+    - `uruguay`
+  - readiness:
+    - `SPORTS_WORLD_CUP_WINNER_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+
+Sports World Cup operating rules:
+- pair and strict-all may both be surfaced as first-class lanes when exact topic and team truth support them
+- pair must remain separately offerable for users who do not want the strict-all route
+- no widening beyond the exact `SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026` topic
+- strict all-venue core remains exactly 4 teams
+- venue-only tails remain excluded
+- rollback remains lane-scoped
+
+## Sports NBA Champion Narrow Review Addendum
+
+Sports now also has an exact lane-scoped NBA champion extension of the rollout model:
+
+- Topic:
+  - `SPORTS|TOURNAMENT_WINNER|NBA|2025_2026`
+- Strict-all lane:
+  - `LIMITLESS|OPINION|POLYMARKET|PREDICT`
+  - lane id:
+    - `SPORTS_NBA_CHAMPION_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+  - exact-safe teams:
+    - `boston_celtics`
+    - `detroit_pistons`
+    - `oklahoma_city_thunder`
+    - `san_antonio_spurs`
+  - readiness:
+    - `SPORTS_NBA_CHAMPION_2025_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- Pair lane:
+  - `POLYMARKET|PREDICT`
+  - lane id:
+    - `SPORTS_NBA_CHAMPION_2025_2026_PAIR_POLYMARKET_PREDICT`
+  - exact-safe teams:
+    - `30` team matcher-backed scope
+  - readiness:
+    - `SPORTS_NBA_CHAMPION_2025_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+
+Sports NBA operating rules:
+- pair and strict-all may both be surfaced as first-class lanes when exact topic and team truth support them
+- pair must remain separately offerable for users who do not want the strict-all route
+- no widening beyond the exact `SPORTS|TOURNAMENT_WINNER|NBA|2025_2026` topic
+- strict all-venue core remains exactly 4 teams
+- venue-only tails remain excluded
+- rollback remains lane-scoped

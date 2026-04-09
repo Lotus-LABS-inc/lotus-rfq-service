@@ -1,0 +1,51 @@
+{
+  "observedAt": "2026-04-08T00:42:56.970Z",
+  "reviewState": "READY_PENDING_OPERATOR_REVIEW",
+  "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+  "approvedVenuePair": "LIMITLESS|POLYMARKET",
+  "approvedCandidates": [
+    "donald_trump",
+    "donald_trump_jr",
+    "ted_cruz",
+    "tucker_carlson"
+  ],
+  "exactSafeOnly": true,
+  "ruleCompatibilityState": [
+    "EXACT_RULE_COMPATIBLE",
+    "EXACT_RULE_COMPATIBLE",
+    "EXACT_RULE_COMPATIBLE",
+    "EXACT_RULE_COMPATIBLE"
+  ],
+  "routeabilityState": [
+    "PAIR_EXACT_AUTO_ROUTEABLE",
+    "PAIR_EXACT_AUTO_ROUTEABLE",
+    "PAIR_EXACT_AUTO_ROUTEABLE",
+    "PAIR_EXACT_AUTO_ROUTEABLE"
+  ],
+  "exclusionsLocked": [
+    "OTHERS_EXCLUDED",
+    "NOT_SHARED",
+    "UNKNOWN_COMPOSITE",
+    "RULE_MISMATCH",
+    "PAIR_EDGE_MISSING"
+  ],
+  "sourceArtifacts": {
+    "pairMatcher": "artifacts/politics/nominee-2028-republican-pair-matcher/politics-nominee-2028-republican-pair-matcher-final-decision.json",
+    "lanes": "artifacts/politics/nominee-2028-republican-pair-matcher/politics-nominee-2028-republican-pair-matcher-lanes.json",
+    "rejections": "artifacts/politics/nominee-2028-republican-pair-matcher/politics-nominee-2028-republican-pair-matcher-rejections.json"
+  },
+  "operatorChecks": [
+    "Confirm the scope is exactly NOMINEE|US_PRESIDENT|2028|REPUBLICAN.",
+    "Confirm the only approved venue pair is LIMITLESS|POLYMARKET.",
+    "Confirm the approved candidate set is exactly the seven listed candidates.",
+    "Confirm every approved lane remains PAIR_EXACT_AUTO_ROUTEABLE and EXACT_RULE_COMPATIBLE.",
+    "Confirm Others and all non-shared tails remain excluded.",
+    "Confirm no Democratic or broader politics topic is included."
+  ],
+  "holdBoundaries": [
+    "Do not activate OPINION lanes from this package.",
+    "Do not promote tri routing from this package.",
+    "Do not add venue-only names.",
+    "Do not widen beyond the Republican 2028 nominee topic."
+  ]
+}

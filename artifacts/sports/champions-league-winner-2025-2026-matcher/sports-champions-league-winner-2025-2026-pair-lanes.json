@@ -1,0 +1,1018 @@
+{
+  "observedAt": "2026-04-09T09:53:13.027Z",
+  "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+  "matcherLanes": [
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "arsenal",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:arsenal",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:arsenal",
+          "rawClubLabel": "UEFA Champions League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "atletico_madrid",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:atletico-madrid",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:atletico-madrid",
+          "rawClubLabel": "UEFA Champions League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "barcelona",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:barcelona",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:barcelona",
+          "rawClubLabel": "UEFA Champions League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "bayern_munich",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:bayern-munich",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:bayern-munich",
+          "rawClubLabel": "UEFA Champions League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "borussia_dortmund",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:dortmund",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:borussia-dortmund",
+          "rawClubLabel": "UEFA Champions League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "chelsea",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:chelsea",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:chelsea",
+          "rawClubLabel": "UEFA Champions League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "inter_milan",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:inter",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:inter-milan",
+          "rawClubLabel": "UEFA Champions League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "juventus",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:juventus",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:juventus",
+          "rawClubLabel": "UEFA Champions League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "liverpool",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:liverpool",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:liverpool",
+          "rawClubLabel": "UEFA Champions League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "paris_saint_germain",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:psg",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:paris-saint-germain",
+          "rawClubLabel": "UEFA Champions League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "real_madrid",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:real-madrid",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:real-madrid",
+          "rawClubLabel": "UEFA Champions League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "club": "arsenal",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:arsenal",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "uefa-champions-league-winner-2026:arsenal",
+          "rawClubLabel": "UEFA Champions League Winner 2026"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "club": "bayern_munich",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:bayern-munich",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "uefa-champions-league-winner-2026:bayern-munich",
+          "rawClubLabel": "UEFA Champions League Winner 2026"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "club": "paris_saint_germain",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:psg",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "uefa-champions-league-winner-2026:psg",
+          "rawClubLabel": "UEFA Champions League Winner 2026"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "club": "real_madrid",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:real-madrid",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "uefa-champions-league-winner-2026:real-madrid",
+          "rawClubLabel": "UEFA Champions League Winner 2026"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "arsenal",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:arsenal",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1576",
+          "rawClubLabel": "Will Arsenal win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "atletico_madrid",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:atletico-madrid",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1585",
+          "rawClubLabel": "Will Atletico Madrid win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "barcelona",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:barcelona",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1580",
+          "rawClubLabel": "Will Barcelona win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "bayern_munich",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:bayern-munich",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1577",
+          "rawClubLabel": "Will Bayern Munich win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "borussia_dortmund",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:dortmund",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1588",
+          "rawClubLabel": "Will Dortmund win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "chelsea",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:chelsea",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1583",
+          "rawClubLabel": "Will Chelsea win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "inter_milan",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:inter",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1584",
+          "rawClubLabel": "Will Inter win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "liverpool",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:liverpool",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1582",
+          "rawClubLabel": "Will Liverpool win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "manchester_city",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:man-city",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1578",
+          "rawClubLabel": "Will Man City win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "paris_saint_germain",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:psg",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1579",
+          "rawClubLabel": "Will PSG win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "real_madrid",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "uefa-champions-league-winner-1765297468263:real-madrid",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1581",
+          "rawClubLabel": "Will Real Madrid win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "club": "arsenal",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "uefa-champions-league-winner-2026:arsenal",
+          "rawClubLabel": "UEFA Champions League Winner 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:arsenal",
+          "rawClubLabel": "UEFA Champions League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "club": "bayern_munich",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "uefa-champions-league-winner-2026:bayern-munich",
+          "rawClubLabel": "UEFA Champions League Winner 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:bayern-munich",
+          "rawClubLabel": "UEFA Champions League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "club": "paris_saint_germain",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "uefa-champions-league-winner-2026:psg",
+          "rawClubLabel": "UEFA Champions League Winner 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:paris-saint-germain",
+          "rawClubLabel": "UEFA Champions League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "club": "real_madrid",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "uefa-champions-league-winner-2026:real-madrid",
+          "rawClubLabel": "UEFA Champions League Winner 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:real-madrid",
+          "rawClubLabel": "UEFA Champions League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "club": "arsenal",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "uefa-champions-league-winner-2026:arsenal",
+          "rawClubLabel": "UEFA Champions League Winner 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1576",
+          "rawClubLabel": "Will Arsenal win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "club": "bayern_munich",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "uefa-champions-league-winner-2026:bayern-munich",
+          "rawClubLabel": "UEFA Champions League Winner 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1577",
+          "rawClubLabel": "Will Bayern Munich win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "club": "paris_saint_germain",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "uefa-champions-league-winner-2026:psg",
+          "rawClubLabel": "UEFA Champions League Winner 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1579",
+          "rawClubLabel": "Will PSG win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "club": "real_madrid",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "uefa-champions-league-winner-2026:real-madrid",
+          "rawClubLabel": "UEFA Champions League Winner 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1581",
+          "rawClubLabel": "Will Real Madrid win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "arsenal",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:arsenal",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1576",
+          "rawClubLabel": "Will Arsenal win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "atletico_madrid",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:atletico-madrid",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1585",
+          "rawClubLabel": "Will Atletico Madrid win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "barcelona",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:barcelona",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1580",
+          "rawClubLabel": "Will Barcelona win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "bayern_munich",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:bayern-munich",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1577",
+          "rawClubLabel": "Will Bayern Munich win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "borussia_dortmund",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:borussia-dortmund",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1588",
+          "rawClubLabel": "Will Dortmund win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "chelsea",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:chelsea",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1583",
+          "rawClubLabel": "Will Chelsea win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "inter_milan",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:inter-milan",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1584",
+          "rawClubLabel": "Will Inter win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "liverpool",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:liverpool",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1582",
+          "rawClubLabel": "Will Liverpool win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "paris_saint_germain",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:paris-saint-germain",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1579",
+          "rawClubLabel": "Will PSG win the 2025–26 Champions League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "real_madrid",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "uefa-champions-league-winner:real-madrid",
+          "rawClubLabel": "UEFA Champions League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1581",
+          "rawClubLabel": "Will Real Madrid win the 2025–26 Champions League?"
+        }
+      ]
+    }
+  ]
+}

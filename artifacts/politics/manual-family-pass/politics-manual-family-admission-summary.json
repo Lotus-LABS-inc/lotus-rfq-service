@@ -1,0 +1,12 @@
+{
+  "observedAt": "2026-04-03T13:35:17.378Z",
+  "admittedByFamily": {
+    "NOMINEE_WINNER": 492,
+    "OFFICE_EXIT_BY_DATE": 2,
+    "OFFICE_WINNER": 1,
+    "GEOPOLITICAL_EVENT_BY_DATE": 8,
+    "GEOPOLITICAL_EVENT": 0
+  },
+  "outOfScopeRows": 8,
+  "unknownRows": 5
+}

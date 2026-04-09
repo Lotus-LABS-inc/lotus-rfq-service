@@ -1,0 +1,724 @@
+{
+  "observedAt": "2026-04-09T11:09:27.370Z",
+  "exactTopic": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+  "refreshedRowsUsed": [
+    {
+      "venue": "OPINION",
+      "venueMarketId": "2026-nba-champion:detroit-pistons",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "detroit_pistons"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "2026-nba-champion:oklahoma-city-thunder",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "oklahoma_city_thunder"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "2026-nba-champion:san-antonio-spurs",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "san_antonio_spurs"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "2026-nba-champion:boston-celtics",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "boston_celtics"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:oklahoma-city-thunder",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "oklahoma_city_thunder"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:san-antonio-spurs",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "san_antonio_spurs"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:boston-celtics",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "boston_celtics"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:denver-nuggets",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "denver_nuggets"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:detroit-pistons",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "detroit_pistons"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:cleveland-cavaliers",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "cleveland_cavaliers"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:new-york-knicks",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "new_york_knicks"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:houston-rockets",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "houston_rockets"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:minnesota-timberwolves",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "minnesota_timberwolves"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:philadelphia-76ers",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "philadelphia_76ers"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:charlotte-hornets",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "charlotte_hornets"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:los-angeles-lakers",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "los_angeles_lakers"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:atlanta-hawks",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "atlanta_hawks"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:los-angeles-clippers",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "los_angeles_clippers"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:phoenix-suns",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "phoenix_suns"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:toronto-raptors",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "toronto_raptors"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:orlando-magic",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "orlando_magic"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:miami-heat",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "miami_heat"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:golden-state-warriors",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "golden_state_warriors"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:portland-trail-blazers",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "portland_trail_blazers"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:new-orleans-pelicans",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "new_orleans_pelicans"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:chicago-bulls",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "chicago_bulls"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:indiana-pacers",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "indiana_pacers"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:milwaukee-bucks",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "milwaukee_bucks"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:dallas-mavericks",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "dallas_mavericks"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:memphis-grizzlies",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "memphis_grizzlies"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:brooklyn-nets",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "brooklyn_nets"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:utah-jazz",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "utah_jazz"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:sacramento-kings",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "sacramento_kings"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nba-champion:washington-wizards",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "washington_wizards"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nba-champion-1766486796462:oklahoma-city-thunder",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "oklahoma_city_thunder"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nba-champion-1766486796462:denver-nuggets",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "denver_nuggets"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nba-champion-1766486796462:houston-rockets",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "houston_rockets"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nba-champion-1766486796462:new-york-knicks",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "new_york_knicks"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nba-champion-1766486796462:san-antonio-spurs",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "san_antonio_spurs"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nba-champion-1766486796462:los-angeles-lakers",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "los_angeles_lakers"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nba-champion-1766486796462:detroit-pistons",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "detroit_pistons"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nba-champion-1766486796462:cleveland-cavaliers",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "cleveland_cavaliers"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nba-champion-1766486796462:boston-celtics",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "boston_celtics"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nba-champion-1766486796462:minnesota-timberwolves",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "minnesota_timberwolves"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nba-champion-1766486796462:golden-state-warriors",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "golden_state_warriors"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nba-champion-1766486796462:orlando-magic",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "orlando_magic"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nba-champion-1766486796462:other",
+      "title": "2026 NBA Champion",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1469",
+      "title": "Will the Oklahoma City Thunder win the 2026 NBA Finals?",
+      "canonicalClubId": "oklahoma_city_thunder"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1470",
+      "title": "Will the Denver Nuggets win the 2026 NBA Finals?",
+      "canonicalClubId": "denver_nuggets"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1471",
+      "title": "Will the New York Knicks win the 2026 NBA Finals?",
+      "canonicalClubId": "new_york_knicks"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1472",
+      "title": "Will the San Antonio Spurs win the 2026 NBA Finals?",
+      "canonicalClubId": "san_antonio_spurs"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1473",
+      "title": "Will the Houston Rockets win the 2026 NBA Finals?",
+      "canonicalClubId": "houston_rockets"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1474",
+      "title": "Will the Boston Celtics win the 2026 NBA Finals?",
+      "canonicalClubId": "boston_celtics"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1476",
+      "title": "Will the Detroit Pistons win the 2026 NBA Finals?",
+      "canonicalClubId": "detroit_pistons"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1477",
+      "title": "Will the Los Angeles Lakers win the 2026 NBA Finals?",
+      "canonicalClubId": "los_angeles_lakers"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1478",
+      "title": "Will the Cleveland Cavaliers win the 2026 NBA Finals?",
+      "canonicalClubId": "cleveland_cavaliers"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1479",
+      "title": "Will the Minnesota Timberwolves win the 2026 NBA Finals?",
+      "canonicalClubId": "minnesota_timberwolves"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1480",
+      "title": "Will the Golden State Warriors win the 2026 NBA Finals?",
+      "canonicalClubId": "golden_state_warriors"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1482",
+      "title": "Will the Orlando Magic win the 2026 NBA Finals?",
+      "canonicalClubId": "orlando_magic"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1484",
+      "title": "Will the Miami Heat win the 2026 NBA Finals?",
+      "canonicalClubId": "miami_heat"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1485",
+      "title": "Will the Philadelphia 76ers win the 2026 NBA Finals?",
+      "canonicalClubId": "philadelphia_76ers"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1486",
+      "title": "Will the Phoenix Suns win the 2026 NBA Finals?",
+      "canonicalClubId": "phoenix_suns"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1487",
+      "title": "Will the Dallas Mavericks win the 2026 NBA Finals?",
+      "canonicalClubId": "dallas_mavericks"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1488",
+      "title": "Will the Toronto Raptors win the 2026 NBA Finals?",
+      "canonicalClubId": "toronto_raptors"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1489",
+      "title": "Will the Los Angeles Clippers win the 2026 NBA Finals?",
+      "canonicalClubId": "los_angeles_clippers"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1490",
+      "title": "Will the Atlanta Hawks win the 2026 NBA Finals?",
+      "canonicalClubId": "atlanta_hawks"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1493",
+      "title": "Will the Milwaukee Bucks win the 2026 NBA Finals?",
+      "canonicalClubId": "milwaukee_bucks"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1494",
+      "title": "Will the Memphis Grizzlies win the 2026 NBA Finals?",
+      "canonicalClubId": "memphis_grizzlies"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1495",
+      "title": "Will the Chicago Bulls win the 2026 NBA Finals?",
+      "canonicalClubId": "chicago_bulls"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1496",
+      "title": "Will the Portland Trail Blazers win the 2026 NBA Finals?",
+      "canonicalClubId": "portland_trail_blazers"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1497",
+      "title": "Will the New Orleans Pelicans win the 2026 NBA Finals?",
+      "canonicalClubId": "new_orleans_pelicans"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1499",
+      "title": "Will the Indiana Pacers win the 2026 NBA Finals?",
+      "canonicalClubId": "indiana_pacers"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1501",
+      "title": "Will the Brooklyn Nets win the 2026 NBA Finals?",
+      "canonicalClubId": "brooklyn_nets"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1502",
+      "title": "Will the Charlotte Hornets win the 2026 NBA Finals?",
+      "canonicalClubId": "charlotte_hornets"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1503",
+      "title": "Will the Utah Jazz win the 2026 NBA Finals?",
+      "canonicalClubId": "utah_jazz"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1504",
+      "title": "Will the Sacramento Kings win the 2026 NBA Finals?",
+      "canonicalClubId": "sacramento_kings"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1505",
+      "title": "Will the Washington Wizards win the 2026 NBA Finals?",
+      "canonicalClubId": "washington_wizards"
+    }
+  ],
+  "familyComparabilitySourceArtifacts": {
+    "fetchSummary": "artifacts/sports/nba-champion-family-pass/sports-nba-champion-fetch-summary.json",
+    "admissionSummary": "artifacts/sports/nba-champion-family-pass/sports-nba-champion-admission-summary.json",
+    "normalizedTopics": "artifacts/sports/nba-champion-family-pass/sports-nba-champion-normalized-topics.json",
+    "comparabilitySummary": "artifacts/sports/nba-champion-family-pass/sports-nba-champion-comparability-summary.json",
+    "basisFragmentationSummary": "artifacts/sports/nba-champion-family-pass/sports-nba-champion-basis-fragmentation-summary.json",
+    "finalDecision": "artifacts/sports/nba-champion-family-pass/sports-nba-champion-final-decision.json"
+  },
+  "admittedVenues": [
+    "LIMITLESS",
+    "OPINION",
+    "POLYMARKET",
+    "PREDICT"
+  ],
+  "admittedTeams": [
+    "atlanta_hawks",
+    "boston_celtics",
+    "brooklyn_nets",
+    "charlotte_hornets",
+    "chicago_bulls",
+    "cleveland_cavaliers",
+    "dallas_mavericks",
+    "denver_nuggets",
+    "detroit_pistons",
+    "golden_state_warriors",
+    "houston_rockets",
+    "indiana_pacers",
+    "los_angeles_clippers",
+    "los_angeles_lakers",
+    "memphis_grizzlies",
+    "miami_heat",
+    "milwaukee_bucks",
+    "minnesota_timberwolves",
+    "new_orleans_pelicans",
+    "new_york_knicks",
+    "oklahoma_city_thunder",
+    "orlando_magic",
+    "philadelphia_76ers",
+    "phoenix_suns",
+    "portland_trail_blazers",
+    "sacramento_kings",
+    "san_antonio_spurs",
+    "toronto_raptors",
+    "utah_jazz",
+    "washington_wizards"
+  ],
+  "exclusionsBeforeFinalLaneConstruction": [
+    {
+      "scope": "team",
+      "teamIdentityKey": "DENVER_NUGGETS",
+      "normalizedTeamName": "denver_nuggets",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg denver_nuggets is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "CLEVELAND_CAVALIERS",
+      "normalizedTeamName": "cleveland_cavaliers",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg cleveland_cavaliers is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "NEW_YORK_KNICKS",
+      "normalizedTeamName": "new_york_knicks",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg new_york_knicks is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "HOUSTON_ROCKETS",
+      "normalizedTeamName": "houston_rockets",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg houston_rockets is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "MINNESOTA_TIMBERWOLVES",
+      "normalizedTeamName": "minnesota_timberwolves",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg minnesota_timberwolves is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "PHILADELPHIA_76ERS",
+      "normalizedTeamName": "philadelphia_76ers",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg philadelphia_76ers is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "CHARLOTTE_HORNETS",
+      "normalizedTeamName": "charlotte_hornets",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg charlotte_hornets is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "LOS_ANGELES_LAKERS",
+      "normalizedTeamName": "los_angeles_lakers",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg los_angeles_lakers is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "ATLANTA_HAWKS",
+      "normalizedTeamName": "atlanta_hawks",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg atlanta_hawks is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "LOS_ANGELES_CLIPPERS",
+      "normalizedTeamName": "los_angeles_clippers",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg los_angeles_clippers is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "PHOENIX_SUNS",
+      "normalizedTeamName": "phoenix_suns",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg phoenix_suns is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "TORONTO_RAPTORS",
+      "normalizedTeamName": "toronto_raptors",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg toronto_raptors is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "ORLANDO_MAGIC",
+      "normalizedTeamName": "orlando_magic",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg orlando_magic is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "MIAMI_HEAT",
+      "normalizedTeamName": "miami_heat",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg miami_heat is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "GOLDEN_STATE_WARRIORS",
+      "normalizedTeamName": "golden_state_warriors",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg golden_state_warriors is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "PORTLAND_TRAIL_BLAZERS",
+      "normalizedTeamName": "portland_trail_blazers",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg portland_trail_blazers is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "NEW_ORLEANS_PELICANS",
+      "normalizedTeamName": "new_orleans_pelicans",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg new_orleans_pelicans is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "CHICAGO_BULLS",
+      "normalizedTeamName": "chicago_bulls",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg chicago_bulls is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "INDIANA_PACERS",
+      "normalizedTeamName": "indiana_pacers",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg indiana_pacers is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "MILWAUKEE_BUCKS",
+      "normalizedTeamName": "milwaukee_bucks",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg milwaukee_bucks is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "DALLAS_MAVERICKS",
+      "normalizedTeamName": "dallas_mavericks",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg dallas_mavericks is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "MEMPHIS_GRIZZLIES",
+      "normalizedTeamName": "memphis_grizzlies",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg memphis_grizzlies is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "BROOKLYN_NETS",
+      "normalizedTeamName": "brooklyn_nets",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg brooklyn_nets is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "UTAH_JAZZ",
+      "normalizedTeamName": "utah_jazz",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg utah_jazz is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "SACRAMENTO_KINGS",
+      "normalizedTeamName": "sacramento_kings",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg sacramento_kings is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "WASHINGTON_WIZARDS",
+      "normalizedTeamName": "washington_wizards",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg washington_wizards is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    }
+  ]
+}

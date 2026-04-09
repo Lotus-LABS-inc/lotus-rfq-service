@@ -1,8 +1,9 @@
 const clientScript = String.raw`
-const state = { scopes: [], latestRunId: null, canonicalMarkets: [] };
+const state = { scopes: [], latestRunId: null, canonicalMarkets: [], routeabilitySummary: null };
 
 const endpoints = {
   scopes: "/admin/simulation/scopes",
+  routeabilitySummary: "/admin/simulation/routeability-summary",
   run: "/admin/simulation/run",
   canonical: (eventId, canonicalMarketId) => {
     const url = new URL("/admin/simulation/canonical/" + encodeURIComponent(eventId), window.location.origin);
@@ -94,6 +95,31 @@ const parseRatio = (value) => {
 };
 
 const badge = (label, tone) => '<span class="badge ' + tone + '">' + esc(label) + "</span>";
+const currentCategory = () => el.category?.value ?? "";
+const currentCatalogScope = () => el.catalogScope?.value ?? "";
+
+const catalogScopeLabel = (value) => {
+  switch (value) {
+    case "historical_simulation":
+      return "Historical only";
+    case "live":
+      return "Live only";
+    case "ALL":
+    case "":
+    case null:
+    case undefined:
+      return "All";
+    default:
+      return String(value);
+  }
+};
+
+const categoryLabel = (value) => {
+  if (!value || value === "ALL") {
+    return "All categories";
+  }
+  return String(value);
+};
 
 const deriveConfidence = (lotusResult) => {
   const blocked = lotusResult?.metadata?.blocked === true || lotusResult?.resolutionRiskGating?.allowed === false;
@@ -157,6 +183,10 @@ const routeReasonLabel = (reason) => {
       return "Unsafe equivalence";
     case "ambiguous_venue_identity":
       return "Ambiguous venue identity";
+    case "opinion_historically_unqualified":
+      return "Opinion exact overlap not historically qualified";
+    case "predict_historically_unqualified":
+      return "Predict not historically qualified";
     default:
       return "Unavailable";
   }
@@ -223,6 +253,95 @@ const resetCanonicalMarketSelect = () => {
   el.canonicalMarketId.dataset.mode = "disabled";
 };
 
+const renderCanonicalEmpty = (message) => {
+  el.canonical.innerHTML = '<p class="muted">' + esc(message) + '</p>';
+};
+
+const renderRouteabilitySummary = (payload) => {
+  state.routeabilitySummary = payload ?? null;
+  if (!payload) {
+    el.routeability.innerHTML = '<p class="muted">No routeability summary loaded yet.</p>';
+    return;
+  }
+
+  const routeRows = (payload.routeModes ?? []).map((summary) =>
+    "<tr><td>" + esc(summary.label) + "</td><td>" + esc(summary.cardinality) + "</td><td>" +
+    esc(String(summary.eventCount)) + "</td><td>" + esc(String(summary.routeableMarketCount)) + "</td></tr>"
+  ).join("");
+
+  const reasonRows = (payload.blockReasons ?? []).map((entry) =>
+    "<tr><td>" + esc(routeReasonLabel(entry.reason)) + "</td><td>" + esc(String(entry.count)) + "</td></tr>"
+  ).join("");
+
+  const reasonList = (entries, formatter = (reason) => routeReasonLabel(reason)) =>
+    Array.isArray(entries) && entries.length > 0
+      ? entries.map((entry) => formatter(entry.reason) + " (" + entry.count + ")").join(", ")
+      : "None";
+
+  el.routeability.innerHTML =
+    '<section class="card"><h3>Filter summary</h3>' +
+    kv([
+      ["Category", categoryLabel(payload.filters?.category)],
+      ["Catalog scope", catalogScopeLabel(payload.filters?.catalogScope)],
+      ["Market class", payload.filters?.marketClass ?? "N/A"],
+      ["Events", String(payload.totals?.eventCount ?? 0)],
+      ["Canonical markets", String(payload.totals?.canonicalMarketCount ?? 0)],
+      ["Runnable single routes", String(payload.totals?.runnableSingleCount ?? 0)],
+      ["Runnable pair routes", String(payload.totals?.runnablePairCount ?? 0)],
+      ["Runnable tri routes", String(payload.totals?.runnableTriCount ?? 0)]
+    ]) +
+    "</section>" +
+    '<section class="card"><h3>Routeability matrix</h3><table class="table"><thead><tr><th>Route mode</th><th>Cardinality</th><th>Events</th><th>Routeable markets</th></tr></thead><tbody>' +
+    (routeRows || '<tr><td colspan="4" class="muted">No routeability data for this filter.</td></tr>') +
+    '</tbody></table></section>' +
+    '<section class="card"><h3>Venue visibility</h3>' +
+    kv([
+      ["Polymarket events", String(payload.venueVisibility?.polymarketEvents ?? 0)],
+      ["Limitless events", String(payload.venueVisibility?.limitlessEvents ?? 0)],
+      ["Opinion events", String(payload.venueVisibility?.opinionEvents ?? 0)],
+      ["Myriad events", String(payload.venueVisibility?.myriadEvents ?? 0)],
+      ["Predict events", String(payload.venueVisibility?.predictEvents ?? 0)]
+    ]) +
+    "</section>" +
+    '<section class="card"><h3>Block reasons</h3><table class="table"><thead><tr><th>Reason</th><th>Count</th></tr></thead><tbody>' +
+    (reasonRows || '<tr><td colspan="2" class="muted">No blocked routes in this filter.</td></tr>') +
+    '</tbody></table></section>' +
+    '<div class="cards">' +
+      '<section class="card"><h3>Opinion routeability</h3>' +
+      kv([
+        ["Events with Opinion inventory", String(payload.opinionRouteability?.eventsWithOpinionInventory ?? 0)],
+        ["Runnable Opinion-only events", String(payload.opinionRouteability?.eventsWithRunnableOpinionOnly ?? 0)],
+        ["Blocked Opinion pair/tri events", String(payload.opinionRouteability?.eventsWithBlockedOpinionPairOrTri ?? 0)],
+        ["Semantic rulepack version", String(payload.opinionRouteability?.semanticsRulepackVersion ?? "n/a")],
+        ["Exact live-only overlaps", String(payload.opinionRouteability?.exactLiveOnlyCount ?? 0)],
+        ["Exact historical-qualified overlaps", String(payload.opinionRouteability?.exactHistoricalQualifiedCount ?? 0)],
+        ["Near-miss candidates", String(payload.opinionRouteability?.nearMissCount ?? 0)],
+        ["Blocked semantic candidates", String(payload.opinionRouteability?.blockedUnsafeCandidateCount ?? 0)],
+        ["Low-confidence semantic candidates", String(payload.opinionRouteability?.lowConfidenceCandidateCount ?? 0)],
+        ["Dominant block reasons", reasonList(payload.opinionRouteability?.dominantBlockReasons)],
+        ["Dominant failed dimensions", reasonList(payload.opinionRouteability?.dominantNearMissDimensions, (dimension) => String(dimension))],
+        ["Dominant near-miss reasons", reasonList(payload.opinionRouteability?.dominantNearMissReasons, (reason) => String(reason))]
+      ]) +
+      '</section>' +
+      '<section class="card"><h3>Predict routeability</h3>' +
+      kv([
+        ["Events with Predict inventory", String(payload.predictRouteability?.eventsWithPredictInventory ?? 0)],
+        ["Current-state-only Predict events", String(payload.predictRouteability?.eventsWithCurrentStateOnlyPredict ?? 0)],
+        ["Historically qualified Predict events", String(payload.predictRouteability?.eventsWithHistoricallyQualifiedPredict ?? 0)],
+        ["Blocked Predict route events", String(payload.predictRouteability?.eventsWithBlockedPredictRoutes ?? 0)],
+        ["Dominant block reasons", reasonList(payload.predictRouteability?.dominantBlockReasons)]
+      ]) +
+      '</section>' +
+    '</div>' +
+    '<section class="card"><h3>Tri-venue routeability</h3>' +
+    kv([
+      ["Tri candidates", String(payload.triRouteability?.candidateCount ?? 0)],
+      ["Tri runnable", String(payload.triRouteability?.runnableCount ?? 0)],
+      ["Dominant tri block reasons", reasonList(payload.triRouteability?.dominantBlockReasons)]
+    ]) +
+    '</section>';
+};
+
 
 const updateScopeOptions = () => {
   const current = el.eventSelect.value;
@@ -264,6 +383,25 @@ const renderCanonical = (payload) => {
   const pairedMarketsRows = (payload.pairedMarkets ?? []).map((market) =>
     "<tr><td>" + esc(market.venue) + "</td><td>" + esc(market.venueMarketId) + "</td><td>" + esc(market.title ?? "N/A") + "</td></tr>"
   ).join("");
+  const predictOverview = payload.predictReadinessOverview ?? null;
+  const predictTone = predictOverview?.state === "HISTORICAL_READY_NATIVE" || predictOverview?.state === "HISTORICAL_READY_FALLBACK"
+    ? "success"
+    : predictOverview?.state === "CURRENT_STATE_ONLY" || predictOverview?.state === "RECORDER_ACCUMULATING"
+      ? "warning"
+      : "danger";
+  const predictReadinessRows = (payload.canonicalMarkets ?? [])
+    .filter((market) => market.predictReadiness)
+    .map((market) => {
+      const readiness = market.predictReadiness;
+      return "<tr><td>" + esc(market.canonicalMarketId) + "</td><td>" +
+        badge(readiness.state, readiness.historicalQualified ? "success" : readiness.state === "UNUSABLE" ? "danger" : "warning") +
+        '</td><td>' + esc(readiness.environments.join(", ") || "N/A") + '</td><td>' +
+        esc(String(readiness.currentStateRowCount)) + '</td><td>' +
+        esc(String(readiness.nativeOrderbookSnapshotCount + readiness.nativeMatchEventCount)) + '</td><td>' +
+        esc(String(readiness.fallbackSnapshotCount)) + '</td><td>' +
+        esc(String(readiness.fallbackCoveredWindowCount)) + '</td><td>' +
+        esc(readiness.reason ?? "N/A") + "</td></tr>";
+    }).join("");
 
   const selectedCanonicalMarketId = renderCanonicalMarketOptions(payload.canonicalMarkets ?? [], payload.canonicalMarketId ?? null);
 
@@ -291,8 +429,28 @@ const renderCanonical = (payload) => {
       ["Category", payload.canonicalCategory ?? "N/A"],
       ["Market class", payload.marketClass ?? "N/A"],
       ["3-platform routes", payload.hasTriVenueRoute ? "Available" : "Not found"],
-      ["Tri-venue exact markets", String(payload.triVenueRouteableMarketCount ?? 0)]
+      ["Tri-venue exact markets", String(payload.triVenueRouteableMarketCount ?? 0)],
+      ["Predict readiness", predictOverview ? predictOverview.state : "UNUSABLE"]
     ]) +
+    "</section>" +
+    '<section class="card"><h3>Predict readiness</h3>' +
+    (predictOverview
+      ? '<p class="callout">' + badge(predictOverview.state, predictTone) + '</p>' +
+        kv([
+          ["Historical qualified", predictOverview.historicalQualified ? "Yes" : "No"],
+          ["Native-ready markets", String(predictOverview.nativeReadyMarkets)],
+          ["Fallback-ready markets", String(predictOverview.fallbackReadyMarkets)],
+          ["Recorder-accumulating markets", String(predictOverview.recorderAccumulatingMarkets)],
+          ["Current-state-only markets", String(predictOverview.currentStateOnlyMarkets)],
+          ["Unusable markets", String(predictOverview.unusableMarkets)],
+          ["Readiness reasons", (predictOverview.reasons ?? []).join(", ") || "N/A"]
+        ])
+      : '<p class="muted">No Predict readiness evidence found for this event.</p>') +
+    (predictReadinessRows
+      ? '<table class="table"><thead><tr><th>Canonical Market ID</th><th>State</th><th>Environments</th><th>Current-state rows</th><th>Native evidence</th><th>Fallback snapshots</th><th>Fallback covered windows</th><th>Reason</th></tr></thead><tbody>' +
+        predictReadinessRows +
+        '</tbody></table>'
+      : '<p class="muted">No Predict-linked exact markets for this event.</p>') +
     "</section>" +
     '<section class="card"><h3>Route mode summary</h3><div class="cards">' +
     (payload.routeModeSummary ?? []).map((summary) =>
@@ -604,16 +762,35 @@ const requestJson = async (url, init) => {
 const loadScopes = async () => {
   setStatus("Loading scopes...", "loading");
   const query = new URLSearchParams();
-  query.set("category", el.marketClass.value);
+  if (currentCategory()) {
+    query.set("category", currentCategory());
+  }
   query.set("marketClass", "BINARY");
+  if (currentCatalogScope()) {
+    query.set("catalogScope", currentCatalogScope());
+  }
   query.set("routeMode", el.routeMode.value);
   const payload = await requestJson(endpoints.scopes + "?" + query.toString(), { method: "GET" });
   state.scopes = Array.isArray(payload.scopes) ? payload.scopes : [];
   updateScopeOptions();
   if (!el.eventSelect.value) {
     resetCanonicalMarketSelect();
+    renderCanonicalEmpty("No canonical event loaded yet.");
   }
   setStatus(state.scopes.length > 0 ? "Scopes loaded." : "No scopes available for this filter.", state.scopes.length > 0 ? "success" : "warning");
+};
+
+const loadRouteabilitySummary = async () => {
+  const query = new URLSearchParams();
+  if (currentCategory()) {
+    query.set("category", currentCategory());
+  }
+  query.set("marketClass", "BINARY");
+  if (currentCatalogScope()) {
+    query.set("catalogScope", currentCatalogScope());
+  }
+  const payload = await requestJson(endpoints.routeabilitySummary + "?" + query.toString(), { method: "GET" });
+  renderRouteabilitySummary(payload.summary ?? null);
 };
 
 const loadCanonical = async () => {
@@ -698,8 +875,10 @@ window.addEventListener("DOMContentLoaded", () => {
   el.canonicalRefresh = document.getElementById("refresh-canonical");
   el.runRefresh = document.getElementById("refresh-run");
   el.status = document.getElementById("console-status");
+  el.routeability = document.getElementById("routeability-summary");
   el.eventSelect = document.getElementById("canonical-event");
-  el.marketClass = document.getElementById("market-class");
+  el.category = document.getElementById("category-filter");
+  el.catalogScope = document.getElementById("catalog-scope");
   el.routeMode = document.getElementById("route-mode");
   el.from = document.getElementById("time-from");
   el.to = document.getElementById("time-to");
@@ -721,6 +900,8 @@ window.addEventListener("DOMContentLoaded", () => {
   el.from.value = oneHourAgo.toISOString().slice(0, 16);
   el.to.value = now.toISOString().slice(0, 16);
   resetCanonicalMarketSelect();
+  renderCanonicalEmpty("No canonical event loaded yet.");
+  renderRouteabilitySummary(null);
 
   el.scopeRefresh.addEventListener("click", () => loadScopes().catch((error) => setStatus(error.message, "error")));
   el.canonicalRefresh.addEventListener("click", () => loadCanonical().catch((error) => setStatus(error.message, "error")));
@@ -732,7 +913,15 @@ window.addEventListener("DOMContentLoaded", () => {
     loadPersistedRun(state.latestRunId).then(() => setStatus("Persisted run refreshed.", "success")).catch((error) => setStatus(error.message, "error"));
   });
 
-  el.marketClass.addEventListener("change", () => loadScopes().catch((error) => setStatus(error.message, "error")));
+  const refreshFilterDrivenState = () =>
+    Promise.resolve()
+      .then(() => loadRouteabilitySummary())
+      .then(() => loadScopes())
+      .then(() => (el.eventSelect.value ? loadCanonical() : undefined))
+      .catch((error) => setStatus(error.message, "error"));
+
+  el.category.addEventListener("change", () => refreshFilterDrivenState());
+  el.catalogScope.addEventListener("change", () => refreshFilterDrivenState());
   el.routeMode.addEventListener("change", () => {
     Promise.resolve()
       .then(() => loadScopes())
@@ -746,7 +935,10 @@ window.addEventListener("DOMContentLoaded", () => {
   el.canonicalMarketId.addEventListener("change", () => loadCanonical().catch((error) => setStatus(error.message, "error")));
   el.form.addEventListener("submit", runSimulation);
 
-  loadScopes().catch((error) => setStatus(error.message, "error"));
+  Promise.resolve()
+    .then(() => loadRouteabilitySummary())
+    .then(() => loadScopes())
+    .catch((error) => setStatus(error.message, "error"));
 });
 `;
 
@@ -975,11 +1167,20 @@ export const renderSimulationConsolePage = (): string => `<!DOCTYPE html>
             </label>
             <label>
               Category
-              <select id="market-class" name="marketClass">
+              <select id="category-filter" name="category">
+                <option value="">All categories</option>
                 <option value="SPORTS">SPORTS</option>
                 <option value="CRYPTO">CRYPTO</option>
                 <option value="POLITICS">POLITICS</option>
                 <option value="ESPORTS">ESPORTS</option>
+              </select>
+            </label>
+            <label>
+              Catalog Scope
+              <select id="catalog-scope" name="catalogScope">
+                <option value="">All</option>
+                <option value="historical_simulation">Historical only</option>
+                <option value="live">Live only</option>
               </select>
             </label>
             <label>
@@ -1023,6 +1224,7 @@ export const renderSimulationConsolePage = (): string => `<!DOCTYPE html>
           </form>
           <div class="endpoint-note">
             Uses: <code>GET /admin/simulation/scopes</code>,
+            <code>GET /admin/simulation/routeability-summary</code>,
             <code>POST /admin/simulation/run</code>,
             <code>GET /admin/simulation/canonical/:eventId</code>,
             <code>GET /admin/simulation/run/:id</code>,
@@ -1031,7 +1233,9 @@ export const renderSimulationConsolePage = (): string => `<!DOCTYPE html>
         </section>
 
         <section class="panel summary-panel">
-          <h2>Canonical Mapping Summary</h2>
+          <h2>Routeability Summary</h2>
+          <div id="routeability-summary"><p class="muted">No routeability summary loaded yet.</p></div>
+          <h2 style="margin-top:16px;">Canonical Mapping Summary</h2>
           <div id="canonical-summary"><p class="muted">No canonical event loaded yet.</p></div>
           <h2 style="margin-top:16px;">Run Metadata And Status</h2>
           <div id="run-summary"><p class="muted">No simulation run yet.</p></div>

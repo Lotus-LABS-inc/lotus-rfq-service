@@ -1,0 +1,627 @@
+{
+  "observedAt": "2026-04-09T09:53:13.026Z",
+  "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+  "matcherLanes": [
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "arsenal",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "english-premier-league-winner-1765295467473:arsenal",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "english-premier-league-winner:arsenal",
+          "rawClubLabel": "English Premier League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "aston_villa",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "english-premier-league-winner-1765295467473:aston-villa",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "english-premier-league-winner:aston-villa",
+          "rawClubLabel": "English Premier League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "chelsea",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "english-premier-league-winner-1765295467473:chelsea",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "english-premier-league-winner:chelsea",
+          "rawClubLabel": "English Premier League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "liverpool",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "english-premier-league-winner-1765295467473:liverpool",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "english-premier-league-winner:liverpool",
+          "rawClubLabel": "English Premier League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "manchester_city",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "english-premier-league-winner-1765295467473:man-city",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "english-premier-league-winner:manchester-city",
+          "rawClubLabel": "English Premier League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "club": "manchester_united",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "english-premier-league-winner-1765295467473:man-united",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "english-premier-league-winner:manchester-united",
+          "rawClubLabel": "English Premier League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "club": "arsenal",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "english-premier-league-winner-1765295467473:arsenal",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "english-premier-league-winner-2026:arsenal",
+          "rawClubLabel": "English Premier League Winner 2026"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "club": "liverpool",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "english-premier-league-winner-1765295467473:liverpool",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "english-premier-league-winner-2026:liverpool",
+          "rawClubLabel": "English Premier League Winner 2026"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "club": "manchester_city",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "english-premier-league-winner-1765295467473:man-city",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "english-premier-league-winner-2026:man-city",
+          "rawClubLabel": "English Premier League Winner 2026"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "club": "manchester_united",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "english-premier-league-winner-1765295467473:man-united",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "english-premier-league-winner-2026:man-united",
+          "rawClubLabel": "English Premier League Winner 2026"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "arsenal",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "english-premier-league-winner-1765295467473:arsenal",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1562",
+          "rawClubLabel": "Will Arsenal win the 2025–26 English Premier League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "aston_villa",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "english-premier-league-winner-1765295467473:aston-villa",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1563",
+          "rawClubLabel": "Will Aston Villa win the 2025–26 English Premier League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "chelsea",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "english-premier-league-winner-1765295467473:chelsea",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1565",
+          "rawClubLabel": "Will Chelsea win the 2025–26 English Premier League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "liverpool",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "english-premier-league-winner-1765295467473:liverpool",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1564",
+          "rawClubLabel": "Will Liverpool win the 2025–26 English Premier League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "club": "manchester_city",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "english-premier-league-winner-1765295467473:man-city",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1560",
+          "rawClubLabel": "Will Manchester City win the 2025–26 English Premier League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "club": "arsenal",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "english-premier-league-winner-2026:arsenal",
+          "rawClubLabel": "English Premier League Winner 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "english-premier-league-winner:arsenal",
+          "rawClubLabel": "English Premier League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "club": "liverpool",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "english-premier-league-winner-2026:liverpool",
+          "rawClubLabel": "English Premier League Winner 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "english-premier-league-winner:liverpool",
+          "rawClubLabel": "English Premier League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "club": "manchester_city",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "english-premier-league-winner-2026:man-city",
+          "rawClubLabel": "English Premier League Winner 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "english-premier-league-winner:manchester-city",
+          "rawClubLabel": "English Premier League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "club": "manchester_united",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "english-premier-league-winner-2026:man-united",
+          "rawClubLabel": "English Premier League Winner 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "english-premier-league-winner:manchester-united",
+          "rawClubLabel": "English Premier League Winner"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "club": "arsenal",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "english-premier-league-winner-2026:arsenal",
+          "rawClubLabel": "English Premier League Winner 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1562",
+          "rawClubLabel": "Will Arsenal win the 2025–26 English Premier League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "club": "liverpool",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "english-premier-league-winner-2026:liverpool",
+          "rawClubLabel": "English Premier League Winner 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1564",
+          "rawClubLabel": "Will Liverpool win the 2025–26 English Premier League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "club": "manchester_city",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "english-premier-league-winner-2026:man-city",
+          "rawClubLabel": "English Premier League Winner 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1560",
+          "rawClubLabel": "Will Manchester City win the 2025–26 English Premier League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "arsenal",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "english-premier-league-winner:arsenal",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1562",
+          "rawClubLabel": "Will Arsenal win the 2025–26 English Premier League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "aston_villa",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "english-premier-league-winner:aston-villa",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1563",
+          "rawClubLabel": "Will Aston Villa win the 2025–26 English Premier League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "chelsea",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "english-premier-league-winner:chelsea",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1565",
+          "rawClubLabel": "Will Chelsea win the 2025–26 English Premier League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "liverpool",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "english-premier-league-winner:liverpool",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1564",
+          "rawClubLabel": "Will Liverpool win the 2025–26 English Premier League?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "club": "manchester_city",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "english-premier-league-winner:manchester-city",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1560",
+          "rawClubLabel": "Will Manchester City win the 2025–26 English Premier League?"
+        }
+      ]
+    }
+  ]
+}

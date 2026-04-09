@@ -1,0 +1,16 @@
+{
+  "observedAt": "2026-04-08T18:34:04.791Z",
+  "canonicalTopicKey": "OFFICE_EXIT_BY_DATE|ISRAEL|PRIME_MINISTER|BENJAMIN_NETANYAHU|2026-12-31",
+  "overallDecision": "OFFICE_EXIT_NETANYAHU_2026_TRI_REVIEW_REQUIRED",
+  "bestPair": "LIMITLESS|POLYMARKET",
+  "bestTriIfAny": "LIMITLESS|POLYMARKET|PREDICT",
+  "pairMatcherReady": true,
+  "triMatcherReady": true,
+  "pairStillPreferred": true,
+  "exactSafePairCandidateCount": 3,
+  "exactSafeTriCandidateCount": 1,
+  "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+  "operatorCredible": true,
+  "matcherFollowUpJustified": true,
+  "singleBestNextAction": "Start narrow operator review on the strict tri lane LIMITLESS|POLYMARKET|PREDICT, while keeping LIMITLESS|POLYMARKET as the pair fallback."
+}

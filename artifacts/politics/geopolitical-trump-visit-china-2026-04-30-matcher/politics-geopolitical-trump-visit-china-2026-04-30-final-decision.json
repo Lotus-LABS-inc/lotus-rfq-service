@@ -1,0 +1,16 @@
+{
+  "observedAt": "2026-04-08T21:00:23.034Z",
+  "canonicalTopicKey": "GEOPOLITICAL_EVENT_BY_DATE|USA_CHINA|TRUMP_VISIT_CHINA|2026-04-30",
+  "overallDecision": "GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_TRI_READY_BUT_PAIR_FIRST",
+  "bestPair": "OPINION|POLYMARKET",
+  "bestTriIfAny": "OPINION|POLYMARKET|PREDICT",
+  "pairMatcherReady": true,
+  "triMatcherReady": true,
+  "pairStillPreferred": true,
+  "exactSafePairCandidateCount": 3,
+  "exactSafeTriCandidateCount": 1,
+  "ruleStatus": "EXACT_RULE_COMPATIBLE",
+  "operatorCredible": true,
+  "matcherFollowUpJustified": true,
+  "singleBestNextAction": "Start narrow pair-first review on OPINION|POLYMARKET, while preserving the strict tri lane OPINION|POLYMARKET|PREDICT as a first-class route."
+}

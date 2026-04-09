@@ -1,0 +1,34 @@
+{
+  "observedAt": "2026-04-08T00:42:56.963Z",
+  "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+  "sourceReports": {
+    "sharedCore": "artifacts/politics/nominee-2028-shared-core",
+    "pairEval": "artifacts/politics/nominee-2028-pair-matcher-eval",
+    "triEval": "artifacts/politics/nominee-2028-tri-eval"
+  },
+  "refreshedRowsUsed": {
+    "observedAt": "2026-04-08T00:42:56.917Z",
+    "freshCandidateMarketsByVenue": {
+      "POLYMARKET": 79,
+      "OPINION": 1,
+      "LIMITLESS": 2
+    },
+    "fetchStates": {
+      "POLYMARKET": "SUCCESS",
+      "OPINION": "SUCCESS",
+      "LIMITLESS": "SUCCESS"
+    }
+  },
+  "admittedVenues": [
+    "LIMITLESS",
+    "OPINION",
+    "POLYMARKET"
+  ],
+  "admittedCandidates": [
+    "donald_trump",
+    "donald_trump_jr",
+    "glenn_youngkin",
+    "ted_cruz",
+    "tucker_carlson"
+  ]
+}

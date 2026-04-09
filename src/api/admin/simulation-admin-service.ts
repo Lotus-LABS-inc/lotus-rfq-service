@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+
 import type { Pool } from "pg";
 import type { Logger } from "pino";
 
@@ -17,6 +20,15 @@ import {
   type HistoricalSimulationRun,
   type PairedMarketIdentity
 } from "../../core/historical-simulation/historical-simulation.types.js";
+import type {
+  PredictHistoricalReadinessState,
+  PredictHistoricalReadinessSummary
+} from "../../integrations/predict/predict-types.js";
+import { PredictReadinessRepository } from "../../repositories/predict-readiness.repository.js";
+import {
+  opinionExactMatchCurationSchema,
+  type OpinionExactMatchCuration
+} from "../../simulation/opinion-exact-match-curation.js";
 import type { ResolutionRiskAdminService } from "./resolution-risk-admin-service.js";
 import type { HistoricalSimulationCatalogService } from "./historical-simulation-catalog-service.js";
 import type {
@@ -71,6 +83,7 @@ interface PairedMarketRow {
 
 interface MarketCoverageRow {
   canonical_market_id: string | null;
+  venue_market_id?: string;
   venue: string;
   row_count: string;
   coverage_start: Date;
@@ -79,11 +92,46 @@ interface MarketCoverageRow {
   market_class: string | null;
 }
 
+interface PredictMarketReadiness {
+  canonicalMarketId: string;
+  predictVenueMarketIds: readonly string[];
+  summary: PredictHistoricalReadinessSummary | null;
+}
+
+interface CanonicalMembershipRow {
+  canonical_market_id: string;
+  venue: string;
+  venue_market_id: string;
+}
+
+interface OpinionExactMatchState {
+  classification: NonNullable<CanonicalMarketOption["opinionExactMatch"]>["classification"];
+  historicalQualified: boolean;
+  reason: string | null;
+}
+
+interface OpinionCurationSummaryReasonCount {
+  reason: string;
+  count: number;
+}
+
+interface OpinionCurationSummaryDimensionCount {
+  dimension: string;
+  count: number;
+}
+
+interface LoadedOpinionCuration {
+  semanticsRulepackVersion: string | null;
+  entries: OpinionExactMatchCuration["entries"];
+  exactMatchesByCanonicalMarketId: ReadonlyMap<string, OpinionExactMatchState>;
+}
+
 type SupportedSimulationCategory = "SPORTS" | "CRYPTO" | "POLITICS" | "ESPORTS";
 
 export interface SimulationAdminScopeFilters {
   category?: SupportedSimulationCategory;
   marketClass?: HistoricalMarketClass;
+  catalogScope?: HistoricalSimulationCatalogScope;
   routeMode?: HistoricalSimulationRouteMode;
 }
 
@@ -137,6 +185,16 @@ export interface SimulationCanonicalCoverage {
     coverageStart: Date;
     coverageEnd: Date;
   }>;
+  predictReadinessOverview: {
+    state: PredictHistoricalReadinessState;
+    historicalQualified: boolean;
+    reasons: readonly string[];
+    recorderAccumulatingMarkets: number;
+    fallbackReadyMarkets: number;
+    nativeReadyMarkets: number;
+    currentStateOnlyMarkets: number;
+    unusableMarkets: number;
+  };
   pairedMarkets: PairedMarketIdentity[];
   canonicalMarkets: CanonicalMarketOption[];
   routeModeSummary: ReadonlyArray<HistoricalSimulationEventRouteSummary>;
@@ -148,6 +206,69 @@ export interface SimulationCanonicalCoverage {
     count: number;
     markets: string[];
   }>;
+}
+
+export interface SimulationRouteabilityReasonCount {
+  reason: HistoricalSimulationRouteAvailabilityReason;
+  count: number;
+}
+
+export interface SimulationRouteabilityModeSummary {
+  routeMode: HistoricalSimulationRouteMode;
+  label: string;
+  cardinality: "single" | "pair" | "tri";
+  routeableMarketCount: number;
+  eventCount: number;
+}
+
+export interface SimulationRouteabilitySummary {
+  filters: {
+    category: SupportedSimulationCategory | "ALL";
+    catalogScope: HistoricalSimulationCatalogScope | "ALL";
+    marketClass: HistoricalMarketClass | null;
+  };
+  totals: {
+    eventCount: number;
+    canonicalMarketCount: number;
+    runnableSingleCount: number;
+    runnablePairCount: number;
+    runnableTriCount: number;
+  };
+  routeModes: readonly SimulationRouteabilityModeSummary[];
+  blockReasons: readonly SimulationRouteabilityReasonCount[];
+  venueVisibility: {
+    polymarketEvents: number;
+    limitlessEvents: number;
+    opinionEvents: number;
+    myriadEvents: number;
+    predictEvents: number;
+  };
+  opinionRouteability: {
+    eventsWithOpinionInventory: number;
+    eventsWithRunnableOpinionOnly: number;
+    eventsWithBlockedOpinionPairOrTri: number;
+    semanticsRulepackVersion: string | null;
+    exactLiveOnlyCount: number;
+    exactHistoricalQualifiedCount: number;
+    nearMissCount: number;
+    blockedUnsafeCandidateCount: number;
+    lowConfidenceCandidateCount: number;
+    dominantBlockReasons: readonly SimulationRouteabilityReasonCount[];
+    dominantNearMissDimensions: readonly OpinionCurationSummaryDimensionCount[];
+    dominantNearMissReasons: readonly OpinionCurationSummaryReasonCount[];
+  };
+  predictRouteability: {
+    eventsWithPredictInventory: number;
+    eventsWithCurrentStateOnlyPredict: number;
+    eventsWithHistoricallyQualifiedPredict: number;
+    eventsWithBlockedPredictRoutes: number;
+    dominantBlockReasons: readonly SimulationRouteabilityReasonCount[];
+  };
+  triRouteability: {
+    candidateCount: number;
+    runnableCount: number;
+    dominantBlockReasons: readonly SimulationRouteabilityReasonCount[];
+  };
 }
 
 export interface SimulationAdminServiceDeps {
@@ -187,7 +308,83 @@ const createNoopLogger = (): Pick<Logger, "info" | "warn" | "error"> => ({
   error: () => undefined
 });
 
+const OPINION_CURATION_ARTIFACT_PATH = path.resolve(process.cwd(), "docs", "opinion-exact-match-curation.json");
 const SAFE_ROUTE_EQUIVALENCE = new Set(["SAFE_EQUIVALENT", "EQUIVALENT_WITH_LAG"]);
+const RESOLUTION_RISK_STALENESS_TOLERANCE_MS = 1_000;
+
+const isAssessmentFreshAgainstProfiles = (
+  assessmentComputedAt: Date | null,
+  latestProfileUpdatedAt: Date | null
+): boolean => {
+  if (assessmentComputedAt === null) {
+    return false;
+  }
+  if (latestProfileUpdatedAt === null) {
+    return true;
+  }
+  return assessmentComputedAt.getTime() + RESOLUTION_RISK_STALENESS_TOLERANCE_MS >= latestProfileUpdatedAt.getTime();
+};
+
+const sortOpinionReasonCounts = (
+  counts: ReadonlyMap<string, number>
+): readonly OpinionCurationSummaryReasonCount[] =>
+  [...counts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([reason, count]) => ({ reason, count }));
+
+const sortOpinionDimensionCounts = (
+  counts: ReadonlyMap<string, number>
+): readonly OpinionCurationSummaryDimensionCount[] =>
+  [...counts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([dimension, count]) => ({ dimension, count }));
+
+const readOpinionCurationArtifact = (
+  logger: Pick<Logger, "info" | "warn" | "error">
+): LoadedOpinionCuration => {
+  if (!existsSync(OPINION_CURATION_ARTIFACT_PATH)) {
+    return {
+      semanticsRulepackVersion: null,
+      entries: [],
+      exactMatchesByCanonicalMarketId: new Map()
+    };
+  }
+
+  try {
+    const payload = opinionExactMatchCurationSchema.parse(
+      JSON.parse(readFileSync(OPINION_CURATION_ARTIFACT_PATH, "utf8"))
+    );
+    const exactMatchesByCanonicalMarketId = new Map<string, OpinionExactMatchState>();
+    for (const entry of payload.entries) {
+      if (
+        entry.decision.status === "semantic_exact_historical_qualified"
+        || entry.decision.status === "semantic_exact_live_only"
+      ) {
+        exactMatchesByCanonicalMarketId.set(entry.selectedSeed.canonicalMarketId, {
+          classification: entry.decision.status,
+          historicalQualified: entry.decision.status === "semantic_exact_historical_qualified",
+          reason: entry.decision.reason
+        });
+      }
+    }
+    return {
+      semanticsRulepackVersion: payload.policy.semanticsRulepackVersion,
+      entries: payload.entries,
+      exactMatchesByCanonicalMarketId
+    };
+  } catch (error) {
+    logger.warn({
+      msg: "Failed to parse Opinion exact-match curation artifact.",
+      artifactPath: OPINION_CURATION_ARTIFACT_PATH,
+      error
+    });
+    return {
+      semanticsRulepackVersion: null,
+      entries: [],
+      exactMatchesByCanonicalMarketId: new Map()
+    };
+  }
+};
 
 const mapRunRow = (row: HistoricalSimulationRunRow): HistoricalSimulationRun => ({
   id: row.id,
@@ -259,7 +456,7 @@ const computeScopedResolutionRiskFreshness = (
   const versions = [...new Set(relevantAssessments.map((assessment) => assessment.version))];
   const isComplete = relevantProfiles.length >= 2 && persistedPairCount === expectedPairCount;
   const isStale =
-    !isComplete || lastComputedAt === null || (latestProfileUpdatedAt !== null && lastComputedAt < latestProfileUpdatedAt);
+    !isComplete || !isAssessmentFreshAgainstProfiles(lastComputedAt, latestProfileUpdatedAt);
 
   return {
     profileCount: relevantProfiles.length,
@@ -361,6 +558,233 @@ const buildPairedMarketIdentityMap = (
   return grouped;
 };
 
+const buildMembershipKey = (venue: string, venueMarketId: string): string =>
+  `${venue}|${venueMarketId}`;
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const looksLikeUuid = (value: string): boolean => UUID_PATTERN.test(value);
+
+const buildCurrentCanonicalMembershipMap = (
+  rows: readonly CanonicalMembershipRow[]
+): ReadonlyMap<string, string> =>
+  new Map(
+    rows.map((row) => [
+      buildMembershipKey(row.venue, row.venue_market_id),
+      row.canonical_market_id
+    ] as const)
+  );
+
+const remapPairedMarketRows = (
+  rows: readonly PairedMarketRow[],
+  membershipByVenueMarket: ReadonlyMap<string, string>
+): readonly PairedMarketRow[] =>
+  rows.map((row) => ({
+    ...row,
+    canonical_market_id:
+      membershipByVenueMarket.get(buildMembershipKey(row.venue, row.venue_market_id))
+      ?? row.canonical_market_id
+  }));
+
+const remapMarketCoverageRows = (
+  rows: readonly MarketCoverageRow[],
+  membershipByVenueMarket: ReadonlyMap<string, string>
+): readonly MarketCoverageRow[] => {
+  const grouped = new Map<string, MarketCoverageRow>();
+  for (const row of rows) {
+    const canonicalMarketId =
+      membershipByVenueMarket.get(buildMembershipKey(row.venue, row.venue_market_id ?? ""))
+      ?? row.canonical_market_id;
+    const key = `${canonicalMarketId ?? "null"}|${row.venue}`;
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, {
+        ...row,
+        canonical_market_id: canonicalMarketId
+      });
+      continue;
+    }
+
+    grouped.set(key, {
+      ...existing,
+      canonical_market_id: canonicalMarketId,
+      row_count: String(coerceCount(existing.row_count) + coerceCount(row.row_count)),
+      coverage_start: existing.coverage_start < row.coverage_start ? existing.coverage_start : row.coverage_start,
+      coverage_end: existing.coverage_end > row.coverage_end ? existing.coverage_end : row.coverage_end,
+      canonical_category: existing.canonical_category ?? row.canonical_category,
+      market_class: existing.market_class ?? row.market_class
+    });
+  }
+
+  return [...grouped.values()].sort((left, right) =>
+    (left.canonical_market_id ?? "").localeCompare(right.canonical_market_id ?? "")
+    || left.venue.localeCompare(right.venue)
+  );
+};
+
+const buildCoverageRowsFromMarketCoverage = (
+  rows: readonly MarketCoverageRow[]
+): ReadonlyArray<CoverageRow & { canonical_category: string | null; market_class: string | null }> => {
+  const grouped = new Map<string, CoverageRow & { canonical_category: string | null; market_class: string | null }>();
+  for (const row of rows) {
+    const existing = grouped.get(row.venue);
+    if (!existing) {
+      grouped.set(row.venue, {
+        venue: row.venue,
+        row_count: row.row_count,
+        coverage_start: row.coverage_start,
+        coverage_end: row.coverage_end,
+        canonical_category: row.canonical_category,
+        market_class: row.market_class
+      });
+      continue;
+    }
+
+    grouped.set(row.venue, {
+      ...existing,
+      row_count: String(coerceCount(existing.row_count) + coerceCount(row.row_count)),
+      coverage_start: existing.coverage_start < row.coverage_start ? existing.coverage_start : row.coverage_start,
+      coverage_end: existing.coverage_end > row.coverage_end ? existing.coverage_end : row.coverage_end,
+      canonical_category: existing.canonical_category ?? row.canonical_category,
+      market_class: existing.market_class ?? row.market_class
+    });
+  }
+
+  return [...grouped.values()].sort((left, right) => left.venue.localeCompare(right.venue));
+};
+
+const buildCanonicalOpinionExactMatches = (input: {
+  marketRows: readonly PairedMarketRow[];
+  marketCoverageRows: readonly MarketCoverageRow[];
+  fallbackMatchesByMarketId: ReadonlyMap<string, OpinionExactMatchState>;
+}): ReadonlyMap<string, OpinionExactMatchState> => {
+  const pairedMarketsById = buildPairedMarketIdentityMap(input.marketRows);
+  const marketCoverage = buildMarketVenueCoverage(input.marketCoverageRows);
+  const merged = new Map<string, OpinionExactMatchState>();
+
+  for (const [canonicalMarketId, venues] of pairedMarketsById.entries()) {
+    const venueSet = new Set(venues.map((venue) => venue.venue));
+    if (!venueSet.has("OPINION")) {
+      continue;
+    }
+    if (![...venueSet].some((venue) => venue !== "OPINION")) {
+      continue;
+    }
+
+    const venueCoverage = marketCoverage.get(canonicalMarketId) ?? new Map();
+    const opinionCoverage = venueCoverage.get("OPINION")?.rowCount ?? 0;
+    const hasCounterpartyHistoricalCoverage = [...venueCoverage.entries()].some(
+      ([venue, coverage]) => venue !== "OPINION" && coverage.rowCount > 0
+    );
+
+    merged.set(canonicalMarketId, {
+      classification:
+        opinionCoverage > 0 && hasCounterpartyHistoricalCoverage
+          ? "semantic_exact_historical_qualified"
+          : "semantic_exact_live_only",
+      historicalQualified: opinionCoverage > 0 && hasCounterpartyHistoricalCoverage,
+      reason: "canonical_promoted_overlap"
+    });
+  }
+
+  for (const [canonicalMarketId, fallback] of input.fallbackMatchesByMarketId.entries()) {
+    if (!merged.has(canonicalMarketId)) {
+      merged.set(canonicalMarketId, fallback);
+    }
+  }
+
+  return merged;
+};
+
+const routeModeRequiresHistoricallyQualifiedPredict = (routeMode: HistoricalSimulationRouteMode): boolean =>
+  routeMode === "POLYMARKET_PREDICT" ||
+  routeMode === "LIMITLESS_PREDICT" ||
+  routeMode === "OPINION_PREDICT";
+
+const routeModeRequiresHistoricallyQualifiedOpinion = (routeMode: HistoricalSimulationRouteMode): boolean =>
+  routeMode === "POLYMARKET_OPINION" ||
+  routeMode === "LIMITLESS_OPINION" ||
+  routeMode === "POLYMARKET_LIMITLESS_OPINION" ||
+  routeMode === "OPINION_PREDICT";
+
+const buildPredictReadinessOverview = (
+  readiness: ReadonlyMap<string, PredictHistoricalReadinessSummary>
+): SimulationCanonicalCoverage["predictReadinessOverview"] => {
+  const summaries = [...readiness.values()];
+  const stateCounts = summaries.reduce<Record<PredictHistoricalReadinessState, number>>(
+    (accumulator, summary) => {
+      accumulator[summary.state] += 1;
+      return accumulator;
+    },
+    {
+      CURRENT_STATE_ONLY: 0,
+      RECORDER_ACCUMULATING: 0,
+      HISTORICAL_READY_NATIVE: 0,
+      HISTORICAL_READY_FALLBACK: 0,
+      UNUSABLE: 0
+    }
+  );
+  const reasons = [...new Set(summaries.map((summary) => summary.reason).filter((reason): reason is string => reason !== null))];
+  const state: PredictHistoricalReadinessState =
+    stateCounts.HISTORICAL_READY_NATIVE > 0
+      ? "HISTORICAL_READY_NATIVE"
+      : stateCounts.HISTORICAL_READY_FALLBACK > 0
+        ? "HISTORICAL_READY_FALLBACK"
+        : stateCounts.RECORDER_ACCUMULATING > 0
+          ? "RECORDER_ACCUMULATING"
+          : stateCounts.CURRENT_STATE_ONLY > 0
+            ? "CURRENT_STATE_ONLY"
+            : "UNUSABLE";
+
+  return {
+    state,
+    historicalQualified: state === "HISTORICAL_READY_NATIVE" || state === "HISTORICAL_READY_FALLBACK",
+    reasons,
+    recorderAccumulatingMarkets: stateCounts.RECORDER_ACCUMULATING,
+    fallbackReadyMarkets: stateCounts.HISTORICAL_READY_FALLBACK,
+    nativeReadyMarkets: stateCounts.HISTORICAL_READY_NATIVE,
+    currentStateOnlyMarkets: stateCounts.CURRENT_STATE_ONLY,
+    unusableMarkets: stateCounts.UNUSABLE
+  };
+};
+
+const buildPredictReadinessInputsFromRows = (
+  marketRows: readonly PairedMarketRow[]
+): readonly PredictMarketReadiness[] => {
+  const grouped = new Map<string, string[]>();
+  for (const row of marketRows) {
+    if (!row.canonical_market_id || row.venue !== "PREDICT") {
+      continue;
+    }
+    const marketIds = grouped.get(row.canonical_market_id) ?? [];
+    marketIds.push(row.venue_market_id);
+    grouped.set(row.canonical_market_id, marketIds);
+  }
+
+  return [...grouped.entries()]
+    .sort((left, right) => left[0].localeCompare(right[0]))
+    .map(([canonicalMarketId, predictVenueMarketIds]) => ({
+      canonicalMarketId,
+      predictVenueMarketIds: [...new Set(predictVenueMarketIds)].sort((left, right) => left.localeCompare(right)),
+      summary: null
+    }));
+};
+
+const buildPredictReadinessInputsFromCanonicalMarkets = (
+  markets: readonly CanonicalMarketOption[]
+): readonly PredictMarketReadiness[] =>
+  markets
+    .map((market) => ({
+      canonicalMarketId: market.canonicalMarketId,
+      predictVenueMarketIds: market.venues
+        .filter((venue) => venue.venue === "PREDICT")
+        .map((venue) => venue.venueMarketId)
+        .sort((left, right) => left.localeCompare(right)),
+      summary: null
+    }))
+    .filter((market) => market.predictVenueMarketIds.length > 0);
+
 const resolveUnavailableRoute = (
   routeMode: HistoricalSimulationRouteMode,
   reason: HistoricalSimulationRouteAvailabilityReason
@@ -404,6 +828,8 @@ const buildRouteModeAvailability = (input: {
   venueCoverage: Map<string, { rowCount: number; coverageStart: Date; coverageEnd: Date }>;
   profiles: readonly ResolutionRiskProfile[];
   assessmentsByPair: ReadonlyMap<string, ResolutionRiskAssessment>;
+  opinionExactMatch?: OpinionExactMatchState | null;
+  predictReadiness?: PredictHistoricalReadinessSummary | null;
 }): readonly HistoricalSimulationRouteAvailability[] => {
   const profilesByVenue = new Map<string, ResolutionRiskProfile[]>();
   for (const profile of input.profiles) {
@@ -425,6 +851,21 @@ const buildRouteModeAvailability = (input: {
 
     if (definition.cardinality === "single") {
       return resolveAvailableRoute(definition.mode);
+    }
+
+    if (
+      routeModeRequiresHistoricallyQualifiedOpinion(definition.mode)
+      && input.opinionExactMatch
+      && !input.opinionExactMatch.historicalQualified
+    ) {
+      return resolveUnavailableRoute(definition.mode, "opinion_historically_unqualified");
+    }
+
+    if (
+      routeModeRequiresHistoricallyQualifiedPredict(definition.mode) &&
+      (!input.predictReadiness || !input.predictReadiness.historicalQualified)
+    ) {
+      return resolveUnavailableRoute(definition.mode, "predict_historically_unqualified");
     }
 
     const requiredProfiles = definition.requiredVenues.map((venue) => ({
@@ -453,7 +894,7 @@ const buildRouteModeAvailability = (input: {
       }
 
       const latestProfileUpdate = leftProfile.updatedAt > rightProfile.updatedAt ? leftProfile.updatedAt : rightProfile.updatedAt;
-      if (assessment.computedAt < latestProfileUpdate) {
+      if (!isAssessmentFreshAgainstProfiles(assessment.computedAt, latestProfileUpdate)) {
         return resolveUnavailableRoute(definition.mode, "stale_resolution_risk");
       }
 
@@ -470,6 +911,8 @@ const buildCanonicalMarketOptions = (input: {
   inspection: ResolutionRiskInspection;
   marketRows: readonly PairedMarketRow[];
   marketCoverageRows: readonly MarketCoverageRow[];
+  opinionExactMatchesByMarketId: ReadonlyMap<string, OpinionExactMatchState>;
+  predictReadinessByMarketId: ReadonlyMap<string, PredictHistoricalReadinessSummary>;
 }): CanonicalMarketOption[] => {
   const titleMap = buildTitleMap(input.marketRows);
   const profilesByMarket = buildProfilesByMarket(input.inspection);
@@ -496,7 +939,9 @@ const buildCanonicalMarketOptions = (input: {
       const routeModes = buildRouteModeAvailability({
         venueCoverage: marketCoverage.get(canonicalMarketId) ?? new Map(),
         profiles: profilesByMarket.get(canonicalMarketId) ?? [],
-        assessmentsByPair
+        assessmentsByPair,
+        opinionExactMatch: input.opinionExactMatchesByMarketId.get(canonicalMarketId) ?? null,
+        predictReadiness: input.predictReadinessByMarketId.get(canonicalMarketId) ?? null
       });
       const runnableRouteModes = routeModes.filter((mode) => mode.runnable).map((mode) => mode.routeMode);
       return {
@@ -504,7 +949,9 @@ const buildCanonicalMarketOptions = (input: {
         isRunnable: runnableRouteModes.length > 0,
         venues,
         routeModes,
-        runnableRouteModes
+        runnableRouteModes,
+        opinionExactMatch: input.opinionExactMatchesByMarketId.get(canonicalMarketId) ?? null,
+        predictReadiness: input.predictReadinessByMarketId.get(canonicalMarketId) ?? null
       };
     });
 };
@@ -525,6 +972,18 @@ const buildRouteModeSummary = (
     };
   });
 
+const sortReasonCounts = (
+  counts: ReadonlyMap<HistoricalSimulationRouteAvailabilityReason, number>
+): readonly SimulationRouteabilityReasonCount[] =>
+  [...counts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([reason, count]) => ({ reason, count }));
+
+interface FilteredCoverageResult {
+  row: EventRow;
+  coverage: SimulationCanonicalCoverage;
+}
+
 export class SimulationAdminService {
   private readonly logger: Pick<Logger, "info" | "warn" | "error">;
 
@@ -534,39 +993,7 @@ export class SimulationAdminService {
 
   public async listScopes(filters: SimulationAdminScopeFilters = {}): Promise<SimulationScopeSummary[]> {
     const routeMode = filters.routeMode ?? DEFAULT_ROUTE_MODE;
-    const clauses = [
-      `canonical_category IN ('SPORTS', 'CRYPTO', 'POLITICS', 'ESPORTS')`
-    ];
-    const values: string[] = [];
-
-    if (filters.category) {
-      values.push(filters.category);
-      clauses.push(`canonical_category = $${values.length}`);
-    }
-
-    if (filters.marketClass) {
-      values.push(filters.marketClass);
-      clauses.push(`market_class = $${values.length}`);
-    }
-
-    const result = await this.deps.pool.query<EventRow>(
-      `SELECT
-         canonical_event_id,
-         canonical_category,
-         market_class
-       FROM historical_market_states
-      WHERE ${clauses.join(" AND ")}
-      GROUP BY canonical_event_id, canonical_category, market_class
-      ORDER BY canonical_event_id ASC`,
-      values
-    );
-
-    const coverages = await Promise.all(
-      result.rows.map(async (row) => ({
-        row,
-        coverage: await this.getCanonicalCoverage(row.canonical_event_id)
-      }))
-    );
+    const coverages = await this.loadFilteredCoverages(filters);
 
     return coverages.flatMap(({ row, coverage }) => {
       const routeableMarkets = coverage.canonicalMarkets.filter((market) =>
@@ -615,11 +1042,296 @@ export class SimulationAdminService {
     });
   }
 
+  public async getRouteabilitySummary(
+    filters: Omit<SimulationAdminScopeFilters, "routeMode"> = {}
+  ): Promise<SimulationRouteabilitySummary> {
+    const coverages = await this.loadFilteredCoverages(filters);
+    const opinionCuration = readOpinionCurationArtifact(this.logger);
+    const routeModeMarketCounts = new Map<HistoricalSimulationRouteMode, number>();
+    const routeModeEventCounts = new Map<HistoricalSimulationRouteMode, number>();
+    const blockReasonCounts = new Map<HistoricalSimulationRouteAvailabilityReason, number>();
+    const opinionReasonCounts = new Map<HistoricalSimulationRouteAvailabilityReason, number>();
+    const predictReasonCounts = new Map<HistoricalSimulationRouteAvailabilityReason, number>();
+    const triReasonCounts = new Map<HistoricalSimulationRouteAvailabilityReason, number>();
+    const opinionNearMissReasonCounts = new Map<string, number>();
+    const opinionNearMissDimensionCounts = new Map<string, number>();
+    const venueEventCounts = {
+      polymarketEvents: 0,
+      limitlessEvents: 0,
+      opinionEvents: 0,
+      myriadEvents: 0,
+      predictEvents: 0
+    };
+
+    let canonicalMarketCount = 0;
+    let runnableSingleCount = 0;
+    let runnablePairCount = 0;
+    let runnableTriCount = 0;
+    let triCandidateCount = 0;
+    let triRunnableCount = 0;
+    let eventsWithOpinionInventory = 0;
+    let eventsWithRunnableOpinionOnly = 0;
+    let eventsWithBlockedOpinionPairOrTri = 0;
+    let exactLiveOnlyCount = 0;
+    let exactHistoricalQualifiedCount = 0;
+    let nearMissCount = 0;
+    let blockedUnsafeCandidateCount = 0;
+    let lowConfidenceCandidateCount = 0;
+    let eventsWithPredictInventory = 0;
+    let eventsWithCurrentStateOnlyPredict = 0;
+    let eventsWithHistoricallyQualifiedPredict = 0;
+    let eventsWithBlockedPredictRoutes = 0;
+
+    const filteredEventIds = new Set(coverages.map(({ coverage }) => coverage.canonicalEventId));
+    const filteredOpinionEntries = opinionCuration.entries.filter((entry) =>
+      filteredEventIds.has(entry.selectedSeed.canonicalEventId)
+    );
+
+    for (const entry of filteredOpinionEntries) {
+      nearMissCount += entry.nearMissCandidates.length;
+      for (const evaluation of entry.candidateEvaluations) {
+        if (evaluation.semanticValidation.discoveryStatus === "candidate_blocked") {
+          blockedUnsafeCandidateCount += 1;
+        }
+        if (evaluation.semanticValidation.qualificationSummary.lowConfidenceSemanticRate > 0) {
+          lowConfidenceCandidateCount += 1;
+        }
+      }
+      for (const candidate of entry.nearMissCandidates) {
+        const reason = candidate.comparison.primaryFailureReason ?? candidate.comparison.failedDimensions[0] ?? "semantic_near_exact";
+        opinionNearMissReasonCounts.set(reason, (opinionNearMissReasonCounts.get(reason) ?? 0) + 1);
+        for (const dimension of candidate.comparison.failedDimensions) {
+          opinionNearMissDimensionCounts.set(
+            dimension,
+            (opinionNearMissDimensionCounts.get(dimension) ?? 0) + 1
+          );
+        }
+      }
+    }
+
+    for (const { coverage } of coverages) {
+      const coverageVenues = new Set(coverage.venueCoverage.map((entry) => entry.venue));
+      if (coverageVenues.has("POLYMARKET")) {
+        venueEventCounts.polymarketEvents += 1;
+      }
+      if (coverageVenues.has("LIMITLESS")) {
+        venueEventCounts.limitlessEvents += 1;
+      }
+      if (coverageVenues.has("OPINION")) {
+        venueEventCounts.opinionEvents += 1;
+      }
+      if (coverageVenues.has("MYRIAD")) {
+        venueEventCounts.myriadEvents += 1;
+      }
+      if (coverageVenues.has("PREDICT")) {
+        venueEventCounts.predictEvents += 1;
+      }
+
+      for (const summary of coverage.routeModeSummary) {
+        routeModeMarketCounts.set(
+          summary.routeMode,
+          (routeModeMarketCounts.get(summary.routeMode) ?? 0) + summary.routeableMarketCount
+        );
+        if (summary.hasAnyRoute) {
+          routeModeEventCounts.set(summary.routeMode, (routeModeEventCounts.get(summary.routeMode) ?? 0) + 1);
+        }
+      }
+
+      canonicalMarketCount += coverage.canonicalMarkets.length;
+
+      let eventHasOpinionInventory = false;
+      let eventHasRunnableOpinionOnly = false;
+      let eventHasBlockedOpinionPairOrTri = false;
+      let eventHasPredictInventory = false;
+      let eventHasCurrentStateOnlyPredict = false;
+      let eventHasHistoricallyQualifiedPredict = false;
+      let eventHasBlockedPredictRoutes = false;
+      const eventOpinionReasonCounts = new Map<HistoricalSimulationRouteAvailabilityReason, number>();
+      const eventPredictReasonCounts = new Map<HistoricalSimulationRouteAvailabilityReason, number>();
+
+      for (const market of coverage.canonicalMarkets) {
+        if (market.opinionExactMatch?.classification === "semantic_exact_live_only") {
+          exactLiveOnlyCount += 1;
+        }
+        if (market.opinionExactMatch?.classification === "semantic_exact_historical_qualified") {
+          exactHistoricalQualifiedCount += 1;
+        }
+        if (market.routeModes.some((route) => route.cardinality === "single" && route.runnable)) {
+          runnableSingleCount += 1;
+        }
+        if (market.routeModes.some((route) => route.cardinality === "pair" && route.runnable)) {
+          runnablePairCount += 1;
+        }
+        if (market.routeModes.some((route) => route.cardinality === "tri" && route.runnable)) {
+          runnableTriCount += 1;
+        }
+
+        const hasOpinionVenue = market.venues.some((venue) => venue.venue === "OPINION");
+        const hasPredictVenue = market.venues.some((venue) => venue.venue === "PREDICT");
+        const predictReadiness = market.predictReadiness ?? null;
+        if (hasOpinionVenue) {
+          eventHasOpinionInventory = true;
+        }
+        if (hasPredictVenue || predictReadiness !== null) {
+          eventHasPredictInventory = true;
+        }
+        if (predictReadiness?.state === "CURRENT_STATE_ONLY") {
+          eventHasCurrentStateOnlyPredict = true;
+        }
+        if (predictReadiness?.historicalQualified) {
+          eventHasHistoricallyQualifiedPredict = true;
+        }
+
+        const triRoutes = market.routeModes.filter((route) => route.cardinality === "tri");
+        if (triRoutes.some((route) => route.runnable || route.reason !== "missing_required_venue")) {
+          triCandidateCount += 1;
+        }
+        if (triRoutes.some((route) => route.runnable)) {
+          triRunnableCount += 1;
+        }
+
+        for (const route of market.routeModes) {
+          if (!route.runnable && route.reason) {
+            blockReasonCounts.set(route.reason, (blockReasonCounts.get(route.reason) ?? 0) + 1);
+          }
+
+          if (route.routeMode === "OPINION_ONLY" && route.runnable) {
+            eventHasRunnableOpinionOnly = true;
+          }
+
+          if (route.cardinality === "tri" && !route.runnable && route.reason) {
+            triReasonCounts.set(route.reason, (triReasonCounts.get(route.reason) ?? 0) + 1);
+          }
+
+          if (route.requiredVenues.includes("OPINION") && route.cardinality !== "single" && !route.runnable && route.reason) {
+            eventOpinionReasonCounts.set(route.reason, (eventOpinionReasonCounts.get(route.reason) ?? 0) + 1);
+            eventHasBlockedOpinionPairOrTri = true;
+          }
+
+          if (route.requiredVenues.includes("PREDICT") && !route.runnable && route.reason) {
+            eventPredictReasonCounts.set(route.reason, (eventPredictReasonCounts.get(route.reason) ?? 0) + 1);
+            eventHasBlockedPredictRoutes = true;
+          }
+        }
+      }
+
+      if (eventHasOpinionInventory) {
+        eventsWithOpinionInventory += 1;
+      }
+      if (eventHasRunnableOpinionOnly) {
+        eventsWithRunnableOpinionOnly += 1;
+      }
+      if (eventHasBlockedOpinionPairOrTri && eventHasOpinionInventory) {
+        eventsWithBlockedOpinionPairOrTri += 1;
+      }
+      if (eventHasOpinionInventory) {
+        for (const [reason, count] of eventOpinionReasonCounts.entries()) {
+          opinionReasonCounts.set(reason, (opinionReasonCounts.get(reason) ?? 0) + count);
+        }
+      }
+      if (eventHasPredictInventory) {
+        eventsWithPredictInventory += 1;
+      }
+      if (eventHasCurrentStateOnlyPredict) {
+        eventsWithCurrentStateOnlyPredict += 1;
+      }
+      if (eventHasHistoricallyQualifiedPredict) {
+        eventsWithHistoricallyQualifiedPredict += 1;
+      }
+      if (eventHasBlockedPredictRoutes && eventHasPredictInventory) {
+        eventsWithBlockedPredictRoutes += 1;
+      }
+      if (eventHasPredictInventory) {
+        for (const [reason, count] of eventPredictReasonCounts.entries()) {
+          predictReasonCounts.set(reason, (predictReasonCounts.get(reason) ?? 0) + count);
+        }
+      }
+    }
+
+    return {
+      filters: {
+        category: filters.category ?? "ALL",
+        catalogScope: filters.catalogScope ?? "ALL",
+        marketClass: filters.marketClass ?? null
+      },
+      totals: {
+        eventCount: coverages.length,
+        canonicalMarketCount,
+        runnableSingleCount,
+        runnablePairCount,
+        runnableTriCount
+      },
+      routeModes: HistoricalSimulationRouteModeDefinitions.map((definition) => ({
+        routeMode: definition.mode,
+        label: definition.label,
+        cardinality: definition.cardinality,
+        routeableMarketCount: routeModeMarketCounts.get(definition.mode) ?? 0,
+        eventCount: routeModeEventCounts.get(definition.mode) ?? 0
+      })),
+      blockReasons: sortReasonCounts(blockReasonCounts),
+      venueVisibility: venueEventCounts,
+      opinionRouteability: {
+        eventsWithOpinionInventory,
+        eventsWithRunnableOpinionOnly,
+        eventsWithBlockedOpinionPairOrTri,
+        semanticsRulepackVersion: opinionCuration.semanticsRulepackVersion,
+        exactLiveOnlyCount,
+        exactHistoricalQualifiedCount,
+        nearMissCount,
+        blockedUnsafeCandidateCount,
+        lowConfidenceCandidateCount,
+        dominantBlockReasons: sortReasonCounts(opinionReasonCounts),
+        dominantNearMissDimensions: sortOpinionDimensionCounts(opinionNearMissDimensionCounts),
+        dominantNearMissReasons: sortOpinionReasonCounts(opinionNearMissReasonCounts)
+      },
+      predictRouteability: {
+        eventsWithPredictInventory,
+        eventsWithCurrentStateOnlyPredict,
+        eventsWithHistoricallyQualifiedPredict,
+        eventsWithBlockedPredictRoutes,
+        dominantBlockReasons: sortReasonCounts(predictReasonCounts)
+      },
+      triRouteability: {
+        candidateCount: triCandidateCount,
+        runnableCount: triRunnableCount,
+        dominantBlockReasons: sortReasonCounts(triReasonCounts)
+      }
+    };
+  }
+
   public async runSimulation(input: SimulationRunInput): Promise<SimulationRunResponse> {
     const canonicalEventId = await this.resolveCanonicalEventId(input);
     const eventCoverage = await this.getCanonicalCoverage(canonicalEventId);
     const canonicalMarketId = this.resolveCanonicalMarketId(input, eventCoverage);
     const coverage = await this.getCanonicalCoverage(canonicalEventId, canonicalMarketId);
+    const selectedOpinionExactMatch = coverage.canonicalMarkets.find(
+      (market) => market.canonicalMarketId === canonicalMarketId
+    )?.opinionExactMatch ?? null;
+    const predictReadiness = await this.loadPredictMarketReadiness(eventCoverage.canonicalMarkets, {
+      start: input.from,
+      end: input.to
+    });
+    const selectedPredictReadiness = predictReadiness.find((entry) => entry.canonicalMarketId === canonicalMarketId)?.summary ?? null;
+
+    if (
+      routeModeRequiresHistoricallyQualifiedOpinion(input.routeMode)
+      && selectedOpinionExactMatch
+      && !selectedOpinionExactMatch.historicalQualified
+    ) {
+      throw new SimulationAdminConflictError(
+        `Opinion exact overlap for ${canonicalMarketId} is present but not historically qualified under route mode ${input.routeMode}.`
+      );
+    }
+
+    if (
+      routeModeRequiresHistoricallyQualifiedPredict(input.routeMode) &&
+      (!selectedPredictReadiness || !selectedPredictReadiness.historicalQualified)
+    ) {
+      throw new SimulationAdminConflictError(
+        `Predict historical evidence is not ready for ${canonicalMarketId} under route mode ${input.routeMode}.`
+      );
+    }
+
     const resolutionRiskByTimestamp = await this.loadResolutionRiskSnapshotByTimestamp(
       canonicalEventId,
       input.from,
@@ -648,7 +1360,8 @@ export class SimulationAdminService {
         requestedNotional: input.requestedNotional,
         requestedRouteMode: input.routeMode,
         requestedCoverageCategory: coverage.canonicalCategory,
-        catalogScope: coverage.catalogScope
+        catalogScope: coverage.catalogScope,
+        predictReadiness: selectedPredictReadiness
       },
       providedSnapshots: {
         resolutionRiskByTimestamp
@@ -711,23 +1424,7 @@ export class SimulationAdminService {
 
   public async getCanonicalCoverage(eventId: string, canonicalMarketId?: string | null): Promise<SimulationCanonicalCoverage> {
     const catalogScope = await this.resolveCatalogScopeForEvent(eventId);
-    const coverageValues = canonicalMarketId ? [eventId, canonicalMarketId] : [eventId];
-    const coverageFilter = canonicalMarketId ? `canonical_event_id = $1 AND canonical_market_id = $2` : `canonical_event_id = $1`;
-    const [coverageRows, pairedMarketRows, canonicalMarketRows, marketCoverageRows, resolutionRiskInspection] = await Promise.all([
-      this.deps.pool.query<CoverageRow & { canonical_category: string | null; market_class: string | null }>(
-        `SELECT
-           venue,
-           COUNT(*)::text AS row_count,
-           MIN("timestamp") AS coverage_start,
-           MAX("timestamp") AS coverage_end,
-           MIN(canonical_category) AS canonical_category,
-           MIN(market_class) AS market_class
-         FROM historical_market_states
-        WHERE ${coverageFilter}
-        GROUP BY venue
-        ORDER BY venue ASC`,
-        coverageValues
-      ),
+    const [pairedMarketRows, marketCoverageRows, canonicalMembershipRows, resolutionRiskInspection] = await Promise.all([
       this.deps.pool.query<PairedMarketRow>(
         `SELECT DISTINCT ON (venue, venue_market_id)
             venue,
@@ -735,24 +1432,14 @@ export class SimulationAdminService {
             canonical_market_id,
             orderbook_snapshot
           FROM historical_market_states
-         WHERE ${coverageFilter}
-         ORDER BY venue, venue_market_id, "timestamp" DESC`,
-        coverageValues
-      ),
-      this.deps.pool.query<PairedMarketRow>(
-        `SELECT DISTINCT ON (canonical_market_id, venue, venue_market_id)
-            canonical_market_id,
-            venue,
-            venue_market_id,
-            orderbook_snapshot
-          FROM historical_market_states
          WHERE canonical_event_id = $1
-         ORDER BY canonical_market_id NULLS FIRST, venue, venue_market_id, "timestamp" DESC`,
+         ORDER BY venue, venue_market_id, "timestamp" DESC`,
         [eventId]
       ),
       this.deps.pool.query<MarketCoverageRow>(
         `SELECT
            canonical_market_id,
+           venue_market_id,
            venue,
            COUNT(*)::text AS row_count,
            MIN("timestamp") AS coverage_start,
@@ -761,18 +1448,43 @@ export class SimulationAdminService {
            MIN(market_class) AS market_class
          FROM historical_market_states
         WHERE canonical_event_id = $1
-        GROUP BY canonical_market_id, venue
-        ORDER BY canonical_market_id NULLS FIRST, venue ASC`,
+        GROUP BY canonical_market_id, venue_market_id, venue
+        ORDER BY canonical_market_id NULLS FIRST, venue ASC, venue_market_id ASC`,
         [eventId]
       ),
+      looksLikeUuid(eventId)
+        ? this.deps.pool.query<CanonicalMembershipRow>(
+            `SELECT
+               members.canonical_executable_market_id AS canonical_market_id,
+               vmp.venue,
+               vmp.venue_market_id
+             FROM canonical_executable_market_members members
+             JOIN venue_market_profiles vmp
+               ON vmp.id = members.venue_market_profile_id
+            WHERE vmp.canonical_event_id = $1`,
+            [eventId]
+          )
+        : Promise.resolve({ rows: [] as CanonicalMembershipRow[] }),
       this.loadResolutionRiskInspection(eventId, catalogScope)
     ]);
 
-    if (coverageRows.rowCount === 0) {
+    const membershipByVenueMarket = buildCurrentCanonicalMembershipMap(canonicalMembershipRows.rows);
+    const remappedPairedMarketRows = remapPairedMarketRows(pairedMarketRows.rows, membershipByVenueMarket);
+    const remappedMarketCoverageRows = remapMarketCoverageRows(marketCoverageRows.rows, membershipByVenueMarket);
+    const filteredPairedMarketRows = canonicalMarketId
+      ? remappedPairedMarketRows.filter((row) => row.canonical_market_id === canonicalMarketId)
+      : remappedPairedMarketRows;
+    const filteredMarketCoverageRows = canonicalMarketId
+      ? remappedMarketCoverageRows.filter((row) => row.canonical_market_id === canonicalMarketId)
+      : remappedMarketCoverageRows;
+    const coverageRows = buildCoverageRowsFromMarketCoverage(filteredMarketCoverageRows);
+    const canonicalMarketRows = remappedPairedMarketRows;
+
+    if (coverageRows.length === 0) {
       throw new SimulationCanonicalCoverageNotFoundError(eventId);
     }
 
-    const pairedMarkets = pairedMarketRows.rows.map((row) => ({
+    const pairedMarkets = filteredPairedMarketRows.map((row) => ({
       venue: row.venue,
       venueMarketId: row.venue_market_id,
       title: selectMarketTitle(row.orderbook_snapshot)
@@ -789,14 +1501,31 @@ export class SimulationAdminService {
       };
     }
 
-    const first = coverageRows.rows[0]!;
+    const first = coverageRows[0]!;
     const scopedProfiles = filterResolutionRiskProfiles(resolutionRiskInspection, canonicalMarketId);
     const scopedAssessments = filterResolutionRiskAssessments(resolutionRiskInspection, canonicalMarketId);
     const scopedFreshness = computeScopedResolutionRiskFreshness(resolutionRiskInspection, canonicalMarketId);
+    const opinionCuration = readOpinionCurationArtifact(this.logger);
+    const predictReadiness = await this.loadPredictMarketReadiness(
+      canonicalMarketRows,
+      undefined
+    );
+    const opinionExactMatchesByMarketId = buildCanonicalOpinionExactMatches({
+      marketRows: canonicalMarketRows,
+      marketCoverageRows: remappedMarketCoverageRows,
+      fallbackMatchesByMarketId: opinionCuration.exactMatchesByCanonicalMarketId
+    });
+    const predictReadinessByMarketId = new Map(
+      predictReadiness
+        .filter((entry) => entry.summary !== null)
+        .map((entry) => [entry.canonicalMarketId, entry.summary as PredictHistoricalReadinessSummary])
+    );
     const canonicalMarkets = buildCanonicalMarketOptions({
       inspection: resolutionRiskInspection,
-      marketRows: canonicalMarketRows.rows,
-      marketCoverageRows: marketCoverageRows.rows
+      marketRows: canonicalMarketRows,
+      marketCoverageRows: remappedMarketCoverageRows,
+      opinionExactMatchesByMarketId,
+      predictReadinessByMarketId
     });
     const routeModeSummary = buildRouteModeSummary(canonicalMarkets);
     const triVenueRouteableMarketCount = routeModeSummary.find(
@@ -808,12 +1537,13 @@ export class SimulationAdminService {
       canonicalMarketId: canonicalMarketId ?? null,
       canonicalCategory: first.canonical_category as SupportedSimulationCategory | "OTHER" | null,
       marketClass: first.market_class as HistoricalMarketClass | null,
-      venueCoverage: coverageRows.rows.map((row) => ({
+      venueCoverage: coverageRows.map((row) => ({
         venue: row.venue,
         rowCount: coerceCount(row.row_count),
         coverageStart: new Date(row.coverage_start),
         coverageEnd: new Date(row.coverage_end)
       })),
+      predictReadinessOverview: buildPredictReadinessOverview(predictReadinessByMarketId),
       pairedMarkets,
       canonicalMarkets,
       routeModeSummary,
@@ -827,6 +1557,104 @@ export class SimulationAdminService {
         freshness: scopedFreshness
       }
     };
+  }
+
+  private async loadPredictMarketReadiness(
+    markets: readonly PairedMarketRow[] | readonly CanonicalMarketOption[],
+    window?: { start: Date; end: Date }
+  ): Promise<readonly PredictMarketReadiness[]> {
+    const seedReadiness = markets.length === 0
+      ? []
+      : "venues" in markets[0]!
+        ? buildPredictReadinessInputsFromCanonicalMarkets(markets as readonly CanonicalMarketOption[])
+        : buildPredictReadinessInputsFromRows(markets as readonly PairedMarketRow[]);
+
+    if (seedReadiness.length === 0) {
+      return [];
+    }
+
+    const marketIds = [...new Set(seedReadiness.flatMap((entry) => entry.predictVenueMarketIds))];
+    const readinessRepository = new PredictReadinessRepository(this.deps.pool);
+    const readinessByMarketId = await readinessRepository.summarizeReadinessByMarketIds({
+      marketIds,
+      ...(window ? { window } : {})
+    });
+
+    return seedReadiness.map((entry) => {
+      const summaries = entry.predictVenueMarketIds
+        .map((marketId) => readinessByMarketId.get(marketId) ?? null)
+        .filter((summary): summary is PredictHistoricalReadinessSummary => summary !== null);
+
+      if (summaries.length === 0) {
+        return entry;
+      }
+
+      const merged: PredictHistoricalReadinessSummary = summaries.reduce<PredictHistoricalReadinessSummary>(
+        (current, summary) => {
+          const rank = (state: PredictHistoricalReadinessState): number => ({
+            HISTORICAL_READY_NATIVE: 5,
+            HISTORICAL_READY_FALLBACK: 4,
+            RECORDER_ACCUMULATING: 3,
+            CURRENT_STATE_ONLY: 2,
+            UNUSABLE: 1
+          })[state];
+          const currentRank = rank(current.state);
+          const summaryRank = rank(summary.state);
+
+          return {
+            marketId: current.marketId,
+            state: summaryRank > currentRank ? summary.state : current.state,
+            historicalQualified: current.historicalQualified || summary.historicalQualified,
+            reason: summaryRank > currentRank ? summary.reason : (current.reason ?? summary.reason),
+            environments: [...new Set([...current.environments, ...summary.environments])].sort((left, right) =>
+              left.localeCompare(right)
+            ),
+            currentStateRowCount: current.currentStateRowCount + summary.currentStateRowCount,
+            currentStateCoverageStart:
+              current.currentStateCoverageStart === null
+                ? summary.currentStateCoverageStart
+                : summary.currentStateCoverageStart === null
+                  ? current.currentStateCoverageStart
+                  : current.currentStateCoverageStart < summary.currentStateCoverageStart
+                    ? current.currentStateCoverageStart
+                    : summary.currentStateCoverageStart,
+            currentStateCoverageEnd:
+              current.currentStateCoverageEnd === null
+                ? summary.currentStateCoverageEnd
+                : summary.currentStateCoverageEnd === null
+                  ? current.currentStateCoverageEnd
+                  : current.currentStateCoverageEnd > summary.currentStateCoverageEnd
+                    ? current.currentStateCoverageEnd
+                    : summary.currentStateCoverageEnd,
+            nativeOrderbookSnapshotCount: current.nativeOrderbookSnapshotCount + summary.nativeOrderbookSnapshotCount,
+            nativeMatchEventCount: current.nativeMatchEventCount + summary.nativeMatchEventCount,
+            recorderCheckpointCount: current.recorderCheckpointCount + summary.recorderCheckpointCount,
+            fallbackSnapshotCount: current.fallbackSnapshotCount + summary.fallbackSnapshotCount,
+            fallbackCoveredWindowCount: current.fallbackCoveredWindowCount + summary.fallbackCoveredWindowCount
+          };
+        },
+        {
+          marketId: entry.predictVenueMarketIds.join("|"),
+          state: "UNUSABLE",
+          historicalQualified: false,
+          reason: null,
+          environments: [],
+          currentStateRowCount: 0,
+          currentStateCoverageStart: null,
+          currentStateCoverageEnd: null,
+          nativeOrderbookSnapshotCount: 0,
+          nativeMatchEventCount: 0,
+          recorderCheckpointCount: 0,
+          fallbackSnapshotCount: 0,
+          fallbackCoveredWindowCount: 0
+        }
+      );
+
+      return {
+        ...entry,
+        summary: merged
+      };
+    });
   }
 
   private async resolveCanonicalEventId(input: SimulationRunInput): Promise<string> {
@@ -938,6 +1766,48 @@ export class SimulationAdminService {
     return (await this.deps.historicalSimulationCatalogService.hasCanonicalEvent(eventId))
       ? "historical_simulation"
       : "live";
+  }
+
+  private async loadFilteredCoverages(
+    filters: Omit<SimulationAdminScopeFilters, "routeMode"> = {}
+  ): Promise<readonly FilteredCoverageResult[]> {
+    const clauses = [
+      `canonical_category IN ('SPORTS', 'CRYPTO', 'POLITICS', 'ESPORTS')`
+    ];
+    const values: string[] = [];
+
+    if (filters.category) {
+      values.push(filters.category);
+      clauses.push(`canonical_category = $${values.length}`);
+    }
+
+    if (filters.marketClass) {
+      values.push(filters.marketClass);
+      clauses.push(`market_class = $${values.length}`);
+    }
+
+    const result = await this.deps.pool.query<EventRow>(
+      `SELECT
+         canonical_event_id,
+         canonical_category,
+         market_class
+       FROM historical_market_states
+      WHERE ${clauses.join(" AND ")}
+      GROUP BY canonical_event_id, canonical_category, market_class
+      ORDER BY canonical_event_id ASC`,
+      values
+    );
+
+    const coverages = await Promise.all(
+      result.rows.map(async (row) => ({
+        row,
+        coverage: await this.getCanonicalCoverage(row.canonical_event_id)
+      }))
+    );
+
+    return filters.catalogScope
+      ? coverages.filter(({ coverage }) => coverage.catalogScope === filters.catalogScope)
+      : coverages;
   }
 
   private async loadResolutionRiskInspection(

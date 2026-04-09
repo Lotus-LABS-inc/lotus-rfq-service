@@ -1,0 +1,50 @@
+{
+  "observedAt": "2026-04-03T13:35:17.378Z",
+  "freshRowsByVenue": {
+    "OPINION": 2,
+    "POLYMARKET": 494,
+    "PREDICT": 0,
+    "LIMITLESS": 0
+  },
+  "refreshedPoliticsRowsByVenue": {
+    "POLYMARKET": 495,
+    "OPINION": 2,
+    "MYRIAD": 19
+  },
+  "fetchStatuses": {
+    "OPINION": {
+      "fetchStatus": "SUCCESS",
+      "warnings": [],
+      "discoveryPath": "opinion_clob_sdk_active_markets",
+      "primaryDiscoveryPath": "opinion_clob_sdk_active_markets",
+      "fallbackDiscoveryPathUsed": null,
+      "primaryPathFailure": null
+    },
+    "POLYMARKET": {
+      "fetchStatus": "SUCCESS",
+      "warnings": [],
+      "discoveryPath": "predexon_polymarket_current_events",
+      "primaryDiscoveryPath": "predexon_polymarket_current_events",
+      "fallbackDiscoveryPathUsed": null,
+      "primaryPathFailure": null
+    },
+    "PREDICT": {
+      "fetchStatus": "EMPTY",
+      "warnings": [],
+      "discoveryPath": "predict_current_markets",
+      "primaryDiscoveryPath": "predict_current_markets",
+      "fallbackDiscoveryPathUsed": null,
+      "primaryPathFailure": null
+    },
+    "LIMITLESS": {
+      "fetchStatus": "EMPTY",
+      "warnings": [],
+      "discoveryPath": "limitless_sdk_active_markets",
+      "primaryDiscoveryPath": "limitless_sdk_active_markets",
+      "fallbackDiscoveryPathUsed": null,
+      "primaryPathFailure": null
+    }
+  },
+  "myriadStatus": "MYRIAD_WIRED_SUCCESS",
+  "myriadRowsFetched": 19
+}

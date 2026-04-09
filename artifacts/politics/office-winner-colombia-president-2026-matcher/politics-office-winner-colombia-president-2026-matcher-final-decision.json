@@ -1,0 +1,21 @@
+{
+  "observedAt": "2026-04-08T15:30:40.074Z",
+  "canonicalTopicKey": "OFFICE_WINNER|COLOMBIA|US_PRESIDENT|2026",
+  "overallDecision": "OFFICE_WINNER_COLOMBIA_PRESIDENT_2026_PAIR_MATCHER_READY_PENDING_OPERATOR_REVIEW",
+  "bestPair": "LIMITLESS|POLYMARKET",
+  "bestStartingCandidates": [
+    "abelardo_de_la_espriella",
+    "iván_cepeda_castro",
+    "juan_carlos_pinzón",
+    "paloma_valencia",
+    "sergio_fajardo_dc",
+    "vicky_dávila_ind"
+  ],
+  "pairMatcherReady": true,
+  "operatorCredible": true,
+  "pairPreferred": true,
+  "exactSafeCandidateCount": 6,
+  "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+  "matcherFollowUpJustified": true,
+  "singleBestNextAction": "Start a narrow readiness review for LIMITLESS|POLYMARKET on OFFICE_WINNER|COLOMBIA|US_PRESIDENT|2026, but require operator rule review because only semantically compatible wording survived."
+}

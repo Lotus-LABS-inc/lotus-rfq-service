@@ -1,0 +1,25 @@
+{
+  "observedAt": "2026-04-03T00:13:37.828Z",
+  "pockets": {
+    "SPORTS|MATCHUP_WINNER|EPL": {
+      "decision": "SPORTS_TARGETED_INGESTION_NO_CHANGE_SUPPLY_THIN",
+      "recommendedAction": "HOLD_POCKET_WAIT_FOR_SUPPLY",
+      "rationale": "The pocket remains discovery-only and should stay secondary to crypto."
+    },
+    "SPORTS|MATCHUP_WINNER|LA_LIGA": {
+      "decision": "SPORTS_TARGETED_INGESTION_NO_CHANGE_SUPPLY_THIN",
+      "recommendedAction": "HOLD_POCKET_WAIT_FOR_SUPPLY",
+      "rationale": "The pocket remains discovery-only and should stay secondary to crypto."
+    },
+    "ESPORTS|MATCHUP_WINNER|VALORANT": {
+      "decision": "SPORTS_TARGETED_INGESTION_NO_CHANGE_SUPPLY_THIN",
+      "recommendedAction": "HOLD_POCKET_WAIT_FOR_SUPPLY",
+      "rationale": "The pocket remains discovery-only and should stay secondary to crypto."
+    },
+    "ESPORTS|MATCHUP_WINNER|LEAGUE_OF_LEGENDS": {
+      "decision": "SPORTS_TARGETED_INGESTION_NO_CHANGE_SUPPLY_THIN",
+      "recommendedAction": "HOLD_POCKET_WAIT_FOR_SUPPLY",
+      "rationale": "The pocket remains discovery-only and should stay secondary to crypto."
+    }
+  }
+}

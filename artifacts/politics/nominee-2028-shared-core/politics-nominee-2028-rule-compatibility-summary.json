@@ -1,0 +1,132 @@
+{
+  "observedAt": "2026-04-08T01:01:28.558Z",
+  "byTopicAndVenue": [
+    {
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "venue": "POLYMARKET",
+      "derivedMeaning": "NOMINEE_WINNER",
+      "ruleCompatibilityClass": "EXACT_RULE_COMPATIBLE",
+      "sourceType": "TITLE_AND_HINTS",
+      "sampleTitles": [
+        "Will Nikki Haley win the 2028 Republican presidential nomination?",
+        "Will Elon Musk win the 2028 Republican presidential nomination?",
+        "Will Rand Paul win the 2028 Republican presidential nomination?",
+        "Will Steve Bannon win the 2028 Republican presidential nomination?",
+        "Will Elise Stefanik win the 2028 Republican presidential nomination?",
+        "Will Thomas Massie win the 2028 Republican presidential nomination?",
+        "Will Tucker Carlson win the 2028 Republican presidential nomination?",
+        "Will Byron Donalds win the 2028 Republican presidential nomination?",
+        "Will Katie Britt win the 2028 Republican presidential nomination?",
+        "Will Tulsi Gabbard win the 2028 Republican presidential nomination?",
+        "Will Josh Hawley win the 2028 Republican presidential nomination?",
+        "Will Joe Kent win the 2028 Republican presidential nomination?",
+        "Will Marco Rubio win the 2028 Republican presidential nomination?",
+        "Will Eric Trump win the 2028 Republican presidential nomination?",
+        "Will Vivek Ramaswamy win the 2028 Republican presidential nomination?",
+        "Will Glenn Youngkin win the 2028 Republican presidential nomination?",
+        "Will Donald Trump win the 2028 Republican presidential nomination?",
+        "Will Mike Pence win the 2028 Republican presidential nomination?",
+        "Will Ivanka Trump win the 2028 Republican presidential nomination?",
+        "Will Pete Hegseth win the 2028 Republican presidential nomination?",
+        "Will Erika Kirk win the 2028 Republican presidential nomination?",
+        "Will Robert F. Kennedy Jr. win the 2028 Republican presidential nomination?",
+        "Will Kristi Noem win the 2028 Republican presidential nomination?",
+        "Will John Thune win the 2028 Republican presidential nomination?",
+        "Will Donald Trump Jr. win the 2028 Republican presidential nomination?",
+        "Will J.D. Vance win the 2028 Republican presidential nomination?",
+        "Will Brian Kemp win the 2028 Republican presidential nomination?",
+        "Will Matt Gaetz win the 2028 Republican presidential nomination?",
+        "Will Sarah Huckabee Sanders win the 2028 Republican presidential nomination?",
+        "Will Greg Abbott win the 2028 Republican presidential nomination?",
+        "Will Ron DeSantis win the 2028 Republican presidential nomination?",
+        "Will Kim Kardashian win the 2028 Republican presidential nomination?",
+        "Will Marjorie Taylor Greene win the 2028 Republican presidential nomination?",
+        "Will Tom Brady win the 2028 Republican presidential nomination?",
+        "Will Ted Cruz win the 2028 Republican presidential nomination?"
+      ]
+    },
+    {
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|DEMOCRATIC",
+      "venue": "POLYMARKET",
+      "derivedMeaning": "NOMINEE_WINNER",
+      "ruleCompatibilityClass": "EXACT_RULE_COMPATIBLE",
+      "sourceType": "TITLE_AND_HINTS",
+      "sampleTitles": [
+        "Will Alexandria Ocasio-Cortez win the 2028 Democratic presidential nomination?",
+        "Will Roy Cooper win the 2028 Democratic presidential nomination?",
+        "Will Kim Kardashian win the 2028 Democratic presidential nomination?",
+        "Will Andrew Yang win the 2028 Democratic presidential nomination?",
+        "Will Rahm Emanuel win the 2028 Democratic presidential nomination?",
+        "Will Raphael Warnock win the 2028 Democratic presidential nomination?",
+        "Will Gretchen Whitmer win the 2028 Democratic presidential nomination?",
+        "Will Tim Walz win the 2028 Democratic presidential nomination?",
+        "Will Stephen A. Smith win the 2028 Democratic presidential nomination?",
+        "Will Jared Polis win the 2028 Democratic presidential nomination?",
+        "Will Wes Moore win the 2028 Democratic presidential nomination?",
+        "Will Ruben Gallego win the 2028 Democratic presidential nomination?",
+        "Will Oprah Winfrey win the 2028 Democratic presidential nomination?",
+        "Will Zohran Mamdani win the 2028 Democratic presidential nomination?",
+        "Will Liz Cheney win the 2028 Democratic presidential nomination?",
+        "Will Gina Raimondo win the 2028 Democratic presidential nomination?",
+        "Will Cory Booker win the 2028 Democratic presidential nomination?",
+        "Will Chris Murphy win the 2028 Democratic presidential nomination?",
+        "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
+        "Will George Clooney win the 2028 Democratic presidential nomination?",
+        "Will Michelle Obama win the 2028 Democratic presidential nomination?",
+        "Will Dwayne 'The Rock' Johnson win the 2028 Democratic presidential nomination?",
+        "Will Mark Cuban win the 2028 Democratic presidential nomination?",
+        "Will Hillary Clinton win the 2028 Democratic presidential nomination?",
+        "Will Josh Shapiro win the 2028 Democratic presidential nomination?",
+        "Will MrBeast win the 2028 Democratic presidential nomination?",
+        "Will Jon Ossoff win the 2028 Democratic presidential nomination?",
+        "Will James Talarico win the 2028 Democratic presidential nomination?",
+        "Will Kamala Harris win the 2028 Democratic presidential nomination?",
+        "Will Barack Obama win the 2028 Democratic presidential nomination?",
+        "Will Hunter Biden win the 2028 Democratic presidential nomination?",
+        "Will Mark Kelly win the 2028 Democratic presidential nomination?",
+        "Will Ro Khanna win the 2028 Democratic presidential nomination?",
+        "Will J.B. Pritzker win the 2028 Democratic presidential nomination?",
+        "Will Bernie Sanders win the 2028 Democratic presidential nomination?",
+        "Will Andy Beshear win the 2028 Democratic presidential nomination?",
+        "Will Jasmine Crockett win the 2028 Democratic presidential nomination?",
+        "Will John Fetterman win the 2028 Democratic presidential nomination?",
+        "Will Phil Murphy win the 2028 Democratic presidential nomination?",
+        "Will Pete Buttigieg win the 2028 Democratic presidential nomination?",
+        "Will Chelsea Clinton win the 2028 Democratic presidential nomination?",
+        "Will Beto O’Rourke win the 2028 Democratic presidential nomination?",
+        "Will Jon Stewart win the 2028 Democratic presidential nomination?",
+        "Will LeBron James win the 2028 Democratic presidential nomination?"
+      ]
+    },
+    {
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "venue": "OPINION",
+      "derivedMeaning": "NOMINEE_WINNER",
+      "ruleCompatibilityClass": "EXACT_RULE_COMPATIBLE",
+      "sourceType": "TITLE_AND_RULES",
+      "sampleTitles": [
+        "Republican Presidential Nominee 2028"
+      ]
+    },
+    {
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|DEMOCRATIC",
+      "venue": "LIMITLESS",
+      "derivedMeaning": "NOMINEE_WINNER",
+      "ruleCompatibilityClass": "EXACT_RULE_COMPATIBLE",
+      "sourceType": "TITLE_AND_RULES",
+      "sampleTitles": [
+        "Democratic Presidential Nominee 2028"
+      ]
+    },
+    {
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "venue": "LIMITLESS",
+      "derivedMeaning": "NOMINEE_WINNER",
+      "ruleCompatibilityClass": "EXACT_RULE_COMPATIBLE",
+      "sourceType": "TITLE_AND_RULES",
+      "sampleTitles": [
+        "Republican Presidential Nominee 2028"
+      ]
+    }
+  ]
+}

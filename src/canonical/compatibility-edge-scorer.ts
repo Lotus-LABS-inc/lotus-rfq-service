@@ -9,6 +9,7 @@ import type {
     VenueMarketProfile
 } from "./canonicalization-types.js";
 import { buildStableTextId, canonicalizeJsonRecord, clampRatioString, normalizeFreeText } from "./canonicalization-types.js";
+import { normalizePropositionTextForSimilarity } from "./proposition-fingerprint.js";
 
 export interface CompatibilityEdgeScoreInput {
     canonicalEventId: string;
@@ -125,11 +126,30 @@ export class CompatibilityEdgeScorer {
         if (left.broadFingerprintKey !== right.broadFingerprintKey) {
             return 0;
         }
-        const leftTokens = new Set(normalizeFreeText(left.normalizedPropositionText).split(" ").filter(Boolean));
-        const rightTokens = new Set(normalizeFreeText(right.normalizedPropositionText).split(" ").filter(Boolean));
+        const leftTokens = new Set(normalizePropositionTextForSimilarity(left.normalizedPropositionText).split(" ").filter(Boolean));
+        const rightTokens = new Set(normalizePropositionTextForSimilarity(right.normalizedPropositionText).split(" ").filter(Boolean));
         const intersection = [...leftTokens].filter((token) => rightTokens.has(token)).length;
         const union = new Set([...leftTokens, ...rightTokens]).size;
         return union === 0 ? 0 : intersection / union;
+    }
+
+    private readStringMetadata(
+        metadata: Readonly<Record<string, unknown>>,
+        key: string
+    ): string | null {
+        const value = metadata[key];
+        return typeof value === "string" && value.length > 0 ? value : null;
+    }
+
+    private readStringArrayMetadata(
+        metadata: Readonly<Record<string, unknown>>,
+        key: string
+    ): readonly string[] {
+        const value = metadata[key];
+        if (!Array.isArray(value)) {
+            return [];
+        }
+        return value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
     }
 
     private scoreOutcomeCompatibility(left: VenueMarketProfile, right: VenueMarketProfile): number {
@@ -180,11 +200,28 @@ export class CompatibilityEdgeScorer {
         ) {
             return 1;
         }
+        const leftAuthorityIdentity = this.readStringMetadata(left.metadata, "normalizedAuthorityIdentity");
+        const rightAuthorityIdentity = this.readStringMetadata(right.metadata, "normalizedAuthorityIdentity");
+        const leftAuthorityPhrases = this.readStringArrayMetadata(left.metadata, "normalizedAuthorityPhrases");
+        const rightAuthorityPhrases = this.readStringArrayMetadata(right.metadata, "normalizedAuthorityPhrases");
+        const authorityAligned = (
+            leftAuthorityIdentity !== null
+            && rightAuthorityIdentity !== null
+            && leftAuthorityIdentity === rightAuthorityIdentity
+            && leftAuthorityPhrases.length > 0
+            && rightAuthorityPhrases.length > 0
+            && left.ruleText !== null
+            && right.ruleText !== null
+            && normalizeFreeText(left.ruleText) === normalizeFreeText(right.ruleText)
+        );
         if (
             left.resolutionSource !== null &&
             right.resolutionSource !== null &&
             normalizeFreeText(left.resolutionSource) !== normalizeFreeText(right.resolutionSource)
         ) {
+            if (authorityAligned) {
+                return 0.15;
+            }
             return 0.8;
         }
         if (left.ruleText === null || right.ruleText === null) {

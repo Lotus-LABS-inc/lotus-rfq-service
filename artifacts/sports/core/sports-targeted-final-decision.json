@@ -1,0 +1,37 @@
+{
+  "observedAt": "2026-04-03T00:13:37.828Z",
+  "pockets": {
+    "SPORTS|MATCHUP_WINNER|EPL": {
+      "decision": "SPORTS_TARGETED_INGESTION_NO_CHANGE_SUPPLY_THIN",
+      "worthMatchingReopenLater": false,
+      "remainDiscoveryOnly": true,
+      "shouldHold": true
+    },
+    "SPORTS|MATCHUP_WINNER|LA_LIGA": {
+      "decision": "SPORTS_TARGETED_INGESTION_NO_CHANGE_SUPPLY_THIN",
+      "worthMatchingReopenLater": false,
+      "remainDiscoveryOnly": true,
+      "shouldHold": true
+    },
+    "ESPORTS|MATCHUP_WINNER|VALORANT": {
+      "decision": "SPORTS_TARGETED_INGESTION_NO_CHANGE_SUPPLY_THIN",
+      "worthMatchingReopenLater": false,
+      "remainDiscoveryOnly": true,
+      "shouldHold": true
+    },
+    "ESPORTS|MATCHUP_WINNER|LEAGUE_OF_LEGENDS": {
+      "decision": "SPORTS_TARGETED_INGESTION_NO_CHANGE_SUPPLY_THIN",
+      "worthMatchingReopenLater": false,
+      "remainDiscoveryOnly": true,
+      "shouldHold": true
+    }
+  },
+  "revisedPriorityOrder": [
+    "SPORTS|MATCHUP_WINNER|EPL",
+    "SPORTS|MATCHUP_WINNER|LA_LIGA",
+    "ESPORTS|MATCHUP_WINNER|VALORANT",
+    "ESPORTS|MATCHUP_WINNER|LEAGUE_OF_LEGENDS"
+  ],
+  "singleBestNextSportsAction": "HOLD_POCKET_WAIT_FOR_SUPPLY",
+  "sportsRemainsSecondaryToCrypto": true
+}

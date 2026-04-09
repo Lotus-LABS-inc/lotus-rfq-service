@@ -1,0 +1,37 @@
+{
+  "observedAt": "2026-04-08T19:43:59.099Z",
+  "canonicalTopicKey": "OFFICE_EXIT_BY_DATE|USA|US_PRESIDENT|DONALD_TRUMP|2026-12-31",
+  "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+  "matcherLanes": [
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "proposition": "TRUMP_OUT_BEFORE_2027",
+      "canonicalTopic": "OFFICE_EXIT_BY_DATE|USA|US_PRESIDENT|DONALD_TRUMP|2026-12-31",
+      "routeabilityDecision": "TRI_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe strict 3-venue office-exit proposition lane on LIMITLESS|OPINION|POLYMARKET."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "trump-out-as-president-before-2027-1768933068297",
+          "title": "Trump out as President before 2027?"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "3062",
+          "title": "Trump out as President before 2027?"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "starmer-out-in-2025",
+          "title": "Trump out as President before 2027?"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Strict tri lane survived the currently admitted LIMITLESS|OPINION|POLYMARKET intersection."
+  ]
+}

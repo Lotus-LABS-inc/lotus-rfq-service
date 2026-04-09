@@ -1,0 +1,22 @@
+{
+  "observedAt": "2026-04-08T01:00:47.620Z",
+  "sourceReports": {
+    "sharedCore": "artifacts/politics/nominee-2028-shared-core",
+    "pairEval": "artifacts/politics/nominee-2028-pair-matcher-eval"
+  },
+  "republican": {
+    "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+    "admittedRowsByVenue": {
+      "POLYMARKET": 62,
+      "OPINION": 4,
+      "LIMITLESS": 8
+    }
+  },
+  "democratic": {
+    "topicKey": "NOMINEE|US_PRESIDENT|2028|DEMOCRATIC",
+    "admittedRowsByVenue": {
+      "POLYMARKET": 82,
+      "LIMITLESS": 7
+    }
+  }
+}

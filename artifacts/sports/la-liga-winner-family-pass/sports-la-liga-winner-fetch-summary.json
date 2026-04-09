@@ -1,0 +1,19 @@
+{
+  "observedAt": "2026-04-08T23:01:08.316Z",
+  "rowsFetchedByVenue": {
+    "OPINION": 3,
+    "POLYMARKET": 10,
+    "LIMITLESS": 5,
+    "PREDICT": 4
+  },
+  "rowsAdmittedByVenue": {
+    "OPINION": 3,
+    "POLYMARKET": 10,
+    "LIMITLESS": 4,
+    "PREDICT": 4
+  },
+  "familySupplyChangedMaterially": false,
+  "admittedTopicCandidates": {
+    "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026": 21
+  }
+}

@@ -1,0 +1,14 @@
+export const POLITICS_NOMINEE_ROLLOUT_STRATEGY_KEY = "politics-nominee-rollout-v1" as const;
+export const POLITICS_NOMINEE_ROLLOUT_SCOPE_TYPE = "POLITICS_NOMINEE_LANE" as const;
+
+export const politicsNomineeLaneIds = [
+  "POLITICS_NOMINEE_REPUBLICAN_PAIR_LIMITLESS_POLYMARKET",
+  "POLITICS_NOMINEE_REPUBLICAN_TRI_LIMITLESS_OPINION_POLYMARKET",
+  "POLITICS_NOMINEE_DEMOCRATIC_PAIR_LIMITLESS_POLYMARKET"
+] as const;
+
+export type PoliticsNomineeLaneId = typeof politicsNomineeLaneIds[number];
+
+export const republicanPairLaneId = "POLITICS_NOMINEE_REPUBLICAN_PAIR_LIMITLESS_POLYMARKET" as const;
+export const republicanTriLaneId = "POLITICS_NOMINEE_REPUBLICAN_TRI_LIMITLESS_OPINION_POLYMARKET" as const;
+export const democraticPairLaneId = "POLITICS_NOMINEE_DEMOCRATIC_PAIR_LIMITLESS_POLYMARKET" as const;

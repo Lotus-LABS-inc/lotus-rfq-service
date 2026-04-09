@@ -1,0 +1,54 @@
+{
+  "observedAt": "2026-04-09T10:43:43.719Z",
+  "laneId": "SPORTS_WORLD_CUP_WINNER_2026_PAIR_LIMITLESS_POLYMARKET",
+  "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+  "venuePair": "LIMITLESS|POLYMARKET",
+  "exactSafeTeams": [
+    "argentina",
+    "belgium",
+    "brazil",
+    "croatia",
+    "england",
+    "france",
+    "germany",
+    "italy",
+    "mexico",
+    "netherlands",
+    "portugal",
+    "spain",
+    "united_states",
+    "uruguay"
+  ],
+  "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+  "operatorRuleReviewRequired": true,
+  "matcherReady": true,
+  "operatorCredible": true,
+  "readinessReviewJustified": true,
+  "rolloutRecommended": false,
+  "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+  "holdPolicy": {
+    "scope": "LANE_ONLY",
+    "holdConditions": [
+      "Any drift in the LIMITLESS|POLYMARKET World Cup shared team core",
+      "Any venue withdrawal from the exact pair lane",
+      "Any rule-compatibility downgrade beyond semantically compatible rewording"
+    ],
+    "userConsentCanWidenScope": false
+  },
+  "rollbackPolicy": {
+    "scope": "LANE_ONLY",
+    "targetMode": "DISABLED_INTERNAL_ONLY",
+    "fallbackLaneId": null,
+    "operatorSteps": [
+      "Hold the pair lane only.",
+      "Do not widen beyond the exact LIMITLESS|POLYMARKET 14-team scope."
+    ]
+  },
+  "exclusionsStillMandatory": [
+    "OTHERS_EXCLUDED",
+    "VENUE_ONLY_TAILS_EXCLUDED",
+    "NO_SCOPE_WIDENING_BEYOND_FIFA_WORLD_CUP_2026",
+    "STRICT_ALL_VENUE_CORE_REMAINS_4_TEAMS"
+  ],
+  "finalReadinessLabel": "SPORTS_WORLD_CUP_WINNER_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW"
+}

@@ -1,0 +1,22 @@
+{
+  "POLYMARKET": {
+    "totalPoliticsLiveRows": 507,
+    "nomineeLikeRows": 494,
+    "usableNomineeRows": 494
+  },
+  "OPINION": {
+    "totalPoliticsLiveRows": 17,
+    "nomineeLikeRows": 3,
+    "usableNomineeRows": 3
+  },
+  "LIMITLESS": {
+    "totalPoliticsLiveRows": 0,
+    "nomineeLikeRows": 0,
+    "usableNomineeRows": 0
+  },
+  "PREDICT": {
+    "totalPoliticsLiveRows": 0,
+    "nomineeLikeRows": 0,
+    "usableNomineeRows": 0
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "observedAt": "2026-04-08T22:22:46.345Z",
+  "rowsFetchedByVenue": {
+    "OPINION": 4,
+    "POLYMARKET": 20,
+    "LIMITLESS": 7,
+    "PREDICT": 6
+  },
+  "rowsAdmittedByVenue": {
+    "OPINION": 4,
+    "POLYMARKET": 20,
+    "LIMITLESS": 6,
+    "PREDICT": 5
+  },
+  "familySupplyChangedMaterially": true,
+  "admittedTopicCandidates": {
+    "SPORTS|LEAGUE_WINNER|EPL|2025_2026": 35
+  }
+}

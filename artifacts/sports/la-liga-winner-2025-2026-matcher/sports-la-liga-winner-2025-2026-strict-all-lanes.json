@@ -1,0 +1,14 @@
+{
+  "observedAt": "2026-04-09T09:53:13.050Z",
+  "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+  "matcherLanes": [
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "clubs": [
+        "atletico_madrid",
+        "barcelona",
+        "real_madrid"
+      ]
+    }
+  ]
+}

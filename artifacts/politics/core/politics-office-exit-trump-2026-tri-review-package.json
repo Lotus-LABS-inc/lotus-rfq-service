@@ -1,0 +1,47 @@
+{
+  "observedAt": "2026-04-08T19:44:36.464Z",
+  "reviewState": "READY_PENDING_OPERATOR_REVIEW",
+  "laneId": "POLITICS_OFFICE_EXIT_TRUMP_2026_TRI_LIMITLESS_OPINION_POLYMARKET",
+  "topicKey": "OFFICE_EXIT_BY_DATE|USA|US_PRESIDENT|DONALD_TRUMP|2026-12-31",
+  "approvedTriVenueSet": "LIMITLESS|OPINION|POLYMARKET",
+  "approvedTriPropositions": [
+    "TRUMP_OUT_BEFORE_2027"
+  ],
+  "peerPairRoute": {
+    "laneId": "POLITICS_OFFICE_EXIT_TRUMP_2026_PAIR_LIMITLESS_POLYMARKET",
+    "venuePair": "LIMITLESS|POLYMARKET",
+    "exactSafePropositions": [
+      "TRUMP_OUT_BEFORE_2027"
+    ]
+  },
+  "ruleCompatibilityState": "EXACT_RULE_COMPATIBLE",
+  "routeabilityState": "TRI_EXACT_AUTO_ROUTEABLE",
+  "exactSafeOnly": true,
+  "exclusionsLocked": [
+    "NO_MYRIAD_FOR_THIS_TOPIC",
+    "NO_SCOPE_WIDENING_BEYOND_TRUMP_EXIT_PROPOSITION",
+    "NO_4_VENUE_TRI_IMPLICATION",
+    "PAIR_ROUTE_MUST_REMAIN_EXPLICIT"
+  ],
+  "sourceArtifacts": {
+    "matcherInputSummary": "artifacts/politics/office-exit-trump-2026-matcher/politics-office-exit-trump-2026-matcher-input-summary.json",
+    "pairLanes": "artifacts/politics/office-exit-trump-2026-matcher/politics-office-exit-trump-2026-pair-lanes.json",
+    "triLanes": "artifacts/politics/office-exit-trump-2026-matcher/politics-office-exit-trump-2026-tri-lanes.json",
+    "rejections": "artifacts/politics/office-exit-trump-2026-matcher/politics-office-exit-trump-2026-rejections.json",
+    "finalDecision": "artifacts/politics/office-exit-trump-2026-matcher/politics-office-exit-trump-2026-final-decision.json"
+  },
+  "operatorChecks": [
+    "Confirm the scope is exactly OFFICE_EXIT_BY_DATE|USA|US_PRESIDENT|DONALD_TRUMP|2026-12-31.",
+    "Confirm the only approved tri venue set is LIMITLESS|OPINION|POLYMARKET.",
+    "Confirm the approved proposition remains exactly TRUMP_OUT_BEFORE_2027.",
+    "Confirm the peer pair route LIMITLESS|POLYMARKET remains separately available and is not discarded.",
+    "Confirm rule state remains EXACT_RULE_COMPATIBLE before any promotion.",
+    "Confirm MYRIAD remains excluded and no four-venue tri implication is added."
+  ],
+  "holdBoundaries": [
+    "Do not widen beyond the exact Trump office-exit topic.",
+    "Do not widen to Netanyahu, Starmer, or Trump variants with different deadlines.",
+    "Do not silently widen from the strict tri lane to a four-venue lane that includes PREDICT.",
+    "Do not treat this review package as activation authority."
+  ]
+}

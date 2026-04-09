@@ -1,0 +1,58 @@
+{
+  "observedAt": "2026-04-08T22:38:30.991Z",
+  "laneId": "SPORTS_EPL_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT",
+  "topicKey": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+  "allVenueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+  "exactSafeAllVenueClubs": [
+    "arsenal",
+    "liverpool",
+    "manchester_city"
+  ],
+  "peerPairRoute": {
+    "laneId": "SPORTS_EPL_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET",
+    "venuePair": "LIMITLESS|POLYMARKET",
+    "exactSafeClubs": [
+      "arsenal",
+      "aston_villa",
+      "chelsea",
+      "liverpool",
+      "manchester_city",
+      "manchester_united"
+    ]
+  },
+  "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+  "operatorRuleReviewRequired": true,
+  "matcherReady": true,
+  "operatorCredible": true,
+  "readinessReviewJustified": true,
+  "rolloutRecommended": false,
+  "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+  "holdPolicy": {
+    "scope": "LANE_ONLY",
+    "holdConditions": [
+      "club_scope_drift",
+      "venue_set_drift",
+      "rule_status_drift",
+      "operator_confidence_lost"
+    ],
+    "userConsentCanWidenScope": false
+  },
+  "rollbackPolicy": {
+    "scope": "LANE_ONLY",
+    "targetMode": "PAIR_ROUTE_INTERNAL_REVIEW_ONLY",
+    "fallbackLaneId": "SPORTS_EPL_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET",
+    "operatorSteps": [
+      "Record a lane-scoped rollback or hold event for SPORTS_EPL_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT.",
+      "Revert this EPL all-venue lane to the peer pair route LIMITLESS|POLYMARKET in internal-review-only posture.",
+      "Do not widen beyond the exact 2025_2026 EPL winner topic or beyond the 3-club strict all-venue core during rollback."
+    ]
+  },
+  "exclusionsStillMandatory": [
+    "OTHERS_EXCLUDED",
+    "VENUE_ONLY_TAILS_EXCLUDED",
+    "NO_SCOPE_WIDENING_BEYOND_EPL_2025_2026",
+    "STRICT_ALL_VENUE_CORE_REMAINS_3_CLUBS",
+    "PAIR_ROUTE_MUST_REMAIN_EXPLICIT"
+  ],
+  "finalReadinessLabel": "SPORTS_EPL_WINNER_2025_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW"
+}

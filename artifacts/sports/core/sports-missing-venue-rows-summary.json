@@ -1,0 +1,101 @@
+{
+  "observedAt": "2026-04-03T00:13:37.828Z",
+  "pockets": {
+    "SPORTS|MATCHUP_WINNER|EPL": {
+      "missingVenues": {
+        "OPINION": {
+          "missingCause": "STILL_UNKNOWN",
+          "fixtureCount": 0,
+          "nextAction": "HOLD"
+        },
+        "POLYMARKET": {
+          "missingCause": "DISCOVERY_GAP",
+          "fixtureCount": 0,
+          "nextAction": "DISCOVERY"
+        },
+        "LIMITLESS": {
+          "missingCause": "STILL_UNKNOWN",
+          "fixtureCount": 0,
+          "nextAction": "HOLD"
+        },
+        "PREDICT": {
+          "missingCause": "STILL_UNKNOWN",
+          "fixtureCount": 0,
+          "nextAction": "HOLD"
+        }
+      }
+    },
+    "SPORTS|MATCHUP_WINNER|LA_LIGA": {
+      "missingVenues": {
+        "OPINION": {
+          "missingCause": "STILL_UNKNOWN",
+          "fixtureCount": 0,
+          "nextAction": "HOLD"
+        },
+        "POLYMARKET": {
+          "missingCause": "DISCOVERY_GAP",
+          "fixtureCount": 0,
+          "nextAction": "DISCOVERY"
+        },
+        "LIMITLESS": {
+          "missingCause": "STILL_UNKNOWN",
+          "fixtureCount": 0,
+          "nextAction": "HOLD"
+        },
+        "PREDICT": {
+          "missingCause": "STILL_UNKNOWN",
+          "fixtureCount": 0,
+          "nextAction": "HOLD"
+        }
+      }
+    },
+    "ESPORTS|MATCHUP_WINNER|VALORANT": {
+      "missingVenues": {
+        "OPINION": {
+          "missingCause": "STILL_UNKNOWN",
+          "fixtureCount": 0,
+          "nextAction": "HOLD"
+        },
+        "POLYMARKET": {
+          "missingCause": "DISCOVERY_GAP",
+          "fixtureCount": 0,
+          "nextAction": "DISCOVERY"
+        },
+        "LIMITLESS": {
+          "missingCause": "STILL_UNKNOWN",
+          "fixtureCount": 0,
+          "nextAction": "HOLD"
+        },
+        "PREDICT": {
+          "missingCause": "STILL_UNKNOWN",
+          "fixtureCount": 0,
+          "nextAction": "HOLD"
+        }
+      }
+    },
+    "ESPORTS|MATCHUP_WINNER|LEAGUE_OF_LEGENDS": {
+      "missingVenues": {
+        "OPINION": {
+          "missingCause": "STILL_UNKNOWN",
+          "fixtureCount": 0,
+          "nextAction": "HOLD"
+        },
+        "POLYMARKET": {
+          "missingCause": "DISCOVERY_GAP",
+          "fixtureCount": 0,
+          "nextAction": "DISCOVERY"
+        },
+        "LIMITLESS": {
+          "missingCause": "STILL_UNKNOWN",
+          "fixtureCount": 0,
+          "nextAction": "HOLD"
+        },
+        "PREDICT": {
+          "missingCause": "STILL_UNKNOWN",
+          "fixtureCount": 0,
+          "nextAction": "HOLD"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "observedAt": "2026-04-03T13:35:17.380Z",
+  "dominantByFamily": {
+    "NOMINEE_WINNER": "UNKNOWN_CRITICAL_FIELD",
+    "OFFICE_EXIT_BY_DATE": null,
+    "OFFICE_WINNER": null,
+    "GEOPOLITICAL_EVENT_BY_DATE": null,
+    "GEOPOLITICAL_EVENT": null
+  },
+  "fragmentedFamilies": [
+    {
+      "family": "NOMINEE_WINNER",
+      "reason": "UNKNOWN_CRITICAL_FIELD"
+    },
+    {
+      "family": "OFFICE_EXIT_BY_DATE",
+      "reason": "FAMILY_REFRESHED_SINGLE_VENUE_ONLY"
+    },
+    {
+      "family": "OFFICE_WINNER",
+      "reason": "FAMILY_REFRESHED_SINGLE_VENUE_ONLY"
+    },
+    {
+      "family": "GEOPOLITICAL_EVENT_BY_DATE",
+      "reason": "FAMILY_REFRESHED_SINGLE_VENUE_ONLY"
+    },
+    {
+      "family": "GEOPOLITICAL_EVENT",
+      "reason": "FAMILY_REFRESHED_NO_SUPPLY"
+    }
+  ]
+}

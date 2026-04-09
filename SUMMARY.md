@@ -2,6 +2,203 @@
 
 ## Current System State
 
+Lotus is now operating with an explicit time-basis split, a pair-first crypto rollout posture, and a secondary sports discovery track.
+
+Current frontier truth:
+- crypto is the shipping frontier
+- politics nominee rollout is now narrowly defined and artifact-backed, but not broad-politics ready
+- first live crypto canary package is prepared for:
+  - `PAIR_PM_OPINION`
+  - `btc_exact_slice_only`
+  - `CRYPTO:SAME_DAY_DIRECTIONAL`
+- first live canary package status:
+  - `CANARY_PACKAGE_READY_PENDING_APPROVAL`
+  - explicit operator action still required
+  - no auto-activation
+- `PAIR_PM_LIMITLESS` remains outside the first live window
+- sports is not a rollout frontier
+- sports is now a fixture-backed live supply/discovery track
+- completed sports winner topics now emit `single | pair | tri | strict_all` lanes and are exposed through the dynamic `/admin/sports-lanes` surface
+
+Current politics nominee truth:
+- Republican pair limited-prod lane is ready pending operator action:
+  - `NOMINEE|US_PRESIDENT|2028|REPUBLICAN`
+  - `LIMITLESS|POLYMARKET`
+  - exact-safe candidates:
+    - `donald_trump`
+    - `donald_trump_jr`
+    - `ted_cruz`
+    - `tucker_carlson`
+- Republican tri lane is now artifact-backed, narrow, and limited-prod eligible only with exact-scope per-run user consent:
+  - `NOMINEE|US_PRESIDENT|2028|REPUBLICAN`
+  - `LIMITLESS|OPINION|POLYMARKET`
+  - exact-safe candidates:
+    - `jd_vance`
+    - `marco_rubio`
+    - `ron_desantis`
+- Democratic pair lane is now matcher-backed and readiness-review backed:
+  - `NOMINEE|US_PRESIDENT|2028|DEMOCRATIC`
+  - `LIMITLESS|POLYMARKET`
+  - exact-safe candidates:
+    - `alexandria_ocasio_cortez`
+    - `andy_beshear`
+    - `gavin_newsom`
+    - `josh_shapiro`
+    - `kamala_harris`
+    - `pete_buttigieg`
+  - current posture:
+    - pair-only
+    - `READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION` in the shared readiness layer
+    - `DEMOCRATIC_PAIR_LIMITED_PROD_READY_FOR_REVIEW` in the narrow lane package
+- hard exclusions remain:
+  - `Others`
+  - venue-only tails
+  - unknown/composite outcomes
+- posture remains:
+  - pair preferred overall
+  - tri allowed only for the narrow Republican subset above
+  - no Democratic tri implication
+  - no Democratic Opinion lane promotion
+  - Republican tri limited-prod use must be gated by a short-lived exact-scope token tied to one RFQ accept run
+  - no broad politics rollout
+- reusable execution-scope token support now exists in the backend:
+  - signed short-lived per-run scope tokens can be minted for exact approved lanes
+  - validation rechecks live admin lane authority before accept
+  - the token model is reusable for future market/category passes with the same exact-scope opt-in problem
+
+Current clean-basis truth:
+- `LIMITLESS_OPINION = 0` in `HISTORICAL_ONLY`
+- `LIMITLESS_OPINION = 0` in `LIVE_ONLY`
+- `POLYMARKET_LIMITLESS_OPINION = 0` in `HISTORICAL_ONLY`
+- `POLYMARKET_LIMITLESS_OPINION = 0` in `LIVE_ONLY`
+
+That means the remaining tri zero is not being treated as:
+- a downstream propagation bug
+- a basis-mixing artifact
+- an obvious ingestion miss
+
+The current defensible rollout surface is pair-first:
+- `PAIR_PM_LIMITLESS`
+  - usable route family
+  - safe-subset-first for canary/prod
+- `PAIR_PM_OPINION`
+  - narrow proven exact BTC slice
+  - broader near-exact inventory remains diagnostic or blocked
+
+Tri is now explicitly non-blocking for the next rollout phase.
+
+## Sports Cardinality Backfill
+
+Sports routeability is now modeled as:
+- `single`
+- `pair`
+- `tri`
+- `strict_all`
+
+Current completed topics under that model:
+- `SPORTS|LEAGUE_WINNER|EPL|2025_2026`
+- `SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026`
+- `SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026`
+- `SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026`
+- `SPORTS|TOURNAMENT_WINNER|NBA|2025_2026`
+
+Per-topic lane counts:
+- `4` single
+- `6` pair
+- `4` tri
+- `1` strict_all
+
+Current sports admin surface:
+- `GET /admin/sports-lanes`
+- `GET /admin/sports-lanes/:laneId`
+- `GET /admin/sports-lanes/:laneId/readiness`
+- `GET /admin/sports-lanes/:laneId/rollback-plan`
+- `POST /admin/sports-lanes/:laneId/operator-approval-intent`
+- `POST /admin/sports-lanes/:laneId/hold`
+- `POST /admin/sports-lanes/:laneId/rollback`
+
+Current generated lane ids:
+- EPL:
+  - `SPORTS_EPL_WINNER_2025_2026_SINGLE_LIMITLESS`
+  - `SPORTS_EPL_WINNER_2025_2026_SINGLE_OPINION`
+  - `SPORTS_EPL_WINNER_2025_2026_SINGLE_POLYMARKET`
+  - `SPORTS_EPL_WINNER_2025_2026_SINGLE_PREDICT`
+  - `SPORTS_EPL_WINNER_2025_2026_PAIR_LIMITLESS_OPINION`
+  - `SPORTS_EPL_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET`
+  - `SPORTS_EPL_WINNER_2025_2026_PAIR_LIMITLESS_PREDICT`
+  - `SPORTS_EPL_WINNER_2025_2026_PAIR_OPINION_POLYMARKET`
+  - `SPORTS_EPL_WINNER_2025_2026_PAIR_OPINION_PREDICT`
+  - `SPORTS_EPL_WINNER_2025_2026_PAIR_POLYMARKET_PREDICT`
+  - `SPORTS_EPL_WINNER_2025_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+  - `SPORTS_EPL_WINNER_2025_2026_TRI_LIMITLESS_OPINION_PREDICT`
+  - `SPORTS_EPL_WINNER_2025_2026_TRI_LIMITLESS_POLYMARKET_PREDICT`
+  - `SPORTS_EPL_WINNER_2025_2026_TRI_OPINION_POLYMARKET_PREDICT`
+  - `SPORTS_EPL_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+- La Liga:
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_SINGLE_LIMITLESS`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_SINGLE_OPINION`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_SINGLE_POLYMARKET`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_SINGLE_PREDICT`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_LIMITLESS_OPINION`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_LIMITLESS_PREDICT`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_OPINION_POLYMARKET`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_OPINION_PREDICT`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_POLYMARKET_PREDICT`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_TRI_LIMITLESS_OPINION_PREDICT`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_TRI_LIMITLESS_POLYMARKET_PREDICT`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_TRI_OPINION_POLYMARKET_PREDICT`
+  - `SPORTS_LA_LIGA_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+- Champions League:
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_SINGLE_LIMITLESS`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_SINGLE_OPINION`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_SINGLE_POLYMARKET`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_SINGLE_PREDICT`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_PAIR_LIMITLESS_OPINION`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_PAIR_LIMITLESS_PREDICT`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_PAIR_OPINION_POLYMARKET`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_PAIR_OPINION_PREDICT`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_PAIR_POLYMARKET_PREDICT`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_TRI_LIMITLESS_OPINION_PREDICT`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_TRI_LIMITLESS_POLYMARKET_PREDICT`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_TRI_OPINION_POLYMARKET_PREDICT`
+  - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+- World Cup:
+  - `SPORTS_WORLD_CUP_WINNER_2026_SINGLE_LIMITLESS`
+  - `SPORTS_WORLD_CUP_WINNER_2026_SINGLE_OPINION`
+  - `SPORTS_WORLD_CUP_WINNER_2026_SINGLE_POLYMARKET`
+  - `SPORTS_WORLD_CUP_WINNER_2026_SINGLE_PREDICT`
+  - `SPORTS_WORLD_CUP_WINNER_2026_PAIR_LIMITLESS_OPINION`
+  - `SPORTS_WORLD_CUP_WINNER_2026_PAIR_LIMITLESS_POLYMARKET`
+  - `SPORTS_WORLD_CUP_WINNER_2026_PAIR_LIMITLESS_PREDICT`
+  - `SPORTS_WORLD_CUP_WINNER_2026_PAIR_OPINION_POLYMARKET`
+  - `SPORTS_WORLD_CUP_WINNER_2026_PAIR_OPINION_PREDICT`
+  - `SPORTS_WORLD_CUP_WINNER_2026_PAIR_POLYMARKET_PREDICT`
+  - `SPORTS_WORLD_CUP_WINNER_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+  - `SPORTS_WORLD_CUP_WINNER_2026_TRI_LIMITLESS_OPINION_PREDICT`
+  - `SPORTS_WORLD_CUP_WINNER_2026_TRI_LIMITLESS_POLYMARKET_PREDICT`
+  - `SPORTS_WORLD_CUP_WINNER_2026_TRI_OPINION_POLYMARKET_PREDICT`
+  - `SPORTS_WORLD_CUP_WINNER_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+- NBA Champion:
+  - `SPORTS_NBA_CHAMPION_2025_2026_SINGLE_LIMITLESS`
+  - `SPORTS_NBA_CHAMPION_2025_2026_SINGLE_OPINION`
+  - `SPORTS_NBA_CHAMPION_2025_2026_SINGLE_POLYMARKET`
+  - `SPORTS_NBA_CHAMPION_2025_2026_SINGLE_PREDICT`
+  - `SPORTS_NBA_CHAMPION_2025_2026_PAIR_LIMITLESS_OPINION`
+  - `SPORTS_NBA_CHAMPION_2025_2026_PAIR_LIMITLESS_POLYMARKET`
+  - `SPORTS_NBA_CHAMPION_2025_2026_PAIR_LIMITLESS_PREDICT`
+  - `SPORTS_NBA_CHAMPION_2025_2026_PAIR_OPINION_POLYMARKET`
+  - `SPORTS_NBA_CHAMPION_2025_2026_PAIR_OPINION_PREDICT`
+  - `SPORTS_NBA_CHAMPION_2025_2026_PAIR_POLYMARKET_PREDICT`
+  - `SPORTS_NBA_CHAMPION_2025_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+  - `SPORTS_NBA_CHAMPION_2025_2026_TRI_LIMITLESS_OPINION_PREDICT`
+  - `SPORTS_NBA_CHAMPION_2025_2026_TRI_LIMITLESS_POLYMARKET_PREDICT`
+  - `SPORTS_NBA_CHAMPION_2025_2026_TRI_OPINION_POLYMARKET_PREDICT`
+  - `SPORTS_NBA_CHAMPION_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+
 Lotus now runs with an additive compatibility/execution layer above the canonical graph and below the current routing and RFQ read-model seams.
 
 Authoritative layered objects now include:
@@ -11,6 +208,7 @@ Authoritative layered objects now include:
 - `CanonicalExecutableMarket`
 - `InterpretedContract`
 - `CompatibilityDecision`
+- `ExecutionControlDecision`
 - `ExecutionIntent`
 - `ExecutionRecord`
 - `ExecutionStateTransition`
@@ -30,6 +228,55 @@ Current authority split:
 Important rollout rule:
 - CAUTION routing still follows the existing `resolutionRiskReadService` / `resolutionRiskPolicyService` path until an explicit cutover occurs
 - the new planner-stage wrappers and compatibility feasibility layer are additive and do not silently redefine CAUTION pooled-routing behavior
+- pair-route rollout readiness must use clean basis-aware evidence
+  - `HISTORICAL_ONLY` for simulation qualification
+  - `LIVE_ONLY` for production rollout eligibility
+  - `MIXED_BASIS` for diagnostics only
+
+## Pair-First Rollout Boundary
+
+Lotus now has explicit pair route classes:
+- `PAIR_PM_LIMITLESS`
+- `PAIR_PM_OPINION`
+
+These classes are evidence-gated and operator-controlled.
+
+Current rollout interpretation:
+- `PAIR_PM_LIMITLESS`
+  - shadow-ready as a class
+  - canary/prod restricted to compatibility-safe exact subsets
+- `PAIR_PM_OPINION`
+  - shadow-ready on the exact BTC slice
+  - broader PM↔Opinion near-exact families remain blocked or shadow-only
+
+Current first-live-window package:
+- route class:
+  - `PAIR_PM_OPINION`
+- scope label:
+  - `btc_exact_slice_only`
+- family:
+  - `CRYPTO:SAME_DAY_DIRECTIONAL`
+- explicitly out of scope:
+  - `PAIR_PM_LIMITLESS`
+  - `CRYPTO:ATH_BY_DATE`
+  - any broader BTC slice
+  - any non-BTC asset
+  - tri
+  - sports/esports
+
+Admin visibility now includes:
+- `GET /admin/pair-routes`
+- `GET /admin/pair-routes/:routeClass`
+- `GET /admin/pair-routes/:routeClass/readiness`
+- `GET /admin/pair-routes/:routeClass/coverage`
+- `POST /admin/pair-routes/:routeClass/promote-shadow`
+- `POST /admin/pair-routes/:routeClass/promote-canary`
+- `POST /admin/pair-routes/:routeClass/demote`
+
+Mutation rules:
+- `ADMIN + 2FA` required
+- audited promotion/demotion events only
+- fail closed outside allowlisted families/categories
 
 ## Compatibility Review
 
@@ -47,6 +294,21 @@ Mutation rules:
 - ambiguous active override state must fail closed
 
 ## Execution And Recovery
+
+Hard execution-control boundary is now active for the live RFQ accept path.
+
+Execution-control objects now include:
+- `ExecutionControlDecision`
+- `ExecutionApprovalState`
+- `ExecutionIdempotencyKey`
+- `ExecutionReplayProtectionRecord`
+- `ExecutionSubmissionLineage`
+- `ExecutionControlAuditRecord`
+
+Live cutover:
+- `/rfq/:id/accept` no longer directly drives `planRunner.run(...)` or `legacyExecutionRouter.execute(...)`
+- those handoffs now pass through `ExecutionControlGateway`
+- `ExecutionSubmissionOrchestrator` is the only layer allowed to invoke downstream execution handlers in the RFQ path
 
 Execution is now explicitly modeled below RFQ session state:
 - `ExecutionIntent`
@@ -66,6 +328,16 @@ Recovery subsystem covers:
 - route revalidation after downstream state changes
 
 Unsafe recovery remains fail-closed.
+
+Admin execution-control routes now exist:
+- `GET /admin/execution-control/intents`
+- `GET /admin/execution-control/intent/:id`
+- `GET /admin/execution-control/records`
+- `GET /admin/execution-control/record/:id`
+- `GET /admin/execution-control/idempotency/:key`
+- `POST /admin/execution-control/reconcile/:recordId`
+- `POST /admin/execution-control/mark-failed/:recordId`
+- `POST /admin/execution-control/retry-safe/:recordId`
 
 ## Verification Status
 
@@ -116,7 +388,24 @@ Current Predict boundary:
 - production trading is still disabled
 - future execution-prep is `EOA`-only
 - Predict Account / smart-wallet flows are deferred
-- Predexon fallback for Predict is implemented as an availability-gated fail-closed path because the current published Predexon reference does not clearly expose Predict-specific endpoints
+- Predexon fallback for Predict is implemented as a documented, availability-gated fail-closed path
+- current-state Predict bootstrap is available through `npm run sync:predict:current-state`
+- live market discovery/probing is available through `npm run scan:predict:live-markets`
+- recorder bootstrap is available through `npm run record:predict:orderbooks`
+- Predexon fallback coverage scanning is available through `npm run scan:predict:predexon-fallback`
+- current-state bootstrap populates canonical graph rows, `predict_market_metadata`, current `predict_orderbook_snapshots` when available, and current-state `historical_market_states`
+- current-state bootstrap does not overclaim history; it remains `ESTIMATED_CONSERVATIVE` unless recorder or realized-event evidence exists
+- current live verification on 2026-03-27 found no recordable Predict orderbooks for the accessible mainnet market set, so recorder bootstrap currently exits cleanly with zero selected markets rather than fabricating coverage
+- Predict historical admission is now evidence-gated:
+  - `PREDICT_ONLY` may remain visible/runnable as current-state conservative evidence
+  - `POLYMARKET_PREDICT`, `LIMITLESS_PREDICT`, and `OPINION_PREDICT` remain blocked unless the exact Predict market has recorder-backed or ingested fallback historical evidence
+  - current-state-only Predict rows no longer promote pair-route availability by themselves
+- admin canonical coverage now exposes Predict readiness states:
+  - `CURRENT_STATE_ONLY`
+  - `RECORDER_ACCUMULATING`
+  - `HISTORICAL_READY_NATIVE`
+  - `HISTORICAL_READY_FALLBACK`
+  - `UNUSABLE`
 
 Not yet promoted:
 - exact historical Opinion pair routes without proven numeric IDs
@@ -137,26 +426,412 @@ Current operator-visible consequence:
 The historical candidate generator now records this boundary explicitly:
 - when `OPINION_API_KEY` is missing, generated candidates retain an audit observation that direct Opinion OpenAPI discovery was skipped
 
+## Broad Semantic Discovery Upgrade
+
+Lotus now uses a checked-in semantic rulepack instead of narrow inline alias maps and title-only discovery seams.
+
+What changed:
+- shared semantic rulepack covers:
+  - phrase families
+  - entity aliases
+  - competition/tournament aliases
+  - time/deadline families
+  - threshold/operator families
+  - discovery keyword families
+- parser registry now supports:
+  - `POLITICS`
+  - `CRYPTO`
+  - `SPORTS`
+  - `ESPORTS`
+  - `CULTURE`
+  - `TECH`
+  - `WEATHER`
+  - `OTHER`
+- broader semantics are now applied across:
+  - Opinion exact-match curation
+  - loose historical candidate discovery
+  - Myriad category inference
+  - admin routeability / near-miss summary surfaces
+
+Safety boundary remains unchanged:
+- matching is still deterministic and auditable
+- no fuzzy/LLM acceptance logic
+- `semantic_exact_live_only` may improve inventory overlap visibility only
+- historical pair/tri promotion still requires documented historical evidence and existing routeability gates
+
+Operator visibility improved:
+- routeability summary now exposes:
+  - exact live-only Opinion overlaps
+  - exact historical-qualified Opinion overlaps
+  - near-miss counts
+  - dominant near-miss reasons
+  - dominant failed semantic dimensions
+
 ## What Next
 
 Recommended next phase:
-1. set `OPINION_API_KEY` and keep `OPINION_OPENAPI_BASE_URL` pointed at the documented Opinion OpenAPI surface
-2. rerun `npm run generate:historical-route-candidates`
-3. review exact Opinion candidates against `docs/predexon-opinion-id-curation.json`
-4. accept only exact semantic matches with validated Predexon historical orderbook coverage
-5. resync `docs/historical-route-curation.json` into the local historical catalog
-6. only then enable any new `POLYMARKET_OPINION`, `LIMITLESS_OPINION`, or tri-venue historical routes
+1. move `PAIR_PM_LIMITLESS` into intentional shadow with the safe-subset-first policy
+2. move `PAIR_PM_OPINION` into intentional shadow around the exact BTC slice
+3. keep canary blocked until clean `LIVE_ONLY` pair evidence improves for the exact allowed subset
+4. treat tri as non-blocking and stop using `LIMITLESS_OPINION` as the immediate rollout dependency
+5. use `docs/pair-route-rollout-summary.json` and the pair-route admin surfaces as the operator source of truth
 
-Hard rule for that phase:
-- no proxy markets
-- no title-only matching
-- no threshold/date substitutions
-- no route activation without a proven numeric Opinion market id plus Predexon historical validation
+Recommended politics nominee next phase:
+1. record operator approval intent for the Republican pair lane:
+   - `POLITICS_NOMINEE_REPUBLICAN_PAIR_LIMITLESS_POLYMARKET`
+   - exact-safe candidates:
+     - `donald_trump`
+     - `donald_trump_jr`
+     - `ted_cruz`
+     - `tucker_carlson`
+2. keep the Republican tri lane canary-only:
+   - `POLITICS_NOMINEE_REPUBLICAN_TRI_LIMITLESS_OPINION_POLYMARKET`
+3. use the Democratic pair limited-prod readiness package to complete lane-scoped operator review for `LIMITLESS|POLYMARKET`
+4. use the politics nominee limited-prod readiness artifacts and lane-scoped admin surfaces as the source of truth for nominee rollout status
+
+Hard rules for this phase:
+- no forced tri dependency
+- no mixed-basis promotion
+- no broad PM↔Limitless canary outside the exact-safe subset
+- no broad PM↔Opinion canary outside the exact BTC slice
+- no threshold relaxation or semantics retuning for rollout
 
 ## Predict What Next
 
 Recommended next steps for Predict:
-1. wire the recorder bootstrap to documented Predict websocket topic/request formats
-2. decide the local recorder collection targets for mainnet vs testnet
-3. accumulate native Predict recorder history before claiming `RECORDED_HISTORICAL` on real windows
-4. keep Predexon fallback disabled until a documented Predict historical surface exists in Predexon
+1. run `npm run sync:predict:current-state -- --environment=mainnet` to seed real current-state inventory locally
+2. use `npm run scan:predict:live-markets -- --environment=mainnet` to identify recordable live IDs
+3. run `npm run record:predict:orderbooks -- --environment=mainnet --marketIds=<ids>` on a schedule and accumulate native recorder history
+4. run `npm run scan:predict:predexon-fallback -- --environment=mainnet --marketIds=<ids> --start=<iso> --end=<iso>` to persist explicit fallback coverage evidence
+5. use `npm run ingest:predict:predexon-fallback` only for market ids and windows that actually return documented fallback snapshots
+6. only promote Predict pair routes after readiness moves to `HISTORICAL_READY_NATIVE` or `HISTORICAL_READY_FALLBACK` for the exact market/window
+
+## Fast Testing Workflow
+
+New local fast-testing scripts:
+- `npm run batch:historical:proven`
+- `npm run batch:predict:evidence -- --environment=mainnet`
+- `npm run report:simulation:canonical-events`
+
+Recommended sequence:
+1. `npm run sync:predexon:live-mappings`
+2. `npm run wire:predexon:live-ids`
+3. `npm run sync:historical-route-curation`
+4. `npm run batch:historical:proven`
+5. `npm run batch:predict:evidence -- --environment=mainnet`
+6. `npm run report:simulation:canonical-events`
+
+Current verified result:
+- proven persisted batch now runs only on the evidence-backed historical set:
+  - `OPINION_ONLY`
+  - `POLYMARKET_LIMITLESS`
+- default run shape is:
+  - `BUY`
+  - `SELL`
+  - `requestedNotional = 100`
+  - `strategyKey = strategy.sim.v1`
+- category report now surfaces single, pair, and tri opportunities from current ingested venue inventory
+- Predict remains report-only for pair modes until historically qualified
+- latest Predict evidence run completed with:
+  - current-state bootstrap succeeded
+  - live market scan selected `0` recordable market ids
+  - recorder and fallback scan skipped cleanly with `no_live_markets_found`
+
+## Sports Discovery Status
+
+Sports is currently secondary to crypto and is operating as a fixture-backed live supply/discovery track, not as a rollout frontier.
+
+Current active targeted pockets:
+- `SPORTS|MATCHUP_WINNER|EPL`
+- `SPORTS|MATCHUP_WINNER|LA_LIGA`
+- `ESPORTS|MATCHUP_WINNER|VALORANT`
+- `ESPORTS|MATCHUP_WINNER|LEAGUE_OF_LEGENDS`
+
+Held / superseded pockets:
+- `ESPORTS|MATCHUP_WINNER|KPL`
+- `ESPORTS|MATCHUP_WINNER|LCK`
+
+Current live targeted discovery result:
+- `EPL`
+  - discovered `0`
+  - admitted `0`
+  - bound `0`
+  - 2+ venue overlap `0`
+- `LA_LIGA`
+  - discovered `0`
+  - admitted `0`
+  - bound `0`
+  - 2+ venue overlap `0`
+- `VALORANT`
+  - discovered `0`
+  - admitted `0`
+  - bound `0`
+  - 2+ venue overlap `0`
+- `LEAGUE_OF_LEGENDS`
+  - discovered `0`
+  - admitted `0`
+  - bound `0`
+  - 2+ venue overlap `0`
+
+Current sports conclusion:
+- all active pockets: `SPORTS_TARGETED_INGESTION_NO_CHANGE_SUPPLY_THIN`
+- no real cross-venue overlap appeared in the current local run
+- no evidence that matcher ambiguity is the blocker
+- single best next sports action: `HOLD_POCKET_WAIT_FOR_SUPPLY`
+
+Sports EPL addendum:
+- narrow sports lane truth is now artifact-backed for:
+  - `SPORTS|LEAGUE_WINNER|EPL|2025_2026`
+- all-venue lane:
+  - `LIMITLESS|OPINION|POLYMARKET|PREDICT`
+  - lane id:
+    - `SPORTS_EPL_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+  - exact-safe clubs:
+    - `arsenal`
+    - `liverpool`
+    - `manchester_city`
+  - readiness:
+    - `SPORTS_EPL_WINNER_2025_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- peer pair lane:
+  - `LIMITLESS|POLYMARKET`
+  - lane id:
+    - `SPORTS_EPL_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET`
+  - exact-safe clubs:
+    - `arsenal`
+    - `aston_villa`
+    - `chelsea`
+    - `liverpool`
+    - `manchester_city`
+    - `manchester_united`
+  - readiness:
+    - `SPORTS_EPL_WINNER_2025_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- sports admin/operator surface now exists at:
+  - `GET /admin/sports-lanes`
+  - `GET /admin/sports-lanes/:laneId`
+  - `GET /admin/sports-lanes/:laneId/readiness`
+  - `GET /admin/sports-lanes/:laneId/rollback-plan`
+  - `POST /admin/sports-lanes/:laneId/operator-approval-intent`
+  - `POST /admin/sports-lanes/:laneId/hold`
+  - `POST /admin/sports-lanes/:laneId/rollback`
+- current sports operating posture:
+  - pair and all-venue are both first-class routes when exact club truth supports them
+  - `SEMANTICALLY_COMPATIBLE_REWORDING` remains review-gated
+  - no widening beyond the exact EPL `2025_2026` winner topic
+  - strict all-venue core remains exactly 3 clubs
+  - venue-only tails remain excluded
+- additional narrow sports lane truth is now artifact-backed for:
+  - `SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026`
+- La Liga all-venue lane:
+  - `LIMITLESS|OPINION|POLYMARKET|PREDICT`
+  - lane id:
+    - `SPORTS_LA_LIGA_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+  - exact-safe clubs:
+    - `atletico_madrid`
+    - `barcelona`
+    - `real_madrid`
+  - readiness:
+    - `SPORTS_LA_LIGA_WINNER_2025_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- La Liga peer pair lane:
+  - `LIMITLESS|POLYMARKET`
+  - lane id:
+    - `SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET`
+  - exact-safe clubs:
+    - `atletico_madrid`
+    - `barcelona`
+    - `real_madrid`
+    - `villarreal`
+  - readiness:
+    - `SPORTS_LA_LIGA_WINNER_2025_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- current sports operating posture for La Liga:
+  - pair and all-venue are both first-class routes when exact club truth supports them
+  - `SEMANTICALLY_COMPATIBLE_REWORDING` remains review-gated
+  - no widening beyond the exact La Liga `2025_2026` winner topic
+  - strict all-venue core remains exactly 3 clubs
+  - venue-only tails remain excluded
+- additional narrow sports lane truth is now artifact-backed for:
+  - `SPORTS|TOURNAMENT_WINNER|NBA|2025_2026`
+- NBA strict-all lane:
+  - `LIMITLESS|OPINION|POLYMARKET|PREDICT`
+  - lane id:
+    - `SPORTS_NBA_CHAMPION_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+  - exact-safe teams:
+    - `boston_celtics`
+    - `detroit_pistons`
+    - `oklahoma_city_thunder`
+    - `san_antonio_spurs`
+  - readiness:
+    - `SPORTS_NBA_CHAMPION_2025_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- NBA peer pair lane:
+  - `POLYMARKET|PREDICT`
+  - lane id:
+    - `SPORTS_NBA_CHAMPION_2025_2026_PAIR_POLYMARKET_PREDICT`
+  - exact-safe teams:
+    - `30` team matcher-backed scope
+  - readiness:
+    - `SPORTS_NBA_CHAMPION_2025_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- current sports operating posture for NBA:
+  - pair and strict-all are both first-class routes when exact team truth supports them
+  - `SEMANTICALLY_COMPATIBLE_REWORDING` remains review-gated
+  - no widening beyond the exact NBA `2025_2026` champion topic
+  - strict all-venue core remains exactly 4 teams
+  - venue-only tails remain excluded
+
+Office-winner limited-prod review package now exists for:
+- `OFFICE_WINNER|USA|US_PRESIDENT|2028`
+- `LIMITLESS|POLYMARKET`
+- candidates:
+  - `alexandria_ocasio_cortez`
+  - `donald_trump`
+  - `gavin_newsom`
+  - `jd_vance`
+  - `josh_shapiro`
+  - `kamala_harris`
+  - `marco_rubio`
+
+Current office-winner readiness posture:
+- label: `OFFICE_WINNER_US_PRESIDENT_2028_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- rule state: `SEMANTICALLY_COMPATIBLE_REWORDING`
+- operator rule review required before promotion
+- no tri implication
+- no venue widening beyond `LIMITLESS|POLYMARKET`
+- additional local office-winner readiness packages now exist for:
+  - `OFFICE_WINNER|SEOUL|MAYOR|2026`
+    - tri lane:
+      - `LIMITLESS|OPINION|POLYMARKET`
+      - readiness:
+        - `OFFICE_WINNER_SEOUL_MAYOR_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+    - pair lane:
+      - `LIMITLESS|POLYMARKET`
+      - readiness:
+        - `OFFICE_WINNER_SEOUL_MAYOR_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+  - `OFFICE_WINNER|BUSAN|MAYOR|2026`
+    - pair lane:
+      - `LIMITLESS|POLYMARKET`
+      - readiness:
+        - `OFFICE_WINNER_BUSAN_MAYOR_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+  - `OFFICE_WINNER|COLOMBIA|US_PRESIDENT|2026`
+    - pair lane:
+      - `LIMITLESS|POLYMARKET`
+      - readiness:
+        - `OFFICE_WINNER_COLOMBIA_PRESIDENT_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- office-winner admin/operator surface now covers:
+  - `POLITICS_OFFICE_WINNER_US_PRESIDENT_2028_PAIR_LIMITLESS_POLYMARKET`
+  - `POLITICS_OFFICE_WINNER_SEOUL_MAYOR_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+  - `POLITICS_OFFICE_WINNER_SEOUL_MAYOR_2026_PAIR_LIMITLESS_POLYMARKET`
+  - `POLITICS_OFFICE_WINNER_BUSAN_MAYOR_2026_PAIR_LIMITLESS_POLYMARKET`
+  - `POLITICS_OFFICE_WINNER_COLOMBIA_PRESIDENT_2026_PAIR_LIMITLESS_POLYMARKET`
+- current local office-winner rule posture remains:
+  - `SEMANTICALLY_COMPATIBLE_REWORDING`
+  - operator rule review required before promotion
+  - no broad office-winner activation
+  - no Busan tri implication
+  - no Colombia tri implication
+
+Office-exit limited-prod review packages now exist for:
+- `OFFICE_EXIT_BY_DATE|ISRAEL|PRIME_MINISTER|BENJAMIN_NETANYAHU|2026-12-31`
+  - tri lane:
+    - `LIMITLESS|POLYMARKET|PREDICT`
+    - proposition:
+      - `NETANYAHU_OUT_BEFORE_2027`
+    - readiness:
+      - `OFFICE_EXIT_NETANYAHU_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+  - pair lane:
+    - `LIMITLESS|POLYMARKET`
+    - proposition:
+      - `NETANYAHU_OUT_BEFORE_2027`
+    - readiness:
+      - `OFFICE_EXIT_NETANYAHU_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- `OFFICE_EXIT_BY_DATE|USA|US_PRESIDENT|DONALD_TRUMP|2026-12-31`
+  - strict tri lane:
+    - `LIMITLESS|OPINION|POLYMARKET`
+    - proposition:
+      - `TRUMP_OUT_BEFORE_2027`
+    - readiness:
+      - `OFFICE_EXIT_TRUMP_2026_LIMITED_PROD_READY_FOR_REVIEW`
+  - peer pair lane:
+    - `LIMITLESS|POLYMARKET`
+    - proposition:
+      - `TRUMP_OUT_BEFORE_2027`
+    - readiness:
+      - `OFFICE_EXIT_TRUMP_2026_LIMITED_PROD_READY_FOR_REVIEW`
+
+Office-exit admin/operator surface now includes:
+- `GET /admin/politics-office-exit-lanes`
+- `GET /admin/politics-office-exit-lanes/:laneId`
+- `GET /admin/politics-office-exit-lanes/:laneId/readiness`
+- `GET /admin/politics-office-exit-lanes/:laneId/rollback-plan`
+- `POST /admin/politics-office-exit-lanes/:laneId/operator-approval-intent`
+- `POST /admin/politics-office-exit-lanes/:laneId/hold`
+- `POST /admin/politics-office-exit-lanes/:laneId/rollback`
+
+Current office-exit lane registry:
+- `POLITICS_OFFICE_EXIT_NETANYAHU_2026_TRI_LIMITLESS_POLYMARKET_PREDICT`
+- `POLITICS_OFFICE_EXIT_NETANYAHU_2026_PAIR_LIMITLESS_POLYMARKET`
+- `POLITICS_OFFICE_EXIT_TRUMP_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+- `POLITICS_OFFICE_EXIT_TRUMP_2026_PAIR_LIMITLESS_POLYMARKET`
+
+Current office-exit operating posture:
+- pair and tri are both first-class lanes when exact topic and proposition truth support them
+- pair is not treated as fallback-only
+- no four-venue tri implication is allowed for Trump
+- no office-exit venue widening beyond the exact admitted lane
+- Netanyahu remains review-gated because rule state is `SEMANTICALLY_COMPATIBLE_REWORDING`
+- Trump is review-ready with `EXACT_RULE_COMPATIBLE`
+
+Geopolitical event-by-date addendum:
+- narrow geopolitical family truth is now artifact-backed for:
+  - `GEOPOLITICAL_EVENT_BY_DATE|USA_CHINA|TRUMP_VISIT_CHINA|2026-04-30`
+- current geopolitical posture:
+  - tri lane:
+    - `OPINION|POLYMARKET|PREDICT`
+    - proposition:
+      - `TRUMP_VISIT_CHINA_BY_2026_04_30`
+    - readiness:
+      - `GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_LIMITED_PROD_READY_FOR_REVIEW`
+  - first-class pair lanes:
+    - `OPINION|POLYMARKET`
+    - `OPINION|PREDICT`
+    - `POLYMARKET|PREDICT`
+    - each exposes:
+      - `TRUMP_VISIT_CHINA_BY_2026_04_30`
+      - `GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_LIMITED_PROD_READY_FOR_REVIEW`
+- geopolitical admin surface now exists at:
+  - `GET /admin/politics-geopolitical-lanes`
+  - `GET /admin/politics-geopolitical-lanes/:laneId`
+  - `GET /admin/politics-geopolitical-lanes/:laneId/readiness`
+  - `GET /admin/politics-geopolitical-lanes/:laneId/rollback-plan`
+  - `POST /admin/politics-geopolitical-lanes/:laneId/operator-approval-intent`
+  - `POST /admin/politics-geopolitical-lanes/:laneId/hold`
+  - `POST /admin/politics-geopolitical-lanes/:laneId/rollback`
+- current geopolitical lane ids:
+  - `POLITICS_GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_TRI_OPINION_POLYMARKET_PREDICT`
+  - `POLITICS_GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_PAIR_OPINION_POLYMARKET`
+  - `POLITICS_GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_PAIR_OPINION_PREDICT`
+  - `POLITICS_GEOPOLITICAL_TRUMP_VISIT_CHINA_2026_04_30_PAIR_POLYMARKET_PREDICT`
+- additional geopolitical topic now advanced:
+  - `GEOPOLITICAL_EVENT_BY_DATE|USA_GREENLAND|TRUMP_ACQUIRE_GREENLAND|2026-12-31`
+  - tri lane:
+    - `LIMITLESS|OPINION|POLYMARKET|PREDICT`
+    - readiness:
+      - `GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+  - first-class pair lanes:
+    - `LIMITLESS|POLYMARKET`
+    - `LIMITLESS|OPINION`
+    - `LIMITLESS|PREDICT`
+    - `OPINION|POLYMARKET`
+    - `OPINION|PREDICT`
+    - `POLYMARKET|PREDICT`
+- additional geopolitical lane ids:
+  - `POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_TRI_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+  - `POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_LIMITLESS_POLYMARKET`
+  - `POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_LIMITLESS_OPINION`
+  - `POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_LIMITLESS_PREDICT`
+  - `POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_OPINION_POLYMARKET`
+  - `POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_OPINION_PREDICT`
+  - `POLITICS_GEOPOLITICAL_TRUMP_ACQUIRE_GREENLAND_2026_12_31_PAIR_POLYMARKET_PREDICT`
+- engineering posture:
+  - pair and tri are both first-class routes when exact truth supports them
+  - no geopolitical venue widening beyond the exact admitted lane
+  - no widening to the May/June deadline buckets
+  - rollback/hold remain lane-scoped only
+  - Greenland is review-gated under `SEMANTICALLY_COMPATIBLE_REWORDING` because the Opinion wording is narrower than the other venues

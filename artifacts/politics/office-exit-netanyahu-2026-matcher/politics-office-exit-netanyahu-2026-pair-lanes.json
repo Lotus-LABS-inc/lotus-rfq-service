@@ -1,0 +1,75 @@
+{
+  "observedAt": "2026-04-08T18:34:04.791Z",
+  "canonicalTopicKey": "OFFICE_EXIT_BY_DATE|ISRAEL|PRIME_MINISTER|BENJAMIN_NETANYAHU|2026-12-31",
+  "matcherLanes": [
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "proposition": "NETANYAHU_OUT_BEFORE_2027",
+      "canonicalTopic": "OFFICE_EXIT_BY_DATE|ISRAEL|PRIME_MINISTER|BENJAMIN_NETANYAHU|2026-12-31",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Office-exit proposition is shared on LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "netanyahu-out-by-end-of-2026-1768997302182",
+          "title": "Netanyahu out before 2027?"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "netanyahu-out-before-2027",
+          "title": "Netanyahu out before 2027?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "proposition": "NETANYAHU_OUT_BEFORE_2027",
+      "canonicalTopic": "OFFICE_EXIT_BY_DATE|ISRAEL|PRIME_MINISTER|BENJAMIN_NETANYAHU|2026-12-31",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Office-exit proposition is shared on LIMITLESS|PREDICT, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "netanyahu-out-by-end-of-2026-1768997302182",
+          "title": "Netanyahu out before 2027?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "19740",
+          "title": "Netanyahu out before 2027?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "proposition": "NETANYAHU_OUT_BEFORE_2027",
+      "canonicalTopic": "OFFICE_EXIT_BY_DATE|ISRAEL|PRIME_MINISTER|BENJAMIN_NETANYAHU|2026-12-31",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Office-exit proposition is shared on POLYMARKET|PREDICT, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "netanyahu-out-before-2027",
+          "title": "Netanyahu out before 2027?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "19740",
+          "title": "Netanyahu out before 2027?"
+        }
+      ]
+    }
+  ]
+}

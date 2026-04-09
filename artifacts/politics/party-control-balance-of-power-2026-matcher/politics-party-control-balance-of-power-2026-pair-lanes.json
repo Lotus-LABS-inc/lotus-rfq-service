@@ -1,0 +1,226 @@
+{
+  "observedAt": "2026-04-08T16:54:04.897Z",
+  "canonicalTopicKey": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+  "matcherLanes": [
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "outcome": "D_SENATE_R_HOUSE",
+      "canonicalTopic": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe shared party-control outcome on OPINION|POLYMARKET."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493240",
+          "rawOutcomeLabel": "D_SENATE_R_HOUSE"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "balance-of-power-2026-midterms",
+          "rawOutcomeLabel": "D_SENATE_R_HOUSE"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "outcome": "DEMOCRATS_SWEEP",
+      "canonicalTopic": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe shared party-control outcome on OPINION|POLYMARKET."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493240",
+          "rawOutcomeLabel": "DEMOCRATS_SWEEP"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "balance-of-power-2026-midterms",
+          "rawOutcomeLabel": "DEMOCRATS_SWEEP"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "outcome": "REPUBLICANS_SWEEP",
+      "canonicalTopic": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe shared party-control outcome on OPINION|POLYMARKET."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493240",
+          "rawOutcomeLabel": "REPUBLICANS_SWEEP"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "balance-of-power-2026-midterms",
+          "rawOutcomeLabel": "REPUBLICANS_SWEEP"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "outcome": "D_SENATE_R_HOUSE",
+      "canonicalTopic": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe shared party-control outcome on OPINION|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493240",
+          "rawOutcomeLabel": "D_SENATE_R_HOUSE"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "balance-of-power-2026-midterm-elections",
+          "rawOutcomeLabel": "D_SENATE_R_HOUSE"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "outcome": "DEMOCRATS_SWEEP",
+      "canonicalTopic": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe shared party-control outcome on OPINION|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493240",
+          "rawOutcomeLabel": "DEMOCRATS_SWEEP"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "balance-of-power-2026-midterm-elections",
+          "rawOutcomeLabel": "DEMOCRATS_SWEEP"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "outcome": "REPUBLICANS_SWEEP",
+      "canonicalTopic": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe shared party-control outcome on OPINION|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493240",
+          "rawOutcomeLabel": "REPUBLICANS_SWEEP"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "balance-of-power-2026-midterm-elections",
+          "rawOutcomeLabel": "REPUBLICANS_SWEEP"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "outcome": "D_SENATE_R_HOUSE",
+      "canonicalTopic": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe shared party-control outcome on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "balance-of-power-2026-midterms",
+          "rawOutcomeLabel": "D_SENATE_R_HOUSE"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "balance-of-power-2026-midterm-elections",
+          "rawOutcomeLabel": "D_SENATE_R_HOUSE"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "outcome": "DEMOCRATS_SWEEP",
+      "canonicalTopic": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe shared party-control outcome on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "balance-of-power-2026-midterms",
+          "rawOutcomeLabel": "DEMOCRATS_SWEEP"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "balance-of-power-2026-midterm-elections",
+          "rawOutcomeLabel": "DEMOCRATS_SWEEP"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "outcome": "R_SENATE_D_HOUSE",
+      "canonicalTopic": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe shared party-control outcome on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "balance-of-power-2026-midterms",
+          "rawOutcomeLabel": "R_SENATE_D_HOUSE"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "balance-of-power-2026-midterm-elections",
+          "rawOutcomeLabel": "R_SENATE_D_HOUSE"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "outcome": "REPUBLICANS_SWEEP",
+      "canonicalTopic": "PARTY_CONTROL|USA|CONGRESS|2026|BALANCE_OF_POWER",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe shared party-control outcome on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "balance-of-power-2026-midterms",
+          "rawOutcomeLabel": "REPUBLICANS_SWEEP"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "balance-of-power-2026-midterm-elections",
+          "rawOutcomeLabel": "REPUBLICANS_SWEEP"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,168 @@
+{
+  "observedAt": "2026-04-08T13:20:48.850Z",
+  "canonicalTopicKey": "OFFICE_WINNER|USA|US_PRESIDENT|2028",
+  "bestPair": "LIMITLESS|POLYMARKET",
+  "matcherLanes": [
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "alexandria_ocasio_cortez",
+      "canonicalTopic": "OFFICE_WINNER|USA|US_PRESIDENT|2028",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "presidential-election-winner-2028",
+          "rawOutcomeLabel": "alexandria ocasio cortez"
+        },
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "presidential-election-winner-2028-1769010522121",
+          "rawOutcomeLabel": "alexandria ocasio cortez"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "donald_trump",
+      "canonicalTopic": "OFFICE_WINNER|USA|US_PRESIDENT|2028",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "presidential-election-winner-2028",
+          "rawOutcomeLabel": "donald trump"
+        },
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "presidential-election-winner-2028-1769010522121",
+          "rawOutcomeLabel": "donald trump"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "gavin_newsom",
+      "canonicalTopic": "OFFICE_WINNER|USA|US_PRESIDENT|2028",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "presidential-election-winner-2028",
+          "rawOutcomeLabel": "gavin newsom"
+        },
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "presidential-election-winner-2028-1769010522121",
+          "rawOutcomeLabel": "gavin newsom"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "jd_vance",
+      "canonicalTopic": "OFFICE_WINNER|USA|US_PRESIDENT|2028",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "presidential-election-winner-2028",
+          "rawOutcomeLabel": "jd vance"
+        },
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "presidential-election-winner-2028-1769010522121",
+          "rawOutcomeLabel": "jd vance"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "josh_shapiro",
+      "canonicalTopic": "OFFICE_WINNER|USA|US_PRESIDENT|2028",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "presidential-election-winner-2028",
+          "rawOutcomeLabel": "josh shapiro"
+        },
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "presidential-election-winner-2028-1769010522121",
+          "rawOutcomeLabel": "josh shapiro"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "kamala_harris",
+      "canonicalTopic": "OFFICE_WINNER|USA|US_PRESIDENT|2028",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "presidential-election-winner-2028",
+          "rawOutcomeLabel": "kamala harris"
+        },
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "presidential-election-winner-2028-1769010522121",
+          "rawOutcomeLabel": "kamala harris"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "candidate": "marco_rubio",
+      "canonicalTopic": "OFFICE_WINNER|USA|US_PRESIDENT|2028",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Candidate is shared across LIMITLESS|POLYMARKET, but rule wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this office-winner lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "presidential-election-winner-2028",
+          "rawOutcomeLabel": "marco rubio"
+        },
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "presidential-election-winner-2028-1769010522121",
+          "rawOutcomeLabel": "marco rubio"
+        }
+      ]
+    }
+  ]
+}

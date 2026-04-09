@@ -15,10 +15,12 @@ const buildInspection = (options?: {
   eventId?: string;
   includeOpinion?: boolean;
   includeLegacy?: boolean;
+  includePredict?: boolean;
 }) => {
   const eventId = options?.eventId ?? canonicalEventId;
   const includeOpinion = options?.includeOpinion ?? false;
   const includeLegacy = options?.includeLegacy ?? false;
+  const includePredict = options?.includePredict ?? false;
   const profiles = [
     {
       id: "profile-limitless",
@@ -41,6 +43,16 @@ const buildInspection = (options?: {
           id: "profile-opinion",
           venue: "OPINION",
           venueMarketId: "opinion-m1",
+          canonicalEventId: eventId,
+          canonicalMarketId: "MARKET-1",
+          updatedAt: new Date("2026-03-13T01:00:00.000Z")
+        }]
+      : []),
+    ...(includePredict
+      ? [{
+          id: "profile-predict",
+          venue: "PREDICT",
+          venueMarketId: "predict-m1",
           canonicalEventId: eventId,
           canonicalMarketId: "MARKET-1",
           updatedAt: new Date("2026-03-13T01:00:00.000Z")
@@ -96,6 +108,20 @@ const buildInspection = (options?: {
           }
         ]
       : [])
+    ,
+    ...(includePredict
+      ? [{
+          id: "assessment-pp",
+          canonicalEventId: eventId,
+          canonicalMarketId: "MARKET-1",
+          marketAProfileId: "profile-predict",
+          marketBProfileId: "profile-polymarket",
+          equivalenceClass: "SAFE_EQUIVALENT" as ResolutionEquivalenceClass,
+          factorBreakdown: {},
+          version: "resolution-risk-v1",
+          computedAt: new Date("2026-03-13T01:30:00.000Z")
+        }]
+      : [])
   ];
 
   return {
@@ -120,10 +146,12 @@ const buildPool = (options?: {
   includeOpinion?: boolean;
   includeLegacy?: boolean;
   eventId?: string;
+  includePredict?: boolean;
 }) => {
   const eventId = options?.eventId ?? canonicalEventId;
   const includeOpinion = options?.includeOpinion ?? false;
   const includeLegacy = options?.includeLegacy ?? false;
+  const includePredict = options?.includePredict ?? false;
 
   return {
     query: vi.fn(async (sql: string, params?: unknown[]) => {
@@ -134,6 +162,57 @@ const buildPool = (options?: {
             canonical_category: includeOpinion ? "POLITICS" : "SPORTS",
             market_class: "BINARY"
           }]
+        };
+      }
+
+      if (sql.includes("SELECT venue_market_id AS market_id")) {
+        return {
+          rows: includePredict
+            ? [{
+                market_id: "predict-m1",
+                row_count: "3",
+                coverage_start: new Date("2026-03-13T00:00:00.000Z"),
+                coverage_end: new Date("2026-03-13T01:00:00.000Z")
+              }]
+            : []
+        };
+      }
+
+      if (sql.includes("FROM canonical_executable_market_members")) {
+        return {
+          rows: [
+            {
+              canonical_market_id: "MARKET-1",
+              venue: "LIMITLESS",
+              venue_market_id: "limitless-m1"
+            },
+            {
+              canonical_market_id: "MARKET-1",
+              venue: "POLYMARKET",
+              venue_market_id: "polymarket-m1"
+            },
+            ...(includePredict
+              ? [{
+                  canonical_market_id: "MARKET-1",
+                  venue: "PREDICT",
+                  venue_market_id: "predict-m1"
+                }]
+              : []),
+            ...(includeOpinion
+              ? [{
+                  canonical_market_id: "MARKET-1",
+                  venue: "OPINION",
+                  venue_market_id: "opinion-m1"
+                }]
+              : []),
+            ...(includeLegacy
+              ? [{
+                  canonical_market_id: "MARKET-LEGACY",
+                  venue: "POLYMARKET",
+                  venue_market_id: "polymarket-legacy"
+                }]
+              : [])
+          ]
         };
       }
 
@@ -154,7 +233,7 @@ const buildPool = (options?: {
         }
 
         return {
-          rowCount: includeOpinion ? 3 : 2,
+          rowCount: includeOpinion ? 3 : includePredict ? 3 : 2,
           rows: [
             {
               venue: "LIMITLESS",
@@ -172,6 +251,16 @@ const buildPool = (options?: {
               canonical_category: includeOpinion ? "POLITICS" : "SPORTS",
               market_class: "BINARY"
             },
+            ...(includePredict
+              ? [{
+                  venue: "PREDICT",
+                  row_count: "3",
+                  coverage_start: new Date("2026-03-13T00:00:00.000Z"),
+                  coverage_end: new Date("2026-03-13T01:00:00.000Z"),
+                  canonical_category: "SPORTS",
+                  market_class: "BINARY"
+                }]
+              : []),
             ...(includeOpinion
               ? [{
                   venue: "OPINION",
@@ -212,6 +301,14 @@ const buildPool = (options?: {
               canonical_market_id: "MARKET-1",
               orderbook_snapshot: { market_title: "Polymarket Market 1" }
             },
+            ...(includePredict
+              ? [{
+                  venue: "PREDICT",
+                  venue_market_id: "predict-m1",
+                  canonical_market_id: "MARKET-1",
+                  orderbook_snapshot: { title: "Predict Market 1", environment: "mainnet" }
+                }]
+              : []),
             ...(includeOpinion
               ? [{
                   venue: "OPINION",
@@ -239,6 +336,14 @@ const buildPool = (options?: {
               venue_market_id: "polymarket-m1",
               orderbook_snapshot: { market_title: "Polymarket Market 1" }
             },
+            ...(includePredict
+              ? [{
+                  canonical_market_id: "MARKET-1",
+                  venue: "PREDICT",
+                  venue_market_id: "predict-m1",
+                  orderbook_snapshot: { title: "Predict Market 1", environment: "mainnet" }
+                }]
+              : []),
             ...(includeOpinion
               ? [{
                   canonical_market_id: "MARKET-1",
@@ -259,11 +364,12 @@ const buildPool = (options?: {
         };
       }
 
-      if (sql.includes("GROUP BY canonical_market_id, venue")) {
+      if (sql.includes("GROUP BY canonical_market_id, venue_market_id, venue")) {
         return {
           rows: [
             {
               canonical_market_id: "MARKET-1",
+              venue_market_id: "limitless-m1",
               venue: "LIMITLESS",
               row_count: "8",
               coverage_start: new Date("2026-03-13T00:00:00.000Z"),
@@ -273,6 +379,7 @@ const buildPool = (options?: {
             },
             {
               canonical_market_id: "MARKET-1",
+              venue_market_id: "polymarket-m1",
               venue: "POLYMARKET",
               row_count: "10",
               coverage_start: new Date("2026-03-13T00:00:00.000Z"),
@@ -280,9 +387,22 @@ const buildPool = (options?: {
               canonical_category: includeOpinion ? "POLITICS" : "SPORTS",
               market_class: "BINARY"
             },
+            ...(includePredict
+              ? [{
+                  canonical_market_id: "MARKET-1",
+                  venue_market_id: "predict-m1",
+                  venue: "PREDICT",
+                  row_count: "3",
+                  coverage_start: new Date("2026-03-13T00:00:00.000Z"),
+                  coverage_end: new Date("2026-03-13T01:00:00.000Z"),
+                  canonical_category: "SPORTS",
+                  market_class: "BINARY"
+                }]
+              : []),
             ...(includeOpinion
               ? [{
                   canonical_market_id: "MARKET-1",
+                  venue_market_id: "opinion-m1",
                   venue: "OPINION",
                   row_count: "7",
                   coverage_start: new Date("2026-03-13T00:00:00.000Z"),
@@ -294,6 +414,7 @@ const buildPool = (options?: {
             ...(includeLegacy
               ? [{
                   canonical_market_id: "MARKET-LEGACY",
+                  venue_market_id: "polymarket-legacy",
                   venue: "POLYMARKET",
                   row_count: "1",
                   coverage_start: new Date("2026-03-13T00:00:00.000Z"),
@@ -310,6 +431,38 @@ const buildPool = (options?: {
         return {
           rows: [{ timestamp: new Date("2026-03-13T00:00:00.000Z") }]
         };
+      }
+
+      if (sql.includes("FROM predict_market_metadata")) {
+        return {
+          rows: includePredict
+            ? [{
+                market_id: "predict-m1",
+                row_count: "1",
+                environments: ["mainnet"]
+              }]
+            : []
+        };
+      }
+
+      if (sql.includes("FROM predict_orderbook_snapshots")) {
+        return { rows: [] };
+      }
+
+      if (sql.includes("FROM predict_match_events")) {
+        return { rows: [] };
+      }
+
+      if (sql.includes("FROM predict_recorder_checkpoints")) {
+        return { rows: [] };
+      }
+
+      if (sql.includes("FROM predict_fallback_historical_snapshots")) {
+        return { rows: [] };
+      }
+
+      if (sql.includes("FROM predict_fallback_coverage_scans")) {
+        return { rows: [] };
       }
 
       if (sql.includes("FROM historical_simulation_runs")) {
@@ -362,6 +515,49 @@ describe("SimulationAdminService", () => {
     }]);
   });
 
+  it("filters runnable scopes by catalog scope", async () => {
+    const liveService = new SimulationAdminService({
+      pool: buildPool(),
+      historicalSimulationRunner: { run: vi.fn() } as never,
+      resolutionRiskAdminService: { getCanonicalInspection: vi.fn(async () => buildInspection()) } as never,
+      historicalSimulationCatalogService: {
+        hasCanonicalEvent: vi.fn(async () => false),
+        getCanonicalInspection: vi.fn(async () => buildInspection())
+      } as never,
+      configVersion: "cfg-hist-v1",
+      engineVersion: "eng-hist-v1"
+    });
+
+    await expect(
+      liveService.listScopes({
+        category: "SPORTS",
+        marketClass: HistoricalMarketClass.BINARY,
+        catalogScope: "historical_simulation"
+      })
+    ).resolves.toEqual([]);
+
+    const historicalService = new SimulationAdminService({
+      pool: buildPool(),
+      historicalSimulationRunner: { run: vi.fn() } as never,
+      resolutionRiskAdminService: { getCanonicalInspection: vi.fn(async () => buildInspection()) } as never,
+      historicalSimulationCatalogService: {
+        hasCanonicalEvent: vi.fn(async () => true),
+        getCanonicalInspection: vi.fn(async () => buildInspection())
+      } as never,
+      configVersion: "cfg-hist-v1",
+      engineVersion: "eng-hist-v1"
+    });
+
+    const scopes = await historicalService.listScopes({
+      category: "SPORTS",
+      marketClass: HistoricalMarketClass.BINARY,
+      catalogScope: "historical_simulation"
+    });
+
+    expect(scopes).toHaveLength(1);
+    expect(scopes[0]?.catalogScope).toBe("historical_simulation");
+  });
+
   it("lists tri-venue scopes only when all three exact-market edges are safe", async () => {
     const service = new SimulationAdminService({
       pool: buildPool({ includeOpinion: true }),
@@ -392,6 +588,34 @@ describe("SimulationAdminService", () => {
       routeableMarketCount: 1,
       venueCoverage: { polymarketRows: 10, limitlessRows: 8, opinionRows: 7, myriadRows: 0, predictRows: 0 }
     }]);
+  });
+
+  it("derives Opinion exactness from canonical promoted overlap before legacy curation fallback", async () => {
+    const service = new SimulationAdminService({
+      pool: buildPool({ includeOpinion: true }),
+      historicalSimulationRunner: { run: vi.fn() } as never,
+      resolutionRiskAdminService: { getCanonicalInspection: vi.fn(async () => buildInspection({ includeOpinion: true })) } as never,
+      historicalSimulationCatalogService: {
+        hasCanonicalEvent: vi.fn(async () => false),
+        getCanonicalInspection: vi.fn(async () => buildInspection({ includeOpinion: true }))
+      } as never,
+      configVersion: "cfg-hist-v1",
+      engineVersion: "eng-hist-v1"
+    });
+
+    const coverage = await service.getCanonicalCoverage(canonicalEventId);
+    const market = coverage.canonicalMarkets.find((entry) => entry.canonicalMarketId === "MARKET-1");
+
+    expect(market?.opinionExactMatch).toEqual({
+      classification: "semantic_exact_historical_qualified",
+      historicalQualified: true,
+      reason: "canonical_promoted_overlap"
+    });
+    expect(market?.routeModes.find((route) => route.routeMode === "POLYMARKET_OPINION")).toEqual(
+      expect.objectContaining({
+        runnable: true
+      })
+    );
   });
 
   it("delegates run requests with route-mode and resolved canonical market metadata", async () => {
@@ -453,6 +677,155 @@ describe("SimulationAdminService", () => {
     }));
   });
 
+  it("keeps Predict current-state-only markets out of pair-route promotion while leaving Predict-only conservative", async () => {
+    const service = new SimulationAdminService({
+      pool: buildPool({ includePredict: true }),
+      historicalSimulationRunner: { run: vi.fn() } as never,
+      resolutionRiskAdminService: { getCanonicalInspection: vi.fn(async () => buildInspection({ includePredict: true })) } as never,
+      historicalSimulationCatalogService: {
+        hasCanonicalEvent: vi.fn(async () => false),
+        getCanonicalInspection: vi.fn(async () => buildInspection({ includePredict: true }))
+      } as never,
+      configVersion: "cfg-hist-v1",
+      engineVersion: "eng-hist-v1"
+    });
+
+    const coverage = await service.getCanonicalCoverage(canonicalEventId);
+    const market = coverage.canonicalMarkets.find((entry) => entry.canonicalMarketId === "MARKET-1");
+
+    expect(market?.predictReadiness).toEqual(expect.objectContaining({
+      state: "CURRENT_STATE_ONLY",
+      historicalQualified: false,
+      currentStateRowCount: 3
+    }));
+    expect(market?.routeModes.find((route) => route.routeMode === "PREDICT_ONLY")).toEqual(
+      expect.objectContaining({ runnable: true })
+    );
+    expect(market?.routeModes.find((route) => route.routeMode === "POLYMARKET_PREDICT")).toEqual(
+      expect.objectContaining({
+        runnable: false,
+        reason: "predict_historically_unqualified"
+      })
+    );
+    expect(coverage.predictReadinessOverview).toEqual(expect.objectContaining({
+      state: "CURRENT_STATE_ONLY",
+      historicalQualified: false,
+      currentStateOnlyMarkets: 1
+    }));
+  });
+
+  it("builds routeability summary with Opinion inventory rollups", async () => {
+    const service = new SimulationAdminService({
+      pool: buildPool({ includeOpinion: true }),
+      historicalSimulationRunner: { run: vi.fn() } as never,
+      resolutionRiskAdminService: { getCanonicalInspection: vi.fn(async () => buildInspection({ includeOpinion: true })) } as never,
+      historicalSimulationCatalogService: {
+        hasCanonicalEvent: vi.fn(async () => false),
+        getCanonicalInspection: vi.fn(async () => buildInspection({ includeOpinion: true }))
+      } as never,
+      configVersion: "cfg-hist-v1",
+      engineVersion: "eng-hist-v1"
+    });
+
+    const summary = await service.getRouteabilitySummary({
+      category: "POLITICS",
+      marketClass: HistoricalMarketClass.BINARY
+    });
+
+    expect(summary.filters).toEqual({
+      category: "POLITICS",
+      catalogScope: "ALL",
+      marketClass: HistoricalMarketClass.BINARY
+    });
+    expect(summary.totals.eventCount).toBe(1);
+    expect(summary.venueVisibility.opinionEvents).toBe(1);
+    expect(summary.opinionRouteability).toEqual(expect.objectContaining({
+      eventsWithOpinionInventory: 1,
+      eventsWithRunnableOpinionOnly: 1,
+      eventsWithBlockedOpinionPairOrTri: 1,
+      exactLiveOnlyCount: expect.any(Number),
+      exactHistoricalQualifiedCount: expect.any(Number),
+      nearMissCount: expect.any(Number),
+      dominantNearMissReasons: expect.any(Array)
+    }));
+    expect(summary.routeModes.find((entry) => entry.routeMode === "POLYMARKET_LIMITLESS_OPINION")).toEqual(
+      expect.objectContaining({
+        routeableMarketCount: 1,
+        eventCount: 1
+      })
+    );
+  });
+
+  it("treats sub-second resolution-risk skew as fresh for canonical promoted Opinion pairs", async () => {
+    const inspection = buildInspection({ includeOpinion: true });
+    for (const profile of inspection.profiles) {
+      if (profile.canonicalMarketId === "MARKET-1") {
+        profile.updatedAt = new Date("2026-03-13T01:30:00.060Z");
+      }
+    }
+    for (const assessment of inspection.assessments) {
+      if (assessment.canonicalMarketId === "MARKET-1") {
+        assessment.computedAt = new Date("2026-03-13T01:30:00.000Z");
+      }
+    }
+
+    const service = new SimulationAdminService({
+      pool: buildPool({ includeOpinion: true }),
+      historicalSimulationRunner: { run: vi.fn() } as never,
+      resolutionRiskAdminService: { getCanonicalInspection: vi.fn(async () => inspection) } as never,
+      historicalSimulationCatalogService: {
+        hasCanonicalEvent: vi.fn(async () => false),
+        getCanonicalInspection: vi.fn(async () => inspection)
+      } as never,
+      configVersion: "cfg-hist-v1",
+      engineVersion: "eng-hist-v1"
+    });
+
+    const coverage = await service.getCanonicalCoverage(canonicalEventId);
+    const market = coverage.canonicalMarkets.find((entry) => entry.canonicalMarketId === "MARKET-1");
+
+    expect(coverage.resolutionRiskInspection.freshness.isStale).toBe(false);
+    expect(market?.routeModes.find((route) => route.routeMode === "POLYMARKET_OPINION")).toEqual(
+      expect.objectContaining({
+        runnable: true
+      })
+    );
+  });
+
+  it("builds routeability summary with blocked Predict category readiness", async () => {
+    const service = new SimulationAdminService({
+      pool: buildPool({ includePredict: true }),
+      historicalSimulationRunner: { run: vi.fn() } as never,
+      resolutionRiskAdminService: { getCanonicalInspection: vi.fn(async () => buildInspection({ includePredict: true })) } as never,
+      historicalSimulationCatalogService: {
+        hasCanonicalEvent: vi.fn(async () => false),
+        getCanonicalInspection: vi.fn(async () => buildInspection({ includePredict: true }))
+      } as never,
+      configVersion: "cfg-hist-v1",
+      engineVersion: "eng-hist-v1"
+    });
+
+    const summary = await service.getRouteabilitySummary({
+      category: "SPORTS",
+      marketClass: HistoricalMarketClass.BINARY
+    });
+
+    expect(summary.venueVisibility.predictEvents).toBe(1);
+    expect(summary.predictRouteability).toEqual(expect.objectContaining({
+      eventsWithPredictInventory: 1,
+      eventsWithCurrentStateOnlyPredict: 1,
+      eventsWithHistoricallyQualifiedPredict: 0,
+      eventsWithBlockedPredictRoutes: 1
+    }));
+    expect(summary.predictRouteability.dominantBlockReasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          reason: "predict_historically_unqualified"
+        })
+      ])
+    );
+  });
+
   it("fails closed when scope resolution is ambiguous or coverage is missing", async () => {
     const service = new SimulationAdminService({
       pool: buildPool(),
@@ -507,13 +880,13 @@ describe("SimulationAdminService", () => {
     const missingService = new SimulationAdminService({
       pool: {
         query: vi.fn(async (sql: string) => {
-          if (sql.includes("GROUP BY venue")) {
-            return { rowCount: 0, rows: [] };
-          }
           if (sql.includes("SELECT DISTINCT ON")) {
             return { rows: [] };
           }
-          if (sql.includes("GROUP BY canonical_market_id, venue")) {
+          if (sql.includes("GROUP BY canonical_market_id, venue_market_id, venue")) {
+            return { rows: [] };
+          }
+          if (sql.includes("FROM canonical_executable_market_members")) {
             return { rows: [] };
           }
           throw new Error(`Unexpected query: ${sql}`);

@@ -1,0 +1,38 @@
+{
+  "observedAt": "2026-04-08T14:30:01.197Z",
+  "laneId": "POLITICS_OFFICE_WINNER_SEOUL_MAYOR_2026_PAIR_LIMITLESS_POLYMARKET",
+  "topicKey": "OFFICE_WINNER|SEOUL|MAYOR|2026",
+  "venuePair": "LIMITLESS|POLYMARKET",
+  "candidateScopeHash": "0931798cb3353211",
+  "exactSafeCandidates": [
+    "ahn_cheol_soo",
+    "cho_eun_hee",
+    "cho_kuk",
+    "chong_won_oh",
+    "han_dong_hoon",
+    "hong_ihk_pyo",
+    "jeon_hyun_heui",
+    "na_kyung_won",
+    "oh_se_hoon",
+    "park_hong_keun",
+    "park_ju_min",
+    "park_yong_jin",
+    "seo_young_kyo"
+  ],
+  "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+  "supportedActions": [
+    "inspect",
+    "hold",
+    "promote",
+    "rollback"
+  ],
+  "userConsentCanWidenScope": false,
+  "narrowestEnforceableUnit": "LANE_SCOPE_LOCK",
+  "sourceArtifactRefs": [
+    "artifacts/politics/office-winner-seoul-mayor-2026-matcher/politics-office-winner-seoul-mayor-2026-matcher-input-summary.json",
+    "artifacts/politics/office-winner-seoul-mayor-2026-matcher/politics-office-winner-seoul-mayor-2026-pair-lanes.json",
+    "artifacts/politics/office-winner-seoul-mayor-2026-matcher/politics-office-winner-seoul-mayor-2026-rejections.json",
+    "artifacts/politics/office-winner-seoul-mayor-2026-matcher/politics-office-winner-seoul-mayor-2026-final-decision.json",
+    "artifacts/politics/office-winner-seoul-mayor-2026-matcher/politics-office-winner-seoul-mayor-2026-operator-summary.md"
+  ]
+}

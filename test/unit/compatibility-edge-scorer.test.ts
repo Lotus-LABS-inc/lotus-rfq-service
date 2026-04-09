@@ -145,4 +145,179 @@ describe("CompatibilityEdgeScorer", () => {
         expect(edge.compatibilityClass).toBe("DO_NOT_POOL");
         expect(edge.liquidityCostBps).toBeNull();
     });
+
+    it("does not hard-fail authority-aligned nomination markets on venue source labels alone", () => {
+        const resolutionNormalizer = new CanonicalResolutionProfileNormalizer();
+        const settlementNormalizer = new CanonicalSettlementProfileNormalizer();
+        const fingerprintBuilder = new PropositionFingerprintBuilder();
+        const scorer = new CompatibilityEdgeScorer();
+        const factory = new VenueMarketProfileFactory();
+
+        const marketA = factory.create({
+            canonicalEventId: "11111111-1111-4111-8111-111111111111",
+            venue: "POLYMARKET",
+            venueMarketId: "poly-newsom",
+            title: "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
+            marketClass: "BINARY",
+            outcomes: [{ id: "yes", label: "Yes" }, { id: "no", label: "No" }],
+            outcomeSchema: { type: "binary", outcomes: ["Yes", "No"] },
+            category: "POLITICS",
+            sourceMetadataVersion: "test-v1"
+        });
+        const marketB = factory.create({
+            canonicalEventId: "11111111-1111-4111-8111-111111111111",
+            venue: "LIMITLESS",
+            venueMarketId: "lim-newsom",
+            title: "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
+            marketClass: "BINARY",
+            outcomes: [{ id: "yes", label: "Yes" }, { id: "no", label: "No" }],
+            outcomeSchema: { type: "binary", outcomes: ["Yes", "No"] },
+            category: "POLITICS",
+            sourceMetadataVersion: "test-v1"
+        });
+        const resolutionRule = "This market resolves according to official Democratic Party sources and the Democratic National Convention.";
+        const resolutionProfileA = resolutionNormalizer.normalize({
+            venueMarketProfileId: marketA.id,
+            resolutionAuthorityType: "CENTRAL",
+            resolutionTitle: marketA.title,
+            ruleText: resolutionRule,
+            resolutionSource: "POLYMARKET"
+        });
+        const resolutionProfileB = resolutionNormalizer.normalize({
+            venueMarketProfileId: marketB.id,
+            resolutionAuthorityType: "CENTRAL",
+            resolutionTitle: marketB.title,
+            ruleText: resolutionRule,
+            resolutionSource: "LIMITLESS"
+        });
+        const settlementProfileA = settlementNormalizer.normalize({ venueMarketProfileId: marketA.id, settlementType: "onchain" });
+        const settlementProfileB = settlementNormalizer.normalize({ venueMarketProfileId: marketB.id, settlementType: "onchain" });
+        const fingerprintA = fingerprintBuilder.build({
+            market: marketA,
+            resolutionProfile: resolutionProfileA,
+            propositionHints: {
+                subject: "gavin newsom",
+                condition: "win 2028 democratic presidential nomination",
+                timeBoundary: "2028-11-07T00:00:00.000Z",
+                normalizedPropositionText: marketA.title
+            }
+        });
+        const fingerprintB = fingerprintBuilder.build({
+            market: marketB,
+            resolutionProfile: resolutionProfileB,
+            propositionHints: {
+                subject: "gavin newsom",
+                condition: "win 2028 democratic presidential nomination",
+                timeBoundary: "2028-11-08T04:59:00.000Z",
+                normalizedPropositionText: marketB.title
+            }
+        });
+
+        const edge = scorer.score({
+            canonicalEventId: marketA.canonicalEventId,
+            marketA,
+            marketB,
+            fingerprintA,
+            fingerprintB,
+            resolutionProfileA,
+            resolutionProfileB,
+            settlementProfileA,
+            settlementProfileB
+        });
+
+        expect(Number(edge.propositionSimilarityScore)).toBeGreaterThan(0.75);
+        expect(Number(edge.resolutionRiskScore)).toBeLessThan(0.8);
+    });
+
+    it("ignores display-time suffixes when broad proposition identity already matches", () => {
+        const resolutionNormalizer = new CanonicalResolutionProfileNormalizer();
+        const settlementNormalizer = new CanonicalSettlementProfileNormalizer();
+        const fingerprintBuilder = new PropositionFingerprintBuilder();
+        const scorer = new CompatibilityEdgeScorer();
+        const factory = new VenueMarketProfileFactory();
+
+        const marketA = factory.create({
+            canonicalEventId: "11111111-1111-4111-8111-111111111111",
+            venue: "POLYMARKET",
+            venueMarketId: "pm-btc-2026-03-21",
+            title: "Bitcoin Up or Down on March 21?",
+            marketClass: "BINARY",
+            outcomes: [{ id: "up", label: "Up" }, { id: "down", label: "Down" }],
+            outcomeSchema: { marketShape: "binary", outcomeLabels: ["Up", "Down"] },
+            category: "CRYPTO",
+            expiresAt: new Date("2026-03-21T16:00:00.000Z"),
+            sourceMetadataVersion: "test-v1"
+        });
+        const marketB = factory.create({
+            canonicalEventId: "11111111-1111-4111-8111-111111111111",
+            venue: "OPINION",
+            venueMarketId: "op-btc-2026-03-21",
+            title: "Bitcoin Up or Down on March 21?(12:00 ET)",
+            marketClass: "BINARY",
+            outcomes: [{ id: "up", label: "Up" }, { id: "down", label: "Down" }],
+            outcomeSchema: { marketShape: "binary", outcomeLabels: ["Up", "Down"] },
+            category: "CRYPTO",
+            expiresAt: new Date("2026-03-21T16:00:00.000Z"),
+            sourceMetadataVersion: "test-v1"
+        });
+
+        const ruleText = "This market resolves using Binance BTC/USDT 1 minute candles.";
+        const resolutionProfileA = resolutionNormalizer.normalize({
+            venueMarketProfileId: marketA.id,
+            resolutionAuthorityType: "CENTRAL",
+            resolutionTitle: marketA.title,
+            ruleText,
+            resolutionSource: "POLYMARKET"
+        });
+        const resolutionProfileB = resolutionNormalizer.normalize({
+            venueMarketProfileId: marketB.id,
+            resolutionAuthorityType: "CENTRAL",
+            resolutionTitle: marketB.title,
+            ruleText,
+            resolutionSource: "OPINION"
+        });
+        const settlementProfileA = settlementNormalizer.normalize({
+            venueMarketProfileId: marketA.id,
+            metadata: { venue: "POLYMARKET" }
+        });
+        const settlementProfileB = settlementNormalizer.normalize({
+            venueMarketProfileId: marketB.id,
+            settlementType: "onchain"
+        });
+        const fingerprintA = fingerprintBuilder.build({
+            market: marketA,
+            resolutionProfile: resolutionProfileA,
+            propositionHints: {
+                subject: "bitcoin up down march 21",
+                condition: "Bitcoin Up or Down on March 21? (12:00 ET)",
+                timeBoundary: "2026-03-21T16:00:00.000Z",
+                normalizedPropositionText: marketA.title
+            }
+        });
+        const fingerprintB = fingerprintBuilder.build({
+            market: marketB,
+            resolutionProfile: resolutionProfileB,
+            propositionHints: {
+                subject: "bitcoin up down march 21",
+                condition: "Bitcoin Up or Down on March 21? (12:00 ET)",
+                timeBoundary: "2026-03-21T16:00:00.000Z",
+                normalizedPropositionText: marketB.title
+            }
+        });
+
+        const edge = scorer.score({
+            canonicalEventId: marketA.canonicalEventId,
+            marketA,
+            marketB,
+            fingerprintA,
+            fingerprintB,
+            resolutionProfileA,
+            resolutionProfileB,
+            settlementProfileA,
+            settlementProfileB
+        });
+
+        expect(fingerprintA.broadFingerprintKey).toBe(fingerprintB.broadFingerprintKey);
+        expect(Number(edge.propositionSimilarityScore)).toBe(1);
+    });
 });

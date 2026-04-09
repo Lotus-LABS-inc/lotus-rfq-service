@@ -1,0 +1,17 @@
+{
+  "observedAt": "2026-04-08T21:00:23.023Z",
+  "totalAdmittedRows": 5,
+  "rowsRejectedByReason": {
+    "DEADLINE_ALREADY_PASSED": 2
+  },
+  "rowsAdmittedByTopicCandidate": {
+    "GEOPOLITICAL_EVENT_BY_DATE|USA_CHINA|TRUMP_VISIT_CHINA|2026-04-30": 3,
+    "GEOPOLITICAL_EVENT_BY_DATE|USA_CHINA|TRUMP_VISIT_CHINA|2026-05-31": 1,
+    "GEOPOLITICAL_EVENT_BY_DATE|USA_CHINA|TRUMP_VISIT_CHINA|2026-06-30": 1
+  },
+  "venueBreakdown": {
+    "OPINION": 3,
+    "POLYMARKET": 1,
+    "PREDICT": 1
+  }
+}

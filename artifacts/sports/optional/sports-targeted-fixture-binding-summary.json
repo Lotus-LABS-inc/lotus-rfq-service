@@ -1,0 +1,25 @@
+{
+  "observedAt": "2026-04-03T00:13:37.828Z",
+  "pockets": {
+    "SPORTS|MATCHUP_WINNER|EPL": {
+      "targetFixtureCount": 0,
+      "boundFixtures": [],
+      "admittedUnboundCount": 0
+    },
+    "SPORTS|MATCHUP_WINNER|LA_LIGA": {
+      "targetFixtureCount": 0,
+      "boundFixtures": [],
+      "admittedUnboundCount": 0
+    },
+    "ESPORTS|MATCHUP_WINNER|VALORANT": {
+      "targetFixtureCount": 0,
+      "boundFixtures": [],
+      "admittedUnboundCount": 0
+    },
+    "ESPORTS|MATCHUP_WINNER|LEAGUE_OF_LEGENDS": {
+      "targetFixtureCount": 0,
+      "boundFixtures": [],
+      "admittedUnboundCount": 0
+    }
+  }
+}

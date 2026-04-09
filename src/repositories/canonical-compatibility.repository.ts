@@ -47,8 +47,8 @@ interface CompatibilityDecisionRow {
 export class CanonicalCompatibilityRepository {
     public constructor(private readonly pool: Pool) {}
 
-    public async upsertInterpretedContract(contract: InterpretedContract): Promise<void> {
-        await this.pool.query(
+    public async upsertInterpretedContract(contract: InterpretedContract): Promise<string> {
+        const result = await this.pool.query<{ id: string }>(
             `INSERT INTO interpreted_contracts (
                 id,
                 venue_market_profile_id,
@@ -71,7 +71,7 @@ export class CanonicalCompatibilityRepository {
                 $1, $2, $3, $4, $5::uuid, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb,
                 $11::jsonb, $12::numeric, $13, $14::jsonb, $15, $16, $17
             )
-            ON CONFLICT (id) DO UPDATE SET
+            ON CONFLICT (venue_market_profile_id) DO UPDATE SET
                 proposition_semantics = EXCLUDED.proposition_semantics,
                 outcome_semantics = EXCLUDED.outcome_semantics,
                 timing_semantics = EXCLUDED.timing_semantics,
@@ -79,9 +79,11 @@ export class CanonicalCompatibilityRepository {
                 settlement_semantics = EXCLUDED.settlement_semantics,
                 ambiguity_flags = EXCLUDED.ambiguity_flags,
                 interpretation_confidence = EXCLUDED.interpretation_confidence,
+                source_metadata_version = EXCLUDED.source_metadata_version,
                 raw_lineage_references = EXCLUDED.raw_lineage_references,
                 is_poolable = EXCLUDED.is_poolable,
-                updated_at = EXCLUDED.updated_at`,
+                updated_at = EXCLUDED.updated_at
+            RETURNING id`,
             [
                 contract.id,
                 contract.venueMarketProfileId,
@@ -102,6 +104,7 @@ export class CanonicalCompatibilityRepository {
                 contract.updatedAt
             ]
         );
+        return result.rows[0]?.id ?? contract.id;
     }
 
     public async upsertCompatibilityDecision(decision: CompatibilityDecision): Promise<void> {

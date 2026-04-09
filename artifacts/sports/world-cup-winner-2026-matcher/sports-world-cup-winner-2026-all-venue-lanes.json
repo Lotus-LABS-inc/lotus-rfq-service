@@ -1,0 +1,142 @@
+{
+  "observedAt": "2026-04-09T10:35:50.891Z",
+  "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+  "canonicalVenueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+  "matcherLanes": [
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "club": "brazil",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "ALL_VENUE_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg survives the strict 4-venue intersection, but wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this strict-all lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:brazil",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-fifa-world-cup-winner:brazil",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:brazil",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1522",
+          "rawTeamLabel": "Will Brazil win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "club": "england",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "ALL_VENUE_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg survives the strict 4-venue intersection, but wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this strict-all lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:england",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-fifa-world-cup-winner:england",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:england",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1519",
+          "rawTeamLabel": "Will England win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "club": "france",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "ALL_VENUE_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg survives the strict 4-venue intersection, but wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this strict-all lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:france",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-fifa-world-cup-winner:france",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:france",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1520",
+          "rawTeamLabel": "Will France win the 2026 FIFA World Cup?"
+        }
+      ]
+    },
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "club": "spain",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "routeabilityDecision": "ALL_VENUE_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Team leg survives the strict 4-venue intersection, but wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this strict-all lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "2026-fifa-world-cup-winner-1765296582257:spain",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "2026-fifa-world-cup-winner:spain",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-fifa-world-cup-winner:spain",
+          "rawTeamLabel": "2026 FIFA World Cup Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1518",
+          "rawTeamLabel": "Will Spain win the 2026 FIFA World Cup?"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Strict all-venue lane survived the LIMITLESS|OPINION|POLYMARKET|PREDICT intersection on a 4-team core."
+  ]
+}

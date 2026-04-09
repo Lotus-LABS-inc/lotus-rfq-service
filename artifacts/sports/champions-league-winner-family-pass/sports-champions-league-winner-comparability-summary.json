@@ -1,0 +1,38 @@
+[
+  {
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026",
+    "venuesPresent": [
+      "LIMITLESS",
+      "OPINION",
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "pairSharedNamedOutcomesCount": 12,
+    "triSharedNamedOutcomesCount": 10,
+    "quadSharedNamedOutcomesCount": 4,
+    "excludedOutcomesCount": 0,
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_CORE_EXISTS",
+    "matcherCandidate": true,
+    "sharedNamedOutcomes": [
+      "Arsenal",
+      "Atletico Madrid",
+      "Barcelona",
+      "Bayern Munich",
+      "Borussia Dortmund",
+      "Chelsea",
+      "Inter Milan",
+      "Juventus",
+      "Liverpool",
+      "Manchester City",
+      "Paris Saint-Germain",
+      "Real Madrid"
+    ],
+    "excludedOutcomes": [],
+    "notes": [
+      "target_venues=LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "quad_shared_core=Arsenal|Bayern Munich|Paris Saint-Germain|Real Madrid",
+      "grouped_sibling_binary_market_reconstruction"
+    ]
+  }
+]

@@ -10,6 +10,11 @@ import { ResolutionRiskGroupingError } from "../../core/rfq-engine/resolution-ri
 import { RiskRejectedError } from "../../core/risk-engine.js";
 import { InsufficientLiquidityError } from "../../core/sor/splitter.js";
 import { MissingReservationTokenError } from "../../core/sor/order-router.js";
+import {
+  ExecutionScopeAuthorityError,
+  ExecutionScopeTokenError,
+  executionScopeKinds
+} from "../../execution-control/execution-scope-token.js";
 
 const createRFQRequestSchema = z.object({
   canonicalMarketId: z.string().min(1),
@@ -23,10 +28,34 @@ const createRFQRequestSchema = z.object({
 type CreateRFQRequest = z.infer<typeof createRFQRequestSchema>;
 
 const acceptRFQRequestSchema = z.object({
-  quoteId: z.string().min(1)
+  quoteId: z.string().min(1),
+  executionScopeToken: z.string().min(1).optional()
 });
 
 type AcceptRFQRequest = z.infer<typeof acceptRFQRequestSchema>;
+
+const createExecutionScopeTokenRequestSchema = z.object({
+  quoteId: z.string().min(1),
+  scopeKind: z.enum(executionScopeKinds),
+  scopeId: z.string().min(1),
+  ttlSeconds: z.number().int().min(1).max(300).optional()
+});
+
+type CreateExecutionScopeTokenRequest = z.infer<typeof createExecutionScopeTokenRequestSchema>;
+
+interface CreateExecutionScopeTokenResponse {
+  token: string;
+  expiresAt: string;
+  singleUse: true;
+  scope: {
+    scopeKind: string;
+    scopeId: string;
+    topicKey: string;
+    laneType: string;
+    venueSet: readonly string[];
+    candidateSet: readonly string[];
+  };
+}
 
 interface AcceptRFQResponse {
   status: "PLAN_ACCEPTED";
@@ -38,6 +67,10 @@ interface AcceptRFQResponse {
 
 export interface RFQRouteHandlers {
   createRFQ(request: CreateRFQRequest): Promise<CreateRFQResult>;
+  createExecutionScopeToken(
+    sessionId: string,
+    request: CreateExecutionScopeTokenRequest
+  ): Promise<CreateExecutionScopeTokenResponse>;
   acceptRFQ(sessionId: string, request: AcceptRFQRequest): Promise<AcceptRFQResponse>;
 }
 
@@ -96,6 +129,32 @@ export const registerRFQRoute = async (
     }
   });
 
+  app.post("/rfq/:id/execution-scope-token", { preHandler: authMiddleware }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = createExecutionScopeTokenRequestSchema.safeParse(request.body);
+
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "Execution scope token request validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+
+    try {
+      const result = await handlers.createExecutionScopeToken(id, parsed.data);
+      return reply.status(201).send(result);
+    } catch (error) {
+      if (error instanceof ExecutionScopeTokenError || error instanceof ExecutionScopeAuthorityError) {
+        return reply.status(409).send({
+          code: "EXECUTION_SCOPE_NOT_AVAILABLE",
+          message: error.message
+        });
+      }
+      throw error;
+    }
+  });
+
   app.post("/rfq/:id/accept", { preHandler: authMiddleware }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const parsed = acceptRFQRequestSchema.safeParse(request.body);
@@ -136,6 +195,13 @@ export const registerRFQRoute = async (
         return reply.status(409).send({
           code: "PLAN_REJECTED",
           reason: "risk_rejected",
+          message: error.message
+        });
+      }
+      if (error instanceof ExecutionScopeTokenError || error instanceof ExecutionScopeAuthorityError) {
+        return reply.status(409).send({
+          code: "PLAN_REJECTED",
+          reason: "execution_scope_invalid",
           message: error.message
         });
       }

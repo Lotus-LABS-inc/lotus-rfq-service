@@ -1,0 +1,109 @@
+{
+  "observedAt": "2026-04-09T09:53:13.026Z",
+  "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+  "canonicalVenueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+  "matcherLanes": [
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "club": "arsenal",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "ALL_VENUE_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg survives the strict 4-venue intersection, but wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this all-venue lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "english-premier-league-winner-1765295467473:arsenal",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "english-premier-league-winner-2026:arsenal",
+          "rawClubLabel": "English Premier League Winner 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "english-premier-league-winner:arsenal",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1562",
+          "rawClubLabel": "Will Arsenal win the 2025–26 English Premier League?"
+        }
+      ]
+    },
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "club": "liverpool",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "ALL_VENUE_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg survives the strict 4-venue intersection, but wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this all-venue lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "english-premier-league-winner-1765295467473:liverpool",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "english-premier-league-winner-2026:liverpool",
+          "rawClubLabel": "English Premier League Winner 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "english-premier-league-winner:liverpool",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1564",
+          "rawClubLabel": "Will Liverpool win the 2025–26 English Premier League?"
+        }
+      ]
+    },
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "club": "manchester_city",
+      "canonicalTopic": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+      "routeabilityDecision": "ALL_VENUE_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Club leg survives the strict 4-venue intersection, but wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this all-venue lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "english-premier-league-winner-1765295467473:man-city",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "english-premier-league-winner-2026:man-city",
+          "rawClubLabel": "English Premier League Winner 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "english-premier-league-winner:manchester-city",
+          "rawClubLabel": "English Premier League Winner"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "1560",
+          "rawClubLabel": "Will Manchester City win the 2025–26 English Premier League?"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Strict all-venue lane survived the LIMITLESS|OPINION|POLYMARKET|PREDICT intersection on a 3-club core."
+  ]
+}

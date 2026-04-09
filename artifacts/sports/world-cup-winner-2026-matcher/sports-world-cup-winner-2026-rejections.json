@@ -1,0 +1,86 @@
+{
+  "observedAt": "2026-04-09T10:35:50.891Z",
+  "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+  "rejections": [
+    {
+      "scope": "team",
+      "teamIdentityKey": "ARGENTINA",
+      "normalizedTeamName": "argentina",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg argentina is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "PORTUGAL",
+      "normalizedTeamName": "portugal",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg portugal is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "GERMANY",
+      "normalizedTeamName": "germany",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg germany is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "NETHERLANDS",
+      "normalizedTeamName": "netherlands",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg netherlands is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "BELGIUM",
+      "normalizedTeamName": "belgium",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg belgium is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "UNITED_STATES",
+      "normalizedTeamName": "united_states",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg united_states is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "URUGUAY",
+      "normalizedTeamName": "uruguay",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg uruguay is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "MEXICO",
+      "normalizedTeamName": "mexico",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg mexico is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "CROATIA",
+      "normalizedTeamName": "croatia",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg croatia is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "ITALY",
+      "normalizedTeamName": "italy",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg italy is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    }
+  ]
+}

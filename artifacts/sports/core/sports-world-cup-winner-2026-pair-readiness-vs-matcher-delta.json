@@ -1,0 +1,44 @@
+{
+  "observedAt": "2026-04-09T10:43:43.740Z",
+  "laneId": "SPORTS_WORLD_CUP_WINNER_2026_PAIR_LIMITLESS_POLYMARKET",
+  "matcherTruthConsumed": {
+    "topicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+    "bestPair": "LIMITLESS|POLYMARKET",
+    "exactSafePairTeams": [
+      "argentina",
+      "belgium",
+      "brazil",
+      "croatia",
+      "england",
+      "france",
+      "germany",
+      "italy",
+      "mexico",
+      "netherlands",
+      "portugal",
+      "spain",
+      "united_states",
+      "uruguay"
+    ],
+    "overallDecision": "SPORTS_WORLD_CUP_WINNER_2026_ALL_VENUE_REVIEW_REQUIRED_PAIR_FIRST",
+    "pairMatcherReady": true,
+    "operatorCredible": true,
+    "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING"
+  },
+  "readinessConclusionsDerived": {
+    "finalReadinessLabel": "SPORTS_WORLD_CUP_WINNER_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+    "readinessReviewJustified": true,
+    "operatorRuleReviewRequired": true,
+    "rolloutRecommended": false,
+    "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+    "exactLaneScopeLocked": true
+  },
+  "intentionallyUnchanged": [
+    "No widening beyond LIMITLESS|POLYMARKET",
+    "No venue-only tails admitted into pair lane",
+    "No automatic promotion implied"
+  ],
+  "stillBlocked": [
+    "Operator rule review still required before production promotion."
+  ]
+}

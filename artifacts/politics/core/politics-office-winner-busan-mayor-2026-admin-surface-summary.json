@@ -1,0 +1,37 @@
+{
+  "observedAt": "2026-04-08T14:58:18.383Z",
+  "laneId": "POLITICS_OFFICE_WINNER_BUSAN_MAYOR_2026_PAIR_LIMITLESS_POLYMARKET",
+  "topicKey": "OFFICE_WINNER|BUSAN|MAYOR|2026",
+  "venuePair": "LIMITLESS|POLYMARKET",
+  "candidateScopeHash": "5aebe74deda9add2",
+  "exactSafeCandidates": [
+    "cho_kuk",
+    "cho_kyoung_tae",
+    "choi_in_ho",
+    "chun_jae_soo",
+    "hong_soon_heon",
+    "kim_do_eup",
+    "kim_young_choon",
+    "lee_jae_sung",
+    "park_heong_joon",
+    "park_jae_ho",
+    "park_seong_hoon",
+    "suh_byung_soo"
+  ],
+  "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+  "supportedActions": [
+    "inspect",
+    "hold",
+    "promote",
+    "rollback"
+  ],
+  "userConsentCanWidenScope": false,
+  "narrowestEnforceableUnit": "LANE_SCOPE_LOCK",
+  "sourceArtifactRefs": [
+    "artifacts/politics/office-winner-busan-mayor-2026-matcher/politics-office-winner-busan-mayor-2026-matcher-input-summary.json",
+    "artifacts/politics/office-winner-busan-mayor-2026-matcher/politics-office-winner-busan-mayor-2026-matcher-lanes.json",
+    "artifacts/politics/office-winner-busan-mayor-2026-matcher/politics-office-winner-busan-mayor-2026-matcher-rejections.json",
+    "artifacts/politics/office-winner-busan-mayor-2026-matcher/politics-office-winner-busan-mayor-2026-matcher-final-decision.json",
+    "artifacts/politics/office-winner-busan-mayor-2026-matcher/politics-office-winner-busan-mayor-2026-operator-summary.md"
+  ]
+}

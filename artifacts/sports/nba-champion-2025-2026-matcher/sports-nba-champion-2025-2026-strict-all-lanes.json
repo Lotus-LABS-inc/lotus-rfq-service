@@ -1,0 +1,15 @@
+{
+  "observedAt": "2026-04-09T11:09:27.392Z",
+  "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+  "matcherLanes": [
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "clubs": [
+        "boston_celtics",
+        "detroit_pistons",
+        "oklahoma_city_thunder",
+        "san_antonio_spurs"
+      ]
+    }
+  ]
+}

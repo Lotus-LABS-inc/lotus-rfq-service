@@ -1,0 +1,43 @@
+{
+  "observedAt": "2026-04-09T10:32:37.501Z",
+  "topics": [
+    {
+      "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026",
+      "venuesPresent": [
+        "LIMITLESS",
+        "OPINION",
+        "POLYMARKET",
+        "PREDICT"
+      ],
+      "pairSharedNamedOutcomesCount": 14,
+      "triSharedNamedOutcomesCount": 14,
+      "quadSharedNamedOutcomesCount": 4,
+      "excludedOutcomesCount": 0,
+      "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "fragmentationLabel": "FAMILY_REFRESHED_SHARED_CORE_EXISTS",
+      "matcherCandidate": true,
+      "sharedNamedOutcomes": [
+        "Argentina",
+        "Belgium",
+        "Brazil",
+        "Croatia",
+        "England",
+        "France",
+        "Germany",
+        "Italy",
+        "Mexico",
+        "Netherlands",
+        "Portugal",
+        "Spain",
+        "United States",
+        "Uruguay"
+      ],
+      "excludedOutcomes": [],
+      "notes": [
+        "admitted_rows=46",
+        "venues_present=LIMITLESS|OPINION|POLYMARKET|PREDICT",
+        "quad_shared_named_outcomes=4"
+      ]
+    }
+  ]
+}

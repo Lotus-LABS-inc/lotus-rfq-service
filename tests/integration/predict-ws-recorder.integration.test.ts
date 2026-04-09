@@ -38,6 +38,7 @@ describe("Predict websocket recorder integration", () => {
     const recordSnapshot = vi.fn(async () => undefined);
     const recorder = new PredictOrderbookRecorder({
       wsClient,
+      environment: "testnet",
       normalizeSnapshot: (envelope) => ({
         venue: "PREDICT",
         environment: "testnet",
@@ -56,8 +57,9 @@ describe("Predict websocket recorder integration", () => {
     });
     recorder.recordSnapshot = recordSnapshot;
 
-    recorder.start(["market:m-1:orderbook"]);
+    const startPromise = recorder.start(["market:m-1:orderbook"]);
     socket.emit("open");
+    await startPromise;
     socket.emit("message", JSON.stringify({ marketId: "m-1", bids: [], asks: [] }));
 
     await vi.waitFor(() => {

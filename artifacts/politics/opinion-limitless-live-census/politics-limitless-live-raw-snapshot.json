@@ -1,0 +1,5670 @@
+[
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x17f45f2840df707f8cc3a0eacca8743ab62d86819f24418579ab0cfe748cf498",
+    "slug": "platinum-xpt-above-dollar203464-on-apr-8-0200-utc-1775610005960",
+    "title": "Platinum (XPT) above $2034.64 on Apr 8, 02:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute XPT (https://tradingview.com/chart/?symbol=PYTH:XPTUSD) candle on Apr 8, 2026, at 02:00 UTC is above $2034.64. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "base_app_challenge",
+      "challenge_crypto_commodities",
+      "challenge_team_commodities",
+      "Commodities",
+      "CRYPTO",
+      "Hourly",
+      "Lumy",
+      "Recurring"
+    ],
+    "tags": [
+      "Lumy",
+      "Recurring",
+      "Hourly",
+      "challenge_crypto_commodities",
+      "challenge_team_commodities",
+      "base_app_challenge"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-08T01:00:05.960Z",
+    "expiresAt": "2026-04-08T02:00:00.000Z",
+    "resolvesAt": "2026-04-08T02:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/platinum-xpt-above-dollar203464-on-apr-8-0200-utc-1775610005960",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "address",
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "liquidity",
+      "liquidityFormatted",
+      "logo",
+      "marketType",
+      "metadata",
+      "ogImageURI",
+      "openInterest",
+      "openInterestFormatted",
+      "positionIds",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 86050,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0xf868209926c017c4f8e3eec03f0f06dac7cf74133e90e1c1e3466a1d4d8c6286",
+    "slug": "silver-xag-above-dollar76688-on-apr-8-0200-utc-1775610003975",
+    "title": "Silver (XAG) above $76.688 on Apr 8, 02:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute XAG (https://tradingview.com/chart/?symbol=PYTH:XAGUSD) candle on Apr 8, 2026, at 02:00 UTC is above $76.688. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "base_app_challenge",
+      "challenge_crypto_commodities",
+      "challenge_team_commodities",
+      "Commodities",
+      "CRYPTO",
+      "Hourly",
+      "Lumy",
+      "Recurring"
+    ],
+    "tags": [
+      "Lumy",
+      "Recurring",
+      "Hourly",
+      "challenge_crypto_commodities",
+      "challenge_team_commodities",
+      "base_app_challenge"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-08T01:00:03.976Z",
+    "expiresAt": "2026-04-08T02:00:00.000Z",
+    "resolvesAt": "2026-04-08T02:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/silver-xag-above-dollar76688-on-apr-8-0200-utc-1775610003975",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "address",
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "liquidity",
+      "liquidityFormatted",
+      "logo",
+      "marketType",
+      "metadata",
+      "ogImageURI",
+      "openInterest",
+      "openInterestFormatted",
+      "positionIds",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 86048,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x947b0360ce8cbd517a9b5bac21e14864637dc9ab40cff67f1e22a386f9e8fd7d",
+    "slug": "oil-ukoilspot-above-dollar92410-on-apr-8-0200-utc-1775610003975",
+    "title": "Oil (UKOILSPOT) above $92.410 on Apr 8, 02:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute UKOILSPOT (https://tradingview.com/chart/?symbol=PYTH:UKOILSPOT) candle on Apr 8, 2026, at 02:00 UTC is above $92.410. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "base_app_challenge",
+      "challenge_crypto_commodities",
+      "challenge_team_commodities",
+      "Commodities",
+      "CRYPTO",
+      "Hourly",
+      "Lumy",
+      "Oil & Gas",
+      "Recurring"
+    ],
+    "tags": [
+      "Lumy",
+      "Recurring",
+      "Hourly",
+      "challenge_crypto_commodities",
+      "challenge_team_commodities",
+      "base_app_challenge"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-08T01:00:03.976Z",
+    "expiresAt": "2026-04-08T02:00:00.000Z",
+    "resolvesAt": "2026-04-08T02:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/oil-ukoilspot-above-dollar92410-on-apr-8-0200-utc-1775610003975",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "address",
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "liquidity",
+      "liquidityFormatted",
+      "logo",
+      "marketType",
+      "metadata",
+      "ogImageURI",
+      "openInterest",
+      "openInterestFormatted",
+      "positionIds",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 86049,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x45949a98da94fb64c0772926bebc25b761c0042d7f7e5d8e30e863e9d632e697",
+    "slug": "gold-paxg-above-dollar479507-on-apr-8-0200-utc-1775610003858",
+    "title": "Gold (PAXG) above $4795.07 on Apr 8, 02:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute PAXG (https://tradingview.com/chart/?symbol=PYTH:PAXGUSD) candle on Apr 8, 2026, at 02:00 UTC is above $4795.07. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "base_app_challenge",
+      "challenge_crypto_commodities",
+      "challenge_team_commodities",
+      "Commodities",
+      "CRYPTO",
+      "Hourly",
+      "Lumy",
+      "Recurring"
+    ],
+    "tags": [
+      "Lumy",
+      "Recurring",
+      "Hourly",
+      "challenge_crypto_commodities",
+      "challenge_team_commodities",
+      "base_app_challenge"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-08T01:00:03.860Z",
+    "expiresAt": "2026-04-08T02:00:00.000Z",
+    "resolvesAt": "2026-04-08T02:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/gold-paxg-above-dollar479507-on-apr-8-0200-utc-1775610003858",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "address",
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "liquidity",
+      "liquidityFormatted",
+      "logo",
+      "marketType",
+      "metadata",
+      "ogImageURI",
+      "openInterest",
+      "openInterestFormatted",
+      "positionIds",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 86047,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x608cc2f315d2f2a5a0161e0c89e5fc628a19f6c4fbd1f9e0488d461eaeb414d6",
+    "slug": "hype-above-dollar38428-on-apr-9-0100-utc-1775610002411",
+    "title": "HYPE above $38.428 on Apr 9, 01:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute HYPE (https://tradingview.com/chart/?symbol=PYTH:HYPEUSD) candle on Apr 9, 2026, at 01:00 UTC is above $38.428. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "CRYPTO",
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "tags": [
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-08T01:00:02.411Z",
+    "expiresAt": "2026-04-09T01:00:00.000Z",
+    "resolvesAt": "2026-04-09T01:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/hype-above-dollar38428-on-apr-9-0100-utc-1775610002411",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 86045,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x333f2ca6c45c57efec1ffee3fcf82a07bc7c20e5323faa7ba090efc42c80f532",
+    "slug": "xrp-above-dollar13664-on-apr-8-0200-utc-1775610002412",
+    "title": "XRP above $1.3664 on Apr 8, 02:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute XRP (https://tradingview.com/chart/?symbol=PYTH:XRPUSD) candle on Apr 8, 2026, at 02:00 UTC is above $1.3664. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "CRYPTO",
+      "Hourly",
+      "Lumy",
+      "mmbot",
+      "nav:domain:crypto",
+      "Prophet",
+      "Recurring",
+      "XRP"
+    ],
+    "tags": [
+      "Lumy",
+      "Recurring",
+      "Hourly",
+      "mmbot",
+      "Prophet",
+      "nav:domain:crypto"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-08T01:00:02.411Z",
+    "expiresAt": "2026-04-08T02:00:00.000Z",
+    "resolvesAt": "2026-04-08T02:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/xrp-above-dollar13664-on-apr-8-0200-utc-1775610002412",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 86046,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0xc99657e47d212df7a85432d790a4144e2125601b98f28465f29ec05ecced821f",
+    "slug": "btc-above-dollar7169786-on-apr-8-0200-utc-1775610002409",
+    "title": "BTC above $71697.86 on Apr 8, 02:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute BTC (https://tradingview.com/chart/?symbol=PYTH:BTCUSD) candle on Apr 8, 2026, at 02:00 UTC is above $71697.86. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "base_app_challenge",
+      "challenge_crypto_commodities",
+      "challenge_team_crypto",
+      "CRYPTO",
+      "Hourly",
+      "Lumy",
+      "mmbot",
+      "nav:domain:crypto",
+      "Prophet",
+      "Recurring",
+      "Simple Mode"
+    ],
+    "tags": [
+      "Lumy",
+      "Recurring",
+      "Hourly",
+      "Simple Mode",
+      "mmbot",
+      "Prophet",
+      "nav:domain:crypto",
+      "challenge_crypto_commodities",
+      "challenge_team_crypto",
+      "base_app_challenge"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-08T01:00:02.408Z",
+    "expiresAt": "2026-04-08T02:00:00.000Z",
+    "resolvesAt": "2026-04-08T02:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/btc-above-dollar7169786-on-apr-8-0200-utc-1775610002409",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 86044,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x8c9c33a18cd6d82766a2f0ccc7315d94e6ef7554d00950081992a510351a38a9",
+    "slug": "sol-above-dollar8475-on-apr-8-0200-utc-1775610002291",
+    "title": "SOL above $84.75 on Apr 8, 02:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute SOL (https://tradingview.com/chart/?symbol=PYTH:SOLUSD) candle on Apr 8, 2026, at 02:00 UTC is above $84.75. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "base_app_challenge",
+      "challenge_crypto_commodities",
+      "challenge_team_crypto",
+      "CRYPTO",
+      "Hourly",
+      "Lumy",
+      "mmbot",
+      "nav:domain:crypto",
+      "Prophet",
+      "Recurring",
+      "Simple Mode"
+    ],
+    "tags": [
+      "Lumy",
+      "Recurring",
+      "Hourly",
+      "Simple Mode",
+      "mmbot",
+      "Prophet",
+      "nav:domain:crypto",
+      "challenge_crypto_commodities",
+      "challenge_team_crypto",
+      "base_app_challenge"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-08T01:00:02.290Z",
+    "expiresAt": "2026-04-08T02:00:00.000Z",
+    "resolvesAt": "2026-04-08T02:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/sol-above-dollar8475-on-apr-8-0200-utc-1775610002291",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 86042,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0xb1c964aa0179c547be24558a8d3cbc91d8b056a3a4542950f7d5bf72df4ad108",
+    "slug": "eth-above-dollar223575-on-apr-8-0200-utc-1775610002292",
+    "title": "ETH above $2235.75 on Apr 8, 02:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute ETH (https://tradingview.com/chart/?symbol=PYTH:ETHUSD) candle on Apr 8, 2026, at 02:00 UTC is above $2235.75. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "base_app_challenge",
+      "challenge_crypto_commodities",
+      "challenge_team_crypto",
+      "CRYPTO",
+      "donut_token_challenge",
+      "Hourly",
+      "Lumy",
+      "mmbot",
+      "nav:domain:crypto",
+      "Prophet",
+      "Recurring"
+    ],
+    "tags": [
+      "Lumy",
+      "Recurring",
+      "Hourly",
+      "mmbot",
+      "Prophet",
+      "nav:domain:crypto",
+      "challenge_crypto_commodities",
+      "challenge_team_crypto",
+      "base_app_challenge",
+      "donut_token_challenge"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-08T01:00:02.290Z",
+    "expiresAt": "2026-04-08T02:00:00.000Z",
+    "resolvesAt": "2026-04-08T02:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/eth-above-dollar223575-on-apr-8-0200-utc-1775610002292",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 86043,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x739be3b1897495605c2d17a50ffb28a5ed35f7d6369308f00e453e033d5ff232",
+    "slug": "doge-above-dollar009422-on-apr-8-0200-utc-1775610001951",
+    "title": "DOGE above $0.09422 on Apr 8, 02:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute DOGE (https://tradingview.com/chart/?symbol=PYTH:DOGEUSD) candle on Apr 8, 2026, at 02:00 UTC is above $0.09422. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "CRYPTO",
+      "Hourly",
+      "Lumy",
+      "mmbot",
+      "nav:domain:crypto",
+      "Prophet",
+      "Recurring",
+      "Simple Mode"
+    ],
+    "tags": [
+      "Lumy",
+      "Recurring",
+      "Hourly",
+      "Simple Mode",
+      "mmbot",
+      "Prophet",
+      "nav:domain:crypto"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-08T01:00:01.950Z",
+    "expiresAt": "2026-04-08T02:00:00.000Z",
+    "resolvesAt": "2026-04-08T02:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/doge-above-dollar009422-on-apr-8-0200-utc-1775610001951",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 86041,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "vct-g2-esports-vs-mibr-1775606406672",
+    "slug": "vct-g2-esports-vs-mibr-1775606406672",
+    "title": "VCT. G2 Esports vs MIBR",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-08T00:10:41.506Z",
+    "expiresAt": "2026-04-12T00:00:00.000Z",
+    "resolvesAt": "2026-04-12T00:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/vct-g2-esports-vs-mibr-1775606406672",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002597,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "premier-series-team-liquid-vs-l1ga-team-1775606406293",
+    "slug": "premier-series-team-liquid-vs-l1ga-team-1775606406293",
+    "title": "PREMIER SERIES. Team Liquid vs L1ga Team",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-08T00:10:31.475Z",
+    "expiresAt": "2026-04-09T14:00:00.000Z",
+    "resolvesAt": "2026-04-09T14:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/premier-series-team-liquid-vs-l1ga-team-1775606406293",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002596,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "north-american-challengers-league-maryville-university-vs-nrg-esports-1775520005183",
+    "slug": "north-american-challengers-league-maryville-university-vs-nrg-esports-1775520005183",
+    "title": "North American Challengers League. Maryville University vs NRG Esports",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-08T00:10:20.760Z",
+    "expiresAt": "2026-04-11T23:00:00.000Z",
+    "resolvesAt": "2026-04-11T23:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/north-american-challengers-league-maryville-university-vs-nrg-esports-1775520005183",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002520,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0xf3663d688172c3b049c241f8255707619d0f1060e096346d55802d754b8cf8ba",
+    "slug": "ltc-above-dollar55364-on-apr-9-0000-utc-1775606402005",
+    "title": "LTC above $55.364 on Apr 9, 00:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute LTC (https://tradingview.com/chart/?symbol=PYTH:LTCUSD) candle on Apr 9, 2026, at 00:00 UTC is above $55.364. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "CRYPTO",
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "tags": [
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-08T00:00:01.990Z",
+    "expiresAt": "2026-04-09T00:00:00.000Z",
+    "resolvesAt": "2026-04-09T00:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/ltc-above-dollar55364-on-apr-9-0000-utc-1775606402005",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85929,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x1287cf4c65ce0d8c643dcf7909b175ba020c0e13a517636c2a31a3b224728c4f",
+    "slug": "xrp-above-dollar13732-on-apr-8-2300-utc-1775602802774",
+    "title": "XRP above $1.3732 on Apr 8, 23:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute XRP (https://tradingview.com/chart/?symbol=PYTH:XRPUSD) candle on Apr 8, 2026, at 23:00 UTC is above $1.3732. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "CRYPTO",
+      "Daily",
+      "Lumy",
+      "Recurring",
+      "XRP"
+    ],
+    "tags": [
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T23:00:02.773Z",
+    "expiresAt": "2026-04-08T23:00:00.000Z",
+    "resolvesAt": "2026-04-08T23:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/xrp-above-dollar13732-on-apr-8-2300-utc-1775602802774",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "trends",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85907,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x08dd6b930974532e6d1c37fcf8c0bbed25070f0004014b10d65ae45078250c7b",
+    "slug": "xlm-above-dollar015840-on-apr-8-2200-utc-1775599202826",
+    "title": "XLM above $0.15840 on Apr 8, 22:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute XLM (https://tradingview.com/chart/?symbol=PYTH:XLMUSD) candle on Apr 8, 2026, at 22:00 UTC is above $0.15840. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "CRYPTO",
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "tags": [
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T22:00:02.826Z",
+    "expiresAt": "2026-04-08T22:00:00.000Z",
+    "resolvesAt": "2026-04-08T22:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/xlm-above-dollar015840-on-apr-8-2200-utc-1775599202826",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "trends",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85879,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "lfl-ici-japon-corp-esport-vs-galions-1775595602765",
+    "slug": "lfl-ici-japon-corp-esport-vs-galions-1775595602765",
+    "title": "LFL. Ici Japon Corp. Esport vs Galions",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:15:09.581Z",
+    "expiresAt": "2026-04-10T20:00:00.000Z",
+    "resolvesAt": "2026-04-10T20:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/lfl-ici-japon-corp-esport-vs-galions-1775595602765",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002568,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "lfl-joblife-vs-karmine-corp-blue-1775595602743",
+    "slug": "lfl-joblife-vs-karmine-corp-blue-1775595602743",
+    "title": "LFL. Joblife vs Karmine Corp Blue",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:14:59.521Z",
+    "expiresAt": "2026-04-10T19:00:00.000Z",
+    "resolvesAt": "2026-04-10T19:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/lfl-joblife-vs-karmine-corp-blue-1775595602743",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002567,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "lfl-tln-pirates-vs-solary-1775595602716",
+    "slug": "lfl-tln-pirates-vs-solary-1775595602716",
+    "title": "LFL. TLN Pirates vs Solary",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:14:49.516Z",
+    "expiresAt": "2026-04-10T18:00:00.000Z",
+    "resolvesAt": "2026-04-10T18:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/lfl-tln-pirates-vs-solary-1775595602716",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002566,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "lfl-vitalitybee-vs-zyb-esport-1775595602695",
+    "slug": "lfl-vitalitybee-vs-zyb-esport-1775595602695",
+    "title": "LFL. Vitality.Bee vs ZYB Esport",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:14:34.837Z",
+    "expiresAt": "2026-04-10T17:00:00.000Z",
+    "resolvesAt": "2026-04-10T17:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/lfl-vitalitybee-vs-zyb-esport-1775595602695",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002565,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "lfl-skillcamp-esport-vs-esprit-shonen-1775595602665",
+    "slug": "lfl-skillcamp-esport-vs-esprit-shonen-1775595602665",
+    "title": "LFL. Skillcamp Esport vs Esprit Shōnen",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:14:20.725Z",
+    "expiresAt": "2026-04-10T16:00:00.000Z",
+    "resolvesAt": "2026-04-10T16:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/lfl-skillcamp-esport-vs-esprit-shonen-1775595602665",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002564,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "lfl-solary-vs-galions-1775595602607",
+    "slug": "lfl-solary-vs-galions-1775595602607",
+    "title": "LFL. Solary vs Galions",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:14:10.712Z",
+    "expiresAt": "2026-04-09T19:00:00.000Z",
+    "resolvesAt": "2026-04-09T19:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/lfl-solary-vs-galions-1775595602607",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002562,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "lfl-tln-pirates-vs-karmine-corp-blue-1775595602637",
+    "slug": "lfl-tln-pirates-vs-karmine-corp-blue-1775595602637",
+    "title": "LFL. TLN Pirates vs Karmine Corp Blue",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:14:00.754Z",
+    "expiresAt": "2026-04-09T20:00:00.000Z",
+    "resolvesAt": "2026-04-09T20:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/lfl-tln-pirates-vs-karmine-corp-blue-1775595602637",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002563,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "lfl-ici-japon-corp-esport-vs-zyb-esport-1775595602580",
+    "slug": "lfl-ici-japon-corp-esport-vs-zyb-esport-1775595602580",
+    "title": "LFL. Ici Japon Corp. Esport vs ZYB Esport",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:13:50.874Z",
+    "expiresAt": "2026-04-09T18:00:00.000Z",
+    "resolvesAt": "2026-04-09T18:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/lfl-ici-japon-corp-esport-vs-zyb-esport-1775595602580",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002561,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "lfl-joblife-vs-esprit-shonen-1775595602554",
+    "slug": "lfl-joblife-vs-esprit-shonen-1775595602554",
+    "title": "LFL. Joblife vs Esprit Shōnen",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:13:35.692Z",
+    "expiresAt": "2026-04-09T17:00:00.000Z",
+    "resolvesAt": "2026-04-09T17:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/lfl-joblife-vs-esprit-shonen-1775595602554",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002560,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "lfl-skillcamp-esport-vs-vitalitybee-1775595602517",
+    "slug": "lfl-skillcamp-esport-vs-vitalitybee-1775595602517",
+    "title": "LFL. Skillcamp Esport vs Vitality.Bee",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:13:15.431Z",
+    "expiresAt": "2026-04-09T16:00:00.000Z",
+    "resolvesAt": "2026-04-09T16:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/lfl-skillcamp-esport-vs-vitalitybee-1775595602517",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002559,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "vcl-reject-vs-fennel-1775595601975",
+    "slug": "vcl-reject-vs-fennel-1775595601975",
+    "title": "VCL. REJECT vs Fennel",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:12:56.645Z",
+    "expiresAt": "2026-04-09T10:00:00.000Z",
+    "resolvesAt": "2026-04-09T10:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/vcl-reject-vs-fennel-1775595601975",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002558,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "vcl-agelite-vs-riddle-1775595601943",
+    "slug": "vcl-agelite-vs-riddle-1775595601943",
+    "title": "VCL. AGELITE vs Riddle",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:12:36.856Z",
+    "expiresAt": "2026-04-09T07:00:00.000Z",
+    "resolvesAt": "2026-04-09T07:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/vcl-agelite-vs-riddle-1775595601943",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002557,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "vcl-murash-vs-insomnia-1775595601887",
+    "slug": "vcl-murash-vs-insomnia-1775595601887",
+    "title": "VCL. Murash vs Insomnia",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:12:21.295Z",
+    "expiresAt": "2026-04-09T04:00:00.000Z",
+    "resolvesAt": "2026-04-09T04:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/vcl-murash-vs-insomnia-1775595601887",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002556,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "premier-series-team-spirit-vs-nigma-galaxy-1775595603962",
+    "slug": "premier-series-team-spirit-vs-nigma-galaxy-1775595603962",
+    "title": "PREMIER SERIES. Team Spirit vs Nigma Galaxy",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:12:06.878Z",
+    "expiresAt": "2026-04-09T11:00:00.000Z",
+    "resolvesAt": "2026-04-09T11:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/premier-series-team-spirit-vs-nigma-galaxy-1775595603962",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002574,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "lfl-vitalitybee-vs-galions-1775595602907",
+    "slug": "lfl-vitalitybee-vs-galions-1775595602907",
+    "title": "LFL. Vitality.Bee vs Galions",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:11:47.975Z",
+    "expiresAt": "2026-04-11T20:00:00.000Z",
+    "resolvesAt": "2026-04-11T20:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/lfl-vitalitybee-vs-galions-1775595602907",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002573,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "north-american-challengers-league-citadel-gaming-vs-blue-otter-1775520005144",
+    "slug": "north-american-challengers-league-citadel-gaming-vs-blue-otter-1775520005144",
+    "title": "North American Challengers League. Citadel Gaming vs Blue Otter",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:11:37.515Z",
+    "expiresAt": "2026-04-11T20:00:00.000Z",
+    "resolvesAt": "2026-04-11T20:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/north-american-challengers-league-citadel-gaming-vs-blue-otter-1775520005144",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002519,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "lfl-joblife-vs-solary-1775595602883",
+    "slug": "lfl-joblife-vs-solary-1775595602883",
+    "title": "LFL. Joblife vs Solary",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:11:22.756Z",
+    "expiresAt": "2026-04-11T19:00:00.000Z",
+    "resolvesAt": "2026-04-11T19:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/lfl-joblife-vs-solary-1775595602883",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002572,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "vct-sentinels-vs-kru-esports-1775520004339",
+    "slug": "vct-sentinels-vs-kru-esports-1775520004339",
+    "title": "VCT. Sentinels vs KRÜ Esports",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:11:08.881Z",
+    "expiresAt": "2026-04-11T21:00:00.000Z",
+    "resolvesAt": "2026-04-11T21:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/vct-sentinels-vs-kru-esports-1775520004339",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002511,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "lfl-esprit-shonen-vs-karmine-corp-blue-1775595602852",
+    "slug": "lfl-esprit-shonen-vs-karmine-corp-blue-1775595602852",
+    "title": "LFL. Esprit Shōnen vs Karmine Corp Blue",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:10:50.127Z",
+    "expiresAt": "2026-04-11T18:00:00.000Z",
+    "resolvesAt": "2026-04-11T18:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/lfl-esprit-shonen-vs-karmine-corp-blue-1775595602852",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002571,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "lfl-ici-japon-corp-esport-vs-tln-pirates-1775595602827",
+    "slug": "lfl-ici-japon-corp-esport-vs-tln-pirates-1775595602827",
+    "title": "LFL. Ici Japon Corp. Esport vs TLN Pirates",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:10:35.454Z",
+    "expiresAt": "2026-04-11T17:00:00.000Z",
+    "resolvesAt": "2026-04-11T17:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/lfl-ici-japon-corp-esport-vs-tln-pirates-1775595602827",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002570,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "lfl-skillcamp-esport-vs-zyb-esport-1775595602805",
+    "slug": "lfl-skillcamp-esport-vs-zyb-esport-1775595602805",
+    "title": "LFL. Skillcamp Esport vs ZYB Esport",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T21:10:21.499Z",
+    "expiresAt": "2026-04-11T16:00:00.000Z",
+    "resolvesAt": "2026-04-11T16:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/lfl-skillcamp-esport-vs-zyb-esport-1775595602805",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002569,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x1796f97d89bda8bce70c4257c99d4d8b2a1f610b0e617bfa040e894e5988b779",
+    "slug": "doge-above-dollar009227-on-apr-8-2000-utc-1775592002111",
+    "title": "DOGE above $0.09227 on Apr 8, 20:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute DOGE (https://tradingview.com/chart/?symbol=PYTH:DOGEUSD) candle on Apr 8, 2026, at 20:00 UTC is above $0.09227. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "CRYPTO",
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "tags": [
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T20:00:02.110Z",
+    "expiresAt": "2026-04-08T20:00:00.000Z",
+    "resolvesAt": "2026-04-08T20:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/doge-above-dollar009227-on-apr-8-2000-utc-1775592002111",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "trends",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85773,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0xe21f126d8847a077414bd824a5a0e254a866c3964c1a9e9e7f78a2dccc8d5fc7",
+    "slug": "mnt-above-dollar064168-on-apr-8-1900-utc-1775588402430",
+    "title": "MNT above $0.64168 on Apr 8, 19:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute MNT (https://tradingview.com/chart/?symbol=PYTH:MNTUSD) candle on Apr 8, 2026, at 19:00 UTC is above $0.64168. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "CRYPTO",
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "tags": [
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T19:00:02.429Z",
+    "expiresAt": "2026-04-08T19:00:00.000Z",
+    "resolvesAt": "2026-04-08T19:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/mnt-above-dollar064168-on-apr-8-1900-utc-1775588402430",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "trends",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85749,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "prime-league-1st-division-vfb-esports-vs-g2-nord-1775520005096",
+    "slug": "prime-league-1st-division-vfb-esports-vs-g2-nord-1775520005096",
+    "title": "Prime League 1st Division. VfB eSports vs G2 NORD",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T18:12:01.570Z",
+    "expiresAt": "2026-04-11T17:00:00.000Z",
+    "resolvesAt": "2026-04-11T17:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/prime-league-1st-division-vfb-esports-vs-g2-nord-1775520005096",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002518,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "prime-league-1st-division-eintracht-spandau-vs-teamorangegaming-1775520005054",
+    "slug": "prime-league-1st-division-eintracht-spandau-vs-teamorangegaming-1775520005054",
+    "title": "Prime League 1st Division. Eintracht Spandau vs TeamOrangeGaming",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T18:11:47.452Z",
+    "expiresAt": "2026-04-11T16:00:00.000Z",
+    "resolvesAt": "2026-04-11T16:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/prime-league-1st-division-eintracht-spandau-vs-teamorangegaming-1775520005054",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002517,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "vct-gentle-mates-vs-karmine-corp-1775520004302",
+    "slug": "vct-gentle-mates-vs-karmine-corp-1775520004302",
+    "title": "VCT. Gentle Mates vs Karmine Corp",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T18:11:32.741Z",
+    "expiresAt": "2026-04-11T18:00:00.000Z",
+    "resolvesAt": "2026-04-11T18:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/vct-gentle-mates-vs-karmine-corp-1775520004302",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002510,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "tcl-bushido-wildcats-vs-team-phoenix-1775584804368",
+    "slug": "tcl-bushido-wildcats-vs-team-phoenix-1775584804368",
+    "title": "TCL. Bushido Wildcats vs Team Phoenix",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T18:11:18.555Z",
+    "expiresAt": "2026-04-11T17:30:00.000Z",
+    "resolvesAt": "2026-04-11T17:30:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/tcl-bushido-wildcats-vs-team-phoenix-1775584804368",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002555,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "tcl-misa-esports-vs-ozarox-esports-1775584804298",
+    "slug": "tcl-misa-esports-vs-ozarox-esports-1775584804298",
+    "title": "TCL. Misa Esports vs Ozarox Esports",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T18:11:03.982Z",
+    "expiresAt": "2026-04-10T17:30:00.000Z",
+    "resolvesAt": "2026-04-10T17:30:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/tcl-misa-esports-vs-ozarox-esports-1775584804298",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002554,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "tcl-pcific-vs-boostgate-esports-1775584804241",
+    "slug": "tcl-pcific-vs-boostgate-esports-1775584804241",
+    "title": "TCL. PCIFIC  vs BoostGate Esports",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T18:10:53.416Z",
+    "expiresAt": "2026-04-10T14:30:00.000Z",
+    "resolvesAt": "2026-04-10T14:30:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/tcl-pcific-vs-boostgate-esports-1775584804241",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002553,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "vct-dragon-ranger-gaming-vs-wolves-esports-1775584803019",
+    "slug": "vct-dragon-ranger-gaming-vs-wolves-esports-1775584803019",
+    "title": "VCT. Dragon Ranger Gaming vs Wolves Esports",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T18:10:43.481Z",
+    "expiresAt": "2026-04-10T11:00:00.000Z",
+    "resolvesAt": "2026-04-10T11:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/vct-dragon-ranger-gaming-vs-wolves-esports-1775584803019",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002551,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "vct-jd-gaming-vs-all-gamers-1775584802945",
+    "slug": "vct-jd-gaming-vs-all-gamers-1775584802945",
+    "title": "VCT. JD Gaming vs All Gamers",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T18:10:24.382Z",
+    "expiresAt": "2026-04-10T09:00:00.000Z",
+    "resolvesAt": "2026-04-10T09:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/vct-jd-gaming-vs-all-gamers-1775584802945",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002550,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x867c1fc97f6684cdf93bf6aec2e1590c8b6e4b6a94e60f046e8974e003cdc749",
+    "slug": "avax-above-dollar86004-on-apr-8-1800-utc-1775584802769",
+    "title": "AVAX above $8.6004 on Apr 8, 18:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute AVAX (https://tradingview.com/chart/?symbol=PYTH:AVAXUSD) candle on Apr 8, 2026, at 18:00 UTC is above $8.6004. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "CRYPTO",
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "tags": [
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T18:00:02.769Z",
+    "expiresAt": "2026-04-08T18:00:00.000Z",
+    "resolvesAt": "2026-04-08T18:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/avax-above-dollar86004-on-apr-8-1800-utc-1775584802769",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "trends",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85705,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x102a619deb4a3044de7edf21bb8277393ea2be35dbcd5308f195b0d35d1f7ca1",
+    "slug": "alvaro-arbeloa-out-as-real-madrid-soach-by-may-31-2026-1775581741421",
+    "title": "Álvaro Arbeloa out as Real Madrid сoach by May 31, 2026?",
+    "rulesText": "<p>This market will resolve to \"YES\" if Álvaro Arbeloa permanently ceases to be the сoach of Real Madrid before May 31, 2026, 23:59 UTC. Otherwise, this market will resolve to \"NO\".</p><p>Temporary absences (including but not limited to medical leave, compassionate leave, suspension, or touchline bans) will not be considered.</p><p>An announcement of Álvaro Arbeloa’s resignation/firing before this market's end date will immediately resolve this market to \"YES\", regardless of when the announced resignation/firing goes into effect.</p><p>This market's primary resolution source will be official information from Real Madrid and/or Álvaro Arbeloa. However, a consensus of credible reporting will also be used.</p>",
+    "categoryHints": [
+      "control_game",
+      "Football",
+      "Off the Pitch",
+      "SPORTS"
+    ],
+    "tags": [
+      "Football",
+      "control_game"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T17:09:01.422Z",
+    "expiresAt": "2026-05-31T23:59:00.000Z",
+    "resolvesAt": "2026-05-31T23:59:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/alvaro-arbeloa-out-as-real-madrid-soach-by-may-31-2026-1775581741421",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85659,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x293e3e2e1f4852bae2561e6b74fe7009e428cea263c10e018373c593084b352e",
+    "slug": "bch-above-dollar43366-on-apr-8-1700-utc-1775581201982",
+    "title": "BCH above $433.66 on Apr 8, 17:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute BCH (https://tradingview.com/chart/?symbol=PYTH:BCHUSD) candle on Apr 8, 2026, at 17:00 UTC is above $433.66. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "CRYPTO",
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "tags": [
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T17:00:01.981Z",
+    "expiresAt": "2026-04-08T17:00:00.000Z",
+    "resolvesAt": "2026-04-08T17:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/bch-above-dollar43366-on-apr-8-1700-utc-1775581201982",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85676,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0xcd549047613faf3edce25d33966436196cfb217f079954500c94c935267ca294",
+    "slug": "will-brighton-have-6-shots-on-target-vs-burnley-on-april-11-1775580192355",
+    "title": "Will Brighton have 6+ shots on target vs Burnley on April 11? ",
+    "rulesText": "<p>This market will resolve to \"YES\" if Brighton records 6 or more shots on target in the Burnley vs Brighton Premier League match scheduled for April 11, 2026, 14:00 UTC, as reported in the <a href=\"http://fbref.com/\" rel=\"noopener noreferrer\" target=\"_blank\">FBRef.com</a> match report for this specific game. Otherwise, it will resolve to “NO.”</p><p>Shots on target (SoT) will be determined using the team total shown in the “SoT” column in the Brighton Player Stats section.</p><p>If the match is not played and completed with an official result by May 11, 2026, 12:00 UTC, the market will resolve to “NO.”</p><p>If the data on the website is unavailable for 72 hours after the match is completed, a consensus of credible reporting will be used.</p>",
+    "categoryHints": [
+      "control_game",
+      "Football",
+      "Off the Pitch",
+      "SPORTS"
+    ],
+    "tags": [
+      "Football",
+      "control_game"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T16:45:14.848Z",
+    "expiresAt": "2026-04-12T14:00:00.000Z",
+    "resolvesAt": "2026-04-12T14:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/will-brighton-have-6-shots-on-target-vs-burnley-on-april-11-1775580192355",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "address",
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "liquidity",
+      "liquidityFormatted",
+      "logo",
+      "marketType",
+      "metadata",
+      "ogImageURI",
+      "openInterest",
+      "openInterestFormatted",
+      "positionIds",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "trends",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85630,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x886d8c775ea3e36dd86e5f9a1ab8c9836c57fe438a7de55267d06416e34813f7",
+    "slug": "burnley-vs-brighton-will-a-substitute-score-a-goal-on-april-11-1775580195449",
+    "title": "Burnley vs Brighton: Will a substitute score a goal on April 11? ",
+    "rulesText": "<p>This market will resolve to \"YES\" if at least one player who was not in the starting XI for either Burnley or Brighton (i.e., did not start the match) scores a goal after entering as a substitute in the Burnley vs Brighton Premier League match scheduled for April 11, 2026, 14:00 UTC, as recorded in the official <a href=\"http://fbref.com/\" rel=\"noopener noreferrer\" target=\"_blank\">FBRef.com</a> match report for this specific game. Otherwise, this market will resolve to \"NO.\"</p><p>If the match is not played and completed with an official result by May 11, 2026, 12:00 UTC, the market will resolve to \"NO.\"</p><p>If the data on the website is unavailable for 72 hours after the match is completed, a consensus of credible reporting will be used.</p>",
+    "categoryHints": [
+      "control_game",
+      "Football",
+      "Off the Pitch",
+      "SPORTS"
+    ],
+    "tags": [
+      "Football",
+      "control_game"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T16:45:14.714Z",
+    "expiresAt": "2026-04-12T14:00:00.000Z",
+    "resolvesAt": "2026-04-12T14:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/burnley-vs-brighton-will-a-substitute-score-a-goal-on-april-11-1775580195449",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "address",
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "liquidity",
+      "liquidityFormatted",
+      "logo",
+      "marketType",
+      "metadata",
+      "ogImageURI",
+      "openInterest",
+      "openInterestFormatted",
+      "positionIds",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "trends",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85629,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0xdefd102e0dcc83a6f828535ea3116cc26a90d4013b92791be486874c18cf052d",
+    "slug": "will-mitoma-complete-2-successful-dribbles-vs-burnley-on-april-11-1775580184631",
+    "title": "Will Mitoma complete 2+ successful dribbles vs Burnley on April 11? ",
+    "rulesText": "<p>This market will resolve to \"YES\" if Kaoru Mitoma completes 2 or more successful dribbles in the Burnley vs Brighton Premier League match scheduled for April 11, 2026, 14:00 UTC, as shown on the <a href=\"https://www.fotmob.com/\" rel=\"noopener noreferrer\" target=\"_blank\">FotMob</a> match page for this specific game. Otherwise, this market will resolve to \"NO.\"</p><p>The successful dribbles count will be determined using the value shown on the FotMob match page under Stats → Player stats → Attack → Successful dribbles (e.g., “1/2 (50%)” = 1) for Kaoru Mitoma. This value will be taken from the match page once the match is completed.</p><p>If the match is not played and completed with an official result by May 11, 2026, 12:00 UTC, the market will resolve to “NO.”</p><p>If the data on the website is unavailable for 72 hours after the match is completed, a consensus of credible reporting will be used.</p>",
+    "categoryHints": [
+      "control_game",
+      "Football",
+      "Off the Pitch",
+      "SPORTS"
+    ],
+    "tags": [
+      "Football",
+      "control_game"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T16:45:02.584Z",
+    "expiresAt": "2026-04-12T14:00:00.000Z",
+    "resolvesAt": "2026-04-12T14:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/will-mitoma-complete-2-successful-dribbles-vs-burnley-on-april-11-1775580184631",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "address",
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "liquidity",
+      "liquidityFormatted",
+      "logo",
+      "marketType",
+      "metadata",
+      "ogImageURI",
+      "openInterest",
+      "openInterestFormatted",
+      "positionIds",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "trends",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85631,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x44403bb50f637dd5926582fa91f854f394c2221331e961669b3423a1a60132a6",
+    "slug": "bnb-above-dollar59843-on-apr-8-1600-utc-1775577603946",
+    "title": "BNB above $598.43 on Apr 8, 16:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute BNB (https://tradingview.com/chart/?symbol=PYTH:BNBUSD) candle on Apr 8, 2026, at 16:00 UTC is above $598.43. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "CRYPTO",
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "tags": [
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T16:00:03.944Z",
+    "expiresAt": "2026-04-08T16:00:00.000Z",
+    "resolvesAt": "2026-04-08T16:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/bnb-above-dollar59843-on-apr-8-1600-utc-1775577603946",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85651,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "road-of-legends-myth-esports-vs-senshi-esports-1775574004363",
+    "slug": "road-of-legends-myth-esports-vs-senshi-esports-1775574004363",
+    "title": "Road Of Legends. Myth Esports vs Senshi Esports",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T15:12:18.656Z",
+    "expiresAt": "2026-04-10T18:00:00.000Z",
+    "resolvesAt": "2026-04-10T18:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/road-of-legends-myth-esports-vs-senshi-esports-1775574004363",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002549,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "road-of-legends-mcon-esports-vs-dynasty-1775574004308",
+    "slug": "road-of-legends-mcon-esports-vs-dynasty-1775574004308",
+    "title": "Road Of Legends. mCon esports vs Dynasty",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T15:12:04.059Z",
+    "expiresAt": "2026-04-10T17:00:00.000Z",
+    "resolvesAt": "2026-04-10T17:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/road-of-legends-mcon-esports-vs-dynasty-1775574004308",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002548,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "pgl-parivision-vs-wildcard-1775574001668",
+    "slug": "pgl-parivision-vs-wildcard-1775574001668",
+    "title": "PGL. PARIVISION vs Wildcard",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T15:11:10.303Z",
+    "expiresAt": "2026-04-09T13:00:00.000Z",
+    "resolvesAt": "2026-04-09T13:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/pgl-parivision-vs-wildcard-1775574001668",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002544,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "pgl-b8-vs-legacy-1775574001598",
+    "slug": "pgl-b8-vs-legacy-1775574001598",
+    "title": "PGL. B8 vs Legacy",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T15:10:55.520Z",
+    "expiresAt": "2026-04-09T10:00:00.000Z",
+    "resolvesAt": "2026-04-09T10:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/pgl-b8-vs-legacy-1775574001598",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002543,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "pgl-fokus-vs-eyeballers-1775574001522",
+    "slug": "pgl-fokus-vs-eyeballers-1775574001522",
+    "title": "PGL. FOKUS vs EYEBALLERS",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T15:10:41.527Z",
+    "expiresAt": "2026-04-09T07:00:00.000Z",
+    "resolvesAt": "2026-04-09T07:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/pgl-fokus-vs-eyeballers-1775574001522",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002542,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "prime-league-1st-division-e-wie-einfach-e-sports-vs-big-1775520005015",
+    "slug": "prime-league-1st-division-e-wie-einfach-e-sports-vs-big-1775520005015",
+    "title": "Prime League 1st Division. E WIE EINFACH E-SPORTS vs BIG",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T15:10:31.489Z",
+    "expiresAt": "2026-04-11T15:00:00.000Z",
+    "resolvesAt": "2026-04-11T15:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/prime-league-1st-division-e-wie-einfach-e-sports-vs-big-1775520005015",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002516,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "vct-fut-esports-vs-natus-vincere-1775520004264",
+    "slug": "vct-fut-esports-vs-natus-vincere-1775520004264",
+    "title": "VCT. FUT Esports vs Natus Vincere",
+    "rulesText": null,
+    "categoryHints": [
+      "Esports",
+      "ESPORTS",
+      "Limitless",
+      "Lumy",
+      "Sports"
+    ],
+    "tags": [
+      "Limitless",
+      "Lumy"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T15:10:21.534Z",
+    "expiresAt": "2026-04-11T15:00:00.000Z",
+    "resolvesAt": "2026-04-11T15:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/vct-fut-esports-vs-natus-vincere-1775520004264",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002509,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x5fcf4fc969efc41320754f457492b521b857d936cd2e835c10c7ccd48a7a8bec",
+    "slug": "will-lionel-messi-play-in-the-2026-fifa-world-cup-1775574530652",
+    "title": "Will Lionel Messi play in the 2026 FIFA World Cup?",
+    "rulesText": "<p>The 2026 FIFA World Cup is a major soccer tournament held from June 11 to July 19, 2026, with games at multiple stadiums across North America.</p><p>This market will resolve to \"Yes\" if Lionel Messi takes the field as a player in at least one official match for Argentina during the 2026 FIFA World Cup at the group stage or later. Otherwise, this market will resolve to \"No\".</p><p>Any on-field appearance as a player will qualify, in regulation, stoppage time, extra time, for a shootout, etc.</p><p>The primary resolution source for this market will be information from FIFA (<a href=\"https://www.fifa.com/\" rel=\"noopener noreferrer\" target=\"_blank\">https://www.fifa.com/</a>), however a consensus of credible reporting will also be used.</p>",
+    "categoryHints": [
+      "control_game",
+      "Football",
+      "Off the Pitch",
+      "SPORTS"
+    ],
+    "tags": [
+      "Football",
+      "control_game"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T15:08:50.652Z",
+    "expiresAt": "2026-07-20T03:59:00.000Z",
+    "resolvesAt": "2026-07-20T03:59:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/will-lionel-messi-play-in-the-2026-fifa-world-cup-1775574530652",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85628,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x6612741c98efca122b8c90550381cc29969f1e0a0874493afd830a653c194d1a",
+    "slug": "will-neymar-play-in-the-2026-fifa-world-cup-1775574512271",
+    "title": "Will Neymar play in the 2026 FIFA World Cup?",
+    "rulesText": "<p>This market will resolve to \"Yes\" if Neymar da Silva Santos Júnior takes the field as a player in at least one official match for Brazil during the 2026 FIFA World Cup at the group stage or later. Otherwise, this market will resolve to \"No\". </p><p>Any on-field appearance as a player will qualify, in regulation, stoppage time, extra time, for a shootout, etc. </p><p>The primary resolution source for this market will be information from FIFA (<a href=\"https://www.fifa.com/\" rel=\"noopener noreferrer\" target=\"_blank\" style=\"color: inherit;\">https://www.fifa.com/</a>), however a consensus of credible reporting will also be used.</p>",
+    "categoryHints": [
+      "control_game",
+      "Football",
+      "Off the Pitch",
+      "SPORTS"
+    ],
+    "tags": [
+      "Football",
+      "control_game"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T15:08:32.271Z",
+    "expiresAt": "2026-07-20T03:59:00.000Z",
+    "resolvesAt": "2026-07-20T03:59:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/will-neymar-play-in-the-2026-fifa-world-cup-1775574512271",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85592,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "how-many-jobs-added-in-april-1775573095035",
+    "slug": "how-many-jobs-added-in-april-1775573095035",
+    "title": "How many jobs added in April?",
+    "rulesText": null,
+    "categoryHints": [
+      "Economy",
+      "Limitless",
+      "OTHER"
+    ],
+    "tags": [
+      "Limitless"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T15:07:40.715Z",
+    "expiresAt": "2026-05-08T15:00:00.000Z",
+    "resolvesAt": "2026-05-08T15:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/how-many-jobs-added-in-april-1775573095035",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002540,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "april-unemployment-rate-1775573390620",
+    "slug": "april-unemployment-rate-1775573390620",
+    "title": "April Unemployment Rate",
+    "rulesText": null,
+    "categoryHints": [
+      "Economy",
+      "Limitless",
+      "OTHER"
+    ],
+    "tags": [
+      "Limitless"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T15:06:31.626Z",
+    "expiresAt": "2026-05-08T15:00:00.000Z",
+    "resolvesAt": "2026-05-08T15:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/april-unemployment-rate-1775573390620",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "createdAt",
+      "creator",
+      "dailyReward",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "marketType",
+      "markets",
+      "metadata",
+      "negRiskMarketId",
+      "ogImageURI",
+      "outcomeTokens",
+      "priorityIndex",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted"
+    ],
+    "rawPayloadPreview": {
+      "id": 10002541,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x9538de2cadbcb75e673019aa6ea81dc25a114befaaf35bda9a435e98b565cbac",
+    "slug": "ondo-above-dollar025052-on-apr-8-1500-utc-1775574010311",
+    "title": "ONDO above $0.25052 on Apr 8, 15:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute ONDO (https://tradingview.com/chart/?symbol=PYTH:ONDOUSD) candle on Apr 8, 2026, at 15:00 UTC is above $0.25052. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "CRYPTO",
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "tags": [
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T15:00:10.307Z",
+    "expiresAt": "2026-04-08T15:00:00.000Z",
+    "resolvesAt": "2026-04-08T15:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/ondo-above-dollar025052-on-apr-8-1500-utc-1775574010311",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "trends",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85627,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x38f8bfc72613255494a346dbaefb7b9437f14c18aab4ef4546f6dbbbfc485a32",
+    "slug": "will-there-be-a-goal-from-a-corner-in-liverpool-vs-fulham-on-apr-11-1775571742735",
+    "title": "Will there be a goal from a corner in Liverpool vs Fulham on Apr 11?",
+    "rulesText": "<p>This market will resolve to \"YES\" if either team scores at least one goal officially designated as originating from a corner kick situation in the Liverpool vs Fulham Premier League match scheduled for April 11, 2026, 16:30 UTC, as shown on the <a href=\"https://www.fotmob.com/\" rel=\"noopener noreferrer\" target=\"_blank\">FotMob</a> match page for this specific game. Otherwise, this market will resolve to \"NO.\"</p><p>A goal from a corner will be determined using the <a href=\"https://www.fotmob.com/\" rel=\"noopener noreferrer\" target=\"_blank\">FotMob</a> shot map, where the situation is labeled as \"From corner\" and the result is \"Goal.\" This value will be taken from the match page once the match is completed.</p><p>If the match is not played and completed with an official result by May 11, 2026, 12:00 UTC, the market will resolve to \"NO.\"</p><p>If the data on the website is unavailable for 72 hours after the match is completed, a consensus of credible reporting will be used.</p>",
+    "categoryHints": [
+      "control_game",
+      "Football",
+      "Off the Pitch",
+      "SPORTS"
+    ],
+    "tags": [
+      "Football",
+      "control_game"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T14:23:10.775Z",
+    "expiresAt": "2026-04-12T16:30:00.000Z",
+    "resolvesAt": "2026-04-12T16:30:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/will-there-be-a-goal-from-a-corner-in-liverpool-vs-fulham-on-apr-11-1775571742735",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "address",
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "liquidity",
+      "liquidityFormatted",
+      "logo",
+      "marketType",
+      "metadata",
+      "ogImageURI",
+      "openInterest",
+      "openInterestFormatted",
+      "positionIds",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "trends",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85546,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x976f936b822d0c976fad424f6d20c0a715fa50761fef2566c5cfc0c98db23e50",
+    "slug": "will-liverpool-start-van-dijk-salah-and-gakpo-vs-fulham-on-april-11-1775571740834",
+    "title": "Will Liverpool start Van Dijk, Salah & Gakpo vs Fulham on April 11? ",
+    "rulesText": "<p>This market will resolve to \"YES\" if Virgil van Dijk, Mohamed Salah, and Cody Gakpo are all listed in Liverpool’s starting XI for the Liverpool vs Fulham Premier League match scheduled for April 11, 2026, 16:30 UTC, as reported in the official <a href=\"http://fbref.com/\" rel=\"noopener noreferrer\" target=\"_blank\">FBRef.com</a> match report for this specific game. Otherwise, this market will resolve to \"NO.\"</p><p>If the match is not played and completed with an official result by May 11, 2026, 12:00 UTC, the market will resolve to \"NO.\"</p><p>If the data on the website is unavailable for 72 hours after the match is completed, a consensus of credible reporting will be used.</p>",
+    "categoryHints": [
+      "control_game",
+      "Football",
+      "Off the Pitch",
+      "SPORTS"
+    ],
+    "tags": [
+      "Football",
+      "control_game"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T14:23:10.554Z",
+    "expiresAt": "2026-04-12T16:30:00.000Z",
+    "resolvesAt": "2026-04-12T16:30:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/will-liverpool-start-van-dijk-salah-and-gakpo-vs-fulham-on-april-11-1775571740834",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "address",
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "liquidity",
+      "liquidityFormatted",
+      "logo",
+      "marketType",
+      "metadata",
+      "ogImageURI",
+      "openInterest",
+      "openInterestFormatted",
+      "positionIds",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "trends",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85547,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x256fa58030fb930f17c079658a1c9023b883e3589101a5be44f5b34d4dbdf5e4",
+    "slug": "slotout-will-fulham-score-before-25-mins-vs-liverpool-on-apr-11-1775571738845",
+    "title": "#SlotOut? Will Fulham score before 25 mins vs Liverpool on Apr 11? ",
+    "rulesText": "<p>This market will resolve to \"YES\" if Fulham scores at least one goal before the first 25 minutes (1’ to 25’ incl.) in the Liverpool vs Fulham Premier League match scheduled for April 11, 2026, 16:30 UTC. The goal must be officially credited to Fulham (including own goals by Liverpool in Fulham's favor) and recorded in the <a href=\"http://fbref.com/\" rel=\"noopener noreferrer\" target=\"_blank\">FBRef.com</a> match report for this specific game. Otherwise, this market will resolve to \"NO.\"</p><p>If the match is not played and completed with an official result by May 11, 2026, 12:00 UTC, the market will resolve to “NO.”</p><p>If the data on the website is unavailable for 72 hours after the match is completed, a consensus of credible reporting will be used.</p>",
+    "categoryHints": [
+      "control_game",
+      "Football",
+      "Off the Pitch",
+      "SPORTS"
+    ],
+    "tags": [
+      "Football",
+      "control_game"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T14:23:02.412Z",
+    "expiresAt": "2026-04-12T16:30:00.000Z",
+    "resolvesAt": "2026-04-12T16:30:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/slotout-will-fulham-score-before-25-mins-vs-liverpool-on-apr-11-1775571738845",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "address",
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "liquidity",
+      "liquidityFormatted",
+      "logo",
+      "marketType",
+      "metadata",
+      "ogImageURI",
+      "openInterest",
+      "openInterestFormatted",
+      "positionIds",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "trends",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85548,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x2d6957bfc3e747567be94e6a615b51e901fc68f32afbbe1852e55ec8b70d459c",
+    "slug": "will-everton-make-4-shots-outside-box-vs-brentford-on-april-11-1775571520223",
+    "title": "Will Everton make 4+ shots outside box vs Brentford on April 11? ",
+    "rulesText": "<p>This market will resolve to \"YES\" if Everton records 4 or more shots outside the box in the Brentford vs Everton Premier League match scheduled for April 11, 2026, 14:00 UTC. Otherwise, it will resolve to “NO.”</p><p>The shots outside the box count will be determined using Everton’s “Shots outside box” value shown on <a href=\"https://www.fotmob.com/\" rel=\"noopener noreferrer\" target=\"_blank\">Fotmob</a> on the match page under Shots → Shots outside box for this specific game. This value will be taken from the match page once the match is completed.</p><p>If the match is not played and completed with an official result by May 11, 2026, 12:00 UTC, the market will resolve to “NO.”</p><p>If the data on the website is unavailable for 72 hours after the match is completed, a consensus of credible reporting will be used.</p>",
+    "categoryHints": [
+      "control_game",
+      "Football",
+      "Off the Pitch",
+      "SPORTS"
+    ],
+    "tags": [
+      "Football",
+      "control_game"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T14:20:02.605Z",
+    "expiresAt": "2026-04-12T14:00:00.000Z",
+    "resolvesAt": "2026-04-12T14:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/will-everton-make-4-shots-outside-box-vs-brentford-on-april-11-1775571520223",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "address",
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "liquidity",
+      "liquidityFormatted",
+      "logo",
+      "marketType",
+      "metadata",
+      "ogImageURI",
+      "openInterest",
+      "openInterestFormatted",
+      "positionIds",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "trends",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85486,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0xcf0ce7808fd64261a72262c628751dbdaaa45d3b2c2784a59c6602ec5944e98a",
+    "slug": "will-everton-start-mykolenko-tarkowski-and-dewsbury-hall-vs-brentford-1775571512637",
+    "title": "Will Everton start Mykolenko, Tarkowski & Dewsbury-Hall vs Brentford?",
+    "rulesText": "<p>This market will resolve to \"YES\" if Vitaliy Mykolenko, James Tarkowski, and Kiernan Dewsbury-Hall are all listed in Everton’s starting XI in the Brentford vs Everton Premier League match scheduled for April 11, 2026, 14:00 UTC, as reported in the <a href=\"http://fbref.com/\" rel=\"noopener noreferrer\" target=\"_blank\">FBRef.com</a> match report for this specific game. Otherwise, this market will resolve to \"NO.\"</p><p>If the match is not played and completed with an official result by May 11, 2026, 12:00 UTC, the market will resolve to “NO.”</p><p>If the data on the website is unavailable for 72 hours after the match is completed, a consensus of credible reporting will be used.</p>",
+    "categoryHints": [
+      "control_game",
+      "Football",
+      "Off the Pitch",
+      "SPORTS"
+    ],
+    "tags": [
+      "Football",
+      "control_game"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T14:20:02.356Z",
+    "expiresAt": "2026-04-12T14:00:00.000Z",
+    "resolvesAt": "2026-04-12T14:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/will-everton-start-mykolenko-tarkowski-and-dewsbury-hall-vs-brentford-1775571512637",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "address",
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "liquidity",
+      "liquidityFormatted",
+      "logo",
+      "marketType",
+      "metadata",
+      "ogImageURI",
+      "openInterest",
+      "openInterestFormatted",
+      "positionIds",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "trends",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85487,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x618d8558a0603da222c0d60a5b7ccbb95ffd9cbef20a2ee05aaef1bffc299db5",
+    "slug": "will-garner-have-6-passes-into-final-third-vs-brentford-on-april-11-1775571507452",
+    "title": "Will Garner have 6+ passes into final third vs Brentford on April 11? ",
+    "rulesText": "<p>This market will resolve to \"YES\" if James Garner records 6 or more passes into the final third in the Brentford vs Everton Premier League match scheduled for April 11, 2026, 14:00 UTC, as shown on the <a href=\"https://www.fotmob.com/\" rel=\"noopener noreferrer\" target=\"_blank\">FotMob</a> match page for this specific game. Otherwise, this market will resolve to \"NO.\"</p><p>The passes into the final third count will be determined using the value on the FotMob match page under Stats → Player stats → Passes → Passes into final third for James Garner. This value will be taken from the match page once the match is completed.</p><p>Note: Passes into the final third are completed passes that move the ball into the attacking team’s final third of the pitch.</p><p>If the match is not played and completed with an official result by May 11, 2026, 12:00 UTC, the market will resolve to “NO.”</p><p>If the data on the website is unavailable for 72 hours after the match is completed, a consensus of credible reporting will be used.</p>",
+    "categoryHints": [
+      "control_game",
+      "Football",
+      "Off the Pitch",
+      "SPORTS"
+    ],
+    "tags": [
+      "Football",
+      "control_game"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T14:20:01.542Z",
+    "expiresAt": "2026-04-12T14:00:00.000Z",
+    "resolvesAt": "2026-04-12T14:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/will-garner-have-6-passes-into-final-third-vs-brentford-on-april-11-1775571507452",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "address",
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "liquidity",
+      "liquidityFormatted",
+      "logo",
+      "marketType",
+      "metadata",
+      "ogImageURI",
+      "openInterest",
+      "openInterestFormatted",
+      "positionIds",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "slug",
+      "status",
+      "tags",
+      "title",
+      "tradeType",
+      "trends",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85488,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x9acfac4a903f2db95e98d92bd73fd0e40761ba9222960f27d2ddf3d050d366df",
+    "slug": "sol-above-dollar7888-on-apr-8-1400-utc-1775570402545",
+    "title": "SOL above $78.88 on Apr 8, 14:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute SOL (https://tradingview.com/chart/?symbol=PYTH:SOLUSD) candle on Apr 8, 2026, at 14:00 UTC is above $78.88. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "CRYPTO",
+      "Daily",
+      "Lumy",
+      "Recurring",
+      "Solana"
+    ],
+    "tags": [
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T14:00:02.542Z",
+    "expiresAt": "2026-04-08T14:00:00.000Z",
+    "resolvesAt": "2026-04-08T14:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/sol-above-dollar7888-on-apr-8-1400-utc-1775570402545",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "trends",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85554,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x4d159b411cf52be5169c3dfb23356cfca9359c902581f38be842323b6541acd4",
+    "slug": "xmr-above-dollar32834-on-apr-8-1300-utc-1775566802525",
+    "title": "XMR above $328.34 on Apr 8, 13:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute XMR (https://tradingview.com/chart/?symbol=PYTH:XMRUSD) candle on Apr 8, 2026, at 13:00 UTC is above $328.34. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "CRYPTO",
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "tags": [
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T13:00:02.523Z",
+    "expiresAt": "2026-04-08T13:00:00.000Z",
+    "resolvesAt": "2026-04-08T13:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/xmr-above-dollar32834-on-apr-8-1300-utc-1775566802525",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "trends",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85510,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "0x0a176beab64526108e92ee46248fd901ebe1caa9f7f1807927ba20dc0ca82f8f",
+    "slug": "oil-ukoilspot-above-dollar10723-on-apr-8-1300-utc-1775566802244",
+    "title": "Oil (UKOILSPOT) above $107.23 on Apr 8, 13:00 UTC?",
+    "rulesText": "This market will resolve to \"YES\" if the opening price of the 1-minute UKOILSPOT (https://tradingview.com/chart/?symbol=PYTH:UKOILSPOT) candle on Apr 8, 2026, at 13:00 UTC is above $107.23. Otherwise, the market will resolve to \"NO\". The resolution is based on data from the Pyth Network.",
+    "categoryHints": [
+      "CRYPTO",
+      "Daily",
+      "Lumy",
+      "Oil & Gas",
+      "Recurring"
+    ],
+    "tags": [
+      "Daily",
+      "Lumy",
+      "Recurring"
+    ],
+    "active": true,
+    "publishedAt": "2026-04-07T13:00:02.244Z",
+    "expiresAt": "2026-04-08T13:00:00.000Z",
+    "resolvesAt": "2026-04-08T13:00:00.000Z",
+    "outcomes": [
+      {
+        "label": "Yes"
+      },
+      {
+        "label": "No"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/oil-ukoilspot-above-dollar10723-on-apr-8-1300-utc-1775566802244",
+    "discoveryPath": "limitless_sdk_active_markets_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:19.675Z",
+    "rawPayloadKeys": [
+      "automationType",
+      "categories",
+      "collateralToken",
+      "conditionId",
+      "createdAt",
+      "creator",
+      "description",
+      "expirationDate",
+      "expirationTimestamp",
+      "expired",
+      "hidden",
+      "httpClient",
+      "id",
+      "imageUrl",
+      "isOther",
+      "isRewardable",
+      "logo",
+      "marketType",
+      "metadata",
+      "negRiskRequestId",
+      "priceOracleMetadata",
+      "prices",
+      "priorityIndex",
+      "proxyTitle",
+      "settings",
+      "slug",
+      "stableSlug",
+      "status",
+      "tags",
+      "title",
+      "tokens",
+      "tradeType",
+      "trends",
+      "updatedAt",
+      "venue",
+      "volume",
+      "volumeFormatted",
+      "winningOutcomeIndex"
+    ],
+    "rawPayloadPreview": {
+      "id": 85495,
+      "marketId": null,
+      "questionId": null,
+      "status": "FUNDED"
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "democratic-presidential-nominee-2028-1768929458278",
+    "slug": "democratic-presidential-nominee-2028-1768929458278",
+    "title": "Democratic Presidential Nominee 2028",
+    "rulesText": "Direct page census from limitless.exchange nominee market page.",
+    "categoryHints": [
+      "Politics",
+      "Limitless",
+      "Nominee"
+    ],
+    "tags": [
+      "Politics"
+    ],
+    "active": true,
+    "publishedAt": null,
+    "expiresAt": null,
+    "resolvesAt": null,
+    "outcomes": [
+      {
+        "label": "Alexandria Ocasio-Cortez"
+      },
+      {
+        "label": "Andy Beshear"
+      },
+      {
+        "label": "Gavin Newsom"
+      },
+      {
+        "label": "Josh Shapiro"
+      },
+      {
+        "label": "Kamala Harris"
+      },
+      {
+        "label": "Other"
+      },
+      {
+        "label": "Pete Buttigieg"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/democratic-presidential-nominee-2028-1768929458278?rv=7Q4JYY4UXP",
+    "discoveryPath": "limitless_direct_market_page_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:21.588Z",
+    "rawPayloadKeys": [
+      "candidateTitles",
+      "directPage",
+      "title"
+    ],
+    "rawPayloadPreview": {
+      "id": null,
+      "marketId": null,
+      "questionId": null,
+      "status": null
+    }
+  },
+  {
+    "venue": "LIMITLESS",
+    "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+    "slug": "republican-presidential-nominee-2028-1768931335047",
+    "title": "Republican Presidential Nominee 2028",
+    "rulesText": "Direct page census from limitless.exchange nominee market page.",
+    "categoryHints": [
+      "Politics",
+      "Limitless",
+      "Nominee"
+    ],
+    "tags": [
+      "Politics"
+    ],
+    "active": true,
+    "publishedAt": null,
+    "expiresAt": null,
+    "resolvesAt": null,
+    "outcomes": [
+      {
+        "label": "Donald Trump"
+      },
+      {
+        "label": "Donald Trump Jr."
+      },
+      {
+        "label": "J.D. Vance"
+      },
+      {
+        "label": "Marco Rubio"
+      },
+      {
+        "label": "Other"
+      },
+      {
+        "label": "Ron DeSantis"
+      },
+      {
+        "label": "Ted Cruz"
+      },
+      {
+        "label": "Tucker Carlson"
+      }
+    ],
+    "sourceUrl": "https://limitless.exchange/markets/republican-presidential-nominee-2028-1768931335047?rv=7Q4JYY4UXP",
+    "discoveryPath": "limitless_direct_market_page_live_census",
+    "fetchTimestamp": "2026-04-08T01:01:22.201Z",
+    "rawPayloadKeys": [
+      "candidateTitles",
+      "directPage",
+      "title"
+    ],
+    "rawPayloadPreview": {
+      "id": null,
+      "marketId": null,
+      "questionId": null,
+      "status": null
+    }
+  }
+]

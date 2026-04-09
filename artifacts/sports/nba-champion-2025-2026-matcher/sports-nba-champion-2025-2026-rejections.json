@@ -1,0 +1,214 @@
+{
+  "observedAt": "2026-04-09T11:09:27.371Z",
+  "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
+  "rejections": [
+    {
+      "scope": "team",
+      "teamIdentityKey": "DENVER_NUGGETS",
+      "normalizedTeamName": "denver_nuggets",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg denver_nuggets is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "CLEVELAND_CAVALIERS",
+      "normalizedTeamName": "cleveland_cavaliers",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg cleveland_cavaliers is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "NEW_YORK_KNICKS",
+      "normalizedTeamName": "new_york_knicks",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg new_york_knicks is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "HOUSTON_ROCKETS",
+      "normalizedTeamName": "houston_rockets",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg houston_rockets is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "MINNESOTA_TIMBERWOLVES",
+      "normalizedTeamName": "minnesota_timberwolves",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg minnesota_timberwolves is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "PHILADELPHIA_76ERS",
+      "normalizedTeamName": "philadelphia_76ers",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg philadelphia_76ers is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "CHARLOTTE_HORNETS",
+      "normalizedTeamName": "charlotte_hornets",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg charlotte_hornets is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "LOS_ANGELES_LAKERS",
+      "normalizedTeamName": "los_angeles_lakers",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg los_angeles_lakers is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "ATLANTA_HAWKS",
+      "normalizedTeamName": "atlanta_hawks",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg atlanta_hawks is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "LOS_ANGELES_CLIPPERS",
+      "normalizedTeamName": "los_angeles_clippers",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg los_angeles_clippers is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "PHOENIX_SUNS",
+      "normalizedTeamName": "phoenix_suns",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg phoenix_suns is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "TORONTO_RAPTORS",
+      "normalizedTeamName": "toronto_raptors",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg toronto_raptors is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "ORLANDO_MAGIC",
+      "normalizedTeamName": "orlando_magic",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg orlando_magic is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "MIAMI_HEAT",
+      "normalizedTeamName": "miami_heat",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg miami_heat is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "GOLDEN_STATE_WARRIORS",
+      "normalizedTeamName": "golden_state_warriors",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg golden_state_warriors is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "PORTLAND_TRAIL_BLAZERS",
+      "normalizedTeamName": "portland_trail_blazers",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg portland_trail_blazers is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "NEW_ORLEANS_PELICANS",
+      "normalizedTeamName": "new_orleans_pelicans",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg new_orleans_pelicans is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "CHICAGO_BULLS",
+      "normalizedTeamName": "chicago_bulls",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg chicago_bulls is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "INDIANA_PACERS",
+      "normalizedTeamName": "indiana_pacers",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg indiana_pacers is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "MILWAUKEE_BUCKS",
+      "normalizedTeamName": "milwaukee_bucks",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg milwaukee_bucks is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "DALLAS_MAVERICKS",
+      "normalizedTeamName": "dallas_mavericks",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg dallas_mavericks is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "MEMPHIS_GRIZZLIES",
+      "normalizedTeamName": "memphis_grizzlies",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg memphis_grizzlies is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "BROOKLYN_NETS",
+      "normalizedTeamName": "brooklyn_nets",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg brooklyn_nets is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "UTAH_JAZZ",
+      "normalizedTeamName": "utah_jazz",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg utah_jazz is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "SACRAMENTO_KINGS",
+      "normalizedTeamName": "sacramento_kings",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg sacramento_kings is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "WASHINGTON_WIZARDS",
+      "normalizedTeamName": "washington_wizards",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Team leg washington_wizards is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    }
+  ]
+}

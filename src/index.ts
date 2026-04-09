@@ -20,6 +20,7 @@ export interface ServiceRuntime {
   logger: Logger;
   redisClient: RedisClient;
   pgPool: Pool;
+  pairShadowPool: Pool;
   db: AppDb;
   app: FastifyInstance;
   shutdown: () => Promise<void>;
@@ -36,6 +37,7 @@ export interface BootstrapModules {
     logger: Logger;
     redisClient: RedisClient;
     pgPool: Pool;
+    pairShadowPool?: Pool;
     db: AppDb;
     canonicalServiceBaseUrl: string;
     jwtSecret: string;
@@ -132,12 +134,20 @@ export const startService = async (
     databaseUrl: env.DATABASE_URL,
     logger
   });
+  const pairShadowPool =
+    env.SUPABASE_DB_URL && env.SUPABASE_DB_URL !== env.DATABASE_URL
+      ? impl.createPgPool({
+          databaseUrl: env.SUPABASE_DB_URL,
+          logger
+        })
+      : pgPool;
   const db = impl.createDrizzleDb(pgPool);
 
   const app = await impl.buildServer({
     logger,
     redisClient,
     pgPool,
+    pairShadowPool,
     db,
     canonicalServiceBaseUrl: env.CANONICAL_SERVICE_BASE_URL,
     jwtSecret: env.JWT_SECRET,
@@ -208,6 +218,9 @@ export const startService = async (
     if (redisConnected) {
       await impl.disconnectRedis(redisClient);
     }
+    if (pairShadowPool !== pgPool) {
+      await impl.closePgPool(pairShadowPool);
+    }
     await impl.closePgPool(pgPool);
     logger.info("Service shutdown completed.");
   };
@@ -219,6 +232,7 @@ export const startService = async (
     logger,
     redisClient,
     pgPool,
+    pairShadowPool,
     db,
     app,
     shutdown

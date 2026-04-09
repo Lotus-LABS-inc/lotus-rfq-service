@@ -1,0 +1,264 @@
+{
+  "observedAt": "2026-04-09T09:53:13.032Z",
+  "exactTopic": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+  "refreshedRowsUsed": [
+    {
+      "venue": "OPINION",
+      "venueMarketId": "la-liga-winner-2026:barcelona",
+      "title": "La Liga Winner 2026",
+      "canonicalClubId": "barcelona"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "la-liga-winner-2026:real-madrid",
+      "title": "La Liga Winner 2026",
+      "canonicalClubId": "real_madrid"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "la-liga-winner-2026:atletico-madrid",
+      "title": "La Liga Winner 2026",
+      "canonicalClubId": "atletico_madrid"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "la-liga-winner-114:real-madrid",
+      "title": "La Liga Winner",
+      "canonicalClubId": "real_madrid"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "la-liga-winner-114:barcelona",
+      "title": "La Liga Winner",
+      "canonicalClubId": "barcelona"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "la-liga-winner-114:villarreal",
+      "title": "La Liga Winner",
+      "canonicalClubId": "villarreal"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "la-liga-winner-114:atletico-madrid",
+      "title": "La Liga Winner",
+      "canonicalClubId": "atletico_madrid"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "la-liga-winner-114:real-betis",
+      "title": "La Liga Winner",
+      "canonicalClubId": "real_betis"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "la-liga-winner-114:athletic-bilbao",
+      "title": "La Liga Winner",
+      "canonicalClubId": "athletic_bilbao"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "la-liga-winner-114:real-sociedad",
+      "title": "La Liga Winner",
+      "canonicalClubId": "real_sociedad"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "la-liga-winner-114:girona",
+      "title": "La Liga Winner",
+      "canonicalClubId": "girona"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "la-liga-winner-114:valencia",
+      "title": "La Liga Winner",
+      "canonicalClubId": "valencia"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "la-liga-winner-114:sevilla",
+      "title": "La Liga Winner",
+      "canonicalClubId": "sevilla"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "la-liga-winner-1765290337005:barcelona",
+      "title": "La Liga Winner",
+      "canonicalClubId": "barcelona"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "la-liga-winner-1765290337005:real-madrid",
+      "title": "La Liga Winner",
+      "canonicalClubId": "real_madrid"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "la-liga-winner-1765290337005:atletico-madrid",
+      "title": "La Liga Winner",
+      "canonicalClubId": "atletico_madrid"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "la-liga-winner-1765290337005:villarreal",
+      "title": "La Liga Winner",
+      "canonicalClubId": "villarreal"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "la-liga-winner-1765290337005:other",
+      "title": "La Liga Winner",
+      "canonicalClubId": "other"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1571",
+      "title": "Will Barcelona win the 2025–26 La Liga?",
+      "canonicalClubId": "barcelona"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1572",
+      "title": "Will Real Madrid win the 2025–26 La Liga?",
+      "canonicalClubId": "real_madrid"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1573",
+      "title": "Will Atletico Madrid win the 2025–26 La Liga?",
+      "canonicalClubId": "atletico_madrid"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "1574",
+      "title": "Will Villarreal win the 2025–26 La Liga?",
+      "canonicalClubId": "villarreal"
+    }
+  ],
+  "familyComparabilitySourceArtifacts": {
+    "fetchSummary": "artifacts/sports/la-liga-winner-family-pass/sports-la-liga-winner-fetch-summary.json",
+    "admissionSummary": "artifacts/sports/la-liga-winner-family-pass/sports-la-liga-winner-admission-summary.json",
+    "normalizedTopics": "artifacts/sports/la-liga-winner-family-pass/sports-la-liga-winner-normalized-topics.json",
+    "comparabilitySummary": "artifacts/sports/la-liga-winner-family-pass/sports-la-liga-winner-comparability-summary.json",
+    "basisFragmentationSummary": "artifacts/sports/la-liga-winner-family-pass/sports-la-liga-winner-basis-fragmentation-summary.json",
+    "finalDecision": "artifacts/sports/la-liga-winner-family-pass/sports-la-liga-winner-final-decision.json"
+  },
+  "admittedVenues": [
+    "LIMITLESS",
+    "OPINION",
+    "POLYMARKET",
+    "PREDICT"
+  ],
+  "admittedClubs": [
+    "athletic_bilbao",
+    "atletico_madrid",
+    "barcelona",
+    "girona",
+    "real_betis",
+    "real_madrid",
+    "real_sociedad",
+    "sevilla",
+    "valencia",
+    "villarreal"
+  ],
+  "exclusionsBeforeFinalLaneConstruction": [
+    {
+      "scope": "club",
+      "clubIdentityKey": "REAL_BETIS",
+      "normalizedClubName": "Real Betis",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Real Betis is not part of the exact shared La Liga winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "ATHLETIC_BILBAO",
+      "normalizedClubName": "Athletic Bilbao",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Athletic Bilbao is not part of the exact shared La Liga winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "REAL_SOCIEDAD",
+      "normalizedClubName": "Real Sociedad",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Real Sociedad is not part of the exact shared La Liga winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "GIRONA",
+      "normalizedClubName": "Girona",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Girona is not part of the exact shared La Liga winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "VALENCIA",
+      "normalizedClubName": "Valencia",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Valencia is not part of the exact shared La Liga winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "SEVILLA",
+      "normalizedClubName": "Sevilla",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Sevilla is not part of the exact shared La Liga winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "VILLARREAL",
+      "normalizedClubName": "villarreal",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg villarreal is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "REAL_BETIS",
+      "normalizedClubName": "real_betis",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg real_betis is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "ATHLETIC_BILBAO",
+      "normalizedClubName": "athletic_bilbao",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg athletic_bilbao is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "REAL_SOCIEDAD",
+      "normalizedClubName": "real_sociedad",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg real_sociedad is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "GIRONA",
+      "normalizedClubName": "girona",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg girona is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "VALENCIA",
+      "normalizedClubName": "valencia",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg valencia is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "SEVILLA",
+      "normalizedClubName": "sevilla",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg sevilla is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    }
+  ]
+}

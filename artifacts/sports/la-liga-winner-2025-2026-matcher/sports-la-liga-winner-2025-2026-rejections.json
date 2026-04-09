@@ -1,0 +1,104 @@
+{
+  "observedAt": "2026-04-09T09:53:13.033Z",
+  "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026",
+  "rejections": [
+    {
+      "scope": "club",
+      "clubIdentityKey": "REAL_BETIS",
+      "normalizedClubName": "Real Betis",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Real Betis is not part of the exact shared La Liga winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "ATHLETIC_BILBAO",
+      "normalizedClubName": "Athletic Bilbao",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Athletic Bilbao is not part of the exact shared La Liga winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "REAL_SOCIEDAD",
+      "normalizedClubName": "Real Sociedad",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Real Sociedad is not part of the exact shared La Liga winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "GIRONA",
+      "normalizedClubName": "Girona",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Girona is not part of the exact shared La Liga winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "VALENCIA",
+      "normalizedClubName": "Valencia",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Valencia is not part of the exact shared La Liga winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "SEVILLA",
+      "normalizedClubName": "Sevilla",
+      "reason": "NOT_SHARED",
+      "notes": "Club leg Sevilla is not part of the exact shared La Liga winner core."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "VILLARREAL",
+      "normalizedClubName": "villarreal",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg villarreal is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "REAL_BETIS",
+      "normalizedClubName": "real_betis",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg real_betis is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "ATHLETIC_BILBAO",
+      "normalizedClubName": "athletic_bilbao",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg athletic_bilbao is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "REAL_SOCIEDAD",
+      "normalizedClubName": "real_sociedad",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg real_sociedad is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "GIRONA",
+      "normalizedClubName": "girona",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg girona is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "VALENCIA",
+      "normalizedClubName": "valencia",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg valencia is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    },
+    {
+      "scope": "club",
+      "clubIdentityKey": "SEVILLA",
+      "normalizedClubName": "sevilla",
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "reason": "ALL_VENUE_EDGE_MISSING",
+      "notes": "Club leg sevilla is not shared across all of LIMITLESS|OPINION|POLYMARKET|PREDICT."
+    }
+  ]
+}

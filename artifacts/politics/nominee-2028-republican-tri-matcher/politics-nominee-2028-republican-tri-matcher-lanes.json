@@ -1,0 +1,111 @@
+{
+  "topic": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+  "canonicalTriVenueSet": "LIMITLESS|OPINION|POLYMARKET",
+  "matcherLanes": [
+    {
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "canonicalTriVenueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "candidateIdentityKey": "jd_vance",
+      "normalizedCandidateName": "jd vance",
+      "routeabilityDecision": "TRI_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "matcherReady": true,
+      "evidenceSources": [
+        "artifacts/politics/nominee-2028-shared-core",
+        "artifacts/politics/nominee-2028-tri-eval",
+        "artifacts/politics/nominee-2028-republican-pair-matcher"
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+          "rawOutcomeLabel": "J.D. Vance"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493224",
+          "rawOutcomeLabel": "J.D. Vance"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "0x18b1c135d0a40c5894da9412e77311827d9caf16cf4cd6591b247a34730af919",
+          "rawOutcomeLabel": "J.D. Vance"
+        }
+      ],
+      "notes": [
+        "Approved exact narrow Republican tri matcher candidate.",
+        "Pair remains preferred outside this narrow tri subset."
+      ]
+    },
+    {
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "canonicalTriVenueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "candidateIdentityKey": "marco_rubio",
+      "normalizedCandidateName": "marco rubio",
+      "routeabilityDecision": "TRI_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "matcherReady": true,
+      "evidenceSources": [
+        "artifacts/politics/nominee-2028-shared-core",
+        "artifacts/politics/nominee-2028-tri-eval",
+        "artifacts/politics/nominee-2028-republican-pair-matcher"
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+          "rawOutcomeLabel": "Marco Rubio"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493224",
+          "rawOutcomeLabel": "Marco Rubio"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "0x21ad31a46bfaa51650766eff6dc69c866959e32d965ffb116020e37694b6317d",
+          "rawOutcomeLabel": "Marco Rubio"
+        }
+      ],
+      "notes": [
+        "Approved exact narrow Republican tri matcher candidate.",
+        "Pair remains preferred outside this narrow tri subset."
+      ]
+    },
+    {
+      "topicKey": "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
+      "canonicalTriVenueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "candidateIdentityKey": "ron_desantis",
+      "normalizedCandidateName": "ron desantis",
+      "routeabilityDecision": "TRI_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "matcherReady": true,
+      "evidenceSources": [
+        "artifacts/politics/nominee-2028-shared-core",
+        "artifacts/politics/nominee-2028-tri-eval",
+        "artifacts/politics/nominee-2028-republican-pair-matcher"
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "republican-presidential-nominee-2028-1768931335047",
+          "rawOutcomeLabel": "Ron DeSantis"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "493224",
+          "rawOutcomeLabel": "Ron DeSantis"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "0x64d31a2af85518c6718a5757a35b840f08eca20c1e22c0eb1e96ec01cc55b8b6",
+          "rawOutcomeLabel": "Ron DeSantis"
+        }
+      ],
+      "notes": [
+        "Approved exact narrow Republican tri matcher candidate.",
+        "Pair remains preferred outside this narrow tri subset."
+      ]
+    }
+  ]
+}

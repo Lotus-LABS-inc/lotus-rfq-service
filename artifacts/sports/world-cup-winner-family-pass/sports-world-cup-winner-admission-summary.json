@@ -1,0 +1,16 @@
+{
+  "observedAt": "2026-04-09T10:32:37.499Z",
+  "totalAdmittedTournamentWinnerRows": 46,
+  "rowsRejectedByReason": {
+    "OTHERS_EXCLUDED": 22
+  },
+  "rowsAdmittedByTopicCandidate": {
+    "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026": 46
+  },
+  "venueBreakdown": {
+    "OPINION": 4,
+    "POLYMARKET": 14,
+    "LIMITLESS": 14,
+    "PREDICT": 14
+  }
+}
