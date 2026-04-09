@@ -214,6 +214,77 @@ export const applyMigrations = async (pool: Pool): Promise<void> => {
       ON combo_netting_events(netting_group_id);
     CREATE INDEX IF NOT EXISTS idx_combo_netting_events_event_type_created_at
       ON combo_netting_events(event_type, created_at);
+
+    CREATE TABLE IF NOT EXISTS routing_plans (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      rfq_id UUID NOT NULL,
+      acceptance_policy TEXT NOT NULL,
+      reservation_token TEXT,
+      created_by UUID,
+      state TEXT NOT NULL,
+      cost_estimate NUMERIC,
+      metadata JSONB,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_routing_plans_rfq ON routing_plans(rfq_id);
+
+    CREATE TABLE IF NOT EXISTS route_candidates (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      routing_plan_id UUID REFERENCES routing_plans(id) ON DELETE CASCADE,
+      leg_id UUID NOT NULL,
+      provider_type TEXT NOT NULL,
+      provider_id TEXT,
+      available_size NUMERIC,
+      quoted_price NUMERIC,
+      fees JSONB,
+      latency_ms INT,
+      fill_prob NUMERIC,
+      metadata JSONB,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'route_candidates_provider_type_check'
+      ) THEN
+        ALTER TABLE route_candidates
+          ADD CONSTRAINT route_candidates_provider_type_check
+          CHECK (provider_type IN ('LP', 'VENUE', 'INTERNAL', 'INTERNAL_CROSS'));
+      END IF;
+    END $$;
+
+    CREATE INDEX IF NOT EXISTS idx_route_candidates_plan ON route_candidates(routing_plan_id);
+
+    CREATE TABLE IF NOT EXISTS route_steps (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      routing_plan_id UUID REFERENCES routing_plans(id),
+      leg_id UUID,
+      step_index INT,
+      provider_type TEXT,
+      provider_id TEXT,
+      target_size NUMERIC,
+      rounded_size NUMERIC,
+      target_price NUMERIC,
+      client_order_id TEXT,
+      idempotency_key TEXT,
+      state TEXT,
+      submitted_at TIMESTAMPTZ,
+      completed_at TIMESTAMPTZ,
+      result JSONB,
+      metadata JSONB
+    );
+    CREATE INDEX IF NOT EXISTS idx_route_steps_plan ON route_steps(routing_plan_id);
+
+    CREATE TABLE IF NOT EXISTS route_history (
+      id BIGSERIAL PRIMARY KEY,
+      routing_plan_id UUID,
+      event_type TEXT,
+      payload JSONB,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
   `);
 
   const migrationDirs = [
