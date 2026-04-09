@@ -81,6 +81,91 @@ export const withTransientRetry = async <T>(operation: () => Promise<T>, attempt
 };
 
 export const applyMigrations = async (pool: Pool): Promise<void> => {
+  // Bootstrap combo base tables first because some migration filenames currently
+  // sort before the original combo-table migration while still referencing combo_rfqs.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS combo_rfqs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL,
+      acceptance_policy TEXT NOT NULL CHECK(acceptance_policy IN ('ALL_OR_NONE','BEST_EFFORT','PARTIAL_ALLOWED')),
+      state TEXT NOT NULL,
+      expires_at TIMESTAMPTZ,
+      metadata JSONB,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS combo_legs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      combo_rfq_id UUID REFERENCES combo_rfqs(id) ON DELETE CASCADE,
+      canonical_market_id UUID NOT NULL,
+      canonical_outcome_id UUID NOT NULL,
+      side TEXT NOT NULL CHECK(side IN ('buy','sell')),
+      size NUMERIC NOT NULL,
+      price_hint NUMERIC,
+      metadata JSONB
+    );
+
+    ALTER TABLE combo_legs
+      ADD COLUMN IF NOT EXISTS remaining_size NUMERIC;
+
+    UPDATE combo_legs
+    SET remaining_size = size
+    WHERE remaining_size IS NULL;
+
+    ALTER TABLE combo_legs
+      ALTER COLUMN remaining_size SET NOT NULL;
+
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'chk_combo_legs_remaining_size_non_negative'
+      ) THEN
+        ALTER TABLE combo_legs
+          ADD CONSTRAINT chk_combo_legs_remaining_size_non_negative CHECK (remaining_size >= 0);
+      END IF;
+    END $$;
+
+    CREATE INDEX IF NOT EXISTS idx_combo_legs_combo ON combo_legs(combo_rfq_id);
+    CREATE INDEX IF NOT EXISTS idx_combo_legs_combo_remaining ON combo_legs(combo_rfq_id, remaining_size);
+
+    CREATE TABLE IF NOT EXISTS combo_quotes (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      combo_rfq_id UUID REFERENCES combo_rfqs(id) ON DELETE CASCADE,
+      lp_id UUID NOT NULL,
+      combo_price NUMERIC,
+      per_leg_prices JSONB,
+      effective_cost NUMERIC,
+      expires_at TIMESTAMPTZ,
+      raw_payload JSONB,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_combo_quotes_rfq ON combo_quotes(combo_rfq_id);
+
+    CREATE TABLE IF NOT EXISTS combo_executions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      combo_rfq_id UUID REFERENCES combo_rfqs(id),
+      combo_quote_id UUID REFERENCES combo_quotes(id),
+      leg_id UUID,
+      venue TEXT,
+      connector_exec_id TEXT,
+      status TEXT,
+      submitted_at TIMESTAMPTZ,
+      completed_at TIMESTAMPTZ,
+      result JSONB
+    );
+    CREATE INDEX IF NOT EXISTS idx_combo_exec_combo ON combo_executions(combo_rfq_id);
+
+    CREATE TABLE IF NOT EXISTS combo_events (
+      id BIGSERIAL PRIMARY KEY,
+      combo_rfq_id UUID,
+      event_type TEXT,
+      payload JSONB,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+  `);
+
   const migrationDirs = [
     path.resolve(process.cwd(), "infra", "migrations"),
     path.resolve(process.cwd(), "sql", "migrations")
@@ -105,8 +190,8 @@ export const applyMigrations = async (pool: Pool): Promise<void> => {
     }
   }
 
-  // The proof job sometimes runs against a partially migrated CI database.
-  // Ensure the combo base tables exist so seeding does not fail-open on missing schema.
+  // Re-assert combo schema after the migration sweep in case a partially migrated
+  // database skipped parts of the original combo-table setup.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS combo_rfqs (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
