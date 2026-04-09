@@ -1,0 +1,306 @@
+[
+  {
+    "interpretedContractId": "opinion-f1-constructors-champion-mercedes",
+    "venue": "OPINION",
+    "venueMarketId": "f1-constructors-champion:mercedes",
+    "title": "F1 Constructors&#x27; Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "mercedes",
+    "interpretationNotes": [
+      "constructor_label=Mercedes",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "opinion-f1-constructors-champion-ferrari",
+    "venue": "OPINION",
+    "venueMarketId": "f1-constructors-champion:ferrari",
+    "title": "F1 Constructors&#x27; Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "ferrari",
+    "interpretationNotes": [
+      "constructor_label=Ferrari",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "opinion-f1-constructors-champion-mclaren",
+    "venue": "OPINION",
+    "venueMarketId": "f1-constructors-champion:mclaren",
+    "title": "F1 Constructors&#x27; Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "mclaren",
+    "interpretationNotes": [
+      "constructor_label=McLaren",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "opinion-f1-constructors-champion-red-bull-racing",
+    "venue": "OPINION",
+    "venueMarketId": "f1-constructors-champion:red-bull-racing",
+    "title": "F1 Constructors&#x27; Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "red_bull_racing",
+    "interpretationNotes": [
+      "constructor_label=Red Bull Racing",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-f1-constructors-champion-mclaren",
+    "venue": "POLYMARKET",
+    "venueMarketId": "f1-constructors-champion:mclaren",
+    "title": "F1 Constructors' Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "mclaren",
+    "interpretationNotes": [
+      "constructor_label=McLaren",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-f1-constructors-champion-ferrari",
+    "venue": "POLYMARKET",
+    "venueMarketId": "f1-constructors-champion:ferrari",
+    "title": "F1 Constructors' Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "ferrari",
+    "interpretationNotes": [
+      "constructor_label=Ferrari",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-f1-constructors-champion-mercedes",
+    "venue": "POLYMARKET",
+    "venueMarketId": "f1-constructors-champion:mercedes",
+    "title": "F1 Constructors' Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "mercedes",
+    "interpretationNotes": [
+      "constructor_label=Mercedes",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-f1-constructors-champion-red-bull-racing",
+    "venue": "POLYMARKET",
+    "venueMarketId": "f1-constructors-champion:red-bull-racing",
+    "title": "F1 Constructors' Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "red_bull_racing",
+    "interpretationNotes": [
+      "constructor_label=Red Bull Racing",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-f1-constructors-champion-aston-martin",
+    "venue": "POLYMARKET",
+    "venueMarketId": "f1-constructors-champion:aston-martin",
+    "title": "F1 Constructors' Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "aston_martin",
+    "interpretationNotes": [
+      "constructor_label=Aston Martin",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-f1-constructors-champion-audi",
+    "venue": "POLYMARKET",
+    "venueMarketId": "f1-constructors-champion:audi",
+    "title": "F1 Constructors' Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "audi",
+    "interpretationNotes": [
+      "constructor_label=Audi",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-f1-constructors-champion-williams",
+    "venue": "POLYMARKET",
+    "venueMarketId": "f1-constructors-champion:williams",
+    "title": "F1 Constructors' Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "williams",
+    "interpretationNotes": [
+      "constructor_label=Williams",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-f1-constructors-champion-mercedes",
+    "venue": "LIMITLESS",
+    "venueMarketId": "f1-constructors-champion-1769014616132:mercedes",
+    "title": "F1 Constructors' Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "mercedes",
+    "interpretationNotes": [
+      "constructor_label=Mercedes",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-f1-constructors-champion-mclaren",
+    "venue": "LIMITLESS",
+    "venueMarketId": "f1-constructors-champion-1769014616132:mclaren",
+    "title": "F1 Constructors' Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "mclaren",
+    "interpretationNotes": [
+      "constructor_label=McLaren",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-f1-constructors-champion-red-bull-racing",
+    "venue": "LIMITLESS",
+    "venueMarketId": "f1-constructors-champion-1769014616132:red-bull-racing",
+    "title": "F1 Constructors' Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "red_bull_racing",
+    "interpretationNotes": [
+      "constructor_label=Red Bull Racing",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-f1-constructors-champion-aston-martin",
+    "venue": "LIMITLESS",
+    "venueMarketId": "f1-constructors-champion-1769014616132:aston-martin",
+    "title": "F1 Constructors' Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "aston_martin",
+    "interpretationNotes": [
+      "constructor_label=Aston Martin",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-f1-constructors-champion-ferrari",
+    "venue": "LIMITLESS",
+    "venueMarketId": "f1-constructors-champion-1769014616132:ferrari",
+    "title": "F1 Constructors' Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "ferrari",
+    "interpretationNotes": [
+      "constructor_label=Ferrari",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-f1-constructors-champion-audi",
+    "venue": "LIMITLESS",
+    "venueMarketId": "f1-constructors-champion-1769014616132:audi",
+    "title": "F1 Constructors' Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "audi",
+    "interpretationNotes": [
+      "constructor_label=Audi",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-f1-constructors-champion-williams",
+    "venue": "LIMITLESS",
+    "venueMarketId": "f1-constructors-champion-1769014616132:williams",
+    "title": "F1 Constructors' Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "williams",
+    "interpretationNotes": [
+      "constructor_label=Williams",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-f1-constructors-champion-other",
+    "venue": "LIMITLESS",
+    "venueMarketId": "f1-constructors-champion-1769014616132:other",
+    "title": "F1 Constructors' Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_CONSTRUCTORS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalConstructorId": "other",
+    "interpretationNotes": [
+      "constructor_label=Other",
+      "rules_present"
+    ],
+    "rejectionReason": "OTHERS_EXCLUDED"
+  }
+]

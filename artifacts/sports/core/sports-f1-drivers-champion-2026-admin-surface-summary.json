@@ -1,0 +1,31 @@
+{
+  "observedAt": "2026-04-09T12:05:37.637Z",
+  "laneId": "SPORTS_F1_DRIVERS_CHAMPION_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT",
+  "topicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+  "allVenueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+  "driverScopeHash": "a063ea650aa44a00",
+  "exactSafeAllVenueDrivers": [
+    "george_russell",
+    "lando_norris",
+    "max_verstappen",
+    "oscar_piastri"
+  ],
+  "peerPairLaneId": "SPORTS_F1_DRIVERS_CHAMPION_2026_PAIR_LIMITLESS_POLYMARKET",
+  "peerPairVenuePair": "LIMITLESS|POLYMARKET",
+  "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+  "supportedActions": [
+    "inspect",
+    "hold",
+    "promote",
+    "rollback"
+  ],
+  "userConsentCanWidenScope": false,
+  "narrowestEnforceableUnit": "LANE_SCOPE_LOCK",
+  "sourceArtifactRefs": [
+    "artifacts/sports/f1-drivers-champion-2026-matcher/sports-f1-drivers-champion-2026-matcher-input-summary.json",
+    "artifacts/sports/f1-drivers-champion-2026-matcher/sports-f1-drivers-champion-2026-pair-lanes.json",
+    "artifacts/sports/f1-drivers-champion-2026-matcher/sports-f1-drivers-champion-2026-all-venue-lanes.json",
+    "artifacts/sports/f1-drivers-champion-2026-matcher/sports-f1-drivers-champion-2026-rejections.json",
+    "artifacts/sports/f1-drivers-champion-2026-matcher/sports-f1-drivers-champion-2026-final-decision.json"
+  ]
+}

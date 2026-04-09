@@ -1,0 +1,34 @@
+[
+  {
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "venuesPresent": [
+      "LIMITLESS",
+      "OPINION",
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "pairSharedNamedOutcomesCount": 8,
+    "triSharedNamedOutcomesCount": 8,
+    "quadSharedNamedOutcomesCount": 4,
+    "excludedOutcomesCount": 0,
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_CORE_EXISTS",
+    "matcherCandidate": true,
+    "sharedNamedOutcomes": [
+      "Charles Leclerc",
+      "Fernando Alonso",
+      "George Russell",
+      "Kimi Antonelli",
+      "Lando Norris",
+      "Lewis Hamilton",
+      "Max Verstappen",
+      "Oscar Piastri"
+    ],
+    "excludedOutcomes": [],
+    "notes": [
+      "admitted_rows=28",
+      "venues_present=LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "quad_shared_named_outcomes=4"
+    ]
+  }
+]

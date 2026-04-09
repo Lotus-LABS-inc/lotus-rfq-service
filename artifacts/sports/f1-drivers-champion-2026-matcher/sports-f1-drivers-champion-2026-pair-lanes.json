@@ -1,0 +1,870 @@
+{
+  "observedAt": "2026-04-09T11:59:10.530Z",
+  "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+  "matcherLanes": [
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "driver": "charles_leclerc",
+      "club": "charles_leclerc",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:charles-leclerc",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:charles-leclerc",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "driver": "fernando_alonso",
+      "club": "fernando_alonso",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:fernando-alonso",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:fernando-alonso",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "driver": "george_russell",
+      "club": "george_russell",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:george-russell",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:george-russell",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "driver": "kimi_antonelli",
+      "club": "kimi_antonelli",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:kimi-antonelli",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:kimi-antonelli",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "driver": "lando_norris",
+      "club": "lando_norris",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:lando-norris",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:lando-norris",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "driver": "lewis_hamilton",
+      "club": "lewis_hamilton",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:lewis-hamilton",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:lewis-hamilton",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "driver": "max_verstappen",
+      "club": "max_verstappen",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:max-verstappen",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:max-verstappen",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "driver": "oscar_piastri",
+      "club": "oscar_piastri",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:oscar-piastri",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:oscar-piastri",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "driver": "george_russell",
+      "club": "george_russell",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:george-russell",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "f1-world-drivers-champion-2026:george-russell",
+          "rawDriverLabel": "F1 World Drivers’ Champion 2026"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "driver": "lando_norris",
+      "club": "lando_norris",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:lando-norris",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "f1-world-drivers-champion-2026:lando-norris",
+          "rawDriverLabel": "F1 World Drivers’ Champion 2026"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "driver": "max_verstappen",
+      "club": "max_verstappen",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:max-verstappen",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "f1-world-drivers-champion-2026:max-verstappen",
+          "rawDriverLabel": "F1 World Drivers’ Champion 2026"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|OPINION",
+      "driver": "oscar_piastri",
+      "club": "oscar_piastri",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|OPINION, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:oscar-piastri",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "f1-world-drivers-champion-2026:oscar-piastri",
+          "rawDriverLabel": "F1 World Drivers’ Champion 2026"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "driver": "charles_leclerc",
+      "club": "charles_leclerc",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:charles-leclerc",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4837",
+          "rawDriverLabel": "Will Charles Leclerc be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "driver": "fernando_alonso",
+      "club": "fernando_alonso",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:fernando-alonso",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4838",
+          "rawDriverLabel": "Will Fernando Alonso be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "driver": "george_russell",
+      "club": "george_russell",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:george-russell",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4835",
+          "rawDriverLabel": "Will George Russell be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "driver": "kimi_antonelli",
+      "club": "kimi_antonelli",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:kimi-antonelli",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4842",
+          "rawDriverLabel": "Will Kimi Antonelli be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "driver": "lando_norris",
+      "club": "lando_norris",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:lando-norris",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4839",
+          "rawDriverLabel": "Will Lando Norris be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "driver": "lewis_hamilton",
+      "club": "lewis_hamilton",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:lewis-hamilton",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4843",
+          "rawDriverLabel": "Will Lewis Hamilton be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "driver": "max_verstappen",
+      "club": "max_verstappen",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:max-verstappen",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4836",
+          "rawDriverLabel": "Will Max Verstappen be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|PREDICT",
+      "driver": "oscar_piastri",
+      "club": "oscar_piastri",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across LIMITLESS|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:oscar-piastri",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4841",
+          "rawDriverLabel": "Will Oscar Piastri be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "driver": "george_russell",
+      "club": "george_russell",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "f1-world-drivers-champion-2026:george-russell",
+          "rawDriverLabel": "F1 World Drivers’ Champion 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:george-russell",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "driver": "lando_norris",
+      "club": "lando_norris",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "f1-world-drivers-champion-2026:lando-norris",
+          "rawDriverLabel": "F1 World Drivers’ Champion 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:lando-norris",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "driver": "max_verstappen",
+      "club": "max_verstappen",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "f1-world-drivers-champion-2026:max-verstappen",
+          "rawDriverLabel": "F1 World Drivers’ Champion 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:max-verstappen",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|POLYMARKET",
+      "driver": "oscar_piastri",
+      "club": "oscar_piastri",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across OPINION|POLYMARKET, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "f1-world-drivers-champion-2026:oscar-piastri",
+          "rawDriverLabel": "F1 World Drivers’ Champion 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:oscar-piastri",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "driver": "george_russell",
+      "club": "george_russell",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "f1-world-drivers-champion-2026:george-russell",
+          "rawDriverLabel": "F1 World Drivers’ Champion 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4835",
+          "rawDriverLabel": "Will George Russell be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "driver": "lando_norris",
+      "club": "lando_norris",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "f1-world-drivers-champion-2026:lando-norris",
+          "rawDriverLabel": "F1 World Drivers’ Champion 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4839",
+          "rawDriverLabel": "Will Lando Norris be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "driver": "max_verstappen",
+      "club": "max_verstappen",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "f1-world-drivers-champion-2026:max-verstappen",
+          "rawDriverLabel": "F1 World Drivers’ Champion 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4836",
+          "rawDriverLabel": "Will Max Verstappen be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "OPINION|PREDICT",
+      "driver": "oscar_piastri",
+      "club": "oscar_piastri",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across OPINION|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "OPINION",
+          "venueMarketId": "f1-world-drivers-champion-2026:oscar-piastri",
+          "rawDriverLabel": "F1 World Drivers’ Champion 2026"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4841",
+          "rawDriverLabel": "Will Oscar Piastri be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "driver": "charles_leclerc",
+      "club": "charles_leclerc",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:charles-leclerc",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4837",
+          "rawDriverLabel": "Will Charles Leclerc be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "driver": "fernando_alonso",
+      "club": "fernando_alonso",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:fernando-alonso",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4838",
+          "rawDriverLabel": "Will Fernando Alonso be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "driver": "george_russell",
+      "club": "george_russell",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:george-russell",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4835",
+          "rawDriverLabel": "Will George Russell be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "driver": "kimi_antonelli",
+      "club": "kimi_antonelli",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:kimi-antonelli",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4842",
+          "rawDriverLabel": "Will Kimi Antonelli be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "driver": "lando_norris",
+      "club": "lando_norris",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:lando-norris",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4839",
+          "rawDriverLabel": "Will Lando Norris be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "driver": "lewis_hamilton",
+      "club": "lewis_hamilton",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:lewis-hamilton",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4843",
+          "rawDriverLabel": "Will Lewis Hamilton be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "driver": "max_verstappen",
+      "club": "max_verstappen",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:max-verstappen",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4836",
+          "rawDriverLabel": "Will Max Verstappen be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "driver": "oscar_piastri",
+      "club": "oscar_piastri",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg is shared across POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:oscar-piastri",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4841",
+          "rawDriverLabel": "Will Oscar Piastri be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    }
+  ]
+}

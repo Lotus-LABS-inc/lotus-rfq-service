@@ -1,0 +1,47 @@
+{
+  "observedAt": "2026-04-09T12:05:37.637Z",
+  "laneId": "SPORTS_F1_DRIVERS_CHAMPION_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT",
+  "matcherTruthConsumed": {
+    "topicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "bestPair": "LIMITLESS|POLYMARKET",
+    "bestAllVenueIfAny": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+    "exactSafeAllVenueDrivers": [
+      "george_russell",
+      "lando_norris",
+      "max_verstappen",
+      "oscar_piastri"
+    ],
+    "exactSafePairDrivers": [
+      "charles_leclerc",
+      "fernando_alonso",
+      "george_russell",
+      "kimi_antonelli",
+      "lando_norris",
+      "lewis_hamilton",
+      "max_verstappen",
+      "oscar_piastri"
+    ],
+    "overallDecision": "SPORTS_F1_DRIVERS_CHAMPION_2026_ALL_VENUE_REVIEW_REQUIRED_PAIR_FIRST",
+    "allVenueMatcherReady": true,
+    "pairMatcherReady": true,
+    "operatorCredible": true,
+    "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING"
+  },
+  "readinessConclusionsDerived": {
+    "finalReadinessLabel": "SPORTS_F1_DRIVERS_CHAMPION_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+    "readinessReviewJustified": true,
+    "operatorRuleReviewRequired": true,
+    "rolloutRecommended": false,
+    "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+    "exactLaneScopeLocked": true,
+    "peerPairRouteStillExplicit": true
+  },
+  "intentionallyUnchanged": [
+    "NO_AUTO_PROMOTION",
+    "NO_SCOPE_WIDENING",
+    "PAIR_ROUTE_REMAINS_EXPLICIT"
+  ],
+  "stillBlocked": [
+    "OPERATOR_RULE_REVIEW_REQUIRED"
+  ]
+}

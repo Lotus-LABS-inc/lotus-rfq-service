@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { registerAdminSportsRoutes } from "../src/api/admin/sports.routes.js";
 
 describe("admin sports routes", () => {
-  it("requires ADMIN + 2FA for mutations and exposes EPL, La Liga, Champions League, World Cup, and NBA lane surfaces", async () => {
+  it("requires ADMIN + 2FA for mutations and exposes EPL, La Liga, Champions League, World Cup, NBA, and F1 lane surfaces", async () => {
     process.env.ADMIN_2FA_TOKEN = "123456";
     const adminMiddleware: preHandlerHookHandler = async (request) => {
       (request as typeof request & { user: { userId: string; role: string } }).user = {
@@ -157,6 +157,58 @@ describe("admin sports routes", () => {
         blockers: ["operator_rule_review_required"],
         sourceArtifactRefs: [],
         currentStage: "INTERNAL_ONLY"
+      }, {
+        laneId: "SPORTS_F1_DRIVERS_CHAMPION_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT",
+        readinessDecision: "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+        operatorCredible: true,
+        operatorRuleReviewRequired: true,
+        topicKey: "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+        laneType: "STRICT_ALL",
+        venueSet: "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+        clubSet: ["george_russell", "lando_norris", "max_verstappen", "oscar_piastri"],
+        pairPreferred: false,
+        blockers: ["operator_rule_review_required"],
+        sourceArtifactRefs: [],
+        currentStage: "INTERNAL_ONLY"
+      }, {
+        laneId: "SPORTS_F1_DRIVERS_CHAMPION_2026_PAIR_LIMITLESS_POLYMARKET",
+        readinessDecision: "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+        operatorCredible: true,
+        operatorRuleReviewRequired: true,
+        topicKey: "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+        laneType: "PAIR",
+        venueSet: "LIMITLESS|POLYMARKET",
+        clubSet: ["charles_leclerc", "fernando_alonso", "george_russell", "kimi_antonelli", "lando_norris", "lewis_hamilton", "max_verstappen", "oscar_piastri"],
+        pairPreferred: true,
+        blockers: ["operator_rule_review_required"],
+        sourceArtifactRefs: [],
+        currentStage: "INTERNAL_ONLY"
+      }, {
+        laneId: "SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_TRI_LIMITLESS_OPINION_POLYMARKET",
+        readinessDecision: "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+        operatorCredible: true,
+        operatorRuleReviewRequired: true,
+        topicKey: "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+        laneType: "TRI",
+        venueSet: "LIMITLESS|OPINION|POLYMARKET",
+        clubSet: ["ferrari", "mclaren", "mercedes", "red_bull_racing"],
+        pairPreferred: false,
+        blockers: ["operator_rule_review_required"],
+        sourceArtifactRefs: [],
+        currentStage: "INTERNAL_ONLY"
+      }, {
+        laneId: "SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_PAIR_LIMITLESS_POLYMARKET",
+        readinessDecision: "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+        operatorCredible: true,
+        operatorRuleReviewRequired: true,
+        topicKey: "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+        laneType: "PAIR",
+        venueSet: "LIMITLESS|POLYMARKET",
+        clubSet: ["aston_martin", "audi", "ferrari", "mclaren", "mercedes", "red_bull_racing", "williams"],
+        pairPreferred: true,
+        blockers: ["operator_rule_review_required"],
+        sourceArtifactRefs: [],
+        currentStage: "INTERNAL_ONLY"
       }])),
       getLane: vi.fn(async () => ({
         laneId: "SPORTS_EPL_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT",
@@ -202,7 +254,7 @@ describe("admin sports routes", () => {
       url: "/admin/sports-lanes"
     });
     expect(listResponse.statusCode).toBe(200);
-    expect(JSON.parse(listResponse.body).lanes).toHaveLength(11);
+    expect(JSON.parse(listResponse.body).lanes).toHaveLength(15);
 
     const readinessResponse = await app.inject({
       method: "GET",

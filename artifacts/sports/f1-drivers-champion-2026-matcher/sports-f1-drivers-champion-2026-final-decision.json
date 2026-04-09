@@ -1,0 +1,16 @@
+{
+  "observedAt": "2026-04-09T11:59:10.564Z",
+  "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+  "overallDecision": "SPORTS_F1_DRIVERS_CHAMPION_2026_ALL_VENUE_REVIEW_REQUIRED_PAIR_FIRST",
+  "bestPair": "LIMITLESS|POLYMARKET",
+  "bestAllVenueIfAny": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+  "pairMatcherReady": true,
+  "allVenueMatcherReady": true,
+  "pairStillPreferred": true,
+  "exactSafePairCandidateCount": 8,
+  "exactSafeAllVenueCandidateCount": 4,
+  "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+  "operatorCredible": true,
+  "matcherFollowUpJustified": true,
+  "singleBestNextAction": "run a narrow readiness pass for SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026 with the preferred pair explicit and the strict all-venue lane kept review-gated."
+}

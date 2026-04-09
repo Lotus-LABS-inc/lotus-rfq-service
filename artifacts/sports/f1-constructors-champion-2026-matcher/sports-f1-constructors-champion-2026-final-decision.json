@@ -1,0 +1,16 @@
+{
+  "observedAt": "2026-04-09T12:29:51.496Z",
+  "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+  "overallDecision": "SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_PAIR_MATCHER_READY_PENDING_OPERATOR_REVIEW",
+  "bestPair": "LIMITLESS|POLYMARKET",
+  "bestAllVenueIfAny": null,
+  "pairMatcherReady": true,
+  "allVenueMatcherReady": false,
+  "pairStillPreferred": true,
+  "exactSafePairCandidateCount": 7,
+  "exactSafeAllVenueCandidateCount": 0,
+  "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+  "operatorCredible": true,
+  "matcherFollowUpJustified": true,
+  "singleBestNextAction": "Run a narrow readiness pass for SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026 on LIMITLESS|POLYMARKET only."
+}

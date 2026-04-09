@@ -358,6 +358,73 @@ Sports EPL operating rules:
 - pair and all-venue may both be surfaced as first-class lanes when exact topic and club truth support them
 - pair must remain separately offerable for users who do not want the all-venue route
 - no widening beyond the exact `SPORTS|LEAGUE_WINNER|EPL|2025_2026` topic
+
+Additional sports winner/tournament lane sets:
+
+- La Liga:
+  - topic:
+    - `SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026`
+  - strict-all lane:
+    - `SPORTS_LA_LIGA_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+  - primary pair lane:
+    - `SPORTS_LA_LIGA_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET`
+
+- Champions League:
+  - topic:
+    - `SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026`
+  - strict-all lane:
+    - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+  - primary pair lane:
+    - `SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET`
+
+- World Cup:
+  - topic:
+    - `SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026`
+  - strict-all lane:
+    - `SPORTS_WORLD_CUP_WINNER_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+  - primary pair lane:
+    - `SPORTS_WORLD_CUP_WINNER_2026_PAIR_LIMITLESS_POLYMARKET`
+
+- NBA Champion:
+  - topic:
+    - `SPORTS|TOURNAMENT_WINNER|NBA|2025_2026`
+  - strict-all lane:
+    - `SPORTS_NBA_CHAMPION_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+  - primary pair lane:
+    - `SPORTS_NBA_CHAMPION_2025_2026_PAIR_POLYMARKET_PREDICT`
+
+- F1 Drivers Champion:
+  - topic:
+    - `SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026`
+  - strict-all lane:
+    - `SPORTS_F1_DRIVERS_CHAMPION_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+  - primary pair lane:
+    - `SPORTS_F1_DRIVERS_CHAMPION_2026_PAIR_LIMITLESS_POLYMARKET`
+  - pair exact-safe drivers:
+    - `charles_leclerc`
+    - `fernando_alonso`
+    - `george_russell`
+    - `kimi_antonelli`
+    - `lando_norris`
+    - `lewis_hamilton`
+    - `max_verstappen`
+    - `oscar_piastri`
+  - strict-all exact-safe drivers:
+    - `george_russell`
+    - `lando_norris`
+    - `max_verstappen`
+    - `oscar_piastri`
+  - readiness:
+    - `SPORTS_F1_DRIVERS_CHAMPION_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+
+Sports admin/operator surface:
+- `GET /admin/sports-lanes`
+- `GET /admin/sports-lanes/:laneId`
+- `GET /admin/sports-lanes/:laneId/readiness`
+- `GET /admin/sports-lanes/:laneId/rollback-plan`
+- `POST /admin/sports-lanes/:laneId/operator-approval-intent`
+- `POST /admin/sports-lanes/:laneId/hold`
+- `POST /admin/sports-lanes/:laneId/rollback`
 - strict all-venue core remains exactly 3 clubs
 - venue-only tails remain excluded
 - rollback remains lane-scoped
@@ -430,6 +497,8 @@ Current completed sports topics under this model:
 - `SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026`
 - `SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026`
 - `SPORTS|TOURNAMENT_WINNER|NBA|2025_2026`
+- `SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026`
+- `SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026`
 
 Per-topic lane counts:
 - `4` single
@@ -518,6 +587,14 @@ Generated lane ids:
   - `SPORTS_NBA_CHAMPION_2025_2026_TRI_LIMITLESS_POLYMARKET_PREDICT`
   - `SPORTS_NBA_CHAMPION_2025_2026_TRI_OPINION_POLYMARKET_PREDICT`
   - `SPORTS_NBA_CHAMPION_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+- F1 Constructors Champion:
+  - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_SINGLE_LIMITLESS`
+  - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_SINGLE_OPINION`
+  - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_SINGLE_POLYMARKET`
+  - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_PAIR_LIMITLESS_OPINION`
+  - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_PAIR_LIMITLESS_POLYMARKET`
+  - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_PAIR_OPINION_POLYMARKET`
+  - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
 
 ## Sports World Cup Narrow Review Addendum
 
@@ -597,5 +674,42 @@ Sports NBA operating rules:
 - pair must remain separately offerable for users who do not want the strict-all route
 - no widening beyond the exact `SPORTS|TOURNAMENT_WINNER|NBA|2025_2026` topic
 - strict all-venue core remains exactly 4 teams
+- venue-only tails remain excluded
+- rollback remains lane-scoped
+
+## Sports F1 Constructors Champion Narrow Review Addendum
+
+- Topic:
+  - `SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026`
+- Tri lane:
+  - `LIMITLESS|OPINION|POLYMARKET`
+  - lane id:
+    - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+  - exact-safe constructors:
+    - `ferrari`
+    - `mclaren`
+    - `mercedes`
+    - `red_bull_racing`
+  - readiness:
+    - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- Pair lane:
+  - `LIMITLESS|POLYMARKET`
+  - lane id:
+    - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_PAIR_LIMITLESS_POLYMARKET`
+  - exact-safe constructors:
+    - `aston_martin`
+    - `audi`
+    - `ferrari`
+    - `mclaren`
+    - `mercedes`
+    - `red_bull_racing`
+    - `williams`
+  - readiness:
+    - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+
+Sports F1 Constructors operating rules:
+- pair and tri may both be surfaced as first-class lanes when exact constructor truth supports them
+- no widening beyond the exact `SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026` topic
+- no invented Predict lane until venue truth exists
 - venue-only tails remain excluded
 - rollback remains lane-scoped

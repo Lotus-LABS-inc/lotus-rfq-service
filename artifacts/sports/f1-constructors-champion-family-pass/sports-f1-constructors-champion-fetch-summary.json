@@ -1,0 +1,14 @@
+{
+  "rowsFetchedByVenue": {
+    "OPINION": 4,
+    "POLYMARKET": 7,
+    "LIMITLESS": 8
+  },
+  "rowsAdmittedByVenue": {
+    "OPINION": 4,
+    "POLYMARKET": 7,
+    "LIMITLESS": 7
+  },
+  "priorRowsFetchedByVenue": {},
+  "priorRowsAdmittedByVenue": {}
+}

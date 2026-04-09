@@ -1,0 +1,37 @@
+{
+  "observedAt": "2026-04-09T12:38:25.244Z",
+  "laneId": "SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_PAIR_LIMITLESS_POLYMARKET",
+  "matcherTruthConsumed": {
+    "topicKey": "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026",
+    "bestPair": "LIMITLESS|POLYMARKET",
+    "exactSafePairConstructors": [
+      "aston_martin",
+      "audi",
+      "ferrari",
+      "mclaren",
+      "mercedes",
+      "red_bull_racing",
+      "williams"
+    ],
+    "overallDecision": "SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_PAIR_MATCHER_READY_PENDING_OPERATOR_REVIEW",
+    "pairMatcherReady": true,
+    "operatorCredible": true,
+    "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING"
+  },
+  "readinessConclusionsDerived": {
+    "finalReadinessLabel": "SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+    "readinessReviewJustified": true,
+    "operatorRuleReviewRequired": true,
+    "rolloutRecommended": false,
+    "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+    "exactLaneScopeLocked": true
+  },
+  "intentionallyUnchanged": [
+    "No widening beyond LIMITLESS|POLYMARKET",
+    "No venue-only tails admitted into pair lane",
+    "No automatic promotion implied"
+  ],
+  "stillBlocked": [
+    "Operator rule review still required before production promotion."
+  ]
+}

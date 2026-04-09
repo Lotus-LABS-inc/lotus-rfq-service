@@ -221,6 +221,47 @@
   - `SPORTS_NBA_CHAMPION_2025_2026_TRI_OPINION_POLYMARKET_PREDICT`
   - `SPORTS_NBA_CHAMPION_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
 
+#### F1 Drivers Champion
+- topic:
+  - `SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026`
+- lane counts:
+  - `4` single
+  - `6` pair
+  - `4` tri
+  - `1` strict_all
+- lane ids:
+  - `SPORTS_F1_DRIVERS_CHAMPION_2026_SINGLE_LIMITLESS`
+  - `SPORTS_F1_DRIVERS_CHAMPION_2026_SINGLE_OPINION`
+  - `SPORTS_F1_DRIVERS_CHAMPION_2026_SINGLE_POLYMARKET`
+  - `SPORTS_F1_DRIVERS_CHAMPION_2026_SINGLE_PREDICT`
+  - `SPORTS_F1_DRIVERS_CHAMPION_2026_PAIR_LIMITLESS_OPINION`
+  - `SPORTS_F1_DRIVERS_CHAMPION_2026_PAIR_LIMITLESS_POLYMARKET`
+  - `SPORTS_F1_DRIVERS_CHAMPION_2026_PAIR_LIMITLESS_PREDICT`
+  - `SPORTS_F1_DRIVERS_CHAMPION_2026_PAIR_OPINION_POLYMARKET`
+  - `SPORTS_F1_DRIVERS_CHAMPION_2026_PAIR_OPINION_PREDICT`
+  - `SPORTS_F1_DRIVERS_CHAMPION_2026_PAIR_POLYMARKET_PREDICT`
+  - `SPORTS_F1_DRIVERS_CHAMPION_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+  - `SPORTS_F1_DRIVERS_CHAMPION_2026_TRI_LIMITLESS_OPINION_PREDICT`
+  - `SPORTS_F1_DRIVERS_CHAMPION_2026_TRI_LIMITLESS_POLYMARKET_PREDICT`
+  - `SPORTS_F1_DRIVERS_CHAMPION_2026_TRI_OPINION_POLYMARKET_PREDICT`
+  - `SPORTS_F1_DRIVERS_CHAMPION_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT`
+
+#### F1 Constructors Champion
+- topic:
+  - `SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026`
+- lane counts:
+  - `3` single
+  - `3` pair
+  - `1` tri
+- lane ids:
+  - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_SINGLE_LIMITLESS`
+  - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_SINGLE_OPINION`
+  - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_SINGLE_POLYMARKET`
+  - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_PAIR_LIMITLESS_OPINION`
+  - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_PAIR_LIMITLESS_POLYMARKET`
+  - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_PAIR_OPINION_POLYMARKET`
+  - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+
 ### Current Recommended Next Action
 
 - Future sports topics should now use the same `single | pair | tri | strict_all` model by default, with `/admin/sports-lanes` serving the emitted lane ids directly from the lane catalogs.
@@ -553,6 +594,53 @@
   - pair and strict-all are both first-class routes when exact topic and team truth support them
   - no widening beyond `SPORTS|TOURNAMENT_WINNER|NBA|2025_2026`
   - strict all-venue core remains exactly 4 teams
+  - venue-only tails remain excluded
+  - hold and rollback remain lane-scoped only
+
+#### 10. Added sports F1 Constructors Champion readiness and real admin parity
+- Topic:
+  - `SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026`
+- Tri lane:
+  - lane id:
+    - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+  - venues:
+    - `LIMITLESS|OPINION|POLYMARKET`
+  - exact-safe constructors:
+    - `ferrari`
+    - `mclaren`
+    - `mercedes`
+    - `red_bull_racing`
+  - readiness:
+    - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- Pair lane:
+  - lane id:
+    - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_PAIR_LIMITLESS_POLYMARKET`
+  - venues:
+    - `LIMITLESS|POLYMARKET`
+  - exact-safe constructors:
+    - `aston_martin`
+    - `audi`
+    - `ferrari`
+    - `mclaren`
+    - `mercedes`
+    - `red_bull_racing`
+    - `williams`
+  - readiness:
+    - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- Rule state:
+  - `SEMANTICALLY_COMPATIBLE_REWORDING`
+- Sports admin namespace remains:
+  - `GET /admin/sports-lanes`
+  - `GET /admin/sports-lanes/:laneId`
+  - `GET /admin/sports-lanes/:laneId/readiness`
+  - `GET /admin/sports-lanes/:laneId/rollback-plan`
+  - `POST /admin/sports-lanes/:laneId/operator-approval-intent`
+  - `POST /admin/sports-lanes/:laneId/hold`
+  - `POST /admin/sports-lanes/:laneId/rollback`
+- Operating posture:
+  - pair and tri are both first-class routes when exact constructor truth supports them
+  - no widening beyond `SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026`
+  - no invented Predict lane until venue truth exists
   - venue-only tails remain excluded
   - hold and rollback remain lane-scoped only
 

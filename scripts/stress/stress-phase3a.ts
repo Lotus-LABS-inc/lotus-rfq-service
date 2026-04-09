@@ -6,46 +6,46 @@ import path from "node:path";
 import pino from "pino";
 import { Pool } from "pg";
 
-import { connectRedis, createRedisClient, type RedisClient } from "../src/db/redis.js";
-import { ReplayEnvelopeWriter } from "../src/core/replay/replay-envelope-writer.js";
-import { ReplayDecisionCaptureService } from "../src/core/replay/replay-decision-capture-service.js";
-import { ExactReplayRunner } from "../src/core/replay/exact-replay-runner.js";
-import { DiffReplayRunner } from "../src/core/replay/diff-replay-runner.js";
-import { replayNettingPhase2A } from "../src/core/replay/evaluators/netting-phase2a-replay-evaluator.js";
-import { replayClearingPhase2B } from "../src/core/replay/evaluators/clearing-phase2b-replay-evaluator.js";
-import { replaySORPlan } from "../src/core/replay/evaluators/sor-plan-replay-evaluator.js";
-import { ReplayAdminService } from "../src/api/admin/replay-admin-service.js";
-import { ControlPlaneAdminService } from "../src/api/admin/control-plane-admin-service.js";
-import { ResolutionPairComparator } from "../src/core/rfq-engine/resolution-pair-comparator.js";
-import { ResolutionRiskScoringEngine } from "../src/core/rfq-engine/resolution-risk-scoring-engine.js";
-import { CostModel } from "../src/core/sor/cost-model.js";
-import { Splitter } from "../src/core/sor/splitter.js";
-import { PlanComposer } from "../src/core/sor/plan-composer.js";
-import { OrderRouter } from "../src/core/sor/order-router.js";
+import { connectRedis, createRedisClient, type RedisClient } from "../../src/db/redis.js";
+import { ReplayEnvelopeWriter } from "../../src/core/replay/replay-envelope-writer.js";
+import { ReplayDecisionCaptureService } from "../../src/core/replay/replay-decision-capture-service.js";
+import { ExactReplayRunner } from "../../src/core/replay/exact-replay-runner.js";
+import { DiffReplayRunner } from "../../src/core/replay/diff-replay-runner.js";
+import { replayNettingPhase2A } from "../../src/core/replay/evaluators/netting-phase2a-replay-evaluator.js";
+import { replayClearingPhase2B } from "../../src/core/replay/evaluators/clearing-phase2b-replay-evaluator.js";
+import { replaySORPlan } from "../../src/core/replay/evaluators/sor-plan-replay-evaluator.js";
+import { ReplayAdminService } from "../../src/api/admin/replay-admin-service.js";
+import { ControlPlaneAdminService } from "../../src/api/admin/control-plane-admin-service.js";
+import { ResolutionPairComparator } from "../../src/core/rfq-engine/resolution-pair-comparator.js";
+import { ResolutionRiskScoringEngine } from "../../src/core/rfq-engine/resolution-risk-scoring-engine.js";
+import { CostModel } from "../../src/core/sor/cost-model.js";
+import { Splitter } from "../../src/core/sor/splitter.js";
+import { PlanComposer } from "../../src/core/sor/plan-composer.js";
+import { OrderRouter } from "../../src/core/sor/order-router.js";
 import type {
   CanonicalRFQInput,
   RouteCandidate,
   SelectedQuoteInput,
   SORAcceptancePolicy
-} from "../src/core/sor/types.js";
-import { ComboNettingCandidateRegistry } from "../src/core/combo-engine/combo-netting-candidate-registry.js";
-import { ComboNettingCompatibilityEngine } from "../src/core/combo-engine/combo-netting-compatibility-engine.js";
-import { ResourceLocker } from "../src/core/combo-engine/resource-locker.js";
-import { MultiLegInternalNettingEngine } from "../src/core/combo-engine/multi-leg-internal-netting-engine.js";
-import type { MultiLegInternalNettingInput } from "../src/core/combo-engine/types.js";
-import { Phase2BCandidateRegistry } from "../src/core/combo-engine/phase2b-candidate-registry.js";
-import { ResidualVectorBuilder } from "../src/core/combo-engine/residual-vector-builder.js";
-import { OverlapGraphBuilder } from "../src/core/combo-engine/overlap-graph-builder.js";
-import { CandidateGroupEnumerator } from "../src/core/combo-engine/candidate-group-enumerator.js";
-import { ClearingCompressionScorer } from "../src/core/combo-engine/clearing-compression-scorer.js";
-import { ClearingRoundPlanner } from "../src/core/combo-engine/clearing-round-planner.js";
-import { MultiPartyExposureAggregator } from "../src/core/combo-engine/multi-party-exposure-aggregator.js";
-import { MultiPartyClearingExecutor } from "../src/core/combo-engine/multi-party-clearing-executor.js";
-import { DegradationManager } from "../src/guardrails/degradation-manager.js";
-import { GuardrailEvaluator } from "../src/guardrails/guardrail-evaluator.js";
-import { createPerformanceGuardrailConfig } from "../src/guardrails/guardrail-config.js";
-import { OrderBook } from "../src/core/internal-engine/order-book.js";
-import { ReconciliationV2Job } from "../src/jobs/reconciliation-v2.job.js";
+} from "../../src/core/sor/types.js";
+import { ComboNettingCandidateRegistry } from "../../src/core/combo-engine/combo-netting-candidate-registry.js";
+import { ComboNettingCompatibilityEngine } from "../../src/core/combo-engine/combo-netting-compatibility-engine.js";
+import { ResourceLocker } from "../../src/core/combo-engine/resource-locker.js";
+import { MultiLegInternalNettingEngine } from "../../src/core/combo-engine/multi-leg-internal-netting-engine.js";
+import type { MultiLegInternalNettingInput } from "../../src/core/combo-engine/types.js";
+import { Phase2BCandidateRegistry } from "../../src/core/combo-engine/phase2b-candidate-registry.js";
+import { ResidualVectorBuilder } from "../../src/core/combo-engine/residual-vector-builder.js";
+import { OverlapGraphBuilder } from "../../src/core/combo-engine/overlap-graph-builder.js";
+import { CandidateGroupEnumerator } from "../../src/core/combo-engine/candidate-group-enumerator.js";
+import { ClearingCompressionScorer } from "../../src/core/combo-engine/clearing-compression-scorer.js";
+import { ClearingRoundPlanner } from "../../src/core/combo-engine/clearing-round-planner.js";
+import { MultiPartyExposureAggregator } from "../../src/core/combo-engine/multi-party-exposure-aggregator.js";
+import { MultiPartyClearingExecutor } from "../../src/core/combo-engine/multi-party-clearing-executor.js";
+import { DegradationManager } from "../../src/guardrails/degradation-manager.js";
+import { GuardrailEvaluator } from "../../src/guardrails/guardrail-evaluator.js";
+import { createPerformanceGuardrailConfig } from "../../src/guardrails/guardrail-config.js";
+import { OrderBook } from "../../src/core/internal-engine/order-book.js";
+import { ReconciliationV2Job } from "../../src/jobs/reconciliation-v2.job.js";
 import {
   applyMigrations,
   buildCreatedAt,
@@ -57,7 +57,7 @@ import {
   loadResidualEntity,
   safeDisconnectRedis,
   scopeReconciliationJobToCombos
-} from "../test/support/phase3a-proof-support.js";
+} from "../../test/support/phase3a-proof-support.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

@@ -1,0 +1,14 @@
+{
+  "totalAdmittedTournamentWinnerRows": 18,
+  "rowsRejectedByReason": {
+    "OTHERS_EXCLUDED": 1
+  },
+  "rowsAdmittedByTopicCandidate": {
+    "SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026": 18
+  },
+  "venueBreakdown": {
+    "OPINION": 4,
+    "POLYMARKET": 7,
+    "LIMITLESS": 7
+  }
+}

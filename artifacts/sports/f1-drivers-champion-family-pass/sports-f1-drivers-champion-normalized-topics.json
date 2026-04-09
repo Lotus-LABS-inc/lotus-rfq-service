@@ -1,0 +1,498 @@
+[
+  {
+    "interpretedContractId": "opinion-f1-drivers-champion-george-russell",
+    "venue": "OPINION",
+    "venueMarketId": "f1-world-drivers-champion-2026:george-russell",
+    "title": "F1 World Drivers’ Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "george_russell",
+    "interpretationNotes": [
+      "driver_label=George Russell",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "opinion-f1-drivers-champion-lando-norris",
+    "venue": "OPINION",
+    "venueMarketId": "f1-world-drivers-champion-2026:lando-norris",
+    "title": "F1 World Drivers’ Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "lando_norris",
+    "interpretationNotes": [
+      "driver_label=Lando Norris",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "opinion-f1-drivers-champion-max-verstappen",
+    "venue": "OPINION",
+    "venueMarketId": "f1-world-drivers-champion-2026:max-verstappen",
+    "title": "F1 World Drivers’ Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "max_verstappen",
+    "interpretationNotes": [
+      "driver_label=Max Verstappen",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "opinion-f1-drivers-champion-oscar-piastri",
+    "venue": "OPINION",
+    "venueMarketId": "f1-world-drivers-champion-2026:oscar-piastri",
+    "title": "F1 World Drivers’ Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "oscar_piastri",
+    "interpretationNotes": [
+      "driver_label=Oscar Piastri",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-f1-drivers-champion-lando-norris",
+    "venue": "POLYMARKET",
+    "venueMarketId": "2026-f1-drivers-champion:lando-norris",
+    "title": "2026 F1 Drivers' Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "lando_norris",
+    "interpretationNotes": [
+      "driver_label=Lando Norris",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-f1-drivers-champion-george-russell",
+    "venue": "POLYMARKET",
+    "venueMarketId": "2026-f1-drivers-champion:george-russell",
+    "title": "2026 F1 Drivers' Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "george_russell",
+    "interpretationNotes": [
+      "driver_label=George Russell",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-f1-drivers-champion-kimi-antonelli",
+    "venue": "POLYMARKET",
+    "venueMarketId": "2026-f1-drivers-champion:kimi-antonelli",
+    "title": "2026 F1 Drivers' Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "kimi_antonelli",
+    "interpretationNotes": [
+      "driver_label=Kimi Antonelli",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-f1-drivers-champion-charles-leclerc",
+    "venue": "POLYMARKET",
+    "venueMarketId": "2026-f1-drivers-champion:charles-leclerc",
+    "title": "2026 F1 Drivers' Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "charles_leclerc",
+    "interpretationNotes": [
+      "driver_label=Charles Leclerc",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-f1-drivers-champion-oscar-piastri",
+    "venue": "POLYMARKET",
+    "venueMarketId": "2026-f1-drivers-champion:oscar-piastri",
+    "title": "2026 F1 Drivers' Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "oscar_piastri",
+    "interpretationNotes": [
+      "driver_label=Oscar Piastri",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-f1-drivers-champion-lewis-hamilton",
+    "venue": "POLYMARKET",
+    "venueMarketId": "2026-f1-drivers-champion:lewis-hamilton",
+    "title": "2026 F1 Drivers' Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "lewis_hamilton",
+    "interpretationNotes": [
+      "driver_label=Lewis Hamilton",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-f1-drivers-champion-max-verstappen",
+    "venue": "POLYMARKET",
+    "venueMarketId": "2026-f1-drivers-champion:max-verstappen",
+    "title": "2026 F1 Drivers' Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "max_verstappen",
+    "interpretationNotes": [
+      "driver_label=Max Verstappen",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-f1-drivers-champion-fernando-alonso",
+    "venue": "POLYMARKET",
+    "venueMarketId": "2026-f1-drivers-champion:fernando-alonso",
+    "title": "2026 F1 Drivers' Champion",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "fernando_alonso",
+    "interpretationNotes": [
+      "driver_label=Fernando Alonso",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-f1-drivers-champion-max-verstappen",
+    "venue": "LIMITLESS",
+    "venueMarketId": "f1-drivers-champion-1769015228907:max-verstappen",
+    "title": "F1 Drivers' Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "max_verstappen",
+    "interpretationNotes": [
+      "driver_label=Max Verstappen",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-f1-drivers-champion-george-russell",
+    "venue": "LIMITLESS",
+    "venueMarketId": "f1-drivers-champion-1769015228907:george-russell",
+    "title": "F1 Drivers' Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "george_russell",
+    "interpretationNotes": [
+      "driver_label=George Russell",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-f1-drivers-champion-lando-norris",
+    "venue": "LIMITLESS",
+    "venueMarketId": "f1-drivers-champion-1769015228907:lando-norris",
+    "title": "F1 Drivers' Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "lando_norris",
+    "interpretationNotes": [
+      "driver_label=Lando Norris",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-f1-drivers-champion-oscar-piastri",
+    "venue": "LIMITLESS",
+    "venueMarketId": "f1-drivers-champion-1769015228907:oscar-piastri",
+    "title": "F1 Drivers' Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "oscar_piastri",
+    "interpretationNotes": [
+      "driver_label=Oscar Piastri",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-f1-drivers-champion-fernando-alonso",
+    "venue": "LIMITLESS",
+    "venueMarketId": "f1-drivers-champion-1769015228907:fernando-alonso",
+    "title": "F1 Drivers' Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "fernando_alonso",
+    "interpretationNotes": [
+      "driver_label=Fernando Alonso",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-f1-drivers-champion-kimi-antonelli",
+    "venue": "LIMITLESS",
+    "venueMarketId": "f1-drivers-champion-1769015228907:kimi-antonelli",
+    "title": "F1 Drivers' Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "kimi_antonelli",
+    "interpretationNotes": [
+      "driver_label=Kimi Antonelli",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-f1-drivers-champion-charles-leclerc",
+    "venue": "LIMITLESS",
+    "venueMarketId": "f1-drivers-champion-1769015228907:charles-leclerc",
+    "title": "F1 Drivers' Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "charles_leclerc",
+    "interpretationNotes": [
+      "driver_label=Charles Leclerc",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-f1-drivers-champion-lewis-hamilton",
+    "venue": "LIMITLESS",
+    "venueMarketId": "f1-drivers-champion-1769015228907:lewis-hamilton",
+    "title": "F1 Drivers' Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "lewis_hamilton",
+    "interpretationNotes": [
+      "driver_label=Lewis Hamilton",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-f1-drivers-champion-isack-hadjar",
+    "venue": "LIMITLESS",
+    "venueMarketId": "f1-drivers-champion-1769015228907:isack-hadjar",
+    "title": "F1 Drivers' Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "other",
+    "interpretationNotes": [
+      "driver_label=Isack Hadjar",
+      "rules_present"
+    ],
+    "rejectionReason": "OTHERS_EXCLUDED"
+  },
+  {
+    "interpretedContractId": "limitless-f1-drivers-champion-other",
+    "venue": "LIMITLESS",
+    "venueMarketId": "f1-drivers-champion-1769015228907:other",
+    "title": "F1 Drivers' Champion 2026",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "other",
+    "interpretationNotes": [
+      "driver_label=Other",
+      "rules_present"
+    ],
+    "rejectionReason": "OTHERS_EXCLUDED"
+  },
+  {
+    "interpretedContractId": "predict-f1-drivers-champion-4835",
+    "venue": "PREDICT",
+    "venueMarketId": "4835",
+    "title": "Will George Russell be the 2026 F1 Drivers' Champion?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "george_russell",
+    "interpretationNotes": [
+      "driver_label=George Russell",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-f1-drivers-champion-4836",
+    "venue": "PREDICT",
+    "venueMarketId": "4836",
+    "title": "Will Max Verstappen be the 2026 F1 Drivers' Champion?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "max_verstappen",
+    "interpretationNotes": [
+      "driver_label=Max Verstappen",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-f1-drivers-champion-4837",
+    "venue": "PREDICT",
+    "venueMarketId": "4837",
+    "title": "Will Charles Leclerc be the 2026 F1 Drivers' Champion?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "charles_leclerc",
+    "interpretationNotes": [
+      "driver_label=Charles Leclerc",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-f1-drivers-champion-4838",
+    "venue": "PREDICT",
+    "venueMarketId": "4838",
+    "title": "Will Fernando Alonso be the 2026 F1 Drivers' Champion?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "fernando_alonso",
+    "interpretationNotes": [
+      "driver_label=Fernando Alonso",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-f1-drivers-champion-4839",
+    "venue": "PREDICT",
+    "venueMarketId": "4839",
+    "title": "Will Lando Norris be the 2026 F1 Drivers' Champion?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "lando_norris",
+    "interpretationNotes": [
+      "driver_label=Lando Norris",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-f1-drivers-champion-4840",
+    "venue": "PREDICT",
+    "venueMarketId": "4840",
+    "title": "Will any other driver be the 2026 F1 Drivers' Champion?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "other",
+    "interpretationNotes": [
+      "driver_label=Other",
+      "rules_present"
+    ],
+    "rejectionReason": "OTHERS_EXCLUDED"
+  },
+  {
+    "interpretedContractId": "predict-f1-drivers-champion-4841",
+    "venue": "PREDICT",
+    "venueMarketId": "4841",
+    "title": "Will Oscar Piastri be the 2026 F1 Drivers' Champion?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "oscar_piastri",
+    "interpretationNotes": [
+      "driver_label=Oscar Piastri",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-f1-drivers-champion-4842",
+    "venue": "PREDICT",
+    "venueMarketId": "4842",
+    "title": "Will Kimi Antonelli be the 2026 F1 Drivers' Champion?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "kimi_antonelli",
+    "interpretationNotes": [
+      "driver_label=Kimi Antonelli",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-f1-drivers-champion-4843",
+    "venue": "PREDICT",
+    "venueMarketId": "4843",
+    "title": "Will Lewis Hamilton be the 2026 F1 Drivers' Champion?",
+    "canonicalFamily": "TOURNAMENT_WINNER",
+    "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+    "canonicalCompetition": "F1_DRIVERS_CHAMPIONSHIP",
+    "canonicalSeason": "2026",
+    "canonicalDriverId": "lewis_hamilton",
+    "interpretationNotes": [
+      "driver_label=Lewis Hamilton",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  }
+]

@@ -1,0 +1,146 @@
+{
+  "observedAt": "2026-04-09T11:59:10.530Z",
+  "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+  "canonicalVenueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+  "matcherLanes": [
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "driver": "george_russell",
+      "club": "george_russell",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "ALL_VENUE_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg survives the strict 4-venue intersection, but wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this strict-all lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:george-russell",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "f1-world-drivers-champion-2026:george-russell",
+          "rawDriverLabel": "F1 World Drivers’ Champion 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:george-russell",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4835",
+          "rawDriverLabel": "Will George Russell be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "driver": "lando_norris",
+      "club": "lando_norris",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "ALL_VENUE_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg survives the strict 4-venue intersection, but wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this strict-all lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:lando-norris",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "f1-world-drivers-champion-2026:lando-norris",
+          "rawDriverLabel": "F1 World Drivers’ Champion 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:lando-norris",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4839",
+          "rawDriverLabel": "Will Lando Norris be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "driver": "max_verstappen",
+      "club": "max_verstappen",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "ALL_VENUE_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg survives the strict 4-venue intersection, but wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this strict-all lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:max-verstappen",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "f1-world-drivers-champion-2026:max-verstappen",
+          "rawDriverLabel": "F1 World Drivers’ Champion 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:max-verstappen",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4836",
+          "rawDriverLabel": "Will Max Verstappen be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    },
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+      "driver": "oscar_piastri",
+      "club": "oscar_piastri",
+      "canonicalTopic": "SPORTS|TOURNAMENT_WINNER|F1_DRIVERS_CHAMPIONSHIP|2026",
+      "routeabilityDecision": "ALL_VENUE_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "Driver leg survives the strict 4-venue intersection, but wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this strict-all lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "f1-drivers-champion-1769015228907:oscar-piastri",
+          "rawDriverLabel": "F1 Drivers' Champion 2026"
+        },
+        {
+          "venue": "OPINION",
+          "venueMarketId": "f1-world-drivers-champion-2026:oscar-piastri",
+          "rawDriverLabel": "F1 World Drivers’ Champion 2026"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "2026-f1-drivers-champion:oscar-piastri",
+          "rawDriverLabel": "2026 F1 Drivers' Champion"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "4841",
+          "rawDriverLabel": "Will Oscar Piastri be the 2026 F1 Drivers' Champion?"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Strict all-venue lane survived the LIMITLESS|OPINION|POLYMARKET|PREDICT intersection on a 4-driver core."
+  ]
+}

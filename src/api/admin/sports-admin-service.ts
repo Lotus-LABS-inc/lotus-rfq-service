@@ -25,6 +25,16 @@ import {
   sportsNbaChampion20252026PairPolymarketPredictLaneId
 } from "../../operations/semantic-expansion/sports-nba-champion-2025-2026-limited-prod-shared.js";
 import {
+  SPORTS_F1_DRIVERS_CHAMPION_2026_ROLLOUT_SCOPE_TYPE,
+  SPORTS_F1_DRIVERS_CHAMPION_2026_ROLLOUT_STRATEGY_KEY,
+  sportsF1DriversChampion2026PairLimitlessPolymarketLaneId
+} from "../../operations/semantic-expansion/sports-f1-drivers-champion-2026-limited-prod-shared.js";
+import {
+  SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_ROLLOUT_SCOPE_TYPE,
+  SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_ROLLOUT_STRATEGY_KEY,
+  sportsF1ConstructorsChampion2026PairLimitlessPolymarketLaneId
+} from "../../operations/semantic-expansion/sports-f1-constructors-champion-2026-limited-prod-shared.js";
+import {
   SPORTS_WORLD_CUP_WINNER_2026_ROLLOUT_SCOPE_TYPE,
   SPORTS_WORLD_CUP_WINNER_2026_ROLLOUT_STRATEGY_KEY,
   sportsWorldCupWinner2026PairLimitlessPolymarketLaneId
@@ -139,6 +149,20 @@ const topicConfigs: readonly SportsTopicConfig[] = [
     strategyKey: SPORTS_NBA_CHAMPION_2025_2026_ROLLOUT_STRATEGY_KEY,
     scopeType: SPORTS_NBA_CHAMPION_2025_2026_ROLLOUT_SCOPE_TYPE,
     primaryPairLaneId: sportsNbaChampion20252026PairPolymarketPredictLaneId
+  },
+  {
+    laneIdPrefix: "SPORTS_F1_DRIVERS_CHAMPION_2026",
+    laneCatalogPath: "artifacts/sports/f1-drivers-champion-2026-matcher/sports-f1-drivers-champion-2026-lane-catalog.json",
+    strategyKey: SPORTS_F1_DRIVERS_CHAMPION_2026_ROLLOUT_STRATEGY_KEY,
+    scopeType: SPORTS_F1_DRIVERS_CHAMPION_2026_ROLLOUT_SCOPE_TYPE,
+    primaryPairLaneId: sportsF1DriversChampion2026PairLimitlessPolymarketLaneId
+  },
+  {
+    laneIdPrefix: "SPORTS_F1_CONSTRUCTORS_CHAMPION_2026",
+    laneCatalogPath: "artifacts/sports/f1-constructors-champion-2026-matcher/sports-f1-constructors-champion-2026-lane-catalog.json",
+    strategyKey: SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_ROLLOUT_STRATEGY_KEY,
+    scopeType: SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_ROLLOUT_SCOPE_TYPE,
+    primaryPairLaneId: sportsF1ConstructorsChampion2026PairLimitlessPolymarketLaneId
   }
 ] as const;
 
