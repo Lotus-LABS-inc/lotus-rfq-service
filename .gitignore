@@ -9,3 +9,4 @@ coverage/
 .tmp-*
 .local-pg.log
 .local-pgdata/
+tmp-*.html
