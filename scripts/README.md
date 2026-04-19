@@ -17,3 +17,7 @@ Rules:
 - script files are executable entrypoints only
 - package script names remain stable even when file locations change
 - new scripts should not be added to the root `scripts/` directory unless they are category READMEs
+
+Migration rule:
+
+- any migration that depends on an existing table must either sort after that base `CREATE TABLE` migration in the repo's ordered migration runner or guard on `to_regclass(...)` so it is safe on a fresh empty database

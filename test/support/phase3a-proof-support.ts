@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
@@ -80,417 +81,144 @@ export const withTransientRetry = async <T>(operation: () => Promise<T>, attempt
   }
 };
 
-export const applyMigrations = async (pool: Pool): Promise<void> => {
-  // Bootstrap combo base tables first because some migration filenames currently
-  // sort before the original combo-table migration while still referencing combo_rfqs.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS combo_rfqs (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id UUID NOT NULL,
-      acceptance_policy TEXT NOT NULL CHECK(acceptance_policy IN ('ALL_OR_NONE','BEST_EFFORT','PARTIAL_ALLOWED')),
-      state TEXT NOT NULL,
-      expires_at TIMESTAMPTZ,
-      metadata JSONB,
-      created_at TIMESTAMPTZ DEFAULT now()
-    );
+const migrationOrderOverrides = new Map<string, number>([
+  ["2026_03_02_create_combo_tables.sql", -20],
+  ["2026_03_02_combine_exec_plans.sql", -19],
+  ["2026_03_10_create_combo_netting_tables.sql", -18],
+  ["2026_03_10_create_combo_netting_attempts.sql", -17]
+]);
 
-    CREATE TABLE IF NOT EXISTS combo_legs (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      combo_rfq_id UUID REFERENCES combo_rfqs(id) ON DELETE CASCADE,
-      canonical_market_id UUID NOT NULL,
-      canonical_outcome_id UUID NOT NULL,
-      side TEXT NOT NULL CHECK(side IN ('buy','sell')),
-      size NUMERIC NOT NULL,
-      price_hint NUMERIC,
-      metadata JSONB
-    );
+const phase3aSchemaGroups = {
+  comboCore: ["combo_rfqs", "combo_legs", "combo_quotes", "combo_executions", "combo_events"],
+  comboNetting: ["combo_netting_groups", "combo_netting_match_legs", "combo_netting_events", "combo_netting_attempts"],
+  sor: ["routing_plans", "route_candidates", "route_steps", "route_history"],
+  historical: ["historical_market_states", "historical_simulation_runs", "historical_simulation_results"],
+  predictPhase4: [
+    "predict_market_metadata",
+    "predict_orderbook_snapshots",
+    "predict_orderbook_deltas",
+    "predict_match_events",
+    "predict_recorder_checkpoints",
+    "predict_fallback_historical_snapshots",
+    "predict_simulation_surface_cache",
+    "predict_fallback_coverage_scans"
+  ]
+} satisfies Record<string, readonly string[]>;
 
-    ALTER TABLE combo_legs
-      ADD COLUMN IF NOT EXISTS remaining_size NUMERIC;
+const migrationPriority = (filename: string): number => {
+  const override = migrationOrderOverrides.get(filename);
+  if (override !== undefined) {
+    return override;
+  }
+  if (filename.includes("_create_")) return 0;
+  if (filename.includes("_add_")) return 1;
+  if (filename.includes("_update_")) return 2;
+  if (filename.includes("_combine_")) return 3;
+  return 4;
+};
 
-    UPDATE combo_legs
-    SET remaining_size = size
-    WHERE remaining_size IS NULL;
+const isSkippableMigrationError = (error: unknown): boolean => {
+  const code = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
+  return code === "42P07" || code === "42710" || code === "42701";
+};
 
-    ALTER TABLE combo_legs
-      ALTER COLUMN remaining_size SET NOT NULL;
+const listMigrationFiles = async (
+  migrationDirs: readonly string[]
+): Promise<Array<{ migrationDir: string; file: string; fullPath: string }>> => {
+  const migrations: Array<{ migrationDir: string; file: string; fullPath: string }> = [];
 
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'chk_combo_legs_remaining_size_non_negative'
-      ) THEN
-        ALTER TABLE combo_legs
-          ADD CONSTRAINT chk_combo_legs_remaining_size_non_negative CHECK (remaining_size >= 0);
-      END IF;
-    END $$;
+  for (const migrationDir of migrationDirs) {
+    if (!existsSync(migrationDir)) {
+      continue;
+    }
 
-    CREATE INDEX IF NOT EXISTS idx_combo_legs_combo ON combo_legs(combo_rfq_id);
-    CREATE INDEX IF NOT EXISTS idx_combo_legs_combo_remaining ON combo_legs(combo_rfq_id, remaining_size);
+    const files = (await readdir(migrationDir))
+      .filter((name) => name.endsWith(".sql"))
+      .sort((left, right) => {
+        const leftPriority = migrationPriority(left);
+        const rightPriority = migrationPriority(right);
+        if (leftPriority !== rightPriority) {
+          return leftPriority - rightPriority;
+        }
+        return left.localeCompare(right);
+      });
 
-    CREATE TABLE IF NOT EXISTS combo_quotes (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      combo_rfq_id UUID REFERENCES combo_rfqs(id) ON DELETE CASCADE,
-      lp_id UUID NOT NULL,
-      combo_price NUMERIC,
-      per_leg_prices JSONB,
-      effective_cost NUMERIC,
-      expires_at TIMESTAMPTZ,
-      raw_payload JSONB,
-      created_at TIMESTAMPTZ DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_combo_quotes_rfq ON combo_quotes(combo_rfq_id);
+    for (const file of files) {
+      migrations.push({
+        migrationDir,
+        file,
+        fullPath: path.join(migrationDir, file)
+      });
+    }
+  }
 
-    CREATE TABLE IF NOT EXISTS combo_executions (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      combo_rfq_id UUID REFERENCES combo_rfqs(id),
-      combo_quote_id UUID REFERENCES combo_quotes(id),
-      leg_id UUID,
-      venue TEXT,
-      connector_exec_id TEXT,
-      status TEXT,
-      submitted_at TIMESTAMPTZ,
-      completed_at TIMESTAMPTZ,
-      result JSONB
-    );
-    CREATE INDEX IF NOT EXISTS idx_combo_exec_combo ON combo_executions(combo_rfq_id);
+  return migrations;
+};
 
-    CREATE TABLE IF NOT EXISTS combo_events (
-      id BIGSERIAL PRIMARY KEY,
-      combo_rfq_id UUID,
-      event_type TEXT,
-      payload JSONB,
-      created_at TIMESTAMPTZ DEFAULT now()
-    );
+export const verifyPhase3ASchema = async (pool: Pool): Promise<void> => {
+  const missingByGroup = new Map<string, string[]>();
 
-    CREATE TABLE IF NOT EXISTS combo_netting_groups (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      incoming_combo_id UUID NOT NULL REFERENCES combo_rfqs(id) ON DELETE CASCADE,
-      matched_combo_id UUID NOT NULL REFERENCES combo_rfqs(id) ON DELETE CASCADE,
-      state TEXT NOT NULL,
-      matched_size NUMERIC NOT NULL CHECK (matched_size > 0),
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_combo_netting_groups_incoming_combo_id
-      ON combo_netting_groups(incoming_combo_id);
-    CREATE INDEX IF NOT EXISTS idx_combo_netting_groups_matched_combo_id
-      ON combo_netting_groups(matched_combo_id);
-    CREATE INDEX IF NOT EXISTS idx_combo_netting_groups_created_at
-      ON combo_netting_groups(created_at);
-
-    CREATE TABLE IF NOT EXISTS combo_netting_match_legs (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      netting_group_id UUID NOT NULL REFERENCES combo_netting_groups(id) ON DELETE CASCADE,
-      incoming_leg_id UUID NOT NULL REFERENCES combo_legs(id) ON DELETE CASCADE,
-      matched_leg_id UUID NOT NULL REFERENCES combo_legs(id) ON DELETE CASCADE,
-      market_id TEXT NOT NULL,
-      outcome_id TEXT NOT NULL,
-      matched_size NUMERIC NOT NULL CHECK (matched_size > 0),
-      price NUMERIC NOT NULL CHECK (price >= 0),
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_combo_netting_match_legs_group_id
-      ON combo_netting_match_legs(netting_group_id);
-    CREATE INDEX IF NOT EXISTS idx_combo_netting_match_legs_incoming_leg_id
-      ON combo_netting_match_legs(incoming_leg_id);
-    CREATE INDEX IF NOT EXISTS idx_combo_netting_match_legs_matched_leg_id
-      ON combo_netting_match_legs(matched_leg_id);
-    CREATE INDEX IF NOT EXISTS idx_combo_netting_match_legs_market_outcome
-      ON combo_netting_match_legs(market_id, outcome_id);
-
-    CREATE TABLE IF NOT EXISTS combo_netting_events (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      netting_group_id UUID NOT NULL REFERENCES combo_netting_groups(id) ON DELETE CASCADE,
-      event_type TEXT NOT NULL,
-      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_combo_netting_events_group_id
-      ON combo_netting_events(netting_group_id);
-    CREATE INDEX IF NOT EXISTS idx_combo_netting_events_event_type_created_at
-      ON combo_netting_events(event_type, created_at);
-
-    CREATE TABLE IF NOT EXISTS routing_plans (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      rfq_id UUID NOT NULL,
-      acceptance_policy TEXT NOT NULL,
-      reservation_token TEXT,
-      created_by UUID,
-      state TEXT NOT NULL,
-      cost_estimate NUMERIC,
-      metadata JSONB,
-      created_at TIMESTAMPTZ DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_routing_plans_rfq ON routing_plans(rfq_id);
-
-    CREATE TABLE IF NOT EXISTS route_candidates (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      routing_plan_id UUID REFERENCES routing_plans(id) ON DELETE CASCADE,
-      leg_id UUID NOT NULL,
-      provider_type TEXT NOT NULL,
-      provider_id TEXT,
-      available_size NUMERIC,
-      quoted_price NUMERIC,
-      fees JSONB,
-      latency_ms INT,
-      fill_prob NUMERIC,
-      metadata JSONB,
-      created_at TIMESTAMPTZ DEFAULT now()
-    );
-
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'route_candidates_provider_type_check'
-      ) THEN
-        ALTER TABLE route_candidates
-          ADD CONSTRAINT route_candidates_provider_type_check
-          CHECK (provider_type IN ('LP', 'VENUE', 'INTERNAL', 'INTERNAL_CROSS'));
-      END IF;
-    END $$;
-
-    CREATE INDEX IF NOT EXISTS idx_route_candidates_plan ON route_candidates(routing_plan_id);
-
-    CREATE TABLE IF NOT EXISTS route_steps (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      routing_plan_id UUID REFERENCES routing_plans(id),
-      leg_id UUID,
-      step_index INT,
-      provider_type TEXT,
-      provider_id TEXT,
-      target_size NUMERIC,
-      rounded_size NUMERIC,
-      target_price NUMERIC,
-      client_order_id TEXT,
-      idempotency_key TEXT,
-      state TEXT,
-      submitted_at TIMESTAMPTZ,
-      completed_at TIMESTAMPTZ,
-      result JSONB,
-      metadata JSONB
-    );
-    CREATE INDEX IF NOT EXISTS idx_route_steps_plan ON route_steps(routing_plan_id);
-
-    CREATE TABLE IF NOT EXISTS route_history (
-      id BIGSERIAL PRIMARY KEY,
-      routing_plan_id UUID,
-      event_type TEXT,
-      payload JSONB,
-      created_at TIMESTAMPTZ DEFAULT now()
-    );
-
-    CREATE TABLE IF NOT EXISTS historical_market_states (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      canonical_event_id TEXT NOT NULL,
-      venue TEXT NOT NULL,
-      venue_market_id TEXT NOT NULL,
-      market_class TEXT NOT NULL,
-      timestamp TIMESTAMPTZ NOT NULL,
-      midpoint NUMERIC NULL,
-      best_bid NUMERIC NULL,
-      best_ask NUMERIC NULL,
-      spread NUMERIC NULL,
-      last_price NUMERIC NULL,
-      volume NUMERIC NULL,
-      open_interest NUMERIC NULL,
-      candles JSONB NULL,
-      orderbook_snapshot JSONB NULL,
-      market_events JSONB NULL,
-      trades JSONB NULL,
-      own_execution_history JSONB NULL,
-      metadata_version TEXT NOT NULL,
-      source_timestamp TIMESTAMPTZ NOT NULL
-    );
-
-    ALTER TABLE historical_market_states
-      ADD COLUMN IF NOT EXISTS canonical_category TEXT NULL;
-
-    ALTER TABLE historical_market_states
-      ADD COLUMN IF NOT EXISTS canonical_market_id TEXT;
-
-    CREATE INDEX IF NOT EXISTS idx_historical_market_states_canonical_event_id
-      ON historical_market_states(canonical_event_id);
-    CREATE INDEX IF NOT EXISTS idx_historical_market_states_venue
-      ON historical_market_states(venue);
-    CREATE INDEX IF NOT EXISTS idx_historical_market_states_venue_market_id
-      ON historical_market_states(venue_market_id);
-    CREATE INDEX IF NOT EXISTS idx_historical_market_states_timestamp
-      ON historical_market_states(timestamp);
-    CREATE INDEX IF NOT EXISTS idx_historical_market_states_venue_market_timestamp
-      ON historical_market_states(venue, venue_market_id, timestamp);
-    CREATE INDEX IF NOT EXISTS idx_historical_market_states_category_event_venue_timestamp
-      ON historical_market_states(canonical_category, canonical_event_id, venue, timestamp);
-    CREATE INDEX IF NOT EXISTS idx_historical_market_states_canonical_market_id
-      ON historical_market_states(canonical_market_id);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_historical_market_states_identity_unique
-      ON historical_market_states (
-        canonical_event_id,
-        venue,
-        venue_market_id,
-        timestamp,
-        metadata_version
+  for (const [group, tables] of Object.entries(phase3aSchemaGroups)) {
+    const missing: string[] = [];
+    for (const tableName of tables) {
+      const result = await pool.query<{ oid: string | null }>(
+        `SELECT to_regclass($1) AS oid`,
+        [`public.${tableName}`]
       );
+      if (!result.rows[0]?.oid) {
+        missing.push(tableName);
+      }
+    }
 
-    CREATE TABLE IF NOT EXISTS historical_simulation_runs (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      scope_type TEXT NOT NULL,
-      scope_id TEXT NOT NULL,
-      venue_pair TEXT NOT NULL,
-      market_class TEXT NOT NULL,
-      started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      ended_at TIMESTAMPTZ NULL,
-      status TEXT NOT NULL,
-      metadata JSONB NOT NULL DEFAULT '{}'::jsonb
-    );
+    if (missing.length > 0) {
+      missingByGroup.set(group, missing);
+    }
+  }
 
-    CREATE TABLE IF NOT EXISTS historical_simulation_results (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      run_id UUID NOT NULL REFERENCES historical_simulation_runs(id) ON DELETE CASCADE,
-      canonical_event_id TEXT NOT NULL,
-      timestamp TIMESTAMPTZ NOT NULL,
-      baseline_results JSONB NOT NULL,
-      lotus_result JSONB NOT NULL,
-      improvement JSONB NOT NULL,
-      rollout_eligibility JSONB NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
+  const comboLegRemainingSize = await pool.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'combo_legs'
+         AND column_name = 'remaining_size'
+     ) AS exists`
+  );
+  if (!comboLegRemainingSize.rows[0]?.exists) {
+    missingByGroup.set("comboLegColumns", ["combo_legs.remaining_size"]);
+  }
 
-    CREATE INDEX IF NOT EXISTS idx_historical_simulation_runs_scope
-      ON historical_simulation_runs(scope_type, scope_id);
-    CREATE INDEX IF NOT EXISTS idx_historical_simulation_runs_venue_pair
-      ON historical_simulation_runs(venue_pair);
-    CREATE INDEX IF NOT EXISTS idx_historical_simulation_runs_market_class
-      ON historical_simulation_runs(market_class);
-    CREATE INDEX IF NOT EXISTS idx_historical_simulation_runs_status
-      ON historical_simulation_runs(status);
-    CREATE INDEX IF NOT EXISTS idx_historical_simulation_runs_started_at
-      ON historical_simulation_runs(started_at);
+  if (missingByGroup.size > 0) {
+    const detail = [...missingByGroup.entries()]
+      .map(([group, tables]) => `${group}=[${tables.join(",")}]`)
+      .join(" ");
+    throw new Error(`phase3a_schema_verification_failed ${detail}`);
+  }
+};
 
-    CREATE INDEX IF NOT EXISTS idx_historical_simulation_results_run_id
-      ON historical_simulation_results(run_id);
-    CREATE INDEX IF NOT EXISTS idx_historical_simulation_results_canonical_event_id
-      ON historical_simulation_results(canonical_event_id);
-    CREATE INDEX IF NOT EXISTS idx_historical_simulation_results_timestamp
-      ON historical_simulation_results(timestamp);
-    CREATE INDEX IF NOT EXISTS idx_historical_simulation_results_created_at
-      ON historical_simulation_results(created_at);
-  `);
-
+export const applyMigrations = async (pool: Pool): Promise<void> => {
   const migrationDirs = [
     path.resolve(process.cwd(), "infra", "migrations"),
     path.resolve(process.cwd(), "sql", "migrations")
   ];
 
-  for (const migrationsDir of migrationDirs) {
-    const files = (await readdir(migrationsDir))
-      .filter((name) => name.endsWith(".sql"))
-      .sort((left, right) => left.localeCompare(right));
+  const migrations = await listMigrationFiles(migrationDirs);
 
-    for (const file of files) {
-      const sql = await readFile(path.join(migrationsDir, file), "utf8");
-      try {
-        await pool.query(sql);
-      } catch (error) {
-        const code = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
-        if (code === "42P07" || code === "42710") {
-          continue;
-        }
-        throw error;
+  for (const migration of migrations) {
+    const sql = await readFile(migration.fullPath, "utf8");
+    try {
+      await pool.query(sql);
+    } catch (error) {
+      if (isSkippableMigrationError(error)) {
+        continue;
       }
+
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`phase3a_migration_failed file=${migration.file} message=${message}`);
     }
   }
 
-  // Re-assert combo schema after the migration sweep in case a partially migrated
-  // database skipped parts of the original combo-table setup.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS combo_rfqs (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id UUID NOT NULL,
-      acceptance_policy TEXT NOT NULL CHECK(acceptance_policy IN ('ALL_OR_NONE','BEST_EFFORT','PARTIAL_ALLOWED')),
-      state TEXT NOT NULL,
-      expires_at TIMESTAMPTZ,
-      metadata JSONB,
-      created_at TIMESTAMPTZ DEFAULT now()
-    );
-
-    CREATE TABLE IF NOT EXISTS combo_legs (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      combo_rfq_id UUID REFERENCES combo_rfqs(id) ON DELETE CASCADE,
-      canonical_market_id UUID NOT NULL,
-      canonical_outcome_id UUID NOT NULL,
-      side TEXT NOT NULL CHECK(side IN ('buy','sell')),
-      size NUMERIC NOT NULL,
-      price_hint NUMERIC,
-      metadata JSONB
-    );
-
-    ALTER TABLE combo_legs
-      ADD COLUMN IF NOT EXISTS remaining_size NUMERIC;
-
-    UPDATE combo_legs
-    SET remaining_size = size
-    WHERE remaining_size IS NULL;
-
-    ALTER TABLE combo_legs
-      ALTER COLUMN remaining_size SET NOT NULL;
-
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'chk_combo_legs_remaining_size_non_negative'
-      ) THEN
-        ALTER TABLE combo_legs
-          ADD CONSTRAINT chk_combo_legs_remaining_size_non_negative CHECK (remaining_size >= 0);
-      END IF;
-    END $$;
-
-    CREATE INDEX IF NOT EXISTS idx_combo_legs_combo ON combo_legs(combo_rfq_id);
-    CREATE INDEX IF NOT EXISTS idx_combo_legs_combo_remaining ON combo_legs(combo_rfq_id, remaining_size);
-
-    CREATE TABLE IF NOT EXISTS combo_quotes (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      combo_rfq_id UUID REFERENCES combo_rfqs(id) ON DELETE CASCADE,
-      lp_id UUID NOT NULL,
-      combo_price NUMERIC,
-      per_leg_prices JSONB,
-      effective_cost NUMERIC,
-      expires_at TIMESTAMPTZ,
-      raw_payload JSONB,
-      created_at TIMESTAMPTZ DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_combo_quotes_rfq ON combo_quotes(combo_rfq_id);
-
-    CREATE TABLE IF NOT EXISTS combo_executions (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      combo_rfq_id UUID REFERENCES combo_rfqs(id),
-      combo_quote_id UUID REFERENCES combo_quotes(id),
-      leg_id UUID,
-      venue TEXT,
-      connector_exec_id TEXT,
-      status TEXT,
-      submitted_at TIMESTAMPTZ,
-      completed_at TIMESTAMPTZ,
-      result JSONB
-    );
-    CREATE INDEX IF NOT EXISTS idx_combo_exec_combo ON combo_executions(combo_rfq_id);
-
-    CREATE TABLE IF NOT EXISTS combo_events (
-      id BIGSERIAL PRIMARY KEY,
-      combo_rfq_id UUID,
-      event_type TEXT,
-      payload JSONB,
-      created_at TIMESTAMPTZ DEFAULT now()
-    );
-  `);
+  await verifyPhase3ASchema(pool);
 };
 
 export const insertCombo = async (pool: Pool, input: InsertComboInput): Promise<void> => {
