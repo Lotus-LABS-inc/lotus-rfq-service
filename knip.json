@@ -1,0 +1,25 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "scripts/**/*.ts",
+    "scripts/**/*.js",
+    "tests/**/*.ts",
+    "test/**/*.ts"
+  ],
+  "project": [
+    "src/**/*.ts",
+    "scripts/**/*.ts",
+    "tests/**/*.ts",
+    "test/**/*.ts"
+  ],
+  "ignoreUnresolved": [
+    "\\.\\./src/.*\\.js",
+    "eslint-plugin-vitest"
+  ],
+  "ignoreDependencies": [
+    "@types/decimal.js",
+    "@types/supertest",
+    "drizzle-kit",
+    "supertest"
+  ]
+}
