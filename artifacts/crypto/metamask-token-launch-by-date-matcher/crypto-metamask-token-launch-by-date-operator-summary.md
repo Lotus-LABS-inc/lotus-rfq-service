@@ -1,0 +1,7 @@
+# Crypto METAMASK Token Launch By Date Matcher
+
+- exact family: CRYPTO|TOKEN_LAUNCH_BY_DATE|METAMASK
+- target pair: POLYMARKET|PREDICT
+- shared launch dates: 2025-12-31, 2026-06-30, 2026-09-30
+- rejected dates: 2026-12-31
+- final decision: CRYPTO_METAMASK_TOKEN_LAUNCH_BY_DATE_PAIR_MATCHER_READY_PENDING_OPERATOR_REVIEW

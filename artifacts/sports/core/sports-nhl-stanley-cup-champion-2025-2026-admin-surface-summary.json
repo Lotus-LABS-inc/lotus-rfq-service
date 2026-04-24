@@ -1,0 +1,32 @@
+{
+  "observedAt": "2026-04-24T12:48:15.228Z",
+  "laneId": "SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_TRI_LIMITLESS_OPINION_POLYMARKET",
+  "topicKey": "SPORTS|TOURNAMENT_WINNER|NHL_STANLEY_CUP|2025_2026",
+  "triVenueSet": "LIMITLESS|OPINION|POLYMARKET",
+  "teamScopeHash": "adce64170942199e",
+  "exactSafeTriTeams": [
+    "colorado_avalanche",
+    "dallas_stars",
+    "edmonton_oilers",
+    "tampa_bay_lightning"
+  ],
+  "peerPairLaneId": "SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_PAIR_LIMITLESS_POLYMARKET",
+  "peerPairVenuePair": "LIMITLESS|POLYMARKET",
+  "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+  "supportedActions": [
+    "inspect",
+    "hold",
+    "promote",
+    "rollback"
+  ],
+  "userConsentCanWidenScope": false,
+  "narrowestEnforceableUnit": "LANE_SCOPE_LOCK",
+  "sourceArtifactRefs": [
+    "artifacts/sports/nhl-stanley-cup-champion-2025-2026-matcher/sports-nhl-stanley-cup-champion-2025-2026-matcher-input-summary.json",
+    "artifacts/sports/nhl-stanley-cup-champion-2025-2026-matcher/sports-nhl-stanley-cup-champion-2025-2026-pair-lanes.json",
+    "artifacts/sports/nhl-stanley-cup-champion-2025-2026-matcher/sports-nhl-stanley-cup-champion-2025-2026-tri-lanes.json",
+    "artifacts/sports/nhl-stanley-cup-champion-2025-2026-matcher/sports-nhl-stanley-cup-champion-2025-2026-rejections.json",
+    "artifacts/sports/nhl-stanley-cup-champion-2025-2026-matcher/sports-nhl-stanley-cup-champion-2025-2026-final-decision.json",
+    "artifacts/sports/nhl-stanley-cup-champion-2025-2026-matcher/sports-nhl-stanley-cup-champion-2025-2026-operator-summary.md"
+  ]
+}

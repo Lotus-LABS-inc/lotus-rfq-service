@@ -1,0 +1,11 @@
+{
+  "rowsFetchedByVenue": {
+    "POLYMARKET": 7,
+    "PREDICT": 7
+  },
+  "rowsAdmittedByVenue": {
+    "POLYMARKET": 7,
+    "PREDICT": 7
+  },
+  "opinionAdmissionStatus": "NOT_CONFIGURED"
+}

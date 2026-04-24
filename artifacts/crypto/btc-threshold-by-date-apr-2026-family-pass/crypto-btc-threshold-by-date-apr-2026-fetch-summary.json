@@ -1,0 +1,12 @@
+{
+  "rowsFetchedByVenue": {
+    "POLYMARKET": 23,
+    "PREDICT": 20
+  },
+  "rowsAdmittedByVenue": {
+    "POLYMARKET": 23,
+    "PREDICT": 20
+  },
+  "priorRowsFetchedByVenue": {},
+  "priorRowsAdmittedByVenue": {}
+}

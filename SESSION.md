@@ -262,9 +262,67 @@
   - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_PAIR_OPINION_POLYMARKET`
   - `SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
 
+#### NHL Stanley Cup Champion
+- topic:
+  - `SPORTS|TOURNAMENT_WINNER|NHL_STANLEY_CUP|2025_2026`
+- lane counts:
+  - `3` single
+  - `3` pair
+  - `1` tri
+- lane ids:
+  - `SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_SINGLE_LIMITLESS`
+  - `SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_SINGLE_OPINION`
+  - `SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_SINGLE_POLYMARKET`
+  - `SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_PAIR_LIMITLESS_OPINION`
+  - `SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_PAIR_LIMITLESS_POLYMARKET`
+  - `SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_PAIR_OPINION_POLYMARKET`
+  - `SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+
 ### Current Recommended Next Action
 
 - Future sports topics should now use the same `single | pair | tri | strict_all` model by default, with `/admin/sports-lanes` serving the emitted lane ids directly from the lane catalogs.
+
+---
+
+## Session: 2026-04-24 (NHL Stanley Cup Champion Repair)
+
+**Goal:** Repair the NHL Stanley Cup family extraction so Polymarket is admitted correctly, then rerun matcher, readiness, admin, and docs on the repaired three-venue truth.
+
+### What Was Done Today
+
+#### 1. Repaired NHL Polymarket extraction
+- fixed the NHL Polymarket slug parser to admit pages shaped like:
+  - `will-the-colorado-avalanche-win-the-2026-nhl-stanley-cup`
+- this moved NHL from a stale two-venue posture to a real three-venue topic:
+  - `LIMITLESS`
+  - `OPINION`
+  - `POLYMARKET`
+
+#### 2. Regenerated matcher and readiness on repaired truth
+- topic:
+  - `SPORTS|TOURNAMENT_WINNER|NHL_STANLEY_CUP|2025_2026`
+- best pair:
+  - `LIMITLESS|POLYMARKET`
+- strict tri:
+  - `LIMITLESS|OPINION|POLYMARKET`
+- strict tri team scope:
+  - `colorado_avalanche`
+  - `dallas_stars`
+  - `edmonton_oilers`
+  - `tampa_bay_lightning`
+- repaired lane ids:
+  - `SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+  - `SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_PAIR_LIMITLESS_POLYMARKET`
+- readiness label:
+  - `SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+
+#### 3. Added real sports admin parity for NHL
+- `/admin/sports-lanes` now exposes the repaired NHL pair and tri lanes
+- hold, rollback, and approval intent remain lane-scoped
+
+### Current Recommended Next Action
+
+- keep future NHL work anchored to the repaired `LIMITLESS|POLYMARKET` pair and `LIMITLESS|OPINION|POLYMARKET` tri truth, not the stale pair-only `LIMITLESS|OPINION` posture.
 
 ---
 
@@ -641,6 +699,50 @@
   - pair and tri are both first-class routes when exact constructor truth supports them
   - no widening beyond `SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026`
   - no invented Predict lane until venue truth exists
+  - venue-only tails remain excluded
+  - hold and rollback remain lane-scoped only
+
+#### 11. Added sports LPL winner readiness and real admin parity
+- Topic:
+  - `SPORTS|LEAGUE_WINNER|LPL|2026`
+- Tri lane:
+  - lane id:
+    - `SPORTS_LPL_WINNER_2026_TRI_LIMITLESS_OPINION_POLYMARKET`
+  - venues:
+    - `LIMITLESS|OPINION|POLYMARKET`
+  - exact-safe teams:
+    - `anyones_legend`
+    - `bilibili_gaming`
+    - `jd_gaming`
+    - `top_esports`
+  - readiness:
+    - `SPORTS_LPL_WINNER_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- Pair lane:
+  - lane id:
+    - `SPORTS_LPL_WINNER_2026_PAIR_LIMITLESS_POLYMARKET`
+  - venues:
+    - `LIMITLESS|POLYMARKET`
+  - exact-safe teams:
+    - `anyones_legend`
+    - `bilibili_gaming`
+    - `jd_gaming`
+    - `top_esports`
+    - `weibo_gaming`
+  - readiness:
+    - `SPORTS_LPL_WINNER_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- Rule state:
+  - `SEMANTICALLY_COMPATIBLE_REWORDING`
+- Sports admin namespace remains:
+  - `GET /admin/sports-lanes`
+  - `GET /admin/sports-lanes/:laneId`
+  - `GET /admin/sports-lanes/:laneId/readiness`
+  - `GET /admin/sports-lanes/:laneId/rollback-plan`
+  - `POST /admin/sports-lanes/:laneId/operator-approval-intent`
+  - `POST /admin/sports-lanes/:laneId/hold`
+  - `POST /admin/sports-lanes/:laneId/rollback`
+- Operating posture:
+  - pair and tri are both first-class routes when exact team truth supports them
+  - no widening beyond `SPORTS|LEAGUE_WINNER|LPL|2026`
   - venue-only tails remain excluded
   - hold and rollback remain lane-scoped only
 
@@ -2915,3 +3017,173 @@ Dominant outcome:
   - Busan has no tri implication
   - Colombia has no tri implication
   - hold and rollback remain lane-aware only
+
+## 2026-04-24 Crypto Admin Surface
+
+- Narrow crypto admin surface now exists at:
+  - `GET /admin/crypto-lanes`
+  - `GET /admin/crypto-lanes/:laneId`
+  - `GET /admin/crypto-lanes/:laneId/readiness`
+  - `GET /admin/crypto-lanes/:laneId/rollback-plan`
+  - `POST /admin/crypto-lanes/:laneId/operator-approval-intent`
+  - `POST /admin/crypto-lanes/:laneId/hold`
+  - `POST /admin/crypto-lanes/:laneId/rollback`
+- Current crypto lane id:
+  - `CRYPTO_BTC_ATH_BY_DATE_PAIR_LIMITLESS_POLYMARKET`
+- Exact family now advanced:
+  - `CRYPTO|ATH_BY_DATE|BTC`
+- Shared exact-safe date buckets:
+  - `2026-06-30`
+  - `2026-09-30`
+  - `2026-12-31`
+- Current readiness posture:
+  - readiness label:
+    - `CRYPTO_BTC_ATH_BY_DATE_LIMITED_PROD_READY_FOR_REVIEW`
+  - admin decision:
+    - `READY_BUT_MISSING_OPERATOR_REVIEW`
+- Narrow crypto operating rules:
+  - no widening beyond the shared `LIMITLESS|POLYMARKET` bucket set
+  - March `2026-03-31` remains excluded as a Polymarket-only tail
+  - no tri implication is justified from current truth
+  - hold and rollback remain lane-scoped only
+
+- Additional crypto ATH-by-date lanes now advanced on the same admin surface:
+  - `CRYPTO_BTC_ATH_BY_DATE_PAIR_LIMITLESS_POLYMARKET`
+  - `CRYPTO_ETH_ATH_BY_DATE_PAIR_LIMITLESS_POLYMARKET`
+  - `CRYPTO_SOL_ATH_BY_DATE_PAIR_LIMITLESS_POLYMARKET`
+  - `CRYPTO_XRP_ATH_BY_DATE_PAIR_LIMITLESS_POLYMARKET`
+- Exact crypto families now covered:
+  - `CRYPTO|ATH_BY_DATE|BTC`
+  - `CRYPTO|ATH_BY_DATE|ETH`
+  - `CRYPTO|ATH_BY_DATE|SOL`
+  - `CRYPTO|ATH_BY_DATE|XRP`
+- ETH/SOL/XRP current shared exact-safe date buckets:
+  - `2026-06-30`
+  - `2026-09-30`
+  - `2026-12-31`
+- ETH/SOL/XRP current readiness posture:
+  - `CRYPTO_ETH_ATH_BY_DATE_LIMITED_PROD_READY_FOR_REVIEW`
+  - `CRYPTO_SOL_ATH_BY_DATE_LIMITED_PROD_READY_FOR_REVIEW`
+  - `CRYPTO_XRP_ATH_BY_DATE_LIMITED_PROD_READY_FOR_REVIEW`
+- Shared crypto admin posture:
+  - admin namespace remains `/admin/crypto-lanes`
+  - `LIMITLESS|POLYMARKET` remains the only admitted venue set for this family
+  - March `2026-03-31` remains excluded wherever it is not shared
+  - no tri implication is justified
+  - hold and rollback remain lane-scoped only
+
+## 2026-04-24 Crypto Threshold-By-Date April Surface
+
+- `/admin/crypto-lanes` now carries both crypto exact-pass families:
+  - `ATH_BY_DATE`
+  - `THRESHOLD_BY_DATE`
+- new threshold family keys:
+  - `CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30`
+  - `CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30`
+  - `CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30`
+  - `CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30`
+- new threshold lane ids:
+  - `CRYPTO_BTC_THRESHOLD_BY_DATE_APR_2026_PAIR_POLYMARKET_PREDICT`
+  - `CRYPTO_ETH_THRESHOLD_BY_DATE_APR_2026_PAIR_POLYMARKET_PREDICT`
+  - `CRYPTO_SOL_THRESHOLD_BY_DATE_APR_2026_PAIR_POLYMARKET_PREDICT`
+  - `CRYPTO_BNB_THRESHOLD_BY_DATE_APR_2026_PAIR_POLYMARKET_PREDICT`
+- exact-topic semantics are comparator-aware because the live ladders include both reach and dip markets:
+  - `...|ABOVE|<THRESHOLD>`
+  - `...|BELOW|<THRESHOLD>`
+- venue pair:
+  - `POLYMARKET|PREDICT`
+- BTC shared thresholds:
+  - above: `70,000`, `75,000`, `80,000`, `85,000`, `90,000`, `95,000`, `100,000`, `105,000`, `110,000`, `150,000`
+  - below: `20,000`, `25,000`, `30,000`, `35,000`, `40,000`, `45,000`, `50,000`, `55,000`, `60,000`, `65,000`
+  - rejected tails:
+    - above `82,500`
+    - below `70,000`
+    - below `75,000`
+  - rule state:
+    - `EXACT_RULE_COMPATIBLE`
+  - readiness:
+    - `CRYPTO_BTC_THRESHOLD_BY_DATE_APR_2026_LIMITED_PROD_READY_FOR_REVIEW`
+  - admin decision:
+    - `READY_BUT_MISSING_OPERATOR_REVIEW`
+- ETH shared thresholds:
+  - above: `2,200`, `2,400`, `2,600`, `2,800`, `3,000`, `3,200`, `3,400`, `3,600`, `3,800`, `4,000`
+  - below: `200`, `400`, `600`, `800`, `1,000`, `1,200`, `1,400`, `1,600`, `1,800`, `2,000`
+  - rejected tails:
+    - none
+  - rule state:
+    - `SEMANTICALLY_COMPATIBLE_REWORDING`
+  - readiness:
+    - `CRYPTO_ETH_THRESHOLD_BY_DATE_APR_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+  - admin decision:
+    - `READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION`
+- SOL shared thresholds:
+  - above: `90`, `100`, `110`, `120`, `130`, `140`, `150`, `160`
+  - below: `10`, `20`, `30`, `40`, `50`, `60`, `70`
+  - rejected tails:
+    - above `80`
+  - rule state:
+    - `SEMANTICALLY_COMPATIBLE_REWORDING`
+  - readiness:
+    - `CRYPTO_SOL_THRESHOLD_BY_DATE_APR_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+  - admin decision:
+    - `READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION`
+- BNB shared thresholds:
+  - above: `700`, `800`, `900`, `1,000`
+  - below: `100`, `200`, `300`, `400`, `500`
+  - rejected tails:
+    - above `600`
+  - rule state:
+    - `SEMANTICALLY_COMPATIBLE_REWORDING`
+  - readiness:
+    - `CRYPTO_BNB_THRESHOLD_BY_DATE_APR_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+  - admin decision:
+    - `READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION`
+- operating posture:
+  - pair-only
+  - no tri implication
+  - no venue-only threshold widening
+  - approval, hold, and rollback remain lane-scoped only
+
+## 2026-04-24 Crypto First-To-Threshold-By-Date Surface
+
+- `/admin/crypto-lanes` now carries three crypto exact-pass families:
+  - `ATH_BY_DATE`
+  - `THRESHOLD_BY_DATE`
+  - `FIRST_TO_THRESHOLD_BY_DATE`
+- new first-to-threshold family keys:
+  - `CRYPTO|FIRST_TO_THRESHOLD_BY_DATE|BTC|60000|80000|2027-01-01`
+  - `CRYPTO|FIRST_TO_THRESHOLD_BY_DATE|ETH|1000|3000|2027-01-01`
+  - `CRYPTO|FIRST_TO_THRESHOLD_BY_DATE|SOL|60|140|2027-01-01`
+- new first-to-threshold lane ids:
+  - `CRYPTO_BTC_FIRST_TO_THRESHOLD_BY_DATE_PAIR_POLYMARKET_PREDICT`
+  - `CRYPTO_ETH_FIRST_TO_THRESHOLD_BY_DATE_PAIR_POLYMARKET_PREDICT`
+  - `CRYPTO_SOL_FIRST_TO_THRESHOLD_BY_DATE_PAIR_POLYMARKET_PREDICT`
+- venue pair:
+  - `POLYMARKET|PREDICT`
+- exact-safe binary outcome cores:
+  - BTC:
+    - `$60k first`
+    - `$80k first`
+  - ETH:
+    - `$1,000 first`
+    - `$3,000 first`
+  - SOL:
+    - `$60 first`
+    - `$140 first`
+- exact semantics:
+  - single asset
+  - lower threshold vs higher threshold first-hit race
+  - deadline `2027-01-01`
+  - fallback `50/50 if neither threshold is hit`
+- current rule posture:
+  - all three lanes remain review-gated because tie handling is not explicit and rules remain `SEMANTICALLY_COMPATIBLE_REWORDING`
+- current readiness labels:
+  - `CRYPTO_BTC_FIRST_TO_THRESHOLD_BY_DATE_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+  - `CRYPTO_ETH_FIRST_TO_THRESHOLD_BY_DATE_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+  - `CRYPTO_SOL_FIRST_TO_THRESHOLD_BY_DATE_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW`
+- operating posture:
+  - pair-only `POLYMARKET|PREDICT`
+  - no tri implication
+  - no venue widening
+  - approval, hold, and rollback remain lane-scoped only
+  - XRP is supported by family design but not onboarded in this pass

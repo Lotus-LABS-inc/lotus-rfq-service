@@ -1,0 +1,47 @@
+{
+  "observedAt": "2026-04-24T14:07:57.758Z",
+  "laneId": "CRYPTO_XRP_ATH_BY_DATE_PAIR_LIMITLESS_POLYMARKET",
+  "familyKey": "CRYPTO|ATH_BY_DATE|XRP",
+  "venuePair": "LIMITLESS|POLYMARKET",
+  "exactSafeDateBuckets": [
+    "2026-06-30",
+    "2026-09-30",
+    "2026-12-31"
+  ],
+  "exactSafeTopics": [
+    "CRYPTO|ATH_BY_DATE|XRP|2026-06-30",
+    "CRYPTO|ATH_BY_DATE|XRP|2026-09-30",
+    "CRYPTO|ATH_BY_DATE|XRP|2026-12-31"
+  ],
+  "ruleStatus": "EXACT_RULE_COMPATIBLE",
+  "operatorRuleReviewRequired": false,
+  "matcherReady": true,
+  "operatorCredible": true,
+  "readinessReviewJustified": true,
+  "rolloutRecommended": false,
+  "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+  "holdPolicy": {
+    "scope": "LANE_ONLY",
+    "holdConditions": [
+      "If either venue loses the shared date-bucket set.",
+      "If any shared bucket drifts from ATH-by-date semantics.",
+      "If operator review rejects semantically-compatible wording."
+    ],
+    "userConsentCanWidenScope": false
+  },
+  "rollbackPolicy": {
+    "scope": "LANE_ONLY",
+    "targetMode": "DISABLED_INTERNAL_ONLY",
+    "fallbackLaneId": null,
+    "operatorSteps": [
+      "Disable the XRP ATH-by-date pair lane only.",
+      "Leave unrelated crypto routes unchanged.",
+      "Keep non-shared venue-only buckets excluded until a shared counterpart is proven again."
+    ]
+  },
+  "exclusionsStillMandatory": [
+    "NO_SCOPE_WIDENING_BEYOND_SHARED_ATH_BY_DATE_BUCKETS",
+    "PAIR_ONLY_UNTIL_THIRD_VENUE_IS_PROVEN"
+  ],
+  "finalReadinessLabel": "CRYPTO_XRP_ATH_BY_DATE_LIMITED_PROD_READY_FOR_REVIEW"
+}

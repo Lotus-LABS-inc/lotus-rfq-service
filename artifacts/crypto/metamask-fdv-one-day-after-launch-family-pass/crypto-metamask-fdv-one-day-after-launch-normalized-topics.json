@@ -1,0 +1,230 @@
+[
+  {
+    "interpretedContractId": "polymarket-metamask-fdv-one-day-after-launch-665531",
+    "venue": "POLYMARKET",
+    "venueMarketId": "665531",
+    "title": "Metamask FDV above $700M one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|METAMASK|ONE_DAY_AFTER_LAUNCH|ABOVE|700000000",
+    "canonicalProject": "METAMASK",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "700000000",
+    "canonicalThresholdLabel": "$700M",
+    "interpretationNotes": [
+      "project=METAMASK",
+      "threshold_label=700M",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-metamask-fdv-one-day-after-launch-665532",
+    "venue": "POLYMARKET",
+    "venueMarketId": "665532",
+    "title": "Metamask FDV above $1B one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|METAMASK|ONE_DAY_AFTER_LAUNCH|ABOVE|1000000000",
+    "canonicalProject": "METAMASK",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "1000000000",
+    "canonicalThresholdLabel": "$1B",
+    "interpretationNotes": [
+      "project=METAMASK",
+      "threshold_label=1B",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-metamask-fdv-one-day-after-launch-665533",
+    "venue": "POLYMARKET",
+    "venueMarketId": "665533",
+    "title": "Metamask FDV above $3B one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|METAMASK|ONE_DAY_AFTER_LAUNCH|ABOVE|3000000000",
+    "canonicalProject": "METAMASK",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "3000000000",
+    "canonicalThresholdLabel": "$3B",
+    "interpretationNotes": [
+      "project=METAMASK",
+      "threshold_label=3B",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-metamask-fdv-one-day-after-launch-667004",
+    "venue": "POLYMARKET",
+    "venueMarketId": "667004",
+    "title": "Metamask FDV above $2B one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|METAMASK|ONE_DAY_AFTER_LAUNCH|ABOVE|2000000000",
+    "canonicalProject": "METAMASK",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "2000000000",
+    "canonicalThresholdLabel": "$2B",
+    "interpretationNotes": [
+      "project=METAMASK",
+      "threshold_label=2B",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-metamask-fdv-one-day-after-launch-667005",
+    "venue": "POLYMARKET",
+    "venueMarketId": "667005",
+    "title": "Metamask FDV above $4B one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|METAMASK|ONE_DAY_AFTER_LAUNCH|ABOVE|4000000000",
+    "canonicalProject": "METAMASK",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "4000000000",
+    "canonicalThresholdLabel": "$4B",
+    "interpretationNotes": [
+      "project=METAMASK",
+      "threshold_label=4B",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-metamask-fdv-one-day-after-launch-1601453",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1601453",
+    "title": "Metamask FDV above $300M one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|METAMASK|ONE_DAY_AFTER_LAUNCH|ABOVE|300000000",
+    "canonicalProject": "METAMASK",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "300000000",
+    "canonicalThresholdLabel": "$300M",
+    "interpretationNotes": [
+      "project=METAMASK",
+      "threshold_label=300M",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-metamask-fdv-one-day-after-launch-1601452",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1601452",
+    "title": "Metamask FDV above $500M one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|METAMASK|ONE_DAY_AFTER_LAUNCH|ABOVE|500000000",
+    "canonicalProject": "METAMASK",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "500000000",
+    "canonicalThresholdLabel": "$500M",
+    "interpretationNotes": [
+      "project=METAMASK",
+      "threshold_label=500M",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-metamask-fdv-one-day-after-launch-881",
+    "venue": "PREDICT",
+    "venueMarketId": "881",
+    "title": "Metamask FDV above $700M one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|METAMASK|ONE_DAY_AFTER_LAUNCH|ABOVE|700000000",
+    "canonicalProject": "METAMASK",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "700000000",
+    "canonicalThresholdLabel": "$700M",
+    "interpretationNotes": [
+      "project=METAMASK",
+      "threshold_label=700M",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-metamask-fdv-one-day-after-launch-882",
+    "venue": "PREDICT",
+    "venueMarketId": "882",
+    "title": "Metamask FDV above $1B one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|METAMASK|ONE_DAY_AFTER_LAUNCH|ABOVE|1000000000",
+    "canonicalProject": "METAMASK",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "1000000000",
+    "canonicalThresholdLabel": "$1B",
+    "interpretationNotes": [
+      "project=METAMASK",
+      "threshold_label=1B",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-metamask-fdv-one-day-after-launch-883",
+    "venue": "PREDICT",
+    "venueMarketId": "883",
+    "title": "Metamask FDV above $3B one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|METAMASK|ONE_DAY_AFTER_LAUNCH|ABOVE|3000000000",
+    "canonicalProject": "METAMASK",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "3000000000",
+    "canonicalThresholdLabel": "$3B",
+    "interpretationNotes": [
+      "project=METAMASK",
+      "threshold_label=3B",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-metamask-fdv-one-day-after-launch-884",
+    "venue": "PREDICT",
+    "venueMarketId": "884",
+    "title": "Metamask FDV above $2B one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|METAMASK|ONE_DAY_AFTER_LAUNCH|ABOVE|2000000000",
+    "canonicalProject": "METAMASK",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "2000000000",
+    "canonicalThresholdLabel": "$2B",
+    "interpretationNotes": [
+      "project=METAMASK",
+      "threshold_label=2B",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-metamask-fdv-one-day-after-launch-885",
+    "venue": "PREDICT",
+    "venueMarketId": "885",
+    "title": "Metamask FDV above $4B one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|METAMASK|ONE_DAY_AFTER_LAUNCH|ABOVE|4000000000",
+    "canonicalProject": "METAMASK",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "4000000000",
+    "canonicalThresholdLabel": "$4B",
+    "interpretationNotes": [
+      "project=METAMASK",
+      "threshold_label=4B",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  }
+]

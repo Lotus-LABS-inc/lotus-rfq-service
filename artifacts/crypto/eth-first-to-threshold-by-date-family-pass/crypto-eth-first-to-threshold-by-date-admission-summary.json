@@ -1,0 +1,11 @@
+{
+  "totalAdmittedMarkets": 2,
+  "rowsRejectedByReason": {},
+  "rowsAdmittedByTopicCandidate": {
+    "CRYPTO|FIRST_TO_THRESHOLD_BY_DATE|ETH|1000|3000|2027-01-01": 2
+  },
+  "venueBreakdown": {
+    "POLYMARKET": 1,
+    "PREDICT": 1
+  }
+}

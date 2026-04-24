@@ -141,6 +141,7 @@ export const normalizeCryptoAsset = (market: MatchingMarketRecord): string | nul
   if (/\b(bitcoin|btc)\b/.test(normalized)) return "BTC";
   if (/\b(ethereum|eth)\b/.test(normalized)) return "ETH";
   if (/\b(solana|sol)\b/.test(normalized)) return "SOL";
+  if (/\b(xrp|ripple)\b/.test(normalized)) return "XRP";
   if (/\b(bnb|binance coin)\b/.test(normalized)) return "BNB";
   return null;
 };
@@ -235,6 +236,9 @@ export const inferCryptoObservationType = (
 ): CryptoObservationType | null => {
   const text = normalizeFreeText(buildText(market));
   if (family === "ATH_BY_DATE") return "ANY_TIME_BEFORE";
+  if (family === "FIRST_TO_THRESHOLD_BY_DATE") return "ANY_TIME_BEFORE";
+  if (family === "FDV_THRESHOLD_AFTER_LAUNCH") return "ONE_DAY_AFTER_LAUNCH";
+  if (family === "TOKEN_LAUNCH_BY_DATE") return "ANY_TIME_BEFORE";
   if (family === "SAME_DAY_DIRECTIONAL") return "SAME_DAY_DIRECTIONAL";
   if (family === "PRICE_RANGE_BUCKET" || family === "UP_DOWN_BUCKET") return "BUCKETED_PRICE_RANGE";
   if (family === "PRICE_AT_CLOSE") return "END_OF_PERIOD_CLOSE";
@@ -248,6 +252,9 @@ export const inferCryptoStructuralContractClass = (
   observationType: CryptoObservationType | null,
   bucketGranularity: CryptoBucketGranularity | null
 ): CryptoStructuralContractClass => {
+  if (family === "FIRST_TO_THRESHOLD_BY_DATE") return "FIRST_TO_THRESHOLD_BINARY";
+  if (family === "FDV_THRESHOLD_AFTER_LAUNCH") return "FDV_THRESHOLD_ONE_DAY_AFTER_LAUNCH";
+  if (family === "TOKEN_LAUNCH_BY_DATE") return "TOKEN_LAUNCH_DATE_BINARY";
   if (family === "ATH_BY_DATE") return "ATH_ANY_TIME_BEFORE_DATE";
   if (family === "THRESHOLD_BY_DATE" && observationType === "ANY_TIME_BEFORE") return "THRESHOLD_ANY_TIME_BEFORE_DATE";
   if (family === "THRESHOLD_BY_DATE") return "THRESHOLD_FIXED_TIME";
@@ -278,4 +285,3 @@ export const extractCryptoRangeMetadata = (market: MatchingMarketRecord): Readon
 
 export const buildCryptoDeterministicHash = (value: Record<string, unknown>): string =>
   serializeStableRecord(value);
-

@@ -1,0 +1,15 @@
+{
+  "blockerCounts": {},
+  "topicBlockers": [
+    {
+      "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|ETH|2026-03-31",
+      "reasons": [
+        "single_venue_only"
+      ],
+      "venuesPresent": [
+        "POLYMARKET"
+      ]
+    }
+  ],
+  "unresolvedRows": []
+}

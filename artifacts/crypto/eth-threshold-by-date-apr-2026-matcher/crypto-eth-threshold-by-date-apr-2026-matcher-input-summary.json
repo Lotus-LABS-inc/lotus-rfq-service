@@ -1,0 +1,402 @@
+{
+  "observedAt": "2026-04-24T14:49:39.273Z",
+  "exactFamily": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30",
+  "targetPair": "POLYMARKET|PREDICT",
+  "refreshedRowsUsed": [
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823789",
+      "title": "Will Ethereum reach $4,000 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|4000",
+      "canonicalThresholdValue": "4000",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 4,000"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823790",
+      "title": "Will Ethereum reach $3,800 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3800",
+      "canonicalThresholdValue": "3800",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 3,800"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823792",
+      "title": "Will Ethereum reach $3,400 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3400",
+      "canonicalThresholdValue": "3400",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 3,400"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823801",
+      "title": "Will Ethereum dip to $1,600 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1600",
+      "canonicalThresholdValue": "1600",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 1,600"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823806",
+      "title": "Will Ethereum dip to $600 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|600",
+      "canonicalThresholdValue": "600",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 600"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823807",
+      "title": "Will Ethereum dip to $400 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|400",
+      "canonicalThresholdValue": "400",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 400"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823794",
+      "title": "Will Ethereum reach $3,000 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3000",
+      "canonicalThresholdValue": "3000",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 3,000"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823796",
+      "title": "Will Ethereum reach $2,600 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|2600",
+      "canonicalThresholdValue": "2600",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 2,600"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823797",
+      "title": "Will Ethereum reach $2,400 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|2400",
+      "canonicalThresholdValue": "2400",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 2,400"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823795",
+      "title": "Will Ethereum reach $2,800 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|2800",
+      "canonicalThresholdValue": "2800",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 2,800"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823798",
+      "title": "Will Ethereum reach $2,200 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|2200",
+      "canonicalThresholdValue": "2200",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 2,200"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823802",
+      "title": "Will Ethereum dip to $1,400 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1400",
+      "canonicalThresholdValue": "1400",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 1,400"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823804",
+      "title": "Will Ethereum dip to $1,000 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1000",
+      "canonicalThresholdValue": "1000",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 1,000"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823808",
+      "title": "Will Ethereum dip to $200 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|200",
+      "canonicalThresholdValue": "200",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 200"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823791",
+      "title": "Will Ethereum reach $3,600 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3600",
+      "canonicalThresholdValue": "3600",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 3,600"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823793",
+      "title": "Will Ethereum reach $3,200 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3200",
+      "canonicalThresholdValue": "3200",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 3,200"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823799",
+      "title": "Will Ethereum dip to $2,000 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|2000",
+      "canonicalThresholdValue": "2000",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 2,000"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823800",
+      "title": "Will Ethereum dip to $1,800 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1800",
+      "canonicalThresholdValue": "1800",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 1,800"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823805",
+      "title": "Will Ethereum dip to $800 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|800",
+      "canonicalThresholdValue": "800",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 800"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823803",
+      "title": "Will Ethereum dip to $1,200 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1200",
+      "canonicalThresholdValue": "1200",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 1,200"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139801",
+      "title": "Will Ethereum reach $4,000 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|4000",
+      "canonicalThresholdValue": "4000",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 4,000"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139802",
+      "title": "Will Ethereum reach $3,800 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3800",
+      "canonicalThresholdValue": "3800",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 3,800"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139803",
+      "title": "Will Ethereum reach $3,600 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3600",
+      "canonicalThresholdValue": "3600",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 3,600"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139804",
+      "title": "Will Ethereum reach $3,400 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3400",
+      "canonicalThresholdValue": "3400",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 3,400"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139805",
+      "title": "Will Ethereum reach $3,200 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3200",
+      "canonicalThresholdValue": "3200",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 3,200"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139806",
+      "title": "Will Ethereum reach $3,000 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3000",
+      "canonicalThresholdValue": "3000",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 3,000"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139807",
+      "title": "Will Ethereum reach $2,800 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|2800",
+      "canonicalThresholdValue": "2800",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 2,800"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139808",
+      "title": "Will Ethereum reach $2,600 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|2600",
+      "canonicalThresholdValue": "2600",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 2,600"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139809",
+      "title": "Will Ethereum reach $2,400 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|2400",
+      "canonicalThresholdValue": "2400",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 2,400"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139810",
+      "title": "Will Ethereum reach $2,200 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|2200",
+      "canonicalThresholdValue": "2200",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 2,200"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139811",
+      "title": "Will Ethereum dip to $2,000 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|2000",
+      "canonicalThresholdValue": "2000",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 2,000"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139812",
+      "title": "Will Ethereum dip to $1,800 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1800",
+      "canonicalThresholdValue": "1800",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 1,800"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139813",
+      "title": "Will Ethereum dip to $1,600 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1600",
+      "canonicalThresholdValue": "1600",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 1,600"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139814",
+      "title": "Will Ethereum dip to $1,400 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1400",
+      "canonicalThresholdValue": "1400",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 1,400"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139815",
+      "title": "Will Ethereum dip to $1,200 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1200",
+      "canonicalThresholdValue": "1200",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 1,200"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139816",
+      "title": "Will Ethereum dip to $1,000 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1000",
+      "canonicalThresholdValue": "1000",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 1,000"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139817",
+      "title": "Will Ethereum dip to $800 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|800",
+      "canonicalThresholdValue": "800",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 800"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139818",
+      "title": "Will Ethereum dip to $600 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|600",
+      "canonicalThresholdValue": "600",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 600"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139819",
+      "title": "Will Ethereum dip to $400 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|400",
+      "canonicalThresholdValue": "400",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 400"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139820",
+      "title": "Will Ethereum dip to $200 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|200",
+      "canonicalThresholdValue": "200",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 200"
+    }
+  ],
+  "familyComparabilitySourceArtifacts": {
+    "fetchSummary": "artifacts/crypto/eth-threshold-by-date-apr-2026-family-pass/crypto-eth-threshold-by-date-apr-2026-fetch-summary.json",
+    "admissionSummary": "artifacts/crypto/eth-threshold-by-date-apr-2026-family-pass/crypto-eth-threshold-by-date-apr-2026-admission-summary.json",
+    "normalizedTopics": "artifacts/crypto/eth-threshold-by-date-apr-2026-family-pass/crypto-eth-threshold-by-date-apr-2026-normalized-topics.json",
+    "comparabilitySummary": "artifacts/crypto/eth-threshold-by-date-apr-2026-family-pass/crypto-eth-threshold-by-date-apr-2026-comparability-summary.json",
+    "basisFragmentationSummary": "artifacts/crypto/eth-threshold-by-date-apr-2026-family-pass/crypto-eth-threshold-by-date-apr-2026-basis-fragmentation-summary.json",
+    "finalDecision": "artifacts/crypto/eth-threshold-by-date-apr-2026-family-pass/crypto-eth-threshold-by-date-apr-2026-final-decision.json"
+  },
+  "admittedVenues": [
+    "POLYMARKET",
+    "PREDICT"
+  ],
+  "admittedTopicKeys": [
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|2200",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|2400",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|2600",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|2800",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3000",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3200",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3400",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3600",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3800",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|4000",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1000",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1200",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1400",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1600",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1800",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|200",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|2000",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|400",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|600",
+    "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|800"
+  ],
+  "exclusionsBeforeFinalLaneConstruction": []
+}

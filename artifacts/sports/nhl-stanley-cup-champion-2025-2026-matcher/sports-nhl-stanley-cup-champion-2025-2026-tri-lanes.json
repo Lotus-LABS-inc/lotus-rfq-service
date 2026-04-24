@@ -1,0 +1,30 @@
+{
+  "observedAt": "2026-04-24T12:43:30.274Z",
+  "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|NHL_STANLEY_CUP|2025_2026",
+  "matcherLanes": [
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "clubs": [
+        "colorado_avalanche"
+      ]
+    },
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "clubs": [
+        "dallas_stars"
+      ]
+    },
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "clubs": [
+        "edmonton_oilers"
+      ]
+    },
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "clubs": [
+        "tampa_bay_lightning"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,591 @@
+[
+  {
+    "interpretedContractId": "polymarket-sol-threshold-apr-2026-1823882",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823882",
+    "title": "Will Solana reach $150 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|150",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "150",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 150",
+    "interpretationNotes": [
+      "threshold_label=150",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-sol-threshold-apr-2026-1823884",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823884",
+    "title": "Will Solana reach $130 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|130",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "130",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 130",
+    "interpretationNotes": [
+      "threshold_label=130",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-sol-threshold-apr-2026-1823886",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823886",
+    "title": "Will Solana reach $110 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|110",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "110",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 110",
+    "interpretationNotes": [
+      "threshold_label=110",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-sol-threshold-apr-2026-1823881",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823881",
+    "title": "Will Solana reach $160 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|160",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "160",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 160",
+    "interpretationNotes": [
+      "threshold_label=160",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-sol-threshold-apr-2026-1823888",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823888",
+    "title": "Will Solana reach $90 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|90",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "90",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 90",
+    "interpretationNotes": [
+      "threshold_label=90",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-sol-threshold-apr-2026-1823890",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823890",
+    "title": "Will Solana dip to $70 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|70",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "70",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 70",
+    "interpretationNotes": [
+      "threshold_label=70",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-sol-threshold-apr-2026-1823896",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823896",
+    "title": "Will Solana dip to $10 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|10",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "10",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 10",
+    "interpretationNotes": [
+      "threshold_label=10",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-sol-threshold-apr-2026-1823883",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823883",
+    "title": "Will Solana reach $140 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|140",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "140",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 140",
+    "interpretationNotes": [
+      "threshold_label=140",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-sol-threshold-apr-2026-1823885",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823885",
+    "title": "Will Solana reach $120 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|120",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "120",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 120",
+    "interpretationNotes": [
+      "threshold_label=120",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-sol-threshold-apr-2026-1823887",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823887",
+    "title": "Will Solana reach $100 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|100",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "100",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 100",
+    "interpretationNotes": [
+      "threshold_label=100",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-sol-threshold-apr-2026-1823889",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823889",
+    "title": "Will Solana reach $80 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|80",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "80",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 80",
+    "interpretationNotes": [
+      "threshold_label=80",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-sol-threshold-apr-2026-1823891",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823891",
+    "title": "Will Solana dip to $60 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|60",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "60",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 60",
+    "interpretationNotes": [
+      "threshold_label=60",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-sol-threshold-apr-2026-1823895",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823895",
+    "title": "Will Solana dip to $20 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|20",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "20",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 20",
+    "interpretationNotes": [
+      "threshold_label=20",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-sol-threshold-apr-2026-1823892",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823892",
+    "title": "Will Solana dip to $50 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|50",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "50",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 50",
+    "interpretationNotes": [
+      "threshold_label=50",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-sol-threshold-apr-2026-1823893",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823893",
+    "title": "Will Solana dip to $40 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|40",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "40",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 40",
+    "interpretationNotes": [
+      "threshold_label=40",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-sol-threshold-apr-2026-1823894",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823894",
+    "title": "Will Solana dip to $30 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|30",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "30",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 30",
+    "interpretationNotes": [
+      "threshold_label=30",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-sol-threshold-apr-2026-139848",
+    "venue": "PREDICT",
+    "venueMarketId": "139848",
+    "title": "Will Solana reach $160 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|160",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "160",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 160",
+    "interpretationNotes": [
+      "threshold_label=160",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-sol-threshold-apr-2026-139849",
+    "venue": "PREDICT",
+    "venueMarketId": "139849",
+    "title": "Will Solana reach $150 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|150",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "150",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 150",
+    "interpretationNotes": [
+      "threshold_label=150",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-sol-threshold-apr-2026-139850",
+    "venue": "PREDICT",
+    "venueMarketId": "139850",
+    "title": "Will Solana reach $140 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|140",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "140",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 140",
+    "interpretationNotes": [
+      "threshold_label=140",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-sol-threshold-apr-2026-139851",
+    "venue": "PREDICT",
+    "venueMarketId": "139851",
+    "title": "Will Solana reach $130 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|130",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "130",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 130",
+    "interpretationNotes": [
+      "threshold_label=130",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-sol-threshold-apr-2026-139852",
+    "venue": "PREDICT",
+    "venueMarketId": "139852",
+    "title": "Will Solana reach $120 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|120",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "120",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 120",
+    "interpretationNotes": [
+      "threshold_label=120",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-sol-threshold-apr-2026-139853",
+    "venue": "PREDICT",
+    "venueMarketId": "139853",
+    "title": "Will Solana reach $110 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|110",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "110",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 110",
+    "interpretationNotes": [
+      "threshold_label=110",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-sol-threshold-apr-2026-139854",
+    "venue": "PREDICT",
+    "venueMarketId": "139854",
+    "title": "Will Solana reach $100 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|100",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "100",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 100",
+    "interpretationNotes": [
+      "threshold_label=100",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-sol-threshold-apr-2026-139855",
+    "venue": "PREDICT",
+    "venueMarketId": "139855",
+    "title": "Will Solana reach $90 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|90",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "90",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 90",
+    "interpretationNotes": [
+      "threshold_label=90",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-sol-threshold-apr-2026-139857",
+    "venue": "PREDICT",
+    "venueMarketId": "139857",
+    "title": "Will Solana dip to $70 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|70",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "70",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 70",
+    "interpretationNotes": [
+      "threshold_label=70",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-sol-threshold-apr-2026-139858",
+    "venue": "PREDICT",
+    "venueMarketId": "139858",
+    "title": "Will Solana dip to $60 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|60",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "60",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 60",
+    "interpretationNotes": [
+      "threshold_label=60",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-sol-threshold-apr-2026-139859",
+    "venue": "PREDICT",
+    "venueMarketId": "139859",
+    "title": "Will Solana dip to $50 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|50",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "50",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 50",
+    "interpretationNotes": [
+      "threshold_label=50",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-sol-threshold-apr-2026-139860",
+    "venue": "PREDICT",
+    "venueMarketId": "139860",
+    "title": "Will Solana dip to $40 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|40",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "40",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 40",
+    "interpretationNotes": [
+      "threshold_label=40",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-sol-threshold-apr-2026-139861",
+    "venue": "PREDICT",
+    "venueMarketId": "139861",
+    "title": "Will Solana dip to $30 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|30",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "30",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 30",
+    "interpretationNotes": [
+      "threshold_label=30",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-sol-threshold-apr-2026-139862",
+    "venue": "PREDICT",
+    "venueMarketId": "139862",
+    "title": "Will Solana dip to $20 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|20",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "20",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 20",
+    "interpretationNotes": [
+      "threshold_label=20",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-sol-threshold-apr-2026-139863",
+    "venue": "PREDICT",
+    "venueMarketId": "139863",
+    "title": "Will Solana dip to $10 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|10",
+    "canonicalAsset": "SOL",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "10",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 10",
+    "interpretationNotes": [
+      "threshold_label=10",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  }
+]

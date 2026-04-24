@@ -10,6 +10,9 @@ const CLASSIFIER_VERSION = "crypto-family-classifier-v1";
 
 const inferFamily = (market: MatchingMarketRecord): CryptoContractFamily => {
   const text = normalizeFreeText(`${market.title} ${market.rulesText ?? ""}`);
+  if (/\bfdv\b.+\babove\b.+\bone day after launch\b/.test(text)) return "FDV_THRESHOLD_AFTER_LAUNCH";
+  if (/\blaunch a token\b|\btoken\b.+\bby\b/.test(text)) return "TOKEN_LAUNCH_BY_DATE";
+  if (/\bwill\b.+\bhit\b.+\bor\b.+\bfirst\b/.test(text)) return "FIRST_TO_THRESHOLD_BY_DATE";
   if (/\ball time high\b|\bath\b/.test(text)) return "ATH_BY_DATE";
   if ((/\bup or down\b|\bhigher or lower\b/.test(text)) && /\bhourly\b/.test(text)) return "GENERIC_DIRECTIONAL";
   if ((/\bup or down\b|\bhigher or lower\b/.test(text)) && /\b\d{1,2}:\d{2}\s*(utc|et)\b/.test(text)) return "GENERIC_DIRECTIONAL";
@@ -36,7 +39,12 @@ const buildAmbiguityFlags = (input: {
   const flags: string[] = [];
   if (!input.asset) flags.push("missing_crypto_asset");
   if (!input.dateKey) flags.push("missing_time_boundary");
-  if (input.market.venue !== "POLYMARKET" && input.market.venue !== "LIMITLESS" && input.market.venue !== "OPINION") {
+  if (
+    input.market.venue !== "POLYMARKET"
+    && input.market.venue !== "LIMITLESS"
+    && input.market.venue !== "OPINION"
+    && input.market.venue !== "PREDICT"
+  ) {
     flags.push("unsupported_venue");
   }
   if (input.market.category !== "CRYPTO") flags.push("non_crypto_category");

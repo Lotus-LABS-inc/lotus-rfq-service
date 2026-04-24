@@ -1,0 +1,15 @@
+{
+  "blockerCounts": {},
+  "topicBlockers": [
+    {
+      "canonicalTopicKey": "CRYPTO|TOKEN_LAUNCH_BY_DATE|METAMASK|2026-12-31",
+      "reasons": [
+        "not_shared_on_polymarket_predict"
+      ],
+      "venuesPresent": [
+        "POLYMARKET"
+      ]
+    }
+  ],
+  "unresolvedRows": []
+}

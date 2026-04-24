@@ -1,0 +1,7 @@
+# Crypto BTC First To Threshold By Date Limited Prod Readiness
+
+- lane id: CRYPTO_BTC_FIRST_TO_THRESHOLD_BY_DATE_PAIR_POLYMARKET_PREDICT
+- exact family: CRYPTO|FIRST_TO_THRESHOLD_BY_DATE|BTC|60000|80000|2027-01-01
+- exact-safe binary outcomes: $60k first, $80k first
+- final readiness label: CRYPTO_BTC_FIRST_TO_THRESHOLD_BY_DATE_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW
+- admin decision: READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION

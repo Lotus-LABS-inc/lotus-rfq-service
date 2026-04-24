@@ -1,0 +1,26 @@
+{
+  "observedAt": "2026-04-24T15:59:43.429Z",
+  "laneId": "CRYPTO_BASE_TOKEN_LAUNCH_BY_DATE_PAIR_POLYMARKET_PREDICT",
+  "matcherTruthConsumed": {
+    "familyKey": "CRYPTO|TOKEN_LAUNCH_BY_DATE|BASE",
+    "bestPair": "POLYMARKET|PREDICT",
+    "exactSafeLaunchDateBuckets": [
+      "2026-06-30",
+      "2026-12-31"
+    ],
+    "exactSafeTopics": [
+      "CRYPTO|TOKEN_LAUNCH_BY_DATE|BASE|2026-06-30",
+      "CRYPTO|TOKEN_LAUNCH_BY_DATE|BASE|2026-12-31"
+    ],
+    "overallDecision": "CRYPTO_BASE_TOKEN_LAUNCH_BY_DATE_PAIR_MATCHER_READY_PENDING_OPERATOR_REVIEW"
+  },
+  "readinessConclusionsDerived": {
+    "finalReadinessLabel": "CRYPTO_BASE_TOKEN_LAUNCH_BY_DATE_LIMITED_PROD_READY_FOR_REVIEW",
+    "exactLaneScopeLocked": true
+  },
+  "intentionallyUnchanged": [
+    "NO_TRI_LANE_INTRODUCED",
+    "NO_VENUE_WIDENING"
+  ],
+  "stillBlocked": []
+}

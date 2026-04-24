@@ -1,0 +1,55 @@
+{
+  "observedAt": "2026-04-24T12:48:15.228Z",
+  "laneId": "SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_TRI_LIMITLESS_OPINION_POLYMARKET",
+  "matcherTruthConsumed": {
+    "topicKey": "SPORTS|TOURNAMENT_WINNER|NHL_STANLEY_CUP|2025_2026",
+    "bestPair": "LIMITLESS|POLYMARKET",
+    "bestTriIfAny": "LIMITLESS|OPINION|POLYMARKET",
+    "exactSafeTriTeams": [
+      "colorado_avalanche",
+      "dallas_stars",
+      "edmonton_oilers",
+      "tampa_bay_lightning"
+    ],
+    "exactSafePairTeams": [
+      "anaheim_ducks",
+      "carolina_hurricanes",
+      "colorado_avalanche",
+      "dallas_stars",
+      "edmonton_oilers",
+      "florida_panthers",
+      "los_angeles_kings",
+      "minnesota_wild",
+      "montreal_canadiens",
+      "new_jersey_devils",
+      "new_york_rangers",
+      "tampa_bay_lightning",
+      "toronto_maple_leafs",
+      "vegas_golden_knights",
+      "washington_capitals",
+      "winnipeg_jets"
+    ],
+    "overallDecision": "SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_TRI_REVIEW_REQUIRED_PAIR_FIRST",
+    "triMatcherReady": true,
+    "pairMatcherReady": true,
+    "operatorCredible": true,
+    "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING"
+  },
+  "readinessConclusionsDerived": {
+    "finalReadinessLabel": "SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW",
+    "readinessReviewJustified": true,
+    "operatorRuleReviewRequired": true,
+    "rolloutRecommended": false,
+    "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+    "exactLaneScopeLocked": true,
+    "peerPairRouteStillExplicit": true
+  },
+  "intentionallyUnchanged": [
+    "No widening beyond NHL Stanley Cup 2025_2026",
+    "No venue-only tails admitted into strict tri lane",
+    "No automatic promotion implied"
+  ],
+  "stillBlocked": [
+    "Operator rule review still required before production promotion."
+  ]
+}

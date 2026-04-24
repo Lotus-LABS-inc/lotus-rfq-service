@@ -1,0 +1,41 @@
+{
+  "observedAt": "2026-04-24T11:22:27.085Z",
+  "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LCK|2026",
+  "matcherLanes": [
+    {
+      "venue": "LIMITLESS",
+      "venueSet": "LIMITLESS",
+      "clubs": [
+        "dplus",
+        "gen_g_esports",
+        "hanwha_life_esports",
+        "kt_rolster",
+        "t1"
+      ]
+    },
+    {
+      "venue": "OPINION",
+      "venueSet": "OPINION",
+      "clubs": [
+        "dplus",
+        "freecs",
+        "gen_g_esports",
+        "t1"
+      ]
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueSet": "POLYMARKET",
+      "clubs": [
+        "dplus",
+        "drx",
+        "freecs",
+        "gen_g_esports",
+        "hanwha_life_esports",
+        "kt_rolster",
+        "nongshim_redforce",
+        "t1"
+      ]
+    }
+  ]
+}

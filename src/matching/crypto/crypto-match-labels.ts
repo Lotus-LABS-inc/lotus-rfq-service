@@ -1,7 +1,7 @@
 import type { ContractFamily } from "../matching-types.js";
 import type { PairMatchLabel, StructuralMatchOutcome } from "../match-labels.js";
 
-export const cryptoTargetVenueValues = ["POLYMARKET", "LIMITLESS", "OPINION"] as const;
+export const cryptoTargetVenueValues = ["POLYMARKET", "LIMITLESS", "OPINION", "PREDICT"] as const;
 export type CryptoTargetVenue = typeof cryptoTargetVenueValues[number];
 
 export const cryptoTrackedAsset = "BTC";
@@ -11,6 +11,9 @@ export const defaultCryptoTrackedAssets = [cryptoTrackedAsset] as const;
 
 export const cryptoContractFamilyValues = [
   "SAME_DAY_DIRECTIONAL",
+  "FIRST_TO_THRESHOLD_BY_DATE",
+  "FDV_THRESHOLD_AFTER_LAUNCH",
+  "TOKEN_LAUNCH_BY_DATE",
   "THRESHOLD_BY_DATE",
   "ATH_BY_DATE",
   "PRICE_AT_CLOSE",
@@ -38,12 +41,16 @@ export const cryptoObservationTypeValues = [
   "INTRADAY_HIT",
   "END_OF_PERIOD_CLOSE",
   "ANY_TIME_BEFORE",
+  "ONE_DAY_AFTER_LAUNCH",
   "SAME_DAY_DIRECTIONAL",
   "BUCKETED_PRICE_RANGE"
 ] as const;
 export type CryptoObservationType = typeof cryptoObservationTypeValues[number];
 
 export const cryptoStructuralContractClassValues = [
+  "FIRST_TO_THRESHOLD_BINARY",
+  "FDV_THRESHOLD_ONE_DAY_AFTER_LAUNCH",
+  "TOKEN_LAUNCH_DATE_BINARY",
   "THRESHOLD_ANY_TIME_BEFORE_DATE",
   "THRESHOLD_FIXED_TIME",
   "ATH_ANY_TIME_BEFORE_DATE",
@@ -75,7 +82,8 @@ export type CryptoStructuralMatchOutcome = StructuralMatchOutcome;
 export const cryptoAllowedVenuePairs = new Set([
   "LIMITLESS|OPINION",
   "LIMITLESS|POLYMARKET",
-  "OPINION|POLYMARKET"
+  "OPINION|POLYMARKET",
+  "POLYMARKET|PREDICT"
 ]);
 
 export const buildCryptoVenuePairKey = (leftVenue: CryptoTargetVenue, rightVenue: CryptoTargetVenue): string =>

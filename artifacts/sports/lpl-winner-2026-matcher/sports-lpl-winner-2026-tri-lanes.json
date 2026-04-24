@@ -1,0 +1,15 @@
+{
+  "observedAt": "2026-04-24T11:11:27.444Z",
+  "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LPL|2026",
+  "matcherLanes": [
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "clubs": [
+        "anyones_legend",
+        "bilibili_gaming",
+        "jd_gaming",
+        "top_esports"
+      ]
+    }
+  ]
+}

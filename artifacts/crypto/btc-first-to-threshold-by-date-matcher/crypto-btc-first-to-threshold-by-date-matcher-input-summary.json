@@ -1,0 +1,56 @@
+{
+  "observedAt": "2026-04-24T15:36:11.229Z",
+  "exactFamily": "CRYPTO|FIRST_TO_THRESHOLD_BY_DATE|BTC|60000|80000|2027-01-01",
+  "targetPair": "POLYMARKET|PREDICT",
+  "refreshedRowsUsed": [
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1357099",
+      "title": "Will Bitcoin hit $60k or $80k first?",
+      "canonicalTopicKey": "CRYPTO|FIRST_TO_THRESHOLD_BY_DATE|BTC|60000|80000|2027-01-01",
+      "canonicalLowerThreshold": "60000",
+      "canonicalHigherThreshold": "80000",
+      "canonicalDeadlineDateKey": "2027-01-01",
+      "exactOutcomeLabels": [
+        "$60k first",
+        "$80k first"
+      ]
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "21177",
+      "title": "Will Bitcoin hit $60k or $80k first?",
+      "canonicalTopicKey": "CRYPTO|FIRST_TO_THRESHOLD_BY_DATE|BTC|60000|80000|2027-01-01",
+      "canonicalLowerThreshold": "60000",
+      "canonicalHigherThreshold": "80000",
+      "canonicalDeadlineDateKey": "2027-01-01",
+      "exactOutcomeLabels": [
+        "$60k first",
+        "$80k first"
+      ]
+    }
+  ],
+  "familyComparabilitySourceArtifacts": {
+    "fetchSummary": "artifacts/crypto/btc-first-to-threshold-by-date-family-pass/crypto-btc-first-to-threshold-by-date-fetch-summary.json",
+    "admissionSummary": "artifacts/crypto/btc-first-to-threshold-by-date-family-pass/crypto-btc-first-to-threshold-by-date-admission-summary.json",
+    "normalizedTopics": "artifacts/crypto/btc-first-to-threshold-by-date-family-pass/crypto-btc-first-to-threshold-by-date-normalized-topics.json",
+    "comparabilitySummary": "artifacts/crypto/btc-first-to-threshold-by-date-family-pass/crypto-btc-first-to-threshold-by-date-comparability-summary.json",
+    "basisFragmentationSummary": "artifacts/crypto/btc-first-to-threshold-by-date-family-pass/crypto-btc-first-to-threshold-by-date-basis-fragmentation-summary.json",
+    "finalDecision": "artifacts/crypto/btc-first-to-threshold-by-date-family-pass/crypto-btc-first-to-threshold-by-date-final-decision.json"
+  },
+  "admittedVenues": [
+    "POLYMARKET",
+    "PREDICT"
+  ],
+  "admittedTopicKeys": [
+    "CRYPTO|FIRST_TO_THRESHOLD_BY_DATE|BTC|60000|80000|2027-01-01"
+  ],
+  "exclusionsBeforeFinalLaneConstruction": [
+    {
+      "scope": "family",
+      "canonicalTopicKey": "CRYPTO|FIRST_TO_THRESHOLD_BY_DATE|BTC|60000|80000|2027-01-01",
+      "reason": "TIE_HANDLING_AMBIGUOUS",
+      "notes": "BTC first-to-threshold market leaves tie handling unspecified and must remain operator-reviewed."
+    }
+  ]
+}

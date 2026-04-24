@@ -1,0 +1,485 @@
+{
+  "observedAt": "2026-04-24T14:49:39.281Z",
+  "matcherLanes": [
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|70000",
+      "exactThresholdLabel": "↑ 70,000",
+      "exactThresholdValue": "70000",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↑ 70,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823778",
+          "rawTitle": "Will Bitcoin reach $70,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139759",
+          "rawTitle": "Will Bitcoin reach $70,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|75000",
+      "exactThresholdLabel": "↑ 75,000",
+      "exactThresholdValue": "75000",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↑ 75,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823777",
+          "rawTitle": "Will Bitcoin reach $75,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139758",
+          "rawTitle": "Will Bitcoin reach $75,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|80000",
+      "exactThresholdLabel": "↑ 80,000",
+      "exactThresholdValue": "80000",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↑ 80,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823776",
+          "rawTitle": "Will Bitcoin reach $80,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139757",
+          "rawTitle": "Will Bitcoin reach $80,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|85000",
+      "exactThresholdLabel": "↑ 85,000",
+      "exactThresholdValue": "85000",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↑ 85,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823775",
+          "rawTitle": "Will Bitcoin reach $85,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139756",
+          "rawTitle": "Will Bitcoin reach $85,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|90000",
+      "exactThresholdLabel": "↑ 90,000",
+      "exactThresholdValue": "90000",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↑ 90,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823774",
+          "rawTitle": "Will Bitcoin reach $90,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139755",
+          "rawTitle": "Will Bitcoin reach $90,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|95000",
+      "exactThresholdLabel": "↑ 95,000",
+      "exactThresholdValue": "95000",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↑ 95,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823773",
+          "rawTitle": "Will Bitcoin reach $95,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139754",
+          "rawTitle": "Will Bitcoin reach $95,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|100000",
+      "exactThresholdLabel": "↑ 100,000",
+      "exactThresholdValue": "100000",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↑ 100,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823772",
+          "rawTitle": "Will Bitcoin reach $100,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139753",
+          "rawTitle": "Will Bitcoin reach $100,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|105000",
+      "exactThresholdLabel": "↑ 105,000",
+      "exactThresholdValue": "105000",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↑ 105,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823771",
+          "rawTitle": "Will Bitcoin reach $105,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139752",
+          "rawTitle": "Will Bitcoin reach $105,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|110000",
+      "exactThresholdLabel": "↑ 110,000",
+      "exactThresholdValue": "110000",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↑ 110,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823770",
+          "rawTitle": "Will Bitcoin reach $110,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139751",
+          "rawTitle": "Will Bitcoin reach $110,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|150000",
+      "exactThresholdLabel": "↑ 150,000",
+      "exactThresholdValue": "150000",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↑ 150,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823769",
+          "rawTitle": "Will Bitcoin reach $150,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139750",
+          "rawTitle": "Will Bitcoin reach $150,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|20000",
+      "exactThresholdLabel": "↓ 20,000",
+      "exactThresholdValue": "20000",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↓ 20,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823788",
+          "rawTitle": "Will Bitcoin dip to $20,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139769",
+          "rawTitle": "Will Bitcoin dip to $20,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|25000",
+      "exactThresholdLabel": "↓ 25,000",
+      "exactThresholdValue": "25000",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↓ 25,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823787",
+          "rawTitle": "Will Bitcoin dip to $25,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139768",
+          "rawTitle": "Will Bitcoin dip to $25,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|30000",
+      "exactThresholdLabel": "↓ 30,000",
+      "exactThresholdValue": "30000",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↓ 30,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823786",
+          "rawTitle": "Will Bitcoin dip to $30,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139767",
+          "rawTitle": "Will Bitcoin dip to $30,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|35000",
+      "exactThresholdLabel": "↓ 35,000",
+      "exactThresholdValue": "35000",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↓ 35,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823785",
+          "rawTitle": "Will Bitcoin dip to $35,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139766",
+          "rawTitle": "Will Bitcoin dip to $35,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|40000",
+      "exactThresholdLabel": "↓ 40,000",
+      "exactThresholdValue": "40000",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↓ 40,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823784",
+          "rawTitle": "Will Bitcoin dip to $40,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139765",
+          "rawTitle": "Will Bitcoin dip to $40,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|45000",
+      "exactThresholdLabel": "↓ 45,000",
+      "exactThresholdValue": "45000",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↓ 45,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823783",
+          "rawTitle": "Will Bitcoin dip to $45,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139764",
+          "rawTitle": "Will Bitcoin dip to $45,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|50000",
+      "exactThresholdLabel": "↓ 50,000",
+      "exactThresholdValue": "50000",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↓ 50,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823782",
+          "rawTitle": "Will Bitcoin dip to $50,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139763",
+          "rawTitle": "Will Bitcoin dip to $50,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|55000",
+      "exactThresholdLabel": "↓ 55,000",
+      "exactThresholdValue": "55000",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↓ 55,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823781",
+          "rawTitle": "Will Bitcoin dip to $55,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139762",
+          "rawTitle": "Will Bitcoin dip to $55,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|60000",
+      "exactThresholdLabel": "↓ 60,000",
+      "exactThresholdValue": "60000",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↓ 60,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823780",
+          "rawTitle": "Will Bitcoin dip to $60,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139761",
+          "rawTitle": "Will Bitcoin dip to $60,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|65000",
+      "exactThresholdLabel": "↓ 65,000",
+      "exactThresholdValue": "65000",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe BTC threshold ladder bucket ↓ 65,000 on POLYMARKET|PREDICT."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823779",
+          "rawTitle": "Will Bitcoin dip to $65,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139760",
+          "rawTitle": "Will Bitcoin dip to $65,000 in April?"
+        }
+      ]
+    }
+  ]
+}

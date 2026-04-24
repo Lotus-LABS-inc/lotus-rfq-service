@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { registerAdminSportsRoutes } from "../src/api/admin/sports.routes.js";
 
 describe("admin sports routes", () => {
-  it("requires ADMIN + 2FA for mutations and exposes EPL, La Liga, Champions League, World Cup, NBA, and F1 lane surfaces", async () => {
+  it("requires ADMIN + 2FA for mutations and exposes EPL, La Liga, Champions League, World Cup, NBA, F1, LCK, LPL, and NHL lane surfaces", async () => {
     process.env.ADMIN_2FA_TOKEN = "123456";
     const adminMiddleware: preHandlerHookHandler = async (request) => {
       (request as typeof request & { user: { userId: string; role: string } }).user = {
@@ -209,6 +209,84 @@ describe("admin sports routes", () => {
         blockers: ["operator_rule_review_required"],
         sourceArtifactRefs: [],
         currentStage: "INTERNAL_ONLY"
+      }, {
+        laneId: "SPORTS_LCK_WINNER_2026_TRI_LIMITLESS_OPINION_POLYMARKET",
+        readinessDecision: "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+        operatorCredible: true,
+        operatorRuleReviewRequired: true,
+        topicKey: "SPORTS|LEAGUE_WINNER|LCK|2026",
+        laneType: "TRI",
+        venueSet: "LIMITLESS|OPINION|POLYMARKET",
+        clubSet: ["dplus", "gen_g_esports", "t1"],
+        pairPreferred: false,
+        blockers: ["operator_rule_review_required"],
+        sourceArtifactRefs: [],
+        currentStage: "INTERNAL_ONLY"
+      }, {
+        laneId: "SPORTS_LCK_WINNER_2026_PAIR_LIMITLESS_POLYMARKET",
+        readinessDecision: "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+        operatorCredible: true,
+        operatorRuleReviewRequired: true,
+        topicKey: "SPORTS|LEAGUE_WINNER|LCK|2026",
+        laneType: "PAIR",
+        venueSet: "LIMITLESS|POLYMARKET",
+        clubSet: ["dplus", "gen_g_esports", "hanwha_life_esports", "kt_rolster", "t1"],
+        pairPreferred: true,
+        blockers: ["operator_rule_review_required"],
+        sourceArtifactRefs: [],
+        currentStage: "INTERNAL_ONLY"
+      }, {
+        laneId: "SPORTS_LPL_WINNER_2026_TRI_LIMITLESS_OPINION_POLYMARKET",
+        readinessDecision: "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+        operatorCredible: true,
+        operatorRuleReviewRequired: true,
+        topicKey: "SPORTS|LEAGUE_WINNER|LPL|2026",
+        laneType: "TRI",
+        venueSet: "LIMITLESS|OPINION|POLYMARKET",
+        clubSet: ["anyones_legend", "bilibili_gaming", "jd_gaming", "top_esports"],
+        pairPreferred: false,
+        blockers: ["operator_rule_review_required"],
+        sourceArtifactRefs: [],
+        currentStage: "INTERNAL_ONLY"
+      }, {
+        laneId: "SPORTS_LPL_WINNER_2026_PAIR_LIMITLESS_POLYMARKET",
+        readinessDecision: "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+        operatorCredible: true,
+        operatorRuleReviewRequired: true,
+        topicKey: "SPORTS|LEAGUE_WINNER|LPL|2026",
+        laneType: "PAIR",
+        venueSet: "LIMITLESS|POLYMARKET",
+        clubSet: ["anyones_legend", "bilibili_gaming", "jd_gaming", "top_esports", "weibo_gaming"],
+        pairPreferred: true,
+        blockers: ["operator_rule_review_required"],
+        sourceArtifactRefs: [],
+        currentStage: "INTERNAL_ONLY"
+      }, {
+        laneId: "SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_TRI_LIMITLESS_OPINION_POLYMARKET",
+        readinessDecision: "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+        operatorCredible: true,
+        operatorRuleReviewRequired: true,
+        topicKey: "SPORTS|TOURNAMENT_WINNER|NHL_STANLEY_CUP|2025_2026",
+        laneType: "TRI",
+        venueSet: "LIMITLESS|OPINION|POLYMARKET",
+        clubSet: ["colorado_avalanche", "dallas_stars", "edmonton_oilers", "tampa_bay_lightning"],
+        pairPreferred: false,
+        blockers: ["operator_rule_review_required"],
+        sourceArtifactRefs: [],
+        currentStage: "INTERNAL_ONLY"
+      }, {
+        laneId: "SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_PAIR_LIMITLESS_POLYMARKET",
+        readinessDecision: "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+        operatorCredible: true,
+        operatorRuleReviewRequired: true,
+        topicKey: "SPORTS|TOURNAMENT_WINNER|NHL_STANLEY_CUP|2025_2026",
+        laneType: "PAIR",
+        venueSet: "LIMITLESS|POLYMARKET",
+        clubSet: ["anaheim_ducks", "carolina_hurricanes", "colorado_avalanche", "dallas_stars", "edmonton_oilers", "florida_panthers", "los_angeles_kings", "minnesota_wild", "montreal_canadiens", "new_jersey_devils", "new_york_rangers", "tampa_bay_lightning", "toronto_maple_leafs", "vegas_golden_knights", "washington_capitals", "winnipeg_jets"],
+        pairPreferred: true,
+        blockers: ["operator_rule_review_required"],
+        sourceArtifactRefs: [],
+        currentStage: "INTERNAL_ONLY"
       }])),
       getLane: vi.fn(async () => ({
         laneId: "SPORTS_EPL_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT",
@@ -254,7 +332,7 @@ describe("admin sports routes", () => {
       url: "/admin/sports-lanes"
     });
     expect(listResponse.statusCode).toBe(200);
-    expect(JSON.parse(listResponse.body).lanes).toHaveLength(15);
+    expect(JSON.parse(listResponse.body).lanes).toHaveLength(21);
 
     const readinessResponse = await app.inject({
       method: "GET",

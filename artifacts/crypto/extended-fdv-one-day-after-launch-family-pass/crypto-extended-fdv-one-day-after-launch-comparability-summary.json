@@ -1,0 +1,114 @@
+[
+  {
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|150000000",
+    "canonicalThresholdValue": "150000000",
+    "canonicalThresholdLabel": "$150M",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "EXACT_RULE_COMPATIBLE",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_FDV_THRESHOLDS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "project=EXTENDED",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|300000000",
+    "canonicalThresholdValue": "300000000",
+    "canonicalThresholdLabel": "$300M",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "EXACT_RULE_COMPATIBLE",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_FDV_THRESHOLDS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "project=EXTENDED",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|500000000",
+    "canonicalThresholdValue": "500000000",
+    "canonicalThresholdLabel": "$500M",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "EXACT_RULE_COMPATIBLE",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_FDV_THRESHOLDS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "project=EXTENDED",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|800000000",
+    "canonicalThresholdValue": "800000000",
+    "canonicalThresholdLabel": "$800M",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "EXACT_RULE_COMPATIBLE",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_FDV_THRESHOLDS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "project=EXTENDED",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|1000000000",
+    "canonicalThresholdValue": "1000000000",
+    "canonicalThresholdLabel": "$1B",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "EXACT_RULE_COMPATIBLE",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_FDV_THRESHOLDS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "project=EXTENDED",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|2000000000",
+    "canonicalThresholdValue": "2000000000",
+    "canonicalThresholdLabel": "$2B",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "EXACT_RULE_COMPATIBLE",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_FDV_THRESHOLDS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "project=EXTENDED",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|3000000000",
+    "canonicalThresholdValue": "3000000000",
+    "canonicalThresholdLabel": "$3B",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "EXACT_RULE_COMPATIBLE",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_FDV_THRESHOLDS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "project=EXTENDED",
+      "pair_shared=yes"
+    ]
+  }
+]

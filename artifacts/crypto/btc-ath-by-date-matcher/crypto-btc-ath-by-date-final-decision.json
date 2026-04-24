@@ -1,0 +1,11 @@
+{
+  "observedAt": "2026-04-24T14:07:42.594Z",
+  "overallDecision": "CRYPTO_BTC_ATH_BY_DATE_PAIR_MATCHER_READY_PENDING_OPERATOR_REVIEW",
+  "bestPair": "LIMITLESS|POLYMARKET",
+  "pairMatcherReady": true,
+  "exactSafePairCandidateCount": 3,
+  "ruleStatus": "EXACT_RULE_COMPATIBLE",
+  "operatorCredible": true,
+  "matcherFollowUpJustified": true,
+  "singleBestNextAction": "Run a narrow readiness pass for the shared BTC ATH-by-date pair buckets with LIMITLESS|POLYMARKET explicit."
+}

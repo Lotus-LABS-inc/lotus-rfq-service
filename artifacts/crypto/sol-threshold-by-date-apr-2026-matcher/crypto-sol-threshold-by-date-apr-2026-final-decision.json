@@ -1,0 +1,11 @@
+{
+  "observedAt": "2026-04-24T14:49:39.299Z",
+  "overallDecision": "CRYPTO_SOL_THRESHOLD_BY_DATE_APR_2026_PAIR_MATCHER_READY_PENDING_OPERATOR_REVIEW",
+  "bestPair": "POLYMARKET|PREDICT",
+  "pairMatcherReady": true,
+  "exactSafePairCandidateCount": 15,
+  "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+  "operatorCredible": true,
+  "matcherFollowUpJustified": true,
+  "singleBestNextAction": "Run a narrow readiness pass for the shared SOL threshold-by-date pair buckets with POLYMARKET|PREDICT explicit."
+}

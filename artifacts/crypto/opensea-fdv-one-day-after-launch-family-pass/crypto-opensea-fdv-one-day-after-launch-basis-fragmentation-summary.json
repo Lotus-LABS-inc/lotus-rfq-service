@@ -1,0 +1,24 @@
+{
+  "blockerCounts": {},
+  "topicBlockers": [
+    {
+      "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|OPENSEA|ONE_DAY_AFTER_LAUNCH|ABOVE|100000000",
+      "reasons": [
+        "not_shared_on_polymarket_predict"
+      ],
+      "venuesPresent": [
+        "POLYMARKET"
+      ]
+    },
+    {
+      "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|OPENSEA|ONE_DAY_AFTER_LAUNCH|ABOVE|300000000",
+      "reasons": [
+        "not_shared_on_polymarket_predict"
+      ],
+      "venuesPresent": [
+        "POLYMARKET"
+      ]
+    }
+  ],
+  "unresolvedRows": []
+}

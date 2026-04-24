@@ -1,0 +1,211 @@
+{
+  "observedAt": "2026-04-24T14:49:39.292Z",
+  "exactFamily": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30",
+  "targetPair": "POLYMARKET|PREDICT",
+  "refreshedRowsUsed": [
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823862",
+      "title": "Will BNB reach $1,000 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|1000",
+      "canonicalThresholdValue": "1000",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 1,000"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823863",
+      "title": "Will BNB reach $900 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|900",
+      "canonicalThresholdValue": "900",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 900"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823868",
+      "title": "Will BNB dip to $400 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|400",
+      "canonicalThresholdValue": "400",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 400"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823870",
+      "title": "Will BNB dip to $200 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|200",
+      "canonicalThresholdValue": "200",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 200"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823865",
+      "title": "Will BNB reach $700 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|700",
+      "canonicalThresholdValue": "700",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 700"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823867",
+      "title": "Will BNB dip to $500 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|500",
+      "canonicalThresholdValue": "500",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 500"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823869",
+      "title": "Will BNB dip to $300 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|300",
+      "canonicalThresholdValue": "300",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 300"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823871",
+      "title": "Will BNB dip to $100 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|100",
+      "canonicalThresholdValue": "100",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 100"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823864",
+      "title": "Will BNB reach $800 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|800",
+      "canonicalThresholdValue": "800",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 800"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823866",
+      "title": "Will BNB reach $600 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|600",
+      "canonicalThresholdValue": "600",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 600"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139770",
+      "title": "Will BNB reach $1,000 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|1000",
+      "canonicalThresholdValue": "1000",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 1,000"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139771",
+      "title": "Will BNB reach $900 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|900",
+      "canonicalThresholdValue": "900",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 900"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139772",
+      "title": "Will BNB reach $800 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|800",
+      "canonicalThresholdValue": "800",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 800"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139773",
+      "title": "Will BNB reach $700 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|700",
+      "canonicalThresholdValue": "700",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 700"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139775",
+      "title": "Will BNB dip to $500 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|500",
+      "canonicalThresholdValue": "500",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 500"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139776",
+      "title": "Will BNB dip to $400 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|400",
+      "canonicalThresholdValue": "400",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 400"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139777",
+      "title": "Will BNB dip to $300 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|300",
+      "canonicalThresholdValue": "300",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 300"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139778",
+      "title": "Will BNB dip to $200 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|200",
+      "canonicalThresholdValue": "200",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 200"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139779",
+      "title": "Will BNB dip to $100 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|100",
+      "canonicalThresholdValue": "100",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 100"
+    }
+  ],
+  "familyComparabilitySourceArtifacts": {
+    "fetchSummary": "artifacts/crypto/bnb-threshold-by-date-apr-2026-family-pass/crypto-bnb-threshold-by-date-apr-2026-fetch-summary.json",
+    "admissionSummary": "artifacts/crypto/bnb-threshold-by-date-apr-2026-family-pass/crypto-bnb-threshold-by-date-apr-2026-admission-summary.json",
+    "normalizedTopics": "artifacts/crypto/bnb-threshold-by-date-apr-2026-family-pass/crypto-bnb-threshold-by-date-apr-2026-normalized-topics.json",
+    "comparabilitySummary": "artifacts/crypto/bnb-threshold-by-date-apr-2026-family-pass/crypto-bnb-threshold-by-date-apr-2026-comparability-summary.json",
+    "basisFragmentationSummary": "artifacts/crypto/bnb-threshold-by-date-apr-2026-family-pass/crypto-bnb-threshold-by-date-apr-2026-basis-fragmentation-summary.json",
+    "finalDecision": "artifacts/crypto/bnb-threshold-by-date-apr-2026-family-pass/crypto-bnb-threshold-by-date-apr-2026-final-decision.json"
+  },
+  "admittedVenues": [
+    "POLYMARKET",
+    "PREDICT"
+  ],
+  "admittedTopicKeys": [
+    "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|1000",
+    "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|600",
+    "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|700",
+    "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|800",
+    "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|900",
+    "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|100",
+    "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|200",
+    "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|300",
+    "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|400",
+    "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|500"
+  ],
+  "exclusionsBeforeFinalLaneConstruction": [
+    {
+      "scope": "threshold_bucket",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|600",
+      "exactThresholdLabel": "↑ 600",
+      "reason": "NOT_SHARED",
+      "notes": "↑ 600 is not shared on POLYMARKET|PREDICT; current venues are POLYMARKET."
+    }
+  ]
+}

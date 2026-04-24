@@ -1,0 +1,268 @@
+[
+  {
+    "interpretedContractId": "polymarket-extended-fdv-one-day-after-launch-716826",
+    "venue": "POLYMARKET",
+    "venueMarketId": "716826",
+    "title": "Extended FDV above $800M one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|800000000",
+    "canonicalProject": "EXTENDED",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "800000000",
+    "canonicalThresholdLabel": "$800M",
+    "interpretationNotes": [
+      "project=EXTENDED",
+      "threshold_label=800M",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-extended-fdv-one-day-after-launch-716829",
+    "venue": "POLYMARKET",
+    "venueMarketId": "716829",
+    "title": "Extended FDV above $2B one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|2000000000",
+    "canonicalProject": "EXTENDED",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "2000000000",
+    "canonicalThresholdLabel": "$2B",
+    "interpretationNotes": [
+      "project=EXTENDED",
+      "threshold_label=2B",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-extended-fdv-one-day-after-launch-716823",
+    "venue": "POLYMARKET",
+    "venueMarketId": "716823",
+    "title": "Extended FDV above $500M one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|500000000",
+    "canonicalProject": "EXTENDED",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "500000000",
+    "canonicalThresholdLabel": "$500M",
+    "interpretationNotes": [
+      "project=EXTENDED",
+      "threshold_label=500M",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-extended-fdv-one-day-after-launch-716827",
+    "venue": "POLYMARKET",
+    "venueMarketId": "716827",
+    "title": "Extended FDV above $1B one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|1000000000",
+    "canonicalProject": "EXTENDED",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "1000000000",
+    "canonicalThresholdLabel": "$1B",
+    "interpretationNotes": [
+      "project=EXTENDED",
+      "threshold_label=1B",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-extended-fdv-one-day-after-launch-716831",
+    "venue": "POLYMARKET",
+    "venueMarketId": "716831",
+    "title": "Extended FDV above $3B one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|3000000000",
+    "canonicalProject": "EXTENDED",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "3000000000",
+    "canonicalThresholdLabel": "$3B",
+    "interpretationNotes": [
+      "project=EXTENDED",
+      "threshold_label=3B",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-extended-fdv-one-day-after-launch-904737",
+    "venue": "POLYMARKET",
+    "venueMarketId": "904737",
+    "title": "Extended FDV above $300M one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|300000000",
+    "canonicalProject": "EXTENDED",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "300000000",
+    "canonicalThresholdLabel": "$300M",
+    "interpretationNotes": [
+      "project=EXTENDED",
+      "threshold_label=300M",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-extended-fdv-one-day-after-launch-1383905",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1383905",
+    "title": "Extended FDV above $150M one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|150000000",
+    "canonicalProject": "EXTENDED",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "150000000",
+    "canonicalThresholdLabel": "$150M",
+    "interpretationNotes": [
+      "project=EXTENDED",
+      "threshold_label=150M",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-extended-fdv-one-day-after-launch-14348",
+    "venue": "PREDICT",
+    "venueMarketId": "14348",
+    "title": "Extended FDV above $150M one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|150000000",
+    "canonicalProject": "EXTENDED",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "150000000",
+    "canonicalThresholdLabel": "$150M",
+    "interpretationNotes": [
+      "project=EXTENDED",
+      "threshold_label=150M",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-extended-fdv-one-day-after-launch-14347",
+    "venue": "PREDICT",
+    "venueMarketId": "14347",
+    "title": "Extended FDV above $300M one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|300000000",
+    "canonicalProject": "EXTENDED",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "300000000",
+    "canonicalThresholdLabel": "$300M",
+    "interpretationNotes": [
+      "project=EXTENDED",
+      "threshold_label=300M",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-extended-fdv-one-day-after-launch-14344",
+    "venue": "PREDICT",
+    "venueMarketId": "14344",
+    "title": "Extended FDV above $500M one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|500000000",
+    "canonicalProject": "EXTENDED",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "500000000",
+    "canonicalThresholdLabel": "$500M",
+    "interpretationNotes": [
+      "project=EXTENDED",
+      "threshold_label=500M",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-extended-fdv-one-day-after-launch-14342",
+    "venue": "PREDICT",
+    "venueMarketId": "14342",
+    "title": "Extended FDV above $800M one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|800000000",
+    "canonicalProject": "EXTENDED",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "800000000",
+    "canonicalThresholdLabel": "$800M",
+    "interpretationNotes": [
+      "project=EXTENDED",
+      "threshold_label=800M",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-extended-fdv-one-day-after-launch-14345",
+    "venue": "PREDICT",
+    "venueMarketId": "14345",
+    "title": "Extended FDV above $1B one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|1000000000",
+    "canonicalProject": "EXTENDED",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "1000000000",
+    "canonicalThresholdLabel": "$1B",
+    "interpretationNotes": [
+      "project=EXTENDED",
+      "threshold_label=1B",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-extended-fdv-one-day-after-launch-14343",
+    "venue": "PREDICT",
+    "venueMarketId": "14343",
+    "title": "Extended FDV above $2B one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|2000000000",
+    "canonicalProject": "EXTENDED",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "2000000000",
+    "canonicalThresholdLabel": "$2B",
+    "interpretationNotes": [
+      "project=EXTENDED",
+      "threshold_label=2B",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-extended-fdv-one-day-after-launch-14346",
+    "venue": "PREDICT",
+    "venueMarketId": "14346",
+    "title": "Extended FDV above $3B one day after launch?",
+    "canonicalFamily": "FDV_THRESHOLD_AFTER_LAUNCH",
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|3000000000",
+    "canonicalProject": "EXTENDED",
+    "canonicalObservationWindow": "ONE_DAY_AFTER_LAUNCH",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdValue": "3000000000",
+    "canonicalThresholdLabel": "$3B",
+    "interpretationNotes": [
+      "project=EXTENDED",
+      "threshold_label=3B",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  }
+]

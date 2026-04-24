@@ -1,0 +1,45 @@
+{
+  "observedAt": "2026-04-24T11:43:55.792Z",
+  "laneId": "SPORTS_LPL_WINNER_2026_PAIR_LIMITLESS_POLYMARKET",
+  "topicKey": "SPORTS|LEAGUE_WINNER|LPL|2026",
+  "venuePair": "LIMITLESS|POLYMARKET",
+  "exactSafeTeams": [
+    "anyones_legend",
+    "bilibili_gaming",
+    "jd_gaming",
+    "top_esports",
+    "weibo_gaming"
+  ],
+  "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+  "operatorRuleReviewRequired": true,
+  "matcherReady": true,
+  "operatorCredible": true,
+  "readinessReviewJustified": true,
+  "rolloutRecommended": false,
+  "recommendedMode": "LIMITED_PROD_REVIEW_ONLY",
+  "holdPolicy": {
+    "scope": "LANE_ONLY",
+    "holdConditions": [
+      "Any drift in the LIMITLESS|POLYMARKET shared LPL core",
+      "Any venue withdrawal from the exact pair lane",
+      "Any rule-compatibility downgrade beyond semantically compatible rewording"
+    ],
+    "userConsentCanWidenScope": false
+  },
+  "rollbackPolicy": {
+    "scope": "LANE_ONLY",
+    "targetMode": "DISABLED_INTERNAL_ONLY",
+    "fallbackLaneId": null,
+    "operatorSteps": [
+      "Hold the pair lane only.",
+      "Do not widen beyond the exact LIMITLESS|POLYMARKET 5-team scope."
+    ]
+  },
+  "exclusionsStillMandatory": [
+    "OTHERS_EXCLUDED",
+    "VENUE_ONLY_TAILS_EXCLUDED",
+    "NO_SCOPE_WIDENING_BEYOND_LPL_2026",
+    "STRICT_TRI_CORE_REMAINS_4_TEAMS"
+  ],
+  "finalReadinessLabel": "SPORTS_LPL_WINNER_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW"
+}

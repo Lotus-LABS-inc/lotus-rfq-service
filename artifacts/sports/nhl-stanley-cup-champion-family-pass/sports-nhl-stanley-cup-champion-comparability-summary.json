@@ -1,0 +1,157 @@
+{
+  "observedAt": "2026-04-24T12:41:05.225Z",
+  "topics": [
+    {
+      "canonicalTopicKey": "SPORTS|TOURNAMENT_WINNER|NHL_STANLEY_CUP|2025_2026",
+      "venuesPresent": [
+        "LIMITLESS",
+        "OPINION",
+        "POLYMARKET"
+      ],
+      "pairSharedNamedOutcomesCount": 16,
+      "triSharedNamedOutcomesCount": 4,
+      "quadSharedNamedOutcomesCount": 0,
+      "excludedOutcomesCount": 16,
+      "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "fragmentationLabel": "FAMILY_REFRESHED_SHARED_CORE_EXISTS",
+      "matcherCandidate": true,
+      "sharedNamedOutcomes": [
+        "Anaheim Ducks",
+        "Carolina Hurricanes",
+        "Colorado Avalanche",
+        "Dallas Stars",
+        "Edmonton Oilers",
+        "Florida Panthers",
+        "Los Angeles Kings",
+        "Minnesota Wild",
+        "Montreal Canadiens",
+        "New Jersey Devils",
+        "New York Rangers",
+        "Tampa Bay Lightning",
+        "Toronto Maple Leafs",
+        "Vegas Golden Knights",
+        "Washington Capitals",
+        "Winnipeg Jets"
+      ],
+      "excludedOutcomes": [
+        {
+          "label": "Boston Bruins",
+          "reason": "NOT_SHARED",
+          "venues": [
+            "POLYMARKET"
+          ]
+        },
+        {
+          "label": "Buffalo Sabres",
+          "reason": "NOT_SHARED",
+          "venues": [
+            "POLYMARKET"
+          ]
+        },
+        {
+          "label": "Calgary Flames",
+          "reason": "NOT_SHARED",
+          "venues": [
+            "POLYMARKET"
+          ]
+        },
+        {
+          "label": "Chicago Blackhawks",
+          "reason": "NOT_SHARED",
+          "venues": [
+            "POLYMARKET"
+          ]
+        },
+        {
+          "label": "Columbus Blue Jackets",
+          "reason": "NOT_SHARED",
+          "venues": [
+            "POLYMARKET"
+          ]
+        },
+        {
+          "label": "Detroit Red Wings",
+          "reason": "NOT_SHARED",
+          "venues": [
+            "POLYMARKET"
+          ]
+        },
+        {
+          "label": "Nashville Predators",
+          "reason": "NOT_SHARED",
+          "venues": [
+            "POLYMARKET"
+          ]
+        },
+        {
+          "label": "New York Islanders",
+          "reason": "NOT_SHARED",
+          "venues": [
+            "POLYMARKET"
+          ]
+        },
+        {
+          "label": "Ottawa Senators",
+          "reason": "NOT_SHARED",
+          "venues": [
+            "POLYMARKET"
+          ]
+        },
+        {
+          "label": "Philadelphia Flyers",
+          "reason": "NOT_SHARED",
+          "venues": [
+            "POLYMARKET"
+          ]
+        },
+        {
+          "label": "Pittsburgh Penguins",
+          "reason": "NOT_SHARED",
+          "venues": [
+            "POLYMARKET"
+          ]
+        },
+        {
+          "label": "San Jose Sharks",
+          "reason": "NOT_SHARED",
+          "venues": [
+            "POLYMARKET"
+          ]
+        },
+        {
+          "label": "Seattle Kraken",
+          "reason": "NOT_SHARED",
+          "venues": [
+            "POLYMARKET"
+          ]
+        },
+        {
+          "label": "St. Louis Blues",
+          "reason": "NOT_SHARED",
+          "venues": [
+            "POLYMARKET"
+          ]
+        },
+        {
+          "label": "Utah Mammoth",
+          "reason": "NOT_SHARED",
+          "venues": [
+            "POLYMARKET"
+          ]
+        },
+        {
+          "label": "Vancouver Canucks",
+          "reason": "NOT_SHARED",
+          "venues": [
+            "POLYMARKET"
+          ]
+        }
+      ],
+      "notes": [
+        "admitted_rows=52",
+        "venues_present=LIMITLESS|OPINION|POLYMARKET",
+        "quad_shared_named_outcomes=0"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "observedAt": "2026-04-24T11:22:27.066Z",
+  "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LCK|2026",
+  "matcherLanes": [
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "clubs": [
+        "dplus"
+      ]
+    },
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "clubs": [
+        "gen_g_esports"
+      ]
+    },
+    {
+      "venueSet": "LIMITLESS|OPINION|POLYMARKET",
+      "clubs": [
+        "t1"
+      ]
+    }
+  ]
+}

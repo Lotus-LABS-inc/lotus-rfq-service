@@ -1,0 +1,14 @@
+{
+  "rowsFetchedByVenue": {
+    "POLYMARKET": 3,
+    "PREDICT": 2
+  },
+  "rowsAdmittedByVenue": {
+    "POLYMARKET": 2,
+    "PREDICT": 2
+  },
+  "excludedDates": [
+    "2025-12-31"
+  ],
+  "opinionAdmissionStatus": "NOT_ADMITTED_FETCH_UNCERTAIN"
+}

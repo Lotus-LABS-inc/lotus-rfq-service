@@ -1,0 +1,51 @@
+[
+  {
+    "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LPL|2026",
+    "venuesPresent": [
+      "LIMITLESS",
+      "OPINION",
+      "POLYMARKET"
+    ],
+    "pairSharedNamedOutcomesCount": 5,
+    "triSharedNamedOutcomesCount": 4,
+    "excludedOutcomesCount": 3,
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_CORE_EXISTS",
+    "matcherCandidate": true,
+    "sharedNamedOutcomes": [
+      "Anyone's Legend",
+      "Bilibili Gaming",
+      "JD Gaming",
+      "Top Esports",
+      "Weibo Gaming"
+    ],
+    "excludedOutcomes": [
+      {
+        "label": "Invictus Gaming",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "LNG Esports",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      },
+      {
+        "label": "Ninjas in Pyjamas",
+        "reason": "NOT_SHARED",
+        "venues": [
+          "POLYMARKET"
+        ]
+      }
+    ],
+    "notes": [
+      "admitted_rows=17",
+      "venues_present=LIMITLESS|OPINION|POLYMARKET",
+      "tri_shared_named_outcomes=4"
+    ]
+  }
+]

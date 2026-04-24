@@ -1,0 +1,26 @@
+#!/usr/bin/env tsx
+import {
+  getCryptoTokenLaunchByDateProjectConfig,
+  type CryptoTokenLaunchByDateProject
+} from "../../src/matching/crypto/crypto-token-launch-by-date-assets.js";
+import { runCryptoTokenLaunchByDateMatcherPass } from "../../src/reports/crypto-token-launch-by-date-shared.js";
+
+const project = process.argv[2] as CryptoTokenLaunchByDateProject | undefined;
+if (!project) {
+  console.error("Usage: tsx scripts/reports/report-crypto-token-launch-by-date-matcher.ts <METAMASK|BASE>");
+  process.exit(1);
+}
+
+const main = async (): Promise<void> => {
+  const result = await runCryptoTokenLaunchByDateMatcherPass({
+    repoRoot: process.cwd(),
+    config: getCryptoTokenLaunchByDateProjectConfig(project)
+  });
+  console.log(JSON.stringify(result.finalDecision, null, 2));
+};
+
+main().catch((error) => {
+  console.error(`Failed to run crypto ${project} token launch by date matcher.`);
+  console.error(error);
+  process.exit(1);
+});

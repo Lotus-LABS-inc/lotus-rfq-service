@@ -1,0 +1,363 @@
+[
+  {
+    "interpretedContractId": "polymarket-bnb-threshold-apr-2026-1823862",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823862",
+    "title": "Will BNB reach $1,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|1000",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "1000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 1,000",
+    "interpretationNotes": [
+      "threshold_label=1,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-bnb-threshold-apr-2026-1823863",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823863",
+    "title": "Will BNB reach $900 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|900",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "900",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 900",
+    "interpretationNotes": [
+      "threshold_label=900",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-bnb-threshold-apr-2026-1823868",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823868",
+    "title": "Will BNB dip to $400 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|400",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "400",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 400",
+    "interpretationNotes": [
+      "threshold_label=400",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-bnb-threshold-apr-2026-1823870",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823870",
+    "title": "Will BNB dip to $200 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|200",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "200",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 200",
+    "interpretationNotes": [
+      "threshold_label=200",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-bnb-threshold-apr-2026-1823865",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823865",
+    "title": "Will BNB reach $700 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|700",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "700",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 700",
+    "interpretationNotes": [
+      "threshold_label=700",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-bnb-threshold-apr-2026-1823867",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823867",
+    "title": "Will BNB dip to $500 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|500",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "500",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 500",
+    "interpretationNotes": [
+      "threshold_label=500",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-bnb-threshold-apr-2026-1823869",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823869",
+    "title": "Will BNB dip to $300 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|300",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "300",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 300",
+    "interpretationNotes": [
+      "threshold_label=300",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-bnb-threshold-apr-2026-1823871",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823871",
+    "title": "Will BNB dip to $100 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|100",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "100",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 100",
+    "interpretationNotes": [
+      "threshold_label=100",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-bnb-threshold-apr-2026-1823864",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823864",
+    "title": "Will BNB reach $800 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|800",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "800",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 800",
+    "interpretationNotes": [
+      "threshold_label=800",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-bnb-threshold-apr-2026-1823866",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823866",
+    "title": "Will BNB reach $600 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|600",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "600",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 600",
+    "interpretationNotes": [
+      "threshold_label=600",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-bnb-threshold-apr-2026-139770",
+    "venue": "PREDICT",
+    "venueMarketId": "139770",
+    "title": "Will BNB reach $1,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|1000",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "1000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 1,000",
+    "interpretationNotes": [
+      "threshold_label=1,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-bnb-threshold-apr-2026-139771",
+    "venue": "PREDICT",
+    "venueMarketId": "139771",
+    "title": "Will BNB reach $900 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|900",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "900",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 900",
+    "interpretationNotes": [
+      "threshold_label=900",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-bnb-threshold-apr-2026-139772",
+    "venue": "PREDICT",
+    "venueMarketId": "139772",
+    "title": "Will BNB reach $800 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|800",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "800",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 800",
+    "interpretationNotes": [
+      "threshold_label=800",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-bnb-threshold-apr-2026-139773",
+    "venue": "PREDICT",
+    "venueMarketId": "139773",
+    "title": "Will BNB reach $700 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|700",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "700",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 700",
+    "interpretationNotes": [
+      "threshold_label=700",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-bnb-threshold-apr-2026-139775",
+    "venue": "PREDICT",
+    "venueMarketId": "139775",
+    "title": "Will BNB dip to $500 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|500",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "500",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 500",
+    "interpretationNotes": [
+      "threshold_label=500",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-bnb-threshold-apr-2026-139776",
+    "venue": "PREDICT",
+    "venueMarketId": "139776",
+    "title": "Will BNB dip to $400 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|400",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "400",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 400",
+    "interpretationNotes": [
+      "threshold_label=400",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-bnb-threshold-apr-2026-139777",
+    "venue": "PREDICT",
+    "venueMarketId": "139777",
+    "title": "Will BNB dip to $300 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|300",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "300",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 300",
+    "interpretationNotes": [
+      "threshold_label=300",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-bnb-threshold-apr-2026-139778",
+    "venue": "PREDICT",
+    "venueMarketId": "139778",
+    "title": "Will BNB dip to $200 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|200",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "200",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 200",
+    "interpretationNotes": [
+      "threshold_label=200",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-bnb-threshold-apr-2026-139779",
+    "venue": "PREDICT",
+    "venueMarketId": "139779",
+    "title": "Will BNB dip to $100 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|100",
+    "canonicalAsset": "BNB",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "100",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 100",
+    "interpretationNotes": [
+      "threshold_label=100",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  }
+]

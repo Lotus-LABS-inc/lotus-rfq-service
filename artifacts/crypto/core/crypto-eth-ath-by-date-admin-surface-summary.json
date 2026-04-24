@@ -1,0 +1,28 @@
+{
+  "observedAt": "2026-04-24T14:07:57.743Z",
+  "laneId": "CRYPTO_ETH_ATH_BY_DATE_PAIR_LIMITLESS_POLYMARKET",
+  "familyKey": "CRYPTO|ATH_BY_DATE|ETH",
+  "venuePair": "LIMITLESS|POLYMARKET",
+  "dateScopeHash": "34fac71d1442d882",
+  "exactSafeDateBuckets": [
+    "2026-06-30",
+    "2026-09-30",
+    "2026-12-31"
+  ],
+  "currentReadinessDecision": "READY_BUT_MISSING_OPERATOR_REVIEW",
+  "supportedActions": [
+    "inspect",
+    "hold",
+    "promote",
+    "rollback"
+  ],
+  "userConsentCanWidenScope": false,
+  "narrowestEnforceableUnit": "LANE_SCOPE_LOCK",
+  "sourceArtifactRefs": [
+    "artifacts/crypto/eth-ath-by-date-matcher/crypto-eth-ath-by-date-matcher-input-summary.json",
+    "artifacts/crypto/eth-ath-by-date-matcher/crypto-eth-ath-by-date-pair-lanes.json",
+    "artifacts/crypto/eth-ath-by-date-matcher/crypto-eth-ath-by-date-rejections.json",
+    "artifacts/crypto/eth-ath-by-date-matcher/crypto-eth-ath-by-date-final-decision.json",
+    "artifacts/crypto/eth-ath-by-date-matcher/crypto-eth-ath-by-date-operator-summary.md"
+  ]
+}

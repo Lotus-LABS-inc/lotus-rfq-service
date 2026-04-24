@@ -1,0 +1,20 @@
+{
+  "observedAt": "2026-04-24T11:22:27.066Z",
+  "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LCK|2026",
+  "rejections": [
+    {
+      "scope": "team",
+      "teamIdentityKey": "DRX",
+      "normalizedTeamName": "DRX",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg DRX is not part of the exact shared LCK winner core."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "NONGSHIM_REDFORCE",
+      "normalizedTeamName": "Nongshim RedForce",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg Nongshim RedForce is not part of the exact shared LCK winner core."
+    }
+  ]
+}

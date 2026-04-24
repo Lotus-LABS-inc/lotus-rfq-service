@@ -1,0 +1,31 @@
+{
+  "observedAt": "2026-04-24T11:34:34.245Z",
+  "laneId": "SPORTS_LCK_WINNER_2026_PAIR_LIMITLESS_POLYMARKET",
+  "topicKey": "SPORTS|LEAGUE_WINNER|LCK|2026",
+  "venuePair": "LIMITLESS|POLYMARKET",
+  "teamScopeHash": "fe332e080f40bbc9",
+  "exactSafeTeams": [
+    "dplus",
+    "gen_g_esports",
+    "hanwha_life_esports",
+    "kt_rolster",
+    "t1"
+  ],
+  "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+  "supportedActions": [
+    "inspect",
+    "hold",
+    "promote",
+    "rollback"
+  ],
+  "userConsentCanWidenScope": false,
+  "narrowestEnforceableUnit": "LANE_SCOPE_LOCK",
+  "sourceArtifactRefs": [
+    "artifacts/sports/lck-winner-2026-matcher/sports-lck-winner-2026-matcher-input-summary.json",
+    "artifacts/sports/lck-winner-2026-matcher/sports-lck-winner-2026-pair-lanes.json",
+    "artifacts/sports/lck-winner-2026-matcher/sports-lck-winner-2026-tri-lanes.json",
+    "artifacts/sports/lck-winner-2026-matcher/sports-lck-winner-2026-rejections.json",
+    "artifacts/sports/lck-winner-2026-matcher/sports-lck-winner-2026-final-decision.json",
+    "artifacts/sports/lck-winner-2026-matcher/sports-lck-winner-2026-operator-summary.md"
+  ]
+}

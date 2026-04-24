@@ -1,0 +1,60 @@
+[
+  {
+    "interpretedContractId": "polymarket-btc-first-threshold-1357099",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1357099",
+    "title": "Will Bitcoin hit $60k or $80k first?",
+    "canonicalFamily": "FIRST_TO_THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|FIRST_TO_THRESHOLD_BY_DATE|BTC|60000|80000|2027-01-01",
+    "canonicalAsset": "BTC",
+    "canonicalLowerThreshold": "60000",
+    "canonicalHigherThreshold": "80000",
+    "canonicalDeadlineDateKey": "2027-01-01",
+    "priceSource": "BINANCE",
+    "hitBasis": "INTRADAY_HIT",
+    "fallbackIfNeither": "SPLIT_50_50",
+    "tieHandling": "UNSPECIFIED",
+    "exactOutcomeLabels": [
+      "$60k first",
+      "$80k first"
+    ],
+    "interpretationConfidence": "HIGH",
+    "interpretationNotes": [
+      "lower_outcome=$60k",
+      "higher_outcome=$80k",
+      "price_source=BINANCE",
+      "fallback_50_50_present",
+      "tie_handling_unspecified"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-first-threshold-21177",
+    "venue": "PREDICT",
+    "venueMarketId": "21177",
+    "title": "Will Bitcoin hit $60k or $80k first?",
+    "canonicalFamily": "FIRST_TO_THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|FIRST_TO_THRESHOLD_BY_DATE|BTC|60000|80000|2027-01-01",
+    "canonicalAsset": "BTC",
+    "canonicalLowerThreshold": "60000",
+    "canonicalHigherThreshold": "80000",
+    "canonicalDeadlineDateKey": "2027-01-01",
+    "priceSource": "BINANCE",
+    "hitBasis": "INTRADAY_HIT",
+    "fallbackIfNeither": "SPLIT_50_50",
+    "tieHandling": "UNSPECIFIED",
+    "exactOutcomeLabels": [
+      "$60k first",
+      "$80k first"
+    ],
+    "interpretationConfidence": "HIGH",
+    "interpretationNotes": [
+      "lower_outcome=$60k",
+      "higher_outcome=$80k",
+      "price_source=BINANCE",
+      "fallback_50_50_present",
+      "tie_handling_unspecified"
+    ],
+    "rejectionReason": null
+  }
+]

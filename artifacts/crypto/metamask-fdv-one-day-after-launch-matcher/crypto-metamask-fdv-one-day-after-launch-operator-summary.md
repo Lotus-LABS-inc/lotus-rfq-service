@@ -1,0 +1,7 @@
+# Crypto METAMASK FDV After Launch Matcher
+
+- exact family: CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|METAMASK|ONE_DAY_AFTER_LAUNCH
+- target pair: POLYMARKET|PREDICT
+- shared FDV thresholds: $700M, $1B, $2B, $3B, $4B
+- rejected thresholds: $300M, $500M
+- final decision: CRYPTO_METAMASK_FDV_ONE_DAY_AFTER_LAUNCH_PAIR_MATCHER_READY_PENDING_OPERATOR_REVIEW

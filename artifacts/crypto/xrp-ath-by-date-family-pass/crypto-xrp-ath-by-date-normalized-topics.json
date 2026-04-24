@@ -1,0 +1,107 @@
+[
+  {
+    "interpretedContractId": "polymarket-xrp-ath-by-xrp-all-time-high-by-june-30-2026",
+    "venue": "POLYMARKET",
+    "venueMarketId": "xrp-all-time-high-by-june-30-2026",
+    "title": "XRP all time high by June 30, 2026?",
+    "canonicalFamily": "ATH_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|XRP|2026-06-30",
+    "canonicalAsset": "XRP",
+    "canonicalDateKey": "2026-06-30",
+    "interpretationNotes": [
+      "exact_date_label=June 30, 2026",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-xrp-ath-by-xrp-all-time-high-by-september-30-2026",
+    "venue": "POLYMARKET",
+    "venueMarketId": "xrp-all-time-high-by-september-30-2026",
+    "title": "XRP all time high by September 30, 2026?",
+    "canonicalFamily": "ATH_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|XRP|2026-09-30",
+    "canonicalAsset": "XRP",
+    "canonicalDateKey": "2026-09-30",
+    "interpretationNotes": [
+      "exact_date_label=September 30, 2026",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-xrp-ath-by-xrp-all-time-high-by-december-31-2026",
+    "venue": "POLYMARKET",
+    "venueMarketId": "xrp-all-time-high-by-december-31-2026",
+    "title": "XRP all time high by December 31, 2026?",
+    "canonicalFamily": "ATH_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|XRP|2026-12-31",
+    "canonicalAsset": "XRP",
+    "canonicalDateKey": "2026-12-31",
+    "interpretationNotes": [
+      "exact_date_label=December 31, 2026",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-xrp-ath-by-xrp-all-time-high-by-march-31-2026",
+    "venue": "POLYMARKET",
+    "venueMarketId": "xrp-all-time-high-by-march-31-2026",
+    "title": "XRP all time high by March 31, 2026?",
+    "canonicalFamily": "ATH_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|XRP|2026-03-31",
+    "canonicalAsset": "XRP",
+    "canonicalDateKey": "2026-03-31",
+    "interpretationNotes": [
+      "exact_date_label=March 31, 2026",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-xrp-ath-by-june-30-2026-1775137169951",
+    "venue": "LIMITLESS",
+    "venueMarketId": "june-30-2026-1775137169951",
+    "title": "XRP all time high by June 30, 2026?",
+    "canonicalFamily": "ATH_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|XRP|2026-06-30",
+    "canonicalAsset": "XRP",
+    "canonicalDateKey": "2026-06-30",
+    "interpretationNotes": [
+      "exact_date_label=June 30, 2026",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-xrp-ath-by-september-30-2026-1775137169961",
+    "venue": "LIMITLESS",
+    "venueMarketId": "september-30-2026-1775137169961",
+    "title": "XRP all time high by September 30, 2026?",
+    "canonicalFamily": "ATH_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|XRP|2026-09-30",
+    "canonicalAsset": "XRP",
+    "canonicalDateKey": "2026-09-30",
+    "interpretationNotes": [
+      "exact_date_label=September 30, 2026",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "limitless-xrp-ath-by-december-31-2026-1775137169966",
+    "venue": "LIMITLESS",
+    "venueMarketId": "december-31-2026-1775137169966",
+    "title": "XRP all time high by December 31, 2026?",
+    "canonicalFamily": "ATH_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|XRP|2026-12-31",
+    "canonicalAsset": "XRP",
+    "canonicalDateKey": "2026-12-31",
+    "interpretationNotes": [
+      "exact_date_label=December 31, 2026",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  }
+]

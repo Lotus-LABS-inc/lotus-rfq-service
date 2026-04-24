@@ -1,0 +1,325 @@
+{
+  "observedAt": "2026-04-24T14:49:39.296Z",
+  "exactFamily": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30",
+  "targetPair": "POLYMARKET|PREDICT",
+  "refreshedRowsUsed": [
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823882",
+      "title": "Will Solana reach $150 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|150",
+      "canonicalThresholdValue": "150",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 150"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823884",
+      "title": "Will Solana reach $130 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|130",
+      "canonicalThresholdValue": "130",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 130"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823886",
+      "title": "Will Solana reach $110 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|110",
+      "canonicalThresholdValue": "110",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 110"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823881",
+      "title": "Will Solana reach $160 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|160",
+      "canonicalThresholdValue": "160",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 160"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823888",
+      "title": "Will Solana reach $90 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|90",
+      "canonicalThresholdValue": "90",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 90"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823890",
+      "title": "Will Solana dip to $70 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|70",
+      "canonicalThresholdValue": "70",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 70"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823896",
+      "title": "Will Solana dip to $10 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|10",
+      "canonicalThresholdValue": "10",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 10"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823883",
+      "title": "Will Solana reach $140 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|140",
+      "canonicalThresholdValue": "140",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 140"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823885",
+      "title": "Will Solana reach $120 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|120",
+      "canonicalThresholdValue": "120",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 120"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823887",
+      "title": "Will Solana reach $100 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|100",
+      "canonicalThresholdValue": "100",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 100"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823889",
+      "title": "Will Solana reach $80 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|80",
+      "canonicalThresholdValue": "80",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 80"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823891",
+      "title": "Will Solana dip to $60 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|60",
+      "canonicalThresholdValue": "60",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 60"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823895",
+      "title": "Will Solana dip to $20 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|20",
+      "canonicalThresholdValue": "20",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 20"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823892",
+      "title": "Will Solana dip to $50 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|50",
+      "canonicalThresholdValue": "50",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 50"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823893",
+      "title": "Will Solana dip to $40 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|40",
+      "canonicalThresholdValue": "40",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 40"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "1823894",
+      "title": "Will Solana dip to $30 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|30",
+      "canonicalThresholdValue": "30",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 30"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139848",
+      "title": "Will Solana reach $160 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|160",
+      "canonicalThresholdValue": "160",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 160"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139849",
+      "title": "Will Solana reach $150 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|150",
+      "canonicalThresholdValue": "150",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 150"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139850",
+      "title": "Will Solana reach $140 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|140",
+      "canonicalThresholdValue": "140",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 140"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139851",
+      "title": "Will Solana reach $130 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|130",
+      "canonicalThresholdValue": "130",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 130"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139852",
+      "title": "Will Solana reach $120 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|120",
+      "canonicalThresholdValue": "120",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 120"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139853",
+      "title": "Will Solana reach $110 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|110",
+      "canonicalThresholdValue": "110",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 110"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139854",
+      "title": "Will Solana reach $100 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|100",
+      "canonicalThresholdValue": "100",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 100"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139855",
+      "title": "Will Solana reach $90 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|90",
+      "canonicalThresholdValue": "90",
+      "canonicalComparator": "ABOVE",
+      "canonicalThresholdLabel": "↑ 90"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139857",
+      "title": "Will Solana dip to $70 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|70",
+      "canonicalThresholdValue": "70",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 70"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139858",
+      "title": "Will Solana dip to $60 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|60",
+      "canonicalThresholdValue": "60",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 60"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139859",
+      "title": "Will Solana dip to $50 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|50",
+      "canonicalThresholdValue": "50",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 50"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139860",
+      "title": "Will Solana dip to $40 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|40",
+      "canonicalThresholdValue": "40",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 40"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139861",
+      "title": "Will Solana dip to $30 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|30",
+      "canonicalThresholdValue": "30",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 30"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139862",
+      "title": "Will Solana dip to $20 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|20",
+      "canonicalThresholdValue": "20",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 20"
+    },
+    {
+      "venue": "PREDICT",
+      "venueMarketId": "139863",
+      "title": "Will Solana dip to $10 in April?",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|10",
+      "canonicalThresholdValue": "10",
+      "canonicalComparator": "BELOW",
+      "canonicalThresholdLabel": "↓ 10"
+    }
+  ],
+  "familyComparabilitySourceArtifacts": {
+    "fetchSummary": "artifacts/crypto/sol-threshold-by-date-apr-2026-family-pass/crypto-sol-threshold-by-date-apr-2026-fetch-summary.json",
+    "admissionSummary": "artifacts/crypto/sol-threshold-by-date-apr-2026-family-pass/crypto-sol-threshold-by-date-apr-2026-admission-summary.json",
+    "normalizedTopics": "artifacts/crypto/sol-threshold-by-date-apr-2026-family-pass/crypto-sol-threshold-by-date-apr-2026-normalized-topics.json",
+    "comparabilitySummary": "artifacts/crypto/sol-threshold-by-date-apr-2026-family-pass/crypto-sol-threshold-by-date-apr-2026-comparability-summary.json",
+    "basisFragmentationSummary": "artifacts/crypto/sol-threshold-by-date-apr-2026-family-pass/crypto-sol-threshold-by-date-apr-2026-basis-fragmentation-summary.json",
+    "finalDecision": "artifacts/crypto/sol-threshold-by-date-apr-2026-family-pass/crypto-sol-threshold-by-date-apr-2026-final-decision.json"
+  },
+  "admittedVenues": [
+    "POLYMARKET",
+    "PREDICT"
+  ],
+  "admittedTopicKeys": [
+    "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|100",
+    "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|110",
+    "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|120",
+    "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|130",
+    "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|140",
+    "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|150",
+    "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|160",
+    "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|80",
+    "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|90",
+    "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|10",
+    "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|20",
+    "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|30",
+    "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|40",
+    "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|50",
+    "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|60",
+    "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|BELOW|70"
+  ],
+  "exclusionsBeforeFinalLaneConstruction": [
+    {
+      "scope": "threshold_bucket",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|80",
+      "exactThresholdLabel": "↑ 80",
+      "reason": "NOT_SHARED",
+      "notes": "↑ 80 is not shared on POLYMARKET|PREDICT; current venues are POLYMARKET."
+    }
+  ]
+}

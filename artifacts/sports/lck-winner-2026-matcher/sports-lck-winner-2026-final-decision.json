@@ -1,0 +1,16 @@
+{
+  "observedAt": "2026-04-24T11:22:27.085Z",
+  "canonicalTopicKey": "SPORTS|LEAGUE_WINNER|LCK|2026",
+  "overallDecision": "SPORTS_LCK_WINNER_2026_TRI_REVIEW_REQUIRED_PAIR_FIRST",
+  "bestPair": "LIMITLESS|POLYMARKET",
+  "bestTriIfAny": "LIMITLESS|OPINION|POLYMARKET",
+  "pairMatcherReady": true,
+  "triMatcherReady": true,
+  "pairStillPreferred": true,
+  "exactSafePairCandidateCount": 5,
+  "exactSafeTriCandidateCount": 3,
+  "ruleStatus": "SEMANTICALLY_COMPATIBLE_REWORDING",
+  "operatorCredible": true,
+  "matcherFollowUpJustified": true,
+  "singleBestNextAction": "Run a narrow readiness pass for SPORTS|LEAGUE_WINNER|LCK|2026 with LIMITLESS|POLYMARKET explicit and the strict tri lane kept review-gated."
+}

@@ -1,0 +1,16 @@
+{
+  "observedAt": "2026-04-24T12:41:05.221Z",
+  "totalAdmittedTournamentWinnerRows": 52,
+  "rowsRejectedByReason": {
+    "OTHERS_EXCLUDED": 1,
+    "OUT_OF_SCOPE_FOR_NHL_STANLEY_CUP_2025_2026_CHAMPION": 10
+  },
+  "rowsAdmittedByTopicCandidate": {
+    "SPORTS|TOURNAMENT_WINNER|NHL_STANLEY_CUP|2025_2026": 52
+  },
+  "venueBreakdown": {
+    "OPINION": 4,
+    "POLYMARKET": 32,
+    "LIMITLESS": 16
+  }
+}

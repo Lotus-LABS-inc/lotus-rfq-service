@@ -1,0 +1,97 @@
+[
+  {
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|REYA|ONE_DAY_AFTER_LAUNCH|ABOVE|70000000",
+    "canonicalThresholdValue": "70000000",
+    "canonicalThresholdLabel": "$70M",
+    "venuesPresent": [
+      "POLYMARKET"
+    ],
+    "ruleCompatibilityClassification": "EXACT_RULE_COMPATIBLE",
+    "fragmentationLabel": "FAMILY_REFRESHED_SINGLE_VENUE_ONLY",
+    "matcherCandidate": false,
+    "notes": [
+      "project=REYA",
+      "pair_shared=no"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|REYA|ONE_DAY_AFTER_LAUNCH|ABOVE|150000000",
+    "canonicalThresholdValue": "150000000",
+    "canonicalThresholdLabel": "$150M",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_FDV_THRESHOLDS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "project=REYA",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|REYA|ONE_DAY_AFTER_LAUNCH|ABOVE|200000000",
+    "canonicalThresholdValue": "200000000",
+    "canonicalThresholdLabel": "$200M",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_FDV_THRESHOLDS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "project=REYA",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|REYA|ONE_DAY_AFTER_LAUNCH|ABOVE|300000000",
+    "canonicalThresholdValue": "300000000",
+    "canonicalThresholdLabel": "$300M",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_FDV_THRESHOLDS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "project=REYA",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|REYA|ONE_DAY_AFTER_LAUNCH|ABOVE|400000000",
+    "canonicalThresholdValue": "400000000",
+    "canonicalThresholdLabel": "$400M",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_FDV_THRESHOLDS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "project=REYA",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|REYA|ONE_DAY_AFTER_LAUNCH|ABOVE|1000000000",
+    "canonicalThresholdValue": "1000000000",
+    "canonicalThresholdLabel": "$1B",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_FDV_THRESHOLDS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "project=REYA",
+      "pair_shared=yes"
+    ]
+  }
+]

@@ -1,0 +1,74 @@
+{
+  "observedAt": "2026-04-24T15:59:34.596Z",
+  "matcherLanes": [
+    {
+      "canonicalTopicKey": "CRYPTO|TOKEN_LAUNCH_BY_DATE|METAMASK|2025-12-31",
+      "venuePair": "POLYMARKET|PREDICT",
+      "exactLaunchDate": "2025-12-31",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "matcherReady": true,
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "604067",
+          "rawTitle": "Will MetaMask launch a token in 2025?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "927",
+          "rawTitle": "Will MetaMask launch a token in 2025?"
+        }
+      ],
+      "notes": [
+        "Exact-safe METAMASK token launch date 2025-12-31 on POLYMARKET|PREDICT."
+      ]
+    },
+    {
+      "canonicalTopicKey": "CRYPTO|TOKEN_LAUNCH_BY_DATE|METAMASK|2026-06-30",
+      "venuePair": "POLYMARKET|PREDICT",
+      "exactLaunchDate": "2026-06-30",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "matcherReady": true,
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "657287",
+          "rawTitle": "Will MetaMask launch a token by June 30?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "928",
+          "rawTitle": "Will MetaMask launch a token by June 30, 2026?"
+        }
+      ],
+      "notes": [
+        "Exact-safe METAMASK token launch date 2026-06-30 on POLYMARKET|PREDICT."
+      ]
+    },
+    {
+      "canonicalTopicKey": "CRYPTO|TOKEN_LAUNCH_BY_DATE|METAMASK|2026-09-30",
+      "venuePair": "POLYMARKET|PREDICT",
+      "exactLaunchDate": "2026-09-30",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "matcherReady": true,
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "664895",
+          "rawTitle": "Will MetaMask launch a token by September 30, 2026?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "929",
+          "rawTitle": "Will MetaMask launch a token by September 30, 2026?"
+        }
+      ],
+      "notes": [
+        "Exact-safe METAMASK token launch date 2026-09-30 on POLYMARKET|PREDICT."
+      ]
+    }
+  ]
+}

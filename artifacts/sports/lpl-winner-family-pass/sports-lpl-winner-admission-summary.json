@@ -1,0 +1,12 @@
+{
+  "totalAdmittedLeagueWinnerRows": 17,
+  "rowsRejectedByReason": {},
+  "rowsAdmittedByTopicCandidate": {
+    "SPORTS|LEAGUE_WINNER|LPL|2026": 17
+  },
+  "venueBreakdown": {
+    "OPINION": 4,
+    "POLYMARKET": 8,
+    "LIMITLESS": 5
+  }
+}

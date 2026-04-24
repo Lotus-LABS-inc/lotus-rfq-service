@@ -1,0 +1,10 @@
+{
+  "overallFamilyDecision": "CRYPTO_BTC_FIRST_TO_THRESHOLD_BY_DATE_FAMILY_REFRESHED_MULTI_VENUE_MATCHER_CANDIDATE_FOUND",
+  "sharedCandidateTopicKeys": [
+    "CRYPTO|FIRST_TO_THRESHOLD_BY_DATE|BTC|60000|80000|2027-01-01"
+  ],
+  "familySupplyCredible": true,
+  "operatorCredible": true,
+  "matcherFollowUpJustified": true,
+  "singleBestNextAction": "Run a narrow matcher pass for the shared BTC first-to-threshold market only, starting with POLYMARKET|PREDICT and excluding non-shared semantics."
+}

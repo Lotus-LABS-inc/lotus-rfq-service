@@ -1,0 +1,147 @@
+{
+  "observedAt": "2026-04-24T11:22:27.065Z",
+  "exactTopic": "SPORTS|LEAGUE_WINNER|LCK|2026",
+  "refreshedRowsUsed": [
+    {
+      "venue": "OPINION",
+      "venueMarketId": "lol-lck-2026-season-winner:gen-g-esports",
+      "title": "LoL: LCK 2026 Season Winner",
+      "canonicalClubId": "gen_g_esports"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "lol-lck-2026-season-winner:freecs",
+      "title": "LoL: LCK 2026 Season Winner",
+      "canonicalClubId": "freecs"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "lol-lck-2026-season-winner:dplus",
+      "title": "LoL: LCK 2026 Season Winner",
+      "canonicalClubId": "dplus"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "lol-lck-2026-season-winner:t1",
+      "title": "LoL: LCK 2026 Season Winner",
+      "canonicalClubId": "t1"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "lol-lck-2026-season-winner:gen-g-esports",
+      "title": "LCK 2026 Season Winner",
+      "canonicalClubId": "gen_g_esports"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "lol-lck-2026-season-winner:freecs",
+      "title": "LCK 2026 Season Winner",
+      "canonicalClubId": "freecs"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "lol-lck-2026-season-winner:dplus",
+      "title": "LCK 2026 Season Winner",
+      "canonicalClubId": "dplus"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "lol-lck-2026-season-winner:t1",
+      "title": "LCK 2026 Season Winner",
+      "canonicalClubId": "t1"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "lol-lck-2026-season-winner:hanwha-life-esports",
+      "title": "LCK 2026 Season Winner",
+      "canonicalClubId": "hanwha_life_esports"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "lol-lck-2026-season-winner:kt-rolster",
+      "title": "LCK 2026 Season Winner",
+      "canonicalClubId": "kt_rolster"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "lol-lck-2026-season-winner:drx",
+      "title": "LCK 2026 Season Winner",
+      "canonicalClubId": "drx"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "lol-lck-2026-season-winner:nongshim-redforce",
+      "title": "LCK 2026 Season Winner",
+      "canonicalClubId": "nongshim_redforce"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "lol-lck-2026-season-winner-1769165401247:gen-g-esports",
+      "title": "LoL: LCK 2026 Season Winner",
+      "canonicalClubId": "gen_g_esports"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "lol-lck-2026-season-winner-1769165401247:t1",
+      "title": "LoL: LCK 2026 Season Winner",
+      "canonicalClubId": "t1"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "lol-lck-2026-season-winner-1769165401247:hanwha-life-esports",
+      "title": "LoL: LCK 2026 Season Winner",
+      "canonicalClubId": "hanwha_life_esports"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "lol-lck-2026-season-winner-1769165401247:dplus",
+      "title": "LoL: LCK 2026 Season Winner",
+      "canonicalClubId": "dplus"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "lol-lck-2026-season-winner-1769165401247:kt-rolster",
+      "title": "LoL: LCK 2026 Season Winner",
+      "canonicalClubId": "kt_rolster"
+    }
+  ],
+  "familyComparabilitySourceArtifacts": {
+    "fetchSummary": "artifacts/sports/lck-winner-family-pass/sports-lck-winner-fetch-summary.json",
+    "admissionSummary": "artifacts/sports/lck-winner-family-pass/sports-lck-winner-admission-summary.json",
+    "normalizedTopics": "artifacts/sports/lck-winner-family-pass/sports-lck-winner-normalized-topics.json",
+    "comparabilitySummary": "artifacts/sports/lck-winner-family-pass/sports-lck-winner-comparability-summary.json",
+    "basisFragmentationSummary": "artifacts/sports/lck-winner-family-pass/sports-lck-winner-basis-fragmentation-summary.json",
+    "finalDecision": "artifacts/sports/lck-winner-family-pass/sports-lck-winner-final-decision.json"
+  },
+  "admittedVenues": [
+    "LIMITLESS",
+    "OPINION",
+    "POLYMARKET"
+  ],
+  "admittedTeams": [
+    "dplus",
+    "drx",
+    "freecs",
+    "gen_g_esports",
+    "hanwha_life_esports",
+    "kt_rolster",
+    "nongshim_redforce",
+    "t1"
+  ],
+  "exclusionsBeforeFinalLaneConstruction": [
+    {
+      "scope": "team",
+      "teamIdentityKey": "DRX",
+      "normalizedTeamName": "DRX",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg DRX is not part of the exact shared LCK winner core."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "NONGSHIM_REDFORCE",
+      "normalizedTeamName": "Nongshim RedForce",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg Nongshim RedForce is not part of the exact shared LCK winner core."
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "observedAt": "2026-04-24T15:59:41.522Z",
+  "matcherLanes": [
+    {
+      "canonicalTopicKey": "CRYPTO|TOKEN_LAUNCH_BY_DATE|BASE|2026-06-30",
+      "venuePair": "POLYMARKET|PREDICT",
+      "exactLaunchDate": "2026-06-30",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "matcherReady": true,
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "821172",
+          "rawTitle": "Will Base launch a token by June 30, 2026?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "934",
+          "rawTitle": "Will Base launch a token by June 30, 2026?"
+        }
+      ],
+      "notes": [
+        "Exact-safe BASE token launch date 2026-06-30 on POLYMARKET|PREDICT."
+      ]
+    },
+    {
+      "canonicalTopicKey": "CRYPTO|TOKEN_LAUNCH_BY_DATE|BASE|2026-12-31",
+      "venuePair": "POLYMARKET|PREDICT",
+      "exactLaunchDate": "2026-12-31",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "matcherReady": true,
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "690693",
+          "rawTitle": "Will Base launch a token by December 31, 2026?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "933",
+          "rawTitle": "Will Base launch a token by December 31, 2026?"
+        }
+      ],
+      "notes": [
+        "Exact-safe BASE token launch date 2026-12-31 on POLYMARKET|PREDICT."
+      ]
+    }
+  ]
+}

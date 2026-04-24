@@ -1,0 +1,71 @@
+{
+  "observedAt": "2026-04-24T14:07:42.810Z",
+  "matcherLanes": [
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|ETH|2026-06-30",
+      "exactDateKey": "2026-06-30",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe ETH ATH-by-date shared bucket on LIMITLESS|POLYMARKET for 2026-06-30."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "june-30-2026-1775136208593",
+          "rawTitle": "Ethereum all time high by June 30, 2026?"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "ethereum-all-time-high-by-june-30-2026",
+          "rawTitle": "Ethereum all time high by June 30, 2026?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|ETH|2026-09-30",
+      "exactDateKey": "2026-09-30",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe ETH ATH-by-date shared bucket on LIMITLESS|POLYMARKET for 2026-09-30."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "september-30-2026-1775136208604",
+          "rawTitle": "Ethereum all time high by September 30, 2026?"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "ethereum-all-time-high-by-september-30-2026",
+          "rawTitle": "Ethereum all time high by September 30, 2026?"
+        }
+      ]
+    },
+    {
+      "venuePair": "LIMITLESS|POLYMARKET",
+      "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|ETH|2026-12-31",
+      "exactDateKey": "2026-12-31",
+      "routeabilityDecision": "PAIR_EXACT_AUTO_ROUTEABLE",
+      "rulesDecision": "EXACT_RULE_COMPATIBLE",
+      "evidenceNotes": [
+        "Exact-safe ETH ATH-by-date shared bucket on LIMITLESS|POLYMARKET for 2026-12-31."
+      ],
+      "evidence": [
+        {
+          "venue": "LIMITLESS",
+          "venueMarketId": "december-31-2026-1775136208609",
+          "rawTitle": "Ethereum all time high by December 31, 2026?"
+        },
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "ethereum-all-time-high-by-december-31-2026",
+          "rawTitle": "Ethereum all time high by December 31, 2026?"
+        }
+      ]
+    }
+  ]
+}

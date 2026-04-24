@@ -1,0 +1,61 @@
+[
+  {
+    "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|SOL|2026-03-31",
+    "canonicalDateKey": "2026-03-31",
+    "venuesPresent": [
+      "POLYMARKET"
+    ],
+    "ruleCompatibilityClassification": "EXACT_RULE_COMPATIBLE",
+    "fragmentationLabel": "FAMILY_REFRESHED_SINGLE_VENUE_ONLY",
+    "matcherCandidate": false,
+    "notes": [
+      "asset=SOL",
+      "pair_shared=no"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|SOL|2026-06-30",
+    "canonicalDateKey": "2026-06-30",
+    "venuesPresent": [
+      "LIMITLESS",
+      "POLYMARKET"
+    ],
+    "ruleCompatibilityClassification": "EXACT_RULE_COMPATIBLE",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_DATE_BUCKETS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "asset=SOL",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|SOL|2026-09-30",
+    "canonicalDateKey": "2026-09-30",
+    "venuesPresent": [
+      "LIMITLESS",
+      "POLYMARKET"
+    ],
+    "ruleCompatibilityClassification": "EXACT_RULE_COMPATIBLE",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_DATE_BUCKETS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "asset=SOL",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|SOL|2026-12-31",
+    "canonicalDateKey": "2026-12-31",
+    "venuesPresent": [
+      "LIMITLESS",
+      "POLYMARKET"
+    ],
+    "ruleCompatibilityClassification": "EXACT_RULE_COMPATIBLE",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_DATE_BUCKETS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "asset=SOL",
+      "pair_shared=yes"
+    ]
+  }
+]

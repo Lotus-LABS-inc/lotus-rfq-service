@@ -1,0 +1,12 @@
+{
+  "observedAt": "2026-04-24T15:59:34.596Z",
+  "rejections": [
+    {
+      "scope": "launch_date",
+      "canonicalTopicKey": "CRYPTO|TOKEN_LAUNCH_BY_DATE|METAMASK|2026-12-31",
+      "exactLaunchDate": "2026-12-31",
+      "reason": "NOT_SHARED",
+      "notes": "2026-12-31 is not shared on POLYMARKET|PREDICT; current venues are POLYMARKET."
+    }
+  ]
+}

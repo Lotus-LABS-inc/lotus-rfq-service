@@ -1,0 +1,12 @@
+{
+  "overallFamilyDecision": "CRYPTO_BTC_ATH_BY_DATE_FAMILY_REFRESHED_MULTI_VENUE_MATCHER_CANDIDATE_FOUND",
+  "sharedCandidateTopicKeys": [
+    "CRYPTO|ATH_BY_DATE|BTC|2026-06-30",
+    "CRYPTO|ATH_BY_DATE|BTC|2026-09-30",
+    "CRYPTO|ATH_BY_DATE|BTC|2026-12-31"
+  ],
+  "familySupplyCredible": true,
+  "operatorCredible": true,
+  "matcherFollowUpJustified": true,
+  "singleBestNextAction": "Run a narrow matcher pass for the shared BTC ATH-by-date buckets only, starting with LIMITLESS|POLYMARKET and excluding non-shared tails."
+}

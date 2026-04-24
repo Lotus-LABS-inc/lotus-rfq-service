@@ -1,0 +1,819 @@
+[
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823780",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823780",
+    "title": "Will Bitcoin dip to $60,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|60000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "60000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 60,000",
+    "interpretationNotes": [
+      "threshold_label=60,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823781",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823781",
+    "title": "Will Bitcoin dip to $55,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|55000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "55000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 55,000",
+    "interpretationNotes": [
+      "threshold_label=55,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823782",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823782",
+    "title": "Will Bitcoin dip to $50,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|50000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "50000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 50,000",
+    "interpretationNotes": [
+      "threshold_label=50,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823785",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823785",
+    "title": "Will Bitcoin dip to $35,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|35000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "35000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 35,000",
+    "interpretationNotes": [
+      "threshold_label=35,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823769",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823769",
+    "title": "Will Bitcoin reach $150,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|150000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "150000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 150,000",
+    "interpretationNotes": [
+      "threshold_label=150,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823772",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823772",
+    "title": "Will Bitcoin reach $100,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|100000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "100000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 100,000",
+    "interpretationNotes": [
+      "threshold_label=100,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823773",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823773",
+    "title": "Will Bitcoin reach $95,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|95000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "95000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 95,000",
+    "interpretationNotes": [
+      "threshold_label=95,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823774",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823774",
+    "title": "Will Bitcoin reach $90,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|90000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "90000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 90,000",
+    "interpretationNotes": [
+      "threshold_label=90,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823775",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823775",
+    "title": "Will Bitcoin reach $85,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|85000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "85000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 85,000",
+    "interpretationNotes": [
+      "threshold_label=85,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823777",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823777",
+    "title": "Will Bitcoin reach $75,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|75000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "75000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 75,000",
+    "interpretationNotes": [
+      "threshold_label=75,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823779",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823779",
+    "title": "Will Bitcoin dip to $65,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|65000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "65000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 65,000",
+    "interpretationNotes": [
+      "threshold_label=65,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823783",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823783",
+    "title": "Will Bitcoin dip to $45,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|45000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "45000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 45,000",
+    "interpretationNotes": [
+      "threshold_label=45,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823787",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823787",
+    "title": "Will Bitcoin dip to $25,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|25000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "25000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 25,000",
+    "interpretationNotes": [
+      "threshold_label=25,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823770",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823770",
+    "title": "Will Bitcoin reach $110,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|110000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "110000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 110,000",
+    "interpretationNotes": [
+      "threshold_label=110,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823771",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823771",
+    "title": "Will Bitcoin reach $105,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|105000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "105000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 105,000",
+    "interpretationNotes": [
+      "threshold_label=105,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823776",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823776",
+    "title": "Will Bitcoin reach $80,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|80000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "80000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 80,000",
+    "interpretationNotes": [
+      "threshold_label=80,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823788",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823788",
+    "title": "Will Bitcoin dip to $20,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|20000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "20000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 20,000",
+    "interpretationNotes": [
+      "threshold_label=20,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823778",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823778",
+    "title": "Will Bitcoin reach $70,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|70000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "70000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 70,000",
+    "interpretationNotes": [
+      "threshold_label=70,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823784",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823784",
+    "title": "Will Bitcoin dip to $40,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|40000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "40000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 40,000",
+    "interpretationNotes": [
+      "threshold_label=40,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-1823786",
+    "venue": "POLYMARKET",
+    "venueMarketId": "1823786",
+    "title": "Will Bitcoin dip to $30,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|30000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "30000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 30,000",
+    "interpretationNotes": [
+      "threshold_label=30,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-2046596",
+    "venue": "POLYMARKET",
+    "venueMarketId": "2046596",
+    "title": "Will Bitcoin dip to $70,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|70000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "70000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 70,000",
+    "interpretationNotes": [
+      "threshold_label=70,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-2054828",
+    "venue": "POLYMARKET",
+    "venueMarketId": "2054828",
+    "title": "Will Bitcoin reach $82,500 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|82500",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "82500",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 82,500",
+    "interpretationNotes": [
+      "threshold_label=82,500",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "polymarket-btc-threshold-apr-2026-2054872",
+    "venue": "POLYMARKET",
+    "venueMarketId": "2054872",
+    "title": "Will Bitcoin dip to $75,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|75000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "75000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 75,000",
+    "interpretationNotes": [
+      "threshold_label=75,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139750",
+    "venue": "PREDICT",
+    "venueMarketId": "139750",
+    "title": "Will Bitcoin reach $150,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|150000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "150000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 150,000",
+    "interpretationNotes": [
+      "threshold_label=150,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139751",
+    "venue": "PREDICT",
+    "venueMarketId": "139751",
+    "title": "Will Bitcoin reach $110,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|110000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "110000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 110,000",
+    "interpretationNotes": [
+      "threshold_label=110,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139752",
+    "venue": "PREDICT",
+    "venueMarketId": "139752",
+    "title": "Will Bitcoin reach $105,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|105000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "105000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 105,000",
+    "interpretationNotes": [
+      "threshold_label=105,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139753",
+    "venue": "PREDICT",
+    "venueMarketId": "139753",
+    "title": "Will Bitcoin reach $100,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|100000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "100000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 100,000",
+    "interpretationNotes": [
+      "threshold_label=100,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139754",
+    "venue": "PREDICT",
+    "venueMarketId": "139754",
+    "title": "Will Bitcoin reach $95,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|95000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "95000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 95,000",
+    "interpretationNotes": [
+      "threshold_label=95,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139755",
+    "venue": "PREDICT",
+    "venueMarketId": "139755",
+    "title": "Will Bitcoin reach $90,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|90000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "90000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 90,000",
+    "interpretationNotes": [
+      "threshold_label=90,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139756",
+    "venue": "PREDICT",
+    "venueMarketId": "139756",
+    "title": "Will Bitcoin reach $85,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|85000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "85000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 85,000",
+    "interpretationNotes": [
+      "threshold_label=85,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139757",
+    "venue": "PREDICT",
+    "venueMarketId": "139757",
+    "title": "Will Bitcoin reach $80,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|80000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "80000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 80,000",
+    "interpretationNotes": [
+      "threshold_label=80,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139758",
+    "venue": "PREDICT",
+    "venueMarketId": "139758",
+    "title": "Will Bitcoin reach $75,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|75000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "75000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 75,000",
+    "interpretationNotes": [
+      "threshold_label=75,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139759",
+    "venue": "PREDICT",
+    "venueMarketId": "139759",
+    "title": "Will Bitcoin reach $70,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|ABOVE|70000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "70000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 70,000",
+    "interpretationNotes": [
+      "threshold_label=70,000",
+      "comparator=ABOVE",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139760",
+    "venue": "PREDICT",
+    "venueMarketId": "139760",
+    "title": "Will Bitcoin dip to $65,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|65000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "65000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 65,000",
+    "interpretationNotes": [
+      "threshold_label=65,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139761",
+    "venue": "PREDICT",
+    "venueMarketId": "139761",
+    "title": "Will Bitcoin dip to $60,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|60000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "60000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 60,000",
+    "interpretationNotes": [
+      "threshold_label=60,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139762",
+    "venue": "PREDICT",
+    "venueMarketId": "139762",
+    "title": "Will Bitcoin dip to $55,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|55000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "55000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 55,000",
+    "interpretationNotes": [
+      "threshold_label=55,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139763",
+    "venue": "PREDICT",
+    "venueMarketId": "139763",
+    "title": "Will Bitcoin dip to $50,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|50000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "50000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 50,000",
+    "interpretationNotes": [
+      "threshold_label=50,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139764",
+    "venue": "PREDICT",
+    "venueMarketId": "139764",
+    "title": "Will Bitcoin dip to $45,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|45000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "45000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 45,000",
+    "interpretationNotes": [
+      "threshold_label=45,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139765",
+    "venue": "PREDICT",
+    "venueMarketId": "139765",
+    "title": "Will Bitcoin dip to $40,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|40000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "40000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 40,000",
+    "interpretationNotes": [
+      "threshold_label=40,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139766",
+    "venue": "PREDICT",
+    "venueMarketId": "139766",
+    "title": "Will Bitcoin dip to $35,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|35000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "35000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 35,000",
+    "interpretationNotes": [
+      "threshold_label=35,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139767",
+    "venue": "PREDICT",
+    "venueMarketId": "139767",
+    "title": "Will Bitcoin dip to $30,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|30000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "30000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 30,000",
+    "interpretationNotes": [
+      "threshold_label=30,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139768",
+    "venue": "PREDICT",
+    "venueMarketId": "139768",
+    "title": "Will Bitcoin dip to $25,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|25000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "25000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 25,000",
+    "interpretationNotes": [
+      "threshold_label=25,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  },
+  {
+    "interpretedContractId": "predict-btc-threshold-apr-2026-139769",
+    "venue": "PREDICT",
+    "venueMarketId": "139769",
+    "title": "Will Bitcoin dip to $20,000 in April?",
+    "canonicalFamily": "THRESHOLD_BY_DATE",
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30|BELOW|20000",
+    "canonicalAsset": "BTC",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "20000",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 20,000",
+    "interpretationNotes": [
+      "threshold_label=20,000",
+      "comparator=BELOW",
+      "rules_present"
+    ],
+    "rejectionReason": null
+  }
+]

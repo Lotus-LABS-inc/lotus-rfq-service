@@ -1,0 +1,505 @@
+{
+  "observedAt": "2026-04-24T14:49:39.275Z",
+  "matcherLanes": [
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|2200",
+      "exactThresholdLabel": "↑ 2,200",
+      "exactThresholdValue": "2200",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↑ 2,200 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823798",
+          "rawTitle": "Will Ethereum reach $2,200 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139810",
+          "rawTitle": "Will Ethereum reach $2,200 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|2400",
+      "exactThresholdLabel": "↑ 2,400",
+      "exactThresholdValue": "2400",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↑ 2,400 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823797",
+          "rawTitle": "Will Ethereum reach $2,400 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139809",
+          "rawTitle": "Will Ethereum reach $2,400 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|2600",
+      "exactThresholdLabel": "↑ 2,600",
+      "exactThresholdValue": "2600",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↑ 2,600 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823796",
+          "rawTitle": "Will Ethereum reach $2,600 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139808",
+          "rawTitle": "Will Ethereum reach $2,600 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|2800",
+      "exactThresholdLabel": "↑ 2,800",
+      "exactThresholdValue": "2800",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↑ 2,800 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823795",
+          "rawTitle": "Will Ethereum reach $2,800 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139807",
+          "rawTitle": "Will Ethereum reach $2,800 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3000",
+      "exactThresholdLabel": "↑ 3,000",
+      "exactThresholdValue": "3000",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↑ 3,000 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823794",
+          "rawTitle": "Will Ethereum reach $3,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139806",
+          "rawTitle": "Will Ethereum reach $3,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3200",
+      "exactThresholdLabel": "↑ 3,200",
+      "exactThresholdValue": "3200",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↑ 3,200 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823793",
+          "rawTitle": "Will Ethereum reach $3,200 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139805",
+          "rawTitle": "Will Ethereum reach $3,200 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3400",
+      "exactThresholdLabel": "↑ 3,400",
+      "exactThresholdValue": "3400",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↑ 3,400 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823792",
+          "rawTitle": "Will Ethereum reach $3,400 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139804",
+          "rawTitle": "Will Ethereum reach $3,400 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3600",
+      "exactThresholdLabel": "↑ 3,600",
+      "exactThresholdValue": "3600",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↑ 3,600 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823791",
+          "rawTitle": "Will Ethereum reach $3,600 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139803",
+          "rawTitle": "Will Ethereum reach $3,600 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|3800",
+      "exactThresholdLabel": "↑ 3,800",
+      "exactThresholdValue": "3800",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↑ 3,800 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823790",
+          "rawTitle": "Will Ethereum reach $3,800 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139802",
+          "rawTitle": "Will Ethereum reach $3,800 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|ABOVE|4000",
+      "exactThresholdLabel": "↑ 4,000",
+      "exactThresholdValue": "4000",
+      "comparator": "ABOVE",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↑ 4,000 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823789",
+          "rawTitle": "Will Ethereum reach $4,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139801",
+          "rawTitle": "Will Ethereum reach $4,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|200",
+      "exactThresholdLabel": "↓ 200",
+      "exactThresholdValue": "200",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↓ 200 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823808",
+          "rawTitle": "Will Ethereum dip to $200 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139820",
+          "rawTitle": "Will Ethereum dip to $200 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|400",
+      "exactThresholdLabel": "↓ 400",
+      "exactThresholdValue": "400",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↓ 400 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823807",
+          "rawTitle": "Will Ethereum dip to $400 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139819",
+          "rawTitle": "Will Ethereum dip to $400 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|600",
+      "exactThresholdLabel": "↓ 600",
+      "exactThresholdValue": "600",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↓ 600 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823806",
+          "rawTitle": "Will Ethereum dip to $600 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139818",
+          "rawTitle": "Will Ethereum dip to $600 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|800",
+      "exactThresholdLabel": "↓ 800",
+      "exactThresholdValue": "800",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↓ 800 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823805",
+          "rawTitle": "Will Ethereum dip to $800 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139817",
+          "rawTitle": "Will Ethereum dip to $800 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1000",
+      "exactThresholdLabel": "↓ 1,000",
+      "exactThresholdValue": "1000",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↓ 1,000 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823804",
+          "rawTitle": "Will Ethereum dip to $1,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139816",
+          "rawTitle": "Will Ethereum dip to $1,000 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1200",
+      "exactThresholdLabel": "↓ 1,200",
+      "exactThresholdValue": "1200",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↓ 1,200 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823803",
+          "rawTitle": "Will Ethereum dip to $1,200 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139815",
+          "rawTitle": "Will Ethereum dip to $1,200 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1400",
+      "exactThresholdLabel": "↓ 1,400",
+      "exactThresholdValue": "1400",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↓ 1,400 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823802",
+          "rawTitle": "Will Ethereum dip to $1,400 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139814",
+          "rawTitle": "Will Ethereum dip to $1,400 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1600",
+      "exactThresholdLabel": "↓ 1,600",
+      "exactThresholdValue": "1600",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↓ 1,600 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823801",
+          "rawTitle": "Will Ethereum dip to $1,600 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139813",
+          "rawTitle": "Will Ethereum dip to $1,600 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|1800",
+      "exactThresholdLabel": "↓ 1,800",
+      "exactThresholdValue": "1800",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↓ 1,800 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823800",
+          "rawTitle": "Will Ethereum dip to $1,800 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139812",
+          "rawTitle": "Will Ethereum dip to $1,800 in April?"
+        }
+      ]
+    },
+    {
+      "venuePair": "POLYMARKET|PREDICT",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|ETH|2026-04-30|BELOW|2000",
+      "exactThresholdLabel": "↓ 2,000",
+      "exactThresholdValue": "2000",
+      "comparator": "BELOW",
+      "routeabilityDecision": "PAIR_REVIEW_REQUIRED",
+      "rulesDecision": "SEMANTICALLY_COMPATIBLE_REWORDING",
+      "evidenceNotes": [
+        "ETH threshold bucket ↓ 2,000 is shared on POLYMARKET|PREDICT, but venue wording is semantically compatible rather than exact.",
+        "Operator review is required before treating this pair lane as exact-safe."
+      ],
+      "evidence": [
+        {
+          "venue": "POLYMARKET",
+          "venueMarketId": "1823799",
+          "rawTitle": "Will Ethereum dip to $2,000 in April?"
+        },
+        {
+          "venue": "PREDICT",
+          "venueMarketId": "139811",
+          "rawTitle": "Will Ethereum dip to $2,000 in April?"
+        }
+      ]
+    }
+  ]
+}

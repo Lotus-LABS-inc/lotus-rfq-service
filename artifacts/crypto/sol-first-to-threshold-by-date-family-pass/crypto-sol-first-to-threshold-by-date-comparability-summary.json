@@ -1,0 +1,31 @@
+[
+  {
+    "canonicalTopicKey": "CRYPTO|FIRST_TO_THRESHOLD_BY_DATE|SOL|60|140|2027-01-01",
+    "canonicalAsset": "SOL",
+    "canonicalLowerThreshold": "60",
+    "canonicalHigherThreshold": "140",
+    "canonicalDeadlineDateKey": "2027-01-01",
+    "priceSource": "BINANCE",
+    "hitBasis": "INTRADAY_HIT",
+    "fallbackIfNeither": "SPLIT_50_50",
+    "tieHandling": "UNSPECIFIED",
+    "exactOutcomeLabels": [
+      "$60 first",
+      "$140 first"
+    ],
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "operatorReviewRequiredReasons": [
+      "tie_handling_unspecified",
+      "semantic_rewording"
+    ],
+    "matcherCandidate": true,
+    "notes": [
+      "asset=SOL",
+      "threshold_pair=60|140"
+    ]
+  }
+]

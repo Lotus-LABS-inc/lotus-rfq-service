@@ -1,0 +1,485 @@
+{
+  "observedAt": "2026-04-24T12:43:30.273Z",
+  "exactTopic": "SPORTS|TOURNAMENT_WINNER|NHL_STANLEY_CUP|2025_2026",
+  "refreshedRowsUsed": [
+    {
+      "venue": "OPINION",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:colorado-avalanche",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "colorado_avalanche"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:edmonton-oilers",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "edmonton_oilers"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:tampa-bay-lightning",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "tampa_bay_lightning"
+    },
+    {
+      "venue": "OPINION",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:dallas-stars",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "dallas_stars"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:carolina-hurricanes",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "carolina_hurricanes"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:colorado-avalanche",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "colorado_avalanche"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:tampa-bay-lightning",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "tampa_bay_lightning"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:edmonton-oilers",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "edmonton_oilers"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:dallas-stars",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "dallas_stars"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:vegas-golden-knights",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "vegas_golden_knights"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:buffalo-sabres",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "buffalo_sabres"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:montreal-canadiens",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "montreal_canadiens"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:philadelphia-flyers",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "philadelphia_flyers"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:minnesota-wild",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "minnesota_wild"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:utah-mammoth",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "utah_mammoth"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:anaheim-ducks",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "anaheim_ducks"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:boston-bruins",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "boston_bruins"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:ottawa-senators",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "ottawa_senators"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:pittsburgh-penguins",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "pittsburgh_penguins"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:los-angeles-kings",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "los_angeles_kings"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:columbus-blue-jackets",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "columbus_blue_jackets"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:nashville-predators",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "nashville_predators"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:florida-panthers",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "florida_panthers"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:calgary-flames",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "calgary_flames"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:san-jose-sharks",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "san_jose_sharks"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:new-jersey-devils",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "new_jersey_devils"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:winnipeg-jets",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "winnipeg_jets"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:toronto-maple-leafs",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "toronto_maple_leafs"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:chicago-blackhawks",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "chicago_blackhawks"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:washington-capitals",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "washington_capitals"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:new-york-rangers",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "new_york_rangers"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:st-louis-blues",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "st_louis_blues"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:vancouver-canucks",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "vancouver_canucks"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:new-york-islanders",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "new_york_islanders"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:detroit-red-wings",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "detroit_red_wings"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "2026-nhl-stanley-cup-champion:seattle-kraken",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "seattle_kraken"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nhl-stanley-cup-champion-1766489120344:colorado-avalanche",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "colorado_avalanche"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nhl-stanley-cup-champion-1766489120344:carolina-hurricanes",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "carolina_hurricanes"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nhl-stanley-cup-champion-1766489120344:florida-panthers",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "florida_panthers"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nhl-stanley-cup-champion-1766489120344:tampa-bay-lightning",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "tampa_bay_lightning"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nhl-stanley-cup-champion-1766489120344:edmonton-oilers",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "edmonton_oilers"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nhl-stanley-cup-champion-1766489120344:vegas-golden-knights",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "vegas_golden_knights"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nhl-stanley-cup-champion-1766489120344:minnesota-wild",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "minnesota_wild"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nhl-stanley-cup-champion-1766489120344:dallas-stars",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "dallas_stars"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nhl-stanley-cup-champion-1766489120344:new-jersey-devils",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "new_jersey_devils"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nhl-stanley-cup-champion-1766489120344:washington-capitals",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "washington_capitals"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nhl-stanley-cup-champion-1766489120344:toronto-maple-leafs",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "toronto_maple_leafs"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nhl-stanley-cup-champion-1766489120344:anaheim-ducks",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "anaheim_ducks"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nhl-stanley-cup-champion-1766489120344:montreal-canadiens",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "montreal_canadiens"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nhl-stanley-cup-champion-1766489120344:los-angeles-kings",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "los_angeles_kings"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nhl-stanley-cup-champion-1766489120344:winnipeg-jets",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "winnipeg_jets"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nhl-stanley-cup-champion-1766489120344:new-york-rangers",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "new_york_rangers"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "2026-nhl-stanley-cup-champion-1766489120344:other",
+      "title": "2026 NHL Stanley Cup Champion",
+      "canonicalClubId": "other"
+    }
+  ],
+  "familyComparabilitySourceArtifacts": {
+    "fetchSummary": "artifacts/sports/nhl-stanley-cup-champion-family-pass/sports-nhl-stanley-cup-champion-fetch-summary.json",
+    "admissionSummary": "artifacts/sports/nhl-stanley-cup-champion-family-pass/sports-nhl-stanley-cup-champion-admission-summary.json",
+    "normalizedTopics": "artifacts/sports/nhl-stanley-cup-champion-family-pass/sports-nhl-stanley-cup-champion-normalized-topics.json",
+    "comparabilitySummary": "artifacts/sports/nhl-stanley-cup-champion-family-pass/sports-nhl-stanley-cup-champion-comparability-summary.json",
+    "basisFragmentationSummary": "artifacts/sports/nhl-stanley-cup-champion-family-pass/sports-nhl-stanley-cup-champion-basis-fragmentation-summary.json",
+    "finalDecision": "artifacts/sports/nhl-stanley-cup-champion-family-pass/sports-nhl-stanley-cup-champion-final-decision.json"
+  },
+  "admittedVenues": [
+    "LIMITLESS",
+    "OPINION",
+    "POLYMARKET"
+  ],
+  "admittedTeams": [
+    "anaheim_ducks",
+    "boston_bruins",
+    "buffalo_sabres",
+    "calgary_flames",
+    "carolina_hurricanes",
+    "chicago_blackhawks",
+    "colorado_avalanche",
+    "columbus_blue_jackets",
+    "dallas_stars",
+    "detroit_red_wings",
+    "edmonton_oilers",
+    "florida_panthers",
+    "los_angeles_kings",
+    "minnesota_wild",
+    "montreal_canadiens",
+    "nashville_predators",
+    "new_jersey_devils",
+    "new_york_islanders",
+    "new_york_rangers",
+    "ottawa_senators",
+    "philadelphia_flyers",
+    "pittsburgh_penguins",
+    "san_jose_sharks",
+    "seattle_kraken",
+    "st_louis_blues",
+    "tampa_bay_lightning",
+    "toronto_maple_leafs",
+    "utah_mammoth",
+    "vancouver_canucks",
+    "vegas_golden_knights",
+    "washington_capitals",
+    "winnipeg_jets"
+  ],
+  "exclusionsBeforeFinalLaneConstruction": [
+    {
+      "scope": "team",
+      "teamIdentityKey": "BOSTON_BRUINS",
+      "normalizedTeamName": "Boston Bruins",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg Boston Bruins is not part of the exact shared NHL Stanley Cup champion core."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "BUFFALO_SABRES",
+      "normalizedTeamName": "Buffalo Sabres",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg Buffalo Sabres is not part of the exact shared NHL Stanley Cup champion core."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "CALGARY_FLAMES",
+      "normalizedTeamName": "Calgary Flames",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg Calgary Flames is not part of the exact shared NHL Stanley Cup champion core."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "CHICAGO_BLACKHAWKS",
+      "normalizedTeamName": "Chicago Blackhawks",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg Chicago Blackhawks is not part of the exact shared NHL Stanley Cup champion core."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "COLUMBUS_BLUE_JACKETS",
+      "normalizedTeamName": "Columbus Blue Jackets",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg Columbus Blue Jackets is not part of the exact shared NHL Stanley Cup champion core."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "DETROIT_RED_WINGS",
+      "normalizedTeamName": "Detroit Red Wings",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg Detroit Red Wings is not part of the exact shared NHL Stanley Cup champion core."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "NASHVILLE_PREDATORS",
+      "normalizedTeamName": "Nashville Predators",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg Nashville Predators is not part of the exact shared NHL Stanley Cup champion core."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "NEW_YORK_ISLANDERS",
+      "normalizedTeamName": "New York Islanders",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg New York Islanders is not part of the exact shared NHL Stanley Cup champion core."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "OTTAWA_SENATORS",
+      "normalizedTeamName": "Ottawa Senators",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg Ottawa Senators is not part of the exact shared NHL Stanley Cup champion core."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "PHILADELPHIA_FLYERS",
+      "normalizedTeamName": "Philadelphia Flyers",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg Philadelphia Flyers is not part of the exact shared NHL Stanley Cup champion core."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "PITTSBURGH_PENGUINS",
+      "normalizedTeamName": "Pittsburgh Penguins",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg Pittsburgh Penguins is not part of the exact shared NHL Stanley Cup champion core."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "SAN_JOSE_SHARKS",
+      "normalizedTeamName": "San Jose Sharks",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg San Jose Sharks is not part of the exact shared NHL Stanley Cup champion core."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "SEATTLE_KRAKEN",
+      "normalizedTeamName": "Seattle Kraken",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg Seattle Kraken is not part of the exact shared NHL Stanley Cup champion core."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "ST._LOUIS_BLUES",
+      "normalizedTeamName": "St. Louis Blues",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg St. Louis Blues is not part of the exact shared NHL Stanley Cup champion core."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "UTAH_MAMMOTH",
+      "normalizedTeamName": "Utah Mammoth",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg Utah Mammoth is not part of the exact shared NHL Stanley Cup champion core."
+    },
+    {
+      "scope": "team",
+      "teamIdentityKey": "VANCOUVER_CANUCKS",
+      "normalizedTeamName": "Vancouver Canucks",
+      "reason": "NOT_SHARED",
+      "notes": "Team leg Vancouver Canucks is not part of the exact shared NHL Stanley Cup champion core."
+    }
+  ]
+}

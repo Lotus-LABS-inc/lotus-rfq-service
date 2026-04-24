@@ -76,6 +76,8 @@ import { registerAdminPoliticsGeopoliticalRoutes } from "./admin/politics-geopol
 import { PoliticsGeopoliticalAdminService } from "./admin/politics-geopolitical-admin-service.js";
 import { registerAdminSportsRoutes } from "./admin/sports.routes.js";
 import { SportsAdminService } from "./admin/sports-admin-service.js";
+import { registerAdminCryptoRoutes } from "./admin/crypto.routes.js";
+import { CryptoAdminService } from "./admin/crypto-admin-service.js";
 import { PairShadowObservationRepository } from "../shadow/pair-shadow-observation-repository.js";
 import { PairShadowRuntimeWriter } from "../shadow/pair-shadow-runtime-writer.js";
 import { PairShadowRuntimeHooks } from "../shadow/pair-shadow-runtime-hooks.js";
@@ -754,6 +756,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     pool: dependencies.pgPool,
     repoRoot: process.cwd()
   });
+  const cryptoAdminService = new CryptoAdminService({
+    pool: dependencies.pgPool,
+    repoRoot: process.cwd()
+  });
   const executionScopeTokenService = new ExecutionScopeTokenService(
     process.env.EXECUTION_SCOPE_TOKEN_SECRET ?? dependencies.jwtSecret
   );
@@ -1415,6 +1421,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   });
   await registerAdminSportsRoutes(app, adminAuthMiddleware, {
     sportsAdminService
+  });
+  await registerAdminCryptoRoutes(app, adminAuthMiddleware, {
+    cryptoAdminService
   });
   await registerAdminSimulationRoutes(app, simulationPreviewAdminMiddleware, {
     simulationAdminService: new SimulationAdminService({

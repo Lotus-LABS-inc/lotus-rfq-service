@@ -1,0 +1,181 @@
+[
+  {
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|600",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "600",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 600",
+    "venuesPresent": [
+      "POLYMARKET"
+    ],
+    "ruleCompatibilityClassification": "EXACT_RULE_COMPATIBLE",
+    "fragmentationLabel": "FAMILY_REFRESHED_SINGLE_VENUE_ONLY",
+    "matcherCandidate": false,
+    "notes": [
+      "asset=BNB",
+      "pair_shared=no"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|700",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "700",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 700",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_THRESHOLD_BUCKETS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "asset=BNB",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|800",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "800",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 800",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_THRESHOLD_BUCKETS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "asset=BNB",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|900",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "900",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 900",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_THRESHOLD_BUCKETS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "asset=BNB",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|1000",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "1000",
+    "canonicalComparator": "ABOVE",
+    "canonicalThresholdLabel": "↑ 1,000",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_THRESHOLD_BUCKETS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "asset=BNB",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|100",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "100",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 100",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_THRESHOLD_BUCKETS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "asset=BNB",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|200",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "200",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 200",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_THRESHOLD_BUCKETS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "asset=BNB",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|300",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "300",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 300",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_THRESHOLD_BUCKETS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "asset=BNB",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|400",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "400",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 400",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_THRESHOLD_BUCKETS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "asset=BNB",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|BELOW|500",
+    "canonicalDateKey": "2026-04-30",
+    "canonicalThresholdValue": "500",
+    "canonicalComparator": "BELOW",
+    "canonicalThresholdLabel": "↓ 500",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "SEMANTICALLY_COMPATIBLE_REWORDING",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_THRESHOLD_BUCKETS_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "asset=BNB",
+      "pair_shared=yes"
+    ]
+  }
+]

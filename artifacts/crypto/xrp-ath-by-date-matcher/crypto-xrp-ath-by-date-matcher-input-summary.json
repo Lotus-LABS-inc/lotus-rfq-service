@@ -1,0 +1,83 @@
+{
+  "observedAt": "2026-04-24T14:07:42.762Z",
+  "exactFamily": "CRYPTO|ATH_BY_DATE|XRP",
+  "targetPair": "LIMITLESS|POLYMARKET",
+  "refreshedRowsUsed": [
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "xrp-all-time-high-by-june-30-2026",
+      "title": "XRP all time high by June 30, 2026?",
+      "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|XRP|2026-06-30",
+      "canonicalDateKey": "2026-06-30"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "xrp-all-time-high-by-september-30-2026",
+      "title": "XRP all time high by September 30, 2026?",
+      "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|XRP|2026-09-30",
+      "canonicalDateKey": "2026-09-30"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "xrp-all-time-high-by-december-31-2026",
+      "title": "XRP all time high by December 31, 2026?",
+      "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|XRP|2026-12-31",
+      "canonicalDateKey": "2026-12-31"
+    },
+    {
+      "venue": "POLYMARKET",
+      "venueMarketId": "xrp-all-time-high-by-march-31-2026",
+      "title": "XRP all time high by March 31, 2026?",
+      "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|XRP|2026-03-31",
+      "canonicalDateKey": "2026-03-31"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "june-30-2026-1775137169951",
+      "title": "XRP all time high by June 30, 2026?",
+      "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|XRP|2026-06-30",
+      "canonicalDateKey": "2026-06-30"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "september-30-2026-1775137169961",
+      "title": "XRP all time high by September 30, 2026?",
+      "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|XRP|2026-09-30",
+      "canonicalDateKey": "2026-09-30"
+    },
+    {
+      "venue": "LIMITLESS",
+      "venueMarketId": "december-31-2026-1775137169966",
+      "title": "XRP all time high by December 31, 2026?",
+      "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|XRP|2026-12-31",
+      "canonicalDateKey": "2026-12-31"
+    }
+  ],
+  "familyComparabilitySourceArtifacts": {
+    "fetchSummary": "artifacts/crypto/xrp-ath-by-date-family-pass/crypto-xrp-ath-by-date-fetch-summary.json",
+    "admissionSummary": "artifacts/crypto/xrp-ath-by-date-family-pass/crypto-xrp-ath-by-date-admission-summary.json",
+    "normalizedTopics": "artifacts/crypto/xrp-ath-by-date-family-pass/crypto-xrp-ath-by-date-normalized-topics.json",
+    "comparabilitySummary": "artifacts/crypto/xrp-ath-by-date-family-pass/crypto-xrp-ath-by-date-comparability-summary.json",
+    "basisFragmentationSummary": "artifacts/crypto/xrp-ath-by-date-family-pass/crypto-xrp-ath-by-date-basis-fragmentation-summary.json",
+    "finalDecision": "artifacts/crypto/xrp-ath-by-date-family-pass/crypto-xrp-ath-by-date-final-decision.json"
+  },
+  "admittedVenues": [
+    "LIMITLESS",
+    "POLYMARKET"
+  ],
+  "admittedTopicKeys": [
+    "CRYPTO|ATH_BY_DATE|XRP|2026-03-31",
+    "CRYPTO|ATH_BY_DATE|XRP|2026-06-30",
+    "CRYPTO|ATH_BY_DATE|XRP|2026-09-30",
+    "CRYPTO|ATH_BY_DATE|XRP|2026-12-31"
+  ],
+  "exclusionsBeforeFinalLaneConstruction": [
+    {
+      "scope": "date_bucket",
+      "canonicalTopicKey": "CRYPTO|ATH_BY_DATE|XRP|2026-03-31",
+      "exactDateKey": "2026-03-31",
+      "reason": "NOT_SHARED",
+      "notes": "CRYPTO|ATH_BY_DATE|XRP|2026-03-31 is not shared on LIMITLESS|POLYMARKET; current venues are POLYMARKET."
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "observedAt": "2026-04-24T14:49:39.294Z",
+  "rejections": [
+    {
+      "scope": "threshold_bucket",
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30|ABOVE|600",
+      "exactThresholdLabel": "↑ 600",
+      "reason": "NOT_SHARED",
+      "notes": "↑ 600 is not shared on POLYMARKET|PREDICT; current venues are POLYMARKET."
+    }
+  ]
+}

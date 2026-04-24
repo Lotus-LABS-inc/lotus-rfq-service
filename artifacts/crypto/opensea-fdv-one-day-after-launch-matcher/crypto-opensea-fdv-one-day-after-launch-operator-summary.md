@@ -1,0 +1,7 @@
+# Crypto OPENSEA FDV After Launch Matcher
+
+- exact family: CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|OPENSEA|ONE_DAY_AFTER_LAUNCH
+- target pair: POLYMARKET|PREDICT
+- shared FDV thresholds: $500M, $1B, $2B, $3B, $5B
+- rejected thresholds: $100M, $300M
+- final decision: CRYPTO_OPENSEA_FDV_ONE_DAY_AFTER_LAUNCH_PAIR_MATCHER_READY_PENDING_OPERATOR_REVIEW

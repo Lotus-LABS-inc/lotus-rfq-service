@@ -1,0 +1,7 @@
+# Crypto EXTENDED FDV After Launch Matcher
+
+- exact family: CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH
+- target pair: POLYMARKET|PREDICT
+- shared FDV thresholds: $150M, $300M, $500M, $800M, $1B, $2B, $3B
+- rejected thresholds: none
+- final decision: CRYPTO_EXTENDED_FDV_ONE_DAY_AFTER_LAUNCH_PAIR_MATCHER_READY_PENDING_OPERATOR_REVIEW

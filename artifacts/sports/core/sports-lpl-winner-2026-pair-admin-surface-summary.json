@@ -1,0 +1,31 @@
+{
+  "observedAt": "2026-04-24T11:43:55.817Z",
+  "laneId": "SPORTS_LPL_WINNER_2026_PAIR_LIMITLESS_POLYMARKET",
+  "topicKey": "SPORTS|LEAGUE_WINNER|LPL|2026",
+  "venuePair": "LIMITLESS|POLYMARKET",
+  "teamScopeHash": "5228cec917050075",
+  "exactSafeTeams": [
+    "anyones_legend",
+    "bilibili_gaming",
+    "jd_gaming",
+    "top_esports",
+    "weibo_gaming"
+  ],
+  "currentReadinessDecision": "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+  "supportedActions": [
+    "inspect",
+    "hold",
+    "promote",
+    "rollback"
+  ],
+  "userConsentCanWidenScope": false,
+  "narrowestEnforceableUnit": "LANE_SCOPE_LOCK",
+  "sourceArtifactRefs": [
+    "artifacts/sports/lpl-winner-2026-matcher/sports-lpl-winner-2026-matcher-input-summary.json",
+    "artifacts/sports/lpl-winner-2026-matcher/sports-lpl-winner-2026-pair-lanes.json",
+    "artifacts/sports/lpl-winner-2026-matcher/sports-lpl-winner-2026-tri-lanes.json",
+    "artifacts/sports/lpl-winner-2026-matcher/sports-lpl-winner-2026-rejections.json",
+    "artifacts/sports/lpl-winner-2026-matcher/sports-lpl-winner-2026-final-decision.json",
+    "artifacts/sports/lpl-winner-2026-matcher/sports-lpl-winner-2026-operator-summary.md"
+  ]
+}

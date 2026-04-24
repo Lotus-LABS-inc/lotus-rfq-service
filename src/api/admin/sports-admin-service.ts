@@ -35,6 +35,21 @@ import {
   sportsF1ConstructorsChampion2026PairLimitlessPolymarketLaneId
 } from "../../operations/semantic-expansion/sports-f1-constructors-champion-2026-limited-prod-shared.js";
 import {
+  SPORTS_LCK_WINNER_2026_ROLLOUT_SCOPE_TYPE,
+  SPORTS_LCK_WINNER_2026_ROLLOUT_STRATEGY_KEY,
+  sportsLckWinner2026PairLimitlessPolymarketLaneId
+} from "../../operations/semantic-expansion/sports-lck-winner-2026-limited-prod-shared.js";
+import {
+  SPORTS_LPL_WINNER_2026_ROLLOUT_SCOPE_TYPE,
+  SPORTS_LPL_WINNER_2026_ROLLOUT_STRATEGY_KEY,
+  sportsLplWinner2026PairLimitlessPolymarketLaneId
+} from "../../operations/semantic-expansion/sports-lpl-winner-2026-limited-prod-shared.js";
+import {
+  SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_ROLLOUT_SCOPE_TYPE,
+  SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_ROLLOUT_STRATEGY_KEY,
+  sportsNhlStanleyCupChampion20252026PairLimitlessPolymarketLaneId
+} from "../../operations/semantic-expansion/sports-nhl-stanley-cup-champion-2025-2026-limited-prod-shared.js";
+import {
   SPORTS_WORLD_CUP_WINNER_2026_ROLLOUT_SCOPE_TYPE,
   SPORTS_WORLD_CUP_WINNER_2026_ROLLOUT_STRATEGY_KEY,
   sportsWorldCupWinner2026PairLimitlessPolymarketLaneId
@@ -163,6 +178,27 @@ const topicConfigs: readonly SportsTopicConfig[] = [
     strategyKey: SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_ROLLOUT_STRATEGY_KEY,
     scopeType: SPORTS_F1_CONSTRUCTORS_CHAMPION_2026_ROLLOUT_SCOPE_TYPE,
     primaryPairLaneId: sportsF1ConstructorsChampion2026PairLimitlessPolymarketLaneId
+  },
+  {
+    laneIdPrefix: "SPORTS_LCK_WINNER_2026",
+    laneCatalogPath: "artifacts/sports/lck-winner-2026-matcher/sports-lck-winner-2026-lane-catalog.json",
+    strategyKey: SPORTS_LCK_WINNER_2026_ROLLOUT_STRATEGY_KEY,
+    scopeType: SPORTS_LCK_WINNER_2026_ROLLOUT_SCOPE_TYPE,
+    primaryPairLaneId: sportsLckWinner2026PairLimitlessPolymarketLaneId
+  },
+  {
+    laneIdPrefix: "SPORTS_LPL_WINNER_2026",
+    laneCatalogPath: "artifacts/sports/lpl-winner-2026-matcher/sports-lpl-winner-2026-lane-catalog.json",
+    strategyKey: SPORTS_LPL_WINNER_2026_ROLLOUT_STRATEGY_KEY,
+    scopeType: SPORTS_LPL_WINNER_2026_ROLLOUT_SCOPE_TYPE,
+    primaryPairLaneId: sportsLplWinner2026PairLimitlessPolymarketLaneId
+  },
+  {
+    laneIdPrefix: "SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026",
+    laneCatalogPath: "artifacts/sports/nhl-stanley-cup-champion-2025-2026-matcher/sports-nhl-stanley-cup-champion-2025-2026-lane-catalog.json",
+    strategyKey: SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_ROLLOUT_STRATEGY_KEY,
+    scopeType: SPORTS_NHL_STANLEY_CUP_CHAMPION_2025_2026_ROLLOUT_SCOPE_TYPE,
+    primaryPairLaneId: sportsNhlStanleyCupChampion20252026PairLimitlessPolymarketLaneId
   }
 ] as const;
 

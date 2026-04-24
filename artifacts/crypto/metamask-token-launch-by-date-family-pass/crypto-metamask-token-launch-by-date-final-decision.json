@@ -1,0 +1,12 @@
+{
+  "overallFamilyDecision": "CRYPTO_METAMASK_TOKEN_LAUNCH_BY_DATE_FAMILY_REFRESHED_MULTI_VENUE_MATCHER_CANDIDATE_FOUND",
+  "sharedCandidateTopicKeys": [
+    "CRYPTO|TOKEN_LAUNCH_BY_DATE|METAMASK|2025-12-31",
+    "CRYPTO|TOKEN_LAUNCH_BY_DATE|METAMASK|2026-06-30",
+    "CRYPTO|TOKEN_LAUNCH_BY_DATE|METAMASK|2026-09-30"
+  ],
+  "familySupplyCredible": true,
+  "operatorCredible": true,
+  "matcherFollowUpJustified": true,
+  "singleBestNextAction": "Run a narrow matcher pass for the shared METAMASK token launch dates only, starting with POLYMARKET|PREDICT and excluding venue-only dates."
+}

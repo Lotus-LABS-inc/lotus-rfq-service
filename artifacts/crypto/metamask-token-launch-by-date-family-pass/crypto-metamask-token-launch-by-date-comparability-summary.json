@@ -1,0 +1,61 @@
+[
+  {
+    "canonicalTopicKey": "CRYPTO|TOKEN_LAUNCH_BY_DATE|METAMASK|2025-12-31",
+    "canonicalDateKey": "2025-12-31",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "EXACT_RULE_COMPATIBLE",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_LAUNCH_DATES_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "project=METAMASK",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|TOKEN_LAUNCH_BY_DATE|METAMASK|2026-06-30",
+    "canonicalDateKey": "2026-06-30",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "EXACT_RULE_COMPATIBLE",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_LAUNCH_DATES_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "project=METAMASK",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|TOKEN_LAUNCH_BY_DATE|METAMASK|2026-09-30",
+    "canonicalDateKey": "2026-09-30",
+    "venuesPresent": [
+      "POLYMARKET",
+      "PREDICT"
+    ],
+    "ruleCompatibilityClassification": "EXACT_RULE_COMPATIBLE",
+    "fragmentationLabel": "FAMILY_REFRESHED_SHARED_LAUNCH_DATES_EXIST",
+    "matcherCandidate": true,
+    "notes": [
+      "project=METAMASK",
+      "pair_shared=yes"
+    ]
+  },
+  {
+    "canonicalTopicKey": "CRYPTO|TOKEN_LAUNCH_BY_DATE|METAMASK|2026-12-31",
+    "canonicalDateKey": "2026-12-31",
+    "venuesPresent": [
+      "POLYMARKET"
+    ],
+    "ruleCompatibilityClassification": "EXACT_RULE_COMPATIBLE",
+    "fragmentationLabel": "FAMILY_REFRESHED_SINGLE_VENUE_ONLY",
+    "matcherCandidate": false,
+    "notes": [
+      "project=METAMASK",
+      "pair_shared=no"
+    ]
+  }
+]

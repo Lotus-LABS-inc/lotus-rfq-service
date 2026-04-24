@@ -16,6 +16,9 @@ import type {
 import type { MatchingProvenance } from "./matching-provenance.js";
 
 export const contractFamilyValues = [
+  "FIRST_TO_THRESHOLD_BY_DATE",
+  "FDV_THRESHOLD_AFTER_LAUNCH",
+  "TOKEN_LAUNCH_BY_DATE",
   "THRESHOLD_BY_DATE",
   "ATH_BY_DATE",
   "SAME_DAY_DIRECTIONAL",

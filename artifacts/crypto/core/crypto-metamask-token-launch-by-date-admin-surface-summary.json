@@ -1,0 +1,28 @@
+{
+  "observedAt": "2026-04-24T15:59:36.695Z",
+  "laneId": "CRYPTO_METAMASK_TOKEN_LAUNCH_BY_DATE_PAIR_POLYMARKET_PREDICT",
+  "familyKey": "CRYPTO|TOKEN_LAUNCH_BY_DATE|METAMASK",
+  "venuePair": "POLYMARKET|PREDICT",
+  "dateScopeHash": "4eeebe9f4d513810",
+  "exactSafeLaunchDateBuckets": [
+    "2025-12-31",
+    "2026-06-30",
+    "2026-09-30"
+  ],
+  "currentReadinessDecision": "READY_BUT_MISSING_OPERATOR_REVIEW",
+  "supportedActions": [
+    "inspect",
+    "hold",
+    "promote",
+    "rollback"
+  ],
+  "userConsentCanWidenScope": false,
+  "narrowestEnforceableUnit": "LANE_SCOPE_LOCK",
+  "sourceArtifactRefs": [
+    "artifacts/crypto/metamask-token-launch-by-date-matcher/crypto-metamask-token-launch-by-date-matcher-input-summary.json",
+    "artifacts/crypto/metamask-token-launch-by-date-matcher/crypto-metamask-token-launch-by-date-pair-lanes.json",
+    "artifacts/crypto/metamask-token-launch-by-date-matcher/crypto-metamask-token-launch-by-date-rejections.json",
+    "artifacts/crypto/metamask-token-launch-by-date-matcher/crypto-metamask-token-launch-by-date-final-decision.json",
+    "artifacts/crypto/metamask-token-launch-by-date-matcher/crypto-metamask-token-launch-by-date-operator-summary.md"
+  ]
+}

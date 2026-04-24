@@ -1,0 +1,11 @@
+{
+  "observedAt": "2026-04-24T15:36:11.230Z",
+  "rejections": [
+    {
+      "scope": "family",
+      "canonicalTopicKey": "CRYPTO|FIRST_TO_THRESHOLD_BY_DATE|ETH|1000|3000|2027-01-01",
+      "reason": "TIE_HANDLING_AMBIGUOUS",
+      "notes": "ETH first-to-threshold market leaves tie handling unspecified and must remain operator-reviewed."
+    }
+  ]
+}

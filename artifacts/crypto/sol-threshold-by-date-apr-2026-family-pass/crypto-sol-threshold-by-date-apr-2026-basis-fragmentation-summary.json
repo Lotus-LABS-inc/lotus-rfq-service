@@ -1,0 +1,15 @@
+{
+  "blockerCounts": {},
+  "topicBlockers": [
+    {
+      "canonicalTopicKey": "CRYPTO|THRESHOLD_BY_DATE|SOL|2026-04-30|ABOVE|80",
+      "reasons": [
+        "single_venue_only"
+      ],
+      "venuesPresent": [
+        "POLYMARKET"
+      ]
+    }
+  ],
+  "unresolvedRows": []
+}
