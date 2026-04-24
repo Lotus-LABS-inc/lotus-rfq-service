@@ -8,8 +8,8 @@ import { Pool } from "pg";
 import {
   type HistoricalRouteManifestEntry,
   runProvenHistoricalBatch
-} from "../src/operations/fast-testing/proven-historical-batch.js";
-import { createSimulationAdminService } from "../src/operations/fast-testing/simulation-admin-service-factory.js";
+} from "../../src/operations/fast-testing/proven-historical-batch.js";
+import { createSimulationAdminService } from "../../src/operations/fast-testing/simulation-admin-service-factory.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

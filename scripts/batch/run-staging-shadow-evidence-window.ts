@@ -5,18 +5,18 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import { PairRouteAdminService } from "../src/api/admin/pair-route-admin-service.js";
-import { writePairCanaryLaunchPlan } from "../src/operations/semantic-expansion/pair-canary-launch-plan.js";
-import { writePairCanaryReadinessArtifacts } from "../src/operations/semantic-expansion/pair-canary-readiness-summary.js";
-import { writePairShadowContinuePlan } from "../src/operations/semantic-expansion/pair-shadow-continue-plan.js";
-import { writeStagingShadowNextStepDecisionArtifact } from "../src/operations/semantic-expansion/staging-shadow-next-step-decision.js";
-import { writeStagingShadowObservationQualityArtifact } from "../src/operations/semantic-expansion/staging-shadow-observation-quality-summary.js";
-import { writeStagingShadowRuntimeCollectionArtifact } from "../src/operations/semantic-expansion/staging-shadow-runtime-collection.js";
-import { PairShadowObservationRepository } from "../src/shadow/pair-shadow-observation-repository.js";
-import { PairShadowRuntimeHooks } from "../src/shadow/pair-shadow-runtime-hooks.js";
-import { PairShadowRuntimeWriter } from "../src/shadow/pair-shadow-runtime-writer.js";
-import { PairShadowStagingReplayDriver } from "../src/shadow/pair-shadow-staging-replay-driver.js";
-import { writeStagingShadowWindowConfig } from "../src/shadow/staging-shadow-window-config.js";
+import { PairRouteAdminService } from "../../src/api/admin/pair-route-admin-service.js";
+import { writePairCanaryLaunchPlan } from "../../src/operations/semantic-expansion/pair-canary-launch-plan.js";
+import { writePairCanaryReadinessArtifacts } from "../../src/operations/semantic-expansion/pair-canary-readiness-summary.js";
+import { writePairShadowContinuePlan } from "../../src/operations/semantic-expansion/pair-shadow-continue-plan.js";
+import { writeStagingShadowNextStepDecisionArtifact } from "../../src/operations/semantic-expansion/staging-shadow-next-step-decision.js";
+import { writeStagingShadowObservationQualityArtifact } from "../../src/operations/semantic-expansion/staging-shadow-observation-quality-summary.js";
+import { writeStagingShadowRuntimeCollectionArtifact } from "../../src/operations/semantic-expansion/staging-shadow-runtime-collection.js";
+import { PairShadowObservationRepository } from "../../src/shadow/pair-shadow-observation-repository.js";
+import { PairShadowRuntimeHooks } from "../../src/shadow/pair-shadow-runtime-hooks.js";
+import { PairShadowRuntimeWriter } from "../../src/shadow/pair-shadow-runtime-writer.js";
+import { PairShadowStagingReplayDriver } from "../../src/shadow/pair-shadow-staging-replay-driver.js";
+import { writeStagingShadowWindowConfig } from "../../src/shadow/staging-shadow-window-config.js";
 
 for (const envPath of [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")]) {
   if (existsSync(envPath)) {

@@ -4,10 +4,10 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import { PredexonHistoricalClient } from "../src/integrations/predexon/predexon-client.js";
-import { PredexonPredictFallbackLoader } from "../src/integrations/predict/predexon-predict-fallback-loader.js";
-import type { PredictEnvironment } from "../src/integrations/predict/predict-types.js";
-import { PredictFallbackRepository } from "../src/repositories/predict-fallback.repository.js";
+import { PredexonHistoricalClient } from "../../src/integrations/predexon/predexon-client.js";
+import { PredexonPredictFallbackLoader } from "../../src/integrations/predict/predexon-predict-fallback-loader.js";
+import type { PredictEnvironment } from "../../src/integrations/predict/predict-types.js";
+import { PredictFallbackRepository } from "../../src/repositories/predict-fallback.repository.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

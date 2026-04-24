@@ -13,7 +13,6 @@
     "test/**/*.ts"
   ],
   "ignoreUnresolved": [
-    "\\.\\./src/.*\\.js",
     "eslint-plugin-vitest"
   ],
   "ignoreDependencies": [

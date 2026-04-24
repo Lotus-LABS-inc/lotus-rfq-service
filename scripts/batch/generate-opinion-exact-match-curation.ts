@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import { historicalRouteCurationSchema } from "../src/simulation/historical-route-catalog-manifest.js";
+import { historicalRouteCurationSchema } from "../../src/simulation/historical-route-catalog-manifest.js";
 import {
   opinionExactMatchCurationSchema,
   selectHybridFourSeeds,
@@ -16,11 +16,11 @@ import {
   type OpinionLiveFallbackSeed,
   type HybridOpinionSeed,
   type OpinionExactMatchCurationEntry
-} from "../src/simulation/opinion-exact-match-curation.js";
-import { DEFAULT_SEMANTICS_RULEPACK_VERSION } from "../src/canonical/semantics-rulepack-versioning.js";
-import { OpinionClient } from "../src/integrations/opinion/opinion-client.js";
-import { OpinionMarketAdapter } from "../src/integrations/opinion/opinion-market-adapter.js";
-import { PredexonHistoricalClient } from "../src/integrations/predexon/predexon-client.js";
+} from "../../src/simulation/opinion-exact-match-curation.js";
+import { DEFAULT_SEMANTICS_RULEPACK_VERSION } from "../../src/canonical/semantics-rulepack-versioning.js";
+import { OpinionClient } from "../../src/integrations/opinion/opinion-client.js";
+import { OpinionMarketAdapter } from "../../src/integrations/opinion/opinion-market-adapter.js";
+import { PredexonHistoricalClient } from "../../src/integrations/predexon/predexon-client.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

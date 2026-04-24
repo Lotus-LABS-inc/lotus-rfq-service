@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { runPredictEvidenceProgram } from "../src/operations/fast-testing/predict-evidence-program.js";
+import { runPredictEvidenceProgram } from "../../src/operations/fast-testing/predict-evidence-program.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

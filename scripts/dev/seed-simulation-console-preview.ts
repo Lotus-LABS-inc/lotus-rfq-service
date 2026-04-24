@@ -7,8 +7,8 @@ import { Pool } from "pg";
 import {
   HistoricalMarketClass,
   type CreateHistoricalMarketStateInput
-} from "../src/core/historical-simulation/historical-simulation.types.js";
-import { HistoricalMarketStateRepository } from "../src/repositories/historical-market-state.repository.js";
+} from "../../src/core/historical-simulation/historical-simulation.types.js";
+import { HistoricalMarketStateRepository } from "../../src/repositories/historical-market-state.repository.js";
 
 const envCandidates = [path.resolve(process.cwd(), "..", ".env"), path.resolve(process.cwd(), ".env")];
 for (const envPath of envCandidates) {

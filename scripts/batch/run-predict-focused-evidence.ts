@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import { runPredictFocusedEvidence } from "../src/operations/semantic-expansion/predict-focused-evidence.js";
+import { runPredictFocusedEvidence } from "../../src/operations/semantic-expansion/predict-focused-evidence.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

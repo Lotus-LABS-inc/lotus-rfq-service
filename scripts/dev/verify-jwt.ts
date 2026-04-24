@@ -1,4 +1,4 @@
-import { buildServer } from "../src/api/server.js";
+import { buildServer } from "../../src/api/server.js";
 import pino from "pino";
 import { randomUUID } from "node:crypto";
 

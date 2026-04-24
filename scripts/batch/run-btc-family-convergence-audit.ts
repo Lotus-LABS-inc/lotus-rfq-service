@@ -4,25 +4,25 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import { writeArtifact } from "../src/operations/semantic-expansion/shared.js";
-import { CryptoMatchingPipeline } from "../src/matching/crypto/crypto-matching-pipeline.js";
-import { listRouteableCryptoPairEdges } from "../src/matching/crypto/crypto-pair-graph.js";
-import { runLimitlessLiveMarketIngestion } from "../src/jobs/ingest-limitless-live-markets.job.js";
-import { PairEdgeRepository } from "../src/repositories/pair-edge.repository.js";
-import { loadBtcAuditData } from "../src/reports/btc-audit-shared.js";
-import { buildBtcFamilyConvergenceSummary, buildBtcFamilyConvergenceSummaryMarkdown } from "../src/reports/btc-family-convergence-summary.js";
-import { buildBtcInventoryAlignmentMatrix, buildBtcInventoryAlignmentMatrixMarkdown } from "../src/reports/btc-inventory-alignment-matrix.js";
-import { buildBtcMissingEdgeRootCauseSummary, buildBtcMissingEdgeRootCauseSummaryMarkdown } from "../src/reports/btc-missing-edge-root-cause-summary.js";
-import { buildBtcNextStepDecision, buildBtcNextStepDecisionMarkdown } from "../src/reports/btc-next-step-decision.js";
-import { buildBtcSourceHygieneSummary } from "../src/reports/btc-source-hygiene-summary.js";
+import { writeArtifact } from "../../src/operations/semantic-expansion/shared.js";
+import { CryptoMatchingPipeline } from "../../src/matching/crypto/crypto-matching-pipeline.js";
+import { listRouteableCryptoPairEdges } from "../../src/matching/crypto/crypto-pair-graph.js";
+import { runLimitlessLiveMarketIngestion } from "../../src/jobs/ingest-limitless-live-markets.job.js";
+import { PairEdgeRepository } from "../../src/repositories/pair-edge.repository.js";
+import { loadBtcAuditData } from "../../src/reports/btc-audit-shared.js";
+import { buildBtcFamilyConvergenceSummary, buildBtcFamilyConvergenceSummaryMarkdown } from "../../src/reports/btc-family-convergence-summary.js";
+import { buildBtcInventoryAlignmentMatrix, buildBtcInventoryAlignmentMatrixMarkdown } from "../../src/reports/btc-inventory-alignment-matrix.js";
+import { buildBtcMissingEdgeRootCauseSummary, buildBtcMissingEdgeRootCauseSummaryMarkdown } from "../../src/reports/btc-missing-edge-root-cause-summary.js";
+import { buildBtcNextStepDecision, buildBtcNextStepDecisionMarkdown } from "../../src/reports/btc-next-step-decision.js";
+import { buildBtcSourceHygieneSummary } from "../../src/reports/btc-source-hygiene-summary.js";
 import {
   buildBtcTargetedIngestionRecoverySummary,
   buildBtcTargetedIngestionRecoverySummaryMarkdown,
   type BtcRecoveryActionResult
-} from "../src/reports/btc-targeted-ingestion-recovery-summary.js";
-import { buildCryptoMatchingQualitySummary } from "../src/reports/crypto-matching-quality-summary.js";
-import { buildCryptoPairRouteabilitySummary } from "../src/reports/crypto-pair-routeability-summary.js";
-import type { BtcAuditData, BtcMissingEdgeRootCauseSummary } from "../src/reports/btc-audit-types.js";
+} from "../../src/reports/btc-targeted-ingestion-recovery-summary.js";
+import { buildCryptoMatchingQualitySummary } from "../../src/reports/crypto-matching-quality-summary.js";
+import { buildCryptoPairRouteabilitySummary } from "../../src/reports/crypto-pair-routeability-summary.js";
+import type { BtcAuditData, BtcMissingEdgeRootCauseSummary } from "../../src/reports/btc-audit-types.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

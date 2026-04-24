@@ -4,11 +4,11 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { Pool } from "pg";
 import pino from "pino";
-import { connectRedis, createRedisClient, disconnectRedis } from "../src/db/redis.js";
-import { InternalCrossingEngine } from "../src/core/internal-engine/engine.js";
-import { OrderBook } from "../src/core/internal-engine/order-book.js";
-import { OrderLockError, OrderLocker } from "../src/core/internal-engine/locker.js";
-import type { InternalOrder } from "../src/core/internal-engine/types.js";
+import { connectRedis, createRedisClient, disconnectRedis } from "../../src/db/redis.js";
+import { InternalCrossingEngine } from "../../src/core/internal-engine/engine.js";
+import { OrderBook } from "../../src/core/internal-engine/order-book.js";
+import { OrderLockError, OrderLocker } from "../../src/core/internal-engine/locker.js";
+import type { InternalOrder } from "../../src/core/internal-engine/types.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

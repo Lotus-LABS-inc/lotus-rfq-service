@@ -1,9 +1,9 @@
 import { Pool } from "pg";
 import Decimal from "decimal.js";
-import { ResolutionRiskAssessmentService } from "../src/core/rfq-engine/resolution-risk-assessment-service.js";
-import { ResolutionRiskScoringEngine } from "../src/core/rfq-engine/resolution-risk-scoring-engine.js";
-import { ResolutionRiskReadService } from "../src/core/rfq-engine/resolution-risk-read-service.js";
-import { OrderRouter } from "../src/core/sor/order-router.js";
+import { ResolutionRiskAssessmentService } from "../../src/core/rfq-engine/resolution-risk-assessment-service.js";
+import { ResolutionRiskScoringEngine } from "../../src/core/rfq-engine/resolution-risk-scoring-engine.js";
+import { ResolutionRiskReadService } from "../../src/core/rfq-engine/resolution-risk-read-service.js";
+import { OrderRouter } from "../../src/core/sor/order-router.js";
 
 // Mock dependencies
 const pool = new Pool({

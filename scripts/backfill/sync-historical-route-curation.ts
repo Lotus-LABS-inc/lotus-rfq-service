@@ -4,17 +4,17 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import { HistoricalMarketClass, type CreateHistoricalMarketStateInput } from "../src/core/historical-simulation/historical-simulation.types.js";
-import { HistoricalMarketStateRepository } from "../src/repositories/historical-market-state.repository.js";
+import { HistoricalMarketClass, type CreateHistoricalMarketStateInput } from "../../src/core/historical-simulation/historical-simulation.types.js";
+import { HistoricalMarketStateRepository } from "../../src/repositories/historical-market-state.repository.js";
 import {
   historicalRouteCurationSchema,
   type HistoricalCatalogManifestEntry
-} from "../src/simulation/historical-route-catalog-manifest.js";
-import { PredexonHistoricalAdapter } from "../src/integrations/predexon/predexon-historical-adapter.js";
-import { PredexonHistoricalClient } from "../src/integrations/predexon/predexon-client.js";
-import { LimitlessHistoricalAdapter } from "../src/integrations/limitless/limitless-historical-adapter.js";
-import { LimitlessHistoricalClient } from "../src/integrations/limitless/limitless-client.js";
-import { mergeHistoricalStates } from "../src/jobs/historical-ingestion.shared.js";
+} from "../../src/simulation/historical-route-catalog-manifest.js";
+import { PredexonHistoricalAdapter } from "../../src/integrations/predexon/predexon-historical-adapter.js";
+import { PredexonHistoricalClient } from "../../src/integrations/predexon/predexon-client.js";
+import { LimitlessHistoricalAdapter } from "../../src/integrations/limitless/limitless-historical-adapter.js";
+import { LimitlessHistoricalClient } from "../../src/integrations/limitless/limitless-client.js";
+import { mergeHistoricalStates } from "../../src/jobs/historical-ingestion.shared.js";
 
 const envCandidates = [path.resolve(process.cwd(), "..", ".env"), path.resolve(process.cwd(), ".env")];
 for (const envPath of envCandidates) {

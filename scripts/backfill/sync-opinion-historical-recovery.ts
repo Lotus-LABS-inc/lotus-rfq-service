@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import { runOpinionHistoricalRecovery } from "../src/integrations/opinion/opinion-historical-market-loader.js";
+import { runOpinionHistoricalRecovery } from "../../src/integrations/opinion/opinion-historical-market-loader.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

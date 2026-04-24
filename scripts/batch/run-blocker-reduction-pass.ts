@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 import { spawnSync } from "node:child_process";
 
-import { writeArtifact } from "../src/operations/semantic-expansion/shared.js";
+import { writeArtifact } from "../../src/operations/semantic-expansion/shared.js";
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 

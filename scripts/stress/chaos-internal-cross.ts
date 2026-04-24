@@ -3,9 +3,9 @@ import { randomUUID } from "node:crypto";
 import pino from "pino";
 import type { Pool, PoolClient } from "pg";
 import type { Logger } from "pino";
-import { InternalCrossingEngine } from "../src/core/internal-engine/engine.js";
-import { OrderLockError } from "../src/core/internal-engine/locker.js";
-import type { InternalOrder, RedisBookOrder } from "../src/core/internal-engine/types.js";
+import { InternalCrossingEngine } from "../../src/core/internal-engine/engine.js";
+import { OrderLockError } from "../../src/core/internal-engine/locker.js";
+import type { InternalOrder, RedisBookOrder } from "../../src/core/internal-engine/types.js";
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
 

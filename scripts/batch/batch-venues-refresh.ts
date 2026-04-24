@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import { runVenueRefreshBatch } from "../src/operations/semantic-expansion/venue-refresh-batch.js";
+import { runVenueRefreshBatch } from "../../src/operations/semantic-expansion/venue-refresh-batch.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

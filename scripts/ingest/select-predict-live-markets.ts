@@ -2,8 +2,8 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-import { PredictClient, PredictClientError } from "../src/integrations/predict/predict-client.js";
-import type { PredictEnvironment } from "../src/integrations/predict/predict-types.js";
+import { PredictClient, PredictClientError } from "../../src/integrations/predict/predict-client.js";
+import type { PredictEnvironment } from "../../src/integrations/predict/predict-types.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

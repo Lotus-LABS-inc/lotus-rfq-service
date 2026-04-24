@@ -5,20 +5,20 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { Pool } from "pg";
 import pino from "pino";
-import { connectRedis, createRedisClient, disconnectRedis } from "../src/db/redis.js";
-import { CostModel } from "../src/core/sor/cost-model.js";
-import { OrderRouter } from "../src/core/sor/order-router.js";
-import { PlanComposer } from "../src/core/sor/plan-composer.js";
-import { PlanRunner } from "../src/core/sor/plan-runner.js";
-import { RouteScout } from "../src/core/sor/route-scout.js";
-import { Splitter } from "../src/core/sor/splitter.js";
+import { connectRedis, createRedisClient, disconnectRedis } from "../../src/db/redis.js";
+import { CostModel } from "../../src/core/sor/cost-model.js";
+import { OrderRouter } from "../../src/core/sor/order-router.js";
+import { PlanComposer } from "../../src/core/sor/plan-composer.js";
+import { PlanRunner } from "../../src/core/sor/plan-runner.js";
+import { RouteScout } from "../../src/core/sor/route-scout.js";
+import { Splitter } from "../../src/core/sor/splitter.js";
 import type {
   CanonicalRFQInput,
   IExecutionRouter,
   PlanStep,
   SORAcceptancePolicy,
   SelectedQuoteInput
-} from "../src/core/sor/types.js";
+} from "../../src/core/sor/types.js";
 
 const envCandidates = [
   path.resolve(process.cwd(), ".env"),

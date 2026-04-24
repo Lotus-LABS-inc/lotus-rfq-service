@@ -1,14 +1,14 @@
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
-import { MyriadClient } from "../src/integrations/myriad/myriad-client.js"
-import { MyriadMarketCrawler } from "../src/integrations/myriad/myriad-market-crawler.js"
-import { MyriadMarketDetailEnricher } from "../src/integrations/myriad/myriad-market-detail-enricher.js"
-import { MyriadMarketEventsBackfill } from "../src/integrations/myriad/myriad-market-events-backfill.js"
-import { buildMyriadPhase4Candidates, generateMyriadPhase4Shortlists } from "../src/integrations/myriad/myriad-phase4-shortlist.js"
-import { classifyMyriadPreviewCategory } from "../src/integrations/myriad/myriad-topic-normalizer.js"
-import { myriadPhase4PreviewArtifactSchema, type MyriadPhase4PreviewArtifact } from "../src/integrations/myriad/myriad-preview-artifact.js"
-import type { MyriadMarketSummary, MyriadQuestion } from "../src/integrations/myriad/myriad-schemas.js"
+import { MyriadClient } from "../../src/integrations/myriad/myriad-client.js"
+import { MyriadMarketCrawler } from "../../src/integrations/myriad/myriad-market-crawler.js"
+import { MyriadMarketDetailEnricher } from "../../src/integrations/myriad/myriad-market-detail-enricher.js"
+import { MyriadMarketEventsBackfill } from "../../src/integrations/myriad/myriad-market-events-backfill.js"
+import { buildMyriadPhase4Candidates, generateMyriadPhase4Shortlists } from "../../src/integrations/myriad/myriad-phase4-shortlist.js"
+import { classifyMyriadPreviewCategory } from "../../src/integrations/myriad/myriad-topic-normalizer.js"
+import { myriadPhase4PreviewArtifactSchema, type MyriadPhase4PreviewArtifact } from "../../src/integrations/myriad/myriad-preview-artifact.js"
+import type { MyriadMarketSummary, MyriadQuestion } from "../../src/integrations/myriad/myriad-schemas.js"
 
 const artifactPath = path.resolve(process.cwd(), ".tmp", "myriad-phase4-preview.json")
 const baseUrl = "https://api-v2.myriadprotocol.com/"

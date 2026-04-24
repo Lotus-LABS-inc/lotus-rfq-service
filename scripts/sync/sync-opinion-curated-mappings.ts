@@ -6,19 +6,19 @@ import { spawnSync } from "node:child_process";
 import { Pool } from "pg";
 import { z } from "zod";
 
-import { buildStableTextId } from "../src/canonical/canonicalization-types.js";
-import { CanonicalGraphProjector } from "../src/canonical/canonical-graph-projector.js";
-import { CanonicalCompatibilityProjector } from "../src/canonical/canonical-compatibility-projector.js";
+import { buildStableTextId } from "../../src/canonical/canonicalization-types.js";
+import { CanonicalGraphProjector } from "../../src/canonical/canonical-graph-projector.js";
+import { CanonicalCompatibilityProjector } from "../../src/canonical/canonical-compatibility-projector.js";
 import {
   CuratedCanonicalGraphSnapshotBuilder,
   type CuratedCanonicalGraphSeed
-} from "../src/canonical/curated-canonical-graph.js";
-import { HistoricalMarketClass, type CreateHistoricalMarketStateInput } from "../src/core/historical-simulation/historical-simulation.types.js";
-import { HistoricalMarketStateRepository } from "../src/repositories/historical-market-state.repository.js";
-import { opinionExactMatchCurationSchema } from "../src/simulation/opinion-exact-match-curation.js";
-import { CanonicalCompatibilityRepository } from "../src/repositories/canonical-compatibility.repository.js";
-import { CanonicalGraphRepository } from "../src/repositories/canonical-graph.repository.js";
-import { CompatibilityVersionRepository } from "../src/repositories/compatibility-version.repository.js";
+} from "../../src/canonical/curated-canonical-graph.js";
+import { HistoricalMarketClass, type CreateHistoricalMarketStateInput } from "../../src/core/historical-simulation/historical-simulation.types.js";
+import { HistoricalMarketStateRepository } from "../../src/repositories/historical-market-state.repository.js";
+import { opinionExactMatchCurationSchema } from "../../src/simulation/opinion-exact-match-curation.js";
+import { CanonicalCompatibilityRepository } from "../../src/repositories/canonical-compatibility.repository.js";
+import { CanonicalGraphRepository } from "../../src/repositories/canonical-graph.repository.js";
+import { CompatibilityVersionRepository } from "../../src/repositories/compatibility-version.repository.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

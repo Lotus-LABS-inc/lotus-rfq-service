@@ -6,18 +6,18 @@ import path from "node:path";
 import pino from "pino";
 import { Pool } from "pg";
 
-import { ComboEngine } from "../src/core/combo-engine/combo-engine.js";
-import { connectRedis, createRedisClient, disconnectRedis } from "../src/db/redis.js";
-import { ResidualVectorBuilder } from "../src/core/combo-engine/residual-vector-builder.js";
-import { Phase2BCandidateRegistry } from "../src/core/combo-engine/phase2b-candidate-registry.js";
-import { OverlapGraphBuilder } from "../src/core/combo-engine/overlap-graph-builder.js";
-import { CandidateGroupEnumerator } from "../src/core/combo-engine/candidate-group-enumerator.js";
-import { ClearingCompressionScorer } from "../src/core/combo-engine/clearing-compression-scorer.js";
-import { ClearingRoundPlanner } from "../src/core/combo-engine/clearing-round-planner.js";
-import { MultiPartyExposureAggregator } from "../src/core/combo-engine/multi-party-exposure-aggregator.js";
-import { MultiPartyClearingExecutor } from "../src/core/combo-engine/multi-party-clearing-executor.js";
-import { ResourceLocker, ResourceLockError } from "../src/core/combo-engine/resource-locker.js";
-import type { ComboQuote, ComboRFQSession, ResidualVector, ResidualVectorEntity } from "../src/core/combo-engine/types.js";
+import { ComboEngine } from "../../src/core/combo-engine/combo-engine.js";
+import { connectRedis, createRedisClient, disconnectRedis } from "../../src/db/redis.js";
+import { ResidualVectorBuilder } from "../../src/core/combo-engine/residual-vector-builder.js";
+import { Phase2BCandidateRegistry } from "../../src/core/combo-engine/phase2b-candidate-registry.js";
+import { OverlapGraphBuilder } from "../../src/core/combo-engine/overlap-graph-builder.js";
+import { CandidateGroupEnumerator } from "../../src/core/combo-engine/candidate-group-enumerator.js";
+import { ClearingCompressionScorer } from "../../src/core/combo-engine/clearing-compression-scorer.js";
+import { ClearingRoundPlanner } from "../../src/core/combo-engine/clearing-round-planner.js";
+import { MultiPartyExposureAggregator } from "../../src/core/combo-engine/multi-party-exposure-aggregator.js";
+import { MultiPartyClearingExecutor } from "../../src/core/combo-engine/multi-party-clearing-executor.js";
+import { ResourceLocker, ResourceLockError } from "../../src/core/combo-engine/resource-locker.js";
+import type { ComboQuote, ComboRFQSession, ResidualVector, ResidualVectorEntity } from "../../src/core/combo-engine/types.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

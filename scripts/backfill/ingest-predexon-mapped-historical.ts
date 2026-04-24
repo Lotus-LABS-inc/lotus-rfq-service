@@ -4,21 +4,21 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import { HistoricalMarketStateRepository } from "../src/repositories/historical-market-state.repository.js";
-import { PredexonHistoricalAdapter } from "../src/integrations/predexon/predexon-historical-adapter.js";
-import { PredexonHistoricalClient } from "../src/integrations/predexon/predexon-client.js";
+import { HistoricalMarketStateRepository } from "../../src/repositories/historical-market-state.repository.js";
+import { PredexonHistoricalAdapter } from "../../src/integrations/predexon/predexon-historical-adapter.js";
+import { PredexonHistoricalClient } from "../../src/integrations/predexon/predexon-client.js";
 import {
   PredexonHistoricalIngestionJob,
   PredexonMappedMarketScopeProvider,
   type PredexonSimulationVenue
-} from "../src/jobs/ingest-predexon-historical.job.js";
+} from "../../src/jobs/ingest-predexon-historical.job.js";
 import {
   type HistoricalIngestionCategory,
   type HistoricalIngestionJobInput,
   type HistoricalIngestionMode
-} from "../src/jobs/historical-ingestion.shared.js";
-import { CanonicalHistoricalNormalizer } from "../src/simulation/canonical-historical-normalizer.js";
-import { ResolutionProfileHistoricalMappingResolver } from "../src/simulation/resolution-profile-historical-mapping-resolver.js";
+} from "../../src/jobs/historical-ingestion.shared.js";
+import { CanonicalHistoricalNormalizer } from "../../src/simulation/canonical-historical-normalizer.js";
+import { ResolutionProfileHistoricalMappingResolver } from "../../src/simulation/resolution-profile-historical-mapping-resolver.js";
 
 const envCandidates = [path.resolve(process.cwd(), "..", ".env"), path.resolve(process.cwd(), ".env")];
 for (const envPath of envCandidates) {

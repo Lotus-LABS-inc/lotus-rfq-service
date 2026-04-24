@@ -4,9 +4,9 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import { MatchingPipeline } from "../src/matching/matching-pipeline.js";
-import { PairEdgeRepository } from "../src/repositories/pair-edge.repository.js";
-import { writeArtifact } from "../src/operations/semantic-expansion/shared.js";
+import { MatchingPipeline } from "../../src/matching/matching-pipeline.js";
+import { PairEdgeRepository } from "../../src/repositories/pair-edge.repository.js";
+import { writeArtifact } from "../../src/operations/semantic-expansion/shared.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

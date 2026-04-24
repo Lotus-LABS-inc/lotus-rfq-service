@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import { runLimitlessTargetedExpansion } from "../src/operations/semantic-expansion/limitless-targeted-expansion.js";
+import { runLimitlessTargetedExpansion } from "../../src/operations/semantic-expansion/limitless-targeted-expansion.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

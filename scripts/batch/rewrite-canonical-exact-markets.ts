@@ -9,7 +9,7 @@ import {
   CANONICAL_MARKET_REWRITE_SPEC,
   EXACT_OVERLAP_ASSESSMENTS,
   type RewriteVenue
-} from "../src/simulation/canonical-market-rewrite-spec.js";
+} from "../../src/simulation/canonical-market-rewrite-spec.js";
 
 const envCandidates = [path.resolve(process.cwd(), "..", ".env"), path.resolve(process.cwd(), ".env")];
 for (const envPath of envCandidates) {

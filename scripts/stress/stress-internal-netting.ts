@@ -6,11 +6,11 @@ import path from "node:path";
 import pino from "pino";
 import { Pool } from "pg";
 
-import { ComboNettingCandidateRegistry } from "../src/core/combo-engine/combo-netting-candidate-registry.js";
-import { ComboNettingCompatibilityEngine } from "../src/core/combo-engine/combo-netting-compatibility-engine.js";
-import { MultiLegInternalNettingEngine } from "../src/core/combo-engine/multi-leg-internal-netting-engine.js";
-import { ResourceLockError, ResourceLocker } from "../src/core/combo-engine/resource-locker.js";
-import { connectRedis, createRedisClient, disconnectRedis } from "../src/db/redis.js";
+import { ComboNettingCandidateRegistry } from "../../src/core/combo-engine/combo-netting-candidate-registry.js";
+import { ComboNettingCompatibilityEngine } from "../../src/core/combo-engine/combo-netting-compatibility-engine.js";
+import { MultiLegInternalNettingEngine } from "../../src/core/combo-engine/multi-leg-internal-netting-engine.js";
+import { ResourceLockError, ResourceLocker } from "../../src/core/combo-engine/resource-locker.js";
+import { connectRedis, createRedisClient, disconnectRedis } from "../../src/db/redis.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

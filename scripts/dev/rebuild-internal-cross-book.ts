@@ -3,9 +3,9 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { Pool } from "pg";
 import pino from "pino";
-import { connectRedis, createRedisClient, disconnectRedis } from "../src/db/redis.js";
-import { OrderBook } from "../src/core/internal-engine/order-book.js";
-import { InternalCrossBookRebuilder } from "../src/core/internal-engine/rebuild-book.js";
+import { connectRedis, createRedisClient, disconnectRedis } from "../../src/db/redis.js";
+import { OrderBook } from "../../src/core/internal-engine/order-book.js";
+import { InternalCrossBookRebuilder } from "../../src/core/internal-engine/rebuild-book.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

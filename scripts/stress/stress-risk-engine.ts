@@ -1,11 +1,11 @@
 import { Pool } from "pg";
 import { randomUUID } from "node:crypto";
 import pino from "pino";
-import { RiskEngine } from "../src/core/risk-engine.js";
-import { ExposureRepository } from "../src/repositories/exposure.repository.js";
-import { ExposureRedisCache } from "../src/repositories/exposure-redis-cache.js";
-import { createRedisClient, connectRedis, disconnectRedis } from "../src/db/redis.js";
-import { loadEnv } from "../src/utils/env.js";
+import { RiskEngine } from "../../src/core/risk-engine.js";
+import { ExposureRepository } from "../../src/repositories/exposure.repository.js";
+import { ExposureRedisCache } from "../../src/repositories/exposure-redis-cache.js";
+import { createRedisClient, connectRedis, disconnectRedis } from "../../src/db/redis.js";
+import { loadEnv } from "../../src/utils/env.js";
 import { existsSync } from "node:fs";
 
 // Load .env if it exists

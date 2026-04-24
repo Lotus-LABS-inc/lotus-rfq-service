@@ -4,8 +4,8 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import { runPredictExactSeedAcquisition } from "../src/operations/semantic-expansion/predict-exact-seed-acquisition.js";
-import type { PredictEnvironment } from "../src/integrations/predict/predict-types.js";
+import { runPredictExactSeedAcquisition } from "../../src/operations/semantic-expansion/predict-exact-seed-acquisition.js";
+import type { PredictEnvironment } from "../../src/integrations/predict/predict-types.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

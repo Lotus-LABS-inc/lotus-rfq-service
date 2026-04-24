@@ -4,15 +4,15 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import { CanonicalGraphProjector } from "../src/canonical/canonical-graph-projector.js";
-import { CanonicalCompatibilityProjector } from "../src/canonical/canonical-compatibility-projector.js";
-import { CuratedCanonicalGraphSnapshotBuilder, type CuratedCanonicalGraphSeed } from "../src/canonical/curated-canonical-graph.js";
-import { PredexonHistoricalAdapter } from "../src/integrations/predexon/predexon-historical-adapter.js";
-import { PredexonHistoricalClient } from "../src/integrations/predexon/predexon-client.js";
-import { CanonicalCompatibilityRepository } from "../src/repositories/canonical-compatibility.repository.js";
-import { CanonicalGraphRepository } from "../src/repositories/canonical-graph.repository.js";
-import { CompatibilityVersionRepository } from "../src/repositories/compatibility-version.repository.js";
-import { CANONICAL_MARKET_REWRITE_SPEC } from "../src/simulation/canonical-market-rewrite-spec.js";
+import { CanonicalGraphProjector } from "../../src/canonical/canonical-graph-projector.js";
+import { CanonicalCompatibilityProjector } from "../../src/canonical/canonical-compatibility-projector.js";
+import { CuratedCanonicalGraphSnapshotBuilder, type CuratedCanonicalGraphSeed } from "../../src/canonical/curated-canonical-graph.js";
+import { PredexonHistoricalAdapter } from "../../src/integrations/predexon/predexon-historical-adapter.js";
+import { PredexonHistoricalClient } from "../../src/integrations/predexon/predexon-client.js";
+import { CanonicalCompatibilityRepository } from "../../src/repositories/canonical-compatibility.repository.js";
+import { CanonicalGraphRepository } from "../../src/repositories/canonical-graph.repository.js";
+import { CompatibilityVersionRepository } from "../../src/repositories/compatibility-version.repository.js";
+import { CANONICAL_MARKET_REWRITE_SPEC } from "../../src/simulation/canonical-market-rewrite-spec.js";
 
 const envCandidates = [path.resolve(process.cwd(), "..", ".env"), path.resolve(process.cwd(), ".env")];
 for (const envPath of envCandidates) {

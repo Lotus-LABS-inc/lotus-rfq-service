@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import { runLimitlessLiveMarketIngestion } from "../src/jobs/ingest-limitless-live-markets.job.js";
+import { runLimitlessLiveMarketIngestion } from "../../src/jobs/ingest-limitless-live-markets.job.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

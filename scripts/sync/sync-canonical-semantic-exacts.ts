@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import { syncSemanticExactOverlaps } from "../src/operations/semantic-expansion/semantic-exact-sync.js";
+import { syncSemanticExactOverlaps } from "../../src/operations/semantic-expansion/semantic-exact-sync.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

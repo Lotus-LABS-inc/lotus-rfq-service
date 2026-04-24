@@ -4,8 +4,8 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import type { PredictEnvironment } from "../src/integrations/predict/predict-types.js";
-import { runPredictSnapshotAccumulation } from "../src/operations/semantic-expansion/predict-snapshot-accumulation.js";
+import type { PredictEnvironment } from "../../src/integrations/predict/predict-types.js";
+import { runPredictSnapshotAccumulation } from "../../src/operations/semantic-expansion/predict-snapshot-accumulation.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

@@ -4,11 +4,11 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import { PredictClient, PredictClientError } from "../src/integrations/predict/predict-client.js";
-import { PredictOrderbookAdapter } from "../src/integrations/predict/predict-orderbook-adapter.js";
-import type { PredictEnvironment, PredictNormalizedOrderbookSnapshot, PredictOrderbookLevel } from "../src/integrations/predict/predict-types.js";
-import { PredictWsClient, type PredictWsEnvelope } from "../src/integrations/predict/predict-ws-client.js";
-import { PredictOrderbookRecorder } from "../src/recorders/predict-orderbook-recorder.js";
+import { PredictClient, PredictClientError } from "../../src/integrations/predict/predict-client.js";
+import { PredictOrderbookAdapter } from "../../src/integrations/predict/predict-orderbook-adapter.js";
+import type { PredictEnvironment, PredictNormalizedOrderbookSnapshot, PredictOrderbookLevel } from "../../src/integrations/predict/predict-types.js";
+import { PredictWsClient, type PredictWsEnvelope } from "../../src/integrations/predict/predict-ws-client.js";
+import { PredictOrderbookRecorder } from "../../src/recorders/predict-orderbook-recorder.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import { runOpinionExactSeedAcquisition } from "../src/operations/semantic-expansion/opinion-exact-seed-acquisition.js";
+import { runOpinionExactSeedAcquisition } from "../../src/operations/semantic-expansion/opinion-exact-seed-acquisition.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

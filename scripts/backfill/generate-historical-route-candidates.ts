@@ -3,26 +3,26 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Pool } from "pg";
 
-import { historicalRouteCandidatesSchema } from "../src/simulation/historical-route-catalog-manifest.js";
+import { historicalRouteCandidatesSchema } from "../../src/simulation/historical-route-catalog-manifest.js";
 import {
   buildSourceBackedHistoricalCandidate,
   historicalRouteDiscoverySeeds,
   type HistoricalRouteDiscoverySeed
-} from "../src/simulation/historical-route-source-discovery.js";
+} from "../../src/simulation/historical-route-source-discovery.js";
 import {
   canLooseMatchCategoryText,
   compareStructuredPropositions,
   parseStructuredProposition,
   type PropositionMatchCategory
-} from "../src/simulation/proposition-matching.js";
+} from "../../src/simulation/proposition-matching.js";
 import {
   buildSemanticsRulepackProvenance,
   DEFAULT_SEMANTICS_RULEPACK_VERSION
-} from "../src/canonical/semantics-rulepack-versioning.js";
-import { validateSemanticsRulepackCandidate } from "../src/canonical/semantics-rulepack-validator.js";
-import { summarizeSemanticsRulepackMetrics } from "../src/canonical/semantics-rulepack-metrics.js";
-import { PredexonHistoricalClient } from "../src/integrations/predexon/predexon-client.js";
-import { LimitlessHistoricalClient } from "../src/integrations/limitless/limitless-client.js";
+} from "../../src/canonical/semantics-rulepack-versioning.js";
+import { validateSemanticsRulepackCandidate } from "../../src/canonical/semantics-rulepack-validator.js";
+import { summarizeSemanticsRulepackMetrics } from "../../src/canonical/semantics-rulepack-metrics.js";
+import { PredexonHistoricalClient } from "../../src/integrations/predexon/predexon-client.js";
+import { LimitlessHistoricalClient } from "../../src/integrations/limitless/limitless-client.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {

@@ -4,10 +4,10 @@ import path from "node:path";
 
 import { Pool } from "pg";
 
-import { writeArtifact } from "../src/operations/semantic-expansion/shared.js";
-import { CryptoMatchingPipeline } from "../src/matching/crypto/crypto-matching-pipeline.js";
-import { listRouteableCryptoPairEdges } from "../src/matching/crypto/crypto-pair-graph.js";
-import { PairEdgeRepository } from "../src/repositories/pair-edge.repository.js";
+import { writeArtifact } from "../../src/operations/semantic-expansion/shared.js";
+import { CryptoMatchingPipeline } from "../../src/matching/crypto/crypto-matching-pipeline.js";
+import { listRouteableCryptoPairEdges } from "../../src/matching/crypto/crypto-pair-graph.js";
+import { PairEdgeRepository } from "../../src/repositories/pair-edge.repository.js";
 
 const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {
