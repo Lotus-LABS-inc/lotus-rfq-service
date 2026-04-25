@@ -44,6 +44,3 @@ export class ExecutionStateMachineV0 {
     return this.state;
   }
 }
-
-export const isTerminalExecutionState = (state: ExecutionStateV0): boolean =>
-  state === "COMPLETED" || state === "FAILED_CLOSED" || state === "CANCELLED";

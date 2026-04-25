@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { RedisClient } from "../../db/redis.js";
 
-export const INTERNAL_NETTING_KILL_SWITCH_KEY = "internal_netting:kill_switch";
+const INTERNAL_NETTING_KILL_SWITCH_KEY = "internal_netting:kill_switch";
 
 export interface InternalNettingRolloutWindowInput {
   enabled: boolean;

@@ -117,7 +117,7 @@ export const evaluatePolymarketLiveSubmitHarness = (
   };
 };
 
-export const buildPolymarketLiveSubmitHarnessLeg = (env: NodeJS.ProcessEnv): ExecutionLegV0 => ({
+const buildPolymarketLiveSubmitHarnessLeg = (env: NodeJS.ProcessEnv): ExecutionLegV0 => ({
   executionLegId: env.POLYMARKET_LIVE_SUBMIT_EXECUTION_LEG_ID ?? `polymarket-live-harness-${Date.now()}`,
   parentExecutionId: env.POLYMARKET_LIVE_SUBMIT_EXECUTION_ID ?? `polymarket-live-harness-parent-${Date.now()}`,
   venue: "POLYMARKET",

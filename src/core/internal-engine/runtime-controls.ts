@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { RedisClient } from "../../db/redis.js";
 
-export const INTERNAL_CROSS_KILL_SWITCH_KEY = "internal_cross:kill_switch";
+const INTERNAL_CROSS_KILL_SWITCH_KEY = "internal_cross:kill_switch";
 
 export interface InternalCrossShadowWindowInput {
   enabled: boolean;

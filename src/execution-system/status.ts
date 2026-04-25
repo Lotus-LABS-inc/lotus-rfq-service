@@ -1,6 +1,6 @@
 import type { ExecutionStateV0, ExecutionSystemMetadataV0 } from "./types.js";
 
-export const mapExecutionStateToUserStatus = (state: ExecutionStateV0): string => {
+const mapExecutionStateToUserStatus = (state: ExecutionStateV0): string => {
   switch (state) {
     case "CREATED":
       return "preparing route";

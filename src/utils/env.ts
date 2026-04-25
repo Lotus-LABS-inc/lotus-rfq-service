@@ -237,7 +237,7 @@ const envSchema = z
 
 export type EnvConfig = Readonly<z.infer<typeof envSchema> & { DATABASE_URL: string }>;
 
-export const resolveDatabaseUrl = (env: z.infer<typeof envSchema>): string => {
+const resolveDatabaseUrl = (env: z.infer<typeof envSchema>): string => {
   const databaseUrl = env.DATABASE_URL ?? env.SUPABASE_DB_URL;
 
   if (!databaseUrl) {
