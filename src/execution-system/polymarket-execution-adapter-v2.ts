@@ -287,7 +287,12 @@ export interface PolymarketClobV2DryRunOrderInput {
 }
 
 export interface PolymarketClobV2DryRunOrderEnvelope {
-  request: {
+  /**
+   * Lotus-internal validation shape only. This is not Polymarket's raw V2 `/order`
+   * request body; live submission must go through the CLOB V2 SDK path.
+   */
+  envelopeKind: "LOTUS_INTERNAL_DRY_RUN_SHAPE";
+  lotusInternalRequest: {
     method: "POST";
     path: "/order";
     host: string;
@@ -520,7 +525,8 @@ export class PolymarketClobV2DryRunClient {
     const preimage = ["POST", "/order", timestamp, sha256Hex(bodyJson)].join("\n");
     const signature = createHmac("sha256", this.config.apiSecret ?? "").update(preimage).digest("hex");
     return {
-      request: {
+      envelopeKind: "LOTUS_INTERNAL_DRY_RUN_SHAPE",
+      lotusInternalRequest: {
         method: "POST",
         path: "/order",
         host: this.config.clobHost ?? "",
@@ -555,14 +561,14 @@ export class PolymarketClobV2DryRunClient {
       dryRun: true,
       orderHash: envelope.signing.bodyHash,
       orderDigest: envelope.signing.preimageHash,
-      marketId: envelope.request.body.market,
-      outcomeId: envelope.request.body.token_id,
-      side: envelope.request.body.side,
-      size: envelope.request.body.size,
-      price: envelope.request.body.price,
-      builderCode: envelope.request.body.builder_code,
-      chainId: envelope.request.body.chain_id,
-      clobHost: envelope.request.host,
+      marketId: envelope.lotusInternalRequest.body.market,
+      outcomeId: envelope.lotusInternalRequest.body.token_id,
+      side: envelope.lotusInternalRequest.body.side,
+      size: envelope.lotusInternalRequest.body.size,
+      price: envelope.lotusInternalRequest.body.price,
+      builderCode: envelope.lotusInternalRequest.body.builder_code,
+      chainId: envelope.lotusInternalRequest.body.chain_id,
+      clobHost: envelope.lotusInternalRequest.host,
       createdAt: now.toISOString(),
       blockers: envelope.validation.blockers
     };

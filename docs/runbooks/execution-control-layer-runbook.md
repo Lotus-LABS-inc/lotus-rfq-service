@@ -132,6 +132,13 @@ Current Polymarket interpretation:
 - this status does not authorize live submission by itself
 - approved-lane enforcement, execution-scope token validation, preflight, settlement verification, and ghost-fill protection still apply
 
+Polymarket V2 dry-run boundary:
+- the `clobV2DryRun` metadata and dry-run signing fixture are Lotus-internal validation artifacts
+- they prove local payload/scope hashing, builder-code presence, and secret redaction
+- they are not Polymarket's raw V2 `/order` request body
+- live submission must use the `@polymarket/clob-client-v2` SDK path with `tokenID`, `price`, `size`, `side`, and `builderCode`
+- do not use the dry-run envelope as an external API contract
+
 Security rules:
 - API keys, passphrases, private keys, and secrets must remain server-side only
 - readiness responses must never include credential values

@@ -29,6 +29,8 @@ Generated: 2026-04-25T00:00:00.000Z
 - `STRUCTURALLY_READY` means local adapter/env structure is present.
 - `EXTERNALLY_BLOCKED` means local structure is ready, but the latest guarded harness attempt was blocked by venue auth or endpoint state.
 - Readiness inspection is not executable authority; approved lanes, scope tokens, preflight, settlement verification, and ghost-fill protection remain mandatory.
+- Polymarket dry-run envelopes are Lotus-internal validation artifacts only; they are not the raw V2 `/order` API body.
+- The live SDK path asserts `tokenID`, `price`, `size`, `side`, and `builderCode` are passed to `@polymarket/clob-client-v2` without removed V1 fields.
 
 ## Remaining Blockers
 

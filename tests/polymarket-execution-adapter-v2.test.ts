@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Side } from "@polymarket/clob-client-v2";
+import { OrderType, Side } from "@polymarket/clob-client-v2";
 
 import type { ExecutionScopeBinding } from "../src/execution-control/execution-scope-token.js";
 import {
@@ -167,7 +167,7 @@ describe("PolymarketExecutionAdapterV2", () => {
     });
   });
 
-  it("prepares a safe dry-run order envelope with builderCode while live execution is disabled", async () => {
+  it("prepares a safe Lotus-internal dry-run envelope with builderCode while live execution is disabled", async () => {
     const adapter = new PolymarketExecutionAdapterV2({
       executionMode: "v2",
       liveExecutionEnabled: false,
@@ -210,7 +210,7 @@ describe("PolymarketExecutionAdapterV2", () => {
     expect(JSON.stringify(prepared.payload)).not.toContain("server-side-key");
   });
 
-  it("dry-run client validates signing and order payload shape without exposing credentials", () => {
+  it("dry-run client validates Lotus-internal signing and payload shape without exposing credentials", () => {
     const client = new PolymarketClobV2DryRunClient({
       executionMode: "v2",
       liveExecutionEnabled: true,
@@ -235,7 +235,8 @@ describe("PolymarketExecutionAdapterV2", () => {
       shapeValid: true,
       blockers: []
     });
-    expect(envelope.request.body).toMatchObject({
+    expect(envelope.envelopeKind).toBe("LOTUS_INTERNAL_DRY_RUN_SHAPE");
+    expect(envelope.lotusInternalRequest.body).toMatchObject({
       side: "SELL",
       size: "2.5",
       price: "0.4200",
@@ -449,23 +450,22 @@ describe("PolymarketExecutionAdapterV2", () => {
       status: "FILLED",
       filledSize: "1"
     });
-    expect(calls[0]).toMatchObject({
-      method: "createAndPostOrder",
-      args: [
-        {
-          tokenID: "pm-outcome-yes",
-          price: 0.51,
-          size: 1,
-          side: "BUY",
-          builderCode: "lotus-builder"
-        },
-        {
-          tickSize: "0.01",
-          negRisk: false
-        },
-        "GTC"
-      ]
+    expect(calls[0]?.method).toBe("createAndPostOrder");
+    expect(calls[0]?.args[0]).toEqual({
+      tokenID: "pm-outcome-yes",
+      price: 0.51,
+      size: 1,
+      side: Side.BUY,
+      builderCode: "lotus-builder"
     });
+    expect(calls[0]?.args[0]).not.toHaveProperty("feeRateBps");
+    expect(calls[0]?.args[0]).not.toHaveProperty("nonce");
+    expect(calls[0]?.args[0]).not.toHaveProperty("taker");
+    expect(calls[0]?.args[1]).toEqual({
+      tickSize: "0.01",
+      negRisk: false
+    });
+    expect(calls[0]?.args[2]).toBe(OrderType.GTC);
 
     await expect(client.fetchFillState("pm-order-1")).resolves.toMatchObject({
       status: "PARTIAL_FILL",

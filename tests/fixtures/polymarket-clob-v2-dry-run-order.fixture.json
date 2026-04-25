@@ -16,7 +16,8 @@
     "price": 0.625
   },
   "expectedEnvelope": {
-    "request": {
+    "envelopeKind": "LOTUS_INTERNAL_DRY_RUN_SHAPE",
+    "lotusInternalRequest": {
       "method": "POST",
       "path": "/order",
       "host": "https://clob.polymarket.test",

@@ -7,8 +7,8 @@ import {
   type PolymarketClobV2DryRunOrderInput
 } from "../src/execution-system/index.js";
 
-describe("Polymarket CLOB V2 dry-run signing fixture", () => {
-  it("matches the known-good order envelope and signing hashes exactly", () => {
+describe("Polymarket CLOB V2 Lotus-internal dry-run signing fixture", () => {
+  it("matches the known-good internal envelope and signing hashes exactly", () => {
     const client = new PolymarketClobV2DryRunClient({
       executionMode: "v2",
       liveExecutionEnabled: true,
@@ -21,6 +21,7 @@ describe("Polymarket CLOB V2 dry-run signing fixture", () => {
     });
 
     const envelope = client.buildOrderEnvelope(fixture.input as PolymarketClobV2DryRunOrderInput);
+    expect(envelope.envelopeKind).toBe("LOTUS_INTERNAL_DRY_RUN_SHAPE");
     expect(envelope).toEqual(fixture.expectedEnvelope as PolymarketClobV2DryRunOrderEnvelope);
   });
 
