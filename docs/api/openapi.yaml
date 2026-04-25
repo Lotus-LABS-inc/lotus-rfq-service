@@ -1,0 +1,3102 @@
+openapi: 3.0.3
+info:
+  title: Lotus RFQ Service API
+  version: 0.1.0
+  description: |
+    Static API contract for the Lotus RFQ service.
+
+    This spec separates implemented callable APIs from planned or unregistered APIs.
+    Do not call endpoints marked `x-lotus-callable: false`.
+
+    Execution safety notes:
+    - RFQ accept may trigger execution only if the lane is operator-approved.
+    - Matcher-ready lanes are not executable authority.
+    - Execution may fail closed.
+    - Settlement verification may delay final completion.
+    - Ghost-fill protection can change final state.
+    - Accounting updates only after settlement/finality.
+    - Execution-scope token is not authority by itself.
+
+    Funding safety notes:
+    - Funding APIs are planned only unless marked implemented.
+    - LiFi route quote does not equal ready-to-trade.
+    - Execution preflight requires READY_TO_TRADE.
+    - Venue capability matrix decides target chain/token.
+    - Predict.fun is not PredictIt.
+servers:
+  - url: http://localhost:3000
+    description: Local dev server
+tags:
+  - name: Health
+  - name: Metrics
+  - name: RFQ
+  - name: LP
+  - name: Resolution Risk
+  - name: Admin Lanes
+  - name: Admin Execution Venues
+  - name: Admin Execution Control
+  - name: Admin Risk
+  - name: Admin SOR
+  - name: Admin Control Plane
+  - name: Admin Simulation
+  - name: Admin Qualification
+  - name: Admin Replay
+  - name: Admin Internal Engines
+  - name: Admin Compatibility
+  - name: Planned Funding
+  - name: Unregistered APIs
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Service health check.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: public
+      x-lotus-side-effects: none
+      x-lotus-danger: low
+      responses:
+        "200":
+          description: Service is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /metrics:
+    get:
+      tags: [Metrics]
+      summary: Prometheus metrics.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: public
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      responses:
+        "200":
+          description: Prometheus text metrics.
+          content:
+            text/plain:
+              schema:
+                type: string
+  /rfq:
+    post:
+      tags: [RFQ]
+      summary: Create an RFQ.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: creates-rfq
+      x-lotus-danger: medium
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRFQRequest"
+      responses:
+        "201":
+          description: RFQ session created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RFQResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "502":
+          $ref: "#/components/responses/Error"
+  /rfq/{id}/execution-scope-token:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [RFQ]
+      summary: Create a short-lived execution-scope token for an RFQ.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: creates-scope-token
+      x-lotus-danger: high
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecutionScopeTokenRequest"
+      responses:
+        "201":
+          description: Scope token created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionScopeTokenResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /rfq/{id}/accept:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [RFQ]
+      summary: Accept an RFQ and potentially start fail-closed execution.
+      description: |
+        Requires valid RFQ state, quote id, lane authority, and execution-scope token where required.
+        This can trigger execution, but only approved lanes can execute. Settlement/finality may delay final completion.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: submits-execution
+      x-lotus-danger: critical
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcceptRFQRequest"
+      responses:
+        "202":
+          description: Execution plan accepted or queued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptRFQResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /rfq/{id}/executions/{executionId}/status:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/ExecutionId"
+    get:
+      tags: [RFQ]
+      summary: Get frontend-safe execution status for an RFQ execution.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Execution status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionStatusResponse"
+        "404":
+          $ref: "#/components/responses/Error"
+  /lp/{id}/quotes:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [LP]
+      summary: LP quote intake.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: lp
+      x-lotus-side-effects: creates-quote
+      x-lotus-danger: high
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          $ref: "#/components/responses/GenericObject"
+  /resolution-risk/canonical/{eventId}:
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Resolution Risk]
+      summary: Public resolution-risk view for a canonical event.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: public
+      x-lotus-side-effects: none
+      x-lotus-danger: low
+      responses:
+        "200":
+          $ref: "#/components/responses/GenericObject"
+  /resolution-risk/pair:
+    get:
+      tags: [Resolution Risk]
+      summary: Public resolution-risk pair comparison.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: public
+      x-lotus-side-effects: none
+      x-lotus-danger: low
+      parameters:
+        - name: leftVenue
+          in: query
+          schema: { type: string }
+        - name: leftMarketId
+          in: query
+          schema: { type: string }
+        - name: rightVenue
+          in: query
+          schema: { type: string }
+        - name: rightMarketId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          $ref: "#/components/responses/GenericObject"
+  /resolution-risk/market/{venue}/{marketId}:
+    parameters:
+      - $ref: "#/components/parameters/Venue"
+      - name: marketId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Resolution Risk]
+      summary: Public resolution-risk view for one venue market.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: public
+      x-lotus-side-effects: none
+      x-lotus-danger: low
+      responses:
+        "200":
+          $ref: "#/components/responses/GenericObject"
+
+  /admin/execution-venues:
+    get:
+      tags: [Admin Execution Venues]
+      summary: List execution adapter readiness.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Venue readiness list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  venues:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ExecutionVenueStatus"
+  /admin/execution-venues/{venue}:
+    parameters:
+      - $ref: "#/components/parameters/Venue"
+    get:
+      tags: [Admin Execution Venues]
+      summary: Get one execution adapter readiness record.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Venue readiness.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  venue:
+                    $ref: "#/components/schemas/ExecutionVenueStatus"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /admin/crypto-lanes:
+    get:
+      tags: [Admin Lanes]
+      summary: List crypto lanes.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/crypto-lanes/{laneId}:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get crypto lane.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/LaneObject" }
+  /admin/crypto-lanes/{laneId}/readiness:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get crypto lane readiness.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/crypto-lanes/{laneId}/rollback-plan:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get crypto lane rollback plan.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/crypto-lanes/{laneId}/authority-state:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get crypto lane execution authority state.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: high
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/crypto-lanes/{laneId}/operator-approval-intent:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Lanes]
+      summary: Record crypto lane operator approval intent.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/crypto-lanes/{laneId}/hold:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Lanes]
+      summary: Hold crypto lane.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/crypto-lanes/{laneId}/rollback:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Lanes]
+      summary: Roll back crypto lane.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+
+  /admin/sports-lanes:
+    get:
+      tags: [Admin Lanes]
+      summary: List sports lanes.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/sports-lanes/{laneId}:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get sports lane.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/LaneObject" }
+  /admin/sports-lanes/{laneId}/readiness:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get sports lane readiness.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/sports-lanes/{laneId}/rollback-plan:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get sports lane rollback plan.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/sports-lanes/{laneId}/authority-state:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get sports lane execution authority state.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: high
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/sports-lanes/{laneId}/operator-approval-intent:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Lanes]
+      summary: Record sports lane operator approval intent.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/sports-lanes/{laneId}/hold:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Lanes]
+      summary: Hold sports lane.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/sports-lanes/{laneId}/rollback:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Lanes]
+      summary: Roll back sports lane.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+
+  /admin/politics-nominee-lanes:
+    get:
+      tags: [Admin Lanes]
+      summary: List admin lane family.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/politics-nominee-lanes/{laneId}:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get admin lane.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/LaneObject" }
+  /admin/politics-nominee-lanes/{laneId}/readiness:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get lane readiness artifact.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/politics-nominee-lanes/{laneId}/rollback-plan:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get lane rollback plan.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/politics-nominee-lanes/{laneId}/canary-gates:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/politics-nominee-lanes/{laneId}/operator-approval-intent:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/politics-nominee-lanes/{laneId}/hold:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/politics-nominee-lanes/{laneId}/rollback:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+
+  /admin/politics-office-winner-lanes:
+    get:
+      tags: [Admin Lanes]
+      summary: List admin lane family.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/politics-office-winner-lanes/{laneId}:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get admin lane.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/LaneObject" }
+  /admin/politics-office-winner-lanes/{laneId}/readiness:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get lane readiness artifact.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/politics-office-winner-lanes/{laneId}/rollback-plan:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get lane rollback plan.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/politics-office-winner-lanes/{laneId}/operator-approval-intent:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/politics-office-winner-lanes/{laneId}/hold:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/politics-office-winner-lanes/{laneId}/rollback:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+
+  /admin/politics-office-exit-lanes:
+    get:
+      tags: [Admin Lanes]
+      summary: List admin lane family.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/politics-office-exit-lanes/{laneId}:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get admin lane.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/LaneObject" }
+  /admin/politics-office-exit-lanes/{laneId}/readiness:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get lane readiness artifact.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/politics-office-exit-lanes/{laneId}/rollback-plan:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get lane rollback plan.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/politics-office-exit-lanes/{laneId}/operator-approval-intent:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/politics-office-exit-lanes/{laneId}/hold:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/politics-office-exit-lanes/{laneId}/rollback:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+
+  /admin/politics-party-control-lanes:
+    get:
+      tags: [Admin Lanes]
+      summary: List admin lane family.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/politics-party-control-lanes/{laneId}:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get admin lane.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/LaneObject" }
+  /admin/politics-party-control-lanes/{laneId}/readiness:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get lane readiness artifact.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/politics-party-control-lanes/{laneId}/rollback-plan:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get lane rollback plan.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/politics-party-control-lanes/{laneId}/operator-approval-intent:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/politics-party-control-lanes/{laneId}/hold:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/politics-party-control-lanes/{laneId}/rollback:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+
+  /admin/politics-geopolitical-lanes:
+    get:
+      tags: [Admin Lanes]
+      summary: List admin lane family.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/politics-geopolitical-lanes/{laneId}:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get admin lane.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/LaneObject" }
+  /admin/politics-geopolitical-lanes/{laneId}/readiness:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get lane readiness artifact.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/politics-geopolitical-lanes/{laneId}/rollback-plan:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    get:
+      tags: [Admin Lanes]
+      summary: Get lane rollback plan.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/politics-geopolitical-lanes/{laneId}/operator-approval-intent:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/politics-geopolitical-lanes/{laneId}/hold:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/politics-geopolitical-lanes/{laneId}/rollback:
+    parameters: [{ $ref: "#/components/parameters/LaneId" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+
+  /admin/execution-control/intents:
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/execution-control/intent/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/execution-control/records:
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/execution-control/record/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/execution-control/idempotency/{key}:
+    parameters:
+      - name: key
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/execution-control/retry-safe/{recordId}:
+    parameters: [{ $ref: "#/components/parameters/RecordId" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/execution-control/reconcile/{recordId}:
+    parameters: [{ $ref: "#/components/parameters/RecordId" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/execution-control/mark-failed/{recordId}:
+    parameters: [{ $ref: "#/components/parameters/RecordId" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+
+  /admin/risk/exposure:
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/risk/adjust:
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/risk/clear-reservation:
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+
+  /admin/sor/plan/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/sor/plan/{id}/force-unwind:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/sor/plan/{id}/retry-step:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/sor/config:
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+
+  /admin/control-plane/buckets:
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/control-plane/bucket/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/control-plane/bucket/{id}/pause:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/control-plane/bucket/{id}/drain:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/control-plane/shards:
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/control-plane/shard/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/control-plane/shard/{id}/pause:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/control-plane/shard/{id}/degrade:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/control-plane/overrides:
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/control-plane/override:
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/control-plane/replay/{envelopeId}:
+    parameters:
+      - name: envelopeId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/control-plane/guardrail-shadow:
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+
+  /admin/simulation/scopes:
+    get:
+      tags: [Admin Simulation]
+      summary: Admin simulation preview read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin-preview
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/simulation/routeability-summary:
+    get:
+      tags: [Admin Simulation]
+      summary: Admin simulation preview read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin-preview
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/simulation/run:
+    post:
+      tags: [Admin Simulation]
+      summary: Admin simulation preview mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin-preview
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: high
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/simulation/run/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Simulation]
+      summary: Admin simulation preview read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin-preview
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/simulation/run/{id}/results:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Simulation]
+      summary: Admin simulation preview read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin-preview
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/simulation/canonical/{eventId}:
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Admin Simulation]
+      summary: Admin simulation preview read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin-preview
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/simulation-console:
+    get:
+      tags: [Admin Simulation]
+      summary: Admin simulation preview read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin-preview
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+
+  /admin/qualification/runs:
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/qualification/run/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/qualification/run/{id}/evaluations:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/qualification/run/{id}/promote:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/qualification/run/{id}/demote:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/qualification/run/{id}/pause:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/qualification/safety-actions:
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/qualification/safety-action/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/qualification/safety-action/{id}/resolve:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+
+  /admin/pair-routes:
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/pair-routes/{routeClass}:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/pair-routes/{routeClass}/readiness:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/pair-routes/{routeClass}/coverage:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/pair-routes/{routeClass}/crypto-prod-readiness:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/pair-routes/{routeClass}/launch-plan:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/pair-routes/{routeClass}/rollback-plan:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/pair-routes/{routeClass}/operator-approval-intent:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/pair-routes/{routeClass}/promote-shadow:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/pair-routes/{routeClass}/demote:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/pair-routes/{routeClass}/promote-canary:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/pair-routes/{routeClass}/revert-shadow-only:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/pair-routes/{routeClass}/shadow-evidence:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/pair-routes/{routeClass}/promotion-blockers:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/pair-routes/{routeClass}/promotion-decisions:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/pair-routes/{routeClass}/canary-readiness:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/pair-routes/{routeClass}/canary-scope-lock:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/pair-routes/{routeClass}/canary-approval-state:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/pair-routes/{routeClass}/final-canary-package:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/pair-routes/{routeClass}/top-up-runtime-observation:
+    parameters: [{ $ref: "#/components/parameters/RouteClass" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+
+  /admin/pair-match-review/pending:
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/pair-match-review/edges:
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/pair-match-review/edge/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/pair-match-review/approve:
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/pair-match-review/reject:
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/compatibility-review/overrides:
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/compatibility-review/override:
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/compatibility-review/deactivate:
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/compatibility-review/decision/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/compatibility-review/history/{overrideId}:
+    parameters:
+      - name: overrideId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+
+  /admin/replay/envelope/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/replay/envelope/{id}/run:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/replay/envelope/{id}/diff:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/resolution-risk/canonical/{eventId}:
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/resolution-risk/recompute/{profileId}:
+    parameters:
+      - name: profileId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/resolution-risk/recompute/canonical/{eventId}:
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+
+  /admin/combo/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/combo/{id}/force-complete:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/combo/{id}/force-fail:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/internal-cross/order/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/internal-cross/order/{id}/remove-from-book:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/internal-cross/trade/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/internal-cross/trade/{id}/force-unwind:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/internal-cross/trade/{id}/reconcile:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/internal-netting/combo/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/internal-netting/group/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/internal-netting/group/{id}/force-fail:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/internal-netting/group/{id}/reconcile:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/internal-clearing/entity/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/internal-clearing/round/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Admin Control Plane]
+      summary: Admin read endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/internal-clearing/round/{id}/force-fail:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+  /admin/internal-clearing/round/{id}/reconcile:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Admin Control Plane]
+      summary: Admin mutation endpoint.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: admin-state-change
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AdminAction" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminAction" }
+
+  /funding/intents:
+    post:
+      tags: [Planned Funding]
+      summary: Planned funding intent creation.
+      x-lotus-status: planned
+      x-lotus-callable: false
+      x-lotus-auth: user
+      x-lotus-side-effects: funding-intent
+      x-lotus-danger: medium
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FundingIntent"
+      responses:
+        "501":
+          description: Planned only; not implemented.
+  /funding/intents/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Planned Funding]
+      summary: Planned funding intent read.
+      x-lotus-status: planned
+      x-lotus-callable: false
+      x-lotus-auth: user
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      responses:
+        "501": { description: Planned only; not implemented. }
+  /funding/intents/{id}/quote:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Planned Funding]
+      summary: Planned funding route quote.
+      x-lotus-status: planned
+      x-lotus-callable: false
+      x-lotus-auth: user
+      x-lotus-side-effects: funding-intent
+      x-lotus-danger: medium
+      responses:
+        "501": { description: Planned only; not implemented. }
+  /funding/intents/{id}/submit:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Planned Funding]
+      summary: Planned funding route submit.
+      x-lotus-status: planned
+      x-lotus-callable: false
+      x-lotus-auth: user
+      x-lotus-side-effects: funding-intent
+      x-lotus-danger: high
+      responses:
+        "501": { description: Planned only; not implemented. }
+  /funding/intents/{id}/status:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Planned Funding]
+      summary: Planned funding status read.
+      x-lotus-status: planned
+      x-lotus-callable: false
+      x-lotus-auth: user
+      x-lotus-side-effects: none
+      x-lotus-danger: low
+      responses:
+        "501": { description: Planned only; not implemented. }
+  /funding/venues/capabilities:
+    get:
+      tags: [Planned Funding]
+      summary: Planned venue funding capability matrix.
+      x-lotus-status: planned
+      x-lotus-callable: false
+      x-lotus-auth: user
+      x-lotus-side-effects: none
+      x-lotus-danger: low
+      responses:
+        "501": { description: Planned only; not implemented. }
+  /admin/funding/intents/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Planned Funding]
+      summary: Planned admin funding intent read.
+      x-lotus-status: planned
+      x-lotus-callable: false
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      responses:
+        "501": { description: Planned only; not implemented. }
+  /admin/funding/ledger:
+    get:
+      tags: [Planned Funding]
+      summary: Planned admin funding ledger read.
+      x-lotus-status: planned
+      x-lotus-callable: false
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      responses:
+        "501": { description: Planned only; not implemented. }
+
+  /docs/schema-index:
+    get:
+      tags: [Unregistered APIs]
+      summary: Documentation-only schema index; not a runtime endpoint.
+      description: References shared schemas so Swagger Editor shows them as part of the contract vocabulary.
+      x-lotus-status: documentation-only
+      x-lotus-callable: false
+      x-lotus-auth: internal
+      x-lotus-side-effects: none
+      x-lotus-danger: low
+      responses:
+        "200":
+          description: Documentation-only schema bundle.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  paginatedResponse:
+                    $ref: "#/components/schemas/PaginatedResponse"
+                  rfq:
+                    $ref: "#/components/schemas/RFQ"
+                  laneApprovalRequest:
+                    $ref: "#/components/schemas/LaneApprovalRequest"
+                  laneApprovalResponse:
+                    $ref: "#/components/schemas/LaneApprovalResponse"
+                  approvedScope:
+                    $ref: "#/components/schemas/ApprovedScope"
+                  executionMetadata:
+                    $ref: "#/components/schemas/ExecutionMetadata"
+                  executionResult:
+                    $ref: "#/components/schemas/ExecutionResult"
+                  venueAdapterStatus:
+                    $ref: "#/components/schemas/VenueAdapterStatus"
+                  fundingRouteLeg:
+                    $ref: "#/components/schemas/FundingRouteLeg"
+                  venueCapability:
+                    $ref: "#/components/schemas/VenueCapability"
+                  fundingStatus:
+                    $ref: "#/components/schemas/FundingStatus"
+                  fundingIntentResponse:
+                    $ref: "#/components/schemas/FundingIntentResponse"
+                  feePreview:
+                    $ref: "#/components/schemas/FeePreview"
+                  auditEvent:
+                    $ref: "#/components/schemas/AuditEvent"
+
+  /combo-rfqs:
+    post:
+      tags: [Unregistered APIs]
+      summary: Route exists in source but is not mounted by src/api/server.ts.
+      x-lotus-status: unregistered
+      x-lotus-callable: false
+      x-lotus-auth: internal
+      x-lotus-side-effects: unknown
+      x-lotus-danger: high
+      responses:
+        "404":
+          description: Not mounted by the current server.
+  /combo-rfqs/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Unregistered APIs]
+      summary: Route exists in source but is not mounted by src/api/server.ts.
+      x-lotus-status: unregistered
+      x-lotus-callable: false
+      x-lotus-auth: internal
+      x-lotus-side-effects: unknown
+      x-lotus-danger: high
+      responses:
+        "404":
+          description: Not mounted by the current server.
+  /combo-rfqs/{id}/accept:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Unregistered APIs]
+      summary: Route exists in source but is not mounted by src/api/server.ts.
+      x-lotus-status: unregistered
+      x-lotus-callable: false
+      x-lotus-auth: internal
+      x-lotus-side-effects: unknown
+      x-lotus-danger: high
+      responses:
+        "404":
+          description: Not mounted by the current server.
+  /combo-rfqs/{id}/stream:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Unregistered APIs]
+      summary: Route exists in source but is not mounted by src/api/server.ts.
+      x-lotus-status: unregistered
+      x-lotus-callable: false
+      x-lotus-auth: internal
+      x-lotus-side-effects: unknown
+      x-lotus-danger: high
+      responses:
+        "404":
+          description: Not mounted by the current server.
+  /lp/{id}/combo-quotes:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Unregistered APIs]
+      summary: Route exists in source but is not mounted by src/api/server.ts.
+      x-lotus-status: unregistered
+      x-lotus-callable: false
+      x-lotus-auth: internal
+      x-lotus-side-effects: unknown
+      x-lotus-danger: high
+      responses:
+        "404":
+          description: Not mounted by the current server.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    ExecutionId:
+      name: executionId
+      in: path
+      required: true
+      schema: { type: string }
+    LaneId:
+      name: laneId
+      in: path
+      required: true
+      schema: { type: string }
+    Venue:
+      name: venue
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Venue" }
+    RecordId:
+      name: recordId
+      in: path
+      required: true
+      schema: { type: string }
+    RouteClass:
+      name: routeClass
+      in: path
+      required: true
+      schema: { type: string }
+  requestBodies:
+    AdminAction:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AdminActionRequest"
+  responses:
+    Error:
+      description: Error response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    GenericObject:
+      description: Artifact/service-shaped response.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: true
+    LaneObject:
+      description: Lane response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Lane"
+    AdminAction:
+      description: Admin action response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AdminActionResponse"
+  schemas:
+    ErrorResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        code: { type: string }
+        error: { type: string }
+        reason: { type: string }
+        message: { type: string }
+        details:
+          type: object
+          additionalProperties: true
+    PaginatedResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { type: object, additionalProperties: true }
+        nextCursor:
+          type: string
+          nullable: true
+    HealthResponse:
+      type: object
+      required: [status, service]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        service:
+          type: string
+          enum: [lotus-rfq-service]
+    RFQ:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        canonicalMarketId: { type: string }
+        takerId: { type: string }
+        side: { type: string, enum: [buy, sell] }
+        quantity: { type: string }
+        state: { type: string }
+    CreateRFQRequest:
+      type: object
+      required: [canonicalMarketId, takerId, side, quantity, idempotencyKey, ttlSeconds]
+      properties:
+        canonicalMarketId: { type: string, minLength: 1 }
+        takerId: { type: string, minLength: 1 }
+        side: { type: string, enum: [buy, sell] }
+        quantity:
+          type: string
+          pattern: "^\\d+(\\.\\d+)?$"
+        idempotencyKey: { type: string, minLength: 1 }
+        ttlSeconds:
+          type: integer
+          minimum: 1
+          maximum: 300
+    RFQResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        sessionId: { type: string }
+        status: { type: string }
+    AcceptRFQRequest:
+      type: object
+      required: [quoteId]
+      properties:
+        quoteId: { type: string, minLength: 1 }
+        executionScopeToken: { type: string, minLength: 1 }
+    AcceptRFQResponse:
+      type: object
+      required: [status, plan_id, plan_state, dispatch_mode]
+      properties:
+        status:
+          type: string
+          enum: [PLAN_ACCEPTED]
+        plan_id: { type: string }
+        plan_state: { type: string }
+        dispatch_mode:
+          type: string
+          enum: [awaited, background]
+        final_status:
+          type: string
+          enum: [COMPLETED, PARTIAL, FAILED, UNWOUND]
+        execution_id:
+          type: string
+          nullable: true
+    ExecutionScopeTokenRequest:
+      type: object
+      required: [quoteId, scopeKind, scopeId]
+      properties:
+        quoteId: { type: string, minLength: 1 }
+        scopeKind:
+          type: string
+          enum: [CRYPTO_LANE, SPORTS_LANE, POLITICS_NOMINEE_LANE]
+        scopeId: { type: string, minLength: 1 }
+        ttlSeconds:
+          type: integer
+          minimum: 1
+          maximum: 300
+    ExecutionScopeTokenResponse:
+      type: object
+      required: [token, expiresAt, singleUse, scope]
+      properties:
+        token: { type: string }
+        expiresAt: { type: string, format: date-time }
+        singleUse: { type: boolean, enum: [true] }
+        scope:
+          type: object
+          additionalProperties: true
+    Lane:
+      type: object
+      additionalProperties: true
+      properties:
+        laneId: { type: string }
+        laneState:
+          $ref: "#/components/schemas/LaneState"
+        topicKey: { type: string }
+        venueSet:
+          type: array
+          items: { $ref: "#/components/schemas/Venue" }
+    LaneState:
+      type: string
+      enum:
+        - MATCHER_READY
+        - READINESS_READY_FOR_REVIEW
+        - OPERATOR_REVIEW_REQUIRED
+        - REVIEW_REQUIRED
+        - TRI_REVIEW_REQUIRED
+        - PAIR_REVIEW_REQUIRED
+        - OPERATOR_APPROVED_SANDBOX
+        - OPERATOR_APPROVED_LIMITED_PROD
+        - HELD
+        - ROLLED_BACK
+        - REJECTED
+    LaneApprovalRequest:
+      allOf:
+        - $ref: "#/components/schemas/AdminActionRequest"
+    LaneApprovalResponse:
+      allOf:
+        - $ref: "#/components/schemas/AdminActionResponse"
+    ApprovedScope:
+      type: object
+      additionalProperties: true
+      properties:
+        laneId: { type: string }
+        topicKey: { type: string }
+        venueSet:
+          type: array
+          items: { $ref: "#/components/schemas/Venue" }
+        candidateSet:
+          type: array
+          items: { type: string }
+        approvedScopeHash: { type: string }
+    ExecutionRequest:
+      type: object
+      required:
+        - executionId
+        - rfqId
+        - userId
+        - canonicalTopicKey
+        - side
+        - size
+        - selectedLaneId
+        - venuePath
+        - executionMode
+        - approvedScopeHash
+        - idempotencyKey
+        - createdAt
+      properties:
+        executionId: { type: string }
+        rfqId: { type: string }
+        userId: { type: string }
+        canonicalTopicKey: { type: string }
+        canonicalOutcomeId: { type: string }
+        candidateId: { type: string }
+        side: { type: string, enum: [buy, sell] }
+        size: { type: string }
+        selectedLaneId: { type: string }
+        venuePath:
+          type: array
+          items: { $ref: "#/components/schemas/Venue" }
+        executionMode:
+          type: string
+          enum: [SINGLE_VENUE, PAIR, TRI, SPLIT]
+        approvedScopeHash: { type: string }
+        maxSlippage: { type: string }
+        fastLaneEnabled: { type: boolean }
+        ghostFillProtectionEnabled: { type: boolean }
+        expectedPrice: { type: string }
+        expectedFees:
+          $ref: "#/components/schemas/FeeSummary"
+        idempotencyKey: { type: string }
+        createdAt: { type: string, format: date-time }
+    ExecutionMetadata:
+      type: object
+      additionalProperties: true
+      properties:
+        request:
+          $ref: "#/components/schemas/ExecutionRequest"
+        legs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExecutionLeg"
+        currentState:
+          $ref: "#/components/schemas/ExecutionState"
+        settlementStatus:
+          $ref: "#/components/schemas/SettlementStatus"
+        ghostFillStatus:
+          $ref: "#/components/schemas/GhostFillStatus"
+        fallbackStatus:
+          $ref: "#/components/schemas/FallbackStatus"
+        receipt:
+          $ref: "#/components/schemas/ExecutionReceipt"
+    ExecutionLeg:
+      type: object
+      additionalProperties: true
+      properties:
+        executionLegId: { type: string }
+        parentExecutionId: { type: string }
+        venue: { $ref: "#/components/schemas/Venue" }
+        venueMarketId: { type: string }
+        venueOutcomeId: { type: string }
+        side: { type: string, enum: [buy, sell] }
+        size: { type: string }
+        price: { type: string }
+        status: { type: string }
+        submittedAt: { type: string, format: date-time }
+        filledAt: { type: string, format: date-time }
+        settlementStatus:
+          $ref: "#/components/schemas/SettlementStatus"
+        venueOrderId: { type: string }
+        fillId: { type: string }
+        errorCode: { type: string }
+    ExecutionState:
+      type: string
+      enum:
+        - CREATED
+        - PREFLIGHT_CHECKING
+        - PREFLIGHT_FAILED
+        - READY_TO_SUBMIT
+        - SUBMITTED
+        - PARTIAL_FILL
+        - FILLED_PENDING_SETTLEMENT
+        - SETTLEMENT_VERIFIED
+        - GHOST_FILL_SUSPECTED
+        - GHOST_FILL_CONFIRMED
+        - REROUTING
+        - REROUTED
+        - FAILED_CLOSED
+        - COMPLETED
+        - CANCELLED
+    ExecutionResult:
+      type: object
+      additionalProperties: true
+      properties:
+        executionId: { type: string }
+        finalState:
+          $ref: "#/components/schemas/ExecutionState"
+        filledSize: { type: string }
+        averagePrice: { type: string }
+        settlementStatus:
+          $ref: "#/components/schemas/SettlementStatus"
+        ghostFillStatus:
+          $ref: "#/components/schemas/GhostFillStatus"
+        fallbackUsed: { type: boolean }
+        fees:
+          $ref: "#/components/schemas/FeeSummary"
+        receipt:
+          $ref: "#/components/schemas/ExecutionReceipt"
+    ExecutionStatusResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        executionId: { type: string }
+        currentState:
+          $ref: "#/components/schemas/ExecutionState"
+        userStatus: { type: string }
+        venuePath:
+          type: array
+          items: { $ref: "#/components/schemas/Venue" }
+        filledAmount: { type: string }
+        settlementStatus:
+          $ref: "#/components/schemas/SettlementStatus"
+        ghostFillStatus:
+          $ref: "#/components/schemas/GhostFillStatus"
+        fallbackStatus:
+          $ref: "#/components/schemas/FallbackStatus"
+        feeSummary:
+          $ref: "#/components/schemas/FeeSummary"
+        receipt:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ExecutionReceipt"
+    SettlementStatus:
+      type: string
+      enum:
+        - SETTLEMENT_VERIFIED
+        - SETTLEMENT_PENDING
+        - SETTLEMENT_TIMEOUT
+        - SETTLEMENT_UNKNOWN
+        - GHOST_FILL_SUSPECTED
+        - GHOST_FILL_CONFIRMED
+        - NOT_APPLICABLE
+        - DRY_RUN_ONLY
+    GhostFillStatus:
+      type: string
+      enum: [NOT_APPLICABLE, NONE, SUSPECTED, CONFIRMED]
+    FallbackStatus:
+      type: string
+      enum: [not_used, unavailable, rerouting, rerouted, failed_closed]
+    ExecutionReceipt:
+      type: object
+      additionalProperties: true
+      properties:
+        executionId: { type: string }
+        finalState:
+          $ref: "#/components/schemas/ExecutionState"
+        filledSize: { type: string }
+        averagePrice: { type: string }
+        fees:
+          $ref: "#/components/schemas/FeeSummary"
+        emittedAt: { type: string, format: date-time }
+    Venue:
+      type: string
+      enum: [POLYMARKET, LIMITLESS, OPINION, MYRIAD, PREDICT, PREDICT_FUN, TEST]
+    VenueReadiness:
+      type: string
+      enum: [NOT_CONFIGURED, LIVE_DISABLED, STRUCTURALLY_READY, EXTERNALLY_BLOCKED, READY, DRY_RUN_READY, LIVE_READY]
+    ExecutionVenueStatus:
+      type: object
+      additionalProperties: true
+      properties:
+        venue: { $ref: "#/components/schemas/Venue" }
+        status: { $ref: "#/components/schemas/VenueReadiness" }
+        liveExecutionEnabled: { type: boolean }
+        envReady: { type: boolean }
+        notes:
+          type: array
+          items: { type: string }
+    VenueAdapterStatus:
+      allOf:
+        - $ref: "#/components/schemas/ExecutionVenueStatus"
+    FundingIntent:
+      type: object
+      additionalProperties: true
+      properties:
+        fundingIntentId: { type: string }
+        userId: { type: string }
+        sourceChain: { type: string }
+        sourceToken: { type: string }
+        sourceAmount: { type: string }
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/FundingTarget"
+        status: { type: string }
+    FundingTarget:
+      type: object
+      additionalProperties: true
+      properties:
+        targetVenue: { $ref: "#/components/schemas/Venue" }
+        targetChain: { type: string }
+        targetToken: { type: string }
+        targetAmount: { type: string }
+        targetPercentage: { type: number }
+        status: { type: string }
+    FundingRouteLeg:
+      type: object
+      additionalProperties: true
+      properties:
+        routeLegId: { type: string }
+        fundingIntentId: { type: string }
+        targetVenue: { $ref: "#/components/schemas/Venue" }
+        routeProvider: { type: string, enum: [LIFI, MANUAL, TEST] }
+        txHashes:
+          type: array
+          items: { type: string }
+        bridgeStatus: { type: string }
+        destinationStatus: { type: string }
+        venueCreditStatus: { type: string }
+        status: { type: string }
+    VenueCapability:
+      type: object
+      additionalProperties: true
+      properties:
+        venue: { $ref: "#/components/schemas/Venue" }
+        supportedChains:
+          type: array
+          items: { type: string }
+        supportedTokens:
+          type: array
+          items: { type: string }
+        preferredChain: { type: string }
+        preferredToken: { type: string }
+        readinessStatus: { type: string }
+    FundingStatus:
+      type: object
+      additionalProperties: true
+      properties:
+        userId: { type: string }
+        venueBalances:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        unifiedDisplayBalance:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    FundingRoutePreview:
+      type: object
+      additionalProperties: true
+      properties:
+        totalEstimatedFees: { type: string }
+        totalEstimatedTime: { type: string }
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/FundingTarget"
+    FundingIntentResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        fundingIntentId: { type: string }
+        currentStatus: { type: string }
+        routePreview:
+          $ref: "#/components/schemas/FundingRoutePreview"
+    FeePreview:
+      type: object
+      additionalProperties: true
+    FeeSummary:
+      type: object
+      additionalProperties: true
+      properties:
+        totalFees: { type: string }
+        priceImprovementFee:
+          $ref: "#/components/schemas/PriceImprovementFee"
+        fastLaneFee:
+          $ref: "#/components/schemas/FastLaneFee"
+        ghostFillProtectionFee:
+          $ref: "#/components/schemas/GhostFillProtectionFee"
+    PriceImprovementFee:
+      type: object
+      properties:
+        amount: { type: string }
+        shareBps: { type: integer }
+    FastLaneFee:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        amount: { type: string }
+    GhostFillProtectionFee:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        amount: { type: string }
+    AuditEvent:
+      type: object
+      additionalProperties: true
+      properties:
+        auditEventId: { type: string }
+        type:
+          $ref: "#/components/schemas/AuditEventType"
+        createdAt: { type: string, format: date-time }
+        metadata:
+          type: object
+          additionalProperties: true
+    AuditEventType:
+      type: string
+      enum:
+        - EXECUTION_CREATED
+        - PREFLIGHT_STARTED
+        - PREFLIGHT_PASSED
+        - PREFLIGHT_FAILED
+        - ROUTE_SELECTED
+        - LIQUIDITY_RESERVED
+        - ORDER_SUBMITTED
+        - PARTIAL_FILL_RECEIVED
+        - FILL_RECEIVED
+        - SETTLEMENT_CHECK_STARTED
+        - SETTLEMENT_VERIFIED
+        - GHOST_FILL_SUSPECTED
+        - GHOST_FILL_CONFIRMED
+        - REROUTE_STARTED
+        - REROUTE_COMPLETED
+        - FAILED_CLOSED
+        - ACCOUNTING_UPDATED
+        - USER_RECEIPT_EMITTED
+    AdminActionRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        operatorId: { type: string }
+        reason: { type: string }
+        note: { type: string }
+    AdminActionResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        status: { type: string }
+        eventId: { type: string }
