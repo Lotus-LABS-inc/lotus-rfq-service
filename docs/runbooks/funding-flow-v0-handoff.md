@@ -388,6 +388,13 @@ In that example:
 
 LiFi is the first route provider for Funding v0.
 
+Primary docs:
+
+- LiFi MCP server overview: https://docs.li.fi/mcp-server/overview
+- LiFi introduction: https://docs.li.fi/introduction/introduction
+- LiFi API reference: https://docs.li.fi/api-reference/introduction
+- LiFi SDK overview: https://docs.li.fi/sdk/overview
+
 LiFi should handle:
 
 - route quote
@@ -412,6 +419,61 @@ Lotus remains responsible for:
 LiFi is a route provider, not the entire funding product.
 
 Do not let LiFi status become the final source of truth for trade readiness. LiFi can say a route completed, but Lotus still needs destination and venue-credit confirmation.
+
+### LiFi Integration Boundary
+
+The Lotus wrapper around LiFi should own the product contract. Do not let UI, RFQ, execution, or venue adapters call LiFi directly.
+
+Suggested internal services:
+
+- `LifiRouteQuoteService`
+- `LifiRouteExecutionService`
+- `LifiRouteStatusService`
+- `FundingRoutePlanner`
+
+LiFi-facing inputs should come from Lotus objects:
+
+- `FundingIntent`
+- `FundingTarget`
+- `VenueCapability`
+- `FundingRouteLeg`
+
+LiFi-facing outputs should be normalized before storage or API response:
+
+- route provider id
+- quote id or route id if provided
+- source chain/token/amount
+- destination chain/token/amount estimate
+- estimated fees
+- estimated duration
+- transaction request payload for the user's wallet
+- status snapshots
+- provider error code and safe message
+
+Never store or expose raw secrets. Never expose route-provider auth, private keys, or venue credentials in frontend responses.
+
+### LiFi Status Is Not Venue Readiness
+
+The route lifecycle has three separate confirmations:
+
+1. LiFi route status says the bridge/swap route moved forward.
+2. Destination confirmation says funds arrived on the target chain/address.
+3. Venue adapter says funds are credited and `READY_TO_TRADE`.
+
+Only step 3 can unblock trade execution.
+
+If LiFi reports success but the venue adapter cannot confirm venue credit, the funding leg must remain `LEG_VENUE_CREDIT_PENDING` and execution preflight must block that venue.
+
+### LiFi MCP Server Usage
+
+The LiFi MCP server can be useful for developer research, route inspection, and implementation support, but it should not become a hidden production dependency unless explicitly designed and reviewed.
+
+Default implementation posture:
+
+- backend runtime should use the LiFi API or SDK through a Lotus wrapper
+- MCP usage is for developer tooling and diagnostics unless separately approved
+- generated route logic must still be audited and covered by tests
+- any MCP-assisted output must be checked into code/docs only after review
 
 ## 10. Venue Adapter Role
 
@@ -943,7 +1005,41 @@ Warnings:
 - Do not let execution preflight bypass funding status. Execution requires `READY_TO_TRADE` for the venue it will use.
 - Do not treat LiFi as the whole product. LiFi is only the route provider.
 
-## 18. Decisions Needed Before Build
+## 18. Security Rules Before Build
+
+Funding moves user capital, so its first implementation must be security-shaped even if it starts with one route leg.
+
+Required rules:
+
+- Do not let the frontend, RFQ flow, execution flow, or venue adapter call LiFi directly.
+- Do not treat a LiFi quote as trusted after it becomes stale.
+- Do not treat a LiFi route status as venue readiness.
+- Do not route to a destination chain, token, or address unless it matches the venue capability matrix.
+- Do not ask the user to sign a route payload unless the UI can show the source, destination, token, amount, estimated fees, and target venue in plain language.
+- Do not store or return route-provider credentials, private keys, venue API secrets, or signing secrets.
+- Do not mark aggregate funding `READY_TO_TRADE` if any required route leg is pending, failed, stale, or not venue-credited.
+- Do not let execution use a venue balance unless the venue-specific leg is `READY_TO_TRADE`.
+- Do not make split funding all-or-nothing in the data model. Partial readiness must be explicit and auditable.
+- Do not let failed split legs contaminate successful venue-ready legs.
+
+Implementation must create deterministic failure reasons for security-sensitive states:
+
+- `ROUTE_QUOTE_STALE`
+- `ROUTE_DESTINATION_MISMATCH`
+- `ROUTE_PROVIDER_STATUS_UNTRUSTED`
+- `DESTINATION_NOT_CONFIRMED`
+- `VENUE_CREDIT_NOT_CONFIRMED`
+- `READY_TO_TRADE_NOT_AVAILABLE`
+- `FUNDING_ROUTE_REPLAY_BLOCKED`
+- `FUNDING_SIGNATURE_REJECTED`
+
+Before runtime implementation starts, read:
+
+- `docs/security/LOTUS_SECURITY_AUDIT.md`
+- `docs/security/LOTUS_THREAT_MODEL.md`
+- `docs/security/LOTUS_SECURITY_CHECKLIST.md`
+
+## 19. Decisions Needed Before Build
 
 - Which venue should be the first target path?
 - Which chains/tokens are enabled in the first capability matrix?
@@ -956,7 +1052,7 @@ Warnings:
 - Should funding reservations be per venue leg, per RFQ execution, or both?
 - Which admin read-only funding views are needed first?
 
-## 19. Questions That Can Wait
+## 20. Questions That Can Wait
 
 - How much of LiFi route status can be trusted directly beyond the first route?
 - What frontend screens already exist for deposit status?

@@ -82,6 +82,87 @@ These rules preserve the current Lotus architecture. Cleanup work MUST clarify t
 4. No broad heuristics that hide ambiguity.
 5. If a future pass wants to change these boundaries, it must be treated as an explicit architecture decision, not folded into incidental cleanup.
 
+# Code Organization and File Creation Rules
+
+Lotus must optimize for code clarity, compactness, and future-engineer readability.
+
+New files must not be created casually. Before adding any new file, the agent or engineer must inspect the existing repo structure and determine whether the logic belongs in an existing module.
+
+## Core Rule
+
+Prefer updating existing modules over creating new files when:
+
+- the responsibility already exists in the repo
+- the new logic is small
+- the code naturally extends an existing domain, service, type, or controller
+- adding a separate file would create unnecessary navigation overhead
+- the new file would duplicate a parallel pattern already present elsewhere
+
+## When A New File Is Allowed
+
+A new file is allowed only when at least one of these is true:
+
+- the concern is clearly separate from existing modules
+- the existing file would become too large or confusing
+- the repo already has a convention for that module type
+- the logic introduces a new external provider adapter
+- the logic introduces a new domain boundary
+- tests or docs would be meaningfully cleaner with a dedicated file
+- the file prevents mixing unrelated responsibilities
+
+## What To Avoid
+
+Avoid:
+
+- file explosion
+- one-prompt-one-file behavior
+- duplicate service, controller, or type files
+- parallel modules with overlapping responsibility
+- creating new docs when an existing doc should be updated
+- creating new route/controller files when an existing route group should be extended
+- creating new type files when an existing domain type file should be extended
+- creating broad new architecture folders without a clear repo convention
+
+## Required Final Response Behavior
+
+Whenever a task creates new files, the final response must include:
+
+1. files added
+2. files updated
+3. why each new file was necessary
+4. which existing files/modules were reused
+5. why the logic could not cleanly live in an existing file
+6. whether the change follows existing repo conventions
+
+## Funding-Specific Note
+
+For funding work:
+
+- reuse the existing funding handoff markdown
+- do not create duplicate funding docs
+- reuse existing API/OpenAPI docs structure
+- reuse existing audit/event patterns
+- reuse existing execution preflight structure
+- reuse existing route/controller conventions
+- only create new funding files if the repo has no suitable existing place or the concern is clearly isolated
+
+## Execution-Specific Note
+
+For execution work:
+
+- reuse existing execution metadata and RFQ records for v0 unless dedicated tables are clearly necessary
+- do not create broad execution schema files unless the metadata shape has stabilized
+- prefer compact extensions over broad rewrites
+
+## Admin/Frontend Note
+
+For admin/frontend work:
+
+- only update the relevant design, category, or module requested
+- do not modify unrelated design categories
+- inspect actual route and file conventions before creating new routes or files
+- proposed route manifests are product/navigation structures, not verified filesystem paths unless confirmed by repo inspection
+
 ## Security Rules
 
 1. All LP endpoints require HMAC authentication.

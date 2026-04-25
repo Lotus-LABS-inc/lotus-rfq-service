@@ -62,6 +62,15 @@ The funding implementation must still follow `docs/runbooks/funding-flow-v0-hand
 - Execution preflight requires `READY_TO_TRADE`.
 - Predict.fun is not PredictIt.
 
+LiFi implementation references are documented in the funding handoff:
+
+- https://docs.li.fi/mcp-server/overview
+- https://docs.li.fi/introduction/introduction
+- https://docs.li.fi/api-reference/introduction
+- https://docs.li.fi/sdk/overview
+
+Use LiFi through a Lotus wrapper. Do not let frontend, RFQ, execution, or venue adapters call LiFi directly.
+
 ## Validation
 
 OpenAPI validation command: not configured.
