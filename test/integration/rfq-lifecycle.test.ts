@@ -17,6 +17,9 @@ import { RFQExecutionRepository } from "../../src/db/repositories/rfq-execution-
 import { RFQQuoteRepository } from "../../src/db/repositories/rfq-quote-repository.js";
 import { RFQSessionRepository } from "../../src/db/repositories/rfq-session-repository.js";
 import { RFQSessionManager } from "../../src/core/rfq-engine/rfq-session-manager.js";
+import { CryptoAdminService } from "../../src/api/admin/crypto-admin-service.js";
+import { ExecutionSystemMetadataSchema } from "../../src/execution-system/index.js";
+import { ExecutionRecordRepository } from "../../src/repositories/execution-record.repository.js";
 import { Pool } from "pg";
 import pino from "pino";
 
@@ -28,6 +31,8 @@ loadDotenv({
 const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const TEST_CANONICAL_MARKET_ID = "a0eb58b9-a89c-48a7-bda8-b08a050ad95e";
 const TEST_CANONICAL_EVENT_ID = "11111111-1111-4111-8111-111111111111";
+const TEST_CRYPTO_LANE_ID = "CRYPTO_BTC_ATH_BY_DATE_PAIR_LIMITLESS_POLYMARKET";
+const TEST_CRYPTO_POLYMARKET_DRY_RUN_LANE_ID = "CRYPTO_BTC_THRESHOLD_BY_DATE_APR_2026_PAIR_POLYMARKET_PREDICT";
 const ENV_READY = Boolean(TEST_DB_URL);
 
 const logger = pino({ level: "silent" });
@@ -434,6 +439,13 @@ const clearPersistentState = async (pool: Pool): Promise<void> => {
     try {
       await pool.query(
         `TRUNCATE TABLE
+          strategy_promotion_events,
+          execution_control_audit_records,
+          execution_submission_lineage,
+          execution_replay_protection_records,
+          execution_idempotency_keys,
+          execution_approval_states,
+          execution_control_decisions,
           execution_recovery_actions,
           execution_state_transitions,
           execution_records,
@@ -661,22 +673,33 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
     await redisClient.connect();
 
     const jwtSecret = "test-secret-at-least-thirty-two-chars";
-    app = await buildServer({
-      logger,
-      redisClient,
-      pgPool: pool,
-      db: createDrizzleDb(pool),
-      canonicalServiceBaseUrl: "http://127.0.0.1:4101",
-      jwtSecret,
-      sorEnabled: true,
-      sorCanaryShadowEnabled: false,
-      sorCanaryPercent: 0,
-      reliabilityWeight: 0.05,
-      latencyWeight: 0.03,
-      failureWeight: 0.08,
-      sorAcceptAonAwait: true,
-      sorAcceptNonAonBackground: true
-    });
+    const originalPolymarketExecutionMode = process.env.POLYMARKET_EXECUTION_MODE;
+    delete process.env.POLYMARKET_EXECUTION_MODE;
+    try {
+      app = await buildServer({
+        logger,
+        redisClient,
+        pgPool: pool,
+        db: createDrizzleDb(pool),
+        canonicalServiceBaseUrl: "http://127.0.0.1:4101",
+        jwtSecret,
+        sorEnabled: true,
+        sorCanaryShadowEnabled: false,
+        sorCanaryPercent: 0,
+        reliabilityWeight: 0.05,
+        latencyWeight: 0.03,
+        failureWeight: 0.08,
+        sorAcceptAonAwait: true,
+        sorAcceptNonAonBackground: true,
+        executionSystemSandboxEnabled: true
+      });
+    } finally {
+      if (originalPolymarketExecutionMode === undefined) {
+        delete process.env.POLYMARKET_EXECUTION_MODE;
+      } else {
+        process.env.POLYMARKET_EXECUTION_MODE = originalPolymarketExecutionMode;
+      }
+    }
 
     sessionRepository = new RFQSessionRepository(pool);
     quoteRepository = new RFQQuoteRepository(pool);
@@ -843,6 +866,341 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
       [body.plan_id]
     );
     expect(routeTrace.rows[0]?.compatibility_version_ids).toBeDefined();
+  }, 60000);
+
+  it("Execution v0 sandbox: RFQ accept persists receipt metadata and exposes frontend status", async () => {
+    const testApp = must(app, "app");
+    const sessions = must(sessionRepository, "sessionRepository");
+    const pg = must(pool, "pool");
+    const [lp] = await createLPKeys(pg);
+    const cryptoAdmin = new CryptoAdminService({ pool: pg });
+    const executionRecords = new ExecutionRecordRepository(pg);
+
+    await cryptoAdmin.recordOperatorApprovalIntent(
+      TEST_CRYPTO_LANE_ID,
+      "integration-test",
+      "approve BTC ATH pair lane for sandbox RFQ accept-to-receipt proof"
+    );
+
+    const takerId = makeUuid();
+    const sessionId = randomUUID();
+    const limitlessQuoteId = `${RUN_PREFIX}sandbox-limitless-quote`;
+    const polymarketQuoteId = `${RUN_PREFIX}sandbox-polymarket-quote`;
+
+    await pg.query(
+      `INSERT INTO rfq_sessions
+      (id, request_id, canonical_market_id, taker_id, side, quantity, status, idempotency_key, expires_at, metadata)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW() + INTERVAL '5 minutes', $9::jsonb)`,
+      [
+        sessionId,
+        `${RUN_PREFIX}${randomUUID()}`,
+        TEST_CANONICAL_MARKET_ID,
+        takerId,
+        "buy",
+        "10",
+        "AWAITING_USER",
+        `${RUN_PREFIX}${randomUUID()}`,
+        JSON.stringify({ acceptance_policy: "ALL_OR_NONE" })
+      ]
+    );
+    trackSessionKeys(sessionId);
+
+    for (const [quoteId, venue] of [
+      [limitlessQuoteId, "LIMITLESS"],
+      [polymarketQuoteId, "POLYMARKET"]
+    ] as const) {
+      await pg.query(
+        `INSERT INTO rfq_quotes
+        (id, session_id, lp_key_id, quote_status, price, quantity, fee_bps, valid_until, quote_payload)
+        VALUES ($1, $2, $3, 'RECEIVED', '1.00', '5', 1, NOW() + INTERVAL '5 minutes', $4::jsonb)`,
+        [
+          randomUUID(),
+          sessionId,
+          lp?.keyDbId ?? "",
+          JSON.stringify({ quoteId, lpId: venue })
+        ]
+      );
+    }
+
+    const authHeader = {
+      authorization: `Bearer ${testApp.jwt.sign({ userId: takerId })}`
+    };
+    const scopeTokenResponse = await testApp.inject({
+      method: "POST",
+      url: `/rfq/${sessionId}/execution-scope-token`,
+      payload: {
+        quoteId: limitlessQuoteId,
+        scopeKind: "CRYPTO_LANE",
+        scopeId: TEST_CRYPTO_LANE_ID,
+        ttlSeconds: 120
+      },
+      headers: authHeader
+    });
+
+    if (scopeTokenResponse.statusCode !== 201) {
+      throw new Error(`Execution scope token failed with ${scopeTokenResponse.statusCode}: ${scopeTokenResponse.body}`);
+    }
+    const scopeTokenBody = scopeTokenResponse.json() as {
+      token: string;
+      scope: {
+        venueSet: string[];
+        candidateSet: string[];
+      };
+    };
+    expect(scopeTokenBody.scope.venueSet.sort()).toEqual(["LIMITLESS", "POLYMARKET"]);
+    expect(scopeTokenBody.scope.candidateSet.length).toBeGreaterThan(0);
+
+    const acceptResponse = await testApp.inject({
+      method: "POST",
+      url: `/rfq/${sessionId}/accept`,
+      payload: {
+        quoteId: limitlessQuoteId,
+        executionScopeToken: scopeTokenBody.token
+      },
+      headers: authHeader
+    });
+
+    if (acceptResponse.statusCode !== 202) {
+      throw new Error(`Sandbox accept RFQ failed with ${acceptResponse.statusCode}: ${acceptResponse.body}`);
+    }
+    const acceptBody = acceptResponse.json() as {
+      status: string;
+      final_status?: string;
+      execution_id?: string | null;
+    };
+    expect(acceptBody.status).toBe("PLAN_ACCEPTED");
+    expect(acceptBody.final_status).toBe("COMPLETED");
+    expect(acceptBody.execution_id).toBeTruthy();
+
+    const executionRecord = await executionRecords.findById(acceptBody.execution_id!);
+    expect(executionRecord).not.toBeNull();
+    const metadataCandidate = (executionRecord!.metadata as Record<string, unknown>).executionSystemV0;
+    const metadata = ExecutionSystemMetadataSchema.parse(metadataCandidate);
+    expect(metadata.executionId).toBe(acceptBody.execution_id);
+    expect(metadata.rfqId).toBe(sessionId);
+    expect(metadata.userId).toBe(takerId);
+    expect(metadata.canonicalTopicKey).toBe("CRYPTO|ATH_BY_DATE|BTC");
+    expect(metadata.selectedLaneId).toBe(TEST_CRYPTO_LANE_ID);
+    expect(metadata.venuePath.sort()).toEqual(["LIMITLESS", "POLYMARKET"]);
+    expect(metadata.executionMode).toBe("PAIR");
+    expect(metadata.executionState).toBe("COMPLETED");
+    expect(metadata.settlementState).toBe("SETTLEMENT_VERIFIED");
+    expect(metadata.ghostFillState).toBe("CLEAR");
+    expect(metadata.fallbackState).toBe("NOT_USED");
+    expect(metadata.auditEventIds.length).toBeGreaterThanOrEqual(10);
+    expect(metadata.receipt).toMatchObject({
+      executionId: acceptBody.execution_id,
+      userId: takerId,
+      state: "COMPLETED",
+      filledSize: "10",
+      settlementStatus: "SETTLEMENT_VERIFIED",
+      ghostFillStatus: "CLEAR"
+    });
+
+    const statusResponse = await testApp.inject({
+      method: "GET",
+      url: `/rfq/${sessionId}/executions/${acceptBody.execution_id}/status`,
+      headers: authHeader
+    });
+    expect(statusResponse.statusCode).toBe(200);
+    expect(statusResponse.json()).toMatchObject({
+      executionId: acceptBody.execution_id,
+      currentState: "COMPLETED",
+      userStatus: "completed",
+      settlementStatus: "SETTLEMENT_VERIFIED",
+      ghostFillStatus: "CLEAR",
+      fallbackStatus: "not_used",
+      receipt: {
+        executionId: acceptBody.execution_id,
+        filledSize: "10",
+        settlementStatus: "SETTLEMENT_VERIFIED"
+      }
+    });
+
+    const finalSession = await sessions.findById(sessionId);
+    expect(finalSession?.status).toBe("SETTLED");
+
+    const auditRows = await pg.query<{ event_type: string }>(
+      `SELECT event_type
+         FROM execution_control_audit_records
+        WHERE execution_record_id = $1
+        ORDER BY created_at ASC`,
+      [acceptBody.execution_id]
+    );
+    expect(auditRows.rows.map((row) => row.event_type)).toEqual(
+      expect.arrayContaining([
+        "EXECUTION_CREATED",
+        "PREFLIGHT_STARTED",
+        "PREFLIGHT_PASSED",
+        "ORDER_SUBMITTED",
+        "SETTLEMENT_VERIFIED",
+        "ACCOUNTING_UPDATED",
+        "USER_RECEIPT_EMITTED"
+      ])
+    );
+  }, 60000);
+
+  it("Execution v0 sandbox: Polymarket V2 dry-run adapter fails closed and exposes safe status", async () => {
+    const pg = must(pool, "pool");
+    const redis = must(redisClient, "redisClient");
+    const [lp] = await createLPKeys(pg);
+    const cryptoAdmin = new CryptoAdminService({ pool: pg });
+    const originalEnv = {
+      POLYMARKET_EXECUTION_MODE: process.env.POLYMARKET_EXECUTION_MODE,
+      POLYMARKET_LIVE_EXECUTION_ENABLED: process.env.POLYMARKET_LIVE_EXECUTION_ENABLED,
+      POLYMARKET_CLOB_HOST: process.env.POLYMARKET_CLOB_HOST,
+      POLYMARKET_CHAIN_ID: process.env.POLYMARKET_CHAIN_ID,
+      POLYMARKET_BUILDER_CODE: process.env.POLYMARKET_BUILDER_CODE
+    };
+
+    process.env.POLYMARKET_EXECUTION_MODE = "v2";
+    process.env.POLYMARKET_LIVE_EXECUTION_ENABLED = "false";
+    process.env.POLYMARKET_CLOB_HOST = "https://clob.polymarket.test";
+    process.env.POLYMARKET_CHAIN_ID = "137";
+    process.env.POLYMARKET_BUILDER_CODE = "lotus-integration-builder";
+
+    const dryRunApp = await buildServer({
+      logger,
+      redisClient: redis,
+      pgPool: pg,
+      db: createDrizzleDb(pg),
+      canonicalServiceBaseUrl: "http://127.0.0.1:4101",
+      jwtSecret: "test-secret-at-least-thirty-two-chars",
+      sorEnabled: true,
+      executionSystemSandboxEnabled: true,
+      sorCanaryShadowEnabled: false,
+      sorCanaryPercent: 0,
+      reliabilityWeight: 0.05,
+      latencyWeight: 0.03,
+      failureWeight: 0.08,
+      sorAcceptAonAwait: true,
+      sorAcceptNonAonBackground: true
+    });
+
+    try {
+      await cryptoAdmin.recordOperatorApprovalIntent(
+        TEST_CRYPTO_POLYMARKET_DRY_RUN_LANE_ID,
+        "integration-test",
+        "approve BTC threshold pair lane for Polymarket V2 dry-run fail-closed proof"
+      );
+
+      const takerId = makeUuid();
+      const sessionId = randomUUID();
+      const polymarketQuoteId = `${RUN_PREFIX}sandbox-polymarket-v2-quote`;
+      const predictQuoteId = `${RUN_PREFIX}sandbox-predict-quote`;
+
+      await pg.query(
+        `INSERT INTO rfq_sessions
+        (id, request_id, canonical_market_id, taker_id, side, quantity, status, idempotency_key, expires_at, metadata)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW() + INTERVAL '5 minutes', $9::jsonb)`,
+        [
+          sessionId,
+          `${RUN_PREFIX}${randomUUID()}`,
+          TEST_CANONICAL_MARKET_ID,
+          takerId,
+          "buy",
+          "10",
+          "AWAITING_USER",
+          `${RUN_PREFIX}${randomUUID()}`,
+          JSON.stringify({ acceptance_policy: "ALL_OR_NONE" })
+        ]
+      );
+      trackSessionKeys(sessionId);
+
+      for (const [quoteId, venue] of [
+        [polymarketQuoteId, "POLYMARKET"],
+        [predictQuoteId, "PREDICT"]
+      ] as const) {
+        await pg.query(
+          `INSERT INTO rfq_quotes
+          (id, session_id, lp_key_id, quote_status, price, quantity, fee_bps, valid_until, quote_payload)
+          VALUES ($1, $2, $3, 'RECEIVED', $4, '5', 1, NOW() + INTERVAL '5 minutes', $5::jsonb)`,
+          [
+            randomUUID(),
+            sessionId,
+            lp?.keyDbId ?? "",
+            venue === "POLYMARKET" ? "0.90" : "1.00",
+            JSON.stringify({ quoteId, lpId: venue })
+          ]
+        );
+      }
+
+      const authHeader = {
+        authorization: `Bearer ${dryRunApp.jwt.sign({ userId: takerId })}`
+      };
+      const tokenResponse = await dryRunApp.inject({
+        method: "POST",
+        url: `/rfq/${sessionId}/execution-scope-token`,
+        payload: {
+          quoteId: polymarketQuoteId,
+          scopeKind: "CRYPTO_LANE",
+          scopeId: TEST_CRYPTO_POLYMARKET_DRY_RUN_LANE_ID,
+          ttlSeconds: 120
+        },
+        headers: authHeader
+      });
+      expect(tokenResponse.statusCode).toBe(201);
+      const tokenBody = tokenResponse.json() as { token: string };
+
+      const acceptResponse = await dryRunApp.inject({
+        method: "POST",
+        url: `/rfq/${sessionId}/accept`,
+        payload: {
+          quoteId: polymarketQuoteId,
+          executionScopeToken: tokenBody.token
+        },
+        headers: authHeader
+      });
+      if (acceptResponse.statusCode !== 202) {
+        throw new Error(`Polymarket V2 dry-run accept failed with ${acceptResponse.statusCode}: ${acceptResponse.body}`);
+      }
+      const acceptBody = acceptResponse.json() as {
+        final_status?: string;
+        execution_id?: string | null;
+      };
+      expect(acceptBody.final_status).toBe("FAILED");
+      expect(acceptBody.execution_id).toBeTruthy();
+
+      const statusResponse = await dryRunApp.inject({
+        method: "GET",
+        url: `/rfq/${sessionId}/executions/${acceptBody.execution_id}/status`,
+        headers: authHeader
+      });
+      expect(statusResponse.statusCode).toBe(200);
+      expect(statusResponse.json()).toMatchObject({
+        executionId: acceptBody.execution_id,
+        currentState: "FAILED_CLOSED",
+        userStatus: "failed closed",
+        filledAmount: "0",
+        settlementStatus: "SETTLEMENT_PENDING",
+        ghostFillStatus: "NOT_APPLICABLE",
+        fallbackStatus: "unavailable",
+        adapterStatus: expect.arrayContaining([
+          expect.objectContaining({
+            venue: "POLYMARKET",
+            legStatus: "FAILED_CLOSED",
+            settlementStatus: "SETTLEMENT_PENDING",
+            errorCode: "POLYMARKET_LIVE_EXECUTION_DISABLED"
+          })
+        ])
+      });
+
+      const record = await new ExecutionRecordRepository(pg).findById(acceptBody.execution_id!);
+      const metadata = ExecutionSystemMetadataSchema.parse((record!.metadata as Record<string, unknown>).executionSystemV0);
+      expect(metadata.receipt).toBeUndefined();
+      expect(JSON.stringify(metadata)).not.toContain("POLYMARKET_API_SECRET");
+      expect(JSON.stringify(metadata)).not.toContain("POLYMARKET_API_KEY");
+      expect(JSON.stringify(metadata)).not.toContain("POLYMARKET_API_PASSPHRASE");
+    } finally {
+      await dryRunApp.close();
+      for (const [key, value] of Object.entries(originalEnv)) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    }
   }, 60000);
 
   it("SOR handoff: risk rejection returns structured 409", async () => {

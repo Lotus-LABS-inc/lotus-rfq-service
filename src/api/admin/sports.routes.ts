@@ -89,6 +89,22 @@ export const registerAdminSportsRoutes = async (
     }
   });
 
+  app.get("/admin/sports-lanes/:laneId/authority-state", { preHandler: adminMiddleware }, async (request, reply) => {
+    const parsed = paramsSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: parsed.error.flatten() });
+    }
+    try {
+      return reply.send({ authorityState: await deps.sportsAdminService.getLaneAuthorityState(parsed.data.laneId) });
+    } catch (error) {
+      if (error instanceof SportsLaneNotFoundError) {
+        return reply.status(404).send({ code: "SPORTS_LANE_NOT_FOUND", message: error.message });
+      }
+      app.log.error({ err: error }, "Failed to load sports authority state.");
+      return reply.status(500).send({ code: "SPORTS_ADMIN_ERROR", message: "Failed to load sports authority state." });
+    }
+  });
+
   app.post("/admin/sports-lanes/:laneId/operator-approval-intent", { preHandler: adminMiddleware }, async (request, reply) => {
     const parsedParams = paramsSchema.safeParse(request.params);
     const parsedBody = bodySchema.safeParse(request.body);

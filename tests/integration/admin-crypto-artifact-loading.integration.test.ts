@@ -48,11 +48,13 @@ describe("crypto admin artifact loading", () => {
       const lane = await service.getLane(laneId);
       const readiness = await service.getReadiness(laneId);
       const rollbackPlan = await service.getRollbackPlan(laneId);
+      const authorityState = await service.getLaneAuthorityState(laneId);
 
       expect(lane.candidateSet.length).toBeGreaterThan(0);
       expect(readiness.candidateSet.length).toBeGreaterThan(0);
       expect(readiness.exactSafeTopics.length).toBeGreaterThan(0);
       expect(rollbackPlan.rollbackTarget).toBe("LANE_HOLD");
+      expect(authorityState.operatorApprovedToOffer).toBe(false);
 
       for (const sourceArtifactRef of lane.sourceArtifactRefs) {
         expect(existsSync(path.resolve(repoRoot, sourceArtifactRef)), sourceArtifactRef).toBe(true);

@@ -5,6 +5,101 @@
 
 ---
 
+## Session: 2026-04-24 (Operator Review Gate And Execution System v0)
+
+**Goal:** Move from matcher/readiness artifacts toward safe execution by adding explicit operator-approved lane authority, updating execution rules, and implementing the narrow Execution System v0 core without reopening matcher passes.
+
+### What Was Done Today So Far
+
+#### 1. Added minimal operator review gate for current market lanes
+- Extended lane authority coverage for:
+  - `SPORTS_LANE`
+  - `CRYPTO_LANE`
+  - existing `POLITICS_NOMINEE_LANE`
+- Added sports and crypto execution-scope authorities.
+- Current operator-approved lane authority is derived from admin promotion events and remains lane-scoped.
+- Matcher/readiness evidence remains non-executable by itself.
+
+#### 2. Added temporary bulk approval bootstrap
+- Added a dev/bootstrap-only script:
+  - `npm run admin:bootstrap-approve-market-lanes`
+- The script is explicitly marked as temporary bootstrap tooling, not a production approval path.
+- Local lane approvals were run for the current pass so the system can proceed toward sandbox execution testing.
+
+#### 3. Updated canonical execution rules
+- Added `# Execution System Orchestration Rules` to `rules.md`.
+- Rules now explicitly state:
+  - matcher output is evidence only
+  - operator approval is executable authority
+  - only `OPERATOR_APPROVED_SANDBOX` and `OPERATOR_APPROVED_LIMITED_PROD` are executable
+  - all other matcher/review/held/rollback states fail closed
+  - execution must include preflight, settlement verification, ghost-fill protection, fallback/fail-closed behavior, accounting, audit, and receipt states
+
+#### 4. Implemented Execution System v0 core
+- Added `src/execution-system` with:
+  - domain types and schemas
+  - v0 state machine
+  - approved-lane enforcement
+  - preflight service
+  - venue adapter interface and registry
+  - `TestExecutionAdapter`
+  - fail-closed `NotConfiguredExecutionAdapter`
+  - settlement verification service
+  - ghost-fill protection classifier
+  - fallback policy
+  - accounting update hook
+  - fee hook
+  - audit sink
+  - frontend-safe status mapper
+  - execution-system submission handler bridge
+- V0 uses existing execution/RFQ records plus typed `executionSystemV0` metadata.
+- No broad execution schema migration was added.
+- Live venue execution remains disabled unless a real venue adapter is configured.
+
+#### 5. Added RFQ execution status surface
+- RFQ accept responses can now include:
+  - `execution_id`
+- Added an execution status route shape:
+  - `GET /rfq/:id/executions/:executionId/status`
+- Status output is frontend-safe and does not claim final completion before settlement/finality verification.
+
+#### 6. Added execution-system report artifacts
+- Added report script:
+  - `npm run report:execution-system:v0`
+- Generated:
+  - `artifacts/execution/execution-system-v0-summary.json`
+  - `artifacts/execution/execution-system-v0-operator-summary.md`
+
+### Verification
+
+- `npm run typecheck`
+- `npm run test:execution-system`
+  - `tests/execution-system-v0.test.ts`
+  - `tests/execution-scope-token.test.ts`
+- Targeted regression run:
+  - `tests/rfq-route.test.ts`
+  - `tests/admin-execution-control-routes.test.ts`
+  - `tests/admin-crypto-routes.test.ts`
+  - `tests/admin-sports-routes.test.ts`
+- `npm run report:execution-system:v0`
+
+All commands passed in the latest local run.
+
+### Repo Truth At This Point
+
+- Execution can only proceed on operator-approved lanes.
+- Execution-scope tokens are required for market-lane execution in v0.
+- Matcher-ready or readiness-review states remain blocked at execution time.
+- The v0 adapter layer is real, but live venue submission is fail-closed by default.
+- Accounting remains settlement/finality gated.
+- Ghost-fill protection exists as a v0 classifier/hook, especially for Polymarket-style off-chain fill without finality.
+
+### Current Recommended Next Action
+
+- Wire the v0 submission handler into one approved sandbox RFQ/SOR path using `TestExecutionAdapter`, then run a full sandbox RFQ accept-to-receipt test.
+
+---
+
 ## Session: 2026-04-08 (Democratic Nominee Pair Limited-Prod Readiness Update)
 
 **Goal:** Extend the existing politics nominee readiness/operator surface to the exact Democratic pair lane proven by the dedicated matcher artifact.

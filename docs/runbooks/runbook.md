@@ -217,6 +217,12 @@ Primary storage:
 Operator surface:
 - see `docs/runbooks/execution-control-layer-runbook.md`
 
+Execution adapter readiness:
+- `GET /admin/execution-venues`
+- `GET /admin/execution-venues/POLYMARKET`
+
+Use this read-only surface to distinguish local adapter structure from external venue blockers. A Polymarket status of `STRUCTURALLY_READY` means Lotus has the local V2 adapter shape configured; `EXTERNALLY_BLOCKED` means the last guarded harness attempt was rejected by venue auth or endpoint state. Neither status bypasses approved-lane enforcement, execution-scope token validation, settlement verification, or ghost-fill protection.
+
 ## Current Verification Status
 
 Code verification completed in this cleanup pass:

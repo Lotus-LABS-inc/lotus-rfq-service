@@ -1,7 +1,7 @@
 # Execution Control Layer Runbook
 
 Status: ACTIVE  
-Last Updated: 2026-03-27
+Last Updated: 2026-04-25
 
 ## Purpose
 The execution control layer is the hard boundary between decisioning and executable action.
@@ -83,6 +83,8 @@ Read:
 - `GET /admin/execution-control/records`
 - `GET /admin/execution-control/record/:id`
 - `GET /admin/execution-control/idempotency/:key`
+- `GET /admin/execution-venues`
+- `GET /admin/execution-venues/:venue`
 
 Mutations:
 - `POST /admin/execution-control/reconcile/:recordId`
@@ -93,6 +95,52 @@ Mutation rules:
 - ADMIN auth required
 - `twoFactorToken` required
 - every mutation writes execution-control audit records
+
+## Execution Venue Readiness Surface
+
+Use the execution venue readiness surface to inspect adapter readiness before any operator considers live venue submission.
+
+Routes:
+- `GET /admin/execution-venues`
+- `GET /admin/execution-venues/POLYMARKET`
+
+Current scope:
+- read-only
+- admin-authenticated
+- no live order submission
+- no credential or secret exposure
+- one venue entry for `POLYMARKET`
+
+Polymarket readiness fields:
+- `structuralReadiness`: adapter/env readiness from the Polymarket V2 adapter config
+- `operationalStatus`: operator-facing status derived from adapter readiness plus the latest harness artifact
+- `liveExecutionEnabled`: whether the live-execution env flag is enabled
+- `featureFlagSelected`: whether `POLYMARKET_EXECUTION_MODE=v2` is selected
+- `requiredEnvPresent` / `missingEnv`: live-submit readiness gate
+- `dryRunRequiredEnvPresent` / `missingDryRunEnv`: dry-run readiness gate
+- `lastHarnessAttempt`: latest `artifacts/execution/polymarket-live-submit-checklist.json` result, if present
+
+Operational statuses:
+- `NOT_CONFIGURED`: required V2 config is absent or the adapter is not selected
+- `LIVE_DISABLED`: dry-run path may be configured, but live execution is disabled
+- `STRUCTURALLY_READY`: required local adapter configuration is present
+- `EXTERNALLY_BLOCKED`: local adapter structure is ready, but the latest harness attempt was blocked by venue auth or endpoint state
+
+Current Polymarket interpretation:
+- `STRUCTURALLY_READY` means Lotus can build and validate the Polymarket V2 execution envelope
+- `EXTERNALLY_BLOCKED` means the remaining blocker is outside Lotus local structure, typically API authorization or endpoint availability
+- this status does not authorize live submission by itself
+- approved-lane enforcement, execution-scope token validation, preflight, settlement verification, and ghost-fill protection still apply
+
+Security rules:
+- API keys, passphrases, private keys, and secrets must remain server-side only
+- readiness responses must never include credential values
+- harness artifacts may include status/error codes, but not secrets
+- do not paste `.env` values into tickets, logs, or operator notes
+
+Operator rule:
+- treat `/admin/execution-venues` as an inspection surface only
+- do not enable live submission until the harness checklist, adapter tests, settlement/finality behavior, and operator signoff are complete
 
 ## Operator Actions
 Use `reconcile` when:

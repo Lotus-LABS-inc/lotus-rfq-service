@@ -1,0 +1,110 @@
+{
+  "generatedAt": "2026-04-24T23:32:00.142Z",
+  "version": "execution-system-v0",
+  "polymarketExecutionAdapterV2": {
+    "adapter": "PolymarketExecutionAdapterV2",
+    "venue": "POLYMARKET",
+    "executionMode": "disabled",
+    "featureFlagSelected": false,
+    "liveExecutionEnabled": false,
+    "readinessState": "NOT_CONFIGURED",
+    "requiredEnvPresent": false,
+    "missingEnv": [
+      "POLYMARKET_CLOB_HOST",
+      "POLYMARKET_CHAIN_ID",
+      "POLYMARKET_API_KEY",
+      "POLYMARKET_API_SECRET",
+      "POLYMARKET_API_PASSPHRASE",
+      "POLYMARKET_BUILDER_CODE",
+      "POLYMARKET_PRIVATE_KEY"
+    ],
+    "dryRunRequiredEnvPresent": false,
+    "missingDryRunEnv": [
+      "POLYMARKET_CLOB_HOST",
+      "POLYMARKET_CHAIN_ID",
+      "POLYMARKET_BUILDER_CODE"
+    ],
+    "builderCodeConfigured": false,
+    "credentialsServerSideOnly": true,
+    "liveSubmissionStatus": "NOT_CONFIGURED"
+  },
+  "authority": {
+    "matcherEvidenceExecutableByItself": false,
+    "executableLaneStates": [
+      "OPERATOR_APPROVED_SANDBOX",
+      "OPERATOR_APPROVED_LIMITED_PROD"
+    ],
+    "scopeTokenRequiredForMarketLanes": true
+  },
+  "lifecycle": {
+    "executionStates": [
+      "CREATED",
+      "PREFLIGHT_CHECKING",
+      "PREFLIGHT_FAILED",
+      "READY_TO_SUBMIT",
+      "SUBMITTED",
+      "PARTIAL_FILL",
+      "FILLED_PENDING_SETTLEMENT",
+      "SETTLEMENT_VERIFIED",
+      "GHOST_FILL_SUSPECTED",
+      "GHOST_FILL_CONFIRMED",
+      "REROUTING",
+      "REROUTED",
+      "FAILED_CLOSED",
+      "COMPLETED",
+      "CANCELLED"
+    ],
+    "settlementStatuses": [
+      "NOT_APPLICABLE",
+      "DRY_RUN_ONLY",
+      "SETTLEMENT_VERIFIED",
+      "SETTLEMENT_PENDING",
+      "SETTLEMENT_TIMEOUT",
+      "SETTLEMENT_UNKNOWN",
+      "GHOST_FILL_SUSPECTED",
+      "GHOST_FILL_CONFIRMED"
+    ],
+    "auditEvents": [
+      "EXECUTION_CREATED",
+      "PREFLIGHT_STARTED",
+      "PREFLIGHT_PASSED",
+      "PREFLIGHT_FAILED",
+      "ROUTE_SELECTED",
+      "LIQUIDITY_RESERVED",
+      "ORDER_SUBMITTED",
+      "PARTIAL_FILL_RECEIVED",
+      "FILL_RECEIVED",
+      "SETTLEMENT_CHECK_STARTED",
+      "SETTLEMENT_VERIFIED",
+      "GHOST_FILL_SUSPECTED",
+      "GHOST_FILL_CONFIRMED",
+      "REROUTE_STARTED",
+      "REROUTE_COMPLETED",
+      "FAILED_CLOSED",
+      "ACCOUNTING_UPDATED",
+      "USER_RECEIPT_EMITTED"
+    ]
+  },
+  "adapters": {
+    "liveVenueSubmissionDefault": "NOT_CONFIGURED_FAIL_CLOSED",
+    "testAdapterAvailable": true,
+    "polymarketGhostFillProtectionHook": true,
+    "polymarketV2AdapterSkeletonAvailable": true,
+    "polymarketV2LiveSubmissionDefault": "DISABLED"
+  },
+  "controls": {
+    "approvedLaneEnforcement": true,
+    "preflightRevalidation": true,
+    "rfqAcceptMetadataPersistence": true,
+    "fallbackFailClosedPolicy": true,
+    "accountingAfterSettlementOnly": true,
+    "feeReceiptHooks": true,
+    "frontendStatusMapping": true
+  },
+  "remainingBlockers": [
+    "Configure real venue execution clients before live venue submission.",
+    "Implement and review a real Polymarket CLOB V2 submit/fill/finality client before enabling live Polymarket execution.",
+    "Keep POLYMARKET_LIVE_EXECUTION_ENABLED=false until credentials, builder code, settlement proof, and runbook signoff are complete.",
+    "Expand dedicated execution tables only after v0 metadata shape stabilizes."
+  ]
+}

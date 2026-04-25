@@ -201,6 +201,43 @@ describe("POST /rfq/:id/accept", () => {
     await app.close();
   });
 
+  it("exposes frontend-safe execution status when configured", async () => {
+    const app = Fastify({ logger: false });
+    const passThroughAuth: preHandlerHookHandler = async () => { };
+    const getExecutionStatus = vi.fn(async () => ({
+      executionId: "execution-1",
+      currentState: "COMPLETED",
+      userStatus: "completed",
+      venuePath: ["LIMITLESS", "POLYMARKET"],
+      filledAmount: "1",
+      settlementStatus: "SETTLEMENT_VERIFIED",
+      ghostFillStatus: "CLEAR",
+      fallbackStatus: "not_used",
+      feeSummary: { totalFees: 0 },
+      receipt: { executionId: "execution-1" }
+    }));
+    await registerRFQRoute(app, passThroughAuth, {
+      createRFQ: vi.fn(),
+      createExecutionScopeToken: vi.fn(),
+      acceptRFQ: vi.fn(),
+      getExecutionStatus
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/rfq/session-1/executions/execution-1/status"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      executionId: "execution-1",
+      userStatus: "completed",
+      settlementStatus: "SETTLEMENT_VERIFIED"
+    });
+    expect(getExecutionStatus).toHaveBeenCalledWith("session-1", "execution-1");
+    await app.close();
+  });
+
   it("maps insufficient liquidity to structured 409", async () => {
     const app = Fastify({ logger: false });
     const passThroughAuth: preHandlerHookHandler = async () => { };

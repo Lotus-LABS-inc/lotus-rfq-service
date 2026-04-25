@@ -310,6 +310,19 @@ describe("admin sports routes", () => {
         laneId: "SPORTS_EPL_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT",
         fallbackLaneId: "SPORTS_EPL_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET"
       })),
+      getLaneAuthorityState: vi.fn(async () => ({
+        laneId: "SPORTS_EPL_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT",
+        topicKey: "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+        laneType: "STRICT_ALL",
+        venueSet: "LIMITLESS|OPINION|POLYMARKET|PREDICT",
+        clubSet: ["arsenal", "liverpool", "manchester_city"],
+        readinessDecision: "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+        currentStage: "INTERNAL_ONLY",
+        latestEventId: null,
+        latestEventAt: null,
+        latestActionKind: null,
+        operatorApprovedToOffer: false
+      })),
       recordOperatorApprovalIntent: vi.fn(async () => ({
         laneId: "SPORTS_EPL_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT"
       })),
@@ -339,6 +352,13 @@ describe("admin sports routes", () => {
       url: "/admin/sports-lanes/SPORTS_CHAMPIONS_LEAGUE_WINNER_2025_2026_TRI_LIMITLESS_OPINION_POLYMARKET/readiness"
     });
     expect(readinessResponse.statusCode).toBe(200);
+
+    const authorityResponse = await app.inject({
+      method: "GET",
+      url: "/admin/sports-lanes/SPORTS_EPL_WINNER_2025_2026_ALL_VENUE_LIMITLESS_OPINION_POLYMARKET_PREDICT/authority-state"
+    });
+    expect(authorityResponse.statusCode).toBe(200);
+    expect(JSON.parse(authorityResponse.body).authorityState.operatorApprovedToOffer).toBe(false);
 
     const deniedMutation = await app.inject({
       method: "POST",

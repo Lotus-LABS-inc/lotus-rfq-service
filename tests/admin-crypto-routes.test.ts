@@ -151,6 +151,19 @@ describe("admin crypto routes", () => {
         laneId: "CRYPTO_BTC_THRESHOLD_BY_DATE_APR_2026_PAIR_POLYMARKET_PREDICT",
         fallbackLaneId: null
       })),
+      getLaneAuthorityState: vi.fn(async () => ({
+        laneId: "CRYPTO_BTC_THRESHOLD_BY_DATE_APR_2026_PAIR_POLYMARKET_PREDICT",
+        familyKey: "CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30",
+        laneType: "PAIR",
+        venueSet: "POLYMARKET|PREDICT",
+        candidateSet: ["above 85,000", "above 100,000", "below 70,000"],
+        readinessDecision: "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+        currentStage: "INTERNAL_ONLY",
+        latestEventId: null,
+        latestEventAt: null,
+        latestActionKind: null,
+        operatorApprovedToOffer: false
+      })),
       recordOperatorApprovalIntent: vi.fn(async () => ({
         laneId: "CRYPTO_BTC_THRESHOLD_BY_DATE_APR_2026_PAIR_POLYMARKET_PREDICT"
       })),
@@ -180,6 +193,13 @@ describe("admin crypto routes", () => {
       url: "/admin/crypto-lanes/CRYPTO_ETH_THRESHOLD_BY_DATE_APR_2026_PAIR_POLYMARKET_PREDICT/readiness"
     });
     expect(readinessResponse.statusCode).toBe(200);
+
+    const authorityResponse = await app.inject({
+      method: "GET",
+      url: "/admin/crypto-lanes/CRYPTO_BTC_THRESHOLD_BY_DATE_APR_2026_PAIR_POLYMARKET_PREDICT/authority-state"
+    });
+    expect(authorityResponse.statusCode).toBe(200);
+    expect(authorityResponse.json().authorityState.operatorApprovedToOffer).toBe(false);
 
     const forbiddenResponse = await app.inject({
       method: "POST",

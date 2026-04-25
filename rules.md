@@ -514,3 +514,384 @@ Do not do broad doc rewrites unless explicitly requested.
 4. No sticky-session assumptions.
 
 Violation of these rules is considered architectural regression.
+
+---
+
+# Execution System Orchestration Rules
+
+## 1. Core Principle
+
+Execution is allowed only after both conditions are true:
+
+1. A lane has matcher/readiness evidence.
+2. The lane has explicit operator approval.
+
+Matcher output is evidence.
+Operator approval is executable authority.
+
+The execution system must never treat any of the following as executable by themselves:
+- `MATCHER_READY`
+- `READINESS_READY_FOR_REVIEW`
+- `OPERATOR_REVIEW_REQUIRED`
+- `REVIEW_REQUIRED`
+- `FAMILY_MATCHER_CANDIDATE_FOUND`
+- `TRI_REVIEW_REQUIRED`
+- `PAIR_REVIEW_REQUIRED`
+
+Only these states are executable:
+- `OPERATOR_APPROVED_SANDBOX`
+- `OPERATOR_APPROVED_LIMITED_PROD`
+
+All other states must fail closed at execution time.
+
+## 2. Execution Lifecycle
+
+The canonical execution lifecycle is:
+
+1. User submits intent.
+2. API creates or loads RFQ.
+3. Canonical layer confirms topic/outcome identity.
+4. SOR selects route only from operator-approved lanes.
+5. Reserve/liquidity layer validates balances and availability.
+6. Execution preflight revalidates lane, venue, outcome, price, and liquidity.
+7. Venue adapter submits order.
+8. Settlement verification begins.
+9. Ghost-fill protection runs where relevant.
+10. Fallback or fail-closed if execution/settlement is unsafe.
+11. Accounting updates per-venue and unified display state.
+12. Audit log records all critical events.
+13. User receives final receipt/status.
+
+## 3. Execution States
+
+Use or support these execution states:
+
+- `CREATED`
+- `PREFLIGHT_CHECKING`
+- `PREFLIGHT_FAILED`
+- `READY_TO_SUBMIT`
+- `SUBMITTED`
+- `PARTIAL_FILL`
+- `FILLED_PENDING_SETTLEMENT`
+- `SETTLEMENT_VERIFIED`
+- `GHOST_FILL_SUSPECTED`
+- `GHOST_FILL_CONFIRMED`
+- `REROUTING`
+- `REROUTED`
+- `FAILED_CLOSED`
+- `COMPLETED`
+- `CANCELLED`
+
+Rules:
+- No execution can skip `PREFLIGHT_CHECKING`.
+- No execution can become `COMPLETED` without settlement verification or a venue-specific finality equivalent.
+- No ghost-fill suspected or confirmed execution can update final user position without recovery, reroute, or explicit fail-closed resolution.
+- `FAILED_CLOSED` must preserve audit evidence and user-safe accounting.
+
+## 4. Approved-Lane Enforcement
+
+Before execution, the system must confirm:
+
+- `laneId` exists.
+- lane state is `OPERATOR_APPROVED_SANDBOX` or `OPERATOR_APPROVED_LIMITED_PROD`.
+- `topicKey` matches RFQ topic.
+- venue set matches approved lane.
+- outcome/candidate set is inside approved scope.
+- rule state has not degraded.
+- lane has not been `HELD`, `ROLLED_BACK`, or `REJECTED`.
+- fallback lane, if used, is also approved.
+
+If any check fails:
+- do not execute.
+- return `PREFLIGHT_FAILED` or `FAILED_CLOSED`.
+- write audit event.
+- surface clear operator/user reason.
+
+Matcher-ready is not enough.
+
+## 5. ExecutionRequest Object Policy
+
+Execution must use a canonical `ExecutionRequest` object.
+
+Required fields:
+- `executionId`
+- `rfqId`
+- `userId`
+- `canonicalTopicKey`
+- `canonicalOutcomeId` or `candidateId`
+- `side`
+- `size`
+- `selectedLaneId`
+- `venuePath`
+- `executionMode`
+- `approvedScopeHash`
+- `maxSlippage`
+- `fastLaneEnabled`
+- `ghostFillProtectionEnabled`
+- `expectedPrice`
+- `expectedFees`
+- `idempotencyKey`
+- `createdAt`
+
+Allowed `executionMode` values:
+- `SINGLE_VENUE`
+- `PAIR`
+- `TRI`
+- `SPLIT`
+
+The `ExecutionRequest` is the only object passed into venue execution adapters.
+
+## 6. ExecutionLeg Policy
+
+Multi-venue or split executions must be represented as child `ExecutionLeg` records.
+
+Required fields:
+- `executionLegId`
+- `parentExecutionId`
+- `venue`
+- `venueMarketId`
+- `venueOutcomeId`
+- `side`
+- `size`
+- `price`
+- `status`
+- `submittedAt`
+- `filledAt`
+- `settlementStatus`
+- `fillId` or `venueOrderId`
+- `errorCode` if any
+
+Rules:
+- Parent execution status must derive from child leg statuses.
+- Partial success must not be marked complete until settlement and accounting are reconciled.
+- Failed legs must trigger fallback or fail-closed logic.
+- Legs cannot execute on venues outside the approved lane/scope.
+
+## 7. Preflight Revalidation Rules
+
+Every execution must revalidate immediately before order submission:
+
+- approved lane state
+- venue health
+- market open status
+- outcome/candidate still present
+- price within slippage
+- liquidity available
+- user balance/funding availability
+- scope token if required
+- fallback availability if route is fragile
+- ghost-fill protection setting if venue requires it
+
+Preflight failures must be deterministic and auditable.
+
+## 8. Execution-Scope Token Rules
+
+For sensitive or advanced lanes, especially tri lanes, execution may require an `executionScopeToken`.
+
+Token rules:
+- token does not grant authority by itself.
+- token must bind exact topic.
+- token must bind exact venue set.
+- token must bind exact outcome/candidate set.
+- token must bind RFQ/execution context where applicable.
+- token must be short-lived.
+- token must be single-use or replay-protected.
+- token must be revalidated against live lane authority before execution.
+
+If the operator-approved lane has changed since token issuance:
+- reject token.
+- fallback only to an approved fallback lane.
+- otherwise fail closed.
+
+User consent can never widen scope.
+
+## 9. Venue Adapter Rules
+
+Venue execution must be adapter-based.
+
+Adapters may include:
+- `PolymarketExecutionAdapter`
+- `LimitlessExecutionAdapter`
+- `OpinionExecutionAdapter`
+- `MyriadExecutionAdapter`
+- `PredictFunExecutionAdapter`
+- `GenericTestExecutionAdapter`
+
+Each adapter must handle:
+- venue market id mapping
+- venue outcome id mapping
+- price format
+- size format
+- side mapping
+- order submission
+- fill state fetching
+- cancel if supported
+- settlement check if supported
+- error normalization
+
+Do not scatter venue-specific execution logic throughout SOR.
+
+SOR chooses the route.
+Adapters execute the route.
+
+## 10. Settlement Verification Rules
+
+After venue execution, settlement verification must begin.
+
+Settlement verification must classify:
+- `SETTLEMENT_VERIFIED`
+- `SETTLEMENT_PENDING`
+- `SETTLEMENT_TIMEOUT`
+- `SETTLEMENT_UNKNOWN`
+- `GHOST_FILL_SUSPECTED`
+- `GHOST_FILL_CONFIRMED`
+
+For venues with known off-chain fill vs on-chain settlement mismatch risk, especially Polymarket:
+- off-chain fill confirmation is not final settlement.
+- on-chain settlement or venue-specific finality proof must be verified.
+- if no settlement appears within configured timeout, classify according to ghost-fill rules.
+
+## 11. Ghost-Fill Protection Rules
+
+Ghost-fill protection must sit after order submission and before final accounting.
+
+A ghost fill may be suspected when:
+- venue/off-chain API says filled.
+- settlement does not appear within configured timeout.
+- counterparty/order nonce cancellation evidence indicates fill may not settle.
+
+On ghost-fill suspected/confirmed:
+- do not update final position as settled.
+- write immutable audit event.
+- notify execution/fallback engine.
+- reroute only to approved fallback lanes.
+- otherwise fail closed.
+- surface user-safe status.
+- preserve all evidence for operator review.
+
+Ghost-fill protection is mandatory for Polymarket-routed trades in protected modes.
+
+## 12. Fallback and Reroute Rules
+
+Fallback logic must obey lane authority.
+
+Allowed fallback:
+- approved pair fallback
+- approved single venue fallback
+- approved alternate lane within exact same topic/outcome scope
+
+Not allowed:
+- fallback to matcher-ready but unapproved lane
+- fallback to venue outside approved scope
+- fallback to candidate/outcome outside approved shared core
+- fallback that bypasses rule review requirement
+
+If no approved fallback exists:
+- fail closed.
+
+## 13. Accounting and Position Update Rules
+
+Accounting updates happen only after settlement is verified or venue-specific finality is confirmed.
+
+For v0:
+- maintain venue-native positions.
+- display unified position view only as a derived view.
+- do not claim sell-anywhere position abstraction unless explicitly implemented.
+- sells must respect where inventory actually exists unless a future approved abstraction layer exists.
+
+Accounting must update:
+- per-venue position
+- per-venue balance
+- unified display position
+- execution receipt
+- fee entries if applicable
+- audit log
+
+## 14. Fee Hook Rules
+
+Execution system may compute monetization, but fees must not be silently invented.
+
+Fee hooks may include:
+- price improvement share
+- fast lane fee
+- ghost-fill protection fee
+- future instant settlement fee
+
+For v0:
+- fee preview
+- deterministic fee calculation
+- receipt display
+- internal fee ledger
+
+No smart-contract enforcement is assumed in v0.
+
+## 15. Audit Event Rules
+
+Execution must write immutable audit events for:
+
+- `EXECUTION_CREATED`
+- `PREFLIGHT_STARTED`
+- `PREFLIGHT_PASSED`
+- `PREFLIGHT_FAILED`
+- `ROUTE_SELECTED`
+- `LIQUIDITY_RESERVED`
+- `ORDER_SUBMITTED`
+- `PARTIAL_FILL_RECEIVED`
+- `FILL_RECEIVED`
+- `SETTLEMENT_CHECK_STARTED`
+- `SETTLEMENT_VERIFIED`
+- `GHOST_FILL_SUSPECTED`
+- `GHOST_FILL_CONFIRMED`
+- `REROUTE_STARTED`
+- `REROUTE_COMPLETED`
+- `FAILED_CLOSED`
+- `ACCOUNTING_UPDATED`
+- `USER_RECEIPT_EMITTED`
+
+Every critical state transition must be auditable.
+
+## 16. Frontend State Rules
+
+Frontend execution UI must consume execution states from backend.
+
+User-facing states should include:
+- preparing route
+- checking lane approval
+- reserving liquidity
+- submitting order
+- partially filled
+- filled pending settlement
+- settlement verified
+- ghost fill detected
+- rerouting safely
+- failed closed
+- completed
+
+The UI must not imply a trade is final before settlement/finality verification.
+
+## 17. Non-Goals for Execution v0
+
+Execution v0 must not attempt:
+- full solver network
+- full smart contract settlement layer
+- full sell-anywhere position abstraction
+- internal clearinghouse
+- full funding SOR
+- instant settlement LP product
+- broad auto-approval of matcher lanes
+
+These are later phases.
+
+## 18. Current Next-Step Rule
+
+After matcher passes are complete but operator approvals are pending, the next valid work is:
+
+1. Create/update minimal lane approval enforcement. Current status: done for the bootstrap pass.
+2. Approve only small sandbox lane set. Current status: done for the current local/bootstrap pass; future approvals must move to the frontend/admin surface.
+3. Implement RFQ to SOR to execution v0.
+4. Implement settlement verification.
+5. Implement ghost-fill protection v0.
+6. Implement audit and receipt states.
+7. Only then expand funding/monetization/frontend depth.
+
+Do not run new matcher passes unless an execution test reveals a matcher defect.

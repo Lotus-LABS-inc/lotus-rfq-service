@@ -422,6 +422,7 @@ Sports admin/operator surface:
 - `GET /admin/sports-lanes/:laneId`
 - `GET /admin/sports-lanes/:laneId/readiness`
 - `GET /admin/sports-lanes/:laneId/rollback-plan`
+- `GET /admin/sports-lanes/:laneId/authority-state`
 - `POST /admin/sports-lanes/:laneId/operator-approval-intent`
 - `POST /admin/sports-lanes/:laneId/hold`
 - `POST /admin/sports-lanes/:laneId/rollback`
@@ -802,6 +803,7 @@ Sports NHL Stanley Cup operating rules:
   - `GET /admin/crypto-lanes/:laneId`
   - `GET /admin/crypto-lanes/:laneId/readiness`
   - `GET /admin/crypto-lanes/:laneId/rollback-plan`
+  - `GET /admin/crypto-lanes/:laneId/authority-state`
   - `POST /admin/crypto-lanes/:laneId/operator-approval-intent`
   - `POST /admin/crypto-lanes/:laneId/hold`
   - `POST /admin/crypto-lanes/:laneId/rollback`
@@ -1016,3 +1018,25 @@ Crypto first-to-threshold operating rules:
   - Base `2025-12-31` remains excluded from the Predict-backed pair because the supplied Predict URL is the 2026 family.
 - Opinion-backed tri lanes are not materialized unless Opinion rows are fetched and normalized exactly.
 - Approval, hold, and rollback remain lane-scoped only.
+
+## Minimal Operator Review Gate
+
+The current sports and crypto market lanes remain review-gated until a lane-scoped operator approval intent exists. The gate is exposed through:
+
+- `GET /admin/sports-lanes/:laneId/authority-state`
+- `GET /admin/crypto-lanes/:laneId/authority-state`
+
+Execution-scope tokens now support `SPORTS_LANE` and `CRYPTO_LANE` scopes. Token issuance and validation fail closed unless:
+
+- the latest lane-scoped promotion event is `OPERATOR_APPROVAL_INTENT`
+- the lane readiness decision is still `READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION` or the legacy-equivalent `READY_BUT_MISSING_OPERATOR_REVIEW`
+- the live venue set still matches the token and the actual execution route
+- the live candidate set still matches the token
+
+Any later hold or rollback event becomes the latest lane event and clears `operatorApprovedToOffer`, which blocks new tokens and invalidates stale ones before execution.
+
+Temporary bootstrap note:
+
+- `npm run admin:bootstrap-approve-market-lanes -- --dry-run` can be used only for this dev/staging bootstrap pass while the frontend approval surface is unavailable.
+- The script uses the same admin services as the API, skips already-approved lanes, and refuses non-local DB hosts unless `--allow-non-local` is explicitly passed.
+- Do not use the script as the long-term production approval workflow; production operator review should use the audited admin UI/API routes.

@@ -4,6 +4,26 @@
 
 Lotus is now operating with an explicit time-basis split, a pair-first crypto rollout posture, and a secondary sports discovery track.
 
+Latest 2026-04-24 execution-system update:
+- minimal operator review gate and lane authority checks are now present for the current sports and crypto admin surfaces
+- a dev/bootstrap-only bulk lane approval script exists for this temporary local pass:
+  - `npm run admin:bootstrap-approve-market-lanes`
+- execution-scope token support now covers:
+  - `POLITICS_NOMINEE_LANE`
+  - `SPORTS_LANE`
+  - `CRYPTO_LANE`
+- `rules.md` now includes canonical `Execution System Orchestration Rules`
+- Execution System v0 core now exists as a narrow, fail-closed orchestration layer under `src/execution-system`
+- Execution System v0 uses existing execution/RFQ records plus typed `executionSystemV0` metadata rather than a broad new schema
+- live venue submission remains fail-closed unless a real configured adapter exists
+- test/stub execution is available through the v0 adapter interface
+- frontend-safe execution status output is now exposed through the RFQ execution-status route shape
+- operator report artifacts now exist under:
+  - `artifacts/execution/execution-system-v0-summary.json`
+  - `artifacts/execution/execution-system-v0-operator-summary.md`
+- current best next implementation step:
+  - wire the v0 submission handler into one approved sandbox RFQ/SOR path with `TestExecutionAdapter` and run a full sandbox accept-to-receipt test
+
 Current frontier truth:
 - crypto is the shipping frontier
 - politics nominee rollout is now narrowly defined and artifact-backed, but not broad-politics ready
@@ -332,6 +352,41 @@ Mutation rules:
 
 Hard execution-control boundary is now active for the live RFQ accept path.
 
+Execution System v0 is now implemented as a narrow bridge from approved RFQ/SOR routes to safe execution orchestration:
+- canonical `ExecutionRequest` and `ExecutionLeg` models exist
+- v0 execution states are implemented:
+  - `CREATED`
+  - `PREFLIGHT_CHECKING`
+  - `PREFLIGHT_FAILED`
+  - `READY_TO_SUBMIT`
+  - `SUBMITTED`
+  - `PARTIAL_FILL`
+  - `FILLED_PENDING_SETTLEMENT`
+  - `SETTLEMENT_VERIFIED`
+  - `GHOST_FILL_SUSPECTED`
+  - `GHOST_FILL_CONFIRMED`
+  - `REROUTING`
+  - `REROUTED`
+  - `FAILED_CLOSED`
+  - `COMPLETED`
+  - `CANCELLED`
+- approved-lane enforcement blocks matcher-only or review-gated lanes at execution time
+- all market-lane executions require a valid execution-scope token in v0
+- preflight checks cover lane authority, venue health, market/outcome availability, slippage, liquidity, funding, idempotency, and fallback approval
+- venue execution is adapter-based:
+  - `TestExecutionAdapter` supports sandbox/test execution
+  - live venues default to deterministic `VENUE_EXECUTION_NOT_CONFIGURED`
+- settlement verification and ghost-fill protection hooks exist
+- Polymarket-style off-chain fill without finality is classified as ghost-fill suspected in protected mode
+- fallback and reroute logic only admits approved fallback scope; otherwise it fails closed
+- accounting updates are built only after settlement/finality verification
+- fee preview/realized fee hooks now exist
+- frontend status mapping prevents final-success UX before settlement/finality
+- v0 report script:
+  - `npm run report:execution-system:v0`
+- v0 test script:
+  - `npm run test:execution-system`
+
 Execution-control objects now include:
 - `ExecutionControlDecision`
 - `ExecutionApprovalState`
@@ -396,6 +451,18 @@ Current environment contract:
 - local development/test convention is now standardized on `127.0.0.1:5433`
 - local DB migration and schema validation pass on the `5433` test environment
 - Supabase schema migration and verification also pass against the current migration set
+
+Latest 2026-04-24 execution-system verification:
+- `npm run typecheck` passes
+- `npm run test:execution-system` passes
+  - `tests/execution-system-v0.test.ts`
+  - `tests/execution-scope-token.test.ts`
+- targeted RFQ/admin regression tests pass:
+  - `tests/rfq-route.test.ts`
+  - `tests/admin-execution-control-routes.test.ts`
+  - `tests/admin-crypto-routes.test.ts`
+  - `tests/admin-sports-routes.test.ts`
+- `npm run report:execution-system:v0` generates the execution-system operator artifacts
 
 ## Historical Simulation Status
 

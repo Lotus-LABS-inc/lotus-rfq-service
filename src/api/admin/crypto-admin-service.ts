@@ -103,6 +103,20 @@ export interface CryptoLimitedProdRollbackPlan {
   operatorSteps: readonly string[];
 }
 
+export interface CryptoLaneAuthorityState {
+  laneId: string;
+  familyKey: string;
+  laneType: "PAIR";
+  venueSet: string;
+  candidateSet: readonly string[];
+  readinessDecision: string;
+  currentStage: QualificationStage;
+  latestEventId: string | null;
+  latestEventAt: string | null;
+  latestActionKind: string | null;
+  operatorApprovedToOffer: boolean;
+}
+
 interface CryptoLaneArtifacts {
   config:
     | CryptoAthByDateAssetConfig
@@ -113,6 +127,11 @@ interface CryptoLaneArtifacts {
   readiness: CryptoReadinessArtifact;
   adminSummary: CryptoAdminSurfaceSummaryArtifact;
 }
+
+const operatorReviewPendingReadinessDecisions = new Set([
+  "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+  "READY_BUT_MISSING_OPERATOR_REVIEW"
+]);
 
 export class CryptoLaneNotFoundError extends Error {
   public constructor(laneId: string) {
@@ -224,7 +243,7 @@ export class CryptoAdminService {
       operatorRuleReviewRequired: artifacts.readiness.operatorRuleReviewRequired,
       blockers: [
         ...(artifacts.readiness.operatorRuleReviewRequired ? ["operator_rule_review_required"] : []),
-        ...(artifacts.adminSummary.currentReadinessDecision !== "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION"
+        ...(!operatorReviewPendingReadinessDecisions.has(artifacts.adminSummary.currentReadinessDecision)
           ? ["lane_not_ready_for_limited_prod_review"]
           : [])
       ],
@@ -339,7 +358,7 @@ export class CryptoAdminService {
       operatorRuleReviewRequired: artifacts.readiness.operatorRuleReviewRequired,
       matcherReady: artifacts.readiness.matcherReady,
       operatorCredible: artifacts.readiness.operatorCredible,
-      readinessReviewJustified: artifacts.adminSummary.currentReadinessDecision === "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+      readinessReviewJustified: operatorReviewPendingReadinessDecisions.has(artifacts.adminSummary.currentReadinessDecision),
       rolloutRecommended: false,
       recommendedMode: "LIMITED_PROD_REVIEW_ONLY" as const,
       finalReadinessLabel: artifacts.readiness.finalReadinessLabel
@@ -367,10 +386,37 @@ export class CryptoAdminService {
     };
   }
 
+  public async getLaneAuthorityState(laneId: string): Promise<CryptoLaneAuthorityState> {
+    const artifacts = this.getLaneArtifacts(laneId);
+    const lane = await this.getLane(laneId);
+    const events = await this.listPromotionEvents(artifacts.config);
+    const latest = events.find((event) => event.scopeId === laneId) ?? null;
+    const latestActionKind =
+      latest && typeof latest.metadata.actionKind === "string"
+        ? latest.metadata.actionKind
+        : null;
+
+    return {
+      laneId,
+      familyKey: lane.familyKey,
+      laneType: lane.laneType,
+      venueSet: lane.venueSet,
+      candidateSet: lane.candidateSet,
+      readinessDecision: lane.readinessDecision,
+      currentStage: lane.currentStage,
+      latestEventId: latest?.id ?? null,
+      latestEventAt: latest?.createdAt.toISOString() ?? null,
+      latestActionKind,
+      operatorApprovedToOffer:
+        latestActionKind === "OPERATOR_APPROVAL_INTENT"
+        && operatorReviewPendingReadinessDecisions.has(lane.readinessDecision)
+    };
+  }
+
   public async recordOperatorApprovalIntent(laneId: string, createdBy: string, reason?: string | null) {
     const artifacts = this.getLaneArtifacts(laneId);
     const lane = await this.getLane(laneId);
-    if (lane.readinessDecision !== "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION") {
+    if (!operatorReviewPendingReadinessDecisions.has(lane.readinessDecision)) {
       throw new CryptoLaneTransitionError(`Operator approval intent blocked: ${lane.readinessDecision}`);
     }
     const event = await this.recordEvent({

@@ -78,6 +78,8 @@ import { registerAdminSportsRoutes } from "./admin/sports.routes.js";
 import { SportsAdminService } from "./admin/sports-admin-service.js";
 import { registerAdminCryptoRoutes } from "./admin/crypto.routes.js";
 import { CryptoAdminService } from "./admin/crypto-admin-service.js";
+import { registerAdminExecutionVenuesRoutes } from "./admin/execution-venues.routes.js";
+import { ExecutionVenuesAdminService } from "./admin/execution-venues-admin-service.js";
 import { PairShadowObservationRepository } from "../shadow/pair-shadow-observation-repository.js";
 import { PairShadowRuntimeWriter } from "../shadow/pair-shadow-runtime-writer.js";
 import { PairShadowRuntimeHooks } from "../shadow/pair-shadow-runtime-hooks.js";
@@ -170,7 +172,29 @@ import {
   ExecutionScopeAuthorityError,
   ExecutionScopeTokenService
 } from "../execution-control/execution-scope-token.js";
+import { CryptoExecutionScopeAuthority } from "../execution-control/crypto-execution-scope-authority.js";
 import { PoliticsNomineeExecutionScopeAuthority } from "../execution-control/politics-nominee-execution-scope-authority.js";
+import { SportsExecutionScopeAuthority } from "../execution-control/sports-execution-scope-authority.js";
+import {
+  AccountingUpdateService,
+  ApprovedLaneExecutionGate,
+  buildFrontendExecutionStatus,
+  ExecutionFeeService,
+  ExecutionPreflightService,
+  ExecutionSystemMetadataSchema,
+  ExecutionSystemOrchestrator,
+  ExecutionSystemSubmissionHandler,
+  ExecutionVenueAdapterRegistry,
+  FallbackPolicyService,
+  GhostFillProtectionService,
+  PolymarketExecutionAdapterV2,
+  buildPolymarketExecutionAdapterV2ConfigFromEnv,
+  RepositoryExecutionAuditSink,
+  ScopeAuthorityLaneResolver,
+  SettlementVerificationService,
+  TestExecutionAdapter,
+  alwaysHealthyPreflightDeps
+} from "../execution-system/index.js";
 
 export interface ServerDependencies {
   logger: Logger;
@@ -182,6 +206,7 @@ export interface ServerDependencies {
   jwtSecret: string;
   devSimulationPreviewEnabled?: boolean;
   sorEnabled?: boolean;
+  executionSystemSandboxEnabled?: boolean;
   sorCanaryShadowEnabled?: boolean;
   sorCanaryPercent?: number;
   sorCanaryStartAt?: string;
@@ -293,6 +318,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     failureRecoveryManager,
     dependencies.logger
   );
+  let executionSystemSandboxHandler: ExecutionSystemSubmissionHandler | null = null;
   const qualificationRuntimeConfig = dependencies.qualificationRuntimeConfig ?? { enabled: false };
   const qualificationRunManager = new QualificationRunManager({
     pool: dependencies.pgPool,
@@ -640,13 +666,25 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           }
         },
         SOR_PLAN: {
-          execute: async ({ request }) => {
+          execute: async (submissionInput) => {
+            const { request } = submissionInput;
             const payload = request.submissionPayload as {
               sessionId: string;
               plan: Parameters<typeof planRunner.run>[0];
               acceptancePolicy: SORAcceptancePolicy;
               awaitExecution: boolean;
             };
+            if (dependencies.executionSystemSandboxEnabled && request.executionScopeBinding && executionSystemSandboxHandler) {
+              await transitionRFQState(payload.sessionId, "ACCEPTED", "execution_system_v0_sandbox_accepted");
+              await transitionRFQState(payload.sessionId, "EXECUTING", "execution_system_v0_sandbox_running");
+              const result = await executionSystemSandboxHandler.execute(submissionInput);
+              if (result.status === "COMPLETED") {
+                await transitionRFQState(payload.sessionId, "SETTLED", "execution_system_v0_sandbox_completed");
+              } else if (result.status === "FAILED") {
+                await transitionRFQState(payload.sessionId, "FAILED", "execution_system_v0_sandbox_failed");
+              }
+              return result;
+            }
             const runPlan = async () => {
               await transitionRFQState(payload.sessionId, "ACCEPTED", "sor_plan_created");
               await transitionRFQState(payload.sessionId, "EXECUTING", "sor_plan_running");
@@ -764,8 +802,37 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     process.env.EXECUTION_SCOPE_TOKEN_SECRET ?? dependencies.jwtSecret
   );
   const executionScopeAuthorities = {
+    CRYPTO_LANE: new CryptoExecutionScopeAuthority(cryptoAdminService),
+    SPORTS_LANE: new SportsExecutionScopeAuthority(sportsAdminService),
     POLITICS_NOMINEE_LANE: new PoliticsNomineeExecutionScopeAuthority(politicsNomineeAdminService)
   } as const;
+  if (dependencies.executionSystemSandboxEnabled) {
+    const laneGate = new ApprovedLaneExecutionGate(new ScopeAuthorityLaneResolver(executionScopeAuthorities));
+    const adapterRegistry = new ExecutionVenueAdapterRegistry();
+    for (const venue of ["LIMITLESS", "OPINION", "POLYMARKET", "PREDICT", "MYRIAD", "TEST"]) {
+      adapterRegistry.register(new TestExecutionAdapter(venue));
+    }
+    if (process.env.POLYMARKET_EXECUTION_MODE === "v2") {
+      adapterRegistry.register(new PolymarketExecutionAdapterV2(
+        buildPolymarketExecutionAdapterV2ConfigFromEnv(process.env)
+      ));
+    }
+    const preflight = new ExecutionPreflightService(alwaysHealthyPreflightDeps(laneGate));
+    executionSystemSandboxHandler = new ExecutionSystemSubmissionHandler(new ExecutionSystemOrchestrator({
+      preflight,
+      adapters: adapterRegistry,
+      settlement: new SettlementVerificationService(adapterRegistry, {
+        timeoutMs: 100,
+        pollIntervalMs: 5,
+        maxAttempts: 1
+      }),
+      ghostFill: new GhostFillProtectionService(),
+      fallback: new FallbackPolicyService(laneGate),
+      accounting: new AccountingUpdateService(),
+      fees: new ExecutionFeeService(),
+      audit: new RepositoryExecutionAuditSink(executionControlRepository)
+    }));
+  }
 
   const wsGateway = await registerWebSocketPlugin(app, {
     redisClient: dependencies.redisClient,
@@ -937,7 +1004,12 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         idempotencyKey: `${session.idempotency_key}:execution-control`,
         metadata: {
           sessionId,
-          quoteId: request.quoteId
+          quoteId: request.quoteId,
+          executionSide: session.side,
+          expectedPrice: Number.parseFloat(quote.price),
+          maxSlippage: 0,
+          fastLaneEnabled: false,
+          ghostFillProtectionEnabled: true
         },
         policyContext: {
           routeTypeAllowed: true,
@@ -1002,7 +1074,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           plan_id: `internal-${sessionId}`,
           plan_state: "COMPLETED" as const,
           dispatch_mode: "awaited" as const,
-          final_status: "COMPLETED" as const
+          final_status: "COMPLETED" as const,
+          execution_id: outcome.executionRecordId
         };
       }
 
@@ -1092,6 +1165,29 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       }
 
       const outcome = await executionControlGateway.execute(executionRequest);
+      if (
+        dependencies.executionSystemSandboxEnabled
+        && validatedScope
+        && outcome.status === "FAILED"
+      ) {
+        return sorEnabled && buildResult.kind === "plan_created"
+          ? {
+              ...toPlanAcceptedResponse(
+                buildResult.plan.id,
+                shouldAwait ? "awaited" : "background",
+                "FAILED"
+              ),
+              execution_id: outcome.executionRecordId
+            }
+          : {
+              status: "PLAN_ACCEPTED" as const,
+              plan_id: `legacy-${sessionId}`,
+              plan_state: "LEGACY_EXECUTED" as const,
+              dispatch_mode: "awaited" as const,
+              final_status: "FAILED" as const,
+              execution_id: outcome.executionRecordId
+            };
+      }
       if (outcome.status === "FAILED" || outcome.status === "BLOCKED" || outcome.status === "RECONCILING") {
         throw new Error(`execution_control_failed:${outcome.rationale.join(",")}`);
       }
@@ -1101,13 +1197,17 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           plan_id: `legacy-${sessionId}`,
           plan_state: "LEGACY_EXECUTED" as const,
           dispatch_mode: "awaited" as const,
-          final_status: outcome.status === "SUBMITTED" ? ("COMPLETED" as const) : ("FAILED" as const)
+          final_status: outcome.status === "SUBMITTED" ? ("COMPLETED" as const) : ("FAILED" as const),
+          execution_id: outcome.executionRecordId
         }
-        : toPlanAcceptedResponse(
+        : {
+            ...toPlanAcceptedResponse(
             buildResult.plan.id,
             shouldAwait ? "awaited" : "background",
             shouldAwait ? "COMPLETED" : undefined
-          );
+            ),
+            execution_id: outcome.executionRecordId
+          };
 
       const isShadowSampled = isCanaryWindowActive({
         enabled: sorCanaryShadowEnabled,
@@ -1269,6 +1369,34 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         void runShadowComparison(sorEnabled ? "sor_authoritative" : "legacy_authoritative");
       }
       return authoritativeResponse;
+    },
+    getExecutionStatus: async (_sessionId, executionId) => {
+      const record = await executionRecordRepository.findById(executionId);
+      if (!record) {
+        return null;
+      }
+      const candidate = (record.metadata as Record<string, unknown>).executionSystemV0;
+      const parsed = ExecutionSystemMetadataSchema.safeParse(candidate);
+      if (!parsed.success) {
+        return {
+          executionId: record.id,
+          currentState: record.executionState,
+          userStatus: record.executionState === "SETTLED" ? "completed" : "preparing route",
+          venuePath: [record.venue],
+          filledAmount: "0",
+          settlementStatus: record.settlementStatus,
+          ghostFillStatus: "NOT_APPLICABLE",
+          fallbackStatus: "not_used",
+          feeSummary: {},
+          adapterStatus: [{
+            venue: record.venue,
+            legStatus: record.executionState,
+            settlementStatus: record.settlementStatus
+          }],
+          receipt: null
+        };
+      }
+      return buildFrontendExecutionStatus(parsed.data);
     }
   });
   const adminAuthMiddleware = createAdminAuthMiddleware();
@@ -1424,6 +1552,12 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   });
   await registerAdminCryptoRoutes(app, adminAuthMiddleware, {
     cryptoAdminService
+  });
+  await registerAdminExecutionVenuesRoutes(app, adminAuthMiddleware, {
+    executionVenuesAdminService: new ExecutionVenuesAdminService({
+      env: process.env,
+      repoRoot: process.cwd()
+    })
   });
   await registerAdminSimulationRoutes(app, simulationPreviewAdminMiddleware, {
     simulationAdminService: new SimulationAdminService({

@@ -63,6 +63,7 @@ interface AcceptRFQResponse {
   plan_state: string;
   dispatch_mode: "awaited" | "background";
   final_status?: "COMPLETED" | "PARTIAL" | "FAILED" | "UNWOUND";
+  execution_id?: string | null;
 }
 
 export interface RFQRouteHandlers {
@@ -72,6 +73,7 @@ export interface RFQRouteHandlers {
     request: CreateExecutionScopeTokenRequest
   ): Promise<CreateExecutionScopeTokenResponse>;
   acceptRFQ(sessionId: string, request: AcceptRFQRequest): Promise<AcceptRFQResponse>;
+  getExecutionStatus?(sessionId: string, executionId: string): Promise<unknown>;
 }
 
 export const registerRFQRoute = async (
@@ -207,5 +209,24 @@ export const registerRFQRoute = async (
       }
       throw error;
     }
+  });
+
+  app.get("/rfq/:id/executions/:executionId/status", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!handlers.getExecutionStatus) {
+      return reply.status(404).send({
+        code: "EXECUTION_STATUS_NOT_AVAILABLE",
+        message: "Execution status lookup is not configured."
+      });
+    }
+
+    const { id, executionId } = request.params as { id: string; executionId: string };
+    const result = await handlers.getExecutionStatus(id, executionId);
+    if (!result) {
+      return reply.status(404).send({
+        code: "EXECUTION_NOT_FOUND",
+        message: "Execution status was not found."
+      });
+    }
+    return reply.status(200).send(result);
   });
 };

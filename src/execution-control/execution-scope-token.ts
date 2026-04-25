@@ -1,6 +1,8 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
 export const executionScopeKinds = [
+  "CRYPTO_LANE",
+  "SPORTS_LANE",
   "POLITICS_NOMINEE_LANE"
 ] as const;
 

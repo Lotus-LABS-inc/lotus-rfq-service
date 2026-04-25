@@ -90,6 +90,22 @@ export const registerAdminCryptoRoutes = async (
     }
   });
 
+  app.get("/admin/crypto-lanes/:laneId/authority-state", { preHandler: adminMiddleware }, async (request, reply) => {
+    const parsed = paramsSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: parsed.error.flatten() });
+    }
+    try {
+      return reply.send({ authorityState: await deps.cryptoAdminService.getLaneAuthorityState(parsed.data.laneId) });
+    } catch (error) {
+      if (error instanceof CryptoLaneNotFoundError) {
+        return reply.status(404).send({ code: "CRYPTO_LANE_NOT_FOUND", message: error.message });
+      }
+      app.log.error({ err: error }, "Failed to load crypto authority state.");
+      return reply.status(500).send({ code: "CRYPTO_ADMIN_ERROR", message: "Failed to load crypto authority state." });
+    }
+  });
+
   app.post("/admin/crypto-lanes/:laneId/operator-approval-intent", { preHandler: adminMiddleware }, async (request, reply) => {
     const parsedParams = paramsSchema.safeParse(request.params);
     const parsedBody = bodySchema.safeParse(request.body);

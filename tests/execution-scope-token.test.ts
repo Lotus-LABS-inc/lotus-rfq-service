@@ -9,8 +9,9 @@ import {
 
 describe("ExecutionScopeTokenService", () => {
   const authority: ExecutionScopeAuthority = {
-    getScopeSnapshot: async (scopeId) => scopeId === "POLITICS_NOMINEE_REPUBLICAN_TRI_LIMITLESS_OPINION_POLYMARKET"
-      ? {
+    getScopeSnapshot: async (scopeId) => {
+      if (scopeId === "POLITICS_NOMINEE_REPUBLICAN_TRI_LIMITLESS_OPINION_POLYMARKET") {
+        return {
           scopeKind: "POLITICS_NOMINEE_LANE",
           scopeId,
           topicKey: "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
@@ -20,8 +21,36 @@ describe("ExecutionScopeTokenService", () => {
           operatorApprovedToOffer: true,
           readinessDecision: "READY_FOR_CANARY_ONLY",
           authorityRef: "evt-1"
-        }
-      : null
+        };
+      }
+      if (scopeId === "CRYPTO_BTC_ATH_BY_DATE_PAIR_LIMITLESS_POLYMARKET") {
+        return {
+          scopeKind: "CRYPTO_LANE",
+          scopeId,
+          topicKey: "CRYPTO|ATH_BY_DATE|BTC",
+          laneType: "PAIR",
+          venueSet: ["LIMITLESS", "POLYMARKET"],
+          candidateSet: ["2026-05-31", "2026-06-30"],
+          operatorApprovedToOffer: true,
+          readinessDecision: "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+          authorityRef: "evt-2"
+        };
+      }
+      if (scopeId === "SPORTS_EPL_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET") {
+        return {
+          scopeKind: "SPORTS_LANE",
+          scopeId,
+          topicKey: "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+          laneType: "PAIR",
+          venueSet: ["LIMITLESS", "POLYMARKET"],
+          candidateSet: ["arsenal", "liverpool", "manchester_city"],
+          operatorApprovedToOffer: false,
+          readinessDecision: "READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION",
+          authorityRef: "evt-3"
+        };
+      }
+      return null;
+    }
   };
 
   it("issues and validates a signed scope token against live authority", async () => {
@@ -88,6 +117,73 @@ describe("ExecutionScopeTokenService", () => {
       actualVenueTargets: ["LIMITLESS", "POLYMARKET"],
       authorities: {
         POLITICS_NOMINEE_LANE: authority
+      },
+      now: new Date("2026-04-04T12:01:00.000Z")
+    })).rejects.toBeInstanceOf(ExecutionScopeAuthorityError);
+  });
+
+  it("supports crypto lane scope tokens once operator approval intent exists", async () => {
+    const service = new ExecutionScopeTokenService("scope-secret");
+    const issued = service.issue({
+      scopeKind: "CRYPTO_LANE",
+      scopeId: "CRYPTO_BTC_ATH_BY_DATE_PAIR_LIMITLESS_POLYMARKET",
+      principalId: "user-1",
+      sessionId: "session-1",
+      quoteId: "quote-1",
+      canonicalMarketId: "canonical-market-1",
+      ttlSeconds: 120,
+      scope: {
+        topicKey: "CRYPTO|ATH_BY_DATE|BTC",
+        laneType: "PAIR",
+        venueSet: ["POLYMARKET", "LIMITLESS"],
+        candidateSet: ["2026-06-30", "2026-05-31"]
+      },
+      now: new Date("2026-04-04T12:00:00.000Z")
+    });
+
+    const validated = await service.validate({
+      token: issued.token,
+      principalId: "user-1",
+      sessionId: "session-1",
+      quoteId: "quote-1",
+      canonicalMarketId: "canonical-market-1",
+      actualVenueTargets: ["LIMITLESS", "POLYMARKET"],
+      authorities: {
+        CRYPTO_LANE: authority
+      },
+      now: new Date("2026-04-04T12:01:00.000Z")
+    });
+
+    expect(validated.binding.scopeKind).toBe("CRYPTO_LANE");
+  });
+
+  it("fails closed for sports lanes still waiting for operator review", async () => {
+    const service = new ExecutionScopeTokenService("scope-secret");
+    const issued = service.issue({
+      scopeKind: "SPORTS_LANE",
+      scopeId: "SPORTS_EPL_WINNER_2025_2026_PAIR_LIMITLESS_POLYMARKET",
+      principalId: "user-1",
+      sessionId: "session-1",
+      quoteId: "quote-1",
+      canonicalMarketId: "canonical-market-1",
+      ttlSeconds: 120,
+      scope: {
+        topicKey: "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
+        laneType: "PAIR",
+        venueSet: ["LIMITLESS", "POLYMARKET"],
+        candidateSet: ["arsenal", "liverpool", "manchester_city"]
+      },
+      now: new Date("2026-04-04T12:00:00.000Z")
+    });
+
+    await expect(service.validate({
+      token: issued.token,
+      principalId: "user-1",
+      sessionId: "session-1",
+      quoteId: "quote-1",
+      canonicalMarketId: "canonical-market-1",
+      authorities: {
+        SPORTS_LANE: authority
       },
       now: new Date("2026-04-04T12:01:00.000Z")
     })).rejects.toBeInstanceOf(ExecutionScopeAuthorityError);

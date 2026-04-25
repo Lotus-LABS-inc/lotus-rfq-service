@@ -204,9 +204,14 @@ export class ExecutionControlGateway {
             };
         }
 
+        const resultMetadata = result.payload?.executionSystemV0
+            ? { executionSystemV0: result.payload.executionSystemV0 }
+            : {};
+
         if (result.status === "SYNC_PENDING" || result.status === "RECONCILING") {
             await audit.transition(result.status, "execution_submission_uncertain", {
                 syncStatus: result.status === "SYNC_PENDING" ? "sync_pending" : "reconciling",
+                metadata: resultMetadata,
                 ...(result.payload ? { payload: result.payload } : {})
             });
             await audit.recordRecovery({
@@ -216,6 +221,7 @@ export class ExecutionControlGateway {
         } else if (result.status === "FAILED") {
             await audit.transition("FAILED", "execution_submission_failed", {
                 syncStatus: "synced",
+                metadata: resultMetadata,
                 ...(result.payload ? { payload: result.payload } : {})
             });
             await audit.recordRecovery(
@@ -223,20 +229,24 @@ export class ExecutionControlGateway {
             );
         } else {
             await audit.transition("EXECUTING", "execution_submission_started", {
+                metadata: resultMetadata,
                 ...(result.payload ? { payload: result.payload } : {})
             });
             if (result.status === "PARTIAL") {
                 await audit.transition("PARTIALLY_FILLED", "execution_submission_partial", {
+                    metadata: resultMetadata,
                     ...(result.payload ? { fillDetails: result.payload } : {})
                 });
                 await audit.recordRecovery();
             } else {
                 await audit.transition("FILLED", "execution_submission_completed", {
                     syncStatus: "synced",
+                    metadata: resultMetadata,
                     ...(result.payload ? { fillDetails: result.payload } : {})
                 });
                 await audit.transition("SETTLED", "execution_submission_settled", {
-                    settlementStatus: "settled"
+                    settlementStatus: "settled",
+                    metadata: resultMetadata
                 });
             }
         }

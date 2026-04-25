@@ -1,0 +1,51 @@
+{
+  "config": {
+    "clobHost": "https://clob.polymarket.test",
+    "chainId": "137",
+    "apiKey": "fixture-api-key-123456",
+    "apiSecret": "fixture-api-secret-abcdef",
+    "apiPassphrase": "fixture-passphrase-7890",
+    "builderCode": "lotus-fixture-builder"
+  },
+  "input": {
+    "clientOrderId": "fixture-client-order-0001",
+    "venueMarketId": "0xfixturemarket000000000000000000000000000000000000000000000000000001",
+    "venueOutcomeId": "1234567890123456789012345678901234567890",
+    "side": "buy",
+    "size": "12.5",
+    "price": 0.625
+  },
+  "expectedEnvelope": {
+    "request": {
+      "method": "POST",
+      "path": "/order",
+      "host": "https://clob.polymarket.test",
+      "body": {
+        "market": "0xfixturemarket000000000000000000000000000000000000000000000000000001",
+        "token_id": "1234567890123456789012345678901234567890",
+        "side": "BUY",
+        "size": "12.5",
+        "price": "0.6250",
+        "builder_code": "lotus-fixture-builder",
+        "chain_id": "137",
+        "client_order_id": "fixture-client-order-0001"
+      }
+    },
+    "signing": {
+      "algorithm": "HMAC_SHA256_DRY_RUN",
+      "timestamp": "1970-01-01T00:00:00.000Z",
+      "bodyHash": "dab2733b478ad44316b5976c99278b9278a5c3e5e9655338210b8ea7db618df0",
+      "preimageHash": "32907888c2e8c8e01b559dc3fcfb176b57afb5157525fae294e96034a7ee7a27",
+      "signatureHash": "18c728eddae1f5a2a1dfbc50e2c06a6a772d19bd4c59ba09c85abf6b5ea448c4",
+      "apiKeyRef": "fixt...3456",
+      "passphraseRef": "fixt...7890",
+      "signatureVerifiedLocally": true
+    },
+    "validation": {
+      "dryRunOnly": true,
+      "submitAllowed": false,
+      "shapeValid": true,
+      "blockers": []
+    }
+  }
+}
