@@ -14,6 +14,8 @@ import { RFQSessionRepository } from "../db/repositories/rfq-session-repository.
 import { RFQExecutionRepository } from "../db/repositories/rfq-execution-repository.js";
 import { registerHealthRoute } from "./routes/health.js";
 import { registerMetricsRoute } from "./routes/metrics.js";
+import { registerFundingRoutes } from "./routes/funding.js";
+import { registerInternalPolymarketFundingBalanceRoute } from "./routes/internal-polymarket-funding-balance.js";
 import { registerRFQRoute } from "./routes/rfq.js";
 import { registerResolutionRiskRoutes } from "./routes/resolution-risk.js";
 import { createLPAuthMiddleware } from "../lp/lp-auth-middleware.js";
@@ -80,6 +82,8 @@ import { registerAdminCryptoRoutes } from "./admin/crypto.routes.js";
 import { CryptoAdminService } from "./admin/crypto-admin-service.js";
 import { registerAdminExecutionVenuesRoutes } from "./admin/execution-venues.routes.js";
 import { ExecutionVenuesAdminService } from "./admin/execution-venues-admin-service.js";
+import { registerAdminFundingReadinessRoutes } from "./admin/funding-readiness.routes.js";
+import { FundingReadinessAdminService } from "./admin/funding-readiness-admin-service.js";
 import { PairShadowObservationRepository } from "../shadow/pair-shadow-observation-repository.js";
 import { PairShadowRuntimeWriter } from "../shadow/pair-shadow-runtime-writer.js";
 import { PairShadowRuntimeHooks } from "../shadow/pair-shadow-runtime-hooks.js";
@@ -153,6 +157,7 @@ import { CompatibilityOverrideRepository } from "../repositories/compatibility-o
 import { ExecutionIntentRepository } from "../repositories/execution-intent.repository.js";
 import { ExecutionRecordRepository } from "../repositories/execution-record.repository.js";
 import { ExecutionControlRepository } from "../repositories/execution-control.repository.js";
+import { FundingRepository } from "../repositories/funding.repository.js";
 import { PairEdgeRepository } from "../repositories/pair-edge.repository.js";
 import { CompatibilityOverrideService } from "../canonical/compatibility-override-service.js";
 import { PairMatchReviewService } from "./admin/pair-match-review-service.js";
@@ -170,6 +175,7 @@ import { ExecutionControlGateway } from "../execution-control/execution-control-
 import type { ExecutionControlRequest } from "../execution-control/execution-control-types.js";
 import {
   ExecutionScopeAuthorityError,
+  type ExecutionScopeAuthorityRegistry,
   ExecutionScopeTokenService
 } from "../execution-control/execution-scope-token.js";
 import { CryptoExecutionScopeAuthority } from "../execution-control/crypto-execution-scope-authority.js";
@@ -195,6 +201,13 @@ import {
   TestExecutionAdapter,
   alwaysHealthyPreflightDeps
 } from "../execution-system/index.js";
+import { FundingReadinessChecker, FundingService } from "../core/funding/funding-service.js";
+import {
+  PolymarketFundingBalanceReadService,
+  buildPolymarketFundingBalanceReadConfigFromEnv
+} from "../core/funding/polymarket-balance-read-service.js";
+import { buildFundingVenueReadinessCheckersFromEnv } from "../core/funding/venue-readiness.js";
+import { LifiRestClient, buildLifiClientConfigFromEnv } from "../integrations/lifi/lifi-client.js";
 
 export interface ServerDependencies {
   logger: Logger;
@@ -251,6 +264,7 @@ export interface ServerDependencies {
   sorAcceptNonAonBackground: boolean;
   performanceGuardrailConfig?: PerformanceGuardrailConfig;
   qualificationRuntimeConfig?: QualificationRuntimeConfig;
+  executionScopeAuthorities?: ExecutionScopeAuthorityRegistry;
 }
 
 export const buildServer = async (dependencies: ServerDependencies): Promise<FastifyInstance> => {
@@ -309,6 +323,21 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const routeSelectionTraceWriter = new RouteSelectionTraceWriter(dependencies.pgPool);
   const executionIntentRepository = new ExecutionIntentRepository(dependencies.pgPool);
   const executionRecordRepository = new ExecutionRecordRepository(dependencies.pgPool);
+  const fundingRepository = new FundingRepository(dependencies.pgPool);
+  const fundingService = new FundingService(
+    fundingRepository,
+    new LifiRestClient(buildLifiClientConfigFromEnv(process.env)),
+    {
+      lifiQuotesEnabled: process.env.FUNDING_LIFI_QUOTES_ENABLED === "true",
+      liveSubmitEnabled: process.env.FUNDING_LIVE_SUBMIT_ENABLED === "true",
+      venueReadinessChecksEnabled: process.env.FUNDING_VENUE_READINESS_CHECKS_ENABLED === "true",
+      env: process.env
+    },
+    buildFundingVenueReadinessCheckersFromEnv(process.env)
+  );
+  const polymarketFundingBalanceReadService = new PolymarketFundingBalanceReadService(
+    buildPolymarketFundingBalanceReadConfigFromEnv(process.env)
+  );
   const failureRecoveryManager = new FailureRecoveryManager(dependencies.pgPool);
   const executionControlRepository = new ExecutionControlRepository(dependencies.pgPool);
   const executionAuditWriter = new ExecutionAuditWriter(
@@ -801,11 +830,15 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const executionScopeTokenService = new ExecutionScopeTokenService(
     process.env.EXECUTION_SCOPE_TOKEN_SECRET ?? dependencies.jwtSecret
   );
-  const executionScopeAuthorities = {
+  const defaultExecutionScopeAuthorities = {
     CRYPTO_LANE: new CryptoExecutionScopeAuthority(cryptoAdminService),
     SPORTS_LANE: new SportsExecutionScopeAuthority(sportsAdminService),
     POLITICS_NOMINEE_LANE: new PoliticsNomineeExecutionScopeAuthority(politicsNomineeAdminService)
   } as const;
+  const executionScopeAuthorities: ExecutionScopeAuthorityRegistry = {
+    ...defaultExecutionScopeAuthorities,
+    ...(dependencies.executionScopeAuthorities ?? {})
+  };
   if (dependencies.executionSystemSandboxEnabled) {
     const laneGate = new ApprovedLaneExecutionGate(new ScopeAuthorityLaneResolver(executionScopeAuthorities));
     const adapterRegistry = new ExecutionVenueAdapterRegistry();
@@ -817,7 +850,12 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         buildPolymarketExecutionAdapterV2ConfigFromEnv(process.env)
       ));
     }
-    const preflight = new ExecutionPreflightService(alwaysHealthyPreflightDeps(laneGate));
+    const preflightDeps = alwaysHealthyPreflightDeps(laneGate);
+    preflightDeps.funding = new FundingReadinessChecker(
+      fundingService,
+      process.env.FUNDING_PREFLIGHT_ENFORCEMENT_ENABLED === "true"
+    );
+    const preflight = new ExecutionPreflightService(preflightDeps);
     executionSystemSandboxHandler = new ExecutionSystemSubmissionHandler(new ExecutionSystemOrchestrator({
       preflight,
       adapters: adapterRegistry,
@@ -840,6 +878,18 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   });
   await registerHealthRoute(app);
   await registerMetricsRoute(app);
+  await registerFundingRoutes(app, userAuthMiddleware, {
+    createIntent: (userId, request) => fundingService.createIntent(userId, request),
+    getIntent: (userId, fundingIntentId) => fundingService.getIntent(userId, fundingIntentId),
+    quoteIntent: (userId, fundingIntentId) => fundingService.quoteIntent(userId, fundingIntentId),
+    submitRouteLeg: (userId, fundingIntentId, request) => fundingService.submitRouteLeg(userId, fundingIntentId, request),
+    refreshIntentStatus: (userId, fundingIntentId) => fundingService.refreshIntentStatus(userId, fundingIntentId),
+    listVenueCapabilities: async () => fundingService.listVenueCapabilities()
+  });
+  await registerInternalPolymarketFundingBalanceRoute(app, polymarketFundingBalanceReadService, {
+    bearerToken: process.env.POLYMARKET_FUNDING_READ_API_KEY,
+    nodeEnv: process.env.NODE_ENV
+  });
   await registerResolutionRiskRoutes(app, {
     buildAssessmentsForCanonicalEvent: (canonicalEventId) =>
       resolutionRiskAssessmentService.buildAssessmentsForCanonicalEvent(canonicalEventId),
@@ -1557,6 +1607,12 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     executionVenuesAdminService: new ExecutionVenuesAdminService({
       env: process.env,
       repoRoot: process.cwd()
+    })
+  });
+  await registerAdminFundingReadinessRoutes(app, adminAuthMiddleware, {
+    fundingReadinessAdminService: new FundingReadinessAdminService({
+      repository: fundingRepository,
+      env: process.env
     })
   });
   await registerAdminSimulationRoutes(app, simulationPreviewAdminMiddleware, {

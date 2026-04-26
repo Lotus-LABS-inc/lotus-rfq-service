@@ -1,0 +1,278 @@
+import { z } from "zod";
+
+const fundingAggregateStates = [
+  "INTENT_CREATED",
+  "ROUTES_QUOTED",
+  "USER_SIGNATURE_REQUIRED",
+  "USER_SIGNED",
+  "ROUTES_SUBMITTED",
+  "BRIDGING",
+  "PARTIALLY_READY_TO_TRADE",
+  "READY_TO_TRADE",
+  "PARTIALLY_FAILED",
+  "FAILED",
+  "CANCELLED",
+  "REFUNDED_OR_RETRY_REQUIRED"
+] as const;
+
+export type FundingAggregateState = (typeof fundingAggregateStates)[number];
+
+const fundingLegStates = [
+  "LEG_CREATED",
+  "LEG_QUOTED",
+  "LEG_SIGNATURE_REQUIRED",
+  "LEG_SUBMITTED",
+  "LEG_BRIDGE_PENDING",
+  "LEG_DESTINATION_RECEIVED",
+  "LEG_VENUE_CREDIT_PENDING",
+  "LEG_READY_TO_TRADE",
+  "LEG_FAILED",
+  "LEG_CANCELLED",
+  "LEG_RETRY_REQUIRED"
+] as const;
+
+export type FundingLegState = (typeof fundingLegStates)[number];
+
+const fundingVenues = ["POLYMARKET", "LIMITLESS", "OPINION", "MYRIAD", "PREDICT_FUN"] as const;
+export type FundingVenue = (typeof fundingVenues)[number];
+
+const fundingAuditEventTypes = [
+  "FUNDING_INTENT_CREATED",
+  "FUNDING_ROUTES_QUOTED",
+  "FUNDING_USER_SIGNATURE_REQUIRED",
+  "FUNDING_USER_SIGNED",
+  "FUNDING_ROUTES_SUBMITTED",
+  "FUNDING_LEG_SUBMITTED",
+  "FUNDING_LEG_BRIDGE_PENDING",
+  "FUNDING_LEG_DESTINATION_RECEIVED",
+  "FUNDING_LEG_VENUE_CREDIT_PENDING",
+  "FUNDING_LEG_READY_TO_TRADE",
+  "FUNDING_LEG_FAILED",
+  "FUNDING_PARTIALLY_READY_TO_TRADE",
+  "FUNDING_READY_TO_TRADE",
+  "FUNDING_FAILED",
+  "FUNDING_RETRY_REQUESTED",
+  "FUNDING_REFUND_REQUIRED",
+  "FUNDING_CANCELLED"
+] as const;
+
+export type FundingAuditEventType = (typeof fundingAuditEventTypes)[number];
+
+const positiveAmount = z.string().regex(/^\d+(\.\d+)?$/);
+const isoDateString = z.string().datetime();
+
+const FundingTargetRequestSchema = z.object({
+  targetVenue: z.enum(fundingVenues),
+  targetAmount: positiveAmount.optional(),
+  targetPercentage: z.number().positive().max(100).optional()
+}).refine((value) => Boolean(value.targetAmount ?? value.targetPercentage), {
+  message: "Funding target requires targetAmount or targetPercentage."
+});
+
+export type FundingTargetRequest = z.infer<typeof FundingTargetRequestSchema>;
+
+export const CreateFundingIntentSchema = z.object({
+  sourceChain: z.string().min(1),
+  sourceToken: z.string().min(1),
+  sourceAmount: positiveAmount,
+  sourceWalletAddress: z.string().min(1),
+  idempotencyKey: z.string().min(1),
+  targets: z.array(FundingTargetRequestSchema).min(1)
+});
+
+export type CreateFundingIntentInput = z.infer<typeof CreateFundingIntentSchema>;
+
+const FundingIntentSchema = z.object({
+  fundingIntentId: z.string().min(1),
+  userId: z.string().min(1),
+  sourceChain: z.string().min(1),
+  sourceToken: z.string().min(1),
+  sourceAmount: positiveAmount,
+  sourceWalletAddress: z.string().min(1),
+  status: z.enum(fundingAggregateStates),
+  idempotencyKey: z.string().min(1),
+  aggregateRouteQuote: z.record(z.string(), z.unknown()),
+  totalEstimatedFees: z.string(),
+  totalEstimatedTimeSeconds: z.number().int().nonnegative().nullable(),
+  auditEventIds: z.array(z.string()),
+  createdAt: isoDateString,
+  updatedAt: isoDateString
+});
+
+export type FundingIntent = z.infer<typeof FundingIntentSchema>;
+
+const FundingTargetSchema = z.object({
+  fundingTargetId: z.string().min(1),
+  fundingIntentId: z.string().min(1),
+  targetVenue: z.enum(fundingVenues),
+  targetChain: z.string().min(1),
+  targetToken: z.string().min(1),
+  targetAmount: positiveAmount,
+  targetPercentage: z.number().positive().max(100).nullable(),
+  venueCapabilitySnapshot: z.record(z.string(), z.unknown()),
+  status: z.enum(fundingLegStates),
+  createdAt: isoDateString,
+  updatedAt: isoDateString
+});
+
+export type FundingTarget = z.infer<typeof FundingTargetSchema>;
+
+const SafeTransactionRequestSchema = z.object({
+  to: z.string().min(1).optional(),
+  from: z.string().min(1).optional(),
+  data: z.string().min(1).optional(),
+  value: z.string().optional(),
+  chainId: z.number().int().positive().optional(),
+  gasLimit: z.string().optional(),
+  gasPrice: z.string().optional()
+});
+
+export type SafeTransactionRequest = z.infer<typeof SafeTransactionRequestSchema>;
+
+const FundingRouteQuoteSchema = z.object({
+  provider: z.literal("LIFI"),
+  providerRouteId: z.string().nullable(),
+  sourceChain: z.string().min(1),
+  sourceToken: z.string().min(1),
+  sourceAmount: positiveAmount,
+  destinationChain: z.string().min(1),
+  destinationToken: z.string().min(1),
+  destinationAmountEstimate: z.string(),
+  estimatedFees: z.string(),
+  estimatedTimeSeconds: z.number().int().nonnegative().nullable(),
+  expiresAt: isoDateString,
+  transactionRequest: SafeTransactionRequestSchema.nullable(),
+  userSafeSummary: z.string()
+});
+
+export type FundingRouteQuote = z.infer<typeof FundingRouteQuoteSchema>;
+
+const FundingRouteLegSchema = z.object({
+  routeLegId: z.string().min(1),
+  fundingIntentId: z.string().min(1),
+  fundingTargetId: z.string().min(1),
+  targetVenue: z.enum(fundingVenues),
+  sourceChain: z.string().min(1),
+  sourceToken: z.string().min(1),
+  sourceAmount: positiveAmount,
+  destinationChain: z.string().min(1),
+  destinationToken: z.string().min(1),
+  destinationAmountEstimate: z.string(),
+  routeProvider: z.literal("LIFI"),
+  routeQuote: FundingRouteQuoteSchema,
+  txHashes: z.array(z.string()),
+  providerStatus: z.record(z.string(), z.unknown()),
+  bridgeStatus: z.string(),
+  destinationStatus: z.string(),
+  venueCreditStatus: z.string(),
+  status: z.enum(fundingLegStates),
+  errorReason: z.string().nullable(),
+  createdAt: isoDateString,
+  updatedAt: isoDateString
+});
+
+export type FundingRouteLeg = z.infer<typeof FundingRouteLegSchema>;
+
+const VenueCapabilitySchema = z.object({
+  venue: z.enum(fundingVenues),
+  supportedChains: z.array(z.string().min(1)),
+  supportedTokens: z.array(z.string().min(1)),
+  preferredChain: z.string().min(1),
+  preferredToken: z.string().min(1),
+  preferredChainId: z.number().int().positive(),
+  preferredTokenAddress: z.string().min(1),
+  sourceTokenAddressByChain: z.record(z.string(), z.string().min(1)),
+  autoCreditSupported: z.boolean(),
+  requiresFinalizationStep: z.boolean(),
+  supportsDirectDeposit: z.boolean(),
+  supportsWithdrawal: z.boolean(),
+  readinessStatus: z.enum(["READY", "DISABLED", "PLANNED", "UNKNOWN"]),
+  depositAddressConfigured: z.boolean(),
+  notes: z.string()
+});
+
+export type VenueCapability = z.infer<typeof VenueCapabilitySchema>;
+
+const FundingReconciliationRecordSchema = z.object({
+  reconciliationId: z.string().min(1),
+  fundingIntentId: z.string().min(1),
+  routeLegId: z.string().min(1),
+  targetVenue: z.enum(fundingVenues),
+  destinationTxHash: z.string().nullable(),
+  destinationReceived: z.boolean(),
+  venueCreditConfirmed: z.boolean(),
+  readyToTrade: z.boolean(),
+  checkedAt: isoDateString,
+  notes: z.string()
+});
+
+export type FundingReconciliationRecord = z.infer<typeof FundingReconciliationRecordSchema>;
+
+export interface FundingIntentView {
+  intent: FundingIntent;
+  targets: FundingTarget[];
+  routeLegs: FundingRouteLeg[];
+  reconciliations: FundingReconciliationRecord[];
+  userSafeMessage: string;
+}
+
+export type FundingFailureCode =
+  | "FUNDING_DISABLED"
+  | "LIFI_QUOTES_DISABLED"
+  | "VENUE_CAPABILITY_UNKNOWN"
+  | "VENUE_CAPABILITY_DISABLED"
+  | "SOURCE_CHAIN_UNSUPPORTED"
+  | "SOURCE_TOKEN_UNSUPPORTED"
+  | "TARGET_SPLIT_INVALID"
+  | "TARGET_DESTINATION_NOT_CONFIGURED"
+  | "ROUTE_QUOTE_FAILED"
+  | "ROUTE_QUOTE_STALE"
+  | "ROUTE_DESTINATION_MISMATCH"
+  | "ROUTE_PROVIDER_STATUS_UNTRUSTED"
+  | "ROUTE_SUBMISSION_FAILED"
+  | "FUNDING_ROUTE_REPLAY_BLOCKED"
+  | "FUNDING_INTENT_NOT_FOUND"
+  | "FUNDING_INTENT_FORBIDDEN"
+  | "FUNDING_SIGNATURE_REJECTED"
+  | "READY_TO_TRADE_NOT_AVAILABLE";
+
+export class FundingError extends Error {
+  public constructor(
+    public readonly code: FundingFailureCode,
+    message: string,
+    public readonly statusCode = 409
+  ) {
+    super(message);
+  }
+}
+
+export const aggregateFundingStatus = (legStates: readonly FundingLegState[]): FundingAggregateState => {
+  if (legStates.length === 0) {
+    return "INTENT_CREATED";
+  }
+  if (legStates.every((state) => state === "LEG_READY_TO_TRADE")) {
+    return "READY_TO_TRADE";
+  }
+  if (legStates.some((state) => state === "LEG_READY_TO_TRADE")) {
+    return "PARTIALLY_READY_TO_TRADE";
+  }
+  if (legStates.every((state) => state === "LEG_FAILED" || state === "LEG_CANCELLED")) {
+    return "FAILED";
+  }
+  if (legStates.some((state) => state === "LEG_FAILED" || state === "LEG_RETRY_REQUIRED")) {
+    return "PARTIALLY_FAILED";
+  }
+  if (legStates.some((state) => state === "LEG_SUBMITTED" || state === "LEG_BRIDGE_PENDING")) {
+    return "BRIDGING";
+  }
+  if (legStates.some((state) => state === "LEG_VENUE_CREDIT_PENDING")) {
+    return "ROUTES_SUBMITTED";
+  }
+  if (legStates.some((state) => state === "LEG_QUOTED" || state === "LEG_SIGNATURE_REQUIRED")) {
+    return "USER_SIGNATURE_REQUIRED";
+  }
+  return "INTENT_CREATED";
+};
+
+export const validateCreateFundingIntentInput = (value: unknown): CreateFundingIntentInput =>
+  CreateFundingIntentSchema.parse(value);

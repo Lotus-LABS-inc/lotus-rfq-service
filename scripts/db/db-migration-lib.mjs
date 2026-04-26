@@ -6,8 +6,14 @@ import { fileURLToPath } from "node:url";
 
 export const resolveRepoRoot = (importMetaUrl) => {
   const scriptPath = fileURLToPath(importMetaUrl);
-  const scriptDir = path.dirname(scriptPath);
-  return path.resolve(scriptDir, "..");
+  let currentDir = path.dirname(scriptPath);
+  while (currentDir !== path.dirname(currentDir)) {
+    if (existsSync(path.join(currentDir, "package.json"))) {
+      return currentDir;
+    }
+    currentDir = path.dirname(currentDir);
+  }
+  return path.resolve(path.dirname(scriptPath), "..", "..");
 };
 
 export const loadRepoEnv = (repoRoot) => {
@@ -46,6 +52,9 @@ const migrationPriority = (filename) => {
 export const listMigrationFiles = async (migrationDirs) => {
   const migrations = [];
   for (const migrationsDir of migrationDirs) {
+    if (!existsSync(migrationsDir)) {
+      continue;
+    }
     const files = (await readdir(migrationsDir))
       .filter((name) => name.endsWith(".sql"))
       .sort((left, right) => {

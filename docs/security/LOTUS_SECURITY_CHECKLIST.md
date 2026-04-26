@@ -18,7 +18,7 @@ Use this checklist before continuing funding, monetization, frontend execution p
 
 ## 2. Funding V0 Security Gate
 
-Before writing funding runtime code:
+Before enabling funding runtime beyond local/sandbox:
 
 - Funding domain model supports multiple targets and per-leg route state.
 - Venue capability matrix is the source of truth for target chain/token.
@@ -31,6 +31,22 @@ Before writing funding runtime code:
 - `READY_TO_TRADE` requires venue adapter confirmation.
 - Execution preflight blocks pending, failed, stale, or unknown funding state.
 - Funding API never returns route-provider secrets or venue credentials.
+- `FUNDING_LIFI_QUOTES_ENABLED` is intentionally set for the environment.
+- `FUNDING_VENUE_READINESS_CHECKS_ENABLED` is intentionally set for the environment.
+- `FUNDING_PREFLIGHT_ENFORCEMENT_ENABLED` is enabled before any live venue execution depends on funded balances.
+- `FUNDING_LIVE_SUBMIT_ENABLED` remains false for v0 because backend does not sign or broadcast user wallet transactions.
+- Venue destination envs such as `POLYMARKET_FUNDING_DESTINATION_ADDRESS` and `LIMITLESS_FUNDING_DESTINATION_ADDRESS` are configured and reviewed before quote enablement.
+- Venue readiness envs such as `*_FUNDING_READINESS_MODE`, `*_FUNDING_READINESS_ENABLED`, `*_FUNDING_BALANCE_URL`, `*_FUNDING_READ_AUTH_MODE`, and `*_FUNDING_READ_API_KEY` are reviewed before any checker can mark balances `READY_TO_TRADE`.
+- Polymarket and Limitless funding readiness default to `DISABLED`; `LIVE_READ` requires an operator-approved read endpoint and server-side-only credentials where needed.
+- Internal Polymarket balance reads require `POLYMARKET_INTERNAL_BALANCE_READ_ENABLED=true`, complete CLOB read credentials, and bearer auth outside local loopback testing.
+- `/internal/polymarket/funding-balance` returns only `usableBalance`; it must not return raw CLOB responses, allowances, auth headers, API keys, or private keys.
+- Sandbox funding enforcement is only allowed for approved routes where every required route venue has validated readiness coverage.
+- Do not enable funding preflight enforcement for pair, tri, or split routes if any route venue is manually seeded, stub-only, `NOT_CONFIGURED`, or missing a venue-specific readiness checker.
+- A persisted `READY_TO_TRADE` row for one venue does not satisfy funding preflight for a route that also requires another venue.
+- Pair-route funding enforcement cannot be enabled unless `artifacts/funding/pair-funding-readiness-sandbox-preflight.json` exists, has `status=COMPLETED`, has `persistedReadinessRows=2`, has `executionPreflight.ok=true`, and is fresh for the intended deployment window.
+- Treat pair-route rehearsal artifacts older than 24 hours, generated before the latest funding/readiness/preflight code change, or generated against different venue readiness envs as stale.
+- If the pair rehearsal artifact is stale or missing, rerun `npm run funding:pair-readiness-sandbox-preflight` before enabling any pair-route funding enforcement flag.
+- Run `npm run funding:pair-enforcement-gate` before changing any pair-route funding enforcement flag; it must pass without overrides unless an operator explicitly documents a shorter or longer freshness window.
 
 ## 3. LiFi Integration Checklist
 
@@ -94,6 +110,8 @@ Before exposing externally:
 - Confirm OpenAPI labels match mounted routes.
 - Public endpoints are intentionally public.
 - Admin endpoints require admin JWT.
+- Admin JWTs are short-lived, signed with the active `JWT_SECRET`, and include `role=ADMIN`.
+- `JWT_SECRET` rotation has a rollback value stored in the operator secret manager before deployment.
 - Simulation preview is disabled in production.
 - `/metrics` is internal, allowlisted, or admin-protected.
 - WebSocket subscription auth and topic ownership are verified.
@@ -105,6 +123,7 @@ If a secret is suspected exposed:
 
 - Stop live adapters.
 - Rotate the affected key immediately.
+- If `JWT_SECRET` is exposed, rotate it and restart the backend; all existing user/admin JWTs must be treated as invalid.
 - Check git history and CI artifacts.
 - Audit recent admin and execution events.
 - Mark impacted lanes held if execution authority may be affected.

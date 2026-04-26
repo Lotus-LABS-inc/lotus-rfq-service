@@ -1,0 +1,45 @@
+{
+  "generatedAt": "2026-04-26T00:11:33.076Z",
+  "status": "COMPLETED",
+  "sandboxLane": {
+    "laneId": "SANDBOX_SINGLE_POLYMARKET_FUNDING_ENFORCEMENT",
+    "laneState": "OPERATOR_APPROVED_SANDBOX",
+    "venuePath": [
+      "POLYMARKET"
+    ],
+    "scopeKind": "CRYPTO_LANE"
+  },
+  "fundingEvidence": {
+    "fundingIntentId": "fa1d0b2e-3f91-4d81-a6dc-b72ce0126b59",
+    "routeLegId": "1a484963-7306-4f92-9c46-1eb48563eca6",
+    "targetVenue": "POLYMARKET",
+    "readinessStatus": "READY_TO_TRADE",
+    "source": "funding_service_refreshIntentStatus",
+    "lifiQuoteCalls": 1,
+    "lifiStatusCalls": 1
+  },
+  "rfqAccept": {
+    "executionId": "325f44fc-baeb-4581-a66e-19ec38bcb65f",
+    "finalStatus": "COMPLETED",
+    "venuePath": [
+      "POLYMARKET"
+    ],
+    "currentState": "COMPLETED"
+  },
+  "pairRouteBlock": {
+    "tested": true,
+    "finalStatus": "FAILED",
+    "reason": "FUNDING_UNAVAILABLE",
+    "missingVenueReadinessCoverage": [
+      "LIMITLESS"
+    ]
+  },
+  "safety": {
+    "defaultFundingPreflightEnforcementEnabled": false,
+    "scriptScopedFundingPreflightEnforcementOnly": true,
+    "liveLifiExecutionEnabled": false,
+    "backendBroadcastedTransaction": false,
+    "liveVenueSubmissionEnabled": false
+  },
+  "redactionVerified": true
+}

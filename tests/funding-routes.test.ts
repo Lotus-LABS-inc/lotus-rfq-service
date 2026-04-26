@@ -1,0 +1,120 @@
+import Fastify from "fastify";
+import fastifyJwt from "@fastify/jwt";
+import { describe, expect, it } from "vitest";
+
+import { registerFundingRoutes } from "../src/api/routes/funding.js";
+import type { FundingIntentView } from "../src/core/funding/types.js";
+
+const view = (userId = "user-1"): FundingIntentView => ({
+  intent: {
+    fundingIntentId: "funding-1",
+    userId,
+    sourceChain: "SOLANA",
+    sourceToken: "USDC",
+    sourceAmount: "100",
+    sourceWalletAddress: "wallet",
+    status: "INTENT_CREATED",
+    idempotencyKey: "idem",
+    aggregateRouteQuote: {},
+    totalEstimatedFees: "0",
+    totalEstimatedTimeSeconds: null,
+    auditEventIds: [],
+    createdAt: "2026-04-25T00:00:00.000Z",
+    updatedAt: "2026-04-25T00:00:00.000Z"
+  },
+  targets: [],
+  routeLegs: [],
+  reconciliations: [],
+  userSafeMessage: "Funding intent created. Route quote is pending."
+});
+
+const buildApp = async () => {
+  const app = Fastify({ logger: false });
+  await app.register(fastifyJwt, { secret: "test-secret" });
+  const auth = async (request: any, reply: any) => {
+    try {
+      await request.jwtVerify();
+    } catch {
+      return reply.status(401).send({ code: "UNAUTHORIZED" });
+    }
+  };
+  await registerFundingRoutes(app, auth, {
+    createIntent: async (userId) => view(userId),
+    getIntent: async (userId) => view(userId),
+    quoteIntent: async (userId) => ({
+      ...view(userId),
+      intent: { ...view(userId).intent, status: "USER_SIGNATURE_REQUIRED" }
+    }),
+    submitRouteLeg: async (userId) => ({
+      ...view(userId),
+      intent: { ...view(userId).intent, status: "BRIDGING" }
+    }),
+    refreshIntentStatus: async (userId) => ({
+      ...view(userId),
+      intent: { ...view(userId).intent, status: "BRIDGING" }
+    }),
+    listVenueCapabilities: async () => ([{
+      venue: "POLYMARKET",
+      readinessStatus: "READY",
+      depositAddressConfigured: true,
+      notes: "safe"
+    }])
+  });
+  return app;
+};
+
+describe("Funding routes", () => {
+  it("requires auth and creates frontend-safe funding intents", async () => {
+    const app = await buildApp();
+    const token = app.jwt.sign({ userId: "user-1", role: "USER" });
+    const unauthorized = await app.inject({
+      method: "POST",
+      url: "/funding/intents",
+      payload: {}
+    });
+    expect(unauthorized.statusCode).toBe(401);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/funding/intents",
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        sourceChain: "SOLANA",
+        sourceToken: "USDC",
+        sourceAmount: "100",
+        sourceWalletAddress: "wallet",
+        idempotencyKey: "idem",
+        targets: [{ targetVenue: "POLYMARKET", targetPercentage: 100 }]
+      }
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      fundingIntentId: "funding-1",
+      currentStatus: "INTENT_CREATED",
+      userSafeMessage: "Funding intent created. Route quote is pending."
+    });
+    expect(response.body).not.toContain("LIFI_API_KEY");
+    await app.close();
+  });
+
+  it("exposes quote, submit, status, and capability surfaces", async () => {
+    const app = await buildApp();
+    const token = app.jwt.sign({ userId: "user-1", role: "USER" });
+    const headers = { authorization: `Bearer ${token}` };
+
+    await expect(app.inject({ method: "POST", url: "/funding/intents/funding-1/quote", headers }))
+      .resolves.toMatchObject({ statusCode: 200 });
+    await expect(app.inject({
+      method: "POST",
+      url: "/funding/intents/funding-1/submit",
+      headers,
+      payload: { routeLegId: "leg-1", txHash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+    })).resolves.toMatchObject({ statusCode: 202 });
+    await expect(app.inject({ method: "GET", url: "/funding/intents/funding-1/status", headers }))
+      .resolves.toMatchObject({ statusCode: 200 });
+    const capabilities = await app.inject({ method: "GET", url: "/funding/venues/capabilities", headers });
+    expect(capabilities.statusCode).toBe(200);
+    expect(capabilities.body).not.toContain("secret");
+    await app.close();
+  });
+});

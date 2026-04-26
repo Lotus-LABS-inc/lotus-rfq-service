@@ -39,18 +39,27 @@ I have USDC. I want to trade. Lotus routes my funds to the venues needed.
 
 Funding prepares venue-ready capital for approved trade execution.
 
+MVP custody model:
+
+```text
+Model A: non-custodial funding preparation.
+```
+
+In Model A, Lotus generates route instructions, validates that the route matches operator-approved funding capabilities, tracks the user-broadcast transaction, and reconciles whether capital became venue-ready. The user signs with their own wallet. Lotus does not custody user funds, sign wallet transactions, broadcast user wallet transactions, pool user funds, or internally allocate user balances in v0.
+
 In plain terms:
 
 1. A user chooses a source wallet, source chain, source token, and amount.
 2. Lotus creates a funding intent.
-3. Lotus checks which venues need funding and what each venue accepts.
+3. Lotus checks which venues need funding and what each venue can receive through the Funding Capability Matrix.
 4. Lotus plans the route, including direct transfer, swap, bridge, or split funding.
-5. Lotus uses a route provider such as LiFi to produce route quotes and transaction payloads.
-6. Lotus tracks every route leg.
-7. Lotus confirms destination receipt.
-8. Lotus confirms venue credit.
-9. Lotus marks funds `READY_TO_TRADE` only after venue readiness is confirmed.
-10. Execution preflight can then allow trades that require that venue balance.
+5. Lotus uses a route provider such as LI.FI to produce route quotes and unsigned transaction instructions.
+6. The user signs and broadcasts from their wallet.
+7. Lotus tracks every route leg.
+8. Lotus confirms destination receipt.
+9. Lotus confirms venue credit.
+10. Lotus marks funds `READY_TO_TRADE` only after venue readiness is confirmed.
+11. Execution preflight can then allow trades that require that venue-ready balance.
 
 Funding does not execute trades. Funding only prepares usable venue capital.
 
@@ -60,10 +69,11 @@ The full funding architecture is:
 
 ```text
 Funding intent
--> venue capability matrix
+-> Funding Capability Matrix
 -> funding route planner
 -> route legs
--> LiFi bridge/swap execution
+-> LI.FI or another route provider
+-> user wallet signature/broadcast
 -> destination confirmation
 -> venue credit/finalization
 -> funding accounting
@@ -84,11 +94,32 @@ The connection point is execution preflight.
 
 Execution preflight must check that the required venue balance is `READY_TO_TRADE` before allowing live execution.
 
-A LiFi transaction hash is not enough.
+A LI.FI transaction hash is not enough.
 
 A bridge-complete status is not enough.
 
 Only venue-ready confirmation is enough.
+
+### Market Capability Matrix vs Funding Capability Matrix
+
+Do not merge market routeability and funding routeability into one concept.
+
+Market Capability Matrix:
+
+- answers which venues, markets, outcomes, and lane scopes are tradable
+- belongs to matcher/readiness/operator approval and SOR routeability
+- decides whether a market lane can ever be executable after operator approval
+
+Funding Capability Matrix:
+
+- answers which venue can receive which chain, token, destination address, and finalization path
+- belongs to capital movement and venue-ready balance checks
+- decides whether funding can safely prepare execution-ready capital for a venue
+
+Execution requires both matrices to pass their own checks:
+
+- an operator-approved market lane
+- venue-ready capital for the exact venue, token, user, and amount required by the execution route
 
 ## 4. Funding vs Execution
 
@@ -139,6 +170,31 @@ Implementation can start with one route leg and one target venue first.
 ```
 
 Do not design a model that assumes one source deposit maps to one venue forever.
+
+## 5A. Capital Mobility / Funding Orchestration
+
+Funding is Lotus's capital mobility layer. It moves user intent from "I have USDC" to "this venue has execution-ready capital for this user" without turning Lotus into a custodian.
+
+The funding brain is Lotus, not LI.FI. Lotus owns:
+
+- target venue selection from the Funding Capability Matrix
+- split allocation planning
+- route validation and stale-quote rejection
+- frontend-safe signing instructions
+- per-leg status tracking
+- destination confirmation
+- venue readiness confirmation
+- auditability and operator visibility
+- execution preflight gating
+
+LI.FI is one route provider in this orchestration. Future providers can be added behind the same Lotus funding planner, but provider success must never be treated as final trade readiness.
+
+Terminology:
+
+- Use `execution-ready capital` when describing capital that can satisfy execution preflight.
+- Use `venue-ready balance` when describing funds that a specific venue confirms as usable.
+- Use `derived capital view` when displaying balances across venues.
+- Avoid `unified balance` unless explicitly qualifying it as a derived view, not custody or pooled funds.
 
 ## 6. Domain Objects
 
@@ -200,7 +256,7 @@ Examples:
 - Limitless target: receive venue-compatible USDC or ETH depending on capability.
 - Myriad target: receive venue-compatible SOL or ETH depending on capability.
 
-The exact token and chain must come from the venue capability matrix, not hardcoded assumptions.
+The exact token and chain must come from the Funding Capability Matrix, not hardcoded assumptions.
 
 ### FundingRouteLeg
 
@@ -234,7 +290,9 @@ Route legs must be independently tracked. One leg can succeed while another fail
 
 ### VenueCapability
 
-Represents what a venue can accept.
+Represents what a venue can accept for funding.
+
+This is the funding-side capability model. It is separate from the market capability model used for matcher/readiness/operator-approved lane routeability.
 
 Do not hardcode one chain/token per venue.
 
@@ -256,14 +314,14 @@ Important:
 
 Predict.fun is not PredictIt. Treat Predict.fun as its own venue.
 
-The capability matrix is the source of truth for target chain/token selection.
+The Funding Capability Matrix is the source of truth for target chain/token/destination selection.
 
 Known examples from the architecture flow:
 
 - Polymarket: venue-compatible USDC, commonly represented as `USDC.e` in the current diagram
 - Limitless: `USDC` / `ETH`
 - Myriad: `SOL` / `ETH`
-- Opinion, Predict.fun, and future venues: confirm through venue capability config before routing
+- Opinion, Predict.fun, and future venues: confirm through Funding Capability Matrix config before routing
 
 These examples are not a substitute for the capability matrix.
 
@@ -384,29 +442,29 @@ In that example:
 - Limitless execution must wait.
 - Opinion execution must fail preflight or request retry/remediation.
 
-## 9. LiFi Role
+## 9. LI.FI Role
 
-LiFi is the first route provider for Funding v0.
+LI.FI is the first route provider for Funding v0.
 
 Primary docs:
 
-- LiFi MCP server overview: https://docs.li.fi/mcp-server/overview
-- LiFi introduction: https://docs.li.fi/introduction/introduction
-- LiFi API reference: https://docs.li.fi/api-reference/introduction
-- LiFi SDK overview: https://docs.li.fi/sdk/overview
+- LI.FI MCP server overview: https://docs.li.fi/mcp-server/overview
+- LI.FI introduction: https://docs.li.fi/introduction/introduction
+- LI.FI API reference: https://docs.li.fi/api-reference/introduction
+- LI.FI SDK overview: https://docs.li.fi/sdk/overview
 
-LiFi should handle:
+LI.FI should handle:
 
 - route quote
 - bridge/swap plan
 - transaction payload
 - route status where available
 
-Lotus should wrap LiFi with its own planner.
+Lotus should wrap LI.FI with its own planner.
 
 Lotus remains responsible for:
 
-- venue capability lookup
+- Funding Capability Matrix lookup
 - route validation
 - status normalization
 - per-leg lifecycle
@@ -416,13 +474,120 @@ Lotus remains responsible for:
 - frontend-safe messaging
 - execution preflight integration
 
-LiFi is a route provider, not the entire funding product.
+LI.FI is a route provider, not the funding brain or the entire funding product.
 
-Do not let LiFi status become the final source of truth for trade readiness. LiFi can say a route completed, but Lotus still needs destination and venue-credit confirmation.
+### Current v0 Implementation Flags
 
-### LiFi Integration Boundary
+Funding v0 is implemented fail-closed by default. Operators must configure these flags before route quotes or execution preflight enforcement are active:
 
-The Lotus wrapper around LiFi should own the product contract. Do not let UI, RFQ, execution, or venue adapters call LiFi directly.
+- `LIFI_API_BASE_URL=https://li.quest/v1`
+- `LIFI_API_KEY` optional and server-side only
+- `LIFI_QUOTE_TIMEOUT_MS=10000`
+- `LIFI_QUOTE_TTL_SECONDS=60`
+- `FUNDING_LIFI_QUOTES_ENABLED=false` by default
+- `FUNDING_LIVE_SUBMIT_ENABLED=false`; backend v0 never signs or broadcasts wallet transactions
+- `FUNDING_PREFLIGHT_ENFORCEMENT_ENABLED=false` until venue-ready funding records are available
+- `FUNDING_VENUE_READINESS_CHECKS_ENABLED=false` until the operator wants route status refresh to call venue readiness checkers
+- `POLYMARKET_FUNDING_DESTINATION_ADDRESS` required before Polymarket funding quotes can be enabled
+- `POLYMARKET_FUNDING_READINESS_MODE=DISABLED` by default; allowed values are `DISABLED`, `STUB`, and `LIVE_READ`
+- `POLYMARKET_FUNDING_READINESS_ENABLED=false` by default
+- `POLYMARKET_FUNDING_BALANCE_URL` is optional and must point to a server-side, operator-approved balance read path before enabling Polymarket readiness checks
+- `POLYMARKET_FUNDING_READ_AUTH_MODE=NONE` by default; use `BEARER` only with server-side operator-approved read credentials
+- `POLYMARKET_FUNDING_READ_API_KEY` is server-side only and must never be returned in API responses, artifacts, logs, or receipts
+- `POLYMARKET_FUNDING_READ_TIMEOUT_MS=5000`
+- `POLYMARKET_FUNDING_MIN_CONFIRMATIONS=0` unless a venue-specific finality policy requires more confirmations
+- `POLYMARKET_INTERNAL_BALANCE_READ_ENABLED=false` by default; set to `true` only when the internal read-only CLOB balance service should serve `/internal/polymarket/funding-balance`
+- `LIMITLESS_FUNDING_DESTINATION_ADDRESS` required before Limitless funding quotes can be enabled
+- `LIMITLESS_FUNDING_PREFERRED_CHAIN=BASE` and `LIMITLESS_FUNDING_PREFERRED_CHAIN_ID=8453` by default
+- `LIMITLESS_USDC_TOKEN_ADDRESS` may override the default Base USDC token address
+- `LIMITLESS_FUNDING_READINESS_MODE=DISABLED` by default; allowed values are `DISABLED`, `STUB`, and `LIVE_READ`
+- `LIMITLESS_FUNDING_READINESS_ENABLED=false` by default
+- `LIMITLESS_FUNDING_BALANCE_URL` is optional and must point to a server-side, operator-approved balance read path before enabling Limitless readiness checks
+- `LIMITLESS_FUNDING_READ_AUTH_MODE=NONE` by default; use `BEARER` only with server-side operator-approved read credentials
+- `LIMITLESS_FUNDING_READ_API_KEY` is server-side only and must never be returned in API responses, artifacts, logs, or receipts
+- `LIMITLESS_FUNDING_READ_TIMEOUT_MS=5000`
+- `LIMITLESS_FUNDING_MIN_CONFIRMATIONS=0` unless a venue-specific finality policy requires more confirmations
+- `SOLANA_USDC_TOKEN_ADDRESS` and `POLYGON_USDC_TOKEN_ADDRESS` may override default token addresses
+
+The implemented user endpoints are:
+
+- `POST /funding/intents`
+- `GET /funding/intents/:fundingIntentId`
+- `POST /funding/intents/:fundingIntentId/quote`
+- `POST /funding/intents/:fundingIntentId/submit`
+- `GET /funding/intents/:fundingIntentId/status`
+- `GET /funding/venues/capabilities`
+
+The backend only records a user-broadcast transaction hash on submit. It does not custody user funds, sign wallet transactions, internally allocate user funds, or broadcast LI.FI transactions in v0.
+
+Do not let LI.FI status become the final source of truth for trade readiness. LI.FI can say a route completed, but Lotus still needs destination and venue-credit confirmation.
+
+### Internal Polymarket Balance Read Service
+
+Lotus can serve the Polymarket funding readiness read contract from an internal backend route:
+
+```http
+GET /internal/polymarket/funding-balance?userId=...&fundingIntentId=...&routeLegId=...
+```
+
+Safe response contract:
+
+```json
+{
+  "usableBalance": "100"
+}
+```
+
+The route is read-only and uses the Polymarket CLOB SDK balance/allowance read path for collateral. It returns the lesser of balance and allowance as a USDC amount. It must not return raw CLOB responses, API keys, auth headers, private keys, allowances, or provider internals.
+
+Activation rules:
+
+- `POLYMARKET_INTERNAL_BALANCE_READ_ENABLED=true` is required.
+- CLOB envs must be complete: `POLYMARKET_CLOB_HOST`, `POLYMARKET_CHAIN_ID`, `POLYMARKET_API_KEY`, `POLYMARKET_API_SECRET`, `POLYMARKET_API_PASSPHRASE`, and `POLYMARKET_PRIVATE_KEY`.
+- If `POLYMARKET_FUNDING_READ_API_KEY` is configured, callers must use `Authorization: Bearer <token>`.
+- If no bearer token is configured, local development allows loopback-only access; production must configure bearer auth.
+- This service does not mark funding `READY_TO_TRADE`; it only supplies the balance read used by the existing readiness checker.
+
+### Limitless Readiness Smoke Test
+
+Use this read-only command to validate the Limitless `LIVE_READ` response contract before any broader pair-route funding enforcement rehearsal:
+
+```bash
+npm run funding:limitless-readiness-smoke
+```
+
+Required operator config:
+
+- `LIMITLESS_FUNDING_READINESS_MODE=LIVE_READ`
+- `LIMITLESS_FUNDING_BALANCE_URL` must point to an operator-approved server-side balance read service.
+- `LIMITLESS_FUNDING_READ_AUTH_MODE=BEARER` requires `LIMITLESS_FUNDING_READ_API_KEY`.
+- `TEST_DATABASE_URL` or `DATABASE_URL` must point to a database with at least one confirmed Limitless funding route leg.
+
+The command:
+
+- selects one safe `LIMITLESS` funding route leg with confirmed destination status
+- invokes `LimitlessFundingReadinessChecker` in read-only mode
+- validates parsing for `READY_TO_TRADE`, `VENUE_CREDIT_PENDING`, or `UNKNOWN`
+- writes `artifacts/funding/limitless-readiness-smoke-test.json`
+- writes `artifacts/funding/limitless-readiness-smoke-test.md`
+- does not persist readiness
+- does not enable funding preflight enforcement
+- does not call LI.FI live execution
+- does not broadcast transactions
+
+Expected safety fields:
+
+- `readOnly=true`
+- `persistedReadinessResult=false`
+- `liveLifiExecutionEnabled=false`
+- `fundingPreflightEnforcementEnabled=false`
+- `redactionVerified=true`
+
+This command only proves the Limitless read path can be parsed safely. It does not make pair-route funding enforcement production-ready by itself.
+
+### LI.FI Integration Boundary
+
+The Lotus wrapper around LI.FI should own the product contract. Do not let UI, RFQ, execution, or venue adapters call LI.FI directly.
 
 Suggested internal services:
 
@@ -431,14 +596,14 @@ Suggested internal services:
 - `LifiRouteStatusService`
 - `FundingRoutePlanner`
 
-LiFi-facing inputs should come from Lotus objects:
+LI.FI-facing inputs should come from Lotus objects:
 
 - `FundingIntent`
 - `FundingTarget`
-- `VenueCapability`
+- `VenueCapability` or the funding capability snapshot
 - `FundingRouteLeg`
 
-LiFi-facing outputs should be normalized before storage or API response:
+LI.FI-facing outputs should be normalized before storage or API response:
 
 - route provider id
 - quote id or route id if provided
@@ -452,25 +617,25 @@ LiFi-facing outputs should be normalized before storage or API response:
 
 Never store or expose raw secrets. Never expose route-provider auth, private keys, or venue credentials in frontend responses.
 
-### LiFi Status Is Not Venue Readiness
+### LI.FI Status Is Not Venue Readiness
 
 The route lifecycle has three separate confirmations:
 
-1. LiFi route status says the bridge/swap route moved forward.
+1. LI.FI route status says the bridge/swap route moved forward.
 2. Destination confirmation says funds arrived on the target chain/address.
 3. Venue adapter says funds are credited and `READY_TO_TRADE`.
 
 Only step 3 can unblock trade execution.
 
-If LiFi reports success but the venue adapter cannot confirm venue credit, the funding leg must remain `LEG_VENUE_CREDIT_PENDING` and execution preflight must block that venue.
+If LI.FI reports success but the venue adapter cannot confirm venue credit, the funding leg must remain `LEG_VENUE_CREDIT_PENDING` and execution preflight must block that venue.
 
-### LiFi MCP Server Usage
+### LI.FI MCP Server Usage
 
-The LiFi MCP server can be useful for developer research, route inspection, and implementation support, but it should not become a hidden production dependency unless explicitly designed and reviewed.
+The LI.FI MCP server can be useful for developer research, route inspection, and implementation support, but it should not become a hidden production dependency unless explicitly designed and reviewed.
 
 Default implementation posture:
 
-- backend runtime should use the LiFi API or SDK through a Lotus wrapper
+- backend runtime should use the LI.FI API or SDK through a Lotus wrapper
 - MCP usage is for developer tooling and diagnostics unless separately approved
 - generated route logic must still be audited and covered by tests
 - any MCP-assisted output must be checked into code/docs only after review
@@ -504,9 +669,14 @@ Execution preflight must not treat a successful bridge as venue-ready unless the
 
 Funding status gates trade execution.
 
+Execution requires both:
+
+- operator-approved market lane authority
+- venue-ready capital for the exact venue, token, user, and amount
+
 Execution preflight should check:
 
-- Does the user have enough `READY_TO_TRADE` balance on the required venue?
+- Does the user have enough `READY_TO_TRADE` venue-ready balance on the required venue?
 - Does the required venue match the approved SOR route?
 - Is the funding leg for that venue confirmed?
 - Is the balance reserved for this execution?
@@ -527,8 +697,8 @@ Do not let execution use:
 - pending bridge funds
 - destination-received but uncredited funds
 - failed funding legs
-- unknown venue capability states
-- aggregate balance that does not exist on the venue required by the route
+- unknown funding capability states
+- derived capital view totals that do not exist on the venue required by the route
 
 ## 12. Audit Events
 
@@ -704,7 +874,7 @@ POST /funding/intents/:fundingIntentId/quote
 
 Why call it:
 
-Quotes the funding route before the user signs anything. This should use the venue capability matrix and LiFi wrapper to produce route previews.
+Quotes the funding route before the user signs anything. This should use the Funding Capability Matrix and LI.FI wrapper to produce route previews.
 
 Expected response:
 
@@ -734,7 +904,7 @@ POST /funding/intents/:fundingIntentId/submit
 
 Why call it:
 
-Submits the user-approved funding route after wallet signature. This is where LiFi transaction payloads are used. In early v0 this can remain sandbox/stubbed until live routing is reviewed.
+Submits the user-approved funding route after wallet signature. This is where LI.FI transaction payloads are used. In early v0 this can remain sandbox/stubbed until live routing is reviewed.
 
 Expected response:
 
@@ -792,7 +962,7 @@ Expected response:
       "status": "READY_TO_TRADE"
     }
   ],
-  "unifiedDisplayBalance": [
+  "derivedCapitalView": [
     {
       "displayToken": "USDC",
       "availableEquivalent": "500",
@@ -891,7 +1061,7 @@ If destination receives funds but venue credit is not ready:
 - mark `VENUE_CREDIT_PENDING`
 - execution remains blocked for that venue
 
-If venue capability is unknown:
+If funding capability is unknown:
 
 - do not route funding
 
@@ -926,7 +1096,7 @@ Phase 1:
 
 - single-source, single-target funding path
 - source: `USDC` on Solana
-- route provider: LiFi
+- route provider: LI.FI
 - target: one venue first
 - status tracking
 - audit events
@@ -960,13 +1130,13 @@ Phase 5:
 
 Phase 6:
 
-- position abstraction and unified balance integrations
+- position abstraction and derived capital view integrations
 
 First implementation should start with:
 
 - domain types
-- venue capability matrix
-- LiFi quote wrapper
+- Funding Capability Matrix
+- LI.FI quote wrapper
 - one route leg success path
 - status lifecycle
 - audit events
@@ -985,6 +1155,8 @@ Then add:
 Do not build first:
 
 - internal Lotus custody
+- router contract model
+- custody/vault model
 - smart contracts
 - full multi-provider funding SOR
 - instant settlement LP product
@@ -1003,7 +1175,8 @@ Warnings:
 - Do not confuse Predict.fun with PredictIt. They are different.
 - Do not mark funds ready after only a bridge transaction. Venue-ready confirmation is required.
 - Do not let execution preflight bypass funding status. Execution requires `READY_TO_TRADE` for the venue it will use.
-- Do not treat LiFi as the whole product. LiFi is only the route provider.
+- Do not treat LI.FI as the whole product. LI.FI is only the route provider.
+- Do not blur future models into v0. Router contracts, custody/vaults, instant settlement LPs, and position abstraction are separate future models, not MVP funding behavior.
 
 ## 18. Security Rules Before Build
 
@@ -1011,10 +1184,10 @@ Funding moves user capital, so its first implementation must be security-shaped 
 
 Required rules:
 
-- Do not let the frontend, RFQ flow, execution flow, or venue adapter call LiFi directly.
-- Do not treat a LiFi quote as trusted after it becomes stale.
-- Do not treat a LiFi route status as venue readiness.
-- Do not route to a destination chain, token, or address unless it matches the venue capability matrix.
+- Do not let the frontend, RFQ flow, execution flow, or venue adapter call LI.FI directly.
+- Do not treat a LI.FI quote as trusted after it becomes stale.
+- Do not treat a LI.FI route status as venue readiness.
+- Do not route to a destination chain, token, or address unless it matches the Funding Capability Matrix.
 - Do not ask the user to sign a route payload unless the UI can show the source, destination, token, amount, estimated fees, and target venue in plain language.
 - Do not store or return route-provider credentials, private keys, venue API secrets, or signing secrets.
 - Do not mark aggregate funding `READY_TO_TRADE` if any required route leg is pending, failed, stale, or not venue-credited.
@@ -1039,7 +1212,144 @@ Before runtime implementation starts, read:
 - `docs/security/LOTUS_THREAT_MODEL.md`
 - `docs/security/LOTUS_SECURITY_CHECKLIST.md`
 
-## 19. Decisions Needed Before Build
+## 19. Funding v0 Validation Notes
+
+Current funding v0 validation commands:
+
+- `npm run db:migrate:test`
+- `npm run test:funding-flow`
+- `npm run test:funding-flow:db`
+- `npm run test:execution-system`
+- `npx vitest run test/integration/rfq-lifecycle.test.ts --maxWorkers=1`
+
+The DB-backed funding test proves:
+
+- funding tables apply through the migration path
+- funding intent, target, route leg, reconciliation, and audit rows persist
+- mocked LI.FI quote/status data drives `USER_SIGNATURE_REQUIRED`, `BRIDGING`, and `ROUTES_SUBMITTED`
+- destination receipt and venue-credit pending do not become `READY_TO_TRADE`
+- venue readiness confirmation is required before execution funding preflight can pass
+- funding preflight enforcement remains disabled by default and only blocks execution when explicitly enabled
+
+Known suite caveat:
+
+- `npm run test:unit` currently has unrelated pre-existing failures in non-funding tests. Use the targeted funding, execution-system, and RFQ lifecycle commands above as the funding v0 acceptance suite until that backlog is cleaned up.
+
+## 20. Sandbox Funding-Enforcement Rehearsal
+
+Before enabling any real funding enforcement flag, operators can run a controlled sandbox rehearsal:
+
+```bash
+npm run funding:polymarket-readiness-sandbox-preflight
+```
+
+This command:
+
+- creates one sandbox funding intent
+- uses a mocked LI.FI quote and mocked LI.FI status, with no live LI.FI call
+- submits a fake user transaction hash to the funding service, with no broadcast
+- reconciles Polymarket readiness through `refreshIntentStatus`
+- persists a `READY_TO_TRADE` reconciliation row
+- verifies admin readiness can see the persisted row
+- runs execution/RFQ accept preflight with funding enforcement enabled only inside the script
+- leaves the database row persisted for operator inspection
+
+Safety notes:
+
+- live LI.FI execution remains disabled
+- backend transaction broadcast remains false
+- default funding preflight enforcement remains false
+- script-scoped funding enforcement is temporary and local to the rehearsal
+- this does not mean production funding enforcement is enabled
+- this does not move real funds
+
+Expected successful output:
+
+- `persistedReadinessResult=true`
+- `rfqAcceptPreflight.ok=true`
+- `redactionVerified=true`
+- `npm run report:funding:readiness` shows the persisted sandbox row
+
+Run this rehearsal:
+
+- before enabling any real funding enforcement flag
+- after changes to funding reconciliation
+- after changes to venue readiness checker behavior
+- after changes to execution preflight funding checks
+
+Sandbox enforcement gate:
+
+- Only rehearse or enable funding enforcement for routes where every venue in the approved RFQ/SOR route has validated readiness coverage.
+- A route is not enforcement-ready if one venue can persist `READY_TO_TRADE` but another route venue is still manually seeded, stub-only, or `NOT_CONFIGURED`.
+- Pair, tri, and split routes require per-venue readiness evidence for each venue leg before the full route can pass funding preflight.
+- If any required venue lacks readiness coverage, execution must fail preflight with `FUNDING_UNAVAILABLE` or remain in sandbox rehearsal only.
+- The current Polymarket readiness path is validated first; other route venues must get their own checker or approved evidence path before broad sandbox enforcement.
+- `npm run report:funding:readiness` must show the relevant persisted rows before an operator treats the route as enforcement-ready.
+
+### Pair-Route Funding-Enforcement Rehearsal
+
+Run:
+
+```bash
+npm run funding:pair-readiness-sandbox-preflight
+```
+
+This command rehearses the approved sandbox pair lane:
+
+```text
+CRYPTO_BTC_ATH_BY_DATE_PAIR_LIMITLESS_POLYMARKET
+```
+
+It:
+
+- creates one split-capable funding intent with `LIMITLESS` and `POLYMARKET` targets
+- uses a mocked LI.FI quote/status provider, with no live LI.FI execution
+- submits fake user tx hashes, with no backend broadcast
+- refreshes funding status and calls the configured venue readiness checkers
+- persists readiness reconciliation for both venue legs when evidence supports it
+- runs execution preflight for the pair lane with funding enforcement enabled only inside the script
+- writes `artifacts/funding/pair-funding-readiness-sandbox-preflight.json`
+- writes `artifacts/funding/pair-funding-readiness-sandbox-preflight.md`
+
+Expected successful output:
+
+- `status=COMPLETED`
+- `persistedReadinessRows=2`
+- `executionPreflight.ok=true`
+- `liveLifiExecutionEnabled=false`
+- `backendBroadcastedTransaction=false`
+- `liveVenueSubmissionEnabled=false`
+- `redactionVerified=true`
+
+Required operator config:
+
+- `POLYMARKET_FUNDING_READINESS_MODE=LIVE_READ`
+- `POLYMARKET_FUNDING_BALANCE_URL` configured
+- `LIMITLESS_FUNDING_READINESS_MODE=LIVE_READ`
+- `LIMITLESS_FUNDING_BALANCE_URL` configured
+- both venue destination addresses configured
+
+This is still a sandbox rehearsal. It does not enable global funding preflight enforcement and does not make pair-route funding enforcement production-ready by itself.
+
+Operator gate before pair-route enforcement:
+
+- Do not enable pair-route funding enforcement unless `artifacts/funding/pair-funding-readiness-sandbox-preflight.json` exists.
+- The artifact must have `status=COMPLETED`.
+- The artifact must have `persistedReadinessRows=2`.
+- The artifact must have `executionPreflight.ok=true`.
+- The artifact must be fresh for the intended deployment window.
+- Treat the artifact as stale if it is older than 24 hours, if funding/readiness/preflight code changed after it was generated, or if the venue readiness env/config changed after it was generated.
+- If stale or missing, rerun `npm run funding:pair-readiness-sandbox-preflight` and review the artifact before changing any enforcement flag.
+
+Machine-checkable gate:
+
+```bash
+npm run funding:pair-enforcement-gate
+```
+
+This command reads `artifacts/funding/pair-funding-readiness-sandbox-preflight.json` and exits non-zero if the artifact is missing, stale, not `COMPLETED`, does not have two persisted readiness rows, does not have `executionPreflight.ok=true`, fails redaction, or has unsafe flags such as live LI.FI execution or backend broadcast enabled. The default freshness window is 24 hours. Operators can override it with `FUNDING_PAIR_REHEARSAL_MAX_AGE_HOURS`.
+
+## 21. Decisions Needed Before Build
 
 - Which venue should be the first target path?
 - Which chains/tokens are enabled in the first capability matrix?
@@ -1052,9 +1362,9 @@ Before runtime implementation starts, read:
 - Should funding reservations be per venue leg, per RFQ execution, or both?
 - Which admin read-only funding views are needed first?
 
-## 20. Questions That Can Wait
+## 22. Questions That Can Wait
 
-- How much of LiFi route status can be trusted directly beyond the first route?
+- How much of LI.FI route status can be trusted directly beyond the first route?
 - What frontend screens already exist for deposit status?
 - How should failed split legs be retried?
 - What user copy should be shown for partial readiness?

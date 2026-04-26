@@ -18,10 +18,12 @@ info:
     - Execution-scope token is not authority by itself.
 
     Funding safety notes:
-    - Funding APIs are planned only unless marked implemented.
-    - LiFi route quote does not equal ready-to-trade.
+    - Funding v0 is non-custodial funding preparation: Lotus returns route instructions and tracks user-broadcast transactions; users sign with their own wallets.
+    - Lotus does not custody, sign, broadcast user wallet transactions, pool funds, or internally allocate user balances in v0.
+    - LI.FI route quote does not equal ready-to-trade.
     - Execution preflight requires READY_TO_TRADE.
-    - Venue capability matrix decides target chain/token.
+    - Funding Capability Matrix decides target chain/token/destination for capital movement.
+    - Market Capability Matrix remains separate and decides market lane routeability/operator approval.
     - Predict.fun is not PredictIt.
 servers:
   - url: http://localhost:3000
@@ -43,6 +45,9 @@ tags:
   - name: Admin Replay
   - name: Admin Internal Engines
   - name: Admin Compatibility
+  - name: Funding
+  - name: Internal Funding
+  - name: Admin Funding Readiness
   - name: Planned Funding
   - name: Unregistered APIs
 paths:
@@ -2317,81 +2322,245 @@ paths:
 
   /funding/intents:
     post:
-      tags: [Planned Funding]
-      summary: Planned funding intent creation.
-      x-lotus-status: planned
-      x-lotus-callable: false
+      tags: [Funding]
+      summary: Create a split-capable funding intent.
+      description: Creates a funding intent only. It does not move funds, sign wallet transactions, or mark funds ready to trade.
+      x-lotus-status: implemented
+      x-lotus-callable: true
       x-lotus-auth: user
       x-lotus-side-effects: funding-intent
       x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/FundingIntent"
+              $ref: "#/components/schemas/CreateFundingIntentRequest"
       responses:
-        "501":
-          description: Planned only; not implemented.
+        "201": { $ref: "#/components/responses/FundingIntent" }
+        "400": { $ref: "#/components/responses/Error" }
   /funding/intents/{id}:
     parameters: [{ $ref: "#/components/parameters/Id" }]
     get:
-      tags: [Planned Funding]
-      summary: Planned funding intent read.
-      x-lotus-status: planned
-      x-lotus-callable: false
+      tags: [Funding]
+      summary: Read an owned funding intent.
+      x-lotus-status: implemented
+      x-lotus-callable: true
       x-lotus-auth: user
       x-lotus-side-effects: none
       x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
       responses:
-        "501": { description: Planned only; not implemented. }
+        "200": { $ref: "#/components/responses/FundingIntent" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /funding/intents/{id}/quote:
     parameters: [{ $ref: "#/components/parameters/Id" }]
     post:
-      tags: [Planned Funding]
-      summary: Planned funding route quote.
-      x-lotus-status: planned
-      x-lotus-callable: false
+      tags: [Funding]
+      summary: Quote funding route legs through the Lotus LI.FI wrapper.
+      description: Fails closed when LI.FI quotes are disabled or the Funding Capability Matrix cannot validate the destination. LI.FI is a route provider only; Lotus remains responsible for funding orchestration and readiness validation.
+      x-lotus-status: implemented
+      x-lotus-callable: true
       x-lotus-auth: user
       x-lotus-side-effects: funding-intent
       x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
       responses:
-        "501": { description: Planned only; not implemented. }
+        "200": { $ref: "#/components/responses/FundingIntent" }
+        "409": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /funding/intents/{id}/submit:
     parameters: [{ $ref: "#/components/parameters/Id" }]
     post:
-      tags: [Planned Funding]
-      summary: Planned funding route submit.
-      x-lotus-status: planned
-      x-lotus-callable: false
+      tags: [Funding]
+      summary: Record a user-broadcast funding transaction hash.
+      description: Backend does not sign or broadcast transactions in v0. This endpoint records a tx hash after the user signs/broadcasts from their wallet.
+      x-lotus-status: implemented
+      x-lotus-callable: true
       x-lotus-auth: user
       x-lotus-side-effects: funding-intent
       x-lotus-danger: high
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitFundingRouteLegRequest"
       responses:
-        "501": { description: Planned only; not implemented. }
+        "202": { $ref: "#/components/responses/FundingIntent" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /funding/intents/{id}/status:
     parameters: [{ $ref: "#/components/parameters/Id" }]
     get:
-      tags: [Planned Funding]
-      summary: Planned funding status read.
-      x-lotus-status: planned
-      x-lotus-callable: false
+      tags: [Funding]
+      summary: Read frontend-safe aggregate and per-leg funding status.
+      x-lotus-status: implemented
+      x-lotus-callable: true
       x-lotus-auth: user
       x-lotus-side-effects: none
       x-lotus-danger: low
+      security: [{ bearerAuth: [] }]
       responses:
-        "501": { description: Planned only; not implemented. }
+        "200": { $ref: "#/components/responses/FundingIntent" }
+        "404": { $ref: "#/components/responses/Error" }
   /funding/venues/capabilities:
     get:
-      tags: [Planned Funding]
-      summary: Planned venue funding capability matrix.
-      x-lotus-status: planned
-      x-lotus-callable: false
+      tags: [Funding]
+      summary: Read frontend-safe venue funding capability matrix.
+      description: Response redacts deposit addresses and provider secrets; it only exposes whether required server-side config exists. This Funding Capability Matrix is separate from market lane capability/operator approval.
+      x-lotus-status: implemented
+      x-lotus-callable: true
       x-lotus-auth: user
       x-lotus-side-effects: none
       x-lotus-danger: low
+      security: [{ bearerAuth: [] }]
       responses:
-        "501": { description: Planned only; not implemented. }
+        "200":
+          description: Venue capability matrix.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [capabilities]
+                properties:
+                capabilities:
+                  type: array
+                  items: { $ref: "#/components/schemas/VenueCapability" }
+  /internal/polymarket/funding-balance:
+    get:
+      tags: [Internal Funding]
+      summary: Internal read-only Polymarket usable funding balance.
+      description: Server-side only endpoint used by Lotus funding readiness checks. It reads Polymarket CLOB collateral balance/allowance and returns only the safe usableBalance contract. It does not move funds, submit orders, persist readiness, or expose raw provider internals.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: internal
+      x-lotus-side-effects: none
+      x-lotus-danger: high
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: fundingIntentId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: routeLegId
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Safe Polymarket usable balance response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [usableBalance]
+                properties:
+                  usableBalance: { type: string }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "502": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /admin/funding/readiness:
+    get:
+      tags: [Admin Funding Readiness]
+      summary: List persisted funding readiness for operator review.
+      description: Read-only admin surface over Funding Flow v0 state. It does not call LI.FI, move funds, run live venue checks, or mark funds ready to trade.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminFundingReadinessList" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+  /admin/funding/readiness/summary:
+    get:
+      tags: [Admin Funding Readiness]
+      summary: Export an operator-safe Funding Flow v0 readiness summary.
+      description: Read-only summary over persisted readiness rows. It does not call LI.FI, move funds, run live venue checks, or mark funds ready to trade.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminFundingReadinessSummary" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+  /admin/funding/readiness/{fundingIntentId}:
+    parameters:
+      - name: fundingIntentId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Admin Funding Readiness]
+      summary: Read persisted funding readiness rows for one funding intent.
+      description: Returns one row per target/route leg for the funding intent. Split funding can therefore return multiple rows.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminFundingReadinessList" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+  /admin/funding/readiness/user/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Admin Funding Readiness]
+      summary: List persisted funding readiness rows for one user.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminFundingReadinessList" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
+  /admin/funding/readiness/venue/{venue}:
+    parameters:
+      - name: venue
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/Venue" }
+    get:
+      tags: [Admin Funding Readiness]
+      summary: List persisted funding readiness rows for one venue.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminFundingReadinessList" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
   /admin/funding/intents/{id}:
     parameters: [{ $ref: "#/components/parameters/Id" }]
     get:
@@ -2598,6 +2767,24 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/AdminActionResponse"
+    FundingIntent:
+      description: Frontend-safe funding intent response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FundingIntentResponse"
+    AdminFundingReadinessList:
+      description: Read-only admin funding readiness rows.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AdminFundingReadinessListResponse"
+    AdminFundingReadinessSummary:
+      description: Read-only operator summary for Funding Flow v0 readiness.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AdminFundingReadinessSummaryResponse"
   schemas:
     ErrorResponse:
       type: object
@@ -2953,6 +3140,34 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/FundingTarget"
+    CreateFundingIntentRequest:
+      type: object
+      required: [sourceChain, sourceToken, sourceAmount, sourceWalletAddress, idempotencyKey, targets]
+      additionalProperties: false
+      properties:
+        sourceChain: { type: string, example: SOLANA }
+        sourceToken: { type: string, example: USDC }
+        sourceAmount: { type: string, example: "100" }
+        sourceWalletAddress: { type: string }
+        idempotencyKey: { type: string }
+        targets:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [targetVenue]
+            additionalProperties: false
+            properties:
+              targetVenue: { $ref: "#/components/schemas/Venue" }
+              targetAmount: { type: string }
+              targetPercentage: { type: number, minimum: 0, maximum: 100 }
+    SubmitFundingRouteLegRequest:
+      type: object
+      required: [routeLegId, txHash]
+      additionalProperties: false
+      properties:
+        routeLegId: { type: string }
+        txHash: { type: string }
         status: { type: string }
     FundingTarget:
       type: object
@@ -3004,6 +3219,7 @@ components:
             type: object
             additionalProperties: true
         unifiedDisplayBalance:
+          description: Legacy display label for a derived capital view only. It does not imply Lotus custody, pooled funds, or sell-anywhere abstraction.
           type: array
           items:
             type: object
@@ -3026,6 +3242,175 @@ components:
         currentStatus: { type: string }
         routePreview:
           $ref: "#/components/schemas/FundingRoutePreview"
+    FundingCheckerMode:
+      type: string
+      enum: [DISABLED, STUB, LIVE_READ, NOT_CONFIGURED]
+    FundingReadinessStatus:
+      type: string
+      enum: [UNKNOWN, DESTINATION_NOT_CONFIRMED, VENUE_CREDIT_PENDING, READY_TO_TRADE, FAILED]
+    AdminFundingReadinessRow:
+      type: object
+      additionalProperties: false
+      required:
+        - fundingIntentId
+        - userId
+        - targetVenue
+        - sourceChain
+        - sourceToken
+        - sourceAmount
+        - destinationChain
+        - destinationToken
+        - destinationAmountEstimate
+        - routeProvider
+        - routeLegId
+        - aggregateFundingStatus
+        - routeLegStatus
+        - bridgeStatus
+        - destinationStatus
+        - venueCreditStatus
+        - readinessStatus
+        - readyToTrade
+        - usableBalanceObserved
+        - requiredAmount
+        - checkerMode
+        - checkerSource
+        - lastCheckedAt
+        - reasonNotReady
+        - txHashes
+        - auditEventIds
+        - createdAt
+        - updatedAt
+      properties:
+        fundingIntentId: { type: string }
+        userId: { type: string }
+        targetVenue: { $ref: "#/components/schemas/Venue" }
+        sourceChain: { type: string }
+        sourceToken: { type: string }
+        sourceAmount: { type: string }
+        destinationChain: { type: string, nullable: true }
+        destinationToken: { type: string, nullable: true }
+        destinationAmountEstimate: { type: string, nullable: true }
+        routeProvider: { type: string, nullable: true, enum: [LIFI] }
+        routeLegId: { type: string, nullable: true }
+        aggregateFundingStatus: { type: string }
+        routeLegStatus: { type: string, nullable: true }
+        bridgeStatus: { type: string, nullable: true }
+        destinationStatus: { type: string, nullable: true }
+        venueCreditStatus: { type: string, nullable: true }
+        readinessStatus: { $ref: "#/components/schemas/FundingReadinessStatus" }
+        readyToTrade: { type: boolean }
+        usableBalanceObserved: { type: string, nullable: true }
+        requiredAmount: { type: string }
+        checkerMode: { $ref: "#/components/schemas/FundingCheckerMode" }
+        checkerSource: { type: string }
+        lastCheckedAt: { type: string, format: date-time, nullable: true }
+        reasonNotReady: { type: string, nullable: true }
+        txHashes:
+          type: array
+          items: { type: string }
+        auditEventIds:
+          type: array
+          items: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AdminFundingReadinessListResponse:
+      type: object
+      additionalProperties: false
+      required: [readiness]
+      properties:
+        readiness:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminFundingReadinessRow"
+    FundingReadinessAgeBucket:
+      type: string
+      enum: [NEVER_CHECKED, UNDER_1H, ONE_TO_24H, ONE_TO_7D, OVER_7D]
+    AdminFundingReadinessSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - generatedAt
+        - totalFundingIntents
+        - totalRouteLegs
+        - readyToTrade
+        - venueCreditPending
+        - destinationNotConfirmed
+        - failed
+        - unknown
+        - splitCapableIntents
+        - partialReadyIntents
+        - countsByVenue
+        - countsByAggregateStatus
+        - countsByReadinessStatus
+        - countsByCheckerMode
+        - countsByRouteProvider
+        - staleAgeBuckets
+        - blockedRows
+        - rows
+      properties:
+        generatedAt: { type: string, format: date-time }
+        totalFundingIntents: { type: integer }
+        totalRouteLegs: { type: integer }
+        readyToTrade: { type: integer }
+        venueCreditPending: { type: integer }
+        destinationNotConfirmed: { type: integer }
+        failed: { type: integer }
+        unknown: { type: integer }
+        splitCapableIntents: { type: integer }
+        partialReadyIntents: { type: integer }
+        countsByVenue:
+          type: object
+          additionalProperties: { type: integer }
+        countsByAggregateStatus:
+          type: object
+          additionalProperties: { type: integer }
+        countsByReadinessStatus:
+          type: object
+          additionalProperties: { type: integer }
+        countsByCheckerMode:
+          type: object
+          additionalProperties: { type: integer }
+        countsByRouteProvider:
+          type: object
+          additionalProperties: { type: integer }
+        staleAgeBuckets:
+          type: object
+          additionalProperties: { type: integer }
+        blockedRows:
+          type: object
+          additionalProperties: false
+          required:
+            - destinationNotConfirmed
+            - venueCreditPending
+            - checkerDisabledOrNotConfigured
+            - failed
+            - unknown
+          properties:
+            destinationNotConfirmed:
+              type: array
+              items: { $ref: "#/components/schemas/AdminFundingReadinessRow" }
+            venueCreditPending:
+              type: array
+              items: { $ref: "#/components/schemas/AdminFundingReadinessRow" }
+            checkerDisabledOrNotConfigured:
+              type: array
+              items: { $ref: "#/components/schemas/AdminFundingReadinessRow" }
+            failed:
+              type: array
+              items: { $ref: "#/components/schemas/AdminFundingReadinessRow" }
+            unknown:
+              type: array
+              items: { $ref: "#/components/schemas/AdminFundingReadinessRow" }
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/AdminFundingReadinessRow" }
+    AdminFundingReadinessSummaryResponse:
+      type: object
+      additionalProperties: false
+      required: [summary]
+      properties:
+        summary:
+          $ref: "#/components/schemas/AdminFundingReadinessSummary"
     FeePreview:
       type: object
       additionalProperties: true

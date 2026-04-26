@@ -4,6 +4,18 @@
 
 Lotus is now operating with an explicit time-basis split, a pair-first crypto rollout posture, and a secondary sports discovery track.
 
+Latest 2026-04-25 funding architecture clarification:
+- Funding v0 uses Model A: non-custodial funding preparation.
+- Lotus generates and validates route instructions, tracks user-broadcast transaction hashes, and reconciles venue readiness; users sign with their own wallets.
+- Lotus does not custody, sign, broadcast user wallet transactions, pool user funds, or internally allocate user balances in v0.
+- Market Capability Matrix and Funding Capability Matrix are separate:
+  - market capability controls market/outcome/lane routeability and operator approval
+  - funding capability controls chain/token/destination/finalization/readiness for capital movement
+- LI.FI is one route provider behind Lotus funding orchestration, not the funding brain.
+- Execution requires both an operator-approved market lane and venue-ready capital for the exact user, venue, token, and amount.
+- Use execution-ready capital, venue-ready balance, or derived capital view language; do not imply a custodial unified balance or sell-anywhere abstraction.
+- Router contracts, custody/vaults, instant settlement LPs, and position abstraction remain future models, not MVP funding behavior.
+
 Latest 2026-04-24 execution-system update:
 - minimal operator review gate and lane authority checks are now present for the current sports and crypto admin surfaces
 - a dev/bootstrap-only bulk lane approval script exists for this temporary local pass:

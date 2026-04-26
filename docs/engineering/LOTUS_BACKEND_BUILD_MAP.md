@@ -25,10 +25,10 @@ The default behavior is fail-closed. Ambiguous market identity, unapproved lanes
 | Sandbox execution | IMPLEMENTED | Test adapter supports sandbox execution paths and DB-backed RFQ accept-to-status tests. |
 | Polymarket V2 adapter | EXTERNALLY_BLOCKED | Adapter is structurally ready with dry-run/signing harness and readiness surface; live submit remains disabled unless feature flags and external auth/endpoint readiness are proven. |
 | Ghost-fill protection | IMPLEMENTED/STUBBED | v0 service and classifier exist. Production-quality venue proofs remain adapter-dependent. |
-| Funding architecture | PLANNED | Architecture handoff exists in `docs/runbooks/funding-flow-v0-handoff.md`. Runtime funding module/endpoints are not implemented. |
+| Funding Flow v0 | IMPLEMENTED/PARTIAL | DB-backed non-custodial funding preparation exists with LI.FI quote/status wrapper, user APIs, admin readiness/summary, Polymarket readiness, and Limitless readiness scaffolding for pair-lane rehearsal. Live LI.FI execution and funding preflight enforcement remain disabled by default. |
 | Monetization hooks | STUB | Execution fee hooks and receipt fee summaries exist; production monetization enforcement is not implemented. |
 | Admin surfaces | IMPLEMENTED | Many admin surfaces are mounted under `/admin/*`; see OpenAPI docs for callable routes. |
-| Frontend/API readiness | PARTIAL | RFQ accept can return execution ids and execution status can be read. Funding and full frontend deposit polish are planned. |
+| Frontend/API readiness | PARTIAL | RFQ accept can return execution ids, execution status can be read, and Funding v0 exposes frontend-safe intent/status/capability APIs. Full frontend deposit polish remains future work. |
 
 ## 3. High-Level Backend Architecture
 
@@ -50,7 +50,7 @@ Lotus is layered as follows:
 - Settlement verification: `src/execution-system/settlement.ts`.
 - Ghost-fill protection: `src/execution-system/ghost-fill.ts`.
 - Accounting/position state: execution accounting hook in `src/execution-system/accounting.ts`; full sell-anywhere position abstraction is not implemented.
-- Funding architecture: planned design in `docs/runbooks/funding-flow-v0-handoff.md`.
+- Funding/capital mobility: DB-backed non-custodial funding preparation under `src/core/funding`, `src/api/routes/funding.ts`, `src/repositories/funding.repository.ts`, and `src/integrations/lifi`.
 - Monetization/fee hooks: `src/execution-system/fees.ts`.
 - Admin APIs/surfaces: `src/api/admin`.
 - Audit/logging: execution audit in `src/execution-system/audit.ts` and `src/execution-control/execution-audit-writer.ts`.
@@ -107,8 +107,8 @@ Off-chain fill is not final settlement. Ghost-fill suspected/confirmed states mu
 
 ```text
 funding intent
--> venue capability matrix
--> LiFi route quote
+-> Funding Capability Matrix
+-> LI.FI or another route provider quote
 -> user signature
 -> route tracking
 -> destination received
@@ -117,7 +117,33 @@ funding intent
 -> execution preflight can proceed
 ```
 
-Funding runtime is planned. LiFi route completion alone is not enough; venue-ready confirmation is required.
+Funding v0 uses Model A: non-custodial funding preparation. Lotus generates route instructions, validates capability scope, tracks user-broadcast transactions, and reconciles venue readiness. The user signs with their own wallet. Lotus does not custody, sign, broadcast user wallet transactions, pool funds, or internally allocate user balances in v0.
+
+LI.FI route completion alone is not enough; venue-ready confirmation is required.
+
+### Capital Mobility / Funding Orchestration
+
+Capital mobility is separate from trade execution but gates execution at preflight.
+
+Lotus owns the funding orchestration:
+
+- Funding Capability Matrix selection
+- split funding planning
+- route-provider validation
+- frontend-safe signing instructions
+- per-leg status tracking
+- destination and venue-credit reconciliation
+- admin readiness visibility
+- execution preflight readiness checks
+
+LI.FI is one route provider, not the funding brain. Future provider integrations must remain behind the Lotus funding planner.
+
+Market Capability Matrix and Funding Capability Matrix are separate:
+
+- Market Capability Matrix decides whether a market/outcome/lane is routeable and operator-approvable.
+- Funding Capability Matrix decides whether capital can safely reach a venue in the right chain/token/destination and become usable.
+
+Execution requires both an operator-approved market lane and venue-ready capital for the exact user, venue, token, and amount.
 
 ### Admin lane approval flow
 
@@ -152,7 +178,7 @@ Hold, rollback, reject, review-required, matcher-ready, and readiness-ready stat
 | Ghost-fill protection | IMPLEMENTED/STUB | `src/execution-system/ghost-fill.ts` |
 | Audit logging | IMPLEMENTED | `src/execution-system/audit.ts`, `src/execution-control/execution-audit-writer.ts` |
 | Accounting/position state | PARTIAL | `src/execution-system/accounting.ts`; full position abstraction is planned |
-| Funding | PLANNED | `docs/runbooks/funding-flow-v0-handoff.md`; no runtime `src/funding` module yet |
+| Funding | IMPLEMENTED/PARTIAL | `src/core/funding`, `src/api/routes/funding.ts`, `src/repositories/funding.repository.ts`, `src/integrations/lifi`, `docs/runbooks/funding-flow-v0-handoff.md` |
 | Admin UI/API surfaces | API IMPLEMENTED | Admin APIs exist; dedicated frontend UI status varies by surface |
 | Tests | IMPLEMENTED | `tests`, `test/integration`, `test/unit` |
 | Scripts/reports | IMPLEMENTED | `scripts/reports`, `scripts/sync`, `scripts/ingest`, `scripts/stress` |
@@ -172,7 +198,7 @@ Hold, rollback, reject, review-required, matcher-ready, and readiness-ready stat
 | Polymarket V2 adapter | EXTERNALLY_BLOCKED | `src/execution-system/polymarket-execution-adapter-v2.ts` | Dry-run/signing readiness; live disabled by flags | High | Do not enable live submit casually. |
 | Settlement verification | IMPLEMENTED | `src/execution-system/settlement.ts` | Verifies/fetches settlement states | Medium | Final accounting depends on it. |
 | Ghost-fill protection | IMPLEMENTED/STUB | `src/execution-system/ghost-fill.ts` | Classifies settlement mismatch risk | Medium | Venue-specific proofs still maturing. |
-| Funding | PLANNED | `docs/runbooks/funding-flow-v0-handoff.md` | Funding architecture and future endpoints | Low for docs, high once code exists | Runtime not implemented. |
+| Funding | IMPLEMENTED/PARTIAL | `src/core/funding`, `src/api/routes/funding.ts`, `src/repositories/funding.repository.ts`, `src/integrations/lifi` | Non-custodial funding preparation, LI.FI quote/status wrapper, funding status, admin readiness | Medium | Live LI.FI execution and funding preflight enforcement remain disabled by default. |
 | Monetization | STUB | `src/execution-system/fees.ts` | Fee preview/receipt hooks | Medium | No production monetization enforcement. |
 | Admin APIs | IMPLEMENTED | `src/api/admin` | Operator/admin read and mutation surfaces | Medium/High | Admin mutations can affect runtime. |
 | Audit | IMPLEMENTED | `src/execution-system/audit.ts`, `src/execution-control` | Records execution/control events | Medium | Do not remove evidence. |
@@ -186,7 +212,7 @@ See `docs/api/openapi.yaml` for contract details.
 - Execution APIs: execution status is implemented as `/rfq/{id}/executions/{executionId}/status`; direct execution submit endpoints are not public.
 - Admin/operator APIs: implemented under `/admin/*`; require admin JWT except simulation preview can allow loopback preview when enabled.
 - Venue readiness APIs: implemented under `/admin/execution-venues`.
-- Funding APIs: planned only; not callable.
+- Funding APIs: implemented for non-custodial intent, quote, submit-tx-hash, status, and capability reads; live LI.FI execution remains disabled by default.
 - Audit/log APIs: execution-control admin reads exist; no broad public audit endpoint.
 - Health/debug APIs: `/health`, `/metrics`, and public resolution-risk reads exist.
 - Planned APIs: funding endpoints are marked `x-lotus-callable: false`.
@@ -198,7 +224,7 @@ See `docs/api/openapi.yaml` for contract details.
 - Static OpenAPI docs under `docs/api`.
 - Sandbox/test adapters.
 - Frontend-safe status mapping, if tests protect behavior.
-- Planned funding docs/contracts, as long as they remain non-callable.
+- Funding docs/contracts and read-only status surfaces, as long as live funding and preflight enforcement remain explicitly scoped.
 - Report scripts when adding new report docs and not changing matcher policy.
 
 ## 9. What Not To Touch Before Deadline
@@ -215,6 +241,7 @@ See `docs/api/openapi.yaml` for contract details.
 - Full position abstraction.
 - Full solver network.
 - Funding runtime changes unless explicitly scoped.
+- Any change that turns Model A non-custodial funding preparation into custody, pooled balances, or internal fund allocation.
 
 ## 10. Security-Critical Boundaries
 
@@ -226,6 +253,9 @@ See `docs/api/openapi.yaml` for contract details.
 - Ghost-fill failures fail closed.
 - Venue adapters must fail closed.
 - Secrets stay server-side and must not appear in logs, metadata, receipts, status responses, or artifacts.
+- Funding v0 is Model A non-custodial funding preparation: Lotus generates and validates route instructions, but users sign/broadcast and Lotus does not custody or internally allocate funds.
+- LI.FI is a route provider, not executable funding authority or the funding brain.
+- Derived capital views must not be presented as custodial or pooled balances.
 
 ## 11. How To Run The Repo
 
@@ -244,6 +274,11 @@ Commands from `package.json`:
 | Execution system tests | `npm run test:execution-system` |
 | Repo audit | `npm run repo:audit` |
 | Execution report | `npm run report:execution-system:v0` |
+| Funding readiness report | `npm run report:funding:readiness` |
+| Funding sandbox preflight rehearsal | `npm run funding:polymarket-readiness-sandbox-preflight` |
+| Pair funding sandbox preflight rehearsal | `npm run funding:pair-readiness-sandbox-preflight` |
+| Pair funding enforcement gate | `npm run funding:pair-enforcement-gate` |
+| Limitless readiness smoke test | `npm run funding:limitless-readiness-smoke` |
 | Polymarket harness | `npm run execution:polymarket-live-submit-harness` |
 
 OpenAPI validation command: missing. Use Swagger Editor manually for now.
@@ -260,7 +295,7 @@ Major report script patterns:
 - Operator review queue and lane approval.
 - Execution system hardening.
 - Ghost-fill validation.
-- Funding architecture and future implementation.
+- Funding Flow v0 hardening, venue readiness validation, and eventual controlled enforcement.
 - Monetization skeleton.
 - Frontend/admin integration.
 - Polymarket V2 external readiness.
@@ -282,6 +317,8 @@ Major report script patterns:
 - Ghost fill: Venue/off-chain fill indication without matching settlement/finality.
 - Venue adapter: Isolated venue-specific execution/funding interface.
 - Execution-scope token: Short-lived token binding user consent to exact scope.
-- Funding intent: Planned user request to move capital into venue-ready state.
-- Venue capability matrix: Source of truth for what chains/tokens each venue accepts.
-- Ready to trade: Funding state where a specific venue balance is confirmed usable for execution.
+- Funding intent: User request to prepare capital for one or more venue targets without Lotus custody.
+- Market Capability Matrix: Source of truth for market/outcome/lane routeability and operator approval.
+- Funding Capability Matrix: Source of truth for what chains/tokens/destinations each venue can receive for funding.
+- Ready to trade: Funding state where a specific venue-ready balance is confirmed usable for execution.
+- Execution-ready capital: Capital confirmed available for the exact venue/user/token/amount required by execution preflight.

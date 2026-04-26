@@ -23,6 +23,50 @@ Prometheus metrics are exposed at `/metrics`.
 ## 3. Administrative Operations
 Runtime controls are available via the Admin API: `POST /admin/sor/config`.
 
+### Admin JWT Generation And Rollback
+
+Admin routes require a JWT signed with the current server-side `JWT_SECRET` and payload role `ADMIN`.
+
+Generate a short-lived admin JWT for local/operator use:
+
+```powershell
+node -e "require('dotenv').config(); const crypto=require('crypto'); const secret=process.env.JWT_SECRET; if(!secret||secret.length<32) throw new Error('JWT_SECRET missing/short'); const enc=o=>Buffer.from(JSON.stringify(o)).toString('base64url'); const now=Math.floor(Date.now()/1000); const header={alg:'HS256',typ:'JWT'}; const payload={userId:process.env.ADMIN_JWT_USER_ID||'admin-operator',role:'ADMIN',iat:now,exp:now+3600}; const data=enc(header)+'.'+enc(payload); const sig=crypto.createHmac('sha256',secret).update(data).digest('base64url'); console.log(data+'.'+sig);"
+```
+
+Use the token only as an admin bearer token:
+
+```http
+Authorization: Bearer <ADMIN_JWT_TOKEN>
+```
+
+Generate a new `JWT_SECRET` for rotation:
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Rotation steps:
+
+1. Store the old `JWT_SECRET` in the operator secret manager as the rollback value.
+2. Set `JWT_SECRET` to the new generated value in the target environment.
+3. Restart the backend.
+4. Generate fresh admin/user JWTs with the new secret.
+5. Verify one read-only admin endpoint before running mutation endpoints.
+
+Rollback steps:
+
+1. Restore the previous `JWT_SECRET` from the secret manager.
+2. Restart the backend.
+3. Tokens signed with the previous secret become valid again.
+4. Tokens signed with the rotated secret become invalid.
+
+Security rules:
+
+- Never commit `JWT_SECRET`, admin JWTs, generated bearer tokens, or screenshots containing tokens.
+- Keep admin JWTs short-lived for manual operations.
+- Rotating `JWT_SECRET` invalidates every existing user/admin JWT signed by the old secret.
+- Do not enable `DEV_SIMULATION_PREVIEW_ENABLED=true` in production as a substitute for admin JWT auth.
+
 ### Feature Flags:
 - `sorEnabled`: Globally enable/disable SOR routing.
 - `sorCanaryShadowEnabled`: Enable shadow mode (SOR builds plans but doesn't execute them, comparing results with legacy logic).

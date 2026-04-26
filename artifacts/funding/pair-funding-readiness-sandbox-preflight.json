@@ -1,0 +1,63 @@
+{
+  "generatedAt": "2026-04-26T01:09:45.851Z",
+  "status": "COMPLETED",
+  "blockers": [],
+  "sandboxLane": {
+    "laneId": "CRYPTO_BTC_ATH_BY_DATE_PAIR_LIMITLESS_POLYMARKET",
+    "laneState": "OPERATOR_APPROVED_SANDBOX",
+    "venuePath": [
+      "LIMITLESS",
+      "POLYMARKET"
+    ],
+    "scopeKind": "CRYPTO_LANE"
+  },
+  "fundingIntentId": "d5dd6a0f-4875-4753-b7c9-04a9a8371c79",
+  "userId": "sandbox-pair-funding-user-86433474-304b-4117-ba45-cf29bcfe5508",
+  "sourceAmount": "100",
+  "executionSize": "10",
+  "routeLegs": [
+    {
+      "routeLegId": "252a3a60-4186-4fac-ae01-76c81238ed0e",
+      "targetVenue": "LIMITLESS",
+      "routeLegStatus": "LEG_READY_TO_TRADE",
+      "destinationStatus": "CONFIRMED",
+      "venueCreditStatus": "CONFIRMED",
+      "destinationAmountEstimate": "50"
+    },
+    {
+      "routeLegId": "3cf59fc8-b6a1-4877-9820-0d4bfb437b47",
+      "targetVenue": "POLYMARKET",
+      "routeLegStatus": "LEG_READY_TO_TRADE",
+      "destinationStatus": "CONFIRMED",
+      "venueCreditStatus": "CONFIRMED",
+      "destinationAmountEstimate": "50"
+    }
+  ],
+  "venueEvidence": [
+    {
+      "targetVenue": "LIMITLESS",
+      "readyToTrade": true
+    },
+    {
+      "targetVenue": "POLYMARKET",
+      "readyToTrade": true
+    }
+  ],
+  "persistedReadinessRows": 2,
+  "adminReadinessVisible": true,
+  "summaryReadyToTradeCount": 4,
+  "lifiQuoteCalls": 2,
+  "lifiStatusCalls": 2,
+  "executionPreflight": {
+    "ok": true,
+    "checkedAt": "2026-04-26T01:09:45.843Z"
+  },
+  "safety": {
+    "defaultFundingPreflightEnforcementEnabled": false,
+    "scriptScopedFundingPreflightEnforcementOnly": true,
+    "liveLifiExecutionEnabled": false,
+    "backendBroadcastedTransaction": false,
+    "liveVenueSubmissionEnabled": false
+  },
+  "redactionVerified": true
+}

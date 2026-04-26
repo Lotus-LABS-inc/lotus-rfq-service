@@ -1,0 +1,40 @@
+{
+  "generatedAt": "2026-04-25T23:08:32.610Z",
+  "status": "COMPLETED",
+  "fundingIntentId": "40a51cc4-9f07-4728-bd89-36b32eb8d7c2",
+  "routeLegId": "25c33257-77a5-411c-95d0-5dc8c48e4ed4",
+  "userId": "sandbox-funding-user-671a8cbb-d811-4df1-af1d-3db8f2384e20",
+  "targetVenue": "POLYMARKET",
+  "sourceAmount": "100",
+  "executionSize": "10",
+  "fundingIntentStatus": "READY_TO_TRADE",
+  "routeLegStatus": "LEG_READY_TO_TRADE",
+  "destinationStatus": "CONFIRMED",
+  "venueCreditStatus": "CONFIRMED",
+  "readinessReason": "POLYMARKET_USABLE_BALANCE_CONFIRMED",
+  "persistedReadinessResult": true,
+  "adminReadinessVisible": true,
+  "summaryReadyToTradeCount": 1,
+  "rfqAcceptPreflight": {
+    "ok": true,
+    "checkedAt": "2026-04-25T23:08:32.607Z"
+  },
+  "defaultFundingPreflightEnforcementEnabled": false,
+  "scriptScopedFundingPreflightEnforcementEnabled": true,
+  "liveLifiExecutionEnabled": false,
+  "backendBroadcastedTransaction": false,
+  "lifiProvider": "SANDBOX_MOCK",
+  "polymarketCheckerMode": "STUB",
+  "redactionVerified": true,
+  "auditEventIds": [
+    "5143f437-0a41-4d89-8dd8-42763f173579",
+    "30c71fdc-b08e-4392-95c6-c6f106d81fe8",
+    "8de252ed-24d2-4bee-8ea0-c0e02b05577d",
+    "1c29bcf9-52bc-4189-a932-f3ec5d7d68b2",
+    "e4cef27f-c5c3-4596-b6c1-9b86af079a41",
+    "808c1eac-6a61-4bb5-8015-4d08ed1b4cf0",
+    "52b4efa9-7361-4bf6-b2c7-163e7092deac",
+    "dfb95c70-4ac5-4c83-8296-cd408104be83",
+    "47530759-e388-4189-b2be-7a2b1ec81e44"
+  ]
+}

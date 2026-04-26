@@ -49,11 +49,11 @@ Frontend should treat implemented callable APIs as usable contracts and planned 
 
 RFQ accept can start execution, but the returned execution may still fail closed if lane approval, execution-scope token, funding readiness, venue readiness, settlement, or ghost-fill checks fail.
 
-Funding endpoints are planned only. Do not build frontend flows that call them until backend implementation exists.
+Funding intent/status endpoints are now implemented for v0, but LI.FI quote execution is feature-flagged and fails closed unless `FUNDING_LIFI_QUOTES_ENABLED=true` and venue destination config is present. Backend v0 records user-broadcast transaction hashes; it does not custody funds, sign wallet transactions, or mark bridge completion as ready-to-trade.
 
 ## How Funding Co-Dev Should Use This
 
-Use planned funding schemas and endpoints as shape guidance, not as existing backend behavior.
+Use implemented funding schemas and endpoints for the v0 funding flow. Planned admin funding endpoints remain shape guidance only unless marked `x-lotus-callable: true`.
 
 The funding implementation must still follow `docs/runbooks/funding-flow-v0-handoff.md`:
 

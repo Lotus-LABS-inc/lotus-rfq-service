@@ -163,6 +163,69 @@ For admin/frontend work:
 - inspect actual route and file conventions before creating new routes or files
 - proposed route manifests are product/navigation structures, not verified filesystem paths unless confirmed by repo inspection
 
+# Funding Custody and Capital Mobility Rules
+
+Funding v0 uses Model A: non-custodial funding preparation.
+
+Lotus may generate route instructions, validate funding capabilities, track user-broadcast transaction hashes, reconcile destination and venue readiness, and expose execution-ready capital status.
+
+Lotus must not custody user funds, sign wallet transactions, broadcast user wallet transactions, pool user funds, internally allocate user balances, or imply that a derived capital view is a custodial balance in v0.
+
+## Funding Authority Boundary
+
+Execution requires both:
+
+- an operator-approved market lane
+- venue-ready capital for the exact user, venue, token, and amount required by the execution route
+
+Funding readiness alone cannot make a market executable.
+
+Market approval alone cannot bypass funding readiness when funding enforcement is enabled.
+
+## Capability Matrix Separation
+
+Market Capability Matrix and Funding Capability Matrix are separate concepts.
+
+Market Capability Matrix:
+
+- belongs to matcher/readiness/operator approval and SOR routeability
+- answers whether a venue market, outcome, and lane scope can be traded
+- must never be inferred from funding route availability
+
+Funding Capability Matrix:
+
+- belongs to capital movement and venue-ready balance checks
+- answers which chain, token, destination, deposit/finalization path, and readiness checker a venue supports
+- must never be inferred from market matcher evidence
+
+## Route Provider Boundary
+
+LI.FI is a route provider, not the Lotus funding brain.
+
+Lotus owns funding orchestration, including capability lookup, split planning, route validation, stale-quote rejection, user-safe signing instructions, route-leg state, destination confirmation, venue readiness confirmation, audit, and execution preflight integration.
+
+LI.FI quote success, transaction hash presence, or bridge-complete status must not mark funds `READY_TO_TRADE` by itself.
+
+## Funding Terminology
+
+Use:
+
+- `execution-ready capital` for capital that can satisfy execution preflight
+- `venue-ready balance` for funds a specific venue confirms as usable
+- `derived capital view` for cross-venue display only
+
+Avoid unqualified `unified balance` language because it can imply custody, pooling, or sell-anywhere abstraction that v0 does not implement.
+
+## Future Funding Models
+
+These are future models and must not be treated as v0 behavior:
+
+- router contract model
+- custody/vault model
+- instant settlement LP model
+- position abstraction
+- sell-anywhere balance abstraction
+
 ## Security Rules
 
 1. All LP endpoints require HMAC authentication.

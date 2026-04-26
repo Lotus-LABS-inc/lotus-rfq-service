@@ -1,6 +1,6 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { readFile, readdir } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import Fastify from "fastify";
 import type { FastifyRequest } from "fastify";
@@ -18,8 +18,21 @@ import { RFQQuoteRepository } from "../../src/db/repositories/rfq-quote-reposito
 import { RFQSessionRepository } from "../../src/db/repositories/rfq-session-repository.js";
 import { RFQSessionManager } from "../../src/core/rfq-engine/rfq-session-manager.js";
 import { CryptoAdminService } from "../../src/api/admin/crypto-admin-service.js";
+import { FundingReadinessAdminService } from "../../src/api/admin/funding-readiness-admin-service.js";
+import { FundingService } from "../../src/core/funding/funding-service.js";
+import type { FundingRouteQuote, FundingVenue } from "../../src/core/funding/types.js";
+import {
+  LimitlessFundingReadinessChecker,
+  PolymarketFundingReadinessChecker,
+  type LimitlessFundingBalanceReadClient,
+  type PolymarketFundingBalanceReadClient,
+  type VenueFundingReadinessChecker
+} from "../../src/core/funding/venue-readiness.js";
+import type { LifiRouteProvider } from "../../src/integrations/lifi/lifi-client.js";
+import type { ExecutionScopeAuthorityRegistry } from "../../src/execution-control/execution-scope-token.js";
 import { ExecutionSystemMetadataSchema } from "../../src/execution-system/index.js";
 import { ExecutionRecordRepository } from "../../src/repositories/execution-record.repository.js";
+import { FundingRepository } from "../../src/repositories/funding.repository.js";
 import { Pool } from "pg";
 import pino from "pino";
 
@@ -32,6 +45,7 @@ const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const TEST_CANONICAL_MARKET_ID = "a0eb58b9-a89c-48a7-bda8-b08a050ad95e";
 const TEST_CANONICAL_EVENT_ID = "11111111-1111-4111-8111-111111111111";
 const TEST_CRYPTO_LANE_ID = "CRYPTO_BTC_ATH_BY_DATE_PAIR_LIMITLESS_POLYMARKET";
+const TEST_SINGLE_POLYMARKET_FUNDING_LANE_ID = "SANDBOX_SINGLE_POLYMARKET_FUNDING_ENFORCEMENT";
 const TEST_CRYPTO_POLYMARKET_DRY_RUN_LANE_ID = "CRYPTO_BTC_THRESHOLD_BY_DATE_APR_2026_PAIR_POLYMARKET_PREDICT";
 const ENV_READY = Boolean(TEST_DB_URL);
 
@@ -401,6 +415,64 @@ const createSignedHeaders = (
   };
 };
 
+const fundingEnv = {
+  POLYMARKET_FUNDING_DESTINATION_ADDRESS: "0x1111111111111111111111111111111111111111",
+  LIMITLESS_FUNDING_DESTINATION_ADDRESS: "0x3333333333333333333333333333333333333333"
+} as NodeJS.ProcessEnv;
+
+class MockLifiProvider implements LifiRouteProvider {
+  public nextStatus: Awaited<ReturnType<LifiRouteProvider["status"]>> = {
+    status: "DONE_COMPLETED",
+    raw: { status: "DONE", substatus: "COMPLETED", source: "rfq-funding-integration-test" }
+  };
+  public quoteCalls = 0;
+  public statusCalls = 0;
+
+  public async quote(input: Parameters<LifiRouteProvider["quote"]>[0]): Promise<FundingRouteQuote> {
+    this.quoteCalls += 1;
+    return {
+      provider: "LIFI",
+      providerRouteId: `mock-route-${randomUUID()}`,
+      sourceChain: input.fromChain,
+      sourceToken: input.fromToken,
+      sourceAmount: input.fromAmount,
+      destinationChain: input.toChain,
+      destinationToken: input.toToken,
+      destinationAmountEstimate: input.fromAmount,
+      estimatedFees: "0",
+      estimatedTimeSeconds: 120,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      transactionRequest: {
+        to: "0x2222222222222222222222222222222222222222",
+        data: "0x1234",
+        chainId: Number(input.toChain)
+      },
+      userSafeSummary: "Mock LI.FI route for RFQ funding integration."
+    };
+  }
+
+  public async status(): Promise<Awaited<ReturnType<LifiRouteProvider["status"]>>> {
+    this.statusCalls += 1;
+    return this.nextStatus;
+  }
+}
+
+class MockPolymarketBalanceReadClient implements PolymarketFundingBalanceReadClient {
+  public constructor(public usableBalance = "0") {}
+
+  public async fetchUsableUsdcBalance(): Promise<{ usableBalance: string; raw?: Record<string, unknown> }> {
+    return { usableBalance: this.usableBalance, raw: { source: "rfq-funding-integration-test" } };
+  }
+}
+
+class MockLimitlessBalanceReadClient implements LimitlessFundingBalanceReadClient {
+  public constructor(public usableBalance = "0") {}
+
+  public async fetchUsableUsdcBalance(): Promise<{ usableBalance: string; raw?: Record<string, unknown> }> {
+    return { usableBalance: this.usableBalance, raw: { source: "rfq-funding-integration-test" } };
+  }
+}
+
 const applyMigrations = async (pool: Pool): Promise<void> => {
   const migrationDirs = [
     path.resolve(process.cwd(), "infra", "migrations"),
@@ -450,6 +522,11 @@ const clearPersistentState = async (pool: Pool): Promise<void> => {
           execution_state_transitions,
           execution_records,
           execution_intents,
+          funding_audit_events,
+          funding_reconciliation_records,
+          funding_route_legs,
+          funding_targets,
+          funding_intents,
           route_rejection_reasons,
           route_candidate_sets,
           route_selection_traces,
@@ -595,6 +672,327 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
 
     trackedRedisKeys.clear();
     trackedSessionIds.clear();
+  };
+
+  const buildFundingService = (
+    repository: FundingRepository,
+    lifi: MockLifiProvider,
+    polymarketBalance: MockPolymarketBalanceReadClient,
+    limitlessBalance = new MockLimitlessBalanceReadClient("0")
+  ): FundingService =>
+    new FundingService(
+      repository,
+      lifi,
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        venueReadinessChecksEnabled: true,
+        env: fundingEnv
+      },
+      new Map<FundingVenue, VenueFundingReadinessChecker>([[
+        "POLYMARKET",
+        new PolymarketFundingReadinessChecker(polymarketBalance, {
+          enabled: true,
+          mode: "STUB",
+          env: fundingEnv
+        })
+      ], [
+        "LIMITLESS",
+        new LimitlessFundingReadinessChecker(limitlessBalance, {
+          enabled: true,
+          mode: "STUB",
+          env: fundingEnv
+        })
+      ]])
+    );
+
+  const seedVenueFundingThroughService = async (input: {
+    userId: string;
+    venue: "POLYMARKET" | "LIMITLESS";
+    sourceAmount?: string;
+    usableBalance?: string;
+    status: "DESTINATION_RECEIVED" | "VENUE_CREDIT_PENDING" | "READY_TO_TRADE";
+  }): Promise<{
+    fundingIntentId: string;
+    routeLegId: string;
+    lifi: MockLifiProvider;
+  }> => {
+    const pg = must(pool, "pool");
+    const repository = new FundingRepository(pg);
+    const lifi = new MockLifiProvider();
+    const polymarketBalance = new MockPolymarketBalanceReadClient(input.usableBalance ?? "0");
+    const limitlessBalance = new MockLimitlessBalanceReadClient(input.usableBalance ?? "0");
+    const service = buildFundingService(repository, lifi, polymarketBalance, limitlessBalance);
+    const created = await service.createIntent(input.userId, {
+      sourceChain: "SOLANA",
+      sourceToken: "USDC",
+      sourceAmount: input.sourceAmount ?? "100",
+      sourceWalletAddress: "rfq-funding-test-solana-wallet",
+      idempotencyKey: `rfq-funding-${randomUUID()}`,
+      targets: [{ targetVenue: input.venue, targetPercentage: 100 }]
+    });
+    const quoted = await service.quoteIntent(input.userId, created.intent.fundingIntentId);
+    const leg = quoted.routeLegs[0];
+    if (!leg) {
+      throw new Error("Funding quote did not create a route leg.");
+    }
+    await service.submitRouteLeg(input.userId, created.intent.fundingIntentId, {
+      routeLegId: leg.routeLegId,
+      txHash: `0x${randomUUID().replaceAll("-", "")}${randomUUID().replaceAll("-", "")}`.slice(0, 66)
+    });
+    if (input.status === "DESTINATION_RECEIVED") {
+      await repository.updateRouteLegProviderStatus({
+        routeLegId: leg.routeLegId,
+        status: "LEG_DESTINATION_RECEIVED",
+        bridgeStatus: "DONE",
+        destinationStatus: "CONFIRMED",
+        venueCreditStatus: "NOT_CONFIRMED",
+        providerStatus: { status: "DONE", source: "rfq-funding-integration-test" },
+        errorReason: null
+      });
+      await repository.updateIntentStatus(created.intent.fundingIntentId, "ROUTES_SUBMITTED");
+      await repository.createReconciliationRecord({
+        fundingIntentId: created.intent.fundingIntentId,
+        routeLegId: leg.routeLegId,
+        targetVenue: input.venue,
+        destinationTxHash: `0x${"d".repeat(64)}`,
+        destinationReceived: true,
+        venueCreditConfirmed: false,
+        readyToTrade: false,
+        notes: "DESTINATION_RECEIVED_ONLY"
+      });
+    } else {
+      await service.refreshIntentStatus(input.userId, created.intent.fundingIntentId);
+    }
+    return {
+      fundingIntentId: created.intent.fundingIntentId,
+      routeLegId: leg.routeLegId,
+      lifi
+    };
+  };
+
+  const seedPolymarketFundingThroughService = async (input: {
+    userId: string;
+    sourceAmount?: string;
+    usableBalance?: string;
+    status: "DESTINATION_RECEIVED" | "VENUE_CREDIT_PENDING" | "READY_TO_TRADE";
+  }) => seedVenueFundingThroughService({ ...input, venue: "POLYMARKET" });
+
+  const seedLimitlessFundingThroughService = async (input: {
+    userId: string;
+    sourceAmount?: string;
+    usableBalance?: string;
+    status: "DESTINATION_RECEIVED" | "VENUE_CREDIT_PENDING" | "READY_TO_TRADE";
+  }) => seedVenueFundingThroughService({ ...input, venue: "LIMITLESS" });
+
+  const buildRfqAppWithFundingEnforcement = async (
+    enabled: boolean,
+    executionScopeAuthorities?: ExecutionScopeAuthorityRegistry
+  ) => {
+    const pg = must(pool, "pool");
+    const redis = must(redisClient, "redisClient");
+    const originalEnv = {
+      FUNDING_PREFLIGHT_ENFORCEMENT_ENABLED: process.env.FUNDING_PREFLIGHT_ENFORCEMENT_ENABLED,
+      FUNDING_LIVE_SUBMIT_ENABLED: process.env.FUNDING_LIVE_SUBMIT_ENABLED,
+      POLYMARKET_EXECUTION_MODE: process.env.POLYMARKET_EXECUTION_MODE
+    };
+    process.env.FUNDING_PREFLIGHT_ENFORCEMENT_ENABLED = enabled ? "true" : "false";
+    process.env.FUNDING_LIVE_SUBMIT_ENABLED = "false";
+    delete process.env.POLYMARKET_EXECUTION_MODE;
+    try {
+      return await buildServer({
+        logger,
+        redisClient: redis,
+        pgPool: pg,
+        db: createDrizzleDb(pg),
+        canonicalServiceBaseUrl: "http://127.0.0.1:4101",
+        jwtSecret: "test-secret-at-least-thirty-two-chars",
+        sorEnabled: true,
+        executionSystemSandboxEnabled: true,
+        ...(executionScopeAuthorities ? { executionScopeAuthorities } : {}),
+        sorCanaryShadowEnabled: false,
+        sorCanaryPercent: 0,
+        reliabilityWeight: 0.05,
+        latencyWeight: 0.03,
+        failureWeight: 0.08,
+        sorAcceptAonAwait: true,
+        sorAcceptNonAonBackground: true
+      });
+    } finally {
+      for (const [key, value] of Object.entries(originalEnv)) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    }
+  };
+
+  const resetFundingRfqScenario = async (): Promise<void> => {
+    const pg = must(pool, "pool");
+    await clearPersistentState(pg);
+    await cleanupTrackedRedisKeys();
+  };
+
+  const singlePolymarketSandboxAuthority = (): ExecutionScopeAuthorityRegistry => ({
+    CRYPTO_LANE: {
+      getScopeSnapshot: async (scopeId) => scopeId === TEST_SINGLE_POLYMARKET_FUNDING_LANE_ID
+        ? {
+            scopeKind: "CRYPTO_LANE",
+            scopeId,
+            topicKey: "SANDBOX|FUNDING_ENFORCEMENT|POLYMARKET_SINGLE",
+            laneType: "SINGLE",
+            venueSet: ["POLYMARKET"],
+            candidateSet: ["POLYMARKET_SANDBOX_READY"],
+            operatorApprovedToOffer: true,
+            readinessDecision: "OPERATOR_APPROVED_SANDBOX",
+            authorityRef: "sandbox-single-polymarket-funding-enforcement"
+      }
+        : null
+    }
+  });
+
+  const assertArtifactRedacted = (payload: unknown): void => {
+    const serialized = JSON.stringify(payload);
+    const secretCandidates = [
+      process.env.LIFI_API_KEY,
+      process.env.POLYMARKET_FUNDING_READ_API_KEY,
+      process.env.POLYMARKET_API_KEY,
+      process.env.POLYMARKET_API_SECRET,
+      process.env.POLYMARKET_API_PASSPHRASE,
+      process.env.POLYMARKET_PRIVATE_KEY,
+      process.env.DATABASE_URL,
+      process.env.TEST_DATABASE_URL
+    ].filter((value): value is string => typeof value === "string" && value.length >= 8);
+    expect(secretCandidates.some((secret) => serialized.includes(secret))).toBe(false);
+    expect(serialized).not.toContain("transactionRequest");
+    expect(serialized.toLowerCase()).not.toContain("authorization");
+    expect(serialized.toLowerCase()).not.toContain("privatekey");
+  };
+
+  const createScopedPolymarketRfq = async (rfqApp: Awaited<ReturnType<typeof buildServer>>, input: {
+    takerId: string;
+    quantity?: string;
+    scopeId?: string;
+    venues?: readonly ("POLYMARKET" | "LIMITLESS")[];
+  }): Promise<{
+    sessionId: string;
+    quoteId: string;
+    authHeader: Record<string, string>;
+    token: string;
+  }> => {
+    const pg = must(pool, "pool");
+    const [lp] = await createLPKeys(pg);
+    const scopeId = input.scopeId ?? TEST_CRYPTO_LANE_ID;
+    if (scopeId === TEST_CRYPTO_LANE_ID) {
+      await new CryptoAdminService({ pool: pg }).recordOperatorApprovalIntent(
+        TEST_CRYPTO_LANE_ID,
+        "integration-test",
+        "approve BTC ATH pair lane for RFQ funding enforcement proof"
+      );
+    }
+    const sessionId = randomUUID();
+    const quoteId = `${RUN_PREFIX}funding-polymarket-quote-${randomUUID()}`;
+    const venues = input.venues ?? ["POLYMARKET", "LIMITLESS"];
+    const routeLegQuantity = (Number.parseFloat(input.quantity ?? "10") / venues.length).toString();
+    await pg.query(
+      `INSERT INTO rfq_sessions
+        (id, request_id, canonical_market_id, taker_id, side, quantity, status, idempotency_key, expires_at, metadata)
+       VALUES ($1, $2, $3, $4, 'buy', $5, 'AWAITING_USER', $6, NOW() + INTERVAL '5 minutes', $7::jsonb)`,
+      [
+        sessionId,
+        `${RUN_PREFIX}${randomUUID()}`,
+        TEST_CANONICAL_MARKET_ID,
+        input.takerId,
+        input.quantity ?? "10",
+        `${RUN_PREFIX}${randomUUID()}`,
+        JSON.stringify({ acceptance_policy: "ALL_OR_NONE" })
+      ]
+    );
+    trackSessionKeys(sessionId);
+    for (const venue of venues) {
+      const candidateQuoteId = venue === "POLYMARKET"
+        ? quoteId
+        : `${RUN_PREFIX}funding-${venue.toLowerCase()}-quote-${randomUUID()}`;
+      await pg.query(
+        `INSERT INTO rfq_quotes
+          (id, session_id, lp_key_id, quote_status, price, quantity, fee_bps, valid_until, quote_payload)
+         VALUES ($1, $2, $3, 'RECEIVED', '1.00', $4, 1, NOW() + INTERVAL '5 minutes', $5::jsonb)`,
+        [
+          randomUUID(),
+          sessionId,
+          lp?.keyDbId ?? "",
+          routeLegQuantity,
+          JSON.stringify({ quoteId: candidateQuoteId, lpId: venue })
+        ]
+      );
+    }
+
+    const authHeader = {
+      authorization: `Bearer ${rfqApp.jwt.sign({ userId: input.takerId })}`
+    };
+    const tokenResponse = await rfqApp.inject({
+      method: "POST",
+      url: `/rfq/${sessionId}/execution-scope-token`,
+      payload: {
+        quoteId,
+        scopeKind: "CRYPTO_LANE",
+        scopeId,
+        ttlSeconds: 120
+      },
+      headers: authHeader
+    });
+    if (tokenResponse.statusCode !== 201) {
+      throw new Error(`Funding RFQ execution-scope token failed with ${tokenResponse.statusCode}: ${tokenResponse.body}`);
+    }
+    return {
+      sessionId,
+      quoteId,
+      authHeader,
+      token: (tokenResponse.json() as { token: string }).token
+    };
+  };
+
+  const acceptScopedRfq = async (
+    rfqApp: Awaited<ReturnType<typeof buildServer>>,
+    context: Awaited<ReturnType<typeof createScopedPolymarketRfq>>
+  ) => {
+    const acceptResponse = await rfqApp.inject({
+      method: "POST",
+      url: `/rfq/${context.sessionId}/accept`,
+      payload: {
+        quoteId: context.quoteId,
+        executionScopeToken: context.token
+      },
+      headers: context.authHeader
+    });
+    if (acceptResponse.statusCode !== 202) {
+      throw new Error(`Funding RFQ accept failed with ${acceptResponse.statusCode}: ${acceptResponse.body}`);
+    }
+    const body = acceptResponse.json() as {
+      final_status?: "COMPLETED" | "FAILED";
+      execution_id?: string | null;
+    };
+    const statusResponse = body.execution_id
+      ? await rfqApp.inject({
+          method: "GET",
+          url: `/rfq/${context.sessionId}/executions/${body.execution_id}/status`,
+          headers: context.authHeader
+        })
+      : null;
+    return { acceptResponse, body, statusResponse };
+  };
+
+  const listExecutionAuditEvents = async (executionId: string) => {
+    const result = await must(pool, "pool").query<{ event_type: string; payload: Record<string, unknown> }>(
+      `SELECT event_type, payload
+         FROM execution_control_audit_records
+        WHERE execution_record_id = $1::uuid
+        ORDER BY created_at ASC`,
+      [executionId]
+    );
+    return result.rows;
   };
 
   beforeAll(async () => {
@@ -1039,6 +1437,369 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
       ])
     );
   }, 60000);
+
+  it("Execution v0 sandbox: RFQ accept funding enforcement blocks non-ready funding and passes exact venue-ready capital", async () => {
+    const testApp = must(app, "app");
+    const pg = must(pool, "pool");
+    expect(process.env.FUNDING_PREFLIGHT_ENFORCEMENT_ENABLED).not.toBe("true");
+    expect(process.env.FUNDING_LIVE_SUBMIT_ENABLED).not.toBe("true");
+
+    const assertFundingBlocked = async (
+      label: string,
+      setupFunding: (takerId: string) => Promise<void>
+    ): Promise<void> => {
+      await resetFundingRfqScenario();
+      const takerId = makeUuid();
+      await setupFunding(takerId);
+      const context = await createScopedPolymarketRfq(enabledApp, { takerId });
+      const accepted = await acceptScopedRfq(enabledApp, context);
+      expect(accepted.body.final_status, label).toBe("FAILED");
+      expect(accepted.body.execution_id, label).toBeTruthy();
+      expect(accepted.statusResponse?.statusCode, label).toBe(200);
+      expect(accepted.statusResponse?.json(), label).toMatchObject({
+        currentState: "FAILED_CLOSED",
+        userStatus: "failed closed"
+      });
+      const auditRows = await listExecutionAuditEvents(accepted.body.execution_id!);
+      expect(auditRows.some((row) =>
+        row.event_type === "PREFLIGHT_FAILED" &&
+        row.payload.code === "FUNDING_UNAVAILABLE"
+      ), label).toBe(true);
+      expect(auditRows.some((row) => row.event_type === "ACCOUNTING_UPDATED"), label).toBe(false);
+    };
+
+    const enabledApp = await buildRfqAppWithFundingEnforcement(true);
+    try {
+      await resetFundingRfqScenario();
+      const disabledTakerId = makeUuid();
+      const disabledContext = await createScopedPolymarketRfq(testApp, { takerId: disabledTakerId });
+      const disabledAccept = await acceptScopedRfq(testApp, disabledContext);
+      expect(disabledAccept.body.final_status).toBe("COMPLETED");
+      expect(disabledAccept.statusResponse?.json()).toMatchObject({
+        currentState: "COMPLETED",
+        userStatus: "completed"
+      });
+
+      await assertFundingBlocked("no funding row", async () => undefined);
+      await assertFundingBlocked("destination received only", async (takerId) => {
+        const limitlessSeed = await seedLimitlessFundingThroughService({
+          userId: takerId,
+          usableBalance: "100",
+          status: "READY_TO_TRADE"
+        });
+        const seeded = await seedPolymarketFundingThroughService({
+          userId: takerId,
+          status: "DESTINATION_RECEIVED"
+        });
+        expect(limitlessSeed.lifi.quoteCalls).toBe(1);
+        expect(limitlessSeed.lifi.statusCalls).toBe(1);
+        expect(seeded.lifi.quoteCalls).toBe(1);
+        expect(seeded.lifi.statusCalls).toBe(0);
+      });
+      await assertFundingBlocked("venue credit pending", async (takerId) => {
+        const limitlessSeed = await seedLimitlessFundingThroughService({
+          userId: takerId,
+          usableBalance: "100",
+          status: "READY_TO_TRADE"
+        });
+        const seeded = await seedPolymarketFundingThroughService({
+          userId: takerId,
+          usableBalance: "0",
+          status: "VENUE_CREDIT_PENDING"
+        });
+        expect(limitlessSeed.lifi.quoteCalls).toBe(1);
+        expect(limitlessSeed.lifi.statusCalls).toBe(1);
+        expect(seeded.lifi.quoteCalls).toBe(1);
+        expect(seeded.lifi.statusCalls).toBe(1);
+      });
+      await assertFundingBlocked("ready wrong venue", async (takerId) => {
+        const limitlessSeed = await seedLimitlessFundingThroughService({
+          userId: takerId,
+          usableBalance: "100",
+          status: "READY_TO_TRADE"
+        });
+        expect(limitlessSeed.lifi.quoteCalls).toBe(1);
+        expect(limitlessSeed.lifi.statusCalls).toBe(1);
+      });
+      await assertFundingBlocked("ready wrong user", async () => {
+        const wrongUserId = makeUuid();
+        const limitlessSeed = await seedLimitlessFundingThroughService({
+          userId: wrongUserId,
+          usableBalance: "100",
+          status: "READY_TO_TRADE"
+        });
+        const polymarketSeed = await seedPolymarketFundingThroughService({
+          userId: wrongUserId,
+          usableBalance: "100",
+          status: "READY_TO_TRADE"
+        });
+        expect(limitlessSeed.lifi.statusCalls).toBe(1);
+        expect(polymarketSeed.lifi.statusCalls).toBe(1);
+      });
+      await assertFundingBlocked("insufficient ready amount", async (takerId) => {
+        const limitlessSeed = await seedLimitlessFundingThroughService({
+          userId: takerId,
+          usableBalance: "100",
+          status: "READY_TO_TRADE"
+        });
+        const polymarketSeed = await seedPolymarketFundingThroughService({
+          userId: takerId,
+          sourceAmount: "5",
+          usableBalance: "5",
+          status: "READY_TO_TRADE"
+        });
+        expect(limitlessSeed.lifi.statusCalls).toBe(1);
+        expect(polymarketSeed.lifi.statusCalls).toBe(1);
+      });
+
+      await resetFundingRfqScenario();
+      const readyTakerId = makeUuid();
+      const readySeed = await seedPolymarketFundingThroughService({
+        userId: readyTakerId,
+        usableBalance: "100",
+        status: "READY_TO_TRADE"
+      });
+      const readyLimitlessSeed = await seedLimitlessFundingThroughService({
+        userId: readyTakerId,
+        usableBalance: "100",
+        status: "READY_TO_TRADE"
+      });
+      expect(readySeed.lifi.quoteCalls).toBe(1);
+      expect(readySeed.lifi.statusCalls).toBe(1);
+      expect(readyLimitlessSeed.lifi.quoteCalls).toBe(1);
+      expect(readyLimitlessSeed.lifi.statusCalls).toBe(1);
+
+      const repository = new FundingRepository(pg);
+      const adminReadiness = new FundingReadinessAdminService({
+        repository,
+        env: {
+          FUNDING_VENUE_READINESS_CHECKS_ENABLED: "true",
+          POLYMARKET_FUNDING_READINESS_MODE: "STUB",
+          LIMITLESS_FUNDING_READINESS_MODE: "STUB"
+        } as NodeJS.ProcessEnv
+      });
+      const fundingSnapshot = async (): Promise<string> => {
+        const result = await pg.query<{ snapshot: string }>(
+          `SELECT jsonb_build_object(
+            'auditCount', (SELECT count(*)::int FROM funding_audit_events),
+            'reconciliationCount', (SELECT count(*)::int FROM funding_reconciliation_records),
+            'intentStatuses', (
+              SELECT COALESCE(jsonb_agg(jsonb_build_object('id', id::text, 'status', status) ORDER BY id::text), '[]'::jsonb)
+                FROM funding_intents
+            ),
+            'legStatuses', (
+              SELECT COALESCE(jsonb_agg(jsonb_build_object('id', id::text, 'status', status) ORDER BY id::text), '[]'::jsonb)
+                FROM funding_route_legs
+            )
+          )::text AS snapshot`
+        );
+        return result.rows[0]!.snapshot;
+      };
+      const beforeAdminRead = await fundingSnapshot();
+      const readinessRows = await adminReadiness.listByIntent(readySeed.fundingIntentId);
+      expect(readinessRows).toHaveLength(1);
+      expect(readinessRows[0]).toMatchObject({
+        readinessStatus: "READY_TO_TRADE",
+        readyToTrade: true
+      });
+      const limitlessReadinessRows = await adminReadiness.listByIntent(readyLimitlessSeed.fundingIntentId);
+      expect(limitlessReadinessRows).toHaveLength(1);
+      expect(limitlessReadinessRows[0]).toMatchObject({
+        targetVenue: "LIMITLESS",
+        readinessStatus: "READY_TO_TRADE",
+        readyToTrade: true,
+        checkerMode: "STUB"
+      });
+      const afterAdminRead = await fundingSnapshot();
+      expect(afterAdminRead).toBe(beforeAdminRead);
+
+      const readyContext = await createScopedPolymarketRfq(enabledApp, { takerId: readyTakerId });
+      const readyAccept = await acceptScopedRfq(enabledApp, readyContext);
+      expect(readyAccept.body.final_status).toBe("COMPLETED");
+      expect(readyAccept.statusResponse?.json()).toMatchObject({
+        currentState: "COMPLETED",
+        userStatus: "completed",
+        receipt: expect.objectContaining({
+          filledSize: "10",
+          settlementStatus: "SETTLEMENT_VERIFIED"
+        })
+      });
+      const readyAuditRows = await listExecutionAuditEvents(readyAccept.body.execution_id!);
+      expect(readyAuditRows.some((row) => row.event_type === "PREFLIGHT_PASSED")).toBe(true);
+      expect(readyAuditRows.some((row) => row.event_type === "ACCOUNTING_UPDATED")).toBe(true);
+    } finally {
+      await enabledApp.close();
+      expect(process.env.FUNDING_PREFLIGHT_ENFORCEMENT_ENABLED).not.toBe("true");
+      expect(process.env.FUNDING_LIVE_SUBMIT_ENABLED).not.toBe("true");
+    }
+  }, 120000);
+
+  it("Execution v0 sandbox: single-venue Polymarket funding enforcement rehearsal passes exact route and blocks uncovered pair route", async () => {
+    expect(process.env.FUNDING_PREFLIGHT_ENFORCEMENT_ENABLED).not.toBe("true");
+    expect(process.env.FUNDING_LIVE_SUBMIT_ENABLED).not.toBe("true");
+
+    const singleAuthority = singlePolymarketSandboxAuthority();
+    const disabledSingleApp = await buildRfqAppWithFundingEnforcement(false, singleAuthority);
+    const enabledSingleApp = await buildRfqAppWithFundingEnforcement(true, singleAuthority);
+    const enabledPairApp = await buildRfqAppWithFundingEnforcement(true);
+
+    try {
+      await resetFundingRfqScenario();
+      const disabledTakerId = makeUuid();
+      const disabledContext = await createScopedPolymarketRfq(disabledSingleApp, {
+        takerId: disabledTakerId,
+        scopeId: TEST_SINGLE_POLYMARKET_FUNDING_LANE_ID,
+        venues: ["POLYMARKET"]
+      });
+      const disabledAccept = await acceptScopedRfq(disabledSingleApp, disabledContext);
+      expect(disabledAccept.body.final_status).toBe("COMPLETED");
+
+      await resetFundingRfqScenario();
+      const wrongVenueTakerId = makeUuid();
+      const wrongVenueSeed = await seedLimitlessFundingThroughService({
+        userId: wrongVenueTakerId,
+        usableBalance: "100",
+        status: "READY_TO_TRADE"
+      });
+      expect(wrongVenueSeed.lifi.statusCalls).toBe(1);
+      const wrongVenueContext = await createScopedPolymarketRfq(enabledSingleApp, {
+        takerId: wrongVenueTakerId,
+        scopeId: TEST_SINGLE_POLYMARKET_FUNDING_LANE_ID,
+        venues: ["POLYMARKET"]
+      });
+      const wrongVenueAccept = await acceptScopedRfq(enabledSingleApp, wrongVenueContext);
+      expect(wrongVenueAccept.body.final_status).toBe("FAILED");
+      expect(wrongVenueAccept.statusResponse?.json()).toMatchObject({
+        currentState: "FAILED_CLOSED",
+        userStatus: "failed closed"
+      });
+      const wrongVenueAudit = await listExecutionAuditEvents(wrongVenueAccept.body.execution_id!);
+      expect(wrongVenueAudit.some((row) =>
+        row.event_type === "PREFLIGHT_FAILED" &&
+        row.payload.code === "FUNDING_UNAVAILABLE"
+      )).toBe(true);
+
+      await resetFundingRfqScenario();
+      const pairTakerId = makeUuid();
+      const pairPolymarketSeed = await seedPolymarketFundingThroughService({
+        userId: pairTakerId,
+        usableBalance: "100",
+        status: "READY_TO_TRADE"
+      });
+      const uncoveredPairContext = await createScopedPolymarketRfq(enabledPairApp, { takerId: pairTakerId });
+      const uncoveredPairAccept = await acceptScopedRfq(enabledPairApp, uncoveredPairContext);
+      expect(pairPolymarketSeed.lifi.statusCalls).toBe(1);
+      expect(uncoveredPairAccept.body.final_status).toBe("FAILED");
+      const uncoveredPairAudit = await listExecutionAuditEvents(uncoveredPairAccept.body.execution_id!);
+      expect(uncoveredPairAudit.some((row) =>
+        row.event_type === "PREFLIGHT_FAILED" &&
+        row.payload.code === "FUNDING_UNAVAILABLE"
+      )).toBe(true);
+
+      await resetFundingRfqScenario();
+      const readyTakerId = makeUuid();
+      const readySeed = await seedPolymarketFundingThroughService({
+        userId: readyTakerId,
+        usableBalance: "100",
+        status: "READY_TO_TRADE"
+      });
+      const readyContext = await createScopedPolymarketRfq(enabledSingleApp, {
+        takerId: readyTakerId,
+        scopeId: TEST_SINGLE_POLYMARKET_FUNDING_LANE_ID,
+        venues: ["POLYMARKET"]
+      });
+      const readyAccept = await acceptScopedRfq(enabledSingleApp, readyContext);
+      expect(readyAccept.body.final_status).toBe("COMPLETED");
+      const readyStatus = readyAccept.statusResponse?.json();
+      expect(readyStatus).toMatchObject({
+        currentState: "COMPLETED",
+        userStatus: "completed",
+        venuePath: ["POLYMARKET"],
+        receipt: expect.objectContaining({
+          filledSize: "10",
+          settlementStatus: "SETTLEMENT_VERIFIED"
+        })
+      });
+      const readyAudit = await listExecutionAuditEvents(readyAccept.body.execution_id!);
+      expect(readyAudit.some((row) => row.event_type === "PREFLIGHT_PASSED")).toBe(true);
+
+      const artifact = {
+        generatedAt: new Date().toISOString(),
+        status: "COMPLETED",
+        sandboxLane: {
+          laneId: TEST_SINGLE_POLYMARKET_FUNDING_LANE_ID,
+          laneState: "OPERATOR_APPROVED_SANDBOX",
+          venuePath: ["POLYMARKET"],
+          scopeKind: "CRYPTO_LANE"
+        },
+        fundingEvidence: {
+          fundingIntentId: readySeed.fundingIntentId,
+          routeLegId: readySeed.routeLegId,
+          targetVenue: "POLYMARKET",
+          readinessStatus: "READY_TO_TRADE",
+          source: "funding_service_refreshIntentStatus",
+          lifiQuoteCalls: readySeed.lifi.quoteCalls,
+          lifiStatusCalls: readySeed.lifi.statusCalls
+        },
+        rfqAccept: {
+          executionId: readyAccept.body.execution_id,
+          finalStatus: readyAccept.body.final_status,
+          venuePath: readyStatus?.venuePath ?? [],
+          currentState: readyStatus?.currentState ?? null
+        },
+        pairRouteBlock: {
+          tested: true,
+          finalStatus: uncoveredPairAccept.body.final_status,
+          reason: "FUNDING_UNAVAILABLE",
+          missingVenueReadinessCoverage: ["LIMITLESS"]
+        },
+        safety: {
+          defaultFundingPreflightEnforcementEnabled: process.env.FUNDING_PREFLIGHT_ENFORCEMENT_ENABLED === "true",
+          scriptScopedFundingPreflightEnforcementOnly: true,
+          liveLifiExecutionEnabled: false,
+          backendBroadcastedTransaction: false,
+          liveVenueSubmissionEnabled: false
+        },
+        redactionVerified: true
+      };
+      assertArtifactRedacted(artifact);
+
+      const artifactDir = path.resolve(process.cwd(), "artifacts", "funding");
+      const jsonPath = path.join(artifactDir, "polymarket-single-venue-funding-enforcement-rehearsal.json");
+      const markdownPath = path.join(artifactDir, "polymarket-single-venue-funding-enforcement-rehearsal.md");
+      await mkdir(artifactDir, { recursive: true });
+      await writeFile(jsonPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+      await writeFile(markdownPath, [
+        "# Polymarket Single-Venue Funding Enforcement Rehearsal",
+        "",
+        `Generated: ${artifact.generatedAt}`,
+        "",
+        "## Result",
+        "",
+        `- Status: ${artifact.status}`,
+        `- Sandbox lane: ${artifact.sandboxLane.laneId}`,
+        `- Venue path: ${artifact.sandboxLane.venuePath.join(", ")}`,
+        `- Funding intent: ${artifact.fundingEvidence.fundingIntentId}`,
+        `- Route leg: ${artifact.fundingEvidence.routeLegId}`,
+        `- RFQ accept final status: ${artifact.rfqAccept.finalStatus}`,
+        `- Pair route without Limitless readiness blocked: ${artifact.pairRouteBlock.finalStatus === "FAILED"}`,
+        "",
+        "## Safety",
+        "",
+        `- Default funding enforcement enabled: ${artifact.safety.defaultFundingPreflightEnforcementEnabled}`,
+        `- Live LI.FI execution enabled: ${artifact.safety.liveLifiExecutionEnabled}`,
+        `- Backend broadcasted transaction: ${artifact.safety.backendBroadcastedTransaction}`,
+        `- Live venue submission enabled: ${artifact.safety.liveVenueSubmissionEnabled}`,
+        `- Redaction verified: ${artifact.redactionVerified}`
+      ].join("\n"), "utf8");
+    } finally {
+      await disabledSingleApp.close();
+      await enabledSingleApp.close();
+      await enabledPairApp.close();
+      expect(process.env.FUNDING_PREFLIGHT_ENFORCEMENT_ENABLED).not.toBe("true");
+      expect(process.env.FUNDING_LIVE_SUBMIT_ENABLED).not.toBe("true");
+    }
+  }, 120000);
 
   it("Execution v0 sandbox: Polymarket V2 dry-run adapter fails closed and exposes safe status", async () => {
     const pg = must(pool, "pool");
