@@ -25,7 +25,7 @@ The default behavior is fail-closed. Ambiguous market identity, unapproved lanes
 | Sandbox execution | IMPLEMENTED | Test adapter supports sandbox execution paths and DB-backed RFQ accept-to-status tests. |
 | Polymarket V2 adapter | EXTERNALLY_BLOCKED | Adapter is structurally ready with dry-run/signing harness and readiness surface; live submit remains disabled unless feature flags and external auth/endpoint readiness are proven. |
 | Ghost-fill protection | IMPLEMENTED/STUBBED | v0 service and classifier exist. Production-quality venue proofs remain adapter-dependent. |
-| Funding Flow v0 | IMPLEMENTED/PARTIAL | DB-backed non-custodial funding preparation exists with LI.FI quote/status wrapper, user APIs, admin readiness/summary, Polymarket readiness, and Limitless readiness scaffolding for pair-lane rehearsal. Live LI.FI execution and funding preflight enforcement remain disabled by default. |
+| Funding Flow v0 | IMPLEMENTED/PARTIAL | DB-backed non-custodial funding preparation exists with LI.FI quote/status wrapper, deposit intent APIs, withdrawal skeleton APIs, venue-ready balance reads, admin readiness/summary, and multi-venue readiness rehearsal tooling. Live LI.FI execution, live venue withdrawal execution, and funding preflight enforcement remain disabled by default. |
 | Monetization hooks | STUB | Execution fee hooks and receipt fee summaries exist; production monetization enforcement is not implemented. |
 | Admin surfaces | IMPLEMENTED | Many admin surfaces are mounted under `/admin/*`; see OpenAPI docs for callable routes. |
 | Frontend/API readiness | PARTIAL | RFQ accept can return execution ids, execution status can be read, and Funding v0 exposes frontend-safe intent/status/capability APIs. Full frontend deposit polish remains future work. |
@@ -198,11 +198,11 @@ Hold, rollback, reject, review-required, matcher-ready, and readiness-ready stat
 | Polymarket V2 adapter | EXTERNALLY_BLOCKED | `src/execution-system/polymarket-execution-adapter-v2.ts` | Dry-run/signing readiness; live disabled by flags | High | Do not enable live submit casually. |
 | Settlement verification | IMPLEMENTED | `src/execution-system/settlement.ts` | Verifies/fetches settlement states | Medium | Final accounting depends on it. |
 | Ghost-fill protection | IMPLEMENTED/STUB | `src/execution-system/ghost-fill.ts` | Classifies settlement mismatch risk | Medium | Venue-specific proofs still maturing. |
-| Funding | IMPLEMENTED/PARTIAL | `src/core/funding`, `src/api/routes/funding.ts`, `src/repositories/funding.repository.ts`, `src/integrations/lifi` | Non-custodial funding preparation, LI.FI quote/status wrapper, funding status, admin readiness | Medium | Live LI.FI execution and funding preflight enforcement remain disabled by default. |
+| Funding | IMPLEMENTED/PARTIAL | `src/core/funding`, `src/api/routes/funding.ts`, `src/repositories/funding.repository.ts`, `src/integrations/lifi` | Non-custodial funding preparation, LI.FI quote/status wrapper, withdrawal skeleton, venue-ready balance output, funding status, admin readiness | Medium | Live LI.FI execution, live venue withdrawal APIs, backend broadcast, and funding preflight enforcement remain disabled by default. |
 | Monetization | STUB | `src/execution-system/fees.ts` | Fee preview/receipt hooks | Medium | No production monetization enforcement. |
 | Admin APIs | IMPLEMENTED | `src/api/admin` | Operator/admin read and mutation surfaces | Medium/High | Admin mutations can affect runtime. |
 | Audit | IMPLEMENTED | `src/execution-system/audit.ts`, `src/execution-control` | Records execution/control events | Medium | Do not remove evidence. |
-| Frontend status output | PARTIAL | `src/execution-system/status.ts`, RFQ status endpoint | User-safe execution status | Low/Medium | Funding status is planned. |
+| Frontend status output | PARTIAL | `src/execution-system/status.ts`, RFQ status endpoint, `src/api/routes/funding.ts` | User-safe execution status plus funding/withdrawal status and venue-ready balance output | Low/Medium | Frontend app integration remains outside this backend repo. |
 
 ## 7. API Surface Overview
 
@@ -212,7 +212,7 @@ See `docs/api/openapi.yaml` for contract details.
 - Execution APIs: execution status is implemented as `/rfq/{id}/executions/{executionId}/status`; direct execution submit endpoints are not public.
 - Admin/operator APIs: implemented under `/admin/*`; require admin JWT except simulation preview can allow loopback preview when enabled.
 - Venue readiness APIs: implemented under `/admin/execution-venues`.
-- Funding APIs: implemented for non-custodial intent, quote, submit-tx-hash, status, and capability reads; live LI.FI execution remains disabled by default.
+- Funding APIs: implemented for non-custodial deposit intent, withdrawal intent skeleton, quote, submit-tx-hash, status, venue-ready balance reads, and capability reads; live LI.FI execution and live venue withdrawal execution remain disabled by default.
 - Audit/log APIs: execution-control admin reads exist; no broad public audit endpoint.
 - Health/debug APIs: `/health`, `/metrics`, and public resolution-risk reads exist.
 - Planned APIs: funding endpoints are marked `x-lotus-callable: false`.

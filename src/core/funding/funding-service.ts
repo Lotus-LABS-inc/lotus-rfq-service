@@ -5,8 +5,10 @@ import type { LifiRouteProvider } from "../../integrations/lifi/lifi-client.js";
 import { isQuoteExpired } from "../../integrations/lifi/lifi-client.js";
 import {
   aggregateFundingStatus,
+  aggregateWithdrawalStatus,
   FundingError,
   type CreateFundingIntentInput,
+  type CreateWithdrawalIntentInput,
   type FundingAuditEventType,
   type FundingIntent,
   type FundingIntentView,
@@ -16,7 +18,16 @@ import {
   type FundingRouteQuote,
   type FundingTarget,
   type FundingVenue,
-  type VenueCapability
+  type VenueBalanceView,
+  type VenueCapability,
+  type WithdrawalAggregateState,
+  type WithdrawalIntent,
+  type WithdrawalIntentView,
+  type WithdrawalLegState,
+  type WithdrawalReconciliationRecord,
+  type WithdrawalRouteLeg,
+  type WithdrawalRouteQuote,
+  type WithdrawalSource
 } from "./types.js";
 import { buildVenueCapabilityMatrix, getVenueDepositAddress } from "./venue-capabilities.js";
 import type {
@@ -65,6 +76,40 @@ export interface FundingRepository {
     token: string;
     amount: string;
   }): Promise<boolean>;
+  listVenueBalances(userId: string): Promise<VenueBalanceView[]>;
+  findWithdrawalIntentById(id: string): Promise<WithdrawalIntent | null>;
+  findWithdrawalIntentByUserAndIdempotencyKey(userId: string, idempotencyKey: string): Promise<WithdrawalIntent | null>;
+  createWithdrawalIntent(input: WithdrawalIntent, sources: WithdrawalSource[]): Promise<WithdrawalIntent>;
+  listWithdrawalSources(withdrawalIntentId: string): Promise<WithdrawalSource[]>;
+  listWithdrawalRouteLegs(withdrawalIntentId: string): Promise<WithdrawalRouteLeg[]>;
+  listWithdrawalReconciliations(withdrawalIntentId: string): Promise<WithdrawalReconciliationRecord[]>;
+  replaceWithdrawalRouteLegs(withdrawalIntentId: string, routeLegs: WithdrawalRouteLeg[]): Promise<void>;
+  updateWithdrawalIntentStatus(withdrawalIntentId: string, status: WithdrawalAggregateState, patch?: Record<string, unknown>): Promise<void>;
+  updateWithdrawalRouteLegSubmission(input: { withdrawalRouteLegId: string; txHash: string; status: WithdrawalLegState }): Promise<void>;
+  updateWithdrawalRouteLegReconciliation(input: {
+    withdrawalRouteLegId: string;
+    status: WithdrawalLegState;
+    venueReleaseStatus: string;
+    destinationStatus: string;
+    providerStatus: Record<string, unknown>;
+    errorReason?: string | null;
+  }): Promise<void>;
+  createWithdrawalReconciliationRecord(input: {
+    withdrawalIntentId: string;
+    withdrawalRouteLegId: string;
+    sourceVenue: FundingVenue;
+    withdrawalTxHash?: string | null;
+    venueReleased: boolean;
+    destinationReceived: boolean;
+    completed: boolean;
+    notes?: string;
+  }): Promise<WithdrawalReconciliationRecord>;
+  appendWithdrawalAuditEvent(input: {
+    withdrawalIntentId: string;
+    withdrawalRouteLegId?: string | null;
+    eventType: string;
+    payload: Record<string, unknown>;
+  }): Promise<string>;
 }
 
 export interface FundingServiceConfig {
@@ -74,12 +119,47 @@ export interface FundingServiceConfig {
   env?: NodeJS.ProcessEnv;
 }
 
+export interface WithdrawalCompletionEvidenceResult {
+  status: "UNKNOWN" | "VENUE_RELEASED" | "DESTINATION_RECEIVED" | "COMPLETED" | "FAILED";
+  venueReleased: boolean;
+  destinationReceived: boolean;
+  completed: boolean;
+  withdrawalTxHash?: string | null;
+  destinationChain?: string | null;
+  destinationWalletAddress?: string | null;
+  token?: string | null;
+  amount?: string | null;
+  checkedAt?: string;
+  reason: string;
+  evidence?: Record<string, string | number | boolean | null>;
+}
+
+export interface WithdrawalCompletionEvidenceChecker {
+  check(input: {
+    userId: string;
+    intent: WithdrawalIntent;
+    leg: WithdrawalRouteLeg;
+    reconciliations: WithdrawalReconciliationRecord[];
+  }): Promise<WithdrawalCompletionEvidenceResult>;
+}
+
+export interface WithdrawalCompletionPersistenceGate {
+  assertCanPersist(input: {
+    userId: string;
+    intent: WithdrawalIntent;
+    leg: WithdrawalRouteLeg;
+    result: WithdrawalCompletionEvidenceResult;
+  }): Promise<void>;
+}
+
 export class FundingService {
   public constructor(
     private readonly repository: FundingRepository,
     private readonly lifi: LifiRouteProvider,
     private readonly config: FundingServiceConfig,
-    private readonly venueReadinessCheckers: ReadonlyMap<FundingVenue, VenueFundingReadinessChecker> = new Map()
+    private readonly venueReadinessCheckers: ReadonlyMap<FundingVenue, VenueFundingReadinessChecker> = new Map(),
+    private readonly withdrawalCompletionChecker: WithdrawalCompletionEvidenceChecker | null = null,
+    private readonly withdrawalCompletionPersistenceGate: WithdrawalCompletionPersistenceGate | null = null
   ) {}
 
   public listVenueCapabilities(): VenueCapability[] {
@@ -90,6 +170,10 @@ export class FundingService {
         Object.keys(capability.sourceTokenAddressByChain).map((chain) => [chain, capability.supportedTokens[0] ?? "UNCONFIGURED"])
       )
     }));
+  }
+
+  public async listVenueBalances(userId: string): Promise<VenueBalanceView[]> {
+    return this.repository.listVenueBalances(userId);
   }
 
   public async createIntent(userId: string, input: CreateFundingIntentInput): Promise<FundingIntentView> {
@@ -399,6 +483,260 @@ export class FundingService {
     return true;
   }
 
+  public async createWithdrawalIntent(userId: string, input: CreateWithdrawalIntentInput): Promise<WithdrawalIntentView> {
+    this.assertWithdrawalDestination(input.destinationWalletAddress);
+    const existing = await this.repository.findWithdrawalIntentByUserAndIdempotencyKey(userId, input.idempotencyKey);
+    if (existing) {
+      return this.getWithdrawalIntent(userId, existing.withdrawalIntentId);
+    }
+    const sources = await this.buildWithdrawalSources(userId, input, randomUUID());
+    const now = new Date().toISOString();
+    const intent: WithdrawalIntent = {
+      withdrawalIntentId: sources.withdrawalIntentId,
+      userId,
+      token: input.token,
+      amount: input.amount,
+      destinationChain: input.destinationChain,
+      destinationWalletAddress: input.destinationWalletAddress,
+      status: "WITHDRAWAL_CREATED",
+      idempotencyKey: input.idempotencyKey,
+      aggregateRouteQuote: {},
+      totalEstimatedFees: "0",
+      totalEstimatedTimeSeconds: null,
+      auditEventIds: [],
+      createdAt: now,
+      updatedAt: now
+    };
+    const created = await this.repository.createWithdrawalIntent(intent, sources.sources);
+    await this.repository.appendWithdrawalAuditEvent({
+      withdrawalIntentId: created.withdrawalIntentId,
+      eventType: "WITHDRAWAL_INTENT_CREATED",
+      payload: { token: input.token, amount: input.amount, sourceCount: input.sources.length }
+    });
+    return this.getWithdrawalIntent(userId, created.withdrawalIntentId);
+  }
+
+  public async getWithdrawalIntent(userId: string, withdrawalIntentId: string): Promise<WithdrawalIntentView> {
+    const intent = await this.repository.findWithdrawalIntentById(withdrawalIntentId);
+    if (!intent) {
+      throw new FundingError("WITHDRAWAL_INTENT_NOT_FOUND", "Withdrawal intent was not found.", 404);
+    }
+    if (intent.userId !== userId) {
+      throw new FundingError("WITHDRAWAL_INTENT_FORBIDDEN", "Withdrawal intent does not belong to this user.", 403);
+    }
+    const [sources, routeLegs, reconciliations] = await Promise.all([
+      this.repository.listWithdrawalSources(withdrawalIntentId),
+      this.repository.listWithdrawalRouteLegs(withdrawalIntentId),
+      this.repository.listWithdrawalReconciliations(withdrawalIntentId)
+    ]);
+    return {
+      intent,
+      sources,
+      routeLegs,
+      reconciliations,
+      userSafeMessage: userSafeWithdrawalMessage(intent.status)
+    };
+  }
+
+  public async quoteWithdrawalIntent(userId: string, withdrawalIntentId: string): Promise<WithdrawalIntentView> {
+    const view = await this.getWithdrawalIntent(userId, withdrawalIntentId);
+    const matrix = buildVenueCapabilityMatrix({ env: this.config.env });
+    const routeLegs = await Promise.all(view.sources.map(async (source) => {
+      const capability = matrix[source.sourceVenue];
+      if (!capability?.supportsWithdrawal) {
+        throw new FundingError("WITHDRAWAL_CAPABILITY_DISABLED", `${source.sourceVenue} withdrawals are not enabled.`, 409);
+      }
+      const hasBalance = await this.repository.hasReadyVenueBalance({
+        userId,
+        venue: source.sourceVenue,
+        token: source.sourceToken,
+        amount: source.sourceAmount
+      });
+      if (!hasBalance) {
+        throw new FundingError("WITHDRAWAL_SOURCE_BALANCE_INSUFFICIENT", `${source.sourceVenue} venue-ready balance is insufficient.`, 409);
+      }
+      return buildWithdrawalRouteLeg(view.intent, source);
+    }));
+    await this.repository.replaceWithdrawalRouteLegs(withdrawalIntentId, routeLegs);
+    await this.repository.updateWithdrawalIntentStatus(withdrawalIntentId, "USER_SIGNATURE_REQUIRED", {
+      aggregateRouteQuote: summarizeWithdrawalQuotes(routeLegs),
+      totalEstimatedFees: routeLegs.reduce((sum, leg) => sum.plus(leg.routeQuote.estimatedFees), new Decimal(0)).toString(),
+      totalEstimatedTimeSeconds: Math.max(...routeLegs.map((leg) => leg.routeQuote.estimatedTimeSeconds ?? 0))
+    });
+    await this.repository.appendWithdrawalAuditEvent({
+      withdrawalIntentId,
+      eventType: "WITHDRAWAL_ROUTES_QUOTED",
+      payload: { routeLegCount: routeLegs.length, provider: "LOTUS_WITHDRAWAL_V0" }
+    });
+    await this.repository.appendWithdrawalAuditEvent({
+      withdrawalIntentId,
+      eventType: "WITHDRAWAL_USER_SIGNATURE_REQUIRED",
+      payload: { routeLegCount: routeLegs.length }
+    });
+    return this.getWithdrawalIntent(userId, withdrawalIntentId);
+  }
+
+  public async submitWithdrawalRouteLeg(
+    userId: string,
+    withdrawalIntentId: string,
+    input: { withdrawalRouteLegId: string; txHash: string }
+  ): Promise<WithdrawalIntentView> {
+    const view = await this.getWithdrawalIntent(userId, withdrawalIntentId);
+    const leg = view.routeLegs.find((candidate) => candidate.withdrawalRouteLegId === input.withdrawalRouteLegId);
+    if (!leg) {
+      throw new FundingError("WITHDRAWAL_INTENT_NOT_FOUND", "Withdrawal route leg was not found.", 404);
+    }
+    if (isWithdrawalQuoteExpired(leg)) {
+      throw new FundingError("WITHDRAWAL_ROUTE_STALE", "Withdrawal quote is stale. Request a new quote before submitting.", 409);
+    }
+    if (leg.txHashes.includes(input.txHash)) {
+      throw new FundingError("WITHDRAWAL_ROUTE_REPLAY_BLOCKED", "Withdrawal route transaction hash was already recorded.", 409);
+    }
+    if (!/^([A-Za-z0-9]{32,}|0x[a-fA-F0-9]{64})$/.test(input.txHash)) {
+      throw new FundingError("WITHDRAWAL_SUBMISSION_FAILED", "Withdrawal transaction hash is invalid.", 400);
+    }
+    await this.repository.updateWithdrawalRouteLegSubmission({
+      withdrawalRouteLegId: leg.withdrawalRouteLegId,
+      txHash: input.txHash,
+      status: "VENUE_RELEASE_PENDING"
+    });
+    const nextLegStates = view.routeLegs.map((candidate) =>
+      candidate.withdrawalRouteLegId === leg.withdrawalRouteLegId ? "VENUE_RELEASE_PENDING" : candidate.status
+    );
+    await this.repository.updateWithdrawalIntentStatus(withdrawalIntentId, aggregateWithdrawalStatus(nextLegStates));
+    await this.repository.appendWithdrawalAuditEvent({
+      withdrawalIntentId,
+      withdrawalRouteLegId: leg.withdrawalRouteLegId,
+      eventType: "WITHDRAWAL_LEG_SUBMITTED",
+      payload: { txHash: input.txHash, provider: "LOTUS_WITHDRAWAL_V0" }
+    });
+    return this.getWithdrawalIntent(userId, withdrawalIntentId);
+  }
+
+  public async refreshWithdrawalStatus(userId: string, withdrawalIntentId: string): Promise<WithdrawalIntentView> {
+    const view = await this.getWithdrawalIntent(userId, withdrawalIntentId);
+    if (!this.withdrawalCompletionChecker) {
+      return view;
+    }
+
+    const refreshedStates: WithdrawalLegState[] = [];
+    for (const leg of view.routeLegs) {
+      const latestTxHash = leg.txHashes.at(-1);
+      if (!latestTxHash || leg.status === "WITHDRAWAL_LEG_COMPLETED" || leg.status === "WITHDRAWAL_LEG_FAILED") {
+        refreshedStates.push(leg.status);
+        continue;
+      }
+      if (!["VENUE_RELEASE_PENDING", "DESTINATION_PENDING", "DESTINATION_RECEIVED"].includes(leg.status)) {
+        refreshedStates.push(leg.status);
+        continue;
+      }
+      const result = await this.withdrawalCompletionChecker.check({
+        userId,
+        intent: view.intent,
+        leg,
+        reconciliations: view.reconciliations
+      });
+      const nextStatus = this.mapWithdrawalCompletionResult(view.intent, leg, result);
+      const completed = nextStatus === "WITHDRAWAL_LEG_COMPLETED";
+      if (completed && this.withdrawalCompletionPersistenceGate) {
+        await this.withdrawalCompletionPersistenceGate.assertCanPersist({
+          userId,
+          intent: view.intent,
+          leg,
+          result
+        });
+      }
+      const venueReleased = completed || result.venueReleased;
+      const destinationReceived = completed || result.destinationReceived;
+      await this.repository.createWithdrawalReconciliationRecord({
+        withdrawalIntentId,
+        withdrawalRouteLegId: leg.withdrawalRouteLegId,
+        sourceVenue: leg.sourceVenue,
+        withdrawalTxHash: result.withdrawalTxHash ?? latestTxHash,
+        venueReleased,
+        destinationReceived,
+        completed,
+        notes: result.reason
+      });
+      await this.repository.updateWithdrawalRouteLegReconciliation({
+        withdrawalRouteLegId: leg.withdrawalRouteLegId,
+        status: nextStatus,
+        venueReleaseStatus: venueReleased ? "CONFIRMED" : result.status === "UNKNOWN" ? "UNKNOWN" : "PENDING",
+        destinationStatus: destinationReceived ? "CONFIRMED" : result.status === "UNKNOWN" ? "UNKNOWN" : "PENDING",
+        providerStatus: {
+          source: "withdrawal_completion_reconciliation",
+          status: result.status,
+          reason: result.reason,
+          evidence: result.evidence ?? {}
+        },
+        errorReason: nextStatus === "WITHDRAWAL_LEG_RETRY_REQUIRED" || nextStatus === "WITHDRAWAL_LEG_FAILED"
+          ? result.reason
+          : null
+      });
+      await this.repository.appendWithdrawalAuditEvent({
+        withdrawalIntentId,
+        withdrawalRouteLegId: leg.withdrawalRouteLegId,
+        eventType: completed
+          ? "WITHDRAWAL_LEG_COMPLETED"
+          : nextStatus === "DESTINATION_PENDING"
+            ? "WITHDRAWAL_VENUE_RELEASED"
+            : nextStatus === "DESTINATION_RECEIVED"
+              ? "WITHDRAWAL_DESTINATION_RECEIVED"
+              : "WITHDRAWAL_RECONCILIATION_FAILED",
+        payload: {
+          status: result.status,
+          reason: result.reason,
+          venueReleased,
+          destinationReceived,
+          completed,
+          evidence: result.evidence ?? {}
+        }
+      });
+      refreshedStates.push(nextStatus);
+    }
+    if (refreshedStates.length > 0) {
+      const nextAggregateStatus = aggregateWithdrawalStatus(refreshedStates);
+      await this.repository.updateWithdrawalIntentStatus(withdrawalIntentId, nextAggregateStatus);
+      if (nextAggregateStatus === "COMPLETED" || nextAggregateStatus === "PARTIALLY_COMPLETED") {
+        await this.repository.appendWithdrawalAuditEvent({
+          withdrawalIntentId,
+          eventType: nextAggregateStatus === "COMPLETED" ? "WITHDRAWAL_COMPLETED" : "WITHDRAWAL_PARTIALLY_COMPLETED",
+          payload: { status: nextAggregateStatus }
+        });
+      }
+    }
+    return this.getWithdrawalIntent(userId, withdrawalIntentId);
+  }
+
+  private mapWithdrawalCompletionResult(
+    intent: WithdrawalIntent,
+    leg: WithdrawalRouteLeg,
+    result: WithdrawalCompletionEvidenceResult
+  ): WithdrawalLegState {
+    if (result.status === "FAILED") {
+      return "WITHDRAWAL_LEG_FAILED";
+    }
+    if (result.status === "UNKNOWN") {
+      return "WITHDRAWAL_LEG_RETRY_REQUIRED";
+    }
+    if (!result.venueReleased) {
+      return "VENUE_RELEASE_PENDING";
+    }
+    if (!result.destinationReceived) {
+      return "DESTINATION_PENDING";
+    }
+    const observedAmount = toDecimalOrNull(result.amount);
+    const destinationMatches = equalsIgnoreCase(result.destinationWalletAddress, intent.destinationWalletAddress)
+      && equalsIgnoreCase(result.destinationChain, intent.destinationChain)
+      && equalsIgnoreCase(result.token, leg.sourceToken)
+      && observedAmount !== null
+      && observedAmount.gte(new Decimal(leg.destinationAmountEstimate));
+    if (!destinationMatches) {
+      return "WITHDRAWAL_LEG_RETRY_REQUIRED";
+    }
+    return result.completed ? "WITHDRAWAL_LEG_COMPLETED" : "DESTINATION_RECEIVED";
+  }
+
   private buildTargets(input: CreateFundingIntentInput, fundingIntentId: string): { fundingIntentId: string; targets: FundingTarget[] } {
     const matrix = buildVenueCapabilityMatrix({ env: this.config.env });
     const now = new Date().toISOString();
@@ -421,6 +759,50 @@ export class FundingService {
       };
     });
     return { fundingIntentId, targets };
+  }
+
+  private async buildWithdrawalSources(
+    userId: string,
+    input: CreateWithdrawalIntentInput,
+    withdrawalIntentId: string
+  ): Promise<{ withdrawalIntentId: string; sources: WithdrawalSource[] }> {
+    validateWithdrawalSplit(input);
+    const matrix = buildVenueCapabilityMatrix({ env: this.config.env });
+    const now = new Date().toISOString();
+    const sources: WithdrawalSource[] = [];
+    for (const source of input.sources) {
+      const capability = matrix[source.sourceVenue];
+      if (!capability?.supportsWithdrawal) {
+        throw new FundingError("WITHDRAWAL_CAPABILITY_DISABLED", `${source.sourceVenue} withdrawals are not enabled.`, 409);
+      }
+      const sourceAmount = source.sourceAmount ?? new Decimal(input.amount).times(source.sourcePercentage ?? 0).div(100).toString();
+      sources.push({
+        withdrawalSourceId: randomUUID(),
+        withdrawalIntentId,
+        sourceVenue: source.sourceVenue,
+        sourceToken: input.token,
+        sourceAmount,
+        sourcePercentage: source.sourcePercentage ?? null,
+        venueCapabilitySnapshot: capability,
+        status: "WITHDRAWAL_LEG_CREATED",
+        createdAt: now,
+        updatedAt: now
+      });
+    }
+    const balances = await this.repository.listVenueBalances(userId);
+    for (const source of sources) {
+      const balance = balances.find((candidate) => candidate.venue === source.sourceVenue && candidate.token === source.sourceToken);
+      if (!balance || new Decimal(balance.availableAmount).lt(source.sourceAmount)) {
+        throw new FundingError("WITHDRAWAL_SOURCE_BALANCE_INSUFFICIENT", `${source.sourceVenue} venue-ready balance is insufficient.`, 409);
+      }
+    }
+    return { withdrawalIntentId, sources };
+  }
+
+  private assertWithdrawalDestination(destinationWalletAddress: string): void {
+    if (!/^(0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{32,64})$/.test(destinationWalletAddress)) {
+      throw new FundingError("WITHDRAWAL_DESTINATION_INVALID", "Withdrawal destination wallet address is invalid.", 400);
+    }
   }
 
   private assertCapabilityReady(capability: VenueCapability | undefined, intent: FundingIntent): asserts capability is VenueCapability {
@@ -468,6 +850,28 @@ const validateSplit = (input: CreateFundingIntentInput): void => {
   }
 };
 
+const validateWithdrawalSplit = (input: CreateWithdrawalIntentInput): void => {
+  const uniqueVenues = new Set(input.sources.map((source) => source.sourceVenue));
+  if (uniqueVenues.size !== input.sources.length) {
+    throw new FundingError("TARGET_SPLIT_INVALID", "Withdrawal sources must use each venue at most once.", 400);
+  }
+  const percentages = input.sources.map((source) => source.sourcePercentage).filter((value): value is number => typeof value === "number");
+  if (percentages.length > 0 && percentages.length !== input.sources.length) {
+    throw new FundingError("TARGET_SPLIT_INVALID", "Use either percentages for all withdrawal sources or explicit amounts for all sources.", 400);
+  }
+  if (percentages.length > 0) {
+    const total = percentages.reduce((sum, value) => sum.plus(value), new Decimal(0));
+    if (!total.eq(100)) {
+      throw new FundingError("TARGET_SPLIT_INVALID", "Withdrawal source percentages must sum to 100.", 400);
+    }
+  } else {
+    const total = input.sources.reduce((sum, source) => sum.plus(source.sourceAmount ?? "0"), new Decimal(0));
+    if (!total.eq(input.amount)) {
+      throw new FundingError("TARGET_SPLIT_INVALID", "Withdrawal source amounts must match withdrawal amount.", 400);
+    }
+  }
+};
+
 const buildRouteLeg = (intent: FundingIntent, target: FundingTarget, quote: FundingRouteQuote): FundingRouteLeg => {
   const now = new Date().toISOString();
   return {
@@ -502,6 +906,68 @@ const summarizeQuotes = (routeLegs: readonly FundingRouteLeg[]): Record<string, 
   totalEstimatedFees: routeLegs.reduce((sum, leg) => sum.plus(leg.routeQuote.estimatedFees), new Decimal(0)).toString()
 });
 
+const buildWithdrawalRouteLeg = (intent: WithdrawalIntent, source: WithdrawalSource): WithdrawalRouteLeg => {
+  const now = new Date().toISOString();
+  const quote: WithdrawalRouteQuote = {
+    provider: "LOTUS_WITHDRAWAL_V0",
+    providerRouteId: `withdrawal-${source.withdrawalSourceId}`,
+    sourceVenue: source.sourceVenue,
+    sourceToken: source.sourceToken,
+    sourceAmount: source.sourceAmount,
+    destinationChain: intent.destinationChain,
+    destinationWalletAddress: intent.destinationWalletAddress,
+    destinationAmountEstimate: source.sourceAmount,
+    estimatedFees: "0",
+    estimatedTimeSeconds: null,
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    transactionRequest: null,
+    userSafeSummary: `Prepare ${source.sourceAmount} ${source.sourceToken} withdrawal from ${source.sourceVenue}. Lotus does not sign or broadcast this transaction.`
+  };
+  return {
+    withdrawalRouteLegId: randomUUID(),
+    withdrawalIntentId: intent.withdrawalIntentId,
+    withdrawalSourceId: source.withdrawalSourceId,
+    sourceVenue: source.sourceVenue,
+    sourceToken: source.sourceToken,
+    sourceAmount: source.sourceAmount,
+    destinationChain: intent.destinationChain,
+    destinationWalletAddress: intent.destinationWalletAddress,
+    destinationAmountEstimate: source.sourceAmount,
+    routeProvider: "LOTUS_WITHDRAWAL_V0",
+    routeQuote: quote,
+    txHashes: [],
+    providerStatus: {},
+    venueReleaseStatus: "NOT_SUBMITTED",
+    destinationStatus: "NOT_CONFIRMED",
+    status: "WITHDRAWAL_LEG_SIGNATURE_REQUIRED",
+    errorReason: null,
+    createdAt: now,
+    updatedAt: now
+  };
+};
+
+const summarizeWithdrawalQuotes = (routeLegs: readonly WithdrawalRouteLeg[]): Record<string, unknown> => ({
+  provider: "LOTUS_WITHDRAWAL_V0",
+  routeLegCount: routeLegs.length,
+  sourceVenues: routeLegs.map((leg) => leg.sourceVenue),
+  totalEstimatedFees: routeLegs.reduce((sum, leg) => sum.plus(leg.routeQuote.estimatedFees), new Decimal(0)).toString(),
+  nonCustodial: true,
+  backendBroadcast: false
+});
+
+const isWithdrawalQuoteExpired = (leg: WithdrawalRouteLeg): boolean => Date.parse(leg.routeQuote.expiresAt) <= Date.now();
+
+const equalsIgnoreCase = (left: string | null | undefined, right: string | null | undefined): boolean =>
+  typeof left === "string" && typeof right === "string" && left.toLowerCase() === right.toLowerCase();
+
+const toDecimalOrNull = (value: string | null | undefined) => {
+  try {
+    return typeof value === "string" ? new Decimal(value) : null;
+  } catch {
+    return null;
+  }
+};
+
 const userSafeFundingMessage = (status: FundingIntent["status"]): string => {
   switch (status) {
     case "INTENT_CREATED":
@@ -524,6 +990,33 @@ const userSafeFundingMessage = (status: FundingIntent["status"]): string => {
       return "Funding was cancelled.";
     default:
       return "Funding status is being updated.";
+  }
+};
+
+const userSafeWithdrawalMessage = (status: WithdrawalIntent["status"]): string => {
+  switch (status) {
+    case "WITHDRAWAL_CREATED":
+      return "Withdrawal intent created. Route preview is pending.";
+    case "USER_SIGNATURE_REQUIRED":
+    case "WITHDRAWAL_QUOTED":
+      return "Withdrawal route is ready for wallet review.";
+    case "WITHDRAWAL_SUBMITTED":
+    case "WITHDRAWING":
+    case "PARTIALLY_WITHDRAWING":
+      return "Withdrawal is in progress.";
+    case "PARTIALLY_COMPLETED":
+      return "Some withdrawal legs are complete.";
+    case "COMPLETED":
+      return "Withdrawal is complete.";
+    case "PARTIALLY_FAILED":
+    case "RETRY_REQUIRED":
+      return "Some withdrawal legs need review or retry.";
+    case "FAILED":
+      return "Withdrawal failed.";
+    case "CANCELLED":
+      return "Withdrawal was cancelled.";
+    default:
+      return "Withdrawal status is being updated.";
   }
 };
 

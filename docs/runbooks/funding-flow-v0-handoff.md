@@ -664,6 +664,78 @@ This read-only report:
 
 Treat any venue with `FAILED`, `MISSING`, or `STALE` as not enforcement-ready. Do not enable pair, tri, split, or venue-specific enforcement unless every venue required by that route is `PASSED` in this summary and the route-specific gate also passes.
 
+### Route-Scope Enforcement Readiness Gate
+
+Before turning on sandbox funding enforcement for a specific route or lane, run:
+
+```bash
+npm run funding:route-enforcement-ready -- <ROUTE_OR_LANE_ID>
+```
+
+For the current Limitless plus Polymarket pair rehearsal, the convenience command is:
+
+```bash
+npm run funding:route-enforcement-ready:pair
+```
+
+For the current sandbox tri rehearsal:
+
+```bash
+npm run funding:tri-readiness-sandbox-preflight
+npm run funding:route-enforcement-ready:tri
+```
+
+This covers:
+
+- `CRYPTO_BTC_ATH_BY_DATE_TRI_LIMITLESS_OPINION_POLYMARKET`
+- `POLYMARKET`
+- `LIMITLESS`
+- `OPINION`
+
+For the strict-all sandbox rehearsal:
+
+```bash
+npm run funding:strict-all-readiness-sandbox-preflight
+npm run funding:route-enforcement-ready:strict-all
+```
+
+This covers:
+
+- `CRYPTO_BTC_ATH_BY_DATE_STRICT_ALL_LIMITLESS_MYRIAD_OPINION_POLYMARKET_PREDICT_FUN`
+- `POLYMARKET`
+- `LIMITLESS`
+- `OPINION`
+- `MYRIAD`
+- `PREDICT_FUN`
+
+This read-only validator:
+
+- infers the route venues from the lane id, or uses `FUNDING_ROUTE_REQUIRED_VENUES`
+- requires `artifacts/funding/all-venue-readiness-gate-summary.json` to be `PASSED` and fresh
+- requires every route venue to be `PASSED` and fresh in the all-venue summary
+- requires a route-specific rehearsal artifact to be `COMPLETED` and fresh
+- verifies every required venue has persisted readiness evidence
+- verifies the rehearsal execution preflight returned `ok=true`
+- verifies safety flags show default funding enforcement, live LI.FI execution, backend broadcast, and live venue submission stayed disabled
+- writes `artifacts/funding/route-enforcement-readiness-<route-or-lane-id>.json`
+- writes `artifacts/funding/route-enforcement-readiness-<route-or-lane-id>.md`
+
+If the lane id is ambiguous, especially anything that says `PREDICT` without `PREDICT_FUN`, set:
+
+```bash
+FUNDING_ROUTE_REQUIRED_VENUES=POLYMARKET,LIMITLESS
+```
+
+Use the exact venues required by the route. Do not treat Predict.fun as equivalent to PredictIt or any other Predict venue.
+
+For multi-venue routes without a built-in artifact convention, provide the operator-approved route rehearsal artifact explicitly:
+
+```bash
+FUNDING_ROUTE_REHEARSAL_ARTIFACT_PATH=artifacts/funding/<approved-route-rehearsal>.json npm run funding:route-enforcement-ready -- <ROUTE_OR_LANE_ID>
+```
+
+`PASSED` only means the route is eligible for a sandbox-only enforcement decision. It does not enable enforcement, does not enable live LI.FI execution, does not broadcast transactions, and does not make the route production-ready.
+
 ### LI.FI Integration Boundary
 
 The Lotus wrapper around LI.FI should own the product contract. Do not let UI, RFQ, execution, or venue adapters call LI.FI directly.
@@ -901,7 +973,7 @@ Why it matters:
 
 Frontend reads final execution status here. Funding state should eventually appear here in a safe summary, such as reservation status and funding failure reason.
 
-### Funding Endpoints To Add
+### Funding Endpoints
 
 ```http
 POST /funding/intents
@@ -909,7 +981,7 @@ POST /funding/intents
 
 Why call it:
 
-Frontend calls this when the user starts funding Lotus.
+Frontend calls this when the user starts non-custodial funding preparation.
 
 Example request:
 
@@ -983,7 +1055,7 @@ POST /funding/intents/:fundingIntentId/submit
 
 Why call it:
 
-Submits the user-approved funding route after wallet signature. This is where LI.FI transaction payloads are used. In early v0 this can remain sandbox/stubbed until live routing is reviewed.
+Records the user-broadcast funding transaction hash after wallet signature. Backend v0 does not sign, broadcast, custody, or submit LI.FI execution on behalf of the user.
 
 Expected response:
 
@@ -1012,40 +1084,33 @@ Why call it:
 Frontend polls this to show progress from route quote through `READY_TO_TRADE`.
 
 ```http
-GET /funding/intents/:fundingIntentId/route-legs
+GET /funding/intents/:fundingIntentId/status
 ```
 
 Why call it:
 
-Frontend and operators need per-leg status for split funding. Aggregate status is not enough.
+Frontend and operators need aggregate and per-leg status for split funding. Aggregate status is not enough.
 
 ```http
-GET /funding/status
+GET /funding/venue-balances
 ```
 
 Why call it:
 
-Shows the user's current funding readiness across venues.
+Shows the user's current venue-ready balances across venues. This is a derived capital view from persisted `READY_TO_TRADE` records and active withdrawal reservations; it is not a Lotus custodial or pooled balance.
 
 Expected response:
 
 ```json
 {
   "userId": "user-id",
-  "venueBalances": [
+  "balances": [
     {
       "venue": "POLYMARKET",
-      "token": "USDC.e",
-      "readyToTradeBalance": "500",
-      "reservedBalance": "0",
-      "status": "READY_TO_TRADE"
-    }
-  ],
-  "derivedCapitalView": [
-    {
-      "displayToken": "USDC",
-      "availableEquivalent": "500",
-      "reservedEquivalent": "0"
+      "token": "USDC",
+      "readyAmount": "500",
+      "pendingWithdrawalAmount": "0",
+      "availableAmount": "500"
     }
   ]
 }
@@ -1058,6 +1123,51 @@ GET /funding/reservations/:reservationId
 Why call it:
 
 Useful when RFQ accept fails or an execution is waiting on reservation/finalization.
+
+### Withdrawal V0 Endpoints
+
+Withdrawal v0 is a DB-backed non-custodial skeleton. It lets the frontend build the withdrawal screen and lets operators validate lifecycle state, but it does not call live venue withdrawal APIs, does not sign, does not broadcast, and does not custody funds.
+
+```http
+POST /funding/withdrawals
+```
+
+Why call it:
+
+Creates a single-source or multi-source withdrawal intent from persisted venue-ready balances.
+
+Example request:
+
+```json
+{
+  "token": "USDC",
+  "amount": "1000",
+  "destinationChain": "POLYGON",
+  "destinationWalletAddress": "0x1111111111111111111111111111111111111111",
+  "idempotencyKey": "withdrawal-idempotency-key",
+  "sources": [
+    {
+      "sourceVenue": "POLYMARKET",
+      "sourcePercentage": 100
+    }
+  ]
+}
+```
+
+```http
+GET /funding/withdrawals/:withdrawalIntentId
+POST /funding/withdrawals/:withdrawalIntentId/quote
+POST /funding/withdrawals/:withdrawalIntentId/submit
+GET /funding/withdrawals/:withdrawalIntentId/status
+```
+
+Rules:
+
+- `quote` fails closed when a source venue has `supportsWithdrawal=false`, unknown capability, insufficient venue-ready balance, or invalid destination wallet.
+- `submit` records a user-broadcast tx hash only. It does not broadcast or call a live venue withdrawal endpoint.
+- Withdrawal route legs keep their own lifecycle state so multi-source withdrawal can be partially completed or partially failed.
+- Withdrawal endpoints must not mutate funding readiness records directly.
+- Withdrawal responses must not expose API keys, auth headers, private keys, raw provider payloads, or live venue internals.
 
 ### Admin Funding Endpoints To Add
 
@@ -1190,9 +1300,9 @@ Phase 2:
 
 Phase 3:
 
-- withdrawals
-- venue-to-wallet flows
-- multi-venue withdrawal aggregation
+- live venue withdrawal execution after venue-specific review
+- venue-to-wallet confirmation flows
+- production multi-venue withdrawal aggregation
 
 Phase 4:
 
@@ -1226,7 +1336,7 @@ Then add:
 - multi-venue split route execution
 - per-leg status tracking
 - venue adapter finalization
-- withdrawals
+- live withdrawal execution and venue-specific withdrawal adapters
 - rebalancing
 
 ## 17. Out of Scope for First Build
@@ -1364,6 +1474,319 @@ Sandbox enforcement gate:
 - If any required venue lacks readiness coverage, execution must fail preflight with `FUNDING_UNAVAILABLE` or remain in sandbox rehearsal only.
 - The current Polymarket readiness path is validated first; other route venues must get their own checker or approved evidence path before broad sandbox enforcement.
 - `npm run report:funding:readiness` must show the relevant persisted rows before an operator treats the route as enforcement-ready.
+
+### Withdrawal Sandbox Rehearsal
+
+Before considering live withdrawal execution, operators can run a controlled withdrawal v0 rehearsal:
+
+```bash
+npm run funding:withdrawal-sandbox-rehearsal
+```
+
+This command:
+
+- applies funding and withdrawal migrations idempotently
+- creates one sandbox funding intent for a test user
+- uses mocked LI.FI quote/status behavior, with no live LI.FI execution
+- reconciles Polymarket venue readiness through the existing funding readiness checker
+- persists one `READY_TO_TRADE` funding row
+- starts an in-process authenticated funding API app
+- calls `GET /funding/venue-balances`
+- creates a withdrawal intent through `POST /funding/withdrawals`
+- quotes the withdrawal route through `POST /funding/withdrawals/:id/quote`
+- records a fake sandbox user tx hash through `POST /funding/withdrawals/:id/submit`
+- reads `GET /funding/withdrawals/:id/status`
+- verifies cross-user read blocking, insufficient balance blocking, duplicate source venue blocking, and withdrawal audit events
+- writes `artifacts/funding/withdrawal-sandbox-rehearsal.json`
+- writes `artifacts/funding/withdrawal-sandbox-rehearsal.md`
+- leaves sandbox DB rows persisted for operator inspection
+
+Expected successful artifact fields:
+
+- `status=COMPLETED`
+- `withdrawalStatus=WITHDRAWING`
+- `routeLegStatus=VENUE_RELEASE_PENDING`
+- `crossUserReadBlocked=true`
+- `insufficientBalanceBlocked=true`
+- `duplicateSourceVenueBlocked=true`
+- `redactionVerified=true`
+- `safety.liveLifiExecutionEnabled=false`
+- `safety.liveVenueWithdrawalExecutionEnabled=false`
+- `safety.backendBroadcastedTransaction=false`
+- `safety.backendSignedTransaction=false`
+- `safety.custodyModel=MODEL_A_NON_CUSTODIAL`
+
+Safety notes:
+
+- this command does not move real funds
+- this command does not call a live venue withdrawal API
+- this command does not broadcast or sign a transaction
+- this command does not enable funding preflight enforcement
+- this command does not mutate production config
+- the fake tx hash is only a lifecycle marker for sandbox API validation
+
+### Withdrawal Completion Sandbox Rehearsal
+
+Before any live withdrawal adapter work, operators must prove withdrawal completion can be reconciled from explicit evidence without custody, signing, broadcasting, or live venue mutation:
+
+```bash
+npm run funding:withdrawal-completion-sandbox-rehearsal
+```
+
+This command:
+
+- applies funding and withdrawal migrations idempotently
+- creates one sandbox funding intent and persists one `READY_TO_TRADE` funding row
+- creates and submits one sandbox withdrawal intent with a fake user-broadcast tx hash
+- injects mocked withdrawal completion evidence through `refreshWithdrawalStatus`
+- persists `funding_withdrawal_reconciliation_records`
+- verifies route status moves through venue release and destination receipt before completion
+- writes `artifacts/funding/withdrawal-completion-sandbox-rehearsal.json`
+- writes `artifacts/funding/withdrawal-completion-sandbox-rehearsal.md`
+
+Expected successful artifact fields:
+
+- `status=COMPLETED`
+- `venueReleased=true`
+- `destinationReceived=true`
+- `completed=true`
+- `withdrawalStatus=COMPLETED`
+- `routeLegStatus=WITHDRAWAL_LEG_COMPLETED`
+- `redactionVerified=true`
+- `safety.liveLifiExecutionEnabled=false`
+- `safety.liveVenueWithdrawalExecutionEnabled=false`
+- `safety.backendBroadcastedTransaction=false`
+- `safety.backendSignedTransaction=false`
+- `safety.custodyModel=MODEL_A_NON_CUSTODIAL`
+
+Safety notes:
+
+- this command uses mocked completion evidence only
+- this command does not call real venue withdrawal APIs
+- this command does not prove a production withdrawal adapter is safe
+- live withdrawal adapter work still requires venue-specific security review, exact destination evidence, and operator approval
+
+### First Real Withdrawal Evidence Adapter Design
+
+The first real withdrawal evidence adapter should be `PolymarketWithdrawalEvidenceChecker`. It must be read-only and fail-closed. It is not a live withdrawal executor and must not call a venue withdrawal mutation endpoint.
+
+Adapter purpose:
+
+- consume evidence for a withdrawal route leg that already has a user-broadcast tx hash
+- prove whether funds have left the source venue
+- prove whether funds reached the exact destination wallet, chain, token, and amount
+- return a `WithdrawalCompletionEvidenceResult` to `refreshWithdrawalStatus`
+- allow `refreshWithdrawalStatus` to persist reconciliation only after exact evidence checks pass
+
+Required evidence contract from the operator-approved Polymarket read service:
+
+```json
+{
+  "sourceVenue": "POLYMARKET",
+  "withdrawalTxHash": "0x...",
+  "status": "PENDING|VENUE_RELEASED|DESTINATION_RECEIVED|COMPLETED|FAILED|UNKNOWN",
+  "venueReleased": true,
+  "destinationReceived": true,
+  "destinationChain": "POLYGON",
+  "destinationWalletAddress": "0x1111111111111111111111111111111111111111",
+  "token": "USDC",
+  "amount": "40",
+  "confirmations": 1,
+  "observedAt": "2026-04-26T00:00:00.000Z",
+  "reason": "POLYMARKET_WITHDRAWAL_DESTINATION_CONFIRMED"
+}
+```
+
+Fields that must not be returned by the read service, logs, API responses, or artifacts:
+
+- API keys
+- auth headers
+- private keys
+- session cookies
+- raw venue account internals
+- raw provider payloads
+- unsigned transaction internals
+- backend signing material
+
+Fail-closed mapping:
+
+- missing checker or disabled mode -> no state change
+- service unavailable, timeout, malformed JSON, missing fields, unsupported token, or unsupported chain -> `UNKNOWN` / retry required
+- tx hash mismatch -> retry required
+- destination wallet mismatch -> retry required
+- destination chain mismatch -> retry required
+- token mismatch -> retry required
+- observed amount below withdrawal route leg amount -> retry required
+- venue released but destination not received -> `DESTINATION_PENDING`
+- exact destination receipt but `completed=false` -> `DESTINATION_RECEIVED`
+- exact venue release and exact destination receipt with `completed=true` -> `WITHDRAWAL_LEG_COMPLETED`
+
+Implemented config names. Defaults must stay disabled:
+
+```env
+POLYMARKET_WITHDRAWAL_EVIDENCE_MODE=DISABLED
+POLYMARKET_WITHDRAWAL_EVIDENCE_ENABLED=false
+POLYMARKET_WITHDRAWAL_EVIDENCE_URL=
+POLYMARKET_WITHDRAWAL_EVIDENCE_AUTH_MODE=NONE
+POLYMARKET_WITHDRAWAL_EVIDENCE_API_KEY=
+POLYMARKET_WITHDRAWAL_EVIDENCE_TIMEOUT_MS=5000
+POLYMARKET_WITHDRAWAL_MIN_CONFIRMATIONS=1
+```
+
+Activation gates before any real adapter is allowed to persist completion:
+
+- `npm run funding:withdrawal-sandbox-rehearsal` passes with a fresh `COMPLETED` artifact
+- `npm run funding:withdrawal-completion-sandbox-rehearsal` passes with a fresh `COMPLETED` artifact
+- the relevant read-only withdrawal evidence smoke command passes with a fresh artifact:
+  - `npm run funding:polymarket-withdrawal-evidence-smoke`
+  - `npm run funding:limitless-withdrawal-evidence-smoke`
+  - `npm run funding:opinion-withdrawal-evidence-smoke`
+  - `npm run funding:myriad-withdrawal-evidence-smoke`
+  - `npm run funding:predictfun-withdrawal-evidence-smoke`
+- the operator-approved Polymarket evidence read service is documented and reviewed
+- the read service returns normalized fields only, not raw provider internals
+- adapter tests prove malformed/unavailable/mismatched evidence fails closed
+- adapter tests prove exact venue release plus exact destination receipt is the only path to `WITHDRAWAL_LEG_COMPLETED`
+- OpenAPI and admin docs are updated only if user/admin response shapes change
+
+This adapter design still does not make live withdrawals available. It only proves completion for user-broadcast withdrawals through read-only evidence.
+
+### Multi-Venue Withdrawal Evidence Smoke Tests
+
+Withdrawal evidence smoke commands are read-only. They call the operator-approved evidence read service, map the normalized response, verify redaction, write `artifacts/funding/<venue>-withdrawal-evidence-smoke-test.json`, and do not persist `funding_withdrawal_reconciliation_records`.
+
+Run the generic command for any supported venue:
+
+```bash
+npm run funding:withdrawal-evidence-smoke -- POLYMARKET
+npm run funding:withdrawal-evidence-smoke -- LIMITLESS
+npm run funding:withdrawal-evidence-smoke -- OPINION
+npm run funding:withdrawal-evidence-smoke -- MYRIAD
+npm run funding:withdrawal-evidence-smoke -- PREDICT_FUN
+```
+
+Convenience aliases:
+
+```bash
+npm run funding:polymarket-withdrawal-evidence-smoke
+npm run funding:limitless-withdrawal-evidence-smoke
+npm run funding:opinion-withdrawal-evidence-smoke
+npm run funding:myriad-withdrawal-evidence-smoke
+npm run funding:predictfun-withdrawal-evidence-smoke
+```
+
+Per-venue config follows the same pattern:
+
+```env
+FUNDING_WITHDRAWAL_COMPLETION_PERSISTENCE_GATE_ENABLED=true
+FUNDING_WITHDRAWAL_COMPLETION_PERSISTENCE_ENABLED=false
+FUNDING_WITHDRAWAL_COMPLETION_PERSISTENCE_VENUES=
+FUNDING_WITHDRAWAL_COMPLETION_SMOKE_MAX_AGE_HOURS=24
+FUNDING_WITHDRAWAL_EVIDENCE_APPROVED_HOSTS=
+<VENUE>_WITHDRAWAL_EVIDENCE_MODE=DISABLED
+<VENUE>_WITHDRAWAL_EVIDENCE_ENABLED=false
+<VENUE>_WITHDRAWAL_EVIDENCE_URL=
+<VENUE>_WITHDRAWAL_EVIDENCE_AUTH_MODE=NONE
+<VENUE>_WITHDRAWAL_EVIDENCE_API_KEY=
+<VENUE>_WITHDRAWAL_EVIDENCE_TIMEOUT_MS=5000
+<VENUE>_WITHDRAWAL_MIN_CONFIRMATIONS=1
+<VENUE>_WITHDRAWAL_EVIDENCE_APPROVED_HOSTS=
+<VENUE>_WITHDRAWAL_EVIDENCE_SMOKE_ARTIFACT_PATH=
+<VENUE>_WITHDRAWAL_COMPLETION_PERSISTENCE_ENABLED=false
+```
+
+Use uppercase venue prefixes: `POLYMARKET`, `LIMITLESS`, `OPINION`, `MYRIAD`, and `PREDICT_FUN`.
+
+For local smoke testing, Lotus can serve the normalized evidence contract through a disabled-by-default internal route:
+
+```text
+GET /internal/funding/:venue/withdrawal-evidence
+```
+
+Local operator fixture env:
+
+```env
+<VENUE>_INTERNAL_WITHDRAWAL_EVIDENCE_READ_ENABLED=false
+<VENUE>_INTERNAL_WITHDRAWAL_EVIDENCE_FIXTURE_PATH=
+```
+
+When enabled locally, this route reads a sanitized operator fixture file and returns only the normalized evidence contract. It does not call a live venue withdrawal API, does not sign, does not broadcast, does not move funds, and does not persist completion. Keep it disabled unless running a controlled smoke test.
+
+Expected smoke artifact safety fields:
+
+- `status=COMPLETED`
+- `readOnly=true`
+- `persistedCompletionResult=false`
+- `redactionVerified=true`
+- `safety.liveVenueWithdrawalExecutionEnabled=false`
+- `safety.backendBroadcastedTransaction=false`
+- `safety.backendSignedTransaction=false`
+- `safety.custodyModel=MODEL_A_NON_CUSTODIAL`
+
+If a submitted withdrawal route leg exists for the venue, the smoke command must show unchanged reconciliation counts before and after the read. If no submitted withdrawal route leg exists for a venue, the command uses synthetic sandbox identifiers and should fail closed rather than reporting completion. Synthetic-row smoke results are useful for validating read-service shape, parser behavior, redaction, and fail-closed behavior, but they are not enough to approve persistence for real withdrawals.
+
+Before a venue-specific evidence checker is allowed to persist real withdrawal completion, operators must have a fresh DB-backed smoke artifact for that venue with a real submitted withdrawal route leg, exact evidence, `persistedCompletionResult=false`, unchanged reconciliation counts, and manual review approval.
+
+The runtime persistence gate is enabled by default with `FUNDING_WITHDRAWAL_COMPLETION_PERSISTENCE_GATE_ENABLED=true`, but live completion persistence itself stays disabled by default with `FUNDING_WITHDRAWAL_COMPLETION_PERSISTENCE_ENABLED=false`. Passing smoke gates is necessary but not sufficient. To persist completion for a controlled venue, operators must explicitly set both:
+
+- `FUNDING_WITHDRAWAL_COMPLETION_PERSISTENCE_ENABLED=true`
+- either `FUNDING_WITHDRAWAL_COMPLETION_PERSISTENCE_VENUES=<VENUE>` or `<VENUE>_WITHDRAWAL_COMPLETION_PERSISTENCE_ENABLED=true`
+
+When the checker attempts to persist `WITHDRAWAL_LEG_COMPLETED`, the gate refuses persistence unless runtime persistence is explicitly enabled for that venue and the latest venue smoke artifact is:
+
+- `status=COMPLETED`
+- `mappingObserved=COMPLETED`
+- `readOnly=true`
+- `persistedCompletionResult=false`
+- `redactionVerified=true`
+- non-synthetic: `selectedWithdrawal.synthetic=false`
+- unchanged reconciliation counts before and after the smoke
+- generated within `FUNDING_WITHDRAWAL_COMPLETION_SMOKE_MAX_AGE_HOURS`
+- produced by `LIVE_READ`
+- produced by a host listed in `<VENUE>_WITHDRAWAL_EVIDENCE_APPROVED_HOSTS` or `FUNDING_WITHDRAWAL_EVIDENCE_APPROVED_HOSTS`
+
+Operators can validate the same gate explicitly before enabling persistence:
+
+```bash
+npm run funding:withdrawal-completion-gate -- POLYMARKET
+npm run funding:polymarket-withdrawal-completion-gate
+npm run funding:limitless-withdrawal-completion-gate
+npm run funding:opinion-withdrawal-completion-gate
+npm run funding:myriad-withdrawal-completion-gate
+npm run funding:predictfun-withdrawal-completion-gate
+```
+
+The validator writes:
+
+```text
+artifacts/funding/<venue>-withdrawal-completion-persistence-gate.json
+artifacts/funding/<venue>-withdrawal-completion-persistence-gate.md
+```
+
+If this gate fails, `refreshWithdrawalStatus` must not persist `completed=true` for that venue even if the evidence checker returns `COMPLETED`.
+
+If this gate passes but runtime persistence is still disabled for the venue, `refreshWithdrawalStatus` must still refuse to persist `completed=true`. This is intentional: operators can validate readiness gates without turning on live completion persistence.
+
+To create a DB-backed submitted withdrawal route leg for a venue-specific evidence smoke test, run:
+
+```bash
+npm run funding:seed-withdrawal-evidence-smoke -- LIMITLESS
+npm run funding:seed-limitless-withdrawal-evidence-smoke
+```
+
+The seed command:
+
+- applies funding and withdrawal migrations idempotently
+- creates sandbox venue-ready funding through the funding service
+- creates a withdrawal intent through the withdrawal service
+- quotes and submits a fake sandbox user-broadcast tx hash
+- leaves the withdrawal leg in `VENUE_RELEASE_PENDING`
+- writes `artifacts/funding/<venue>-withdrawal-evidence-smoke-row-seed.json`
+- does not call the withdrawal evidence checker
+- does not persist withdrawal completion evidence
+- does not sign, broadcast, custody, or call live venue withdrawal execution
+
+After seeding, rerun the venue smoke command. If the smoke artifact still maps to `UNKNOWN`, `FAILED`, or any non-completed status, do not enable persistence for that venue. Persistence is only eligible for a later controlled pass when the read-only smoke maps exact venue-release and destination-receipt evidence to completion while preserving `persistedCompletionResult=false` and unchanged reconciliation counts.
 
 ### Pair-Route Funding-Enforcement Rehearsal
 

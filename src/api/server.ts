@@ -16,6 +16,7 @@ import { registerHealthRoute } from "./routes/health.js";
 import { registerMetricsRoute } from "./routes/metrics.js";
 import { registerFundingRoutes } from "./routes/funding.js";
 import { registerInternalPolymarketFundingBalanceRoute } from "./routes/internal-polymarket-funding-balance.js";
+import { registerInternalLimitlessWithdrawalEvidenceRoute } from "./routes/internal-limitless-withdrawal-evidence.js";
 import { registerRFQRoute } from "./routes/rfq.js";
 import { registerResolutionRiskRoutes } from "./routes/resolution-risk.js";
 import { createLPAuthMiddleware } from "../lp/lp-auth-middleware.js";
@@ -206,7 +207,14 @@ import {
   PolymarketFundingBalanceReadService,
   buildPolymarketFundingBalanceReadConfigFromEnv
 } from "../core/funding/polymarket-balance-read-service.js";
+import {
+  InternalWithdrawalEvidenceReadService
+} from "../core/funding/limitless-withdrawal-evidence-read-service.js";
 import { buildFundingVenueReadinessCheckersFromEnv } from "../core/funding/venue-readiness.js";
+import {
+  buildPolymarketWithdrawalEvidenceCheckerFromEnv,
+  buildWithdrawalCompletionPersistenceGateFromEnv
+} from "../core/funding/withdrawal-evidence.js";
 import { LifiRestClient, buildLifiClientConfigFromEnv } from "../integrations/lifi/lifi-client.js";
 
 export interface ServerDependencies {
@@ -333,11 +341,14 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       venueReadinessChecksEnabled: process.env.FUNDING_VENUE_READINESS_CHECKS_ENABLED === "true",
       env: process.env
     },
-    buildFundingVenueReadinessCheckersFromEnv(process.env)
+    buildFundingVenueReadinessCheckersFromEnv(process.env),
+    buildPolymarketWithdrawalEvidenceCheckerFromEnv(process.env),
+    buildWithdrawalCompletionPersistenceGateFromEnv(process.env)
   );
   const polymarketFundingBalanceReadService = new PolymarketFundingBalanceReadService(
     buildPolymarketFundingBalanceReadConfigFromEnv(process.env)
   );
+  const internalWithdrawalEvidenceReadService = new InternalWithdrawalEvidenceReadService({ env: process.env });
   const failureRecoveryManager = new FailureRecoveryManager(dependencies.pgPool);
   const executionControlRepository = new ExecutionControlRepository(dependencies.pgPool);
   const executionAuditWriter = new ExecutionAuditWriter(
@@ -884,10 +895,27 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     quoteIntent: (userId, fundingIntentId) => fundingService.quoteIntent(userId, fundingIntentId),
     submitRouteLeg: (userId, fundingIntentId, request) => fundingService.submitRouteLeg(userId, fundingIntentId, request),
     refreshIntentStatus: (userId, fundingIntentId) => fundingService.refreshIntentStatus(userId, fundingIntentId),
-    listVenueCapabilities: async () => fundingService.listVenueCapabilities()
+    listVenueCapabilities: async () => fundingService.listVenueCapabilities(),
+    listVenueBalances: (userId) => fundingService.listVenueBalances(userId),
+    createWithdrawalIntent: (userId, request) => fundingService.createWithdrawalIntent(userId, request),
+    getWithdrawalIntent: (userId, withdrawalIntentId) => fundingService.getWithdrawalIntent(userId, withdrawalIntentId),
+    quoteWithdrawalIntent: (userId, withdrawalIntentId) => fundingService.quoteWithdrawalIntent(userId, withdrawalIntentId),
+    submitWithdrawalRouteLeg: (userId, withdrawalIntentId, request) =>
+      fundingService.submitWithdrawalRouteLeg(userId, withdrawalIntentId, request),
+    refreshWithdrawalStatus: (userId, withdrawalIntentId) => fundingService.refreshWithdrawalStatus(userId, withdrawalIntentId)
   });
   await registerInternalPolymarketFundingBalanceRoute(app, polymarketFundingBalanceReadService, {
     bearerToken: process.env.POLYMARKET_FUNDING_READ_API_KEY,
+    nodeEnv: process.env.NODE_ENV
+  });
+  await registerInternalLimitlessWithdrawalEvidenceRoute(app, internalWithdrawalEvidenceReadService, {
+    bearerTokenByVenue: {
+      POLYMARKET: process.env.POLYMARKET_WITHDRAWAL_EVIDENCE_API_KEY,
+      LIMITLESS: process.env.LIMITLESS_WITHDRAWAL_EVIDENCE_API_KEY,
+      OPINION: process.env.OPINION_WITHDRAWAL_EVIDENCE_API_KEY,
+      MYRIAD: process.env.MYRIAD_WITHDRAWAL_EVIDENCE_API_KEY,
+      PREDICT_FUN: process.env.PREDICT_FUN_WITHDRAWAL_EVIDENCE_API_KEY
+    },
     nodeEnv: process.env.NODE_ENV
   });
   await registerResolutionRiskRoutes(app, {

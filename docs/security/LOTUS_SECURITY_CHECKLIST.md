@@ -50,6 +50,35 @@ Before enabling funding runtime beyond local/sandbox:
 - Run `npm run funding:pair-enforcement-gate` before changing any pair-route funding enforcement flag; it must pass without overrides unless an operator explicitly documents a shorter or longer freshness window.
 - Run the route-specific gate, such as `npm run funding:opinion-enforcement-gate`, before changing any single-venue funding enforcement setting for that venue; every venue in the route path must have fresh persisted `READY_TO_TRADE` evidence.
 - Run `npm run funding:venue-gate-summary` before any sandbox funding-enforcement rollout; every venue required by the route must be `PASSED` and fresh in the summary.
+- Run `npm run funding:route-enforcement-ready -- <ROUTE_OR_LANE_ID>` before enabling sandbox funding enforcement for a specific route scope; it must pass using the all-venue summary plus a route-specific rehearsal artifact.
+- For tri-route funding enforcement, run `npm run funding:tri-readiness-sandbox-preflight` and `npm run funding:route-enforcement-ready:tri`; both must pass and remain fresh.
+- For strict-all funding enforcement, run `npm run funding:strict-all-readiness-sandbox-preflight` and `npm run funding:route-enforcement-ready:strict-all`; both must pass and remain fresh.
+- If the route/lane id is ambiguous or includes `PREDICT` without `PREDICT_FUN`, set `FUNDING_ROUTE_REQUIRED_VENUES` explicitly; do not treat Predict.fun as interchangeable with any other Predict venue.
+
+Withdrawal v0 gate:
+
+- Withdrawal v0 is Model A non-custodial: Lotus creates withdrawal records, route previews, and user-broadcast tx hash records only.
+- Do not add or enable backend signing, backend broadcast, live venue withdrawal API calls, or custody/vault behavior without a separate security review.
+- Withdrawal quote must require persisted venue-ready balance for the exact user, venue, token, and amount.
+- Withdrawal quote must fail closed when `supportsWithdrawal=false`, venue capability is unknown, balance is insufficient, destination wallet is invalid, or the quote is stale.
+- Multi-source withdrawals must preserve per-source/leg state; do not treat partial withdrawal success as aggregate completion.
+- Withdrawal responses must not return API keys, auth headers, private keys, raw provider payloads, LI.FI `transactionRequest` internals, or venue withdrawal internals.
+- Withdrawal endpoints must not mutate funding readiness records directly.
+- Run `npm run funding:withdrawal-sandbox-rehearsal` before considering live withdrawal execution; the artifact must be `COMPLETED`, fresh for the intended deployment window, redacted, and explicitly reviewed by an operator.
+- Live withdrawal execution remains blocked if `artifacts/funding/withdrawal-sandbox-rehearsal.json` is missing, stale, failed, or shows any safety flag inconsistent with Model A non-custodial behavior.
+- Run `npm run funding:withdrawal-completion-sandbox-rehearsal` before building a live withdrawal adapter; the artifact must be `COMPLETED`, fresh, redacted, and show `venueReleased=true`, `destinationReceived=true`, and `completed=true`.
+- Withdrawal completion must require explicit venue-release and destination-receipt evidence. A user tx hash, venue release alone, or ambiguous provider response must not mark a withdrawal complete.
+- Completed withdrawals must continue reducing available venue-ready balance unless the withdrawal is failed or cancelled; otherwise users could withdraw the same venue-ready capital twice.
+- The first real withdrawal evidence adapter should be Polymarket-only, read-only, disabled by default, and fail-closed. It must consume a normalized operator-approved evidence read service, not raw venue internals.
+- Withdrawal evidence env vars must stay disabled by default. Incomplete config must not persist completion.
+- Do not persist `WITHDRAWAL_LEG_COMPLETED` unless the evidence matches the submitted withdrawal tx hash, exact destination wallet, exact chain, exact token, sufficient amount, and minimum confirmations.
+- Before enabling any venue withdrawal evidence checker for persistence, run the matching read-only smoke command and review the fresh artifact: `funding:polymarket-withdrawal-evidence-smoke`, `funding:limitless-withdrawal-evidence-smoke`, `funding:opinion-withdrawal-evidence-smoke`, `funding:myriad-withdrawal-evidence-smoke`, or `funding:predictfun-withdrawal-evidence-smoke`.
+- Smoke artifacts must show `readOnly=true`, `persistedCompletionResult=false`, `redactionVerified=true`, and unchanged reconciliation counts for real DB rows. Synthetic-row smoke results are useful for parser/read-service validation but are not enough to approve persistence for real user withdrawals.
+- `FUNDING_WITHDRAWAL_COMPLETION_PERSISTENCE_GATE_ENABLED` must remain true for any environment where a withdrawal evidence checker can persist completion.
+- `FUNDING_WITHDRAWAL_COMPLETION_PERSISTENCE_ENABLED` must remain false until one venue is explicitly selected for a controlled persistence test.
+- Completion persistence must also be scoped to the selected venue by `FUNDING_WITHDRAWAL_COMPLETION_PERSISTENCE_VENUES=<VENUE>` or `<VENUE>_WITHDRAWAL_COMPLETION_PERSISTENCE_ENABLED=true`; do not enable all venues at once.
+- Before allowing `WITHDRAWAL_LEG_COMPLETED` persistence for a venue, run `npm run funding:withdrawal-completion-gate -- <VENUE>` or the venue alias. The gate must pass using a fresh, `COMPLETED`, redacted, non-synthetic smoke artifact from an operator-approved evidence host.
+- Configure `<VENUE>_WITHDRAWAL_EVIDENCE_APPROVED_HOSTS` or `FUNDING_WITHDRAWAL_EVIDENCE_APPROVED_HOSTS` before considering live completion persistence; an unapproved evidence host must block persistence.
 
 ## 3. LiFi Integration Checklist
 

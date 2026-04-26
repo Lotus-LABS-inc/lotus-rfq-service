@@ -30,6 +30,7 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
   const predictFunPreferredChain = envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_CHAIN") ?? "POLYGON";
   const predictFunPreferredChainId = Number.parseInt(envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_CHAIN_ID") ?? "137", 10);
   const predictFunUsdcAddress = envValue(env, "PREDICT_FUN_USDC_TOKEN_ADDRESS") ?? polygonUsdcAddress;
+  const supportsWithdrawal = (venue: FundingVenue): boolean => envValue(env, `${venue}_FUNDING_WITHDRAWALS_ENABLED`) === "true";
 
   return {
     POLYMARKET: {
@@ -46,7 +47,7 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       autoCreditSupported: false,
       requiresFinalizationStep: true,
       supportsDirectDeposit: true,
-      supportsWithdrawal: false,
+      supportsWithdrawal: supportsWithdrawal("POLYMARKET"),
       readinessStatus: polymarketDepositAddress ? "READY" : "DISABLED",
       depositAddressConfigured: Boolean(polymarketDepositAddress),
       notes: polymarketDepositAddress
@@ -67,7 +68,7 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       autoCreditSupported: false,
       requiresFinalizationStep: true,
       supportsDirectDeposit: true,
-      supportsWithdrawal: false,
+      supportsWithdrawal: supportsWithdrawal("LIMITLESS"),
       readinessStatus: limitlessDepositAddress ? "READY" : "DISABLED",
       depositAddressConfigured: Boolean(limitlessDepositAddress),
       notes: limitlessDepositAddress
@@ -81,6 +82,7 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       preferredChainId: opinionPreferredChainId,
       preferredTokenAddress: opinionUsdcAddress,
       sourceTokenAddressByChain: { SOLANA: solanaUsdcAddress },
+      supportsWithdrawal: supportsWithdrawal("OPINION"),
       configuredNote: "Opinion funding quote path is configured for Solana USDC to the operator-approved Opinion funding destination.",
       missingNote: "Set OPINION_FUNDING_DESTINATION_ADDRESS before enabling Opinion funding quotes."
     }),
@@ -91,6 +93,7 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       preferredChainId: myriadPreferredChainId,
       preferredTokenAddress: myriadUsdcAddress,
       sourceTokenAddressByChain: { SOLANA: solanaUsdcAddress },
+      supportsWithdrawal: supportsWithdrawal("MYRIAD"),
       configuredNote: "Myriad funding quote path is configured for Solana USDC to the operator-approved Myriad funding destination.",
       missingNote: "Set MYRIAD_FUNDING_DESTINATION_ADDRESS before enabling Myriad funding quotes."
     }),
@@ -101,6 +104,7 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       preferredChainId: predictFunPreferredChainId,
       preferredTokenAddress: predictFunUsdcAddress,
       sourceTokenAddressByChain: { SOLANA: solanaUsdcAddress },
+      supportsWithdrawal: supportsWithdrawal("PREDICT_FUN"),
       configuredNote: "Predict.fun funding quote path is configured for Solana USDC to the operator-approved Predict.fun funding destination.",
       missingNote: "Set PREDICT_FUN_FUNDING_DESTINATION_ADDRESS before enabling Predict.fun funding quotes; do not confuse Predict.fun with PredictIt."
     })
@@ -133,6 +137,7 @@ const configurableCapability = (input: {
   preferredChainId: number;
   preferredTokenAddress: string;
   sourceTokenAddressByChain: Record<string, string>;
+  supportsWithdrawal: boolean;
   configuredNote: string;
   missingNote: string;
 }): VenueCapability => ({
@@ -147,7 +152,7 @@ const configurableCapability = (input: {
   autoCreditSupported: false,
   requiresFinalizationStep: true,
   supportsDirectDeposit: true,
-  supportsWithdrawal: false,
+  supportsWithdrawal: input.supportsWithdrawal,
   readinessStatus: input.depositAddress ? "READY" : "DISABLED",
   depositAddressConfigured: Boolean(input.depositAddress),
   notes: input.depositAddress ? input.configuredNote : input.missingNote

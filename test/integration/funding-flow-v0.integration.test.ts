@@ -9,8 +9,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { FundingReadinessAdminService } from "../../src/api/admin/funding-readiness-admin-service.js";
 import { registerAdminFundingReadinessRoutes } from "../../src/api/admin/funding-readiness.routes.js";
-import { createAdminAuthMiddleware } from "../../src/api/user-auth-middleware.js";
-import { FundingReadinessChecker, FundingService } from "../../src/core/funding/funding-service.js";
+import { registerFundingRoutes } from "../../src/api/routes/funding.js";
+import { createAdminAuthMiddleware, createUserAuthMiddleware } from "../../src/api/user-auth-middleware.js";
+import {
+  FundingReadinessChecker,
+  FundingService,
+  type WithdrawalCompletionEvidenceChecker,
+  type WithdrawalCompletionEvidenceResult
+} from "../../src/core/funding/funding-service.js";
 import type { FundingRouteQuote } from "../../src/core/funding/types.js";
 import {
   PolymarketFundingReadinessChecker,
@@ -37,6 +43,10 @@ const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const ENV_READY = Boolean(TEST_DB_URL);
 const fundingEnv = {
   POLYMARKET_FUNDING_DESTINATION_ADDRESS: "0x1111111111111111111111111111111111111111"
+} as NodeJS.ProcessEnv;
+const withdrawalEnv = {
+  ...fundingEnv,
+  POLYMARKET_FUNDING_WITHDRAWALS_ENABLED: "true"
 } as NodeJS.ProcessEnv;
 
 class MockLifiProvider implements LifiRouteProvider {
@@ -77,6 +87,21 @@ class MockPolymarketBalanceReadClient implements PolymarketFundingBalanceReadCli
 
   public async fetchUsableUsdcBalance(): Promise<{ usableBalance: string; raw?: Record<string, unknown> }> {
     return { usableBalance: this.usableBalance, raw: { source: "db-integration-test" } };
+  }
+}
+
+class MockWithdrawalCompletionChecker implements WithdrawalCompletionEvidenceChecker {
+  public result: WithdrawalCompletionEvidenceResult = {
+    status: "UNKNOWN",
+    venueReleased: false,
+    destinationReceived: false,
+    completed: false,
+    reason: "MOCK_UNKNOWN",
+    evidence: { source: "db-integration-test" }
+  };
+
+  public async check(): Promise<WithdrawalCompletionEvidenceResult> {
+    return this.result;
   }
 }
 
@@ -151,17 +176,48 @@ const buildAdminFundingReadinessApp = async (repository: FundingRepository) => {
   return app;
 };
 
+const buildUserFundingApp = async (fundingService: FundingService) => {
+  const app = Fastify({ logger: false });
+  await app.register(fastifyJwt, { secret: "test-secret" });
+  await registerFundingRoutes(app, createUserAuthMiddleware(), {
+    createIntent: (userId, request) => fundingService.createIntent(userId, request),
+    getIntent: (userId, fundingIntentId) => fundingService.getIntent(userId, fundingIntentId),
+    quoteIntent: (userId, fundingIntentId) => fundingService.quoteIntent(userId, fundingIntentId),
+    submitRouteLeg: (userId, fundingIntentId, request) => fundingService.submitRouteLeg(userId, fundingIntentId, request),
+    refreshIntentStatus: (userId, fundingIntentId) => fundingService.refreshIntentStatus(userId, fundingIntentId),
+    listVenueCapabilities: async () => fundingService.listVenueCapabilities(),
+    listVenueBalances: (userId) => fundingService.listVenueBalances(userId),
+    createWithdrawalIntent: (userId, request) => fundingService.createWithdrawalIntent(userId, request),
+    getWithdrawalIntent: (userId, withdrawalIntentId) => fundingService.getWithdrawalIntent(userId, withdrawalIntentId),
+    quoteWithdrawalIntent: (userId, withdrawalIntentId) => fundingService.quoteWithdrawalIntent(userId, withdrawalIntentId),
+    submitWithdrawalRouteLeg: (userId, withdrawalIntentId, request) =>
+      fundingService.submitWithdrawalRouteLeg(userId, withdrawalIntentId, request),
+    refreshWithdrawalStatus: (userId, withdrawalIntentId) => fundingService.refreshWithdrawalStatus(userId, withdrawalIntentId)
+  });
+  return app;
+};
+
 const applyFundingMigration = async (pool: Pool): Promise<void> => {
   const sql = await readFile(
     path.resolve(process.cwd(), "sql", "migrations", "2026_04_25_create_funding_flow_v0_tables.sql"),
     "utf8"
   );
   await pool.query(sql);
+  const withdrawalSql = await readFile(
+    path.resolve(process.cwd(), "sql", "migrations", "2026_04_26_create_funding_withdrawal_v0_tables.sql"),
+    "utf8"
+  );
+  await pool.query(withdrawalSql);
 };
 
 const clearFundingTables = async (pool: Pool): Promise<void> => {
   await pool.query(
     `TRUNCATE TABLE
+      funding_withdrawal_audit_events,
+      funding_withdrawal_reconciliation_records,
+      funding_withdrawal_route_legs,
+      funding_withdrawal_sources,
+      funding_withdrawal_intents,
       funding_audit_events,
       funding_reconciliation_records,
       funding_route_legs,
@@ -375,6 +431,378 @@ describe.skipIf(!ENV_READY)("Funding flow v0 DB integration", () => {
 
     const disabledPreflight = buildPreflight(new FundingReadinessChecker(service, false));
     await expect(disabledPreflight.evaluate({ request: executionRequest(userId), scopeBinding })).resolves.toMatchObject({ ok: true });
+  });
+
+  it("persists withdrawal create -> quote -> submit using venue-ready funding rows without mutating readiness", async () => {
+    const userId = `withdrawal-user-${randomUUID()}`;
+    const createdFunding = await service.createIntent(userId, {
+      sourceChain: "SOLANA",
+      sourceToken: "USDC",
+      sourceAmount: "100",
+      sourceWalletAddress: "solana-wallet-address",
+      idempotencyKey: `funding-for-withdrawal-${randomUUID()}`,
+      targets: [{ targetVenue: "POLYMARKET", targetPercentage: 100 }]
+    });
+    const quotedFunding = await service.quoteIntent(userId, createdFunding.intent.fundingIntentId);
+    await service.submitRouteLeg(userId, createdFunding.intent.fundingIntentId, {
+      routeLegId: quotedFunding.routeLegs[0]!.routeLegId,
+      txHash: `0x${"f".repeat(64)}`
+    });
+    polymarketBalance.usableBalance = "100";
+    await service.refreshIntentStatus(userId, createdFunding.intent.fundingIntentId);
+
+    const withdrawalService = new FundingService(repository, lifi, {
+      lifiQuotesEnabled: true,
+      liveSubmitEnabled: false,
+      venueReadinessChecksEnabled: false,
+      env: withdrawalEnv
+    });
+    const balancesBefore = await withdrawalService.listVenueBalances(userId);
+    expect(balancesBefore).toMatchObject([{
+      venue: "POLYMARKET",
+      token: "USDC",
+      readyAmount: "100",
+      pendingWithdrawalAmount: "0",
+      availableAmount: "100"
+    }]);
+
+    const withdrawal = await withdrawalService.createWithdrawalIntent(userId, {
+      token: "USDC",
+      amount: "50",
+      destinationChain: "POLYGON",
+      destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+      idempotencyKey: `withdrawal-${randomUUID()}`,
+      sources: [{ sourceVenue: "POLYMARKET", sourcePercentage: 100 }]
+    });
+    expect(withdrawal.intent.status).toBe("WITHDRAWAL_CREATED");
+
+    const quotedWithdrawal = await withdrawalService.quoteWithdrawalIntent(userId, withdrawal.intent.withdrawalIntentId);
+    expect(quotedWithdrawal.intent.status).toBe("USER_SIGNATURE_REQUIRED");
+    expect(quotedWithdrawal.routeLegs[0]).toMatchObject({
+      sourceVenue: "POLYMARKET",
+      routeProvider: "LOTUS_WITHDRAWAL_V0",
+      status: "WITHDRAWAL_LEG_SIGNATURE_REQUIRED",
+      destinationWalletAddress: "0x1111111111111111111111111111111111111111"
+    });
+    expect(quotedWithdrawal.routeLegs[0]!.routeQuote.transactionRequest).toBeNull();
+    expect(JSON.stringify(quotedWithdrawal)).not.toContain("authorization");
+    expect(JSON.stringify(quotedWithdrawal)).not.toContain("privateKey");
+    expect(JSON.stringify(quotedWithdrawal)).not.toContain("apiKey");
+
+    const submitted = await withdrawalService.submitWithdrawalRouteLeg(userId, withdrawal.intent.withdrawalIntentId, {
+      withdrawalRouteLegId: quotedWithdrawal.routeLegs[0]!.withdrawalRouteLegId,
+      txHash: `0x${"9".repeat(64)}`
+    });
+    expect(submitted.intent.status).toBe("WITHDRAWING");
+    expect(submitted.routeLegs[0]).toMatchObject({
+      status: "VENUE_RELEASE_PENDING",
+      venueReleaseStatus: "PENDING"
+    });
+
+    const balancesAfter = await withdrawalService.listVenueBalances(userId);
+    expect(balancesAfter[0]).toMatchObject({
+      readyAmount: "100",
+      pendingWithdrawalAmount: "50",
+      availableAmount: "50"
+    });
+    await expect(withdrawalService.createWithdrawalIntent(userId, {
+      token: "USDC",
+      amount: "60",
+      destinationChain: "POLYGON",
+      destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+      idempotencyKey: `withdrawal-over-reserve-${randomUUID()}`,
+      sources: [{ sourceVenue: "POLYMARKET", sourcePercentage: 100 }]
+    })).rejects.toMatchObject({ code: "WITHDRAWAL_SOURCE_BALANCE_INSUFFICIENT" });
+
+    const readinessRows = await repository.listAdminReadinessRows({ fundingIntentId: createdFunding.intent.fundingIntentId });
+    expect(readinessRows[0]).toMatchObject({
+      readyToTrade: true
+    });
+    const fundingReconciliations = await pool.query<{ count: string }>(
+      "SELECT count(*)::text FROM funding_reconciliation_records WHERE funding_intent_id = $1::uuid",
+      [createdFunding.intent.fundingIntentId]
+    );
+    expect(fundingReconciliations.rows[0]!.count).toBe("1");
+
+    const withdrawalAudit = await pool.query<{ event_type: string }>(
+      `SELECT event_type
+         FROM funding_withdrawal_audit_events
+        WHERE withdrawal_intent_id = $1::uuid
+        ORDER BY created_at ASC`,
+      [withdrawal.intent.withdrawalIntentId]
+    );
+    expect(withdrawalAudit.rows.map((row) => row.event_type)).toEqual([
+      "WITHDRAWAL_INTENT_CREATED",
+      "WITHDRAWAL_ROUTES_QUOTED",
+      "WITHDRAWAL_USER_SIGNATURE_REQUIRED",
+      "WITHDRAWAL_LEG_SUBMITTED"
+    ]);
+  });
+
+  it("rehearses withdrawal UI/API flow against seeded venue-ready balances", async () => {
+    const userId = `withdrawal-api-user-${randomUUID()}`;
+    const createdFunding = await service.createIntent(userId, {
+      sourceChain: "SOLANA",
+      sourceToken: "USDC",
+      sourceAmount: "100",
+      sourceWalletAddress: "solana-wallet-address",
+      idempotencyKey: `funding-for-withdrawal-api-${randomUUID()}`,
+      targets: [{ targetVenue: "POLYMARKET", targetPercentage: 100 }]
+    });
+    const quotedFunding = await service.quoteIntent(userId, createdFunding.intent.fundingIntentId);
+    await service.submitRouteLeg(userId, createdFunding.intent.fundingIntentId, {
+      routeLegId: quotedFunding.routeLegs[0]!.routeLegId,
+      txHash: `0x${"8".repeat(64)}`
+    });
+    polymarketBalance.usableBalance = "100";
+    await service.refreshIntentStatus(userId, createdFunding.intent.fundingIntentId);
+
+    const withdrawalService = new FundingService(repository, lifi, {
+      lifiQuotesEnabled: true,
+      liveSubmitEnabled: false,
+      venueReadinessChecksEnabled: false,
+      env: withdrawalEnv
+    });
+    const app = await buildUserFundingApp(withdrawalService);
+    try {
+      const token = app.jwt.sign({ userId, role: "USER" });
+      const otherUserToken = app.jwt.sign({ userId: `other-${randomUUID()}`, role: "USER" });
+      const headers = { authorization: `Bearer ${token}` };
+
+      const balances = await app.inject({ method: "GET", url: "/funding/venue-balances", headers });
+      expect(balances.statusCode).toBe(200);
+      expect(balances.json()).toMatchObject({
+        balances: [{
+          venue: "POLYMARKET",
+          token: "USDC",
+          readyAmount: "100",
+          pendingWithdrawalAmount: "0",
+          availableAmount: "100"
+        }]
+      });
+
+      const createdWithdrawal = await app.inject({
+        method: "POST",
+        url: "/funding/withdrawals",
+        headers,
+        payload: {
+          token: "USDC",
+          amount: "40",
+          destinationChain: "POLYGON",
+          destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+          idempotencyKey: `withdrawal-api-${randomUUID()}`,
+          sources: [{ sourceVenue: "POLYMARKET", sourcePercentage: 100 }]
+        }
+      });
+      expect(createdWithdrawal.statusCode).toBe(201);
+      const createdWithdrawalBody = createdWithdrawal.json() as { withdrawalIntentId: string; currentStatus: string };
+      expect(createdWithdrawalBody.currentStatus).toBe("WITHDRAWAL_CREATED");
+
+      const crossUserRead = await app.inject({
+        method: "GET",
+        url: `/funding/withdrawals/${createdWithdrawalBody.withdrawalIntentId}`,
+        headers: { authorization: `Bearer ${otherUserToken}` }
+      });
+      expect(crossUserRead.statusCode).toBe(403);
+
+      const quotedWithdrawal = await app.inject({
+        method: "POST",
+        url: `/funding/withdrawals/${createdWithdrawalBody.withdrawalIntentId}/quote`,
+        headers
+      });
+      expect(quotedWithdrawal.statusCode).toBe(200);
+      const quotedWithdrawalBody = quotedWithdrawal.json() as {
+        currentStatus: string;
+        routeLegs: Array<{ withdrawalRouteLegId: string; routeQuote: { transactionRequest: unknown } }>;
+      };
+      expect(quotedWithdrawalBody.currentStatus).toBe("USER_SIGNATURE_REQUIRED");
+      expect(quotedWithdrawalBody.routeLegs[0]!.routeQuote.transactionRequest).toBeNull();
+
+      const submittedWithdrawal = await app.inject({
+        method: "POST",
+        url: `/funding/withdrawals/${createdWithdrawalBody.withdrawalIntentId}/submit`,
+        headers,
+        payload: {
+          withdrawalRouteLegId: quotedWithdrawalBody.routeLegs[0]!.withdrawalRouteLegId,
+          txHash: `0x${"7".repeat(64)}`
+        }
+      });
+      expect(submittedWithdrawal.statusCode).toBe(202);
+      expect(submittedWithdrawal.json()).toMatchObject({
+        currentStatus: "WITHDRAWING",
+        routeLegs: [{ status: "VENUE_RELEASE_PENDING", venueReleaseStatus: "PENDING" }]
+      });
+
+      const status = await app.inject({
+        method: "GET",
+        url: `/funding/withdrawals/${createdWithdrawalBody.withdrawalIntentId}/status`,
+        headers
+      });
+      expect(status.statusCode).toBe(200);
+      expect(status.json()).toMatchObject({ currentStatus: "WITHDRAWING" });
+
+      const balancesAfter = await app.inject({ method: "GET", url: "/funding/venue-balances", headers });
+      expect(balancesAfter.statusCode).toBe(200);
+      expect(balancesAfter.json()).toMatchObject({
+        balances: [{
+          venue: "POLYMARKET",
+          token: "USDC",
+          readyAmount: "100",
+          pendingWithdrawalAmount: "40",
+          availableAmount: "60"
+        }]
+      });
+
+      const serialized = `${balances.body}${createdWithdrawal.body}${quotedWithdrawal.body}${submittedWithdrawal.body}${status.body}`;
+      expect(serialized).not.toContain("authorization");
+      expect(serialized).not.toContain("privateKey");
+      expect(serialized).not.toContain("apiKey");
+      expect(serialized).not.toContain("server-side-secret");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("persists withdrawal completion reconciliation from mocked exact evidence", async () => {
+    const userId = `withdrawal-completion-${randomUUID()}`;
+    const createdFunding = await service.createIntent(userId, {
+      sourceChain: "SOLANA",
+      sourceToken: "USDC",
+      sourceAmount: "100",
+      sourceWalletAddress: "solana-wallet-address",
+      idempotencyKey: `funding-for-withdrawal-completion-${randomUUID()}`,
+      targets: [{ targetVenue: "POLYMARKET", targetPercentage: 100 }]
+    });
+    const quotedFunding = await service.quoteIntent(userId, createdFunding.intent.fundingIntentId);
+    await service.submitRouteLeg(userId, createdFunding.intent.fundingIntentId, {
+      routeLegId: quotedFunding.routeLegs[0]!.routeLegId,
+      txHash: `0x${"6".repeat(64)}`
+    });
+    polymarketBalance.usableBalance = "100";
+    await service.refreshIntentStatus(userId, createdFunding.intent.fundingIntentId);
+
+    const completionChecker = new MockWithdrawalCompletionChecker();
+    const withdrawalService = new FundingService(
+      repository,
+      lifi,
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        venueReadinessChecksEnabled: false,
+        env: withdrawalEnv
+      },
+      new Map(),
+      completionChecker
+    );
+    const withdrawal = await withdrawalService.createWithdrawalIntent(userId, {
+      token: "USDC",
+      amount: "40",
+      destinationChain: "POLYGON",
+      destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+      idempotencyKey: `withdrawal-completion-${randomUUID()}`,
+      sources: [{ sourceVenue: "POLYMARKET", sourcePercentage: 100 }]
+    });
+    const quotedWithdrawal = await withdrawalService.quoteWithdrawalIntent(userId, withdrawal.intent.withdrawalIntentId);
+    const withdrawalTxHash = `0x${"5".repeat(64)}`;
+    await withdrawalService.submitWithdrawalRouteLeg(userId, withdrawal.intent.withdrawalIntentId, {
+      withdrawalRouteLegId: quotedWithdrawal.routeLegs[0]!.withdrawalRouteLegId,
+      txHash: withdrawalTxHash
+    });
+
+    completionChecker.result = {
+      status: "VENUE_RELEASED",
+      venueReleased: true,
+      destinationReceived: false,
+      completed: false,
+      withdrawalTxHash,
+      reason: "SANDBOX_VENUE_RELEASED",
+      evidence: { source: "mock_completion_checker", rawProviderPayloadIncluded: false }
+    };
+    const released = await withdrawalService.refreshWithdrawalStatus(userId, withdrawal.intent.withdrawalIntentId);
+    expect(released.intent.status).toBe("WITHDRAWING");
+    expect(released.routeLegs[0]).toMatchObject({
+      status: "DESTINATION_PENDING",
+      venueReleaseStatus: "CONFIRMED",
+      destinationStatus: "PENDING"
+    });
+
+    completionChecker.result = {
+      status: "COMPLETED",
+      venueReleased: true,
+      destinationReceived: true,
+      completed: true,
+      withdrawalTxHash,
+      destinationChain: "POLYGON",
+      destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+      token: "USDC",
+      amount: "40",
+      reason: "SANDBOX_DESTINATION_CONFIRMED",
+      evidence: { source: "mock_completion_checker", confirmationCount: 1 }
+    };
+    const completed = await withdrawalService.refreshWithdrawalStatus(userId, withdrawal.intent.withdrawalIntentId);
+    expect(completed.intent.status).toBe("COMPLETED");
+    expect(completed.routeLegs[0]).toMatchObject({
+      status: "WITHDRAWAL_LEG_COMPLETED",
+      venueReleaseStatus: "CONFIRMED",
+      destinationStatus: "CONFIRMED"
+    });
+    expect(completed.reconciliations[0]).toMatchObject({
+      sourceVenue: "POLYMARKET",
+      withdrawalTxHash,
+      venueReleased: true,
+      destinationReceived: true,
+      completed: true,
+      notes: "SANDBOX_DESTINATION_CONFIRMED"
+    });
+
+    const reconciliationRows = await pool.query<{
+      venue_released: boolean;
+      destination_received: boolean;
+      completed: boolean;
+      notes: string;
+    }>(
+      `SELECT venue_released, destination_received, completed, notes
+         FROM funding_withdrawal_reconciliation_records
+        WHERE withdrawal_intent_id = $1::uuid
+        ORDER BY checked_at DESC`,
+      [withdrawal.intent.withdrawalIntentId]
+    );
+    expect(reconciliationRows.rows).toHaveLength(2);
+    expect(reconciliationRows.rows[0]).toMatchObject({
+      venue_released: true,
+      destination_received: true,
+      completed: true,
+      notes: "SANDBOX_DESTINATION_CONFIRMED"
+    });
+
+    const balancesAfterCompletion = await withdrawalService.listVenueBalances(userId);
+    expect(balancesAfterCompletion[0]).toMatchObject({
+      readyAmount: "100",
+      pendingWithdrawalAmount: "40",
+      availableAmount: "60"
+    });
+
+    const audit = await pool.query<{ event_type: string; payload: Record<string, unknown> }>(
+      `SELECT event_type, payload
+         FROM funding_withdrawal_audit_events
+        WHERE withdrawal_intent_id = $1::uuid
+        ORDER BY created_at ASC`,
+      [withdrawal.intent.withdrawalIntentId]
+    );
+    expect(audit.rows.map((row) => row.event_type)).toEqual([
+      "WITHDRAWAL_INTENT_CREATED",
+      "WITHDRAWAL_ROUTES_QUOTED",
+      "WITHDRAWAL_USER_SIGNATURE_REQUIRED",
+      "WITHDRAWAL_LEG_SUBMITTED",
+      "WITHDRAWAL_VENUE_RELEASED",
+      "WITHDRAWAL_LEG_COMPLETED",
+      "WITHDRAWAL_COMPLETED"
+    ]);
+    const serialized = JSON.stringify({ view: completed, audit: audit.rows });
+    expect(serialized).not.toContain("0x1234");
+    expect(serialized).not.toContain("authorization");
+    expect(serialized).not.toContain("privateKey");
+    expect(serialized).not.toContain("server-side-secret");
   });
 
   it("keeps execution funding enforcement disabled by default and blocks until exact venue funds are ready when enabled", async () => {

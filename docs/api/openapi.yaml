@@ -24,6 +24,8 @@ info:
     - Execution preflight requires READY_TO_TRADE.
     - Funding Capability Matrix decides target chain/token/destination for capital movement.
     - Market Capability Matrix remains separate and decides market lane routeability/operator approval.
+    - Withdrawal v0 is also non-custodial: Lotus records withdrawal intents, route previews, and user-broadcast tx hashes only.
+    - Withdrawal quote/submit endpoints do not call live venue withdrawal APIs, do not sign, and do not broadcast transactions.
     - Predict.fun is not PredictIt.
 servers:
   - url: http://localhost:3000
@@ -2407,6 +2409,109 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/FundingIntent" }
         "404": { $ref: "#/components/responses/Error" }
+  /funding/venue-balances:
+    get:
+      tags: [Funding]
+      summary: Read frontend-safe venue-ready balances for the authenticated user.
+      description: Returns a derived capital view from persisted READY_TO_TRADE funding records minus active withdrawal amounts. It does not imply Lotus custody or pooled balances.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: none
+      x-lotus-danger: low
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/VenueBalances" }
+        "401": { $ref: "#/components/responses/Error" }
+  /funding/withdrawals:
+    post:
+      tags: [Funding]
+      summary: Create a split-capable withdrawal intent.
+      description: Creates a non-custodial withdrawal intent from venue-ready capital. Lotus does not custody, sign, broadcast, call live venue withdrawal APIs, or mutate funding readiness records.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: funding-withdrawal-intent
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWithdrawalIntentRequest"
+      responses:
+        "201": { $ref: "#/components/responses/WithdrawalIntent" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /funding/withdrawals/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Funding]
+      summary: Read an owned withdrawal intent.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/WithdrawalIntent" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /funding/withdrawals/{id}/quote:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Funding]
+      summary: Quote non-custodial withdrawal route legs.
+      description: Creates a frontend-safe withdrawal preview using Lotus withdrawal v0 scaffolding. It fails closed when venue withdrawal capability is disabled, source venue-ready balance is insufficient, destination wallet is invalid, or capability state is unknown.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: funding-withdrawal-intent
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/WithdrawalIntent" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /funding/withdrawals/{id}/submit:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [Funding]
+      summary: Record a user-broadcast withdrawal transaction hash.
+      description: Backend records the tx hash after the user signs/broadcasts. This does not submit a transaction, call a venue withdrawal API, or move funds from Lotus custody.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: funding-withdrawal-intent
+      x-lotus-danger: high
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitWithdrawalRouteLegRequest"
+      responses:
+        "202": { $ref: "#/components/responses/WithdrawalIntent" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /funding/withdrawals/{id}/status:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Funding]
+      summary: Read frontend-safe aggregate and per-leg withdrawal status.
+      description: Status read is non-custodial and does not run live venue withdrawal mutation.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: none
+      x-lotus-danger: low
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/WithdrawalIntent" }
+        "404": { $ref: "#/components/responses/Error" }
   /funding/venues/capabilities:
     get:
       tags: [Funding]
@@ -2427,9 +2532,9 @@ paths:
                 type: object
                 required: [capabilities]
                 properties:
-                capabilities:
-                  type: array
-                  items: { $ref: "#/components/schemas/VenueCapability" }
+                  capabilities:
+                    type: array
+                    items: { $ref: "#/components/schemas/VenueCapability" }
   /internal/polymarket/funding-balance:
     get:
       tags: [Internal Funding]
@@ -2773,6 +2878,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/FundingIntentResponse"
+    VenueBalances:
+      description: Frontend-safe derived venue-ready balance rows.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/VenueBalanceListResponse"
+    WithdrawalIntent:
+      description: Frontend-safe withdrawal intent response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/WithdrawalIntentResponse"
     AdminFundingReadinessList:
       description: Read-only admin funding readiness rows.
       content:
@@ -3242,6 +3359,158 @@ components:
         currentStatus: { type: string }
         routePreview:
           $ref: "#/components/schemas/FundingRoutePreview"
+    VenueBalance:
+      type: object
+      additionalProperties: false
+      required: [userId, venue, token, readyAmount, pendingWithdrawalAmount, availableAmount, lastReadyAt]
+      properties:
+        userId: { type: string }
+        venue: { $ref: "#/components/schemas/Venue" }
+        token: { type: string }
+        readyAmount:
+          type: string
+          description: Persisted READY_TO_TRADE venue-ready amount for this user/venue/token.
+        pendingWithdrawalAmount:
+          type: string
+          description: Active withdrawal amount already created/submitted from this venue/token.
+        availableAmount:
+          type: string
+          description: Derived display amount equal to readyAmount minus active withdrawal amount. This is not a custodial pooled balance.
+        lastReadyAt:
+          type: string
+          format: date-time
+          nullable: true
+    VenueBalanceListResponse:
+      type: object
+      additionalProperties: false
+      required: [balances]
+      properties:
+        balances:
+          type: array
+          items: { $ref: "#/components/schemas/VenueBalance" }
+    WithdrawalStatus:
+      type: string
+      enum:
+        - WITHDRAWAL_CREATED
+        - WITHDRAWAL_QUOTED
+        - USER_SIGNATURE_REQUIRED
+        - USER_SIGNED
+        - WITHDRAWAL_SUBMITTED
+        - PARTIALLY_WITHDRAWING
+        - WITHDRAWING
+        - PARTIALLY_COMPLETED
+        - COMPLETED
+        - PARTIALLY_FAILED
+        - FAILED
+        - CANCELLED
+        - RETRY_REQUIRED
+    WithdrawalLegStatus:
+      type: string
+      enum:
+        - WITHDRAWAL_LEG_CREATED
+        - WITHDRAWAL_LEG_QUOTED
+        - WITHDRAWAL_LEG_SIGNATURE_REQUIRED
+        - WITHDRAWAL_LEG_SUBMITTED
+        - VENUE_RELEASE_PENDING
+        - DESTINATION_PENDING
+        - DESTINATION_RECEIVED
+        - WITHDRAWAL_LEG_COMPLETED
+        - WITHDRAWAL_LEG_FAILED
+        - WITHDRAWAL_LEG_RETRY_REQUIRED
+    CreateWithdrawalIntentRequest:
+      type: object
+      required: [token, amount, destinationChain, destinationWalletAddress, idempotencyKey, sources]
+      additionalProperties: false
+      properties:
+        token: { type: string, example: USDC }
+        amount: { type: string, example: "100" }
+        destinationChain: { type: string, example: POLYGON }
+        destinationWalletAddress:
+          type: string
+          description: User-controlled destination wallet. Lotus validates format but does not custody or broadcast.
+        idempotencyKey: { type: string }
+        sources:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [sourceVenue]
+            additionalProperties: false
+            properties:
+              sourceVenue: { $ref: "#/components/schemas/Venue" }
+              sourceAmount: { type: string }
+              sourcePercentage: { type: number, minimum: 0, maximum: 100 }
+    SubmitWithdrawalRouteLegRequest:
+      type: object
+      required: [withdrawalRouteLegId, txHash]
+      additionalProperties: false
+      properties:
+        withdrawalRouteLegId: { type: string }
+        txHash:
+          type: string
+          description: User-broadcast transaction hash. Backend records only; it does not broadcast.
+    WithdrawalSource:
+      type: object
+      additionalProperties: true
+      properties:
+        withdrawalSourceId: { type: string }
+        withdrawalIntentId: { type: string }
+        sourceVenue: { $ref: "#/components/schemas/Venue" }
+        sourceToken: { type: string }
+        sourceAmount: { type: string }
+        sourcePercentage: { type: number, nullable: true }
+        status: { $ref: "#/components/schemas/WithdrawalLegStatus" }
+    WithdrawalRouteLeg:
+      type: object
+      additionalProperties: true
+      properties:
+        withdrawalRouteLegId: { type: string }
+        withdrawalIntentId: { type: string }
+        withdrawalSourceId: { type: string }
+        sourceVenue: { $ref: "#/components/schemas/Venue" }
+        sourceToken: { type: string }
+        sourceAmount: { type: string }
+        destinationChain: { type: string }
+        destinationWalletAddress: { type: string }
+        destinationAmountEstimate: { type: string }
+        routeProvider: { type: string, enum: [LOTUS_WITHDRAWAL_V0] }
+        routeQuote:
+          type: object
+          additionalProperties: true
+          description: Frontend-safe withdrawal preview. It must not contain provider secrets or live venue withdrawal internals.
+        txHashes:
+          type: array
+          items: { type: string }
+        venueReleaseStatus: { type: string }
+        destinationStatus: { type: string }
+        status: { $ref: "#/components/schemas/WithdrawalLegStatus" }
+    WithdrawalIntentResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        withdrawalIntentId: { type: string }
+        currentStatus: { $ref: "#/components/schemas/WithdrawalStatus" }
+        token: { type: string }
+        amount: { type: string }
+        destinationChain: { type: string }
+        destinationWalletAddress: { type: string }
+        routePreview:
+          type: object
+          additionalProperties: true
+        totalEstimatedFees: { type: string }
+        totalEstimatedTimeSeconds: { type: integer }
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/WithdrawalSource" }
+        routeLegs:
+          type: array
+          items: { $ref: "#/components/schemas/WithdrawalRouteLeg" }
+        reconciliations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        userSafeMessage: { type: string }
     FundingCheckerMode:
       type: string
       enum: [DISABLED, STUB, LIVE_READ, NOT_CONFIGURED]

@@ -36,6 +36,39 @@ export type FundingLegState = (typeof fundingLegStates)[number];
 const fundingVenues = ["POLYMARKET", "LIMITLESS", "OPINION", "MYRIAD", "PREDICT_FUN"] as const;
 export type FundingVenue = (typeof fundingVenues)[number];
 
+const withdrawalAggregateStates = [
+  "WITHDRAWAL_CREATED",
+  "WITHDRAWAL_QUOTED",
+  "USER_SIGNATURE_REQUIRED",
+  "USER_SIGNED",
+  "WITHDRAWAL_SUBMITTED",
+  "PARTIALLY_WITHDRAWING",
+  "WITHDRAWING",
+  "PARTIALLY_COMPLETED",
+  "COMPLETED",
+  "PARTIALLY_FAILED",
+  "FAILED",
+  "CANCELLED",
+  "RETRY_REQUIRED"
+] as const;
+
+export type WithdrawalAggregateState = (typeof withdrawalAggregateStates)[number];
+
+const withdrawalLegStates = [
+  "WITHDRAWAL_LEG_CREATED",
+  "WITHDRAWAL_LEG_QUOTED",
+  "WITHDRAWAL_LEG_SIGNATURE_REQUIRED",
+  "WITHDRAWAL_LEG_SUBMITTED",
+  "VENUE_RELEASE_PENDING",
+  "DESTINATION_PENDING",
+  "DESTINATION_RECEIVED",
+  "WITHDRAWAL_LEG_COMPLETED",
+  "WITHDRAWAL_LEG_FAILED",
+  "WITHDRAWAL_LEG_RETRY_REQUIRED"
+] as const;
+
+export type WithdrawalLegState = (typeof withdrawalLegStates)[number];
+
 const fundingAuditEventTypes = [
   "FUNDING_INTENT_CREATED",
   "FUNDING_ROUTES_QUOTED",
@@ -71,6 +104,18 @@ const FundingTargetRequestSchema = z.object({
 
 export type FundingTargetRequest = z.infer<typeof FundingTargetRequestSchema>;
 
+const WithdrawalSourceRequestSchema = z.object({
+  sourceVenue: z.enum(fundingVenues),
+  sourceAmount: positiveAmount.optional(),
+  sourcePercentage: z.number().positive().max(100).optional()
+}).refine((value) => Boolean(value.sourceAmount ?? value.sourcePercentage), {
+  message: "Withdrawal source requires sourceAmount or sourcePercentage."
+}).refine((value) => !(value.sourceAmount && value.sourcePercentage), {
+  message: "Withdrawal source must use either sourceAmount or sourcePercentage, not both."
+});
+
+export type WithdrawalSourceRequest = z.infer<typeof WithdrawalSourceRequestSchema>;
+
 export const CreateFundingIntentSchema = z.object({
   sourceChain: z.string().min(1),
   sourceToken: z.string().min(1),
@@ -81,6 +126,17 @@ export const CreateFundingIntentSchema = z.object({
 });
 
 export type CreateFundingIntentInput = z.infer<typeof CreateFundingIntentSchema>;
+
+export const CreateWithdrawalIntentSchema = z.object({
+  token: z.string().min(1),
+  amount: positiveAmount,
+  destinationChain: z.string().min(1),
+  destinationWalletAddress: z.string().min(1),
+  idempotencyKey: z.string().min(1),
+  sources: z.array(WithdrawalSourceRequestSchema).min(1)
+});
+
+export type CreateWithdrawalIntentInput = z.infer<typeof CreateWithdrawalIntentSchema>;
 
 const FundingIntentSchema = z.object({
   fundingIntentId: z.string().min(1),
@@ -216,6 +272,104 @@ export interface FundingIntentView {
   userSafeMessage: string;
 }
 
+export interface VenueBalanceView {
+  venue: FundingVenue;
+  token: string;
+  readyAmount: string;
+  pendingWithdrawalAmount: string;
+  availableAmount: string;
+  updatedAt: string | null;
+}
+
+export interface WithdrawalIntent {
+  withdrawalIntentId: string;
+  userId: string;
+  token: string;
+  amount: string;
+  destinationChain: string;
+  destinationWalletAddress: string;
+  status: WithdrawalAggregateState;
+  idempotencyKey: string;
+  aggregateRouteQuote: Record<string, unknown>;
+  totalEstimatedFees: string;
+  totalEstimatedTimeSeconds: number | null;
+  auditEventIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WithdrawalSource {
+  withdrawalSourceId: string;
+  withdrawalIntentId: string;
+  sourceVenue: FundingVenue;
+  sourceToken: string;
+  sourceAmount: string;
+  sourcePercentage: number | null;
+  venueCapabilitySnapshot: Record<string, unknown>;
+  status: WithdrawalLegState;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WithdrawalRouteQuote {
+  provider: "LOTUS_WITHDRAWAL_V0";
+  providerRouteId: string | null;
+  sourceVenue: FundingVenue;
+  sourceToken: string;
+  sourceAmount: string;
+  destinationChain: string;
+  destinationWalletAddress: string;
+  destinationAmountEstimate: string;
+  estimatedFees: string;
+  estimatedTimeSeconds: number | null;
+  expiresAt: string;
+  transactionRequest: SafeTransactionRequest | null;
+  userSafeSummary: string;
+}
+
+export interface WithdrawalRouteLeg {
+  withdrawalRouteLegId: string;
+  withdrawalIntentId: string;
+  withdrawalSourceId: string;
+  sourceVenue: FundingVenue;
+  sourceToken: string;
+  sourceAmount: string;
+  destinationChain: string;
+  destinationWalletAddress: string;
+  destinationAmountEstimate: string;
+  routeProvider: "LOTUS_WITHDRAWAL_V0";
+  routeQuote: WithdrawalRouteQuote;
+  txHashes: string[];
+  providerStatus: Record<string, unknown>;
+  venueReleaseStatus: string;
+  destinationStatus: string;
+  status: WithdrawalLegState;
+  errorReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WithdrawalReconciliationRecord {
+  withdrawalReconciliationId: string;
+  withdrawalIntentId: string;
+  withdrawalRouteLegId: string;
+  sourceVenue: FundingVenue;
+  withdrawalTxHash: string | null;
+  venueReleased: boolean;
+  destinationReceived: boolean;
+  completed: boolean;
+  checkedAt: string;
+  notes: string;
+}
+
+export interface WithdrawalIntentView {
+  intent: WithdrawalIntent;
+  sources: WithdrawalSource[];
+  routeLegs: WithdrawalRouteLeg[];
+  reconciliations: WithdrawalReconciliationRecord[];
+  userSafeMessage: string;
+}
+
 export type FundingFailureCode =
   | "FUNDING_DISABLED"
   | "LIFI_QUOTES_DISABLED"
@@ -234,7 +388,16 @@ export type FundingFailureCode =
   | "FUNDING_INTENT_NOT_FOUND"
   | "FUNDING_INTENT_FORBIDDEN"
   | "FUNDING_SIGNATURE_REJECTED"
-  | "READY_TO_TRADE_NOT_AVAILABLE";
+  | "READY_TO_TRADE_NOT_AVAILABLE"
+  | "WITHDRAWAL_INTENT_NOT_FOUND"
+  | "WITHDRAWAL_INTENT_FORBIDDEN"
+  | "WITHDRAWAL_CAPABILITY_DISABLED"
+  | "WITHDRAWAL_SOURCE_BALANCE_INSUFFICIENT"
+  | "WITHDRAWAL_ROUTE_REPLAY_BLOCKED"
+  | "WITHDRAWAL_ROUTE_STALE"
+  | "WITHDRAWAL_SUBMISSION_FAILED"
+  | "WITHDRAWAL_DESTINATION_INVALID"
+  | "WITHDRAWAL_COMPLETION_PERSISTENCE_BLOCKED";
 
 export class FundingError extends Error {
   public constructor(
@@ -274,5 +437,33 @@ export const aggregateFundingStatus = (legStates: readonly FundingLegState[]): F
   return "INTENT_CREATED";
 };
 
+export const aggregateWithdrawalStatus = (legStates: readonly WithdrawalLegState[]): WithdrawalAggregateState => {
+  if (legStates.length === 0) {
+    return "WITHDRAWAL_CREATED";
+  }
+  if (legStates.every((state) => state === "WITHDRAWAL_LEG_COMPLETED")) {
+    return "COMPLETED";
+  }
+  if (legStates.some((state) => state === "WITHDRAWAL_LEG_COMPLETED")) {
+    return "PARTIALLY_COMPLETED";
+  }
+  if (legStates.every((state) => state === "WITHDRAWAL_LEG_FAILED")) {
+    return "FAILED";
+  }
+  if (legStates.some((state) => state === "WITHDRAWAL_LEG_FAILED" || state === "WITHDRAWAL_LEG_RETRY_REQUIRED")) {
+    return "PARTIALLY_FAILED";
+  }
+  if (legStates.some((state) => state === "WITHDRAWAL_LEG_SUBMITTED" || state === "VENUE_RELEASE_PENDING" || state === "DESTINATION_PENDING")) {
+    return "WITHDRAWING";
+  }
+  if (legStates.some((state) => state === "WITHDRAWAL_LEG_QUOTED" || state === "WITHDRAWAL_LEG_SIGNATURE_REQUIRED")) {
+    return "USER_SIGNATURE_REQUIRED";
+  }
+  return "WITHDRAWAL_CREATED";
+};
+
 export const validateCreateFundingIntentInput = (value: unknown): CreateFundingIntentInput =>
   CreateFundingIntentSchema.parse(value);
+
+export const validateCreateWithdrawalIntentInput = (value: unknown): CreateWithdrawalIntentInput =>
+  CreateWithdrawalIntentSchema.parse(value);

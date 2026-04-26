@@ -7,7 +7,14 @@ import type {
   FundingReconciliationRecord,
   FundingRouteLeg,
   FundingTarget,
-  FundingVenue
+  FundingVenue,
+  VenueBalanceView,
+  WithdrawalAggregateState,
+  WithdrawalIntent,
+  WithdrawalLegState,
+  WithdrawalReconciliationRecord,
+  WithdrawalRouteLeg,
+  WithdrawalSource
 } from "../core/funding/types.js";
 import type { FundingRepository as FundingRepositoryContract } from "../core/funding/funding-service.js";
 
@@ -110,6 +117,79 @@ interface FundingAdminReadinessRow {
   audit_event_ids: string[] | null;
   created_at: Date;
   updated_at: Date;
+}
+
+interface VenueBalanceRow {
+  venue: FundingVenue;
+  token: string;
+  ready_amount: string;
+  pending_withdrawal_amount: string;
+  updated_at: Date | null;
+}
+
+interface WithdrawalIntentRow {
+  id: string;
+  user_id: string;
+  token: string;
+  amount: string;
+  destination_chain: string;
+  destination_wallet_address: string;
+  status: WithdrawalAggregateState;
+  idempotency_key: string;
+  aggregate_route_quote: Record<string, unknown>;
+  total_estimated_fees: string;
+  total_estimated_time_seconds: number | null;
+  audit_event_ids: string[];
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface WithdrawalSourceRow {
+  id: string;
+  withdrawal_intent_id: string;
+  source_venue: FundingVenue;
+  source_token: string;
+  source_amount: string;
+  source_percentage: string | null;
+  venue_capability_snapshot: Record<string, unknown>;
+  status: WithdrawalLegState;
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface WithdrawalRouteLegRow {
+  id: string;
+  withdrawal_intent_id: string;
+  withdrawal_source_id: string;
+  source_venue: FundingVenue;
+  source_token: string;
+  source_amount: string;
+  destination_chain: string;
+  destination_wallet_address: string;
+  destination_amount_estimate: string;
+  route_provider: "LOTUS_WITHDRAWAL_V0";
+  route_quote: WithdrawalRouteLeg["routeQuote"];
+  tx_hashes: string[];
+  provider_status: Record<string, unknown>;
+  venue_release_status: string;
+  destination_status: string;
+  status: WithdrawalLegState;
+  error_reason: string | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface WithdrawalReconciliationRow {
+  id: string;
+  withdrawal_intent_id: string;
+  withdrawal_route_leg_id: string;
+  source_venue: FundingVenue;
+  withdrawal_tx_hash: string | null;
+  venue_released: boolean;
+  destination_received: boolean;
+  completed: boolean;
+  checked_at: Date;
+  notes: string;
 }
 
 export interface FundingAdminReadinessRecord {
@@ -515,6 +595,46 @@ export class FundingRepository implements FundingRepositoryContract {
     return result.rows.map(mapAdminReadinessRow);
   }
 
+  public async listVenueBalances(userId: string): Promise<VenueBalanceView[]> {
+    const result = await this.pool.query<VenueBalanceRow>(
+      `WITH ready AS (
+         SELECT ft.target_venue AS venue,
+                ft.target_token AS token,
+                COALESCE(SUM((ft.target_amount)::numeric), 0) AS ready_amount,
+                MAX(fr.checked_at) AS updated_at
+           FROM funding_targets ft
+           JOIN funding_intents fi ON fi.id = ft.funding_intent_id
+           JOIN funding_route_legs fl ON fl.funding_target_id = ft.id
+           JOIN funding_reconciliation_records fr ON fr.route_leg_id = fl.id
+          WHERE fi.user_id = $1
+            AND fr.ready_to_trade = true
+          GROUP BY ft.target_venue, ft.target_token
+       ),
+       withdrawal_reservations AS (
+         SELECT fws.source_venue AS venue,
+                fws.source_token AS token,
+                COALESCE(SUM((fws.source_amount)::numeric), 0) AS pending_withdrawal_amount
+           FROM funding_withdrawal_sources fws
+           JOIN funding_withdrawal_intents fwi ON fwi.id = fws.withdrawal_intent_id
+          WHERE fwi.user_id = $1
+            AND fwi.status NOT IN ('FAILED', 'CANCELLED')
+          GROUP BY fws.source_venue, fws.source_token
+       )
+       SELECT ready.venue,
+              ready.token,
+              ready.ready_amount::text,
+              COALESCE(withdrawal_reservations.pending_withdrawal_amount, 0)::text AS pending_withdrawal_amount,
+              ready.updated_at
+         FROM ready
+         LEFT JOIN withdrawal_reservations
+           ON withdrawal_reservations.venue = ready.venue
+          AND withdrawal_reservations.token = ready.token
+        ORDER BY ready.venue ASC, ready.token ASC`,
+      [userId]
+    );
+    return result.rows.map(mapVenueBalance);
+  }
+
   public async hasReadyVenueBalance(input: { userId: string; venue: string; token: string; amount: string }): Promise<boolean> {
     const result = await this.pool.query<{ ready_amount: string }>(
       `SELECT COALESCE(SUM((ft.target_amount)::numeric), 0)::text AS ready_amount
@@ -530,6 +650,280 @@ export class FundingRepository implements FundingRepositoryContract {
       [input.userId, input.venue, input.token]
     );
     return Number(result.rows[0]?.ready_amount ?? "0") >= Number(input.amount);
+  }
+
+  public async findWithdrawalIntentById(id: string): Promise<WithdrawalIntent | null> {
+    const result = await this.pool.query<WithdrawalIntentRow>("SELECT * FROM funding_withdrawal_intents WHERE id = $1::uuid", [id]);
+    return result.rows[0] ? mapWithdrawalIntent(result.rows[0]) : null;
+  }
+
+  public async findWithdrawalIntentByUserAndIdempotencyKey(userId: string, idempotencyKey: string): Promise<WithdrawalIntent | null> {
+    const result = await this.pool.query<WithdrawalIntentRow>(
+      "SELECT * FROM funding_withdrawal_intents WHERE user_id = $1 AND idempotency_key = $2 LIMIT 1",
+      [userId, idempotencyKey]
+    );
+    return result.rows[0] ? mapWithdrawalIntent(result.rows[0]) : null;
+  }
+
+  public async createWithdrawalIntent(input: WithdrawalIntent, sources: WithdrawalSource[]): Promise<WithdrawalIntent> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<WithdrawalIntentRow>(
+        `INSERT INTO funding_withdrawal_intents (
+          id, user_id, token, amount, destination_chain, destination_wallet_address, status,
+          idempotency_key, aggregate_route_quote, total_estimated_fees, total_estimated_time_seconds, audit_event_ids
+        ) VALUES (
+          $1::uuid, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12::jsonb
+        )
+        ON CONFLICT (user_id, idempotency_key) DO UPDATE SET updated_at = funding_withdrawal_intents.updated_at
+        RETURNING *`,
+        [
+          input.withdrawalIntentId,
+          input.userId,
+          input.token,
+          input.amount,
+          input.destinationChain,
+          input.destinationWalletAddress,
+          input.status,
+          input.idempotencyKey,
+          JSON.stringify(input.aggregateRouteQuote),
+          input.totalEstimatedFees,
+          input.totalEstimatedTimeSeconds,
+          JSON.stringify(input.auditEventIds)
+        ]
+      );
+      for (const source of sources) {
+        await client.query(
+          `INSERT INTO funding_withdrawal_sources (
+            id, withdrawal_intent_id, source_venue, source_token, source_amount,
+            source_percentage, venue_capability_snapshot, status
+          ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::jsonb, $8)
+          ON CONFLICT (id) DO NOTHING`,
+          [
+            source.withdrawalSourceId,
+            source.withdrawalIntentId,
+            source.sourceVenue,
+            source.sourceToken,
+            source.sourceAmount,
+            source.sourcePercentage,
+            JSON.stringify(source.venueCapabilitySnapshot),
+            source.status
+          ]
+        );
+      }
+      await client.query("COMMIT");
+      return mapWithdrawalIntent(result.rows[0]!);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  public async listWithdrawalSources(withdrawalIntentId: string): Promise<WithdrawalSource[]> {
+    const result = await this.pool.query<WithdrawalSourceRow>(
+      "SELECT * FROM funding_withdrawal_sources WHERE withdrawal_intent_id = $1::uuid ORDER BY created_at ASC",
+      [withdrawalIntentId]
+    );
+    return result.rows.map(mapWithdrawalSource);
+  }
+
+  public async listWithdrawalRouteLegs(withdrawalIntentId: string): Promise<WithdrawalRouteLeg[]> {
+    const result = await this.pool.query<WithdrawalRouteLegRow>(
+      "SELECT * FROM funding_withdrawal_route_legs WHERE withdrawal_intent_id = $1::uuid ORDER BY created_at ASC",
+      [withdrawalIntentId]
+    );
+    return result.rows.map(mapWithdrawalRouteLeg);
+  }
+
+  public async listWithdrawalReconciliations(withdrawalIntentId: string): Promise<WithdrawalReconciliationRecord[]> {
+    const result = await this.pool.query<WithdrawalReconciliationRow>(
+      "SELECT * FROM funding_withdrawal_reconciliation_records WHERE withdrawal_intent_id = $1::uuid ORDER BY checked_at DESC",
+      [withdrawalIntentId]
+    );
+    return result.rows.map(mapWithdrawalReconciliation);
+  }
+
+  public async replaceWithdrawalRouteLegs(withdrawalIntentId: string, routeLegs: WithdrawalRouteLeg[]): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("DELETE FROM funding_withdrawal_route_legs WHERE withdrawal_intent_id = $1::uuid", [withdrawalIntentId]);
+      for (const leg of routeLegs) {
+        await client.query(
+          `INSERT INTO funding_withdrawal_route_legs (
+            id, withdrawal_intent_id, withdrawal_source_id, source_venue, source_token, source_amount,
+            destination_chain, destination_wallet_address, destination_amount_estimate, route_provider, route_quote,
+            tx_hashes, provider_status, venue_release_status, destination_status, status, error_reason
+          ) VALUES (
+            $1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, $9, $10, $11::jsonb,
+            $12::jsonb, $13::jsonb, $14, $15, $16, $17
+          )`,
+          [
+            leg.withdrawalRouteLegId,
+            leg.withdrawalIntentId,
+            leg.withdrawalSourceId,
+            leg.sourceVenue,
+            leg.sourceToken,
+            leg.sourceAmount,
+            leg.destinationChain,
+            leg.destinationWalletAddress,
+            leg.destinationAmountEstimate,
+            leg.routeProvider,
+            JSON.stringify(leg.routeQuote),
+            JSON.stringify(leg.txHashes),
+            JSON.stringify(leg.providerStatus),
+            leg.venueReleaseStatus,
+            leg.destinationStatus,
+            leg.status,
+            leg.errorReason
+          ]
+        );
+        await client.query("UPDATE funding_withdrawal_sources SET status = $1, updated_at = now() WHERE id = $2::uuid", [
+          leg.status,
+          leg.withdrawalSourceId
+        ]);
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  public async updateWithdrawalIntentStatus(withdrawalIntentId: string, status: WithdrawalAggregateState, patch: Record<string, unknown> = {}): Promise<void> {
+    await this.pool.query(
+      `UPDATE funding_withdrawal_intents
+          SET status = $2,
+              aggregate_route_quote = COALESCE($3::jsonb, aggregate_route_quote),
+              total_estimated_fees = COALESCE($4, total_estimated_fees),
+              total_estimated_time_seconds = COALESCE($5, total_estimated_time_seconds),
+              updated_at = now()
+        WHERE id = $1::uuid`,
+      [
+        withdrawalIntentId,
+        status,
+        patch.aggregateRouteQuote ? JSON.stringify(patch.aggregateRouteQuote) : null,
+        typeof patch.totalEstimatedFees === "string" ? patch.totalEstimatedFees : null,
+        typeof patch.totalEstimatedTimeSeconds === "number" ? patch.totalEstimatedTimeSeconds : null
+      ]
+    );
+  }
+
+  public async updateWithdrawalRouteLegSubmission(input: { withdrawalRouteLegId: string; txHash: string; status: WithdrawalLegState }): Promise<void> {
+    await this.pool.query(
+      `WITH updated_leg AS (
+        UPDATE funding_withdrawal_route_legs
+           SET tx_hashes = tx_hashes || jsonb_build_array($2::text),
+               status = $3,
+               venue_release_status = 'PENDING',
+               updated_at = now()
+         WHERE id = $1::uuid
+         RETURNING withdrawal_source_id
+      )
+      UPDATE funding_withdrawal_sources
+         SET status = $3,
+             updated_at = now()
+       WHERE id IN (SELECT withdrawal_source_id FROM updated_leg)`,
+      [input.withdrawalRouteLegId, input.txHash, input.status]
+    );
+  }
+
+  public async updateWithdrawalRouteLegReconciliation(input: {
+    withdrawalRouteLegId: string;
+    status: WithdrawalLegState;
+    venueReleaseStatus: string;
+    destinationStatus: string;
+    providerStatus: Record<string, unknown>;
+    errorReason?: string | null;
+  }): Promise<void> {
+    await this.pool.query(
+      `WITH updated_leg AS (
+        UPDATE funding_withdrawal_route_legs
+           SET status = $2,
+               venue_release_status = $3,
+               destination_status = $4,
+               provider_status = $5::jsonb,
+               error_reason = $6,
+               updated_at = now()
+         WHERE id = $1::uuid
+         RETURNING withdrawal_source_id
+      )
+      UPDATE funding_withdrawal_sources
+         SET status = $2,
+             updated_at = now()
+       WHERE id IN (SELECT withdrawal_source_id FROM updated_leg)`,
+      [
+        input.withdrawalRouteLegId,
+        input.status,
+        input.venueReleaseStatus,
+        input.destinationStatus,
+        JSON.stringify(input.providerStatus),
+        input.errorReason ?? null
+      ]
+    );
+  }
+
+  public async createWithdrawalReconciliationRecord(input: {
+    withdrawalIntentId: string;
+    withdrawalRouteLegId: string;
+    sourceVenue: FundingVenue;
+    withdrawalTxHash?: string | null;
+    venueReleased: boolean;
+    destinationReceived: boolean;
+    completed: boolean;
+    notes?: string;
+  }): Promise<WithdrawalReconciliationRecord> {
+    const result = await this.pool.query<WithdrawalReconciliationRow>(
+      `INSERT INTO funding_withdrawal_reconciliation_records (
+        withdrawal_intent_id, withdrawal_route_leg_id, source_venue, withdrawal_tx_hash,
+        venue_released, destination_received, completed, notes
+      ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8)
+      RETURNING *`,
+      [
+        input.withdrawalIntentId,
+        input.withdrawalRouteLegId,
+        input.sourceVenue,
+        input.withdrawalTxHash ?? null,
+        input.venueReleased,
+        input.destinationReceived,
+        input.completed,
+        input.notes ?? ""
+      ]
+    );
+    return mapWithdrawalReconciliation(result.rows[0]!);
+  }
+
+  public async appendWithdrawalAuditEvent(input: {
+    withdrawalIntentId: string;
+    withdrawalRouteLegId?: string | null;
+    eventType: string;
+    payload: Record<string, unknown>;
+  }): Promise<string> {
+    const result = await this.pool.query<{ id: string }>(
+      `INSERT INTO funding_withdrawal_audit_events (withdrawal_intent_id, withdrawal_route_leg_id, event_type, payload)
+       VALUES ($1::uuid, $2::uuid, $3, $4::jsonb)
+       RETURNING id::text`,
+      [
+        input.withdrawalIntentId,
+        input.withdrawalRouteLegId ?? null,
+        input.eventType,
+        JSON.stringify(input.payload)
+      ]
+    );
+    const id = result.rows[0]!.id;
+    await this.pool.query(
+      `UPDATE funding_withdrawal_intents
+          SET audit_event_ids = audit_event_ids || jsonb_build_array($2::text),
+              updated_at = now()
+        WHERE id = $1::uuid`,
+      [input.withdrawalIntentId, id]
+    );
+    return id;
   }
 }
 
@@ -632,4 +1026,82 @@ const mapAdminReadinessRow = (row: FundingAdminReadinessRow): FundingAdminReadin
   auditEventIds: row.audit_event_ids ?? [],
   createdAt: row.created_at.toISOString(),
   updatedAt: row.updated_at.toISOString()
+});
+
+const mapVenueBalance = (row: VenueBalanceRow): VenueBalanceView => {
+  const readyAmount = Number(row.ready_amount ?? "0");
+  const pendingWithdrawalAmount = Number(row.pending_withdrawal_amount ?? "0");
+  return {
+    venue: row.venue,
+    token: row.token,
+    readyAmount: row.ready_amount ?? "0",
+    pendingWithdrawalAmount: row.pending_withdrawal_amount ?? "0",
+    availableAmount: String(Math.max(readyAmount - pendingWithdrawalAmount, 0)),
+    updatedAt: row.updated_at ? row.updated_at.toISOString() : null
+  };
+};
+
+const mapWithdrawalIntent = (row: WithdrawalIntentRow): WithdrawalIntent => ({
+  withdrawalIntentId: row.id,
+  userId: row.user_id,
+  token: row.token,
+  amount: row.amount,
+  destinationChain: row.destination_chain,
+  destinationWalletAddress: row.destination_wallet_address,
+  status: row.status,
+  idempotencyKey: row.idempotency_key,
+  aggregateRouteQuote: row.aggregate_route_quote ?? {},
+  totalEstimatedFees: row.total_estimated_fees,
+  totalEstimatedTimeSeconds: row.total_estimated_time_seconds,
+  auditEventIds: row.audit_event_ids ?? [],
+  createdAt: row.created_at.toISOString(),
+  updatedAt: row.updated_at.toISOString()
+});
+
+const mapWithdrawalSource = (row: WithdrawalSourceRow): WithdrawalSource => ({
+  withdrawalSourceId: row.id,
+  withdrawalIntentId: row.withdrawal_intent_id,
+  sourceVenue: row.source_venue,
+  sourceToken: row.source_token,
+  sourceAmount: row.source_amount,
+  sourcePercentage: row.source_percentage === null ? null : Number(row.source_percentage),
+  venueCapabilitySnapshot: row.venue_capability_snapshot ?? {},
+  status: row.status,
+  createdAt: row.created_at.toISOString(),
+  updatedAt: row.updated_at.toISOString()
+});
+
+const mapWithdrawalRouteLeg = (row: WithdrawalRouteLegRow): WithdrawalRouteLeg => ({
+  withdrawalRouteLegId: row.id,
+  withdrawalIntentId: row.withdrawal_intent_id,
+  withdrawalSourceId: row.withdrawal_source_id,
+  sourceVenue: row.source_venue,
+  sourceToken: row.source_token,
+  sourceAmount: row.source_amount,
+  destinationChain: row.destination_chain,
+  destinationWalletAddress: row.destination_wallet_address,
+  destinationAmountEstimate: row.destination_amount_estimate,
+  routeProvider: row.route_provider,
+  routeQuote: row.route_quote,
+  txHashes: row.tx_hashes ?? [],
+  providerStatus: row.provider_status ?? {},
+  venueReleaseStatus: row.venue_release_status,
+  destinationStatus: row.destination_status,
+  status: row.status,
+  errorReason: row.error_reason,
+  createdAt: row.created_at.toISOString(),
+  updatedAt: row.updated_at.toISOString()
+});
+
+const mapWithdrawalReconciliation = (row: WithdrawalReconciliationRow): WithdrawalReconciliationRecord => ({
+  withdrawalReconciliationId: row.id,
+  withdrawalIntentId: row.withdrawal_intent_id,
+  withdrawalRouteLegId: row.withdrawal_route_leg_id,
+  sourceVenue: row.source_venue,
+  withdrawalTxHash: row.withdrawal_tx_hash,
+  venueReleased: row.venue_released,
+  destinationReceived: row.destination_received,
+  completed: row.completed,
+  checkedAt: row.checked_at.toISOString(),
+  notes: row.notes
 });
