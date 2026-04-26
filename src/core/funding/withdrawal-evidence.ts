@@ -386,6 +386,16 @@ export class ConfigurableVenueWithdrawalEvidenceChecker implements WithdrawalCom
     const venueReleased = booleanValue(raw.venueReleased);
     const destinationReceived = booleanValue(raw.destinationReceived);
     const completedFlag = booleanValue(raw.completed);
+    const safeProviderEvidence = compactEvidence({
+      withdrawalTxHash,
+      confirmations,
+      recoveryReviewRequired: booleanValue(raw.recoveryReviewRequired),
+      recoveryReason: stringValue(raw.recoveryReason),
+      bridgeAddress: stringValue(raw.bridgeAddress),
+      bridgeStatus: stringValue(raw.bridgeStatus),
+      bridgeAmount: stringValue(raw.bridgeAmount),
+      bridgeTxHash: stringValue(raw.bridgeTxHash)
+    });
 
     if (sourceVenue !== this.venue || !withdrawalTxHash || !status) {
       return this.result("UNKNOWN", false, false, false, `${this.venue}_WITHDRAWAL_EVIDENCE_MALFORMED`, {
@@ -401,19 +411,19 @@ export class ConfigurableVenueWithdrawalEvidenceChecker implements WithdrawalCom
       return this.result("UNKNOWN", false, false, false, `${this.venue}_WITHDRAWAL_EVIDENCE_SCOPE_MISMATCH`, { withdrawalTxHash });
     }
     if (status === "FAILED") {
-      return this.result("FAILED", venueReleased, destinationReceived, false, reason, { withdrawalTxHash, confirmations });
+      return this.result("FAILED", venueReleased, destinationReceived, false, reason, safeProviderEvidence);
     }
     if (status !== "PENDING" && status !== "VENUE_RELEASED" && status !== "DESTINATION_RECEIVED" && status !== "COMPLETED" && status !== "UNKNOWN") {
       return this.result("UNKNOWN", venueReleased, destinationReceived, false, `${this.venue}_WITHDRAWAL_STATUS_UNSUPPORTED`, { withdrawalTxHash });
     }
     if (status === "UNKNOWN") {
-      return this.result("UNKNOWN", venueReleased, destinationReceived, false, reason, { withdrawalTxHash });
+      return this.result("UNKNOWN", venueReleased, destinationReceived, false, reason, safeProviderEvidence);
     }
     if (status === "PENDING" || !venueReleased) {
       return this.result("VENUE_RELEASED", false, false, false, `${this.venue}_WITHDRAWAL_VENUE_RELEASE_PENDING`, { withdrawalTxHash });
     }
     if (!destinationReceived) {
-      return this.result("VENUE_RELEASED", true, false, false, reason, { withdrawalTxHash, confirmations });
+      return this.result("VENUE_RELEASED", true, false, false, reason, safeProviderEvidence);
     }
     if (!destinationChain || !destinationWalletAddress || !token || !amount) {
       return this.result("UNKNOWN", true, true, false, `${this.venue}_WITHDRAWAL_DESTINATION_EVIDENCE_MALFORMED`, { withdrawalTxHash });
@@ -613,6 +623,13 @@ const numberValue = (value: unknown): number | null =>
       : null;
 
 const booleanValue = (value: unknown): boolean => value === true || value === "true";
+
+const compactEvidence = (
+  input: Record<string, string | number | boolean | null | undefined>
+): Record<string, string | number | boolean | null> =>
+  Object.fromEntries(
+    Object.entries(input).filter((entry): entry is [string, string | number | boolean | null] => entry[1] !== undefined)
+  );
 
 const positiveInt = (value: string | undefined, fallback: number): number => {
   const parsed = Number.parseInt(value ?? "", 10);

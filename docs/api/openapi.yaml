@@ -3478,12 +3478,44 @@ components:
           type: object
           additionalProperties: true
           description: Frontend-safe withdrawal preview. It must not contain provider secrets or live venue withdrawal internals.
+        providerStatus:
+          type: object
+          additionalProperties: true
+          description: Sanitized provider status metadata. Polymarket Bridge sandbox rows may include provider=POLYMARKET_BRIDGE, mode=SANDBOX_DRY_RUN, bridgeAddressPresent, status, completionPersisted=false, and warnings. Raw Bridge payloads, API keys, auth headers, private keys, DB URLs, and live withdrawal internals must not be returned.
         txHashes:
           type: array
           items: { type: string }
         venueReleaseStatus: { type: string }
         destinationStatus: { type: string }
         status: { $ref: "#/components/schemas/WithdrawalLegStatus" }
+    PolymarketBridgeWithdrawalPreview:
+      type: object
+      additionalProperties: false
+      description: Optional frontend-safe Polymarket Bridge sandbox preview. It is available only when disabled-by-default Bridge sandbox wiring is explicitly enabled and does not represent live execution or completion evidence.
+      properties:
+        provider: { type: string, enum: [POLYMARKET_BRIDGE] }
+        mode: { type: string, enum: [SANDBOX_DRY_RUN] }
+        bridgeAddressPresent: { type: boolean }
+        bridgeAddress:
+          type: string
+          description: User-action address returned by the Bridge prepare flow. It is not a Lotus custody address and is returned only as frontend-safe instruction metadata.
+        destinationChain: { type: string }
+        destinationToken: { type: string }
+        destinationAddress: { type: string }
+        amount: { type: string }
+        estimatedFees: { type: string }
+        estimatedTimeSeconds:
+          type: integer
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+        warnings:
+          type: array
+          items: { type: string }
+        completionPersisted:
+          type: boolean
+          enum: [false]
     WithdrawalIntentResponse:
       type: object
       additionalProperties: true
@@ -3497,6 +3529,9 @@ components:
         routePreview:
           type: object
           additionalProperties: true
+          properties:
+            polymarketBridge:
+              $ref: "#/components/schemas/PolymarketBridgeWithdrawalPreview"
         totalEstimatedFees: { type: string }
         totalEstimatedTimeSeconds: { type: integer }
         sources:

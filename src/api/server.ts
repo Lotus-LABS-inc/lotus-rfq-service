@@ -215,6 +215,11 @@ import {
   buildPolymarketWithdrawalEvidenceCheckerFromEnv,
   buildWithdrawalCompletionPersistenceGateFromEnv
 } from "../core/funding/withdrawal-evidence.js";
+import {
+  getPolymarketBridgeWithdrawalConfigFromEnv,
+  HttpPolymarketBridgeWithdrawalClient,
+  PolymarketBridgeWithdrawalAdapter
+} from "../core/funding/polymarket-bridge-withdrawal-adapter.js";
 import { LifiRestClient, buildLifiClientConfigFromEnv } from "../integrations/lifi/lifi-client.js";
 
 export interface ServerDependencies {
@@ -332,6 +337,18 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const executionIntentRepository = new ExecutionIntentRepository(dependencies.pgPool);
   const executionRecordRepository = new ExecutionRecordRepository(dependencies.pgPool);
   const fundingRepository = new FundingRepository(dependencies.pgPool);
+  const polymarketBridgeWithdrawalConfig = getPolymarketBridgeWithdrawalConfigFromEnv(process.env);
+  const polymarketBridgeWithdrawalAdapter = polymarketBridgeWithdrawalConfig.configured && polymarketBridgeWithdrawalConfig.apiBaseUrl
+    ? new PolymarketBridgeWithdrawalAdapter(
+        new HttpPolymarketBridgeWithdrawalClient({
+          apiBaseUrl: polymarketBridgeWithdrawalConfig.apiBaseUrl,
+          timeoutMs: polymarketBridgeWithdrawalConfig.timeoutMs,
+          authMode: polymarketBridgeWithdrawalConfig.authMode,
+          apiKey: process.env.POLYMARKET_BRIDGE_API_KEY
+        }),
+        polymarketBridgeWithdrawalConfig
+      )
+    : null;
   const fundingService = new FundingService(
     fundingRepository,
     new LifiRestClient(buildLifiClientConfigFromEnv(process.env)),
@@ -343,7 +360,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     },
     buildFundingVenueReadinessCheckersFromEnv(process.env),
     buildPolymarketWithdrawalEvidenceCheckerFromEnv(process.env),
-    buildWithdrawalCompletionPersistenceGateFromEnv(process.env)
+    buildWithdrawalCompletionPersistenceGateFromEnv(process.env),
+    polymarketBridgeWithdrawalAdapter
   );
   const polymarketFundingBalanceReadService = new PolymarketFundingBalanceReadService(
     buildPolymarketFundingBalanceReadConfigFromEnv(process.env)

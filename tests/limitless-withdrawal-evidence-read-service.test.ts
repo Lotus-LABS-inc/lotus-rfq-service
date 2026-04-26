@@ -177,6 +177,139 @@ describe("Limitless internal withdrawal evidence read service", () => {
     });
   });
 
+  it("maps Polymarket on-chain USDC transfer evidence without marking destination complete", async () => {
+    const service = new InternalWithdrawalEvidenceReadService({
+      env: {
+        POLYMARKET_INTERNAL_WITHDRAWAL_EVIDENCE_READ_ENABLED: "true",
+        POLYMARKET_INTERNAL_WITHDRAWAL_EVIDENCE_READ_MODE: "POLYGON_ONCHAIN",
+        POLYMARKET_INTERNAL_WITHDRAWAL_EVIDENCE_POLYGON_RPC_URL: "https://polygon.example/rpc",
+        POLYMARKET_WITHDRAWAL_MIN_CONFIRMATIONS: "1"
+      } as NodeJS.ProcessEnv,
+      fetchImpl: async (_input, init) => {
+        if (!init?.body) {
+          return new Response(JSON.stringify({ transactions: [] }));
+        }
+        const body = JSON.parse(String(init?.body)) as { method: string };
+        if (body.method === "eth_blockNumber") {
+          return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x65" }));
+        }
+        return new Response(JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            status: "0x1",
+            blockNumber: "0x64",
+            logs: [{
+              address: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
+              topics: [
+                "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                "0x0000000000000000000000005c2a7bf969c813dd79587b6aada5877476281072",
+                "0x0000000000000000000000004a01ccfaa0014cd706313be5110a517e83104985"
+              ],
+              data: "0x00000000000000000000000000000000000000000000000000000000000f4240",
+              blockTimestamp: "0x69ee6dae"
+            }]
+          }
+        }));
+      }
+    });
+
+    const result = await service.readEvidence({
+      userId: "user-1",
+      withdrawalIntentId: "withdrawal-1",
+      withdrawalRouteLegId: "leg-1",
+      sourceVenue: "POLYMARKET",
+      withdrawalTxHash: "0xee8ea143e2c004eab18676bc52bb1884eb3bb54f1809733b83fa335cc25025b7"
+    });
+
+    expect(result).toMatchObject({
+      sourceVenue: "POLYMARKET",
+      withdrawalTxHash: "0xee8ea143e2c004eab18676bc52bb1884eb3bb54f1809733b83fa335cc25025b7",
+      status: "VENUE_RELEASED",
+      venueReleased: true,
+      destinationReceived: false,
+      completed: false,
+      destinationChain: "POLYGON",
+      destinationWalletAddress: "0x5c2a7bf969c813dd79587b6aada5877476281072",
+      token: "USDC",
+      amount: "1",
+      confirmations: 2,
+      reason: "POLYMARKET_WITHDRAWAL_ONCHAIN_BRIDGE_TRANSFER_CONFIRMED"
+    });
+  });
+
+  it("flags Polymarket aggregate Bridge completion for recovery review without marking complete", async () => {
+    const service = new InternalWithdrawalEvidenceReadService({
+      env: {
+        POLYMARKET_INTERNAL_WITHDRAWAL_EVIDENCE_READ_ENABLED: "true",
+        POLYMARKET_INTERNAL_WITHDRAWAL_EVIDENCE_READ_MODE: "POLYGON_ONCHAIN",
+        POLYMARKET_INTERNAL_WITHDRAWAL_EVIDENCE_POLYGON_RPC_URL: "https://polygon.example/rpc",
+        POLYMARKET_INTERNAL_WITHDRAWAL_EVIDENCE_BRIDGE_STATUS_BASE_URL: "https://bridge.example",
+        POLYMARKET_WITHDRAWAL_MIN_CONFIRMATIONS: "1"
+      } as NodeJS.ProcessEnv,
+      fetchImpl: async (input, init) => {
+        if (!init?.body) {
+          expect(String(input)).toBe("https://bridge.example/status/0x4a01ccfaa0014cd706313be5110a517e83104985");
+          return new Response(JSON.stringify({
+            transactions: [{
+              status: "COMPLETED",
+              toChainId: "137",
+              toTokenAddress: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
+              fromAmountBaseUnit: "1000000"
+            }]
+          }));
+        }
+        const body = JSON.parse(String(init.body)) as { method: string };
+        if (body.method === "eth_blockNumber") {
+          return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x65" }));
+        }
+        return new Response(JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            status: "0x1",
+            blockNumber: "0x64",
+            logs: [{
+              address: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
+              topics: [
+                "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                "0x0000000000000000000000005c2a7bf969c813dd79587b6aada5877476281072",
+                "0x0000000000000000000000004a01ccfaa0014cd706313be5110a517e83104985"
+              ],
+              data: "0x00000000000000000000000000000000000000000000000000000000000f4240"
+            }]
+          }
+        }));
+      }
+    });
+
+    const result = await service.readEvidence({
+      userId: "user-1",
+      withdrawalIntentId: "withdrawal-1",
+      withdrawalRouteLegId: "leg-1",
+      sourceVenue: "POLYMARKET",
+      withdrawalTxHash: "0xee8ea143e2c004eab18676bc52bb1884eb3bb54f1809733b83fa335cc25025b7"
+    });
+
+    expect(result).toMatchObject({
+      sourceVenue: "POLYMARKET",
+      status: "UNKNOWN",
+      venueReleased: true,
+      destinationReceived: false,
+      completed: false,
+      destinationChain: "POLYGON",
+      token: "USDC",
+      amount: "1",
+      recoveryReviewRequired: true,
+      recoveryReason: "POLYMARKET_BRIDGE_COMPLETED_AGGREGATE_WITHOUT_EXACT_DESTINATION_SCOPE",
+      bridgeAddress: "0x4a01ccfaa0014cd706313be5110a517e83104985",
+      bridgeStatus: "COMPLETED",
+      bridgeAmount: "1",
+      reason: "POLYMARKET_WITHDRAWAL_BRIDGE_AGGREGATE_COMPLETION_REVIEW_REQUIRED"
+    });
+    expect(result).not.toHaveProperty("destinationWalletAddress");
+  });
+
   it("requires fresh non-synthetic read-only smoke evidence before completion persistence", () => {
     const blockers: string[] = [];
     validateWithdrawalEvidenceSmokeArtifact({

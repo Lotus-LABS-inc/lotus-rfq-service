@@ -94,7 +94,19 @@ const buildApp = async () => {
     getWithdrawalIntent: async (userId) => withdrawalView(userId),
     quoteWithdrawalIntent: async (userId) => ({
       ...withdrawalView(userId),
-      intent: { ...withdrawalView(userId).intent, status: "USER_SIGNATURE_REQUIRED" }
+      intent: {
+        ...withdrawalView(userId).intent,
+        status: "USER_SIGNATURE_REQUIRED",
+        aggregateRouteQuote: {
+          provider: "LOTUS_WITHDRAWAL_V0",
+          polymarketBridge: {
+            provider: "POLYMARKET_BRIDGE",
+            mode: "SANDBOX_DRY_RUN",
+            bridgeAddressPresent: true,
+            completionPersisted: false
+          }
+        }
+      }
     }),
     submitWithdrawalRouteLeg: async (userId) => ({
       ...withdrawalView(userId),
@@ -196,8 +208,19 @@ describe("Funding routes", () => {
 
     await expect(app.inject({ method: "GET", url: "/funding/withdrawals/withdrawal-1", headers }))
       .resolves.toMatchObject({ statusCode: 200 });
-    await expect(app.inject({ method: "POST", url: "/funding/withdrawals/withdrawal-1/quote", headers }))
-      .resolves.toMatchObject({ statusCode: 200 });
+    const quote = await app.inject({ method: "POST", url: "/funding/withdrawals/withdrawal-1/quote", headers });
+    expect(quote.statusCode).toBe(200);
+    expect(quote.json()).toMatchObject({
+      routePreview: {
+        polymarketBridge: {
+          provider: "POLYMARKET_BRIDGE",
+          mode: "SANDBOX_DRY_RUN",
+          completionPersisted: false
+        }
+      }
+    });
+    expect(quote.body).not.toContain("authorization");
+    expect(quote.body).not.toContain("privateKey");
     await expect(app.inject({
       method: "POST",
       url: "/funding/withdrawals/withdrawal-1/submit",

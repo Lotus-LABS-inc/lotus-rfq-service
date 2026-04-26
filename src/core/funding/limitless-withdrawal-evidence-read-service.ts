@@ -25,6 +25,12 @@ export interface InternalWithdrawalEvidenceReadOutput {
   amount?: string;
   confirmations?: number;
   observedAt?: string;
+  recoveryReviewRequired?: boolean;
+  recoveryReason?: string;
+  bridgeAddress?: string;
+  bridgeStatus?: string;
+  bridgeAmount?: string;
+  bridgeTxHash?: string;
   reason: string;
 }
 
@@ -34,6 +40,8 @@ export interface InternalWithdrawalEvidenceReadStatus {
   enabled: boolean;
   configured: boolean;
   fixturePathConfigured: boolean;
+  onchainConfigured: boolean;
+  readMode: InternalWithdrawalEvidenceReadMode;
   credentialsServerSideOnly: true;
 }
 
@@ -43,6 +51,12 @@ export interface InternalWithdrawalEvidenceReadServiceConfig {
   venue?: FundingVenue | undefined;
   enabled?: boolean | undefined;
   fixturePath?: string | undefined;
+  readMode?: InternalWithdrawalEvidenceReadMode | undefined;
+  polygonRpcUrl?: string | undefined;
+  bridgeStatusBaseUrl?: string | undefined;
+  usdcTokenAddress?: string | undefined;
+  minimumConfirmations?: number | undefined;
+  fetchImpl?: typeof fetch | undefined;
   env?: NodeJS.ProcessEnv | undefined;
 }
 
@@ -69,13 +83,20 @@ export class LimitlessWithdrawalEvidenceMalformedError extends Error {
   }
 }
 
+export type InternalWithdrawalEvidenceReadMode = "FIXTURE" | "POLYGON_ONCHAIN";
+
 export const buildInternalWithdrawalEvidenceReadConfigFromEnv = (
   venue: FundingVenue,
   env: NodeJS.ProcessEnv = process.env
 ): InternalWithdrawalEvidenceReadServiceConfig => ({
   venue,
   enabled: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_READ_ENABLED`] === "true",
+  readMode: readModeFromEnv(env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_READ_MODE`]),
   fixturePath: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_FIXTURE_PATH`],
+  polygonRpcUrl: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_POLYGON_RPC_URL`],
+  bridgeStatusBaseUrl: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_BRIDGE_STATUS_BASE_URL`],
+  usdcTokenAddress: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_USDC_ADDRESS`],
+  minimumConfirmations: positiveInt(env[`${venue}_WITHDRAWAL_MIN_CONFIRMATIONS`], 1),
   env
 });
 
@@ -93,8 +114,10 @@ export class InternalWithdrawalEvidenceReadService {
     const resolved = this.resolveConfig(venue);
     return {
       enabled: resolved.enabled,
-      configured: resolved.enabled && nonEmpty(resolved.fixturePath),
+      configured: resolved.enabled && (nonEmpty(resolved.fixturePath) || (resolved.readMode === "POLYGON_ONCHAIN" && nonEmpty(resolved.polygonRpcUrl))),
       fixturePathConfigured: nonEmpty(resolved.fixturePath),
+      onchainConfigured: resolved.readMode === "POLYGON_ONCHAIN" && nonEmpty(resolved.polygonRpcUrl),
+      readMode: resolved.readMode,
       credentialsServerSideOnly: true
     };
   }
@@ -102,8 +125,25 @@ export class InternalWithdrawalEvidenceReadService {
   public async readEvidence(input: InternalWithdrawalEvidenceReadInput): Promise<InternalWithdrawalEvidenceReadOutput> {
     const resolved = this.resolveConfig(input.sourceVenue);
     const status = this.getStatus(input.sourceVenue);
-    if (!status.configured || !resolved.fixturePath) {
+    if (!status.configured) {
       throw new LimitlessWithdrawalEvidenceReadNotConfiguredError(`${input.sourceVenue} withdrawal evidence read is disabled or incomplete.`);
+    }
+
+    if (input.sourceVenue === "POLYMARKET" && resolved.readMode === "POLYGON_ONCHAIN") {
+      if (!resolved.polygonRpcUrl) {
+        throw new LimitlessWithdrawalEvidenceReadNotConfiguredError("POLYMARKET on-chain withdrawal evidence RPC URL is not configured.");
+      }
+      return this.readPolymarketOnchainEvidence(input, {
+        polygonRpcUrl: resolved.polygonRpcUrl,
+        bridgeStatusBaseUrl: resolved.bridgeStatusBaseUrl,
+        usdcTokenAddress: resolved.usdcTokenAddress,
+        minimumConfirmations: resolved.minimumConfirmations,
+        fetchImpl: resolved.fetchImpl
+      });
+    }
+
+    if (!resolved.fixturePath) {
+      throw new LimitlessWithdrawalEvidenceReadNotConfiguredError(`${input.sourceVenue} withdrawal evidence fixture path is not configured.`);
     }
 
     const records = await this.readFixtureRecords(resolved.fixturePath);
@@ -116,18 +156,36 @@ export class InternalWithdrawalEvidenceReadService {
 
   private resolveConfig(venue: FundingVenue): {
     enabled: boolean;
+    readMode: InternalWithdrawalEvidenceReadMode;
     fixturePath?: string | undefined;
+    polygonRpcUrl?: string | undefined;
+    bridgeStatusBaseUrl?: string | undefined;
+    usdcTokenAddress: string;
+    minimumConfirmations: number;
+    fetchImpl: typeof fetch;
   } {
     if (this.config.venue) {
       return {
         enabled: this.config.enabled === true,
-        fixturePath: this.config.fixturePath
+        readMode: this.config.readMode ?? "FIXTURE",
+        fixturePath: this.config.fixturePath,
+        polygonRpcUrl: this.config.polygonRpcUrl,
+        bridgeStatusBaseUrl: this.config.bridgeStatusBaseUrl,
+        usdcTokenAddress: this.config.usdcTokenAddress ?? POLYGON_USDC_TOKEN_ADDRESS,
+        minimumConfirmations: this.config.minimumConfirmations ?? 1,
+        fetchImpl: this.config.fetchImpl ?? fetch
       };
     }
     const env = this.config.env ?? process.env;
     return {
       enabled: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_READ_ENABLED`] === "true",
-      fixturePath: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_FIXTURE_PATH`]
+      readMode: readModeFromEnv(env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_READ_MODE`]),
+      fixturePath: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_FIXTURE_PATH`],
+      polygonRpcUrl: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_POLYGON_RPC_URL`],
+      bridgeStatusBaseUrl: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_BRIDGE_STATUS_BASE_URL`],
+      usdcTokenAddress: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_USDC_ADDRESS`] ?? POLYGON_USDC_TOKEN_ADDRESS,
+      minimumConfirmations: positiveInt(env[`${venue}_WITHDRAWAL_MIN_CONFIRMATIONS`], 1),
+      fetchImpl: this.config.fetchImpl ?? fetch
     };
   }
 
@@ -143,6 +201,128 @@ export class InternalWithdrawalEvidenceReadService {
       throw new LimitlessWithdrawalEvidenceMalformedError("Withdrawal evidence fixture must contain object records.");
     }
     return records;
+  }
+
+  private async readPolymarketOnchainEvidence(
+    input: InternalWithdrawalEvidenceReadInput,
+    config: {
+      polygonRpcUrl: string;
+      bridgeStatusBaseUrl?: string | undefined;
+      usdcTokenAddress: string;
+      minimumConfirmations: number;
+      fetchImpl: typeof fetch;
+    }
+  ): Promise<InternalWithdrawalEvidenceReadOutput> {
+    const receipt = await rpcCall(config, "eth_getTransactionReceipt", [input.withdrawalTxHash]);
+    if (!isRecord(receipt)) {
+      return {
+        sourceVenue: input.sourceVenue,
+        withdrawalTxHash: input.withdrawalTxHash,
+        status: "PENDING",
+        venueReleased: false,
+        destinationReceived: false,
+        completed: false,
+        reason: "POLYMARKET_WITHDRAWAL_ONCHAIN_RECEIPT_PENDING"
+      };
+    }
+    const txStatus = stringValue(receipt.status);
+    if (txStatus !== "0x1") {
+      return {
+        sourceVenue: input.sourceVenue,
+        withdrawalTxHash: input.withdrawalTxHash,
+        status: "FAILED",
+        venueReleased: false,
+        destinationReceived: false,
+        completed: false,
+        reason: "POLYMARKET_WITHDRAWAL_ONCHAIN_TX_FAILED"
+      };
+    }
+    const transfer = findUsdcTransfer(receipt, config.usdcTokenAddress);
+    if (!transfer) {
+      return {
+        sourceVenue: input.sourceVenue,
+        withdrawalTxHash: input.withdrawalTxHash,
+        status: "UNKNOWN",
+        venueReleased: false,
+        destinationReceived: false,
+        completed: false,
+        reason: "POLYMARKET_WITHDRAWAL_ONCHAIN_USDC_TRANSFER_NOT_FOUND"
+      };
+    }
+    const currentBlockHex = await rpcCall(config, "eth_blockNumber", []);
+    const currentBlock = hexToBigInt(stringValue(currentBlockHex));
+    const txBlock = hexToBigInt(stringValue(receipt.blockNumber));
+    const confirmations = currentBlock !== null && txBlock !== null && currentBlock >= txBlock
+      ? Number(currentBlock - txBlock + 1n)
+      : 0;
+    const enoughConfirmations = confirmations >= config.minimumConfirmations;
+    const bridgeStatus = enoughConfirmations
+      ? await this.readPolymarketBridgeStatus(config, transfer.to)
+      : null;
+    if (bridgeStatus?.status === "COMPLETED") {
+      return {
+        sourceVenue: input.sourceVenue,
+        withdrawalTxHash: input.withdrawalTxHash,
+        status: "UNKNOWN",
+        venueReleased: true,
+        destinationReceived: false,
+        completed: false,
+        destinationChain: chainNameFromBridgeChainId(bridgeStatus.toChainId) ?? "POLYGON",
+        token: tokenSymbolFromBridgeToken(bridgeStatus.toTokenAddress) ?? "USDC",
+        amount: bridgeStatus.amount ?? transfer.amount,
+        confirmations,
+        ...(stringValue(transfer.observedAt) ? { observedAt: transfer.observedAt } : {}),
+        recoveryReviewRequired: true,
+        recoveryReason: "POLYMARKET_BRIDGE_COMPLETED_AGGREGATE_WITHOUT_EXACT_DESTINATION_SCOPE",
+        bridgeAddress: transfer.to,
+        bridgeStatus: bridgeStatus.status,
+        ...(bridgeStatus.amount ? { bridgeAmount: bridgeStatus.amount } : {}),
+        ...(bridgeStatus.txHash ? { bridgeTxHash: bridgeStatus.txHash } : {}),
+        reason: "POLYMARKET_WITHDRAWAL_BRIDGE_AGGREGATE_COMPLETION_REVIEW_REQUIRED"
+      };
+    }
+    return {
+      sourceVenue: input.sourceVenue,
+      withdrawalTxHash: input.withdrawalTxHash,
+      status: enoughConfirmations ? "VENUE_RELEASED" : "PENDING",
+      venueReleased: enoughConfirmations,
+      destinationReceived: false,
+      completed: false,
+      destinationChain: "POLYGON",
+      destinationWalletAddress: transfer.from,
+      token: "USDC",
+      amount: transfer.amount,
+      confirmations,
+      ...(stringValue(transfer.observedAt) ? { observedAt: transfer.observedAt } : {}),
+      reason: enoughConfirmations
+        ? bridgeStatus?.status
+          ? `POLYMARKET_WITHDRAWAL_BRIDGE_STATUS_${bridgeStatus.status}`
+          : "POLYMARKET_WITHDRAWAL_ONCHAIN_BRIDGE_TRANSFER_CONFIRMED"
+        : "POLYMARKET_WITHDRAWAL_ONCHAIN_CONFIRMATIONS_PENDING"
+    };
+  }
+
+  private async readPolymarketBridgeStatus(
+    config: {
+      bridgeStatusBaseUrl?: string | undefined;
+      fetchImpl: typeof fetch;
+    },
+    bridgeAddress: string
+  ): Promise<PolymarketBridgeStatusSummary | null> {
+    const baseUrl = (config.bridgeStatusBaseUrl ?? POLYMARKET_BRIDGE_STATUS_BASE_URL).replace(/\/+$/, "");
+    try {
+      const response = await config.fetchImpl(`${baseUrl}/status/${bridgeAddress}`, { method: "GET" });
+      if (!response.ok) {
+        return null;
+      }
+      const payload = await response.json() as unknown;
+      if (!isRecord(payload) || !Array.isArray(payload.transactions)) {
+        return null;
+      }
+      return normalizeBridgeStatusTransaction(payload.transactions.filter(isRecord));
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -222,3 +402,193 @@ const booleanValue = (value: unknown): boolean =>
 
 const equalsIgnoreCase = (a: string | undefined, b: string): boolean =>
   typeof a === "string" && a.toLowerCase() === b.toLowerCase();
+
+const POLYGON_USDC_TOKEN_ADDRESS = "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359";
+const POLYMARKET_BRIDGE_STATUS_BASE_URL = "https://bridge.polymarket.com";
+const ERC20_TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+const readModeFromEnv = (value: string | undefined): InternalWithdrawalEvidenceReadMode =>
+  value?.trim().toUpperCase() === "POLYGON_ONCHAIN" ? "POLYGON_ONCHAIN" : "FIXTURE";
+
+const positiveInt = (value: string | undefined, fallback: number): number => {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const rpcCall = async (
+  config: {
+    polygonRpcUrl?: string;
+    fetchImpl: typeof fetch;
+  },
+  method: string,
+  params: unknown[]
+): Promise<unknown> => {
+  if (!config.polygonRpcUrl) {
+    throw new LimitlessWithdrawalEvidenceReadNotConfiguredError("Polygon RPC URL is not configured.");
+  }
+  const response = await config.fetchImpl(config.polygonRpcUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method,
+      params
+    })
+  });
+  if (!response.ok) {
+    throw new LimitlessWithdrawalEvidenceNotFoundError("Polygon RPC evidence read failed.");
+  }
+  const payload = await response.json() as unknown;
+  if (!isRecord(payload)) {
+    throw new LimitlessWithdrawalEvidenceMalformedError("Polygon RPC response is malformed.");
+  }
+  if (payload.error) {
+    throw new LimitlessWithdrawalEvidenceNotFoundError("Polygon RPC returned an error.");
+  }
+  return payload.result;
+};
+
+const findUsdcTransfer = (
+  receipt: Record<string, unknown>,
+  usdcTokenAddress: string
+): { from: string; to: string; amount: string; observedAt?: string } | null => {
+  const logs = Array.isArray(receipt.logs) ? receipt.logs.filter(isRecord) : [];
+  for (const log of logs) {
+    const topics = Array.isArray(log.topics) ? log.topics : [];
+    if (!equalsIgnoreCase(stringValue(log.address), usdcTokenAddress) ||
+      !equalsIgnoreCase(typeof topics[0] === "string" ? topics[0] : undefined, ERC20_TRANSFER_TOPIC)) {
+      continue;
+    }
+    const from = addressFromTopic(typeof topics[1] === "string" ? topics[1] : undefined);
+    const to = addressFromTopic(typeof topics[2] === "string" ? topics[2] : undefined);
+    const amount = amountFromUsdcData(stringValue(log.data));
+    if (from && to && amount) {
+      const parsed = {
+        from,
+        to,
+        amount
+      };
+      const observedAt = hexTimestampToIso(stringValue(log.blockTimestamp));
+      return observedAt ? { ...parsed, observedAt } : parsed;
+    }
+  }
+  return null;
+};
+
+const addressFromTopic = (topic: string | undefined): string | null => {
+  if (!topic || !/^0x[a-fA-F0-9]{64}$/.test(topic)) {
+    return null;
+  }
+  return `0x${topic.slice(-40)}`;
+};
+
+const amountFromUsdcData = (data: string | undefined): string | null => {
+  const value = hexToBigInt(data);
+  if (value === null) {
+    return null;
+  }
+  const units = value / 1_000_000n;
+  const remainder = value % 1_000_000n;
+  if (remainder === 0n) {
+    return units.toString();
+  }
+  return `${units.toString()}.${remainder.toString().padStart(6, "0").replace(/0+$/, "")}`;
+};
+
+const hexToBigInt = (value: string | undefined): bigint | null => {
+  if (!value || !/^0x[a-fA-F0-9]+$/.test(value)) {
+    return null;
+  }
+  try {
+    return BigInt(value);
+  } catch {
+    return null;
+  }
+};
+
+const hexTimestampToIso = (value: string | undefined): string | undefined => {
+  const timestamp = hexToBigInt(value);
+  if (timestamp === null) {
+    return undefined;
+  }
+  return new Date(Number(timestamp) * 1000).toISOString();
+};
+
+interface PolymarketBridgeStatusSummary {
+  status: string;
+  toChainId?: string;
+  toTokenAddress?: string;
+  amount?: string;
+  txHash?: string;
+}
+
+const normalizeBridgeStatusTransaction = (
+  transactions: Record<string, unknown>[]
+): PolymarketBridgeStatusSummary | null => {
+  const candidates: PolymarketBridgeStatusSummary[] = [];
+  for (const transaction of transactions) {
+    const status = stringValue(transaction.status)?.toUpperCase();
+    if (!status) {
+      continue;
+    }
+    candidates.push(compactBridgeStatusSummary({
+      status,
+      toChainId: stringValue(transaction.toChainId),
+      toTokenAddress: stringValue(transaction.toTokenAddress),
+      amount: amountFromUsdcBaseUnit(stringValue(transaction.fromAmountBaseUnit)),
+      txHash: stringValue(transaction.txHash)
+    }));
+  }
+  return candidates.find((transaction) => transaction.status === "COMPLETED") ??
+    candidates.find((transaction) => transaction.status === "PROCESSING") ??
+    candidates.find((transaction) => transaction.status === "DEPOSIT_DETECTED") ??
+    null;
+};
+
+const compactBridgeStatusSummary = (input: {
+  status: string;
+  toChainId?: string | undefined;
+  toTokenAddress?: string | undefined;
+  amount?: string | undefined;
+  txHash?: string | undefined;
+}): PolymarketBridgeStatusSummary => ({
+  status: input.status,
+  ...(input.toChainId ? { toChainId: input.toChainId } : {}),
+  ...(input.toTokenAddress ? { toTokenAddress: input.toTokenAddress } : {}),
+  ...(input.amount ? { amount: input.amount } : {}),
+  ...(input.txHash ? { txHash: input.txHash } : {})
+});
+
+const amountFromUsdcBaseUnit = (value: string | undefined): string | undefined => {
+  if (!value || !/^\d+$/.test(value)) {
+    return undefined;
+  }
+  const parsed = BigInt(value);
+  const units = parsed / 1_000_000n;
+  const remainder = parsed % 1_000_000n;
+  if (remainder === 0n) {
+    return units.toString();
+  }
+  return `${units.toString()}.${remainder.toString().padStart(6, "0").replace(/0+$/, "")}`;
+};
+
+const chainNameFromBridgeChainId = (chainId: string | undefined): string | undefined => {
+  switch (chainId) {
+    case "137":
+      return "POLYGON";
+    case "1":
+      return "ETHEREUM";
+    case "8453":
+      return "BASE";
+    case "42161":
+      return "ARBITRUM";
+    case "1151111081099710":
+      return "SOLANA";
+    default:
+      return undefined;
+  }
+};
+
+const tokenSymbolFromBridgeToken = (tokenAddress: string | undefined): string | undefined =>
+  tokenAddress ? "USDC" : undefined;

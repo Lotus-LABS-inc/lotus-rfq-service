@@ -52,6 +52,10 @@ import {
   type PolymarketWithdrawalEvidenceReadClient
 } from "../src/core/funding/withdrawal-evidence.js";
 import {
+  MockPolymarketBridgeWithdrawalClient,
+  PolymarketBridgeWithdrawalAdapter
+} from "../src/core/funding/polymarket-bridge-withdrawal-adapter.js";
+import {
   normalizeLifiQuote,
   normalizeLifiStatus,
   type LifiRouteProvider
@@ -877,6 +881,36 @@ describe("Funding v0 domain", () => {
     });
 
     client.raw = {
+      sourceVenue: "POLYMARKET",
+      withdrawalTxHash: "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      status: "UNKNOWN",
+      venueReleased: true,
+      destinationReceived: false,
+      completed: false,
+      confirmations: 2,
+      recoveryReviewRequired: true,
+      recoveryReason: "POLYMARKET_BRIDGE_COMPLETED_AGGREGATE_WITHOUT_EXACT_DESTINATION_SCOPE",
+      bridgeAddress: "0x4a01ccfaa0014cd706313be5110a517e83104985",
+      bridgeStatus: "COMPLETED",
+      bridgeAmount: "2.400099",
+      bridgeTxHash: "0xc66a4d429abb085f3d5a5fba2b2b6e05bcdfad1e1d11367efe84c00be9b08045",
+      reason: "POLYMARKET_WITHDRAWAL_BRIDGE_AGGREGATE_COMPLETION_REVIEW_REQUIRED"
+    };
+    await expect(checker.check({ userId: "user-1", intent, leg, reconciliations: [] })).resolves.toMatchObject({
+      status: "UNKNOWN",
+      venueReleased: true,
+      destinationReceived: false,
+      completed: false,
+      reason: "POLYMARKET_WITHDRAWAL_BRIDGE_AGGREGATE_COMPLETION_REVIEW_REQUIRED",
+      evidence: {
+        recoveryReviewRequired: true,
+        recoveryReason: "POLYMARKET_BRIDGE_COMPLETED_AGGREGATE_WITHOUT_EXACT_DESTINATION_SCOPE",
+        bridgeStatus: "COMPLETED",
+        bridgeAmount: "2.400099"
+      }
+    });
+
+    client.raw = {
       userId: "other-user",
       withdrawalIntentId: "withdrawal-intent-1",
       withdrawalRouteLegId: "withdrawal-leg-1",
@@ -1034,6 +1068,105 @@ describe("Funding v0 domain", () => {
         { sourceVenue: "POLYMARKET", sourcePercentage: 50 }
       ]
     })).rejects.toMatchObject({ code: "TARGET_SPLIT_INVALID" });
+  });
+
+  it("uses Polymarket Bridge sandbox metadata only when explicitly enabled", async () => {
+    const repository = new InMemoryFundingRepository();
+    repository.ready = true;
+    const bridgeAdapter = new PolymarketBridgeWithdrawalAdapter(
+      new MockPolymarketBridgeWithdrawalClient(),
+      {
+        enabled: true,
+        mode: "DRY_RUN",
+        apiBaseUrl: "https://bridge.operator.example",
+        authMode: "NONE",
+        timeoutMs: 5000,
+        dryRunOnly: true,
+        configured: true
+      },
+      { now: () => new Date("2026-04-26T00:00:00.000Z") }
+    );
+    const service = new FundingService(
+      repository,
+      new StubLifiProvider(),
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env: withdrawalEnv
+      },
+      new Map(),
+      null,
+      null,
+      bridgeAdapter
+    );
+
+    const created = await service.createWithdrawalIntent("user-1", {
+      token: "USDC",
+      amount: "40",
+      destinationChain: "POLYGON",
+      destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+      idempotencyKey: "withdraw-bridge-sandbox",
+      sources: [{ sourceVenue: "POLYMARKET", sourcePercentage: 100 }]
+    });
+    const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
+    const serializedQuote = JSON.stringify(quoted);
+
+    expect(quoted.routeLegs[0]!.routeProvider).toBe("LOTUS_WITHDRAWAL_V0");
+    expect(quoted.routeLegs[0]!.providerStatus).toMatchObject({
+      provider: "POLYMARKET_BRIDGE",
+      mode: "SANDBOX_DRY_RUN",
+      bridgeAddressPresent: true,
+      status: "PENDING",
+      completionPersisted: false
+    });
+    expect(quoted.intent.aggregateRouteQuote).toMatchObject({
+      polymarketBridge: {
+        provider: "POLYMARKET_BRIDGE",
+        mode: "SANDBOX_DRY_RUN",
+        bridgeAddressPresent: true,
+        completionPersisted: false
+      }
+    });
+    expect(serializedQuote).toContain("Lotus does not sign");
+    expect(serializedQuote).not.toContain("authorization");
+    expect(serializedQuote).not.toContain("server-side-secret");
+
+    const submitted = await service.submitWithdrawalRouteLeg("user-1", created.intent.withdrawalIntentId, {
+      withdrawalRouteLegId: quoted.routeLegs[0]!.withdrawalRouteLegId,
+      txHash: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    });
+    expect(submitted.routeLegs[0]!.status).toBe("VENUE_RELEASE_PENDING");
+
+    const refreshed = await service.refreshWithdrawalStatus("user-1", created.intent.withdrawalIntentId);
+    expect(refreshed.routeLegs[0]!.status).toBe("VENUE_RELEASE_PENDING");
+    expect(refreshed.routeLegs[0]!.providerStatus).toMatchObject({
+      provider: "POLYMARKET_BRIDGE",
+      mode: "SANDBOX_DRY_RUN",
+      status: "COMPLETED",
+      completionPersisted: false
+    });
+    expect(refreshed.reconciliations).toEqual([]);
+  });
+
+  it("keeps default withdrawal quote behavior when Bridge sandbox is not wired", async () => {
+    const repository = new InMemoryFundingRepository();
+    repository.ready = true;
+    const service = new FundingService(repository, new StubLifiProvider(), {
+      lifiQuotesEnabled: true,
+      liveSubmitEnabled: false,
+      env: withdrawalEnv
+    });
+    const created = await service.createWithdrawalIntent("user-1", {
+      token: "USDC",
+      amount: "40",
+      destinationChain: "POLYGON",
+      destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+      idempotencyKey: "withdraw-default-v0",
+      sources: [{ sourceVenue: "POLYMARKET", sourcePercentage: 100 }]
+    });
+    const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
+    expect(quoted.routeLegs[0]!.providerStatus).toEqual({});
+    expect(quoted.intent.aggregateRouteQuote).not.toHaveProperty("polymarketBridge");
   });
 
   it("fails closed when LI.FI quotes are disabled or split is invalid", async () => {

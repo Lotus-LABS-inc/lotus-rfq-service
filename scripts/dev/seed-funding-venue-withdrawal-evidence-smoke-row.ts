@@ -55,6 +55,9 @@ const artifactDir = join(process.cwd(), "artifacts", "funding");
 const amount = process.env.FUNDING_WITHDRAWAL_EVIDENCE_SEED_AMOUNT ?? "40";
 const readyAmount = process.env.FUNDING_WITHDRAWAL_EVIDENCE_SEED_READY_AMOUNT ?? "100";
 const token = "USDC";
+const explicitWithdrawalTxHash = process.env.FUNDING_WITHDRAWAL_EVIDENCE_SEED_WITHDRAWAL_TX_HASH?.trim() ?? null;
+const explicitDestinationAddress = process.env.FUNDING_WITHDRAWAL_EVIDENCE_SEED_DESTINATION_ADDRESS?.trim() ?? null;
+const explicitDestinationChain = process.env.FUNDING_WITHDRAWAL_EVIDENCE_SEED_DESTINATION_CHAIN?.trim() ?? null;
 
 if (!databaseUrl) {
   throw new Error("TEST_DATABASE_URL or DATABASE_URL is required to seed a withdrawal evidence smoke row.");
@@ -123,6 +126,16 @@ const applyFundingMigrations = async (pool: Pool): Promise<void> => {
 };
 
 const fakeTxHash = (): string => `0x${randomUUID().replaceAll("-", "")}${randomUUID().replaceAll("-", "")}`.slice(0, 66);
+
+const withdrawalTxHash = (): string => {
+  if (explicitWithdrawalTxHash) {
+    if (!/^([A-Za-z0-9]{32,}|0x[a-fA-F0-9]{64})$/.test(explicitWithdrawalTxHash)) {
+      throw new Error("FUNDING_WITHDRAWAL_EVIDENCE_SEED_WITHDRAWAL_TX_HASH is not a valid tx hash/reference.");
+    }
+    return explicitWithdrawalTxHash;
+  }
+  return fakeTxHash();
+};
 
 const fallbackAddressForVenue = (venue: FundingVenue): string =>
   venue === "LIMITLESS"
@@ -315,8 +328,8 @@ const main = async (): Promise<void> => {
     const withdrawal = await service.createWithdrawalIntent(artifact.userId, {
       token,
       amount,
-      destinationChain: capability.preferredChain,
-      destinationWalletAddress: fallbackAddressForVenue(venue),
+      destinationChain: explicitDestinationChain ?? capability.preferredChain,
+      destinationWalletAddress: explicitDestinationAddress ?? fallbackAddressForVenue(venue),
       idempotencyKey: `sandbox-${venue.toLowerCase()}-withdrawal-evidence-${randomUUID()}`,
       sources: [{ sourceVenue: venue, sourcePercentage: 100 }]
     });
@@ -325,10 +338,10 @@ const main = async (): Promise<void> => {
     if (!withdrawalLeg) {
       throw new Error("Withdrawal quote did not produce a route leg.");
     }
-    const withdrawalTxHash = fakeTxHash();
+    const submittedWithdrawalTxHash = withdrawalTxHash();
     const submittedWithdrawal = await service.submitWithdrawalRouteLeg(artifact.userId, withdrawal.intent.withdrawalIntentId, {
       withdrawalRouteLegId: withdrawalLeg.withdrawalRouteLegId,
-      txHash: withdrawalTxHash
+      txHash: submittedWithdrawalTxHash
     });
     const submittedLeg = submittedWithdrawal.routeLegs[0];
     const audit = await pool.query<{ event_type: string }>(
@@ -348,7 +361,7 @@ const main = async (): Promise<void> => {
       withdrawalRouteLegStatus: submittedLeg?.status ?? null,
       destinationChain: submittedWithdrawal.intent.destinationChain,
       destinationWalletAddress: submittedWithdrawal.intent.destinationWalletAddress,
-      fakeSandboxWithdrawalTxHash: withdrawalTxHash,
+      fakeSandboxWithdrawalTxHash: submittedWithdrawalTxHash,
       reconciliationRecordsObserved: reconciliationCount,
       auditEventsObserved: audit.rows.map((row) => row.event_type),
       selectedBySmokeQuery

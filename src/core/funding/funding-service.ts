@@ -34,6 +34,12 @@ import type {
   VenueFundingReadinessChecker,
   VenueFundingReadinessResult
 } from "./venue-readiness.js";
+import type {
+  PolymarketBridgeRawStatus,
+  PolymarketBridgeWithdrawalAdapter,
+  PolymarketBridgeWithdrawalQuote,
+  PolymarketBridgeUserAction
+} from "./polymarket-bridge-withdrawal-adapter.js";
 
 export interface FundingRepository {
   findIntentById(id: string): Promise<FundingIntent | null>;
@@ -159,7 +165,8 @@ export class FundingService {
     private readonly config: FundingServiceConfig,
     private readonly venueReadinessCheckers: ReadonlyMap<FundingVenue, VenueFundingReadinessChecker> = new Map(),
     private readonly withdrawalCompletionChecker: WithdrawalCompletionEvidenceChecker | null = null,
-    private readonly withdrawalCompletionPersistenceGate: WithdrawalCompletionPersistenceGate | null = null
+    private readonly withdrawalCompletionPersistenceGate: WithdrawalCompletionPersistenceGate | null = null,
+    private readonly polymarketBridgeWithdrawalAdapter: PolymarketBridgeWithdrawalAdapter | null = null
   ) {}
 
   public listVenueCapabilities(): VenueCapability[] {
@@ -555,6 +562,9 @@ export class FundingService {
       if (!hasBalance) {
         throw new FundingError("WITHDRAWAL_SOURCE_BALANCE_INSUFFICIENT", `${source.sourceVenue} venue-ready balance is insufficient.`, 409);
       }
+      if (this.shouldUsePolymarketBridgeSandbox(view, source)) {
+        return this.buildPolymarketBridgeWithdrawalRouteLeg(view.intent, source);
+      }
       return buildWithdrawalRouteLeg(view.intent, source);
     }));
     await this.repository.replaceWithdrawalRouteLegs(withdrawalIntentId, routeLegs);
@@ -615,8 +625,9 @@ export class FundingService {
 
   public async refreshWithdrawalStatus(userId: string, withdrawalIntentId: string): Promise<WithdrawalIntentView> {
     const view = await this.getWithdrawalIntent(userId, withdrawalIntentId);
+    await this.refreshPolymarketBridgeSandboxStatus(view);
     if (!this.withdrawalCompletionChecker) {
-      return view;
+      return this.getWithdrawalIntent(userId, withdrawalIntentId);
     }
 
     const refreshedStates: WithdrawalLegState[] = [];
@@ -706,6 +717,97 @@ export class FundingService {
       }
     }
     return this.getWithdrawalIntent(userId, withdrawalIntentId);
+  }
+
+  private shouldUsePolymarketBridgeSandbox(view: WithdrawalIntentView, source: WithdrawalSource): boolean {
+    if (!this.polymarketBridgeWithdrawalAdapter || view.sources.length !== 1 || source.sourceVenue !== "POLYMARKET") {
+      return false;
+    }
+    const capabilities = this.polymarketBridgeWithdrawalAdapter.getWithdrawalCapabilities();
+    return capabilities.supportsWithdrawal && capabilities.readinessStatus === "DRY_RUN_READY";
+  }
+
+  private async buildPolymarketBridgeWithdrawalRouteLeg(
+    intent: WithdrawalIntent,
+    source: WithdrawalSource
+  ): Promise<WithdrawalRouteLeg> {
+    if (!this.polymarketBridgeWithdrawalAdapter) {
+      return buildWithdrawalRouteLeg(intent, source);
+    }
+    try {
+      const supportedAssets = await this.polymarketBridgeWithdrawalAdapter.getSupportedBridgeAssets();
+      const quote = await this.polymarketBridgeWithdrawalAdapter.prepareWithdrawalQuote({
+        destinationChain: intent.destinationChain,
+        destinationToken: intent.token,
+        destinationAddress: intent.destinationWalletAddress,
+        amount: source.sourceAmount
+      });
+      const userAction = await this.polymarketBridgeWithdrawalAdapter.prepareUserAction(quote);
+      return buildPolymarketBridgeWithdrawalRouteLeg(intent, source, quote, userAction, supportedAssets.length);
+    } catch (error) {
+      const normalized = this.polymarketBridgeWithdrawalAdapter.normalizeWithdrawalError(error);
+      throw new FundingError(
+        "WITHDRAWAL_PROVIDER_UNAVAILABLE",
+        `Polymarket Bridge sandbox quote failed closed: ${normalized.message}`,
+        503
+      );
+    }
+  }
+
+  private async refreshPolymarketBridgeSandboxStatus(view: WithdrawalIntentView): Promise<void> {
+    if (!this.polymarketBridgeWithdrawalAdapter) {
+      return;
+    }
+    for (const leg of view.routeLegs) {
+      const providerStatus = leg.providerStatus;
+      if (providerStatus.provider !== "POLYMARKET_BRIDGE" || providerStatus.mode !== "SANDBOX_DRY_RUN") {
+        continue;
+      }
+      const bridgeAddress = typeof providerStatus.bridgeAddress === "string" ? providerStatus.bridgeAddress : null;
+      const latestTxHash = leg.txHashes.at(-1) ?? null;
+      if (!bridgeAddress && !latestTxHash) {
+        continue;
+      }
+      try {
+        const status = await this.polymarketBridgeWithdrawalAdapter.fetchWithdrawalStatus({
+          bridgeAddress,
+          txHash: latestTxHash
+        });
+        await this.repository.updateWithdrawalRouteLegReconciliation({
+          withdrawalRouteLegId: leg.withdrawalRouteLegId,
+          status: leg.status,
+          venueReleaseStatus: leg.venueReleaseStatus,
+          destinationStatus: leg.destinationStatus,
+          providerStatus: buildPolymarketBridgeProviderStatus({
+            quote: null,
+            userAction: null,
+            supportedAssetsChecked: null,
+            status,
+            existingProviderStatus: providerStatus
+          }),
+          errorReason: null
+        });
+      } catch (error) {
+        const normalized = this.polymarketBridgeWithdrawalAdapter.normalizeWithdrawalError(error);
+        await this.repository.updateWithdrawalRouteLegReconciliation({
+          withdrawalRouteLegId: leg.withdrawalRouteLegId,
+          status: leg.status,
+          venueReleaseStatus: leg.venueReleaseStatus,
+          destinationStatus: leg.destinationStatus,
+          providerStatus: {
+            ...providerStatus,
+            status: "UNKNOWN",
+            completionPersisted: false,
+            warnings: [
+              "Polymarket Bridge sandbox status could not be refreshed.",
+              "Dry-run status is not withdrawal completion evidence."
+            ],
+            error: normalized
+          },
+          errorReason: null
+        });
+      }
+    }
   }
 
   private mapWithdrawalCompletionResult(
@@ -946,14 +1048,163 @@ const buildWithdrawalRouteLeg = (intent: WithdrawalIntent, source: WithdrawalSou
   };
 };
 
+const buildPolymarketBridgeWithdrawalRouteLeg = (
+  intent: WithdrawalIntent,
+  source: WithdrawalSource,
+  bridgeQuote: PolymarketBridgeWithdrawalQuote,
+  userAction: PolymarketBridgeUserAction,
+  supportedAssetCount: number
+): WithdrawalRouteLeg => {
+  const now = new Date().toISOString();
+  const quote: WithdrawalRouteQuote = {
+    provider: "LOTUS_WITHDRAWAL_V0",
+    providerRouteId: bridgeQuote.providerQuoteId ?? `polymarket-bridge-${source.withdrawalSourceId}`,
+    sourceVenue: source.sourceVenue,
+    sourceToken: source.sourceToken,
+    sourceAmount: source.sourceAmount,
+    destinationChain: intent.destinationChain,
+    destinationWalletAddress: intent.destinationWalletAddress,
+    destinationAmountEstimate: bridgeQuote.amount,
+    estimatedFees: bridgeQuote.estimatedFees,
+    estimatedTimeSeconds: bridgeQuote.estimatedTimeSeconds,
+    expiresAt: bridgeQuote.expiresAt,
+    transactionRequest: null,
+    userSafeSummary: "Polymarket Bridge sandbox: user must send funds from their Polymarket wallet. Lotus does not sign, broadcast, custody, or move funds."
+  };
+  return {
+    withdrawalRouteLegId: randomUUID(),
+    withdrawalIntentId: intent.withdrawalIntentId,
+    withdrawalSourceId: source.withdrawalSourceId,
+    sourceVenue: source.sourceVenue,
+    sourceToken: source.sourceToken,
+    sourceAmount: source.sourceAmount,
+    destinationChain: intent.destinationChain,
+    destinationWalletAddress: intent.destinationWalletAddress,
+    destinationAmountEstimate: bridgeQuote.amount,
+    routeProvider: "LOTUS_WITHDRAWAL_V0",
+    routeQuote: quote,
+    txHashes: [],
+    providerStatus: buildPolymarketBridgeProviderStatus({
+      quote: bridgeQuote,
+      userAction,
+      supportedAssetsChecked: supportedAssetCount,
+      status: null
+    }),
+    venueReleaseStatus: "NOT_SUBMITTED",
+    destinationStatus: "NOT_CONFIRMED",
+    status: "WITHDRAWAL_LEG_SIGNATURE_REQUIRED",
+    errorReason: null,
+    createdAt: now,
+    updatedAt: now
+  };
+};
+
+const buildPolymarketBridgeProviderStatus = (input: {
+  quote: PolymarketBridgeWithdrawalQuote | null;
+  userAction: PolymarketBridgeUserAction | null;
+  supportedAssetsChecked: number | null;
+  status: PolymarketBridgeRawStatus | null;
+  existingProviderStatus?: Record<string, unknown>;
+}): Record<string, unknown> => {
+  const existing = input.existingProviderStatus ?? {};
+  const bridgeAddress = input.userAction?.bridgeAddress ??
+    input.status?.bridgeAddress ??
+    (typeof existing.bridgeAddress === "string" ? existing.bridgeAddress : null);
+  const warnings = [
+    ...(Array.isArray(existing.warnings) ? existing.warnings.filter((warning): warning is string => typeof warning === "string") : []),
+    ...(input.userAction?.warnings ?? []),
+    "Polymarket Bridge sandbox status is not withdrawal completion evidence."
+  ];
+  return {
+    ...existing,
+    provider: "POLYMARKET_BRIDGE",
+    mode: "SANDBOX_DRY_RUN",
+    bridgeAddressPresent: Boolean(bridgeAddress),
+    ...(bridgeAddress ? { bridgeAddress } : {}),
+    status: input.status?.status ?? existing.status ?? "PENDING",
+    completionPersisted: false,
+    warnings: [...new Set(warnings)],
+    supportedAssetsChecked: input.supportedAssetsChecked ?? existing.supportedAssetsChecked ?? null,
+    ...(input.quote ? {
+      quote: {
+        provider: input.quote.provider,
+        providerQuoteId: input.quote.providerQuoteId,
+        destinationChain: input.quote.destinationChain,
+        destinationToken: input.quote.destinationToken,
+        destinationAddress: input.quote.destinationAddress,
+        amount: input.quote.amount,
+        estimatedFees: input.quote.estimatedFees,
+        estimatedTimeSeconds: input.quote.estimatedTimeSeconds,
+        expiresAt: input.quote.expiresAt
+      }
+    } : {}),
+    ...(input.userAction ? {
+      userAction: {
+        actionType: input.userAction.actionType,
+        bridgeAddress: input.userAction.bridgeAddress,
+        destinationChain: input.userAction.destinationChain,
+        destinationToken: input.userAction.destinationToken,
+        destinationAddress: input.userAction.destinationAddress,
+        amount: input.userAction.amount,
+        expiresAt: input.userAction.expiresAt,
+        warnings: input.userAction.warnings
+      }
+    } : {}),
+    ...(input.status ? {
+      statusSummary: {
+        status: input.status.status,
+        txHash: input.status.txHash,
+        bridgeAddressPresent: Boolean(input.status.bridgeAddress),
+        destinationChain: input.status.destinationChain,
+        destinationToken: input.status.destinationToken,
+        destinationAddress: input.status.destinationAddress,
+        amount: input.status.amount,
+        completedAt: input.status.completedAt
+      }
+    } : {})
+  };
+};
+
 const summarizeWithdrawalQuotes = (routeLegs: readonly WithdrawalRouteLeg[]): Record<string, unknown> => ({
   provider: "LOTUS_WITHDRAWAL_V0",
   routeLegCount: routeLegs.length,
   sourceVenues: routeLegs.map((leg) => leg.sourceVenue),
   totalEstimatedFees: routeLegs.reduce((sum, leg) => sum.plus(leg.routeQuote.estimatedFees), new Decimal(0)).toString(),
   nonCustodial: true,
-  backendBroadcast: false
+  backendBroadcast: false,
+  ...summarizePolymarketBridgePreview(routeLegs)
 });
+
+const summarizePolymarketBridgePreview = (routeLegs: readonly WithdrawalRouteLeg[]): Record<string, unknown> => {
+  const bridgeLeg = routeLegs.find((leg) => leg.providerStatus.provider === "POLYMARKET_BRIDGE");
+  if (!bridgeLeg) {
+    return {};
+  }
+  const status = bridgeLeg.providerStatus;
+  const quote = status.quote && typeof status.quote === "object" && !Array.isArray(status.quote)
+    ? status.quote as Record<string, unknown>
+    : {};
+  const userAction = status.userAction && typeof status.userAction === "object" && !Array.isArray(status.userAction)
+    ? status.userAction as Record<string, unknown>
+    : {};
+  return {
+    polymarketBridge: {
+      provider: "POLYMARKET_BRIDGE",
+      mode: "SANDBOX_DRY_RUN",
+      bridgeAddressPresent: status.bridgeAddressPresent === true,
+      bridgeAddress: typeof userAction.bridgeAddress === "string" ? userAction.bridgeAddress : undefined,
+      destinationChain: quote.destinationChain ?? bridgeLeg.destinationChain,
+      destinationToken: quote.destinationToken ?? bridgeLeg.sourceToken,
+      destinationAddress: quote.destinationAddress ?? bridgeLeg.destinationWalletAddress,
+      amount: quote.amount ?? bridgeLeg.destinationAmountEstimate,
+      estimatedFees: quote.estimatedFees ?? bridgeLeg.routeQuote.estimatedFees,
+      estimatedTimeSeconds: quote.estimatedTimeSeconds ?? bridgeLeg.routeQuote.estimatedTimeSeconds,
+      expiresAt: quote.expiresAt ?? bridgeLeg.routeQuote.expiresAt,
+      warnings: Array.isArray(status.warnings) ? status.warnings : [],
+      completionPersisted: false
+    }
+  };
+};
 
 const isWithdrawalQuoteExpired = (leg: WithdrawalRouteLeg): boolean => Date.parse(leg.routeQuote.expiresAt) <= Date.now();
 

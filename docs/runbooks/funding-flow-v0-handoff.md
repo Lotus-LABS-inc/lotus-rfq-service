@@ -1570,6 +1570,39 @@ Safety notes:
 
 The first real withdrawal evidence adapter should be `PolymarketWithdrawalEvidenceChecker`. It must be read-only and fail-closed. It is not a live withdrawal executor and must not call a venue withdrawal mutation endpoint.
 
+The live withdrawal adapter design for v1 lives in `docs/runbooks/withdrawal-flow-v1-adapter-design.md`. That spec is the canonical boundary for future venue-specific live withdrawal adapter work. It preserves Model A non-custodial semantics and does not authorize backend signing, backend broadcasting, custody, or live venue mutation.
+
+For Polymarket, the first Bridge adapter validation is operator-only and dry-run:
+
+```bash
+npm run funding:polymarket-bridge-withdrawal-dry-run
+```
+
+This command validates supported-assets parsing, quote preparation, user-action instructions, status parsing, evidence normalization, and redaction without wiring Polymarket Bridge into user withdrawal endpoints.
+
+A real HTTP `COMPLETED` dry-run means Bridge prepare/read/status compatibility only. It does not prove completion because no real user transfer is sent. Completion evidence should remain not completed until a separate controlled transfer rehearsal is explicitly approved.
+
+Polymarket Bridge sandbox wiring is disabled by default. When `POLYMARKET_BRIDGE_WITHDRAWALS_ENABLED=true`, `POLYMARKET_BRIDGE_DRY_RUN_ONLY=true`, and the adapter is configured, `POST /funding/withdrawals/:id/quote` may return frontend-safe `routePreview.polymarketBridge` metadata for a single-source Polymarket withdrawal. `GET /funding/withdrawals/:id/status` may refresh sanitized Bridge provider status for the recorded bridge address/reference. This wiring still does not sign, broadcast, move funds, call LI.FI execution, persist completion, or enable live withdrawal execution.
+
+To start a controlled user-transfer rehearsal, operators can run:
+
+```bash
+npm run funding:polymarket-bridge-user-transfer-rehearsal:start
+```
+
+This command only prepares an operator action artifact. It refuses to run unless `POLYMARKET_BRIDGE_USER_TRANSFER_REHEARSAL_ENABLED=true`, Polymarket Bridge config is complete, `POLYMARKET_BRIDGE_DRY_RUN_ONLY=true`, an operator-approved destination address is configured, and the rehearsal amount is within the configured maximum. Success writes `artifacts/funding/polymarket-bridge-user-transfer-rehearsal-start.json` and `.md` with `status=ACTION_REQUIRED`.
+
+The Bridge service controls the action expiry. Lotus must not extend or fake the expiry locally. The rehearsal command records `usableTtlSeconds` and refuses actions below `POLYMARKET_BRIDGE_REHEARSAL_MIN_TTL_SECONDS` so operators do not act on an already stale instruction.
+
+Safety notes:
+
+- the command does not sign or broadcast
+- the command does not persist completion
+- the command does not call LI.FI execution
+- the command does not enable live venue withdrawal execution
+- the operator must manually verify the Bridge address, destination wallet, token, amount, and expiry before sending from the Polymarket wallet
+- after the manual transfer, record the user-broadcast tx hash/reference through the existing withdrawal submit/status path and run evidence smoke/gate checks before any completion persistence
+
 Adapter purpose:
 
 - consume evidence for a withdrawal route leg that already has a user-broadcast tx hash
@@ -1709,10 +1742,38 @@ Local operator fixture env:
 
 ```env
 <VENUE>_INTERNAL_WITHDRAWAL_EVIDENCE_READ_ENABLED=false
+<VENUE>_INTERNAL_WITHDRAWAL_EVIDENCE_READ_MODE=FIXTURE
 <VENUE>_INTERNAL_WITHDRAWAL_EVIDENCE_FIXTURE_PATH=
 ```
 
 When enabled locally, this route reads a sanitized operator fixture file and returns only the normalized evidence contract. It does not call a live venue withdrawal API, does not sign, does not broadcast, does not move funds, and does not persist completion. Keep it disabled unless running a controlled smoke test.
+
+Polymarket also supports a fail-closed on-chain read mode for replacing the local fixture during Bridge transfer validation:
+
+```env
+POLYMARKET_INTERNAL_WITHDRAWAL_EVIDENCE_READ_ENABLED=true
+POLYMARKET_INTERNAL_WITHDRAWAL_EVIDENCE_READ_MODE=POLYGON_ONCHAIN
+POLYMARKET_INTERNAL_WITHDRAWAL_EVIDENCE_POLYGON_RPC_URL=https://...
+POLYMARKET_INTERNAL_WITHDRAWAL_EVIDENCE_BRIDGE_STATUS_BASE_URL=https://bridge.polymarket.com
+POLYMARKET_INTERNAL_WITHDRAWAL_EVIDENCE_USDC_ADDRESS=0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359
+```
+
+This mode reads Polygon transaction receipts and the Polymarket Bridge status endpoint for the observed Bridge address. It can prove venue-release/source-transfer evidence, but it must not mark withdrawal completion by itself. A Bridge `COMPLETED` status without exact destination wallet evidence is treated as destination-scope-unverified and still cannot persist completion. `COMPLETED` persistence requires explicit destination receipt evidence that matches the expected wallet, chain, token, amount, withdrawal intent, and route leg.
+
+Late or expired Polymarket Bridge transfers may be recovered by the Bridge provider as an aggregate completion that includes multiple sends to the same Bridge address. Lotus treats that as a recovery-review case, not as normal completion evidence. The evidence checker should return `UNKNOWN` with `recoveryReviewRequired=true`, `bridgeStatus=COMPLETED`, and the aggregate `bridgeAmount` when Bridge status shows completion but cannot prove the exact destination wallet and exact per-withdrawal amount. Operators may use this to investigate recovered funds, but `refreshWithdrawalStatus` must not persist `WITHDRAWAL_LEG_COMPLETED` from aggregate Bridge evidence.
+
+Operators can generate a read-only recovery proposal from the latest Polymarket withdrawal evidence smoke artifact:
+
+```bash
+npm run funding:polymarket-bridge-withdrawal-recovery-review
+```
+
+The command reads `artifacts/funding/polymarket-withdrawal-evidence-smoke-test.json`, finds submitted Polymarket withdrawal rows for the same destination wallet and review window, compares their expected total to the aggregate Bridge amount, and writes:
+
+- `artifacts/funding/polymarket-bridge-withdrawal-recovery-review.json`
+- `artifacts/funding/polymarket-bridge-withdrawal-recovery-review.md`
+
+This is an operator review artifact only. It does not approve completion, does not persist reconciliation records, does not sign, does not broadcast, and does not move funds. A separate future approval command must require explicit operator input and should remain disabled until this report can produce an exact aggregate match with no already-completed candidate ambiguity.
 
 Expected smoke artifact safety fields:
 
@@ -1790,6 +1851,18 @@ To create a DB-backed submitted withdrawal route leg for a venue-specific eviden
 npm run funding:seed-withdrawal-evidence-smoke -- LIMITLESS
 npm run funding:seed-limitless-withdrawal-evidence-smoke
 ```
+
+For controlled real-transfer rehearsals, the seed command can record an operator-provided user-broadcast reference without signing or broadcasting:
+
+```bash
+FUNDING_WITHDRAWAL_EVIDENCE_SEED_WITHDRAWAL_TX_HASH=0x...
+FUNDING_WITHDRAWAL_EVIDENCE_SEED_AMOUNT=1
+FUNDING_WITHDRAWAL_EVIDENCE_SEED_DESTINATION_CHAIN=POLYGON
+FUNDING_WITHDRAWAL_EVIDENCE_SEED_DESTINATION_ADDRESS=0x...
+npm run funding:seed-withdrawal-evidence-smoke -- POLYMARKET
+```
+
+Use these overrides only after a manual user/operator transfer has already been sent. The seed still creates records only; it does not call live withdrawal execution, sign, broadcast, or persist completion evidence.
 
 The seed command:
 
