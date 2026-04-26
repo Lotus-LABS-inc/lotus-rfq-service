@@ -8,16 +8,23 @@ import {
   type FundingReconciliationRecord,
   type FundingRouteLeg,
   type FundingRouteQuote,
-  type FundingTarget
+  type FundingTarget,
+  type FundingVenue
 } from "../src/core/funding/types.js";
 import { FundingReadinessChecker, FundingService, type FundingRepository } from "../src/core/funding/funding-service.js";
 import { buildVenueCapabilityMatrix } from "../src/core/funding/venue-capabilities.js";
 import {
+  ConfigurableVenueFundingReadinessChecker,
+  getFundingReadinessConfigFromEnv,
   getLimitlessFundingReadinessConfigFromEnv,
+  getMyriadFundingReadinessConfigFromEnv,
+  getOpinionFundingReadinessConfigFromEnv,
+  getPredictFunFundingReadinessConfigFromEnv,
   getPolymarketFundingReadinessConfigFromEnv,
   HttpPolymarketFundingBalanceReadClient,
   LimitlessFundingReadinessChecker,
   PolymarketFundingReadinessChecker,
+  type FundingBalanceReadClient,
   type LimitlessFundingBalanceReadClient,
   type PolymarketFundingBalanceReadClient
 } from "../src/core/funding/venue-readiness.js";
@@ -30,7 +37,10 @@ import { zeroFees, type ExecutionRequestV0 } from "../src/execution-system/types
 
 const env = {
   POLYMARKET_FUNDING_DESTINATION_ADDRESS: "0x1111111111111111111111111111111111111111",
-  LIMITLESS_FUNDING_DESTINATION_ADDRESS: "0x3333333333333333333333333333333333333333"
+  LIMITLESS_FUNDING_DESTINATION_ADDRESS: "0x3333333333333333333333333333333333333333",
+  OPINION_FUNDING_DESTINATION_ADDRESS: "0x4444444444444444444444444444444444444444",
+  MYRIAD_FUNDING_DESTINATION_ADDRESS: "0x5555555555555555555555555555555555555555",
+  PREDICT_FUN_FUNDING_DESTINATION_ADDRESS: "0x6666666666666666666666666666666666666666"
 } as NodeJS.ProcessEnv;
 
 const executionRequest = (): ExecutionRequestV0 => ({
@@ -198,6 +208,18 @@ class StubLimitlessBalanceReadClient implements LimitlessFundingBalanceReadClien
   }
 }
 
+class StubFundingBalanceReadClient implements FundingBalanceReadClient {
+  public usableBalance = "0";
+  public shouldThrow = false;
+
+  public async fetchUsableUsdcBalance(): Promise<{ usableBalance: string; raw?: Record<string, unknown> }> {
+    if (this.shouldThrow) {
+      throw new Error("read unavailable");
+    }
+    return { usableBalance: this.usableBalance, raw: { source: "stub" } };
+  }
+}
+
 class StubLifiProvider implements LifiRouteProvider {
   public async quote(input: Parameters<LifiRouteProvider["quote"]>[0]): Promise<FundingRouteQuote> {
     return {
@@ -249,6 +271,10 @@ describe("Funding v0 domain", () => {
   it("exposes frontend-safe venue capabilities without deposit secrets", () => {
     const matrix = buildVenueCapabilityMatrix({ env });
     expect(matrix.POLYMARKET.readinessStatus).toBe("READY");
+    expect(matrix.OPINION.readinessStatus).toBe("READY");
+    expect(matrix.MYRIAD.readinessStatus).toBe("READY");
+    expect(matrix.PREDICT_FUN.readinessStatus).toBe("READY");
+    expect(buildVenueCapabilityMatrix({ env: {} as NodeJS.ProcessEnv }).OPINION.readinessStatus).toBe("DISABLED");
     const repository = new InMemoryFundingRepository();
     const service = new FundingService(repository, new StubLifiProvider(), {
       lifiQuotesEnabled: true,
@@ -256,6 +282,7 @@ describe("Funding v0 domain", () => {
       env
     });
     expect(JSON.stringify(service.listVenueCapabilities())).not.toContain(env.POLYMARKET_FUNDING_DESTINATION_ADDRESS);
+    expect(JSON.stringify(service.listVenueCapabilities())).not.toContain(env.OPINION_FUNDING_DESTINATION_ADDRESS);
   });
 
   it("creates split-capable intents, quotes route legs, and blocks stale replay", async () => {
@@ -594,6 +621,115 @@ describe("Funding v0 domain", () => {
     balanceClient.usableBalance = "not-a-number";
     await expect(checker.check({ userId: "user-1", intent, leg, reconciliations: [] }))
       .resolves.toMatchObject({ status: "UNKNOWN", readyToTrade: false, reason: "LIMITLESS_BALANCE_RESPONSE_MALFORMED" });
+  });
+
+  it("uses the shared venue readiness checker for next venues", async () => {
+    const venueConfigs = [
+      ["OPINION", getOpinionFundingReadinessConfigFromEnv],
+      ["MYRIAD", getMyriadFundingReadinessConfigFromEnv],
+      ["PREDICT_FUN", getPredictFunFundingReadinessConfigFromEnv]
+    ] as const;
+
+    for (const [venue, readConfig] of venueConfigs) {
+      expect(readConfig({} as NodeJS.ProcessEnv)).toMatchObject({
+        enabled: false,
+        mode: "DISABLED",
+        configured: false
+      });
+      expect(getFundingReadinessConfigFromEnv(venue, {
+        [`${venue}_FUNDING_READINESS_MODE`]: "LIVE_READ",
+        [`${venue}_FUNDING_BALANCE_URL`]: `https://operator.example/${venue.toLowerCase()}-readiness`,
+        [`${venue}_FUNDING_READ_AUTH_MODE`]: "BEARER"
+      } as NodeJS.ProcessEnv)).toMatchObject({
+        enabled: true,
+        mode: "LIVE_READ",
+        authMode: "BEARER",
+        configured: true
+      });
+
+      const balanceClient = new StubFundingBalanceReadClient();
+      const checker = new ConfigurableVenueFundingReadinessChecker(venue, balanceClient, {
+        mode: "STUB",
+        env,
+        now: () => new Date("2026-04-25T00:00:00.000Z")
+      });
+      const intent = {
+        fundingIntentId: `${venue.toLowerCase()}-intent-1`,
+        userId: "user-1",
+        sourceChain: "SOLANA",
+        sourceToken: "USDC",
+        sourceAmount: "25",
+        sourceWalletAddress: "wallet",
+        status: "ROUTES_SUBMITTED" as const,
+        idempotencyKey: `${venue.toLowerCase()}-idem`,
+        aggregateRouteQuote: {},
+        totalEstimatedFees: "0",
+        totalEstimatedTimeSeconds: null,
+        auditEventIds: [],
+        createdAt: "2026-04-25T00:00:00.000Z",
+        updatedAt: "2026-04-25T00:00:00.000Z"
+      };
+      const leg = {
+        routeLegId: `${venue.toLowerCase()}-leg-1`,
+        fundingIntentId: intent.fundingIntentId,
+        fundingTargetId: `${venue.toLowerCase()}-target-1`,
+        targetVenue: venue as FundingVenue,
+        sourceChain: "SOLANA",
+        sourceToken: "USDC",
+        sourceAmount: "25",
+        destinationChain: "POLYGON",
+        destinationToken: "USDC",
+        destinationAmountEstimate: "25",
+        routeProvider: "LIFI" as const,
+        routeQuote: await new StubLifiProvider().quote({
+          fromChain: "SOLANA",
+          toChain: "137",
+          fromToken: "source",
+          toToken: "target",
+          fromAmount: "25",
+          fromAddress: "wallet",
+          toAddress: "destination",
+          targetVenue: venue
+        }),
+        txHashes: ["0x2222222222222222222222222222222222222222222222222222222222222222"],
+        providerStatus: {},
+        bridgeStatus: "DONE",
+        destinationStatus: "CONFIRMED",
+        venueCreditStatus: "PENDING",
+        status: "LEG_VENUE_CREDIT_PENDING" as const,
+        errorReason: null,
+        createdAt: "2026-04-25T00:00:00.000Z",
+        updatedAt: "2026-04-25T00:00:00.000Z"
+      };
+
+      balanceClient.usableBalance = "24.99";
+      await expect(checker.check({ userId: "user-1", intent, leg, reconciliations: [] }))
+        .resolves.toMatchObject({
+          venue,
+          status: "VENUE_CREDIT_PENDING",
+          readyToTrade: false,
+          reason: `${venue}_USABLE_BALANCE_BELOW_REQUIRED_AMOUNT`
+        });
+
+      balanceClient.usableBalance = "25";
+      const ready = await checker.check({ userId: "user-1", intent, leg, reconciliations: [] });
+      expect(ready).toMatchObject({
+        venue,
+        status: "READY_TO_TRADE",
+        readyToTrade: true,
+        reason: `${venue}_USABLE_BALANCE_CONFIRMED`,
+        evidence: {
+          source: `${venue.toLowerCase()}_funding_readiness`,
+          checkerMode: "STUB"
+        }
+      });
+      expect(JSON.stringify(ready)).not.toContain("authorization");
+      expect(JSON.stringify(ready)).not.toContain("privateKey");
+
+      balanceClient.usableBalance = "not-a-number";
+      await expect(checker.check({ userId: "user-1", intent, leg, reconciliations: [] }))
+        .resolves.toMatchObject({ status: "UNKNOWN", readyToTrade: false, reason: `${venue}_BALANCE_RESPONSE_MALFORMED` });
+    }
   });
 
   it("validates Polymarket operator readiness config and redacts live-read evidence", async () => {

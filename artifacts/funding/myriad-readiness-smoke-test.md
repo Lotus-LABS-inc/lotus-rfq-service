@@ -1,7 +1,7 @@
-# Limitless Funding Readiness Smoke Test
+# MYRIAD Funding Readiness Smoke Test
 
-Generated: 2026-04-26T01:44:12.257Z
-Status: NO_ELIGIBLE_CONFIRMED_ROW
+Generated: 2026-04-26T02:09:18.926Z
+Status: COMPLETED
 
 ## Safety
 
@@ -17,21 +17,21 @@ Status: NO_ELIGIBLE_CONFIRMED_ROW
 - Configured: true
 - Balance URL configured: true
 - Balance URL host: localhost:4001
-- Auth mode: BEARER
+- Auth mode: NONE
 - API key configured: true
 - Timeout ms: 5000
 - Minimum confirmations: 0
 
 ## Result
 
-- Mapping observed: none
-- Reason: none
-- Ready to trade observed: false
+- Mapping observed: READY_TO_TRADE
+- Reason: MYRIAD_USABLE_BALANCE_CONFIRMED
+- Ready to trade observed: true
 
 ## Blockers
 
-- No LIMITLESS funding route leg with confirmed destination status was found.
+- none
 
 ## Warnings
 
-- none
+- READY_TO_TRADE was observed by the read-only smoke test but was not persisted.

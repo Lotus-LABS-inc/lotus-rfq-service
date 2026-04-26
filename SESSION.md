@@ -3282,3 +3282,60 @@ Dominant outcome:
   - no venue widening
   - approval, hold, and rollback remain lane-scoped only
   - XRP is supported by family design but not onboarded in this pass
+
+## 2026-04-26 Funding Readiness Multi-Venue Gate Session
+
+- centralized funding venue readiness into a shared configurable checker/client layer for:
+  - `POLYMARKET`
+  - `LIMITLESS`
+  - `OPINION`
+  - `MYRIAD`
+  - `PREDICT_FUN`
+- retained compatibility for existing Polymarket and Limitless readiness paths while adding generic support for the next venues
+- extended funding capabilities so Opinion, Myriad, and Predict.fun stay disabled by default and only become quote-capable with explicit venue destination configuration
+- added generic operator flow commands:
+  - `npm run funding:venue-readiness-smoke -- <VENUE>`
+  - `npm run funding:seed-venue-readiness-smoke -- <VENUE>`
+  - `npm run funding:venue-readiness-reconcile -- <VENUE>`
+  - `npm run funding:venue-readiness-sandbox-preflight -- <VENUE>`
+  - `npm run funding:venue-enforcement-gate -- <VENUE>`
+  - `npm run funding:venue-gate-summary`
+- added convenience smoke commands for:
+  - `npm run funding:opinion-readiness-smoke`
+  - `npm run funding:myriad-readiness-smoke`
+  - `npm run funding:predictfun-readiness-smoke`
+- completed controlled readiness sequence for Opinion:
+  - seeded confirmed destination funding route leg
+  - smoke mapped to `READY_TO_TRADE`
+  - reconciliation persisted readiness through the funding service
+  - sandbox preflight passed with funding enforcement enabled only inside the script
+  - route gate passed
+- completed the same sequence for Myriad
+- completed the same sequence for Predict.fun
+- added all-venue readiness gate summary artifacts:
+  - `artifacts/funding/all-venue-readiness-gate-summary.json`
+  - `artifacts/funding/all-venue-readiness-gate-summary.md`
+- latest all-venue gate summary result:
+  - `PASSED`
+  - `passedVenues=5`
+  - `failedVenues=0`
+- updated docs:
+  - `docs/runbooks/funding-flow-v0-handoff.md`
+  - `docs/security/LOTUS_SECURITY_CHECKLIST.md`
+- safety posture at end of session:
+  - live LI.FI execution remains disabled
+  - backend transaction broadcast remains disabled
+  - funding preflight enforcement remains disabled by default
+  - admin reads remain read-only
+  - smoke tests do not persist readiness
+  - route-specific reconciliation remains the only persistence path for venue readiness
+- validation run:
+  - `npm run typecheck`
+  - `npm run test:funding-flow`
+  - `npm run test:funding-flow:db`
+  - `npm run test:execution-system`
+  - `npm audit --omit=dev --audit-level=moderate`
+  - `npm run report:funding:readiness`
+  - `npm run funding:venue-gate-summary`
+- next safe action:
+  - only consider sandbox funding enforcement for route scopes whose required venues have fresh persisted readiness evidence and passing gate artifacts

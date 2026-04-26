@@ -1,0 +1,17 @@
+{
+  "generatedAt": "2026-04-26T02:05:12.439Z",
+  "status": "COMPLETED",
+  "targetVenue": "OPINION",
+  "fundingIntentId": "2c8ed972-cf09-46db-8150-c4df15c84f31",
+  "routeLegId": "9d3fdb58-ede8-4860-a758-a4916cabf987",
+  "userId": "smoke-opinion-readiness-user",
+  "routeLegStatus": "LEG_READY_TO_TRADE",
+  "destinationStatus": "CONFIRMED",
+  "venueCreditStatus": "CONFIRMED",
+  "persistedReadinessResult": true,
+  "reconciliationReason": "OPINION_USABLE_BALANCE_CONFIRMED",
+  "smokeReadyToTrade": true,
+  "liveLifiExecutionEnabled": false,
+  "fundingPreflightEnforcementEnabled": false,
+  "redactionVerified": true
+}

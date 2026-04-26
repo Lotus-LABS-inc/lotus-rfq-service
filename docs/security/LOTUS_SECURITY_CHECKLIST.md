@@ -37,7 +37,8 @@ Before enabling funding runtime beyond local/sandbox:
 - `FUNDING_LIVE_SUBMIT_ENABLED` remains false for v0 because backend does not sign or broadcast user wallet transactions.
 - Venue destination envs such as `POLYMARKET_FUNDING_DESTINATION_ADDRESS` and `LIMITLESS_FUNDING_DESTINATION_ADDRESS` are configured and reviewed before quote enablement.
 - Venue readiness envs such as `*_FUNDING_READINESS_MODE`, `*_FUNDING_READINESS_ENABLED`, `*_FUNDING_BALANCE_URL`, `*_FUNDING_READ_AUTH_MODE`, and `*_FUNDING_READ_API_KEY` are reviewed before any checker can mark balances `READY_TO_TRADE`.
-- Polymarket and Limitless funding readiness default to `DISABLED`; `LIVE_READ` requires an operator-approved read endpoint and server-side-only credentials where needed.
+- Polymarket, Limitless, Opinion, Myriad, and Predict.fun funding readiness default to `DISABLED`; `LIVE_READ` requires an operator-approved read endpoint and server-side-only credentials where needed.
+- Before a new venue is used in funding enforcement, run its read-only smoke command and confirm the artifact is redacted, read-only, and either `COMPLETED` with expected mapping or fail-closed with a documented blocker.
 - Internal Polymarket balance reads require `POLYMARKET_INTERNAL_BALANCE_READ_ENABLED=true`, complete CLOB read credentials, and bearer auth outside local loopback testing.
 - `/internal/polymarket/funding-balance` returns only `usableBalance`; it must not return raw CLOB responses, allowances, auth headers, API keys, or private keys.
 - Sandbox funding enforcement is only allowed for approved routes where every required route venue has validated readiness coverage.
@@ -47,6 +48,8 @@ Before enabling funding runtime beyond local/sandbox:
 - Treat pair-route rehearsal artifacts older than 24 hours, generated before the latest funding/readiness/preflight code change, or generated against different venue readiness envs as stale.
 - If the pair rehearsal artifact is stale or missing, rerun `npm run funding:pair-readiness-sandbox-preflight` before enabling any pair-route funding enforcement flag.
 - Run `npm run funding:pair-enforcement-gate` before changing any pair-route funding enforcement flag; it must pass without overrides unless an operator explicitly documents a shorter or longer freshness window.
+- Run the route-specific gate, such as `npm run funding:opinion-enforcement-gate`, before changing any single-venue funding enforcement setting for that venue; every venue in the route path must have fresh persisted `READY_TO_TRADE` evidence.
+- Run `npm run funding:venue-gate-summary` before any sandbox funding-enforcement rollout; every venue required by the route must be `PASSED` and fresh in the summary.
 
 ## 3. LiFi Integration Checklist
 

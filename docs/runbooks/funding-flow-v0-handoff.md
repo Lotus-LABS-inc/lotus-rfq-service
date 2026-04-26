@@ -507,6 +507,9 @@ Funding v0 is implemented fail-closed by default. Operators must configure these
 - `LIMITLESS_FUNDING_READ_API_KEY` is server-side only and must never be returned in API responses, artifacts, logs, or receipts
 - `LIMITLESS_FUNDING_READ_TIMEOUT_MS=5000`
 - `LIMITLESS_FUNDING_MIN_CONFIRMATIONS=0` unless a venue-specific finality policy requires more confirmations
+- `OPINION_FUNDING_DESTINATION_ADDRESS`, `MYRIAD_FUNDING_DESTINATION_ADDRESS`, and `PREDICT_FUN_FUNDING_DESTINATION_ADDRESS` are required before those venues can be used for funding quotes
+- `OPINION_*`, `MYRIAD_*`, and `PREDICT_FUN_*` readiness envs follow the same disabled-by-default balance-read pattern: `*_FUNDING_READINESS_MODE=DISABLED`, `*_FUNDING_BALANCE_URL`, `*_FUNDING_READ_AUTH_MODE`, `*_FUNDING_READ_API_KEY`, `*_FUNDING_READ_TIMEOUT_MS`, and `*_FUNDING_MIN_CONFIRMATIONS`
+- `OPINION_FUNDING_PREFERRED_CHAIN`, `MYRIAD_FUNDING_PREFERRED_CHAIN`, and `PREDICT_FUN_FUNDING_PREFERRED_CHAIN` default to `POLYGON` until operator-approved venue capability data says otherwise
 - `SOLANA_USDC_TOKEN_ADDRESS` and `POLYGON_USDC_TOKEN_ADDRESS` may override default token addresses
 
 The implemented user endpoints are:
@@ -548,28 +551,32 @@ Activation rules:
 - If no bearer token is configured, local development allows loopback-only access; production must configure bearer auth.
 - This service does not mark funding `READY_TO_TRADE`; it only supplies the balance read used by the existing readiness checker.
 
-### Limitless Readiness Smoke Test
+### Generic Venue Readiness Smoke Tests
 
-Use this read-only command to validate the Limitless `LIVE_READ` response contract before any broader pair-route funding enforcement rehearsal:
+Use these read-only commands to validate a venue `LIVE_READ` response contract before any broader route funding enforcement rehearsal:
 
 ```bash
 npm run funding:limitless-readiness-smoke
+npm run funding:opinion-readiness-smoke
+npm run funding:myriad-readiness-smoke
+npm run funding:predictfun-readiness-smoke
+npm run funding:venue-readiness-smoke -- OPINION
 ```
 
 Required operator config:
 
-- `LIMITLESS_FUNDING_READINESS_MODE=LIVE_READ`
-- `LIMITLESS_FUNDING_BALANCE_URL` must point to an operator-approved server-side balance read service.
-- `LIMITLESS_FUNDING_READ_AUTH_MODE=BEARER` requires `LIMITLESS_FUNDING_READ_API_KEY`.
-- `TEST_DATABASE_URL` or `DATABASE_URL` must point to a database with at least one confirmed Limitless funding route leg.
+- `<VENUE>_FUNDING_READINESS_MODE=LIVE_READ`
+- `<VENUE>_FUNDING_BALANCE_URL` must point to an operator-approved server-side balance read service.
+- `<VENUE>_FUNDING_READ_AUTH_MODE=BEARER` requires `<VENUE>_FUNDING_READ_API_KEY`.
+- `TEST_DATABASE_URL` or `DATABASE_URL` must point to a database with at least one confirmed funding route leg for that venue.
 
 The command:
 
-- selects one safe `LIMITLESS` funding route leg with confirmed destination status
-- invokes `LimitlessFundingReadinessChecker` in read-only mode
+- selects one safe venue funding route leg with confirmed destination status
+- invokes the shared configurable venue readiness checker in read-only mode
 - validates parsing for `READY_TO_TRADE`, `VENUE_CREDIT_PENDING`, or `UNKNOWN`
-- writes `artifacts/funding/limitless-readiness-smoke-test.json`
-- writes `artifacts/funding/limitless-readiness-smoke-test.md`
+- writes `artifacts/funding/<venue>-readiness-smoke-test.json`
+- writes `artifacts/funding/<venue>-readiness-smoke-test.md`
 - does not persist readiness
 - does not enable funding preflight enforcement
 - does not call LI.FI live execution
@@ -583,7 +590,79 @@ Expected safety fields:
 - `fundingPreflightEnforcementEnabled=false`
 - `redactionVerified=true`
 
-This command only proves the Limitless read path can be parsed safely. It does not make pair-route funding enforcement production-ready by itself.
+These commands only prove a venue read path can be parsed safely. They do not make pair-route or tri-route funding enforcement production-ready by themselves.
+
+### Opinion Readiness Seed And Reconciliation Rehearsal
+
+Use this sequence to create one confirmed Opinion funding route leg, validate the read-only balance-read mapping, then persist readiness only if the smoke artifact proves `READY_TO_TRADE`:
+
+```bash
+npm run funding:seed-opinion-readiness-smoke
+npm run funding:opinion-readiness-smoke
+npm run funding:opinion-readiness-reconcile
+```
+
+Safety rules:
+
+- `funding:seed-opinion-readiness-smoke` creates a sandbox funding intent, target, route leg, fake tx hash, and destination-confirmed reconciliation row.
+- The seed command does not call LI.FI, does not broadcast a transaction, and does not mark funds `READY_TO_TRADE`.
+- `funding:opinion-readiness-smoke` is read-only and writes `artifacts/funding/opinion-readiness-smoke-test.json`.
+- `funding:opinion-readiness-reconcile` refuses to persist unless the smoke artifact is `COMPLETED`, `mappingObserved=READY_TO_TRADE`, `redactionVerified=true`, and safety flags show no live LI.FI execution or funding enforcement.
+- The reconciliation command persists readiness through `FundingService.verifyVenueReadiness`, not through admin reads.
+- If the smoke maps to `VENUE_CREDIT_PENDING`, `UNKNOWN`, fails redaction, or has no selected row, do not run reconciliation.
+
+### Opinion Route Enforcement Rehearsal Gate
+
+After Opinion readiness is persisted, run a sandbox-only execution preflight rehearsal before treating any Opinion route as funding-enforcement-ready:
+
+```bash
+npm run funding:opinion-readiness-sandbox-preflight
+npm run funding:opinion-enforcement-gate
+```
+
+The rehearsal:
+
+- selects one persisted `READY_TO_TRADE` Opinion funding row from the real funding tables
+- builds a sandbox `CRYPTO_BTC_ATH_BY_DATE_SINGLE_OPINION` lane in script scope only
+- runs execution preflight with funding enforcement enabled only inside the script
+- does not call LI.FI
+- does not broadcast transactions
+- does not submit venue orders
+- writes `artifacts/funding/opinion-funding-readiness-sandbox-preflight.json`
+- writes `artifacts/funding/opinion-funding-readiness-sandbox-preflight.md`
+
+The gate refuses enforcement readiness unless:
+
+- the artifact status is `COMPLETED`
+- the artifact is fresh, default 24 hours
+- every venue in the route path has persisted `READY_TO_TRADE` evidence
+- every route leg has `LEG_READY_TO_TRADE`, `destinationStatus=CONFIRMED`, and `venueCreditStatus=CONFIRMED`
+- execution preflight returned `ok=true`
+- safety flags show default funding enforcement, live LI.FI execution, backend broadcast, and live venue submission are all disabled
+- redaction is verified
+
+For pair, tri, or split routes, the same rule applies: every venue in the route must have fresh persisted readiness evidence and a passing route-specific rehearsal gate. A single ready venue does not make a multi-venue route enforcement-ready.
+
+### All-Venue Readiness Gate Summary
+
+Before any sandbox funding-enforcement rollout, run:
+
+```bash
+npm run funding:venue-gate-summary
+```
+
+This read-only report:
+
+- checks Polymarket, Limitless, Opinion, Myriad, and Predict.fun
+- accepts either a single-venue rehearsal artifact or a pair rehearsal artifact that covers the venue
+- verifies freshness, default 24 hours
+- verifies persisted readiness evidence
+- verifies execution preflight passed
+- verifies redaction and safety flags
+- writes `artifacts/funding/all-venue-readiness-gate-summary.json`
+- writes `artifacts/funding/all-venue-readiness-gate-summary.md`
+
+Treat any venue with `FAILED`, `MISSING`, or `STALE` as not enforcement-ready. Do not enable pair, tri, split, or venue-specific enforcement unless every venue required by that route is `PASSED` in this summary and the route-specific gate also passes.
 
 ### LI.FI Integration Boundary
 

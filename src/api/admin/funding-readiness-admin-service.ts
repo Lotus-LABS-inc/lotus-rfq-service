@@ -1,7 +1,8 @@
 import type { FundingAdminReadinessRecord } from "../../repositories/funding.repository.js";
 import {
-  getLimitlessFundingReadinessConfigFromEnv,
-  getPolymarketFundingReadinessConfigFromEnv
+  fundingReadinessSourceForVenue,
+  getFundingReadinessConfigFromEnv,
+  isFundingVenueReadinessSupported
 } from "../../core/funding/venue-readiness.js";
 
 export type FundingCheckerMode = "DISABLED" | "STUB" | "LIVE_READ" | "NOT_CONFIGURED";
@@ -175,20 +176,10 @@ export class FundingReadinessAdminService {
     if (this.env.FUNDING_VENUE_READINESS_CHECKS_ENABLED !== "true") {
       return "DISABLED";
     }
-    if (normalizedVenue === "LIMITLESS") {
-      const config = getLimitlessFundingReadinessConfigFromEnv(this.env);
-      if (config.mode === "DISABLED") {
-        return "DISABLED";
-      }
-      if (config.mode === "STUB") {
-        return "STUB";
-      }
-      return config.configured ? "LIVE_READ" : "NOT_CONFIGURED";
-    }
-    if (normalizedVenue !== "POLYMARKET") {
+    if (!isFundingVenueReadinessSupported(normalizedVenue)) {
       return "NOT_CONFIGURED";
     }
-    const config = getPolymarketFundingReadinessConfigFromEnv(this.env);
+    const config = getFundingReadinessConfigFromEnv(normalizedVenue, this.env);
     if (config.mode === "DISABLED") {
       return "DISABLED";
     }
@@ -260,13 +251,7 @@ const resolveReasonNotReady = (
 };
 
 const resolveCheckerSource = (venue: string): string => {
-  if (venue.toUpperCase() === "POLYMARKET") {
-    return "polymarket_funding_readiness";
-  }
-  if (venue.toUpperCase() === "LIMITLESS") {
-    return "limitless_funding_readiness";
-  }
-  return "not_configured";
+  return fundingReadinessSourceForVenue(venue);
 };
 
 export const buildFundingReadinessOperatorSummary = (

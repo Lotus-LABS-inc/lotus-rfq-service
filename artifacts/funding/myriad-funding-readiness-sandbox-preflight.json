@@ -1,0 +1,52 @@
+{
+  "generatedAt": "2026-04-26T02:09:47.669Z",
+  "status": "COMPLETED",
+  "blockers": [],
+  "sandboxLane": {
+    "laneId": "CRYPTO_BTC_ATH_BY_DATE_SINGLE_MYRIAD",
+    "laneState": "OPERATOR_APPROVED_SANDBOX",
+    "venuePath": [
+      "MYRIAD"
+    ],
+    "scopeKind": "CRYPTO_LANE"
+  },
+  "fundingIntentId": "7f0a331f-10c8-4f86-8112-01fa927093d7",
+  "routeLegId": "5ae48408-b42e-47ad-b918-4469ff35b497",
+  "userId": "smoke-myriad-readiness-user",
+  "executionSize": "10",
+  "routeLegs": [
+    {
+      "routeLegId": "5ae48408-b42e-47ad-b918-4469ff35b497",
+      "targetVenue": "MYRIAD",
+      "routeLegStatus": "LEG_READY_TO_TRADE",
+      "destinationStatus": "CONFIRMED",
+      "venueCreditStatus": "CONFIRMED",
+      "destinationAmountEstimate": "100"
+    }
+  ],
+  "venueEvidence": [
+    {
+      "targetVenue": "MYRIAD",
+      "readyToTrade": true,
+      "destinationReceived": true,
+      "venueCreditConfirmed": true,
+      "reason": null,
+      "lastCheckedAt": "2026-04-26T02:09:30.636Z"
+    }
+  ],
+  "persistedReadinessRows": 1,
+  "adminReadinessVisible": true,
+  "summaryReadyToTradeCount": 2,
+  "executionPreflight": {
+    "ok": true,
+    "checkedAt": "2026-04-26T02:09:47.654Z"
+  },
+  "safety": {
+    "defaultFundingPreflightEnforcementEnabled": false,
+    "scriptScopedFundingPreflightEnforcementOnly": true,
+    "liveLifiExecutionEnabled": false,
+    "backendBroadcastedTransaction": false,
+    "liveVenueSubmissionEnabled": false
+  },
+  "redactionVerified": true
+}

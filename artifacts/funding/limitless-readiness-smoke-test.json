@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-04-26T00:59:58.807Z",
-  "status": "COMPLETED",
+  "generatedAt": "2026-04-26T01:44:12.257Z",
+  "status": "NO_ELIGIBLE_CONFIRMED_ROW",
   "readOnly": true,
   "persistedReadinessResult": false,
   "liveLifiExecutionEnabled": false,
@@ -15,42 +15,12 @@
     "timeoutMs": 5000,
     "minimumConfirmations": 0
   },
-  "selectedRow": {
-    "fundingIntentId": "4d16bfef-32e4-42ce-8765-e0e1dc087e36",
-    "userId": "smoke-limitless-readiness-user",
-    "targetVenue": "LIMITLESS",
-    "routeLegId": "8c309cbd-8e5f-4672-a029-2f48355be9b9",
-    "destinationStatus": "CONFIRMED",
-    "venueCreditStatus": "PENDING",
-    "requiredAmount": "100",
-    "txHashes": [
-      "0xfb87dc767f0e4970b116ddd44285ea17af0eeff9ff324b9885a1f8b6758216b7"
-    ]
-  },
-  "readinessResult": {
-    "venue": "LIMITLESS",
-    "token": "USDC",
-    "checkedAt": "2026-04-26T00:59:59.145Z",
-    "status": "READY_TO_TRADE",
-    "destinationReceived": true,
-    "venueCreditConfirmed": true,
-    "readyToTrade": true,
-    "usableBalance": "1000",
-    "reason": "LIMITLESS_USABLE_BALANCE_CONFIRMED",
-    "evidence": {
-      "source": "limitless_funding_readiness",
-      "checkerMode": "LIVE_READ",
-      "authMode": "BEARER",
-      "minimumConfirmations": 0,
-      "redactionPolicy": "SERVER_SAFE_DEFAULT",
-      "requiredAmount": "100",
-      "usableBalance": "1000"
-    }
-  },
-  "mappingObserved": "READY_TO_TRADE",
+  "selectedRow": null,
+  "readinessResult": null,
+  "mappingObserved": null,
   "redactionVerified": true,
-  "blockers": [],
-  "warnings": [
-    "READY_TO_TRADE was observed by the read-only smoke test but was not persisted."
-  ]
+  "blockers": [
+    "No LIMITLESS funding route leg with confirmed destination status was found."
+  ],
+  "warnings": []
 }

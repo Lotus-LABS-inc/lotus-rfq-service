@@ -1,7 +1,7 @@
 # Polymarket Funding Readiness Smoke Test
 
-Generated: 2026-04-25T22:54:54.528Z
-Status: COMPLETED
+Generated: 2026-04-26T01:44:02.955Z
+Status: NO_ELIGIBLE_CONFIRMED_ROW
 
 ## Safety
 
@@ -18,20 +18,20 @@ Status: COMPLETED
 - Balance URL configured: true
 - Balance URL host: localhost:4001
 - Auth mode: NONE
-- API key configured: false
+- API key configured: true
 - Timeout ms: 5000
 - Minimum confirmations: 0
 
 ## Result
 
-- Mapping observed: READY_TO_TRADE
-- Reason: POLYMARKET_USABLE_BALANCE_CONFIRMED
-- Ready to trade observed: true
+- Mapping observed: none
+- Reason: none
+- Ready to trade observed: false
 
 ## Blockers
 
-- none
+- No POLYMARKET funding route leg with confirmed destination status was found.
 
 ## Warnings
 
-- READY_TO_TRADE was observed by the read-only smoke test but was not persisted.
+- none

@@ -1,0 +1,52 @@
+{
+  "generatedAt": "2026-04-26T02:12:07.408Z",
+  "status": "COMPLETED",
+  "blockers": [],
+  "sandboxLane": {
+    "laneId": "CRYPTO_BTC_ATH_BY_DATE_SINGLE_PREDICT_FUN",
+    "laneState": "OPERATOR_APPROVED_SANDBOX",
+    "venuePath": [
+      "PREDICT_FUN"
+    ],
+    "scopeKind": "CRYPTO_LANE"
+  },
+  "fundingIntentId": "4b1f3e3b-eabf-4f91-8a55-7e3c8659868a",
+  "routeLegId": "f21bf91c-e98c-43f2-ab86-b7f3d7cc5f7a",
+  "userId": "smoke-predict_fun-readiness-user",
+  "executionSize": "10",
+  "routeLegs": [
+    {
+      "routeLegId": "f21bf91c-e98c-43f2-ab86-b7f3d7cc5f7a",
+      "targetVenue": "PREDICT_FUN",
+      "routeLegStatus": "LEG_READY_TO_TRADE",
+      "destinationStatus": "CONFIRMED",
+      "venueCreditStatus": "CONFIRMED",
+      "destinationAmountEstimate": "100"
+    }
+  ],
+  "venueEvidence": [
+    {
+      "targetVenue": "PREDICT_FUN",
+      "readyToTrade": true,
+      "destinationReceived": true,
+      "venueCreditConfirmed": true,
+      "reason": null,
+      "lastCheckedAt": "2026-04-26T02:11:53.041Z"
+    }
+  ],
+  "persistedReadinessRows": 1,
+  "adminReadinessVisible": true,
+  "summaryReadyToTradeCount": 3,
+  "executionPreflight": {
+    "ok": true,
+    "checkedAt": "2026-04-26T02:12:07.391Z"
+  },
+  "safety": {
+    "defaultFundingPreflightEnforcementEnabled": false,
+    "scriptScopedFundingPreflightEnforcementOnly": true,
+    "liveLifiExecutionEnabled": false,
+    "backendBroadcastedTransaction": false,
+    "liveVenueSubmissionEnabled": false
+  },
+  "redactionVerified": true
+}

@@ -1191,3 +1191,62 @@ Geopolitical event-by-date addendum:
   - no venue widening
   - approval, hold, and rollback remain lane-scoped only
   - XRP is supported by family design but not onboarded in this pass
+
+## Funding Readiness V0 Multi-Venue Gate Pass
+
+- funding venue readiness is now centralized behind a shared configurable balance-read framework instead of venue-by-venue duplicated checker logic
+- supported readiness venues:
+  - `POLYMARKET`
+  - `LIMITLESS`
+  - `OPINION`
+  - `MYRIAD`
+  - `PREDICT_FUN`
+- default safety posture is unchanged:
+  - `FUNDING_PREFLIGHT_ENFORCEMENT_ENABLED=false`
+  - no live LI.FI execution
+  - no backend transaction broadcast
+  - no live venue order submission
+  - admin reads remain read-only
+  - smoke tests do not persist readiness
+  - reconciliation is the only path that persists venue readiness
+- new generic operator commands:
+  - `npm run funding:venue-readiness-smoke -- <VENUE>`
+  - `npm run funding:seed-venue-readiness-smoke -- <VENUE>`
+  - `npm run funding:venue-readiness-reconcile -- <VENUE>`
+  - `npm run funding:venue-readiness-sandbox-preflight -- <VENUE>`
+  - `npm run funding:venue-enforcement-gate -- <VENUE>`
+  - `npm run funding:venue-gate-summary`
+- convenience smoke aliases were added for:
+  - `funding:opinion-readiness-smoke`
+  - `funding:myriad-readiness-smoke`
+  - `funding:predictfun-readiness-smoke`
+- Opinion, Myriad, and Predict.fun each completed the same controlled sequence:
+  - seed confirmed destination funding row
+  - read-only smoke test maps venue evidence to `READY_TO_TRADE`
+  - reconciliation persists `READY_TO_TRADE`
+  - sandbox RFQ/funding preflight rehearsal passes with enforcement enabled only inside the script
+  - route-specific gate passes
+- Polymarket and Limitless remain covered through the prior pair-route readiness rehearsal and gate artifacts
+- all-venue readiness gate summary was added:
+  - artifacts:
+    - `artifacts/funding/all-venue-readiness-gate-summary.json`
+    - `artifacts/funding/all-venue-readiness-gate-summary.md`
+  - latest result:
+    - `PASSED`
+    - `passedVenues=5`
+    - `failedVenues=0`
+- docs updated:
+  - funding runbook now documents generic venue smoke, reconcile, sandbox preflight, route gates, and all-venue gate summary
+  - security checklist now requires fresh completed route/venue gate artifacts before sandbox funding enforcement rollout
+- validation run during the pass:
+  - `npm run typecheck`
+  - `npm run test:funding-flow`
+  - `npm run test:funding-flow:db`
+  - `npm run test:execution-system`
+  - `npm audit --omit=dev --audit-level=moderate`
+  - `npm run report:funding:readiness`
+  - `npm run funding:venue-gate-summary`
+- current readiness conclusion:
+  - sandbox funding enforcement can only be considered for route scopes where every venue has fresh persisted readiness evidence and a passing gate artifact
+  - global funding enforcement remains disabled
+  - production/live funding remains blocked until operator-approved rollout and real venue evidence review

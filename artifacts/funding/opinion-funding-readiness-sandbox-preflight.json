@@ -1,0 +1,52 @@
+{
+  "generatedAt": "2026-04-26T02:05:26.238Z",
+  "status": "COMPLETED",
+  "blockers": [],
+  "sandboxLane": {
+    "laneId": "CRYPTO_BTC_ATH_BY_DATE_SINGLE_OPINION",
+    "laneState": "OPERATOR_APPROVED_SANDBOX",
+    "venuePath": [
+      "OPINION"
+    ],
+    "scopeKind": "CRYPTO_LANE"
+  },
+  "fundingIntentId": "2c8ed972-cf09-46db-8150-c4df15c84f31",
+  "routeLegId": "9d3fdb58-ede8-4860-a758-a4916cabf987",
+  "userId": "smoke-opinion-readiness-user",
+  "executionSize": "10",
+  "routeLegs": [
+    {
+      "routeLegId": "9d3fdb58-ede8-4860-a758-a4916cabf987",
+      "targetVenue": "OPINION",
+      "routeLegStatus": "LEG_READY_TO_TRADE",
+      "destinationStatus": "CONFIRMED",
+      "venueCreditStatus": "CONFIRMED",
+      "destinationAmountEstimate": "100"
+    }
+  ],
+  "venueEvidence": [
+    {
+      "targetVenue": "OPINION",
+      "readyToTrade": true,
+      "destinationReceived": true,
+      "venueCreditConfirmed": true,
+      "reason": null,
+      "lastCheckedAt": "2026-04-26T02:05:12.406Z"
+    }
+  ],
+  "persistedReadinessRows": 1,
+  "adminReadinessVisible": true,
+  "summaryReadyToTradeCount": 1,
+  "executionPreflight": {
+    "ok": true,
+    "checkedAt": "2026-04-26T02:05:26.225Z"
+  },
+  "safety": {
+    "defaultFundingPreflightEnforcementEnabled": false,
+    "scriptScopedFundingPreflightEnforcementOnly": true,
+    "liveLifiExecutionEnabled": false,
+    "backendBroadcastedTransaction": false,
+    "liveVenueSubmissionEnabled": false
+  },
+  "redactionVerified": true
+}

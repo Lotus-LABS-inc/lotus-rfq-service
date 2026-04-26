@@ -36,76 +36,85 @@ export interface VenueFundingReadinessChecker {
   }): Promise<VenueFundingReadinessResult>;
 }
 
+export interface FundingBalanceReadInput {
+  userId: string;
+  fundingIntentId: string;
+  routeLegId: string;
+  targetVenue: FundingVenue;
+}
+
+export interface FundingBalanceReadClient {
+  fetchUsableUsdcBalance(input: FundingBalanceReadInput): Promise<{ usableBalance: string; raw?: Record<string, unknown> }>;
+}
+
 export interface PolymarketFundingBalanceReadClient {
-  fetchUsableUsdcBalance(input: {
-    userId: string;
-    fundingIntentId: string;
-    routeLegId: string;
-    targetVenue: "POLYMARKET";
-  }): Promise<{ usableBalance: string; raw?: Record<string, unknown> }>;
+  fetchUsableUsdcBalance(input: FundingBalanceReadInput & { targetVenue: "POLYMARKET" }): Promise<{ usableBalance: string; raw?: Record<string, unknown> }>;
 }
 
 export interface LimitlessFundingBalanceReadClient {
-  fetchUsableUsdcBalance(input: {
-    userId: string;
-    fundingIntentId: string;
-    routeLegId: string;
-    targetVenue: "LIMITLESS";
-  }): Promise<{ usableBalance: string; raw?: Record<string, unknown> }>;
+  fetchUsableUsdcBalance(input: FundingBalanceReadInput & { targetVenue: "LIMITLESS" }): Promise<{ usableBalance: string; raw?: Record<string, unknown> }>;
 }
 
-export type PolymarketFundingReadinessMode = "DISABLED" | "STUB" | "LIVE_READ";
-export type PolymarketFundingReadinessAuthMode = "NONE" | "BEARER";
-export type PolymarketFundingReadinessRedactionPolicy = "SERVER_SAFE_DEFAULT";
-export type LimitlessFundingReadinessMode = "DISABLED" | "STUB" | "LIVE_READ";
-export type LimitlessFundingReadinessAuthMode = "NONE" | "BEARER";
-export type LimitlessFundingReadinessRedactionPolicy = "SERVER_SAFE_DEFAULT";
+export type FundingReadinessMode = "DISABLED" | "STUB" | "LIVE_READ";
+export type FundingReadinessAuthMode = "NONE" | "BEARER";
+export type FundingReadinessRedactionPolicy = "SERVER_SAFE_DEFAULT";
 
-export interface PolymarketFundingReadinessConfig {
+export type PolymarketFundingReadinessMode = FundingReadinessMode;
+export type PolymarketFundingReadinessAuthMode = FundingReadinessAuthMode;
+export type PolymarketFundingReadinessRedactionPolicy = FundingReadinessRedactionPolicy;
+export type LimitlessFundingReadinessMode = FundingReadinessMode;
+export type LimitlessFundingReadinessAuthMode = FundingReadinessAuthMode;
+export type LimitlessFundingReadinessRedactionPolicy = FundingReadinessRedactionPolicy;
+export type OpinionFundingReadinessMode = FundingReadinessMode;
+export type OpinionFundingReadinessAuthMode = FundingReadinessAuthMode;
+export type OpinionFundingReadinessRedactionPolicy = FundingReadinessRedactionPolicy;
+export type MyriadFundingReadinessMode = FundingReadinessMode;
+export type MyriadFundingReadinessAuthMode = FundingReadinessAuthMode;
+export type MyriadFundingReadinessRedactionPolicy = FundingReadinessRedactionPolicy;
+export type PredictFunFundingReadinessMode = FundingReadinessMode;
+export type PredictFunFundingReadinessAuthMode = FundingReadinessAuthMode;
+export type PredictFunFundingReadinessRedactionPolicy = FundingReadinessRedactionPolicy;
+
+export interface FundingReadinessConfig {
   enabled?: boolean;
-  mode?: PolymarketFundingReadinessMode;
+  mode?: FundingReadinessMode;
   balanceUrl?: string | null | undefined;
-  authMode?: PolymarketFundingReadinessAuthMode;
+  authMode?: FundingReadinessAuthMode;
   timeoutMs?: number;
   minimumConfirmations?: number;
-  redactionPolicy?: PolymarketFundingReadinessRedactionPolicy;
+  redactionPolicy?: FundingReadinessRedactionPolicy;
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
 }
 
-export interface LimitlessFundingReadinessConfig {
-  enabled?: boolean;
-  mode?: LimitlessFundingReadinessMode;
-  balanceUrl?: string | null | undefined;
-  authMode?: LimitlessFundingReadinessAuthMode;
-  timeoutMs?: number;
-  minimumConfirmations?: number;
-  redactionPolicy?: LimitlessFundingReadinessRedactionPolicy;
-  env?: NodeJS.ProcessEnv;
-  now?: () => Date;
-}
+export type PolymarketFundingReadinessConfig = FundingReadinessConfig;
+export type LimitlessFundingReadinessConfig = FundingReadinessConfig;
+export type OpinionFundingReadinessConfig = FundingReadinessConfig;
+export type MyriadFundingReadinessConfig = FundingReadinessConfig;
+export type PredictFunFundingReadinessConfig = FundingReadinessConfig;
 
-export interface OperatorPolymarketFundingReadinessConfig {
+export interface OperatorFundingReadinessConfig {
+  venue: FundingVenue;
   enabled: boolean;
-  mode: PolymarketFundingReadinessMode;
+  mode: FundingReadinessMode;
   balanceUrl: string | null;
-  authMode: PolymarketFundingReadinessAuthMode;
+  authMode: FundingReadinessAuthMode;
   timeoutMs: number;
   minimumConfirmations: number;
-  redactionPolicy: PolymarketFundingReadinessRedactionPolicy;
+  redactionPolicy: FundingReadinessRedactionPolicy;
   configured: boolean;
 }
 
-export interface OperatorLimitlessFundingReadinessConfig {
-  enabled: boolean;
-  mode: LimitlessFundingReadinessMode;
-  balanceUrl: string | null;
-  authMode: LimitlessFundingReadinessAuthMode;
-  timeoutMs: number;
-  minimumConfirmations: number;
-  redactionPolicy: LimitlessFundingReadinessRedactionPolicy;
-  configured: boolean;
-}
+export type OperatorPolymarketFundingReadinessConfig = Omit<OperatorFundingReadinessConfig, "venue">;
+export type OperatorLimitlessFundingReadinessConfig = Omit<OperatorFundingReadinessConfig, "venue">;
+export type OperatorOpinionFundingReadinessConfig = Omit<OperatorFundingReadinessConfig, "venue">;
+export type OperatorMyriadFundingReadinessConfig = Omit<OperatorFundingReadinessConfig, "venue">;
+export type OperatorPredictFunFundingReadinessConfig = Omit<OperatorFundingReadinessConfig, "venue">;
+
+const readinessVenues: readonly FundingVenue[] = ["POLYMARKET", "LIMITLESS", "OPINION", "MYRIAD", "PREDICT_FUN"];
+
+export const isFundingVenueReadinessSupported = (venue: string): venue is FundingVenue =>
+  readinessVenues.includes(venue.toUpperCase() as FundingVenue);
 
 const safeDecimal = (value: string) => {
   try {
@@ -117,61 +126,83 @@ const safeDecimal = (value: string) => {
 };
 
 const destinationReceivedForLeg = (leg: FundingRouteLeg): boolean =>
-  leg.destinationStatus === "CONFIRMED" || leg.status === "LEG_DESTINATION_RECEIVED" || leg.status === "LEG_VENUE_CREDIT_PENDING" || leg.status === "LEG_READY_TO_TRADE";
+  leg.destinationStatus === "CONFIRMED" ||
+  leg.status === "LEG_DESTINATION_RECEIVED" ||
+  leg.status === "LEG_VENUE_CREDIT_PENDING" ||
+  leg.status === "LEG_READY_TO_TRADE";
+
+const envPrefix = (venue: FundingVenue): string => venue;
+
+export const fundingReadinessSourceForVenue = (venue: string): string => {
+  const normalizedVenue = venue.toUpperCase();
+  return isFundingVenueReadinessSupported(normalizedVenue)
+    ? `${normalizedVenue.toLowerCase()}_funding_readiness`
+    : "not_configured";
+};
+
+const titleVenue = (venue: FundingVenue): string =>
+  venue.split("_").map((part) => `${part[0] ?? ""}${part.slice(1).toLowerCase()}`).join(" ");
+
+export const getFundingReadinessConfigFromEnv = (
+  venue: FundingVenue,
+  env: NodeJS.ProcessEnv = process.env
+): OperatorFundingReadinessConfig => {
+  const prefix = envPrefix(venue);
+  const configuredMode = env[`${prefix}_FUNDING_READINESS_MODE`]?.toUpperCase();
+  const mode: FundingReadinessMode =
+    configuredMode === "STUB" || configuredMode === "LIVE_READ" || configuredMode === "DISABLED"
+      ? configuredMode
+      : env[`${prefix}_FUNDING_READINESS_ENABLED`] === "true"
+        ? "LIVE_READ"
+        : "DISABLED";
+  const balanceUrl = env[`${prefix}_FUNDING_BALANCE_URL`]?.trim() || null;
+  const balanceUrlValid = isValidHttpUrl(balanceUrl);
+  const authMode = env[`${prefix}_FUNDING_READ_AUTH_MODE`] === "BEARER" ? "BEARER" : "NONE";
+  const timeoutMs = Number.parseInt(env[`${prefix}_FUNDING_READ_TIMEOUT_MS`] ?? "5000", 10);
+  const minimumConfirmations = Number.parseInt(env[`${prefix}_FUNDING_MIN_CONFIRMATIONS`] ?? "0", 10);
+  return {
+    venue,
+    enabled: mode !== "DISABLED",
+    mode,
+    balanceUrl,
+    authMode,
+    timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 5_000,
+    minimumConfirmations: Number.isFinite(minimumConfirmations) && minimumConfirmations > 0 ? minimumConfirmations : 0,
+    redactionPolicy: "SERVER_SAFE_DEFAULT",
+    configured: mode === "STUB" || (mode === "LIVE_READ" && balanceUrlValid)
+  };
+};
+
+const stripVenue = (config: OperatorFundingReadinessConfig): Omit<OperatorFundingReadinessConfig, "venue"> => ({
+  enabled: config.enabled,
+  mode: config.mode,
+  balanceUrl: config.balanceUrl,
+  authMode: config.authMode,
+  timeoutMs: config.timeoutMs,
+  minimumConfirmations: config.minimumConfirmations,
+  redactionPolicy: config.redactionPolicy,
+  configured: config.configured
+});
 
 export const getPolymarketFundingReadinessConfigFromEnv = (
   env: NodeJS.ProcessEnv = process.env
-): OperatorPolymarketFundingReadinessConfig => {
-  const configuredMode = env.POLYMARKET_FUNDING_READINESS_MODE?.toUpperCase();
-  const mode: PolymarketFundingReadinessMode =
-    configuredMode === "STUB" || configuredMode === "LIVE_READ" || configuredMode === "DISABLED"
-      ? configuredMode
-      : env.POLYMARKET_FUNDING_READINESS_ENABLED === "true"
-        ? "LIVE_READ"
-        : "DISABLED";
-  const balanceUrl = env.POLYMARKET_FUNDING_BALANCE_URL?.trim() || null;
-  const balanceUrlValid = isValidHttpUrl(balanceUrl);
-  const authMode = env.POLYMARKET_FUNDING_READ_AUTH_MODE === "BEARER" ? "BEARER" : "NONE";
-  const timeoutMs = Number.parseInt(env.POLYMARKET_FUNDING_READ_TIMEOUT_MS ?? "5000", 10);
-  const minimumConfirmations = Number.parseInt(env.POLYMARKET_FUNDING_MIN_CONFIRMATIONS ?? "0", 10);
-  return {
-    enabled: mode !== "DISABLED",
-    mode,
-    balanceUrl,
-    authMode,
-    timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 5_000,
-    minimumConfirmations: Number.isFinite(minimumConfirmations) && minimumConfirmations > 0 ? minimumConfirmations : 0,
-    redactionPolicy: "SERVER_SAFE_DEFAULT",
-    configured: mode === "STUB" || (mode === "LIVE_READ" && balanceUrlValid)
-  };
-};
+): OperatorPolymarketFundingReadinessConfig => stripVenue(getFundingReadinessConfigFromEnv("POLYMARKET", env));
 
 export const getLimitlessFundingReadinessConfigFromEnv = (
   env: NodeJS.ProcessEnv = process.env
-): OperatorLimitlessFundingReadinessConfig => {
-  const configuredMode = env.LIMITLESS_FUNDING_READINESS_MODE?.toUpperCase();
-  const mode: LimitlessFundingReadinessMode =
-    configuredMode === "STUB" || configuredMode === "LIVE_READ" || configuredMode === "DISABLED"
-      ? configuredMode
-      : env.LIMITLESS_FUNDING_READINESS_ENABLED === "true"
-        ? "LIVE_READ"
-        : "DISABLED";
-  const balanceUrl = env.LIMITLESS_FUNDING_BALANCE_URL?.trim() || null;
-  const balanceUrlValid = isValidHttpUrl(balanceUrl);
-  const authMode = env.LIMITLESS_FUNDING_READ_AUTH_MODE === "BEARER" ? "BEARER" : "NONE";
-  const timeoutMs = Number.parseInt(env.LIMITLESS_FUNDING_READ_TIMEOUT_MS ?? "5000", 10);
-  const minimumConfirmations = Number.parseInt(env.LIMITLESS_FUNDING_MIN_CONFIRMATIONS ?? "0", 10);
-  return {
-    enabled: mode !== "DISABLED",
-    mode,
-    balanceUrl,
-    authMode,
-    timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 5_000,
-    minimumConfirmations: Number.isFinite(minimumConfirmations) && minimumConfirmations > 0 ? minimumConfirmations : 0,
-    redactionPolicy: "SERVER_SAFE_DEFAULT",
-    configured: mode === "STUB" || (mode === "LIVE_READ" && balanceUrlValid)
-  };
-};
+): OperatorLimitlessFundingReadinessConfig => stripVenue(getFundingReadinessConfigFromEnv("LIMITLESS", env));
+
+export const getOpinionFundingReadinessConfigFromEnv = (
+  env: NodeJS.ProcessEnv = process.env
+): OperatorOpinionFundingReadinessConfig => stripVenue(getFundingReadinessConfigFromEnv("OPINION", env));
+
+export const getMyriadFundingReadinessConfigFromEnv = (
+  env: NodeJS.ProcessEnv = process.env
+): OperatorMyriadFundingReadinessConfig => stripVenue(getFundingReadinessConfigFromEnv("MYRIAD", env));
+
+export const getPredictFunFundingReadinessConfigFromEnv = (
+  env: NodeJS.ProcessEnv = process.env
+): OperatorPredictFunFundingReadinessConfig => stripVenue(getFundingReadinessConfigFromEnv("PREDICT_FUN", env));
 
 const isValidHttpUrl = (url: string | null): boolean => {
   if (!url) {
@@ -185,17 +216,18 @@ const isValidHttpUrl = (url: string | null): boolean => {
   }
 };
 
-export class PolymarketFundingReadinessChecker implements VenueFundingReadinessChecker {
-  public readonly venue = "POLYMARKET" as const;
+export class ConfigurableVenueFundingReadinessChecker implements VenueFundingReadinessChecker {
   private readonly now: () => Date;
-  private readonly operatorConfig: OperatorPolymarketFundingReadinessConfig;
+  private readonly operatorConfig: OperatorFundingReadinessConfig;
 
   public constructor(
-    private readonly client: PolymarketFundingBalanceReadClient,
-    private readonly config: PolymarketFundingReadinessConfig
+    public readonly venue: FundingVenue,
+    private readonly client: FundingBalanceReadClient,
+    config: FundingReadinessConfig
   ) {
     this.now = config.now ?? (() => new Date());
     this.operatorConfig = {
+      venue,
       enabled: config.mode ? config.mode !== "DISABLED" : config.enabled === true,
       mode: config.mode ?? (config.enabled ? "LIVE_READ" : "DISABLED"),
       balanceUrl: config.balanceUrl ?? null,
@@ -233,7 +265,7 @@ export class PolymarketFundingReadinessChecker implements VenueFundingReadinessC
         venueCreditConfirmed: false,
         readyToTrade: false,
         usableBalance: null,
-        reason: "POLYMARKET_FUNDING_READINESS_DISABLED",
+        reason: `${this.venue}_FUNDING_READINESS_DISABLED`,
         evidence: this.safeEvidence({ checkerMode: this.operatorConfig.mode })
       });
     }
@@ -245,7 +277,7 @@ export class PolymarketFundingReadinessChecker implements VenueFundingReadinessC
         venueCreditConfirmed: false,
         readyToTrade: false,
         usableBalance: null,
-        reason: "POLYMARKET_FUNDING_READINESS_NOT_CONFIGURED",
+        reason: `${this.venue}_FUNDING_READINESS_NOT_CONFIGURED`,
         evidence: this.safeEvidence({ checkerMode: this.operatorConfig.mode })
       });
     }
@@ -255,7 +287,7 @@ export class PolymarketFundingReadinessChecker implements VenueFundingReadinessC
         userId: input.userId,
         fundingIntentId: input.intent.fundingIntentId,
         routeLegId: input.leg.routeLegId,
-        targetVenue: "POLYMARKET"
+        targetVenue: this.venue
       });
       const usableBalance = safeDecimal(balance.usableBalance);
       const requiredAmount = safeDecimal(input.leg.destinationAmountEstimate);
@@ -266,7 +298,7 @@ export class PolymarketFundingReadinessChecker implements VenueFundingReadinessC
           venueCreditConfirmed: false,
           readyToTrade: false,
           usableBalance: balance.usableBalance,
-          reason: "POLYMARKET_BALANCE_RESPONSE_MALFORMED",
+          reason: `${this.venue}_BALANCE_RESPONSE_MALFORMED`,
           evidence: this.safeEvidence({ rawStatus: "malformed_balance" })
         });
       }
@@ -277,7 +309,7 @@ export class PolymarketFundingReadinessChecker implements VenueFundingReadinessC
           venueCreditConfirmed: true,
           readyToTrade: true,
           usableBalance: usableBalance.toString(),
-          reason: "POLYMARKET_USABLE_BALANCE_CONFIRMED",
+          reason: `${this.venue}_USABLE_BALANCE_CONFIRMED`,
           evidence: this.safeEvidence({ requiredAmount: requiredAmount.toString(), usableBalance: usableBalance.toString() })
         });
       }
@@ -287,7 +319,7 @@ export class PolymarketFundingReadinessChecker implements VenueFundingReadinessC
         venueCreditConfirmed: false,
         readyToTrade: false,
         usableBalance: usableBalance.toString(),
-        reason: "POLYMARKET_USABLE_BALANCE_BELOW_REQUIRED_AMOUNT",
+        reason: `${this.venue}_USABLE_BALANCE_BELOW_REQUIRED_AMOUNT`,
         evidence: this.safeEvidence({ requiredAmount: requiredAmount.toString(), usableBalance: usableBalance.toString() })
       });
     } catch (error) {
@@ -297,7 +329,7 @@ export class PolymarketFundingReadinessChecker implements VenueFundingReadinessC
         venueCreditConfirmed: false,
         readyToTrade: false,
         usableBalance: null,
-        reason: "POLYMARKET_READINESS_READ_UNAVAILABLE",
+        reason: `${this.venue}_READINESS_READ_UNAVAILABLE`,
         evidence: this.safeEvidence({
           error: error instanceof Error ? "READ_UNAVAILABLE" : "UNKNOWN_READ_ERROR"
         })
@@ -307,7 +339,7 @@ export class PolymarketFundingReadinessChecker implements VenueFundingReadinessC
 
   private safeEvidence(extra: Record<string, unknown>): Record<string, unknown> {
     return {
-      source: "polymarket_funding_readiness",
+      source: fundingReadinessSourceForVenue(this.venue),
       checkerMode: this.operatorConfig.mode,
       authMode: this.operatorConfig.authMode,
       minimumConfirmations: this.operatorConfig.minimumConfirmations,
@@ -326,178 +358,71 @@ export class PolymarketFundingReadinessChecker implements VenueFundingReadinessC
   }
 }
 
-export class LimitlessFundingReadinessChecker implements VenueFundingReadinessChecker {
-  public readonly venue = "LIMITLESS" as const;
-  private readonly now: () => Date;
-  private readonly operatorConfig: OperatorLimitlessFundingReadinessConfig;
-
-  public constructor(
-    private readonly client: LimitlessFundingBalanceReadClient,
-    private readonly config: LimitlessFundingReadinessConfig
-  ) {
-    this.now = config.now ?? (() => new Date());
-    this.operatorConfig = {
-      enabled: config.mode ? config.mode !== "DISABLED" : config.enabled === true,
-      mode: config.mode ?? (config.enabled ? "LIVE_READ" : "DISABLED"),
-      balanceUrl: config.balanceUrl ?? null,
-      authMode: config.authMode ?? "NONE",
-      timeoutMs: config.timeoutMs ?? 5_000,
-      minimumConfirmations: config.minimumConfirmations ?? 0,
-      redactionPolicy: config.redactionPolicy ?? "SERVER_SAFE_DEFAULT",
-      configured: config.mode === "STUB" || (config.mode === "LIVE_READ" && Boolean(config.balanceUrl)) || (config.enabled === true && !config.mode)
-    };
-  }
-
-  public async check(input: {
-    userId: string;
-    intent: FundingIntent;
-    leg: FundingRouteLeg;
-    reconciliations: readonly FundingReconciliationRecord[];
-  }): Promise<VenueFundingReadinessResult> {
-    const destinationReceived = destinationReceivedForLeg(input.leg);
-    if (!destinationReceived) {
-      return this.result({
-        status: "UNKNOWN",
-        destinationReceived: false,
-        venueCreditConfirmed: false,
-        readyToTrade: false,
-        usableBalance: null,
-        reason: "DESTINATION_NOT_CONFIRMED",
-        evidence: this.safeEvidence({ checkerMode: this.operatorConfig.mode })
-      });
-    }
-
-    if (!this.operatorConfig.enabled) {
-      return this.result({
-        status: "UNKNOWN",
-        destinationReceived: true,
-        venueCreditConfirmed: false,
-        readyToTrade: false,
-        usableBalance: null,
-        reason: "LIMITLESS_FUNDING_READINESS_DISABLED",
-        evidence: this.safeEvidence({ checkerMode: this.operatorConfig.mode })
-      });
-    }
-
-    if (!this.operatorConfig.configured) {
-      return this.result({
-        status: "UNKNOWN",
-        destinationReceived: true,
-        venueCreditConfirmed: false,
-        readyToTrade: false,
-        usableBalance: null,
-        reason: "LIMITLESS_FUNDING_READINESS_NOT_CONFIGURED",
-        evidence: this.safeEvidence({ checkerMode: this.operatorConfig.mode })
-      });
-    }
-
-    try {
-      const balance = await this.client.fetchUsableUsdcBalance({
-        userId: input.userId,
-        fundingIntentId: input.intent.fundingIntentId,
-        routeLegId: input.leg.routeLegId,
-        targetVenue: "LIMITLESS"
-      });
-      const usableBalance = safeDecimal(balance.usableBalance);
-      const requiredAmount = safeDecimal(input.leg.destinationAmountEstimate);
-      if (!usableBalance || !requiredAmount) {
-        return this.result({
-          status: "UNKNOWN",
-          destinationReceived: true,
-          venueCreditConfirmed: false,
-          readyToTrade: false,
-          usableBalance: balance.usableBalance,
-          reason: "LIMITLESS_BALANCE_RESPONSE_MALFORMED",
-          evidence: this.safeEvidence({ rawStatus: "malformed_balance" })
-        });
-      }
-      if (usableBalance.greaterThanOrEqualTo(requiredAmount)) {
-        return this.result({
-          status: "READY_TO_TRADE",
-          destinationReceived: true,
-          venueCreditConfirmed: true,
-          readyToTrade: true,
-          usableBalance: usableBalance.toString(),
-          reason: "LIMITLESS_USABLE_BALANCE_CONFIRMED",
-          evidence: this.safeEvidence({ requiredAmount: requiredAmount.toString(), usableBalance: usableBalance.toString() })
-        });
-      }
-      return this.result({
-        status: "VENUE_CREDIT_PENDING",
-        destinationReceived: true,
-        venueCreditConfirmed: false,
-        readyToTrade: false,
-        usableBalance: usableBalance.toString(),
-        reason: "LIMITLESS_USABLE_BALANCE_BELOW_REQUIRED_AMOUNT",
-        evidence: this.safeEvidence({ requiredAmount: requiredAmount.toString(), usableBalance: usableBalance.toString() })
-      });
-    } catch (error) {
-      return this.result({
-        status: "UNKNOWN",
-        destinationReceived: true,
-        venueCreditConfirmed: false,
-        readyToTrade: false,
-        usableBalance: null,
-        reason: "LIMITLESS_READINESS_READ_UNAVAILABLE",
-        evidence: this.safeEvidence({
-          error: error instanceof Error ? "READ_UNAVAILABLE" : "UNKNOWN_READ_ERROR"
-        })
-      });
-    }
-  }
-
-  private safeEvidence(extra: Record<string, unknown>): Record<string, unknown> {
-    return {
-      source: "limitless_funding_readiness",
-      checkerMode: this.operatorConfig.mode,
-      authMode: this.operatorConfig.authMode,
-      minimumConfirmations: this.operatorConfig.minimumConfirmations,
-      redactionPolicy: this.operatorConfig.redactionPolicy,
-      ...extra
-    };
-  }
-
-  private result(input: Omit<VenueFundingReadinessResult, "venue" | "token" | "checkedAt">): VenueFundingReadinessResult {
-    return {
-      venue: this.venue,
-      token: "USDC",
-      checkedAt: this.now().toISOString(),
-      ...input
-    };
+export class PolymarketFundingReadinessChecker extends ConfigurableVenueFundingReadinessChecker {
+  public constructor(client: PolymarketFundingBalanceReadClient, config: PolymarketFundingReadinessConfig) {
+    super("POLYMARKET", client as unknown as FundingBalanceReadClient, config);
   }
 }
 
-export class DisabledPolymarketFundingBalanceReadClient implements PolymarketFundingBalanceReadClient {
+export class LimitlessFundingReadinessChecker extends ConfigurableVenueFundingReadinessChecker {
+  public constructor(client: LimitlessFundingBalanceReadClient, config: LimitlessFundingReadinessConfig) {
+    super("LIMITLESS", client as unknown as FundingBalanceReadClient, config);
+  }
+}
+
+export class OpinionFundingReadinessChecker extends ConfigurableVenueFundingReadinessChecker {
+  public constructor(client: FundingBalanceReadClient, config: OpinionFundingReadinessConfig) {
+    super("OPINION", client, config);
+  }
+}
+
+export class MyriadFundingReadinessChecker extends ConfigurableVenueFundingReadinessChecker {
+  public constructor(client: FundingBalanceReadClient, config: MyriadFundingReadinessConfig) {
+    super("MYRIAD", client, config);
+  }
+}
+
+export class PredictFunFundingReadinessChecker extends ConfigurableVenueFundingReadinessChecker {
+  public constructor(client: FundingBalanceReadClient, config: PredictFunFundingReadinessConfig) {
+    super("PREDICT_FUN", client, config);
+  }
+}
+
+export class DisabledFundingBalanceReadClient implements FundingBalanceReadClient {
+  public constructor(private readonly venue: FundingVenue) {}
+
   public async fetchUsableUsdcBalance(): Promise<{ usableBalance: string; raw?: Record<string, unknown> }> {
-    throw new Error("Polymarket funding balance read client is not configured.");
+    throw new Error(`${titleVenue(this.venue)} funding balance read client is not configured.`);
   }
 }
 
-export class DisabledLimitlessFundingBalanceReadClient implements LimitlessFundingBalanceReadClient {
-  public async fetchUsableUsdcBalance(): Promise<{ usableBalance: string; raw?: Record<string, unknown> }> {
-    throw new Error("Limitless funding balance read client is not configured.");
+export class DisabledPolymarketFundingBalanceReadClient extends DisabledFundingBalanceReadClient implements PolymarketFundingBalanceReadClient {
+  public constructor() {
+    super("POLYMARKET");
   }
 }
 
-export class HttpPolymarketFundingBalanceReadClient implements PolymarketFundingBalanceReadClient {
+export class DisabledLimitlessFundingBalanceReadClient extends DisabledFundingBalanceReadClient implements LimitlessFundingBalanceReadClient {
+  public constructor() {
+    super("LIMITLESS");
+  }
+}
+
+export class HttpFundingBalanceReadClient implements FundingBalanceReadClient {
   public constructor(
+    private readonly venue: FundingVenue,
     private readonly config: {
       balanceUrl?: string | undefined;
       timeoutMs?: number | undefined;
-      authMode?: PolymarketFundingReadinessAuthMode | undefined;
+      authMode?: FundingReadinessAuthMode | undefined;
       apiKey?: string | undefined;
       fetchImpl?: typeof fetch | undefined;
     }
   ) {}
 
-  public async fetchUsableUsdcBalance(input: {
-    userId: string;
-    fundingIntentId: string;
-    routeLegId: string;
-    targetVenue: "POLYMARKET";
-  }): Promise<{ usableBalance: string; raw?: Record<string, unknown> }> {
+  public async fetchUsableUsdcBalance(input: FundingBalanceReadInput): Promise<{ usableBalance: string; raw?: Record<string, unknown> }> {
     if (!this.config.balanceUrl) {
-      throw new Error("POLYMARKET_FUNDING_BALANCE_URL is not configured.");
+      throw new Error(`${this.venue}_FUNDING_BALANCE_URL is not configured.`);
     }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs ?? 5_000);
@@ -506,18 +431,19 @@ export class HttpPolymarketFundingBalanceReadClient implements PolymarketFunding
       url.searchParams.set("userId", input.userId);
       url.searchParams.set("fundingIntentId", input.fundingIntentId);
       url.searchParams.set("routeLegId", input.routeLegId);
+      url.searchParams.set("targetVenue", input.targetVenue);
       const response = await (this.config.fetchImpl ?? fetch)(url, {
         method: "GET",
         headers: this.buildHeaders(),
         signal: controller.signal
       });
       if (!response.ok) {
-        throw new Error(`Polymarket funding balance read failed with ${response.status}.`);
+        throw new Error(`${titleVenue(this.venue)} funding balance read failed with ${response.status}.`);
       }
       const raw = await response.json() as Record<string, unknown>;
       const usableBalance = raw.usableBalance ?? raw.availableBalance ?? raw.balance;
       if (typeof usableBalance !== "string" && typeof usableBalance !== "number") {
-        throw new Error("Polymarket funding balance response did not include usableBalance.");
+        throw new Error(`${titleVenue(this.venue)} funding balance response did not include usableBalance.`);
       }
       return { usableBalance: String(usableBalance), raw };
     } finally {
@@ -533,83 +459,37 @@ export class HttpPolymarketFundingBalanceReadClient implements PolymarketFunding
   }
 }
 
-export class HttpLimitlessFundingBalanceReadClient implements LimitlessFundingBalanceReadClient {
-  public constructor(
-    private readonly config: {
-      balanceUrl?: string | undefined;
-      timeoutMs?: number | undefined;
-      authMode?: LimitlessFundingReadinessAuthMode | undefined;
-      apiKey?: string | undefined;
-      fetchImpl?: typeof fetch | undefined;
-    }
-  ) {}
-
-  public async fetchUsableUsdcBalance(input: {
-    userId: string;
-    fundingIntentId: string;
-    routeLegId: string;
-    targetVenue: "LIMITLESS";
-  }): Promise<{ usableBalance: string; raw?: Record<string, unknown> }> {
-    if (!this.config.balanceUrl) {
-      throw new Error("LIMITLESS_FUNDING_BALANCE_URL is not configured.");
-    }
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs ?? 5_000);
-    try {
-      const url = new URL(this.config.balanceUrl);
-      url.searchParams.set("userId", input.userId);
-      url.searchParams.set("fundingIntentId", input.fundingIntentId);
-      url.searchParams.set("routeLegId", input.routeLegId);
-      const response = await (this.config.fetchImpl ?? fetch)(url, {
-        method: "GET",
-        headers: this.buildHeaders(),
-        signal: controller.signal
-      });
-      if (!response.ok) {
-        throw new Error(`Limitless funding balance read failed with ${response.status}.`);
-      }
-      const raw = await response.json() as Record<string, unknown>;
-      const usableBalance = raw.usableBalance ?? raw.availableBalance ?? raw.balance;
-      if (typeof usableBalance !== "string" && typeof usableBalance !== "number") {
-        throw new Error("Limitless funding balance response did not include usableBalance.");
-      }
-      return { usableBalance: String(usableBalance), raw };
-    } finally {
-      clearTimeout(timeout);
-    }
+export class HttpPolymarketFundingBalanceReadClient extends HttpFundingBalanceReadClient implements PolymarketFundingBalanceReadClient {
+  public constructor(config: ConstructorParameters<typeof HttpFundingBalanceReadClient>[1]) {
+    super("POLYMARKET", config);
   }
+}
 
-  private buildHeaders(): Record<string, string> {
-    if (this.config.authMode === "BEARER" && this.config.apiKey) {
-      return { authorization: `Bearer ${this.config.apiKey}` };
-    }
-    return {};
+export class HttpLimitlessFundingBalanceReadClient extends HttpFundingBalanceReadClient implements LimitlessFundingBalanceReadClient {
+  public constructor(config: ConstructorParameters<typeof HttpFundingBalanceReadClient>[1]) {
+    super("LIMITLESS", config);
   }
 }
 
 export const buildFundingVenueReadinessCheckersFromEnv = (
   env: NodeJS.ProcessEnv = process.env
-): Map<FundingVenue, VenueFundingReadinessChecker> => {
-  const polymarketConfig = getPolymarketFundingReadinessConfigFromEnv(env);
-  const polymarketClient = polymarketConfig.mode === "LIVE_READ"
-    ? new HttpPolymarketFundingBalanceReadClient({
-      balanceUrl: polymarketConfig.balanceUrl ?? undefined,
-      timeoutMs: polymarketConfig.timeoutMs,
-      authMode: polymarketConfig.authMode,
-      apiKey: env.POLYMARKET_FUNDING_READ_API_KEY
+): Map<FundingVenue, VenueFundingReadinessChecker> =>
+  new Map<FundingVenue, VenueFundingReadinessChecker>(
+    readinessVenues.map((venue) => [venue, buildCheckerFromEnv(venue, env)])
+  );
+
+const buildCheckerFromEnv = (
+  venue: FundingVenue,
+  env: NodeJS.ProcessEnv
+): VenueFundingReadinessChecker => {
+  const config = getFundingReadinessConfigFromEnv(venue, env);
+  const client = config.mode === "LIVE_READ"
+    ? new HttpFundingBalanceReadClient(venue, {
+      balanceUrl: config.balanceUrl ?? undefined,
+      timeoutMs: config.timeoutMs,
+      authMode: config.authMode,
+      apiKey: env[`${envPrefix(venue)}_FUNDING_READ_API_KEY`]
     })
-    : new DisabledPolymarketFundingBalanceReadClient();
-  const limitlessConfig = getLimitlessFundingReadinessConfigFromEnv(env);
-  const limitlessClient = limitlessConfig.mode === "LIVE_READ"
-    ? new HttpLimitlessFundingBalanceReadClient({
-      balanceUrl: limitlessConfig.balanceUrl ?? undefined,
-      timeoutMs: limitlessConfig.timeoutMs,
-      authMode: limitlessConfig.authMode,
-      apiKey: env.LIMITLESS_FUNDING_READ_API_KEY
-    })
-    : new DisabledLimitlessFundingBalanceReadClient();
-  return new Map<FundingVenue, VenueFundingReadinessChecker>([
-    ["POLYMARKET", new PolymarketFundingReadinessChecker(polymarketClient, { ...polymarketConfig, env })],
-    ["LIMITLESS", new LimitlessFundingReadinessChecker(limitlessClient, { ...limitlessConfig, env })]
-  ]);
+    : new DisabledFundingBalanceReadClient(venue);
+  return new ConfigurableVenueFundingReadinessChecker(venue, client, { ...config, env });
 };

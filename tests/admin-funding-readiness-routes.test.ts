@@ -207,6 +207,50 @@ describe("admin funding readiness routes", () => {
     await app.close();
   });
 
+  it("resolves checker mode and source for newly supported funding venues", async () => {
+    const repository = new FakeFundingReadinessRepository([
+      baseRow({
+        fundingIntentId: "intent-opinion",
+        userId: "user-opinion",
+        targetVenue: "OPINION"
+      }),
+      baseRow({
+        fundingIntentId: "intent-myriad",
+        userId: "user-myriad",
+        targetVenue: "MYRIAD"
+      }),
+      baseRow({
+        fundingIntentId: "intent-predict-fun",
+        userId: "user-predict-fun",
+        targetVenue: "PREDICT_FUN"
+      })
+    ]);
+    const service = new FundingReadinessAdminService({
+      repository,
+      env: {
+        FUNDING_VENUE_READINESS_CHECKS_ENABLED: "true",
+        OPINION_FUNDING_READINESS_MODE: "LIVE_READ",
+        OPINION_FUNDING_BALANCE_URL: "https://operator.example/opinion-readiness",
+        MYRIAD_FUNDING_READINESS_MODE: "STUB",
+        PREDICT_FUN_FUNDING_READINESS_MODE: "LIVE_READ"
+      } as NodeJS.ProcessEnv
+    });
+
+    const readiness = await service.listReadiness();
+    expect(readiness.find((row) => row.targetVenue === "OPINION")).toMatchObject({
+      checkerMode: "LIVE_READ",
+      checkerSource: "opinion_funding_readiness"
+    });
+    expect(readiness.find((row) => row.targetVenue === "MYRIAD")).toMatchObject({
+      checkerMode: "STUB",
+      checkerSource: "myriad_funding_readiness"
+    });
+    expect(readiness.find((row) => row.targetVenue === "PREDICT_FUN")).toMatchObject({
+      checkerMode: "NOT_CONFIGURED",
+      checkerSource: "predict_fun_funding_readiness"
+    });
+  });
+
   it("filters by intent, user, and venue and returns 404 for unknown intent", async () => {
     const app = await buildApp();
     const adminToken = app.jwt.sign({ userId: "admin-1", role: "ADMIN" });

@@ -1,0 +1,57 @@
+{
+  "generatedAt": "2026-04-26T02:11:42.940Z",
+  "venue": "PREDICT_FUN",
+  "status": "COMPLETED",
+  "readOnly": true,
+  "persistedReadinessResult": false,
+  "liveLifiExecutionEnabled": false,
+  "fundingPreflightEnforcementEnabled": false,
+  "config": {
+    "mode": "LIVE_READ",
+    "configured": true,
+    "balanceUrlConfigured": true,
+    "balanceUrlHost": "localhost:4001",
+    "authMode": "NONE",
+    "apiKeyConfigured": true,
+    "timeoutMs": 5000,
+    "minimumConfirmations": 0
+  },
+  "selectedRow": {
+    "fundingIntentId": "4b1f3e3b-eabf-4f91-8a55-7e3c8659868a",
+    "userId": "smoke-predict_fun-readiness-user",
+    "targetVenue": "PREDICT_FUN",
+    "routeLegId": "f21bf91c-e98c-43f2-ab86-b7f3d7cc5f7a",
+    "destinationStatus": "CONFIRMED",
+    "venueCreditStatus": "PENDING",
+    "requiredAmount": "100",
+    "txHashes": [
+      "0x5d5f1d1b3a224c5ba9b3dd0f09753f1e97f2f9109e914c0e8992c5ac8b462a65"
+    ]
+  },
+  "readinessResult": {
+    "venue": "PREDICT_FUN",
+    "token": "USDC",
+    "checkedAt": "2026-04-26T02:11:43.186Z",
+    "status": "READY_TO_TRADE",
+    "destinationReceived": true,
+    "venueCreditConfirmed": true,
+    "readyToTrade": true,
+    "usableBalance": "1000",
+    "reason": "PREDICT_FUN_USABLE_BALANCE_CONFIRMED",
+    "evidence": {
+      "source": "predict_fun_funding_readiness",
+      "checkerMode": "LIVE_READ",
+      "authMode": "NONE",
+      "minimumConfirmations": 0,
+      "redactionPolicy": "SERVER_SAFE_DEFAULT",
+      "requiredAmount": "100",
+      "usableBalance": "1000"
+    }
+  },
+  "mappingObserved": "READY_TO_TRADE",
+  "redactionVerified": true,
+  "blockers": [],
+  "warnings": [
+    "READY_TO_TRADE was observed by the read-only smoke test but was not persisted."
+  ]
+}

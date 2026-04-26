@@ -1,40 +1,41 @@
 {
-  "generatedAt": "2026-04-26T01:10:03.184Z",
+  "generatedAt": "2026-04-26T02:12:29.659Z",
   "totalFundingIntents": 3,
-  "totalRouteLegs": 4,
-  "readyToTrade": 4,
+  "totalRouteLegs": 3,
+  "readyToTrade": 3,
   "venueCreditPending": 0,
   "destinationNotConfirmed": 0,
   "failed": 0,
   "unknown": 0,
-  "splitCapableIntents": 1,
+  "splitCapableIntents": 0,
   "partialReadyIntents": 0,
   "countsByVenue": {
-    "LIMITLESS": 2,
-    "POLYMARKET": 2
+    "PREDICT_FUN": 1,
+    "MYRIAD": 1,
+    "OPINION": 1
   },
   "countsByAggregateStatus": {
-    "READY_TO_TRADE": 4
+    "READY_TO_TRADE": 3
   },
   "countsByReadinessStatus": {
     "UNKNOWN": 0,
     "DESTINATION_NOT_CONFIRMED": 0,
     "VENUE_CREDIT_PENDING": 0,
-    "READY_TO_TRADE": 4,
+    "READY_TO_TRADE": 3,
     "FAILED": 0
   },
   "countsByCheckerMode": {
     "DISABLED": 0,
     "STUB": 0,
-    "LIVE_READ": 4,
+    "LIVE_READ": 3,
     "NOT_CONFIGURED": 0
   },
   "countsByRouteProvider": {
-    "LIFI": 4
+    "LIFI": 3
   },
   "staleAgeBuckets": {
     "NEVER_CHECKED": 0,
-    "UNDER_1H": 4,
+    "UNDER_1H": 3,
     "ONE_TO_24H": 0,
     "ONE_TO_7D": 0,
     "OVER_7D": 0
@@ -48,113 +49,17 @@
   },
   "rows": [
     {
-      "fundingIntentId": "d5dd6a0f-4875-4753-b7c9-04a9a8371c79",
-      "userId": "sandbox-pair-funding-user-86433474-304b-4117-ba45-cf29bcfe5508",
-      "targetVenue": "LIMITLESS",
-      "sourceChain": "SOLANA",
-      "sourceToken": "USDC",
-      "sourceAmount": "100",
-      "destinationChain": "BASE",
-      "destinationToken": "USDC",
-      "destinationAmountEstimate": "50",
-      "routeProvider": "LIFI",
-      "routeLegId": "252a3a60-4186-4fac-ae01-76c81238ed0e",
-      "aggregateFundingStatus": "READY_TO_TRADE",
-      "routeLegStatus": "LEG_READY_TO_TRADE",
-      "bridgeStatus": "DONE",
-      "destinationStatus": "CONFIRMED",
-      "venueCreditStatus": "CONFIRMED",
-      "readinessStatus": "READY_TO_TRADE",
-      "readyToTrade": true,
-      "usableBalanceObserved": null,
-      "requiredAmount": "50",
-      "checkerMode": "LIVE_READ",
-      "checkerSource": "limitless_funding_readiness",
-      "lastCheckedAt": "2026-04-26T01:09:45.764Z",
-      "reasonNotReady": null,
-      "txHashes": [
-        "0xe1eea703ad4f44d79341b432e7d01388b45146625c274928a41d2086c6ff01f5"
-      ],
-      "auditEventIds": [
-        "0fb88bf7-04ba-4ce3-aa2f-051a9cc7a071",
-        "25913a4d-65ad-4bcb-85a7-ac3dc5c2dc27",
-        "4ae24bb5-a9c1-412f-8798-1428164cea66",
-        "a96d29a2-73cd-430b-88e1-39dbd695cd91",
-        "10a87740-dcb6-4a5f-9486-dae5e6c95f56",
-        "058671e0-7223-4aa4-9857-0c26935f933d",
-        "b5a3f5a6-ebba-4578-8b2d-5f3a63be126d",
-        "d2544e67-30a4-41b2-943e-1dc817eb84bc",
-        "05c7c3da-bf8f-4744-a9b2-b1cd339f9e9b",
-        "867540c6-7d23-457b-8e72-ad7c2518fa44",
-        "9b5f2287-c3de-4fbf-9819-5636ac7eaddc",
-        "781a568f-763f-4f50-9ab5-80f7992463d9",
-        "61b9c423-0e4f-4357-9ad1-d1f648e453ab",
-        "181c6029-8cb8-4f93-a87d-e003251b7a7d",
-        "decccd9a-02f4-41f5-b3cf-254cc40a2d87"
-      ],
-      "createdAt": "2026-04-26T01:09:45.498Z",
-      "updatedAt": "2026-04-26T01:09:45.819Z"
-    },
-    {
-      "fundingIntentId": "d5dd6a0f-4875-4753-b7c9-04a9a8371c79",
-      "userId": "sandbox-pair-funding-user-86433474-304b-4117-ba45-cf29bcfe5508",
-      "targetVenue": "POLYMARKET",
+      "fundingIntentId": "4b1f3e3b-eabf-4f91-8a55-7e3c8659868a",
+      "userId": "smoke-predict_fun-readiness-user",
+      "targetVenue": "PREDICT_FUN",
       "sourceChain": "SOLANA",
       "sourceToken": "USDC",
       "sourceAmount": "100",
       "destinationChain": "POLYGON",
       "destinationToken": "USDC",
-      "destinationAmountEstimate": "50",
-      "routeProvider": "LIFI",
-      "routeLegId": "3cf59fc8-b6a1-4877-9820-0d4bfb437b47",
-      "aggregateFundingStatus": "READY_TO_TRADE",
-      "routeLegStatus": "LEG_READY_TO_TRADE",
-      "bridgeStatus": "DONE",
-      "destinationStatus": "CONFIRMED",
-      "venueCreditStatus": "CONFIRMED",
-      "readinessStatus": "READY_TO_TRADE",
-      "readyToTrade": true,
-      "usableBalanceObserved": null,
-      "requiredAmount": "50",
-      "checkerMode": "LIVE_READ",
-      "checkerSource": "polymarket_funding_readiness",
-      "lastCheckedAt": "2026-04-26T01:09:45.801Z",
-      "reasonNotReady": null,
-      "txHashes": [
-        "0x211e0889018a406d9ea9b169459ea480536e004aca934fc798be0c55c0c66da6"
-      ],
-      "auditEventIds": [
-        "0fb88bf7-04ba-4ce3-aa2f-051a9cc7a071",
-        "25913a4d-65ad-4bcb-85a7-ac3dc5c2dc27",
-        "4ae24bb5-a9c1-412f-8798-1428164cea66",
-        "a96d29a2-73cd-430b-88e1-39dbd695cd91",
-        "10a87740-dcb6-4a5f-9486-dae5e6c95f56",
-        "058671e0-7223-4aa4-9857-0c26935f933d",
-        "b5a3f5a6-ebba-4578-8b2d-5f3a63be126d",
-        "d2544e67-30a4-41b2-943e-1dc817eb84bc",
-        "05c7c3da-bf8f-4744-a9b2-b1cd339f9e9b",
-        "867540c6-7d23-457b-8e72-ad7c2518fa44",
-        "9b5f2287-c3de-4fbf-9819-5636ac7eaddc",
-        "781a568f-763f-4f50-9ab5-80f7992463d9",
-        "61b9c423-0e4f-4357-9ad1-d1f648e453ab",
-        "181c6029-8cb8-4f93-a87d-e003251b7a7d",
-        "decccd9a-02f4-41f5-b3cf-254cc40a2d87"
-      ],
-      "createdAt": "2026-04-26T01:09:45.498Z",
-      "updatedAt": "2026-04-26T01:09:45.819Z"
-    },
-    {
-      "fundingIntentId": "f177ab9d-e4ce-449f-9bb5-446e4966ba83",
-      "userId": "c6e7736d-530e-4f49-bf36-ef1179a0b540",
-      "targetVenue": "LIMITLESS",
-      "sourceChain": "SOLANA",
-      "sourceToken": "USDC",
-      "sourceAmount": "100",
-      "destinationChain": "BASE",
-      "destinationToken": "USDC",
       "destinationAmountEstimate": "100",
       "routeProvider": "LIFI",
-      "routeLegId": "cc489380-e6b9-466f-b1b2-090efcb5ccb2",
+      "routeLegId": "f21bf91c-e98c-43f2-ab86-b7f3d7cc5f7a",
       "aggregateFundingStatus": "READY_TO_TRADE",
       "routeLegStatus": "LEG_READY_TO_TRADE",
       "bridgeStatus": "DONE",
@@ -165,30 +70,28 @@
       "usableBalanceObserved": null,
       "requiredAmount": "100",
       "checkerMode": "LIVE_READ",
-      "checkerSource": "limitless_funding_readiness",
-      "lastCheckedAt": "2026-04-26T01:02:39.139Z",
+      "checkerSource": "predict_fun_funding_readiness",
+      "lastCheckedAt": "2026-04-26T02:11:53.041Z",
       "reasonNotReady": null,
       "txHashes": [
-        "0x94f608ccf0d942879c7e8f52e68272a3af9cb6681b564c2fbf7faa9864009908"
+        "0x5d5f1d1b3a224c5ba9b3dd0f09753f1e97f2f9109e914c0e8992c5ac8b462a65"
       ],
       "auditEventIds": [
-        "613d6265-3324-40ef-901f-1b26009276f8",
-        "3e5346a2-6789-440d-b214-f00dac53bd0e",
-        "42e259a0-fee0-4682-b028-eab919640fa8",
-        "3eaaef25-cc80-414d-a092-465f03efe0b5",
-        "62b5d0eb-9e86-4b93-a186-812c7b51efc1",
-        "bcf9f253-646e-4230-a101-c9fd2ffc2a57",
-        "930d7d5f-e2da-4fa8-b22f-c6ef5a6b5f44",
-        "5044fa4f-0833-474a-bb21-6138d9ce6d4c",
-        "c4601554-626e-4ea1-80bf-3a7f0eb575b9"
+        "c4895767-2f6e-4bd4-b77d-48ac72ce0133",
+        "7b1265ec-5ee4-4cc1-9106-f2567f834fa9",
+        "bc2f2c22-ae3a-4967-a64b-f243f0e77e5b",
+        "a867955c-93bd-4f0f-b423-85fb4568cc40",
+        "ae85ebef-9248-4b8b-ae19-10da121b30e7",
+        "3fcc1dda-82b1-4284-aec5-08aba2bb83cf",
+        "9aa32e8d-3942-4c40-9d4a-ab1ef410a651"
       ],
-      "createdAt": "2026-04-26T01:02:39.087Z",
-      "updatedAt": "2026-04-26T01:02:39.153Z"
+      "createdAt": "2026-04-26T02:11:30.310Z",
+      "updatedAt": "2026-04-26T02:11:53.068Z"
     },
     {
-      "fundingIntentId": "070dba47-c8f8-4b97-8196-05c9840c5efe",
-      "userId": "c6e7736d-530e-4f49-bf36-ef1179a0b540",
-      "targetVenue": "POLYMARKET",
+      "fundingIntentId": "7f0a331f-10c8-4f86-8112-01fa927093d7",
+      "userId": "smoke-myriad-readiness-user",
+      "targetVenue": "MYRIAD",
       "sourceChain": "SOLANA",
       "sourceToken": "USDC",
       "sourceAmount": "100",
@@ -196,7 +99,7 @@
       "destinationToken": "USDC",
       "destinationAmountEstimate": "100",
       "routeProvider": "LIFI",
-      "routeLegId": "9bada547-2486-4bdf-b9d9-9658fac45d82",
+      "routeLegId": "5ae48408-b42e-47ad-b918-4469ff35b497",
       "aggregateFundingStatus": "READY_TO_TRADE",
       "routeLegStatus": "LEG_READY_TO_TRADE",
       "bridgeStatus": "DONE",
@@ -207,25 +110,63 @@
       "usableBalanceObserved": null,
       "requiredAmount": "100",
       "checkerMode": "LIVE_READ",
-      "checkerSource": "polymarket_funding_readiness",
-      "lastCheckedAt": "2026-04-26T01:02:39.068Z",
+      "checkerSource": "myriad_funding_readiness",
+      "lastCheckedAt": "2026-04-26T02:09:30.636Z",
       "reasonNotReady": null,
       "txHashes": [
-        "0x12a53050fb26414fad7678d570f665a5b7a25834f7204b8cbe1bd1a20cdbf765"
+        "0x2cab87b73caf488aa2e8549eb7d8520651e7d5f9bada49eb997d2df9a5b93549"
       ],
       "auditEventIds": [
-        "a79f32b5-6ac3-4c13-9006-f99b46330486",
-        "36e0b45b-c0db-461a-8976-15609facd345",
-        "9a4c5038-a208-4803-a69c-c10ad7a6c49b",
-        "9679cf3c-2817-4e7d-8eca-aac0d5a16b37",
-        "372c59b4-2d9b-4a62-a594-6a8e8aaee3aa",
-        "888db633-9485-4381-ba06-a8396d729e51",
-        "ca96242f-287a-44f2-9ecd-747575238ed7",
-        "8c0778d1-eaf5-46d5-8859-a7ede375392b",
-        "f4b18a28-addf-4114-aff0-c12d9b93ea59"
+        "89e783ec-6ae8-4fd9-b25e-c16825059521",
+        "72247465-3975-4b55-8ccd-668e50760078",
+        "c1284d88-e7f2-41e5-a951-4ff03801983d",
+        "34137801-b51b-40b0-b699-039a1ce7cc0d",
+        "13929687-72d3-47bb-a688-990a2a1084ce",
+        "0114500c-459e-40c9-b860-05da0f964176",
+        "24599868-a65b-4d62-8976-51f4beb63468"
       ],
-      "createdAt": "2026-04-26T01:02:38.964Z",
-      "updatedAt": "2026-04-26T01:02:39.082Z"
+      "createdAt": "2026-04-26T02:09:07.564Z",
+      "updatedAt": "2026-04-26T02:09:30.676Z"
+    },
+    {
+      "fundingIntentId": "2c8ed972-cf09-46db-8150-c4df15c84f31",
+      "userId": "smoke-opinion-readiness-user",
+      "targetVenue": "OPINION",
+      "sourceChain": "SOLANA",
+      "sourceToken": "USDC",
+      "sourceAmount": "100",
+      "destinationChain": "POLYGON",
+      "destinationToken": "USDC",
+      "destinationAmountEstimate": "100",
+      "routeProvider": "LIFI",
+      "routeLegId": "9d3fdb58-ede8-4860-a758-a4916cabf987",
+      "aggregateFundingStatus": "READY_TO_TRADE",
+      "routeLegStatus": "LEG_READY_TO_TRADE",
+      "bridgeStatus": "DONE",
+      "destinationStatus": "CONFIRMED",
+      "venueCreditStatus": "CONFIRMED",
+      "readinessStatus": "READY_TO_TRADE",
+      "readyToTrade": true,
+      "usableBalanceObserved": null,
+      "requiredAmount": "100",
+      "checkerMode": "LIVE_READ",
+      "checkerSource": "opinion_funding_readiness",
+      "lastCheckedAt": "2026-04-26T02:05:12.406Z",
+      "reasonNotReady": null,
+      "txHashes": [
+        "0x5b5a7db057274342b4a93fdd2c927355181da8c2a87b4c73be98e219039a8774"
+      ],
+      "auditEventIds": [
+        "cc0a99bc-5473-4aa9-8a1b-4bd2b5ea2983",
+        "81410e1f-9429-4228-a67c-f3babfc61618",
+        "5664694f-b8da-4a50-9c1f-7576cd11e160",
+        "4a70ea0f-270e-428a-a5c6-5d47aaff343f",
+        "63d2857f-c9cd-4ad7-b8ec-f97c1c0cbf80",
+        "7bb1455b-81e6-40e0-a1e3-71fd3958d009",
+        "d5c6778c-3181-424b-8ea1-0701749de3ed"
+      ],
+      "createdAt": "2026-04-26T02:04:13.604Z",
+      "updatedAt": "2026-04-26T02:05:12.431Z"
     }
   ]
 }

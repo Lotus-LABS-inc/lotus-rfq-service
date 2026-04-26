@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-04-25T22:54:54.528Z",
-  "status": "COMPLETED",
+  "generatedAt": "2026-04-26T01:44:02.955Z",
+  "status": "NO_ELIGIBLE_CONFIRMED_ROW",
   "readOnly": true,
   "persistedReadinessResult": false,
   "liveLifiExecutionEnabled": false,
@@ -11,46 +11,16 @@
     "balanceUrlConfigured": true,
     "balanceUrlHost": "localhost:4001",
     "authMode": "NONE",
-    "apiKeyConfigured": false,
+    "apiKeyConfigured": true,
     "timeoutMs": 5000,
     "minimumConfirmations": 0
   },
-  "selectedRow": {
-    "fundingIntentId": "d9c27701-68a5-4636-b06f-ce99334d12b0",
-    "userId": "smoke-polymarket-readiness-user",
-    "targetVenue": "POLYMARKET",
-    "routeLegId": "aa9f7bdd-5f7e-427a-b680-a1a54147efc9",
-    "destinationStatus": "CONFIRMED",
-    "venueCreditStatus": "PENDING",
-    "requiredAmount": "100",
-    "txHashes": [
-      "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-    ]
-  },
-  "readinessResult": {
-    "venue": "POLYMARKET",
-    "token": "USDC",
-    "checkedAt": "2026-04-25T22:54:54.672Z",
-    "status": "READY_TO_TRADE",
-    "destinationReceived": true,
-    "venueCreditConfirmed": true,
-    "readyToTrade": true,
-    "usableBalance": "1000",
-    "reason": "POLYMARKET_USABLE_BALANCE_CONFIRMED",
-    "evidence": {
-      "source": "polymarket_funding_readiness",
-      "checkerMode": "LIVE_READ",
-      "authMode": "NONE",
-      "minimumConfirmations": 0,
-      "redactionPolicy": "SERVER_SAFE_DEFAULT",
-      "requiredAmount": "100",
-      "usableBalance": "1000"
-    }
-  },
-  "mappingObserved": "READY_TO_TRADE",
+  "selectedRow": null,
+  "readinessResult": null,
+  "mappingObserved": null,
   "redactionVerified": true,
-  "blockers": [],
-  "warnings": [
-    "READY_TO_TRADE was observed by the read-only smoke test but was not persisted."
-  ]
+  "blockers": [
+    "No POLYMARKET funding route leg with confirmed destination status was found."
+  ],
+  "warnings": []
 }
