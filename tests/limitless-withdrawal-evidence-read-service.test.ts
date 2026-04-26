@@ -48,6 +48,7 @@ describe("Limitless internal withdrawal evidence read service", () => {
       status: "COMPLETED",
       venueReleased: true,
       destinationReceived: true,
+      completed: true,
       destinationChain: "BASE",
       destinationWalletAddress: "0x2222222222222222222222222222222222222222",
       token: "USDC",
@@ -74,6 +75,7 @@ describe("Limitless internal withdrawal evidence read service", () => {
       status: "COMPLETED",
       venueReleased: true,
       destinationReceived: true,
+      completed: true,
       destinationChain: "BASE",
       destinationWalletAddress: "0x2222222222222222222222222222222222222222",
       token: "USDC",
@@ -93,6 +95,7 @@ describe("Limitless internal withdrawal evidence read service", () => {
       status: "PENDING",
       venueReleased: false,
       destinationReceived: false,
+      completed: false,
       reason: "LIMITLESS_WITHDRAWAL_PENDING"
     });
     const app = Fastify();
@@ -118,7 +121,8 @@ describe("Limitless internal withdrawal evidence read service", () => {
       sourceVenue: "LIMITLESS",
       status: "PENDING",
       venueReleased: false,
-      destinationReceived: false
+      destinationReceived: false,
+      completed: false
     });
   });
 
@@ -132,6 +136,7 @@ describe("Limitless internal withdrawal evidence read service", () => {
       status: "COMPLETED",
       venueReleased: true,
       destinationReceived: true,
+      completed: true,
       destinationChain: "POLYGON",
       destinationWalletAddress: "0x3333333333333333333333333333333333333333",
       token: "USDC",
@@ -167,6 +172,7 @@ describe("Limitless internal withdrawal evidence read service", () => {
       status: "COMPLETED",
       venueReleased: true,
       destinationReceived: true,
+      completed: true,
       reason: "OPINION_WITHDRAWAL_DESTINATION_CONFIRMED"
     });
   });

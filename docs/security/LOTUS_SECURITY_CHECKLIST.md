@@ -78,6 +78,7 @@ Withdrawal v0 gate:
 - `FUNDING_WITHDRAWAL_COMPLETION_PERSISTENCE_ENABLED` must remain false until one venue is explicitly selected for a controlled persistence test.
 - Completion persistence must also be scoped to the selected venue by `FUNDING_WITHDRAWAL_COMPLETION_PERSISTENCE_VENUES=<VENUE>` or `<VENUE>_WITHDRAWAL_COMPLETION_PERSISTENCE_ENABLED=true`; do not enable all venues at once.
 - Before allowing `WITHDRAWAL_LEG_COMPLETED` persistence for a venue, run `npm run funding:withdrawal-completion-gate -- <VENUE>` or the venue alias. The gate must pass using a fresh, `COMPLETED`, redacted, non-synthetic smoke artifact from an operator-approved evidence host.
+- Before broader withdrawal completion rollout, run `npm run funding:withdrawal-completion-gate-summary`; every venue row must be `PASSED`, fresh, redacted, non-synthetic, and backed by an operator-approved evidence host.
 - Configure `<VENUE>_WITHDRAWAL_EVIDENCE_APPROVED_HOSTS` or `FUNDING_WITHDRAWAL_EVIDENCE_APPROVED_HOSTS` before considering live completion persistence; an unapproved evidence host must block persistence.
 
 ## 3. LiFi Integration Checklist

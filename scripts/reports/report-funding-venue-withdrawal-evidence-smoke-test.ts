@@ -207,14 +207,21 @@ const run = async (): Promise<SmokeArtifact> => {
       reconciliations: []
     });
     const afterCount = candidate.synthetic ? null : await countReconciliations(pool, candidate.withdrawal_intent_id);
+    const smokeBlockers = [
+      ...(candidate.synthetic ? [`No submitted ${requestedVenue} withdrawal row existed; smoke used synthetic sandbox identifiers.`] : []),
+      ...(result.status !== "COMPLETED" || !result.completed
+        ? [`Exact completed withdrawal evidence was not observed. mapping=${result.status}, completed=${result.completed}.`]
+        : [])
+    ];
     const completed = {
       ...artifact,
-      status: "COMPLETED" as const,
+      status: smokeBlockers.length === 0 ? "COMPLETED" as const : "FAILED" as const,
       selectedWithdrawal: toSelectedWithdrawal(candidate),
       evidenceResult: sanitizeResult(result),
       mappingObserved: result.status,
       reconciliationRecordsBefore: beforeCount,
       reconciliationRecordsAfter: afterCount,
+      blockers: smokeBlockers,
       warnings: result.completed
         ? ["COMPLETED was observed by the read-only smoke test but was not persisted."]
         : candidate.synthetic

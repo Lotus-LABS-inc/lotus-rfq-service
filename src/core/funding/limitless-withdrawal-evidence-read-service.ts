@@ -18,6 +18,7 @@ export interface InternalWithdrawalEvidenceReadOutput {
   status: "PENDING" | "VENUE_RELEASED" | "DESTINATION_RECEIVED" | "COMPLETED" | "FAILED" | "UNKNOWN";
   venueReleased: boolean;
   destinationReceived: boolean;
+  completed: boolean;
   destinationChain?: string;
   destinationWalletAddress?: string;
   token?: string;
@@ -183,6 +184,7 @@ const normalizeRecord = (
     status,
     venueReleased: booleanValue(record.venueReleased),
     destinationReceived: booleanValue(record.destinationReceived),
+    completed: booleanValue(record.completed),
     ...(stringValue(record.destinationChain) ? { destinationChain: stringValue(record.destinationChain)! } : {}),
     ...(stringValue(record.destinationWalletAddress) ? { destinationWalletAddress: stringValue(record.destinationWalletAddress)! } : {}),
     ...(stringValue(record.token) ? { token: stringValue(record.token)! } : {}),

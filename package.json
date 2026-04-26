@@ -119,6 +119,7 @@
     "funding:opinion-withdrawal-completion-gate": "tsx scripts/dev/validate-withdrawal-completion-persistence-gate.ts OPINION",
     "funding:myriad-withdrawal-completion-gate": "tsx scripts/dev/validate-withdrawal-completion-persistence-gate.ts MYRIAD",
     "funding:predictfun-withdrawal-completion-gate": "tsx scripts/dev/validate-withdrawal-completion-persistence-gate.ts PREDICT_FUN",
+    "funding:withdrawal-completion-gate-summary": "tsx scripts/reports/report-funding-withdrawal-completion-gate-summary.ts",
     "funding:seed-polymarket-readiness-smoke": "tsx scripts/dev/seed-polymarket-funding-readiness-smoke-row.ts",
     "funding:polymarket-readiness-sandbox-preflight": "tsx scripts/dev/run-polymarket-funding-readiness-sandbox-preflight.ts",
     "funding:pair-readiness-sandbox-preflight": "tsx scripts/dev/run-pair-funding-readiness-sandbox-preflight.ts",

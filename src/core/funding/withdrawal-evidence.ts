@@ -354,15 +354,28 @@ export class ConfigurableVenueWithdrawalEvidenceChecker implements WithdrawalCom
         sourceVenue: this.venue,
         withdrawalTxHash
       });
-      return this.normalize(raw, withdrawalTxHash);
+      return this.normalize(raw, {
+        userId: input.userId,
+        withdrawalIntentId: input.intent.withdrawalIntentId,
+        withdrawalRouteLegId: input.leg.withdrawalRouteLegId,
+        submittedTxHash: withdrawalTxHash
+      });
     } catch {
       return this.result("UNKNOWN", false, false, false, `${this.venue}_WITHDRAWAL_EVIDENCE_READ_UNAVAILABLE`, { withdrawalTxHash });
     }
   }
 
-  private normalize(raw: Record<string, unknown>, submittedTxHash: string): WithdrawalCompletionEvidenceResult {
+  private normalize(raw: Record<string, unknown>, expected: {
+    userId: string;
+    withdrawalIntentId: string;
+    withdrawalRouteLegId: string;
+    submittedTxHash: string;
+  }): WithdrawalCompletionEvidenceResult {
     const sourceVenue = raw.sourceVenue;
     const withdrawalTxHash = stringValue(raw.withdrawalTxHash);
+    const userId = stringValue(raw.userId);
+    const withdrawalIntentId = stringValue(raw.withdrawalIntentId);
+    const withdrawalRouteLegId = stringValue(raw.withdrawalRouteLegId);
     const status = stringValue(raw.status)?.toUpperCase();
     const destinationChain = stringValue(raw.destinationChain);
     const destinationWalletAddress = stringValue(raw.destinationWalletAddress);
@@ -372,14 +385,20 @@ export class ConfigurableVenueWithdrawalEvidenceChecker implements WithdrawalCom
     const reason = stringValue(raw.reason) ?? `${this.venue}_WITHDRAWAL_EVIDENCE_NORMALIZED`;
     const venueReleased = booleanValue(raw.venueReleased);
     const destinationReceived = booleanValue(raw.destinationReceived);
+    const completedFlag = booleanValue(raw.completed);
 
     if (sourceVenue !== this.venue || !withdrawalTxHash || !status) {
       return this.result("UNKNOWN", false, false, false, `${this.venue}_WITHDRAWAL_EVIDENCE_MALFORMED`, {
-        withdrawalTxHash: withdrawalTxHash ?? submittedTxHash
+        withdrawalTxHash: withdrawalTxHash ?? expected.submittedTxHash
       });
     }
-    if (withdrawalTxHash.toLowerCase() !== submittedTxHash.toLowerCase()) {
+    if (withdrawalTxHash.toLowerCase() !== expected.submittedTxHash.toLowerCase()) {
       return this.result("UNKNOWN", false, false, false, `${this.venue}_WITHDRAWAL_TX_HASH_MISMATCH`, { withdrawalTxHash });
+    }
+    if ((userId && userId !== expected.userId) ||
+      (withdrawalIntentId && withdrawalIntentId !== expected.withdrawalIntentId) ||
+      (withdrawalRouteLegId && withdrawalRouteLegId !== expected.withdrawalRouteLegId)) {
+      return this.result("UNKNOWN", false, false, false, `${this.venue}_WITHDRAWAL_EVIDENCE_SCOPE_MISMATCH`, { withdrawalTxHash });
     }
     if (status === "FAILED") {
       return this.result("FAILED", venueReleased, destinationReceived, false, reason, { withdrawalTxHash, confirmations });
@@ -408,8 +427,21 @@ export class ConfigurableVenueWithdrawalEvidenceChecker implements WithdrawalCom
         amount
       };
     }
+    if (status === "COMPLETED" && !completedFlag) {
+      return {
+        ...this.result("DESTINATION_RECEIVED", true, true, false, `${this.venue}_WITHDRAWAL_COMPLETION_FLAG_MISSING`, {
+          withdrawalTxHash,
+          confirmations
+        }),
+        withdrawalTxHash,
+        destinationChain,
+        destinationWalletAddress,
+        token,
+        amount
+      };
+    }
     return {
-      ...this.result(status === "COMPLETED" ? "COMPLETED" : "DESTINATION_RECEIVED", true, true, status === "COMPLETED", reason, {
+      ...this.result(status === "COMPLETED" ? "COMPLETED" : "DESTINATION_RECEIVED", true, true, status === "COMPLETED" && completedFlag, reason, {
         withdrawalTxHash,
         confirmations
       }),

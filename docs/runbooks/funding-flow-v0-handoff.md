@@ -1587,6 +1587,7 @@ Required evidence contract from the operator-approved Polymarket read service:
   "status": "PENDING|VENUE_RELEASED|DESTINATION_RECEIVED|COMPLETED|FAILED|UNKNOWN",
   "venueReleased": true,
   "destinationReceived": true,
+  "completed": true,
   "destinationChain": "POLYGON",
   "destinationWalletAddress": "0x1111111111111111111111111111111111111111",
   "token": "USDC",
@@ -1613,6 +1614,7 @@ Fail-closed mapping:
 - missing checker or disabled mode -> no state change
 - service unavailable, timeout, malformed JSON, missing fields, unsupported token, or unsupported chain -> `UNKNOWN` / retry required
 - tx hash mismatch -> retry required
+- user, withdrawal intent, or route-leg scope mismatch when returned by the read service -> retry required
 - destination wallet mismatch -> retry required
 - destination chain mismatch -> retry required
 - token mismatch -> retry required
@@ -1755,6 +1757,21 @@ npm run funding:opinion-withdrawal-completion-gate
 npm run funding:myriad-withdrawal-completion-gate
 npm run funding:predictfun-withdrawal-completion-gate
 ```
+
+To inspect every venue in one operator-safe report before broader rollout, run:
+
+```bash
+npm run funding:withdrawal-completion-gate-summary
+```
+
+The summary writes:
+
+```text
+artifacts/funding/all-venue-withdrawal-completion-gate-summary.json
+artifacts/funding/all-venue-withdrawal-completion-gate-summary.md
+```
+
+This summary is read-only. It does not enable persistence, call LI.FI execution, call venue withdrawal execution, sign, or broadcast. Broader rollout should not proceed unless every venue row is `PASSED`, fresh, redacted, non-synthetic, and backed by an operator-approved evidence host.
 
 The validator writes:
 

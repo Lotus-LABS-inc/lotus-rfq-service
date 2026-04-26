@@ -835,6 +835,7 @@ describe("Funding v0 domain", () => {
       status: "COMPLETED",
       venueReleased: true,
       destinationReceived: true,
+      completed: true,
       destinationChain: "POLYGON",
       destinationWalletAddress: "0x1111111111111111111111111111111111111111",
       token: "USDC",
@@ -855,6 +856,47 @@ describe("Funding v0 domain", () => {
       amount: "40"
     });
     expect(JSON.stringify(completed)).not.toContain("secret");
+
+    client.raw = {
+      sourceVenue: "POLYMARKET",
+      withdrawalTxHash: "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      status: "COMPLETED",
+      venueReleased: true,
+      destinationReceived: true,
+      completed: false,
+      destinationChain: "POLYGON",
+      destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+      token: "USDC",
+      amount: "40",
+      confirmations: 2
+    };
+    await expect(checker.check({ userId: "user-1", intent, leg, reconciliations: [] })).resolves.toMatchObject({
+      status: "DESTINATION_RECEIVED",
+      completed: false,
+      reason: "POLYMARKET_WITHDRAWAL_COMPLETION_FLAG_MISSING"
+    });
+
+    client.raw = {
+      userId: "other-user",
+      withdrawalIntentId: "withdrawal-intent-1",
+      withdrawalRouteLegId: "withdrawal-leg-1",
+      sourceVenue: "POLYMARKET",
+      withdrawalTxHash: "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      status: "COMPLETED",
+      venueReleased: true,
+      destinationReceived: true,
+      completed: true,
+      destinationChain: "POLYGON",
+      destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+      token: "USDC",
+      amount: "40",
+      confirmations: 2
+    };
+    await expect(checker.check({ userId: "user-1", intent, leg, reconciliations: [] })).resolves.toMatchObject({
+      status: "UNKNOWN",
+      completed: false,
+      reason: "POLYMARKET_WITHDRAWAL_EVIDENCE_SCOPE_MISMATCH"
+    });
 
     client.raw = {
       sourceVenue: "POLYMARKET",
