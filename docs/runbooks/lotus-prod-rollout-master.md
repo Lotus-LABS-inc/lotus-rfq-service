@@ -108,6 +108,55 @@ npm run db:verify:supabase
 npm run db:schema:validate
 ```
 
+### Dedicated Ops Read Service
+
+Deploy a second Render Web Service for operator-approved funding balance and withdrawal evidence reads. This service uses the same repo but a separate entrypoint and must not expose user APIs, RFQ routes, admin routes, metrics, WebSockets, signing, broadcasting, LI.FI execution, or live withdrawal execution.
+
+| Setting | Value |
+|---|---|
+| Render service name | `lotus-ops-read-service` |
+| Root directory | `lotus-rfq-service` |
+| Build command | `npm ci && npm run build` |
+| Start command | `npm run start:ops-read` |
+| Health check path | `/health` |
+| Custom domain | `ops.uselotus.xyz` |
+
+Ops read service routes:
+
+| Route | Auth env | Response contract |
+|---|---|---|
+| `GET /health` | None | `{ status, service }` |
+| `GET /lotus/polymarket/funding-balance` | `POLYMARKET_FUNDING_READ_API_KEY` | `{ usableBalance }` |
+| `GET /lotus/limitless/funding-balance` | `LIMITLESS_FUNDING_READ_API_KEY` | `{ usableBalance }` |
+| `GET /lotus/opinion/funding-balance` | `OPINION_FUNDING_READ_API_KEY` | `{ usableBalance }` |
+| `GET /lotus/myriad/funding-balance` | `MYRIAD_FUNDING_READ_API_KEY` | `{ usableBalance }` |
+| `GET /lotus/predictfun/funding-balance` | `PREDICT_FUN_FUNDING_READ_API_KEY` | `{ usableBalance }` |
+| `GET /lotus/:venue/withdrawal-evidence` | `<VENUE>_WITHDRAWAL_EVIDENCE_API_KEY` | Normalized evidence object only |
+
+Main backend URLs should point to `ops.uselotus.xyz` after deployment:
+
+| Backend env | Production value |
+|---|---|
+| `POLYMARKET_FUNDING_BALANCE_URL` | `https://ops.uselotus.xyz/lotus/polymarket/funding-balance` |
+| `LIMITLESS_FUNDING_BALANCE_URL` | `https://ops.uselotus.xyz/lotus/limitless/funding-balance` |
+| `OPINION_FUNDING_BALANCE_URL` | `https://ops.uselotus.xyz/lotus/opinion/funding-balance` |
+| `MYRIAD_FUNDING_BALANCE_URL` | `https://ops.uselotus.xyz/lotus/myriad/funding-balance` |
+| `PREDICT_FUN_FUNDING_BALANCE_URL` | `https://ops.uselotus.xyz/lotus/predictfun/funding-balance` |
+| `POLYMARKET_WITHDRAWAL_EVIDENCE_URL` | `https://ops.uselotus.xyz/lotus/polymarket/withdrawal-evidence` |
+| `OPINION_WITHDRAWAL_EVIDENCE_URL` | `https://ops.uselotus.xyz/lotus/opinion/withdrawal-evidence` |
+| `MYRIAD_WITHDRAWAL_EVIDENCE_URL` | `https://ops.uselotus.xyz/lotus/myriad/withdrawal-evidence` |
+| `PREDICT_FUN_WITHDRAWAL_EVIDENCE_URL` | `https://ops.uselotus.xyz/lotus/predictfun/withdrawal-evidence` |
+| `FUNDING_WITHDRAWAL_EVIDENCE_APPROVED_HOSTS` | `ops.uselotus.xyz` |
+
+Non-Polymarket ops funding balance routes must stay `DISABLED` until an operator-approved upstream exists:
+
+| Env pattern | Example | Production expectation |
+|---|---|---|
+| `<VENUE>_OPS_FUNDING_BALANCE_MODE` | `DISABLED` or `HTTP_UPSTREAM` | Default `DISABLED`; no static/fixture balances in production. |
+| `<VENUE>_OPS_FUNDING_BALANCE_UPSTREAM_URL` | `https://approved-read.example/balance` | Operator-approved source only. |
+| `<VENUE>_OPS_FUNDING_BALANCE_UPSTREAM_AUTH_MODE` | `BEARER` | Use bearer auth when upstream requires credentials. |
+| `<VENUE>_OPS_FUNDING_BALANCE_UPSTREAM_API_KEY` | `<secret>` | Secret manager only. |
+
 ## 6. Security And Admin Surface
 
 Admin endpoints are production-sensitive and must use short-lived admin JWTs signed by the production `JWT_SECRET`.
