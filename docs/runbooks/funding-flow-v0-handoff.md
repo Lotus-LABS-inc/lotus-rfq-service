@@ -321,7 +321,7 @@ The Funding Capability Matrix is the source of truth for target chain/token/dest
 
 Known examples from the architecture flow:
 
-- Polymarket: venue-compatible USDC, commonly represented as `USDC.e` in the current diagram
+- Polymarket: venue-compatible collateral. For CLOB V2 trading readiness this is pUSD collateral, not raw USDC.e. API-only funding flows must account for USDC.e -> pUSD wrapping through Polymarket's Collateral Onramp before execution readiness can be treated as venue-ready.
 - Limitless: `USDC` / `ETH`
 - Myriad: `SOL` / `ETH`
 - Opinion, Predict.fun, and future venues: confirm through Funding Capability Matrix config before routing
@@ -544,12 +544,15 @@ Safe response contract:
 }
 ```
 
-The route is read-only and uses the Polymarket CLOB SDK balance/allowance read path for collateral. It returns the lesser of balance and allowance as a USDC amount. It must not return raw CLOB responses, API keys, auth headers, private keys, allowances, or provider internals.
+The route is read-only and uses the Polymarket CLOB V2 SDK balance/allowance read path for collateral. Under Polymarket V2, this collateral is pUSD, a standard ERC-20 backed by USDC. The service returns the lesser of balance and allowance as a decimal collateral amount for Lotus readiness comparison. It must not return raw CLOB responses, API keys, auth headers, private keys, allowances, or provider internals.
 
 Activation rules:
 
 - `POLYMARKET_INTERNAL_BALANCE_READ_ENABLED=true` is required.
 - CLOB envs must be complete: `POLYMARKET_CLOB_HOST`, `POLYMARKET_CHAIN_ID`, `POLYMARKET_API_KEY`, `POLYMARKET_API_SECRET`, `POLYMARKET_API_PASSPHRASE`, and `POLYMARKET_PRIVATE_KEY`.
+- Polymarket CLOB V2 must use `@polymarket/clob-client-v2`; legacy `@polymarket/clob-client` and `@polymarket/builder-signing-sdk` are not valid for production.
+- Before the 2026-04-28 cutover, point `POLYMARKET_CLOB_HOST` at `https://clob-v2.polymarket.com`; after cutover, `https://clob.polymarket.com` serves V2.
+- Builder attribution uses `POLYMARKET_BUILDER_CODE` / `builderCode`; old `POLY_BUILDER_*` HMAC builder headers are not used.
 - If `POLYMARKET_FUNDING_READ_API_KEY` is configured, callers must use `Authorization: Bearer <token>`.
 - If no bearer token is configured, local development allows loopback-only access; production must configure bearer auth.
 - This service does not mark funding `READY_TO_TRADE`; it only supplies the balance read used by the existing readiness checker.

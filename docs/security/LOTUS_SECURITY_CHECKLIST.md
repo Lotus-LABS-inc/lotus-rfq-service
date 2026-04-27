@@ -39,8 +39,9 @@ Before enabling funding runtime beyond local/sandbox:
 - Venue readiness envs such as `*_FUNDING_READINESS_MODE`, `*_FUNDING_READINESS_ENABLED`, `*_FUNDING_BALANCE_URL`, `*_FUNDING_READ_AUTH_MODE`, and `*_FUNDING_READ_API_KEY` are reviewed before any checker can mark balances `READY_TO_TRADE`.
 - Polymarket, Limitless, Opinion, Myriad, and Predict.fun funding readiness default to `DISABLED`; `LIVE_READ` requires an operator-approved read endpoint and server-side-only credentials where needed.
 - Before a new venue is used in funding enforcement, run its read-only smoke command and confirm the artifact is redacted, read-only, and either `COMPLETED` with expected mapping or fail-closed with a documented blocker.
-- Internal Polymarket balance reads require `POLYMARKET_INTERNAL_BALANCE_READ_ENABLED=true`, complete CLOB read credentials, and bearer auth outside local loopback testing.
+- Internal Polymarket balance reads require `POLYMARKET_INTERNAL_BALANCE_READ_ENABLED=true`, complete CLOB V2 read credentials, and bearer auth outside local loopback testing.
 - `/internal/polymarket/funding-balance` returns only `usableBalance`; it must not return raw CLOB responses, allowances, auth headers, API keys, or private keys.
+- Polymarket V2 funding readiness must treat CLOB collateral as pUSD. API-only funding flows must account for USDC.e -> pUSD wrapping before marking capital execution-ready.
 - Sandbox funding enforcement is only allowed for approved routes where every required route venue has validated readiness coverage.
 - Do not enable funding preflight enforcement for pair, tri, or split routes if any route venue is manually seeded, stub-only, `NOT_CONFIGURED`, or missing a venue-specific readiness checker.
 - A persisted `READY_TO_TRADE` row for one venue does not satisfy funding preflight for a route that also requires another venue.
@@ -148,6 +149,9 @@ Do not enable live Polymarket submission until:
 - `POLYMARKET_EXECUTION_MODE=v2` is set intentionally.
 - `POLYMARKET_LIVE_EXECUTION_ENABLED=true` is set intentionally.
 - All required `POLYMARKET_*` env keys are present server-side only.
+- `POLYMARKET_CLOB_HOST` uses `https://clob-v2.polymarket.com` before the 2026-04-28 V2 cutover and `https://clob.polymarket.com` after V2 takes over production.
+- The repo uses `@polymarket/clob-client-v2` and does not depend on legacy `@polymarket/clob-client` or `@polymarket/builder-signing-sdk`.
+- V2 order creation uses `builderCode` and does not send legacy `nonce`, `feeRateBps`, or `taker` fields from Lotus.
 - Dependency critical/high advisories are remediated or formally risk-accepted.
 - SDK payload tests prove `builderCode`, `tokenID`, `price`, `size`, and `side` mapping.
 - Live harness is run only with operator-controlled tiny-size/non-production-safe configuration.

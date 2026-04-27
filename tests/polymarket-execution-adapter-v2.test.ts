@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { OrderType, Side } from "@polymarket/clob-client-v2";
 
 import type { ExecutionScopeBinding } from "../src/execution-control/execution-scope-token.js";
@@ -131,6 +132,25 @@ const buildOrchestrator = (input: {
 };
 
 describe("PolymarketExecutionAdapterV2", () => {
+  it("uses the Polymarket V2 SDK and excludes legacy CLOB/builder signing packages", () => {
+    const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    const lockfile = readFileSync(new URL("../package-lock.json", import.meta.url), "utf8");
+    const allDeps = {
+      ...packageJson.dependencies,
+      ...packageJson.devDependencies
+    };
+
+    expect(allDeps["@polymarket/clob-client-v2"]).toBeDefined();
+    expect(allDeps["@polymarket/clob-client"]).toBeUndefined();
+    expect(allDeps["@polymarket/builder-signing-sdk"]).toBeUndefined();
+    expect(lockfile).toContain('"node_modules/@polymarket/clob-client-v2"');
+    expect(lockfile).not.toContain('"node_modules/@polymarket/clob-client"');
+    expect(lockfile).not.toContain('"node_modules/@polymarket/builder-signing-sdk"');
+  });
+
   it("reports disabled mode and fails closed without preparing an order", async () => {
     const adapter = new PolymarketExecutionAdapterV2({
       executionMode: "disabled",
