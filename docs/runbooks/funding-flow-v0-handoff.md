@@ -576,6 +576,8 @@ Required operator config:
 - `<VENUE>_FUNDING_READ_AUTH_MODE=BEARER` requires `<VENUE>_FUNDING_READ_API_KEY`.
 - `TEST_DATABASE_URL` or `DATABASE_URL` must point to a database with at least one confirmed funding route leg for that venue.
 
+The ops read service can source non-Polymarket balance reads either from a reviewed venue HTTP API (`<VENUE>_OPS_FUNDING_BALANCE_MODE=DIRECT_HTTP`) or from an operator-approved ERC-20 wallet balance (`<VENUE>_OPS_FUNDING_BALANCE_MODE=ONCHAIN_ERC20`). `ONCHAIN_ERC20` requires RPC URL, token address, wallet address, and token decimals envs on the ops service, and it may only be treated as `READY_TO_TRADE` when that on-chain wallet is the actual usable venue trading wallet or the venue has confirmed on-chain balance equals usable trading balance.
+
 The command:
 
 - selects one safe venue funding route leg with confirmed destination status

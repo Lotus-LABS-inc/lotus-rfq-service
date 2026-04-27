@@ -103,7 +103,7 @@ describe("ops read service", () => {
     expectNoSecrets(response.body);
   });
 
-  it("fails closed for non-Polymarket funding balance routes when upstream mode is disabled", async () => {
+  it("fails closed for non-Polymarket funding balance routes when direct mode is disabled", async () => {
     const app = await buildOpsReadServer({
       env: {
         NODE_ENV: "production",
@@ -125,11 +125,12 @@ describe("ops read service", () => {
     });
   });
 
-  it("normalizes non-Polymarket HTTP upstream funding balances", async () => {
+  it("normalizes direct non-Polymarket HTTP funding balances", async () => {
     const fetchImpl: typeof fetch = vi.fn(async (input, init) => {
       expect(String(input)).toContain("targetVenue=MYRIAD");
-      expect(init?.headers instanceof Headers ? init.headers.get("authorization") : null).toBe("Bearer upstream-token");
-      return new Response(JSON.stringify({ availableBalance: "77.25", rawProviderPayload: "must-not-return" }), {
+      expect(String(input)).toContain("https://api-v2.myriadprotocol.com/operator/balance");
+      expect(init?.headers instanceof Headers ? init.headers.get("x-api-key") : null).toBe("venue-read-token");
+      return new Response(JSON.stringify({ account: { usable: "77.25" }, rawProviderPayload: "must-not-return" }), {
         status: 200,
         headers: { "content-type": "application/json" }
       });
@@ -138,10 +139,12 @@ describe("ops read service", () => {
       env: {
         NODE_ENV: "production",
         MYRIAD_FUNDING_READ_API_KEY: "read-token",
-        MYRIAD_OPS_FUNDING_BALANCE_MODE: "HTTP_UPSTREAM",
-        MYRIAD_OPS_FUNDING_BALANCE_UPSTREAM_URL: "https://ops-upstream.example/myriad/balance",
-        MYRIAD_OPS_FUNDING_BALANCE_UPSTREAM_AUTH_MODE: "BEARER",
-        MYRIAD_OPS_FUNDING_BALANCE_UPSTREAM_API_KEY: "upstream-token"
+        MYRIAD_OPS_FUNDING_BALANCE_MODE: "DIRECT_HTTP",
+        MYRIAD_OPS_FUNDING_BALANCE_BASE_URL: "https://api-v2.myriadprotocol.com/",
+        MYRIAD_OPS_FUNDING_BALANCE_PATH: "/operator/balance",
+        MYRIAD_OPS_FUNDING_BALANCE_AUTH_MODE: "API_KEY",
+        MYRIAD_OPS_FUNDING_BALANCE_API_KEY: "venue-read-token",
+        MYRIAD_OPS_FUNDING_BALANCE_RESPONSE_FIELD: "account.usable"
       } as NodeJS.ProcessEnv,
       fetchImpl
     });
@@ -156,6 +159,76 @@ describe("ops read service", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ usableBalance: "77.25" });
     expect(response.body).not.toContain("rawProviderPayload");
+    expectNoSecrets(response.body);
+  });
+
+  it("reads on-chain ERC20 balances for non-Polymarket funding balance routes", async () => {
+    const fetchImpl: typeof fetch = vi.fn(async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as {
+        method: string;
+        params: [{ to: string; data: string }, string];
+      };
+      expect(body.method).toBe("eth_call");
+      expect(body.params[0].to).toBe("0x55d398326f99059fF775485246999027B3197955");
+      expect(body.params[0].data).toBe(
+        "0x70a082310000000000000000000000005c2a7bf969c813dd79587b6aada5877476281072"
+      );
+      expect(body.params[1]).toBe("latest");
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: `0x${(77_250_000n).toString(16)}` }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    });
+    const app = await buildOpsReadServer({
+      env: {
+        NODE_ENV: "production",
+        PREDICT_FUN_FUNDING_READ_API_KEY: "read-token",
+        PREDICT_FUN_OPS_FUNDING_BALANCE_MODE: "ONCHAIN_ERC20",
+        PREDICT_FUN_OPS_FUNDING_BALANCE_RPC_URL: "https://bsc-rpc.example",
+        PREDICT_FUN_OPS_FUNDING_BALANCE_TOKEN_ADDRESS: "0x55d398326f99059fF775485246999027B3197955",
+        PREDICT_FUN_OPS_FUNDING_BALANCE_WALLET_ADDRESS: "0x5c2a7bf969c813dd79587b6aada5877476281072",
+        PREDICT_FUN_OPS_FUNDING_BALANCE_TOKEN_DECIMALS: "6"
+      } as NodeJS.ProcessEnv,
+      fetchImpl
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/lotus/predictfun/funding-balance?userId=user-1&fundingIntentId=funding-1&routeLegId=leg-1",
+      headers: { authorization: "Bearer read-token" }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ usableBalance: "77.25" });
+    expect(response.body).not.toContain("bsc-rpc.example");
+    expect(response.body).not.toContain("0x55d398326f99059fF775485246999027B3197955");
+    expectNoSecrets(response.body);
+  });
+
+  it("fails closed when on-chain ERC20 funding balance config is incomplete", async () => {
+    const app = await buildOpsReadServer({
+      env: {
+        NODE_ENV: "production",
+        PREDICT_FUN_FUNDING_READ_API_KEY: "read-token",
+        PREDICT_FUN_OPS_FUNDING_BALANCE_MODE: "ONCHAIN_ERC20",
+        PREDICT_FUN_OPS_FUNDING_BALANCE_RPC_URL: "https://bsc-rpc.example",
+        PREDICT_FUN_OPS_FUNDING_BALANCE_TOKEN_ADDRESS: "0x55d398326f99059fF775485246999027B3197955"
+      } as NodeJS.ProcessEnv
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/lotus/predictfun/funding-balance?userId=user-1&fundingIntentId=funding-1&routeLegId=leg-1",
+      headers: { authorization: "Bearer read-token" }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({
+      code: "PREDICT_FUN_FUNDING_BALANCE_READ_NOT_CONFIGURED"
+    });
+    expect(response.body).not.toContain("bsc-rpc.example");
     expectNoSecrets(response.body);
   });
 

@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { createHmac } from "node:crypto";
 import { config as loadDotenvFile } from "dotenv";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -129,9 +130,35 @@ const parsePositiveInt = (value: string | undefined, fallback: number): number =
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
-const normalizeUpstreamBalance = (raw: unknown): string => {
+const parseNonNegativeInt = (value: string | undefined, fallback: number): number => {
+  const parsed = Number.parseInt(`${value ?? ""}`, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+};
+
+const stringValue = (value: unknown): string | null =>
+  typeof value === "string" && value.trim().length > 0 ? value.trim() :
+    typeof value === "number" && Number.isFinite(value) && value >= 0 ? `${value}` :
+      null;
+
+const isEvmAddress = (value: string | undefined): value is string =>
+  typeof value === "string" && /^0x[a-fA-F0-9]{40}$/.test(value.trim());
+
+const readDotPath = (raw: unknown, path: string | undefined): unknown => {
+  const parts = path?.split(".").map((part) => part.trim()).filter(Boolean) ?? [];
+  if (parts.length === 0) {
+    return undefined;
+  }
+  return parts.reduce<unknown>((current, part) => {
+    if (!current || typeof current !== "object" || Array.isArray(current)) {
+      return undefined;
+    }
+    return (current as Record<string, unknown>)[part];
+  }, raw);
+};
+
+const normalizeDirectBalanceFallback = (raw: unknown): string => {
   if (!raw || typeof raw !== "object") {
-    throw new OpsFundingBalanceMalformedError("Funding balance upstream response was not an object.");
+    throw new OpsFundingBalanceMalformedError("Funding balance direct response was not an object.");
   }
   const record = raw as Record<string, unknown>;
   const candidate = record.usableBalance ?? record.availableBalance ?? record.balance;
@@ -141,62 +168,226 @@ const normalizeUpstreamBalance = (raw: unknown): string => {
   if (typeof candidate === "number" && Number.isFinite(candidate) && candidate >= 0) {
     return `${candidate}`;
   }
-  throw new OpsFundingBalanceMalformedError("Funding balance upstream response did not contain a balance field.");
+  throw new OpsFundingBalanceMalformedError("Funding balance direct response did not contain a balance field.");
 };
 
-const readHttpUpstreamFundingBalance = async (
+const normalizeDirectBalance = (raw: unknown, responseField: string | undefined): string => {
+  const configuredField = stringValue(readDotPath(raw, responseField));
+  if (configuredField) {
+    return configuredField;
+  }
+  return normalizeDirectBalanceFallback(raw);
+};
+
+const encodeErc20BalanceOfCall = (walletAddress: string): string =>
+  `0x70a08231${walletAddress.trim().toLowerCase().replace(/^0x/, "").padStart(64, "0")}`;
+
+const parseJsonRpcHexQuantity = (value: unknown): bigint => {
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]*$/.test(value)) {
+    throw new OpsFundingBalanceMalformedError("ERC20 balance response did not contain a hex result.");
+  }
+  return BigInt(value || "0x0");
+};
+
+const formatAtomicUnits = (value: bigint, decimals: number): string => {
+  if (value < 0n) {
+    throw new OpsFundingBalanceMalformedError("ERC20 balance response was negative.");
+  }
+  if (decimals === 0) {
+    return value.toString();
+  }
+  const divisor = 10n ** BigInt(decimals);
+  const whole = value / divisor;
+  const fraction = value % divisor;
+  if (fraction === 0n) {
+    return whole.toString();
+  }
+  const fractionText = fraction.toString().padStart(decimals, "0").replace(/0+$/, "");
+  return `${whole.toString()}.${fractionText}`;
+};
+
+const buildDirectFundingBalanceHeaders = (
+  venue: Exclude<FundingVenue, "POLYMARKET">,
+  env: NodeJS.ProcessEnv,
+  method: string,
+  pathWithSearch: string
+): Headers => {
+  const headers = new Headers();
+  const authMode = `${env[`${venue}_OPS_FUNDING_BALANCE_AUTH_MODE`] ?? "NONE"}`.trim().toUpperCase();
+  if (authMode === "BEARER") {
+    const apiKey = env[`${venue}_OPS_FUNDING_BALANCE_API_KEY`]?.trim();
+    if (!apiKey) {
+      throw new OpsFundingBalanceNotConfiguredError(`${venue} funding balance bearer token is not configured.`);
+    }
+    headers.set("authorization", `Bearer ${apiKey}`);
+  }
+  if (authMode === "API_KEY") {
+    const apiKey = env[`${venue}_OPS_FUNDING_BALANCE_API_KEY`]?.trim();
+    if (!apiKey) {
+      throw new OpsFundingBalanceNotConfiguredError(`${venue} funding balance API key is not configured.`);
+    }
+    headers.set(env[`${venue}_OPS_FUNDING_BALANCE_API_KEY_HEADER`]?.trim() || "x-api-key", apiKey);
+  }
+  if (authMode === "HMAC") {
+    const apiKey = env[`${venue}_OPS_FUNDING_BALANCE_API_KEY`]?.trim();
+    const secret = env[`${venue}_OPS_FUNDING_BALANCE_HMAC_SECRET`]?.trim();
+    if (!apiKey || !secret) {
+      throw new OpsFundingBalanceNotConfiguredError(`${venue} funding balance HMAC credentials are not configured.`);
+    }
+    const timestamp = new Date().toISOString();
+    const payload = `${timestamp}\n${method.toUpperCase()}\n${pathWithSearch}\n`;
+    headers.set(env[`${venue}_OPS_FUNDING_BALANCE_HMAC_API_KEY_HEADER`]?.trim() || "lmts-api-key", apiKey);
+    headers.set(env[`${venue}_OPS_FUNDING_BALANCE_HMAC_TIMESTAMP_HEADER`]?.trim() || "lmts-timestamp", timestamp);
+    headers.set(
+      env[`${venue}_OPS_FUNDING_BALANCE_HMAC_SIGNATURE_HEADER`]?.trim() || "lmts-signature",
+      createHmac("sha256", decodeBase64Secret(secret)).update(payload).digest("base64")
+    );
+  }
+  const onBehalfOf = env[`${venue}_OPS_FUNDING_BALANCE_ON_BEHALF_OF_PROFILE_ID`]?.trim();
+  if (onBehalfOf) {
+    headers.set("x-on-behalf-of", onBehalfOf);
+  }
+  return headers;
+};
+
+const readDirectHttpFundingBalance = async (
   venue: Exclude<FundingVenue, "POLYMARKET">,
   input: OpsFundingBalanceInput,
   env: NodeJS.ProcessEnv,
   fetchImpl: typeof fetch
 ): Promise<PolymarketFundingBalanceReadOutput> => {
   const mode = `${env[`${venue}_OPS_FUNDING_BALANCE_MODE`] ?? "DISABLED"}`.trim().toUpperCase();
-  if (mode !== "HTTP_UPSTREAM") {
-    throw new OpsFundingBalanceNotConfiguredError(`${venue} funding balance upstream mode is disabled.`);
+  if (mode !== "DIRECT_HTTP") {
+    throw new OpsFundingBalanceNotConfiguredError(`${venue} direct funding balance mode is disabled.`);
   }
 
-  const upstreamUrl = env[`${venue}_OPS_FUNDING_BALANCE_UPSTREAM_URL`]?.trim();
-  if (!upstreamUrl) {
-    throw new OpsFundingBalanceNotConfiguredError(`${venue} funding balance upstream URL is not configured.`);
+  const baseUrl = env[`${venue}_OPS_FUNDING_BALANCE_BASE_URL`]?.trim() ||
+    (venue === "LIMITLESS" ? env.LIMITLESS_BASE_URL?.trim() :
+      venue === "OPINION" ? env.OPINION_OPENAPI_BASE_URL?.trim() :
+        venue === "MYRIAD" ? env.MYRIAD_BASE_URL?.trim() :
+          venue === "PREDICT_FUN" ? env.PREDICT_MAINNET_BASE_URL?.trim() :
+            undefined);
+  const path = env[`${venue}_OPS_FUNDING_BALANCE_PATH`]?.trim();
+  if (!baseUrl || !path) {
+    throw new OpsFundingBalanceNotConfiguredError(`${venue} direct funding balance base URL or path is not configured.`);
   }
 
-  const url = new URL(upstreamUrl);
+  const url = new URL(path, baseUrl);
   url.searchParams.set("userId", input.userId);
   url.searchParams.set("fundingIntentId", input.fundingIntentId);
   url.searchParams.set("routeLegId", input.routeLegId);
   url.searchParams.set("targetVenue", venue);
 
-  const headers = new Headers();
-  const authMode = `${env[`${venue}_OPS_FUNDING_BALANCE_UPSTREAM_AUTH_MODE`] ?? "NONE"}`.trim().toUpperCase();
-  if (authMode === "BEARER") {
-    const apiKey = env[`${venue}_OPS_FUNDING_BALANCE_UPSTREAM_API_KEY`]?.trim();
-    if (!apiKey) {
-      throw new OpsFundingBalanceNotConfiguredError(`${venue} funding balance upstream bearer token is not configured.`);
+  const timeoutMs = parsePositiveInt(env[`${venue}_FUNDING_READ_TIMEOUT_MS`], 5_000);
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => abortController.abort(), timeoutMs);
+  try {
+    const pathWithSearch = `${url.pathname}${url.search}`;
+    const response = await fetchImpl(url, {
+      method: "GET",
+      headers: buildDirectFundingBalanceHeaders(venue, env, "GET", pathWithSearch),
+      signal: abortController.signal
+    });
+    if (!response.ok) {
+      throw new OpsFundingBalanceUnavailableError(`${venue} direct funding balance read returned HTTP ${response.status}.`);
     }
-    headers.set("authorization", `Bearer ${apiKey}`);
+    return {
+      usableBalance: normalizeDirectBalance(
+        await response.json(),
+        env[`${venue}_OPS_FUNDING_BALANCE_RESPONSE_FIELD`]
+      )
+    };
+  } catch (error) {
+    if (error instanceof OpsFundingBalanceNotConfiguredError || error instanceof OpsFundingBalanceMalformedError) {
+      throw error;
+    }
+    throw new OpsFundingBalanceUnavailableError(`${venue} direct funding balance read is unavailable.`);
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const readOnchainErc20FundingBalance = async (
+  venue: Exclude<FundingVenue, "POLYMARKET">,
+  env: NodeJS.ProcessEnv,
+  fetchImpl: typeof fetch
+): Promise<PolymarketFundingBalanceReadOutput> => {
+  const rpcUrl = env[`${venue}_OPS_FUNDING_BALANCE_RPC_URL`]?.trim();
+  const tokenAddress = env[`${venue}_OPS_FUNDING_BALANCE_TOKEN_ADDRESS`]?.trim();
+  const walletAddress = env[`${venue}_OPS_FUNDING_BALANCE_WALLET_ADDRESS`]?.trim();
+  const decimals = parseNonNegativeInt(env[`${venue}_OPS_FUNDING_BALANCE_TOKEN_DECIMALS`], 6);
+  if (!rpcUrl || !isEvmAddress(tokenAddress) || !isEvmAddress(walletAddress)) {
+    throw new OpsFundingBalanceNotConfiguredError(`${venue} ERC20 balance read is not configured.`);
+  }
+  if (decimals > 36) {
+    throw new OpsFundingBalanceNotConfiguredError(`${venue} ERC20 token decimals are not supported.`);
   }
 
   const timeoutMs = parsePositiveInt(env[`${venue}_FUNDING_READ_TIMEOUT_MS`], 5_000);
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), timeoutMs);
   try {
-    const response = await fetchImpl(url, {
-      method: "GET",
-      headers,
+    const response = await fetchImpl(rpcUrl, {
+      method: "POST",
+      headers: new Headers({ "content-type": "application/json" }),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_call",
+        params: [
+          {
+            to: tokenAddress,
+            data: encodeErc20BalanceOfCall(walletAddress)
+          },
+          "latest"
+        ]
+      }),
       signal: abortController.signal
     });
     if (!response.ok) {
-      throw new OpsFundingBalanceUnavailableError(`${venue} funding balance upstream returned HTTP ${response.status}.`);
+      throw new OpsFundingBalanceUnavailableError(`${venue} ERC20 balance read returned HTTP ${response.status}.`);
     }
-    return { usableBalance: normalizeUpstreamBalance(await response.json()) };
+    const raw = await response.json() as Record<string, unknown>;
+    if (raw.error) {
+      throw new OpsFundingBalanceUnavailableError(`${venue} ERC20 balance read returned a JSON-RPC error.`);
+    }
+    return {
+      usableBalance: formatAtomicUnits(parseJsonRpcHexQuantity(raw.result), decimals)
+    };
   } catch (error) {
-    if (error instanceof OpsFundingBalanceNotConfiguredError || error instanceof OpsFundingBalanceMalformedError) {
+    if (
+      error instanceof OpsFundingBalanceNotConfiguredError ||
+      error instanceof OpsFundingBalanceMalformedError ||
+      error instanceof OpsFundingBalanceUnavailableError
+    ) {
       throw error;
     }
-    throw new OpsFundingBalanceUnavailableError(`${venue} funding balance upstream is unavailable.`);
+    throw new OpsFundingBalanceUnavailableError(`${venue} ERC20 balance read is unavailable.`);
   } finally {
     clearTimeout(timeout);
   }
+};
+
+const readOpsFundingBalance = async (
+  venue: Exclude<FundingVenue, "POLYMARKET">,
+  input: OpsFundingBalanceInput,
+  env: NodeJS.ProcessEnv,
+  fetchImpl: typeof fetch
+): Promise<PolymarketFundingBalanceReadOutput> => {
+  const mode = `${env[`${venue}_OPS_FUNDING_BALANCE_MODE`] ?? "DISABLED"}`.trim().toUpperCase();
+  if (mode === "DIRECT_HTTP") {
+    return readDirectHttpFundingBalance(venue, input, env, fetchImpl);
+  }
+  if (mode === "ONCHAIN_ERC20") {
+    return readOnchainErc20FundingBalance(venue, env, fetchImpl);
+  }
+  throw new OpsFundingBalanceNotConfiguredError(`${venue} funding balance mode is disabled.`);
+};
+
+const decodeBase64Secret = (secret: string): Buffer => {
+  const normalized = secret.trim();
+  const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
+  return Buffer.from(padded, "base64");
 };
 
 const handleFundingBalanceError = (venue: FundingVenue, error: unknown, reply: FastifyReply) => {
@@ -292,7 +483,7 @@ export const buildOpsReadServer = async (deps: OpsReadServerDeps = {}): Promise<
     try {
       const result = venue === "POLYMARKET"
         ? await polymarketFundingBalanceReader.readUsableBalance(parsed.data)
-        : await readHttpUpstreamFundingBalance(
+        : await readOpsFundingBalance(
             venue as (typeof nonPolymarketFundingVenues)[number],
             parsed.data,
             env,
