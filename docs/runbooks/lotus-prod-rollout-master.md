@@ -108,6 +108,66 @@ npm run db:verify:supabase
 npm run db:schema:validate
 ```
 
+### Dedicated Ops Read Service
+
+Deploy a second Render Web Service for operator-approved funding balance and withdrawal evidence reads. This service uses the same repo but a separate entrypoint and must not expose user APIs, RFQ routes, admin routes, metrics, WebSockets, signing, broadcasting, LI.FI execution, or live withdrawal execution.
+
+| Setting | Value |
+|---|---|
+| Render service name | `lotus-ops-read-service` |
+| Root directory | `lotus-rfq-service` |
+| Build command | `npm ci && npm run build` |
+| Start command | `npm run start:ops-read` |
+| Health check path | `/health` |
+| Custom domain | `ops.uselotus.xyz` |
+
+Ops read service routes:
+
+| Route | Auth env | Response contract |
+|---|---|---|
+| `GET /health` | None | `{ status, service }` |
+| `GET /lotus/polymarket/funding-balance` | `POLYMARKET_FUNDING_READ_API_KEY` | `{ usableBalance }` |
+| `GET /lotus/limitless/funding-balance` | `LIMITLESS_FUNDING_READ_API_KEY` | `{ usableBalance }` |
+| `GET /lotus/opinion/funding-balance` | `OPINION_FUNDING_READ_API_KEY` | `{ usableBalance }` |
+| `GET /lotus/myriad/funding-balance` | `MYRIAD_FUNDING_READ_API_KEY` | `{ usableBalance }` |
+| `GET /lotus/predictfun/funding-balance` | `PREDICT_FUN_FUNDING_READ_API_KEY` | `{ usableBalance }` |
+| `GET /lotus/:venue/withdrawal-evidence` | `<VENUE>_WITHDRAWAL_EVIDENCE_API_KEY` | Normalized evidence object only |
+
+Main backend URLs should point to `ops.uselotus.xyz` after deployment:
+
+| Backend env | Production value |
+|---|---|
+| `POLYMARKET_FUNDING_BALANCE_URL` | `https://ops.uselotus.xyz/lotus/polymarket/funding-balance` |
+| `LIMITLESS_FUNDING_BALANCE_URL` | `https://ops.uselotus.xyz/lotus/limitless/funding-balance` |
+| `OPINION_FUNDING_BALANCE_URL` | `https://ops.uselotus.xyz/lotus/opinion/funding-balance` |
+| `MYRIAD_FUNDING_BALANCE_URL` | `https://ops.uselotus.xyz/lotus/myriad/funding-balance` |
+| `PREDICT_FUN_FUNDING_BALANCE_URL` | `https://ops.uselotus.xyz/lotus/predictfun/funding-balance` |
+| `POLYMARKET_WITHDRAWAL_EVIDENCE_URL` | `https://ops.uselotus.xyz/lotus/polymarket/withdrawal-evidence` |
+| `OPINION_WITHDRAWAL_EVIDENCE_URL` | `https://ops.uselotus.xyz/lotus/opinion/withdrawal-evidence` |
+| `MYRIAD_WITHDRAWAL_EVIDENCE_URL` | `https://ops.uselotus.xyz/lotus/myriad/withdrawal-evidence` |
+| `PREDICT_FUN_WITHDRAWAL_EVIDENCE_URL` | `https://ops.uselotus.xyz/lotus/predictfun/withdrawal-evidence` |
+| `FUNDING_WITHDRAWAL_EVIDENCE_APPROVED_HOSTS` | `ops.uselotus.xyz` |
+
+Non-Polymarket ops funding balance routes must stay `DISABLED` until an operator-approved direct venue/API read path exists. Do not deploy a third read service unless a venue requires one; `ops.uselotus.xyz` should call the official venue/API read endpoint directly.
+
+| Env pattern | Example | Production expectation |
+|---|---|---|
+| `<VENUE>_OPS_FUNDING_BALANCE_MODE` | `DISABLED`, `DIRECT_HTTP`, or `ONCHAIN_ERC20` | Default `DISABLED`; no static/fixture balances in production. |
+| `<VENUE>_OPS_FUNDING_BALANCE_BASE_URL` | `https://api.venue.example` | Official/operator-approved venue API host only. |
+| `<VENUE>_OPS_FUNDING_BALANCE_PATH` | `/portfolio/balance` | Exact reviewed read-only path. |
+| `<VENUE>_OPS_FUNDING_BALANCE_AUTH_MODE` | `NONE`, `BEARER`, `API_KEY`, or `HMAC` | Use the least-privileged read-only auth supported by the venue. |
+| `<VENUE>_OPS_FUNDING_BALANCE_API_KEY` | `<secret>` | Secret manager only. |
+| `<VENUE>_OPS_FUNDING_BALANCE_API_KEY_HEADER` | `x-api-key` | Required only for `API_KEY` mode. |
+| `<VENUE>_OPS_FUNDING_BALANCE_HMAC_SECRET` | `<secret>` | Required only for `HMAC` mode. |
+| `<VENUE>_OPS_FUNDING_BALANCE_ON_BEHALF_OF_PROFILE_ID` | `<profile-id>` | Optional venue-specific delegated read scope. |
+| `<VENUE>_OPS_FUNDING_BALANCE_RESPONSE_FIELD` | `account.usableBalance` | Optional dot path when venue response does not return top-level `usableBalance`, `availableBalance`, or `balance`. |
+| `<VENUE>_OPS_FUNDING_BALANCE_RPC_URL` | `https://rpc.example` | Required only for `ONCHAIN_ERC20`; may contain provider credentials if the RPC provider requires them. |
+| `<VENUE>_OPS_FUNDING_BALANCE_TOKEN_ADDRESS` | `0x...` | Required only for `ONCHAIN_ERC20`; ERC-20 token contract checked with `balanceOf`. |
+| `<VENUE>_OPS_FUNDING_BALANCE_WALLET_ADDRESS` | `0x...` | Required only for `ONCHAIN_ERC20`; operator-approved funding/trading wallet to check. |
+| `<VENUE>_OPS_FUNDING_BALANCE_TOKEN_DECIMALS` | `6` | Required only for `ONCHAIN_ERC20` when not six decimals. |
+
+`ONCHAIN_ERC20` may be used only when the checked wallet balance is operator-approved as equivalent to usable venue trading balance. If the venue has an internal crediting step after on-chain receipt, keep the route disabled or pending until a venue/API credit confirmation exists.
+
 ## 6. Security And Admin Surface
 
 Admin endpoints are production-sensitive and must use short-lived admin JWTs signed by the production `JWT_SECRET`.
