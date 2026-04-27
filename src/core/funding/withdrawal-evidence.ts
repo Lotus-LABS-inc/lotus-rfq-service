@@ -107,12 +107,16 @@ export interface WithdrawalEvidenceSmokeArtifact {
     evidenceUrlHost?: string;
     authMode?: string;
     apiKeyConfigured?: boolean;
+    minimumConfirmations?: number;
   };
   selectedWithdrawal?: {
     synthetic?: boolean;
     sourceVenue?: string;
     withdrawalRouteLegId?: string;
     withdrawalTxHash?: string;
+    destinationChain?: string;
+    destinationWalletAddress?: string;
+    requiredAmount?: string;
   };
   evidenceResult?: {
     status?: string;
@@ -120,6 +124,11 @@ export interface WithdrawalEvidenceSmokeArtifact {
     destinationReceived?: boolean;
     completed?: boolean;
     withdrawalTxHash?: string | null;
+    destinationChain?: string | null;
+    destinationWalletAddress?: string | null;
+    token?: string | null;
+    amount?: string | null;
+    evidence?: Record<string, unknown>;
   } | null;
   mappingObserved?: string;
   redactionVerified?: boolean;
@@ -133,6 +142,7 @@ export interface WithdrawalCompletionPersistenceGateConfig {
   maxAgeHours: number;
   artifactPathByVenue?: Partial<Record<FundingVenue, string>>;
   approvedHostsByVenue?: Partial<Record<FundingVenue, string[]>>;
+  production?: boolean;
   now?: () => Date;
 }
 
@@ -158,6 +168,13 @@ export class ArtifactBackedWithdrawalCompletionPersistenceGate implements Withdr
   }): Promise<void> {
     if (!this.config.enabled) {
       return;
+    }
+    if (this.config.persistenceEnabled && this.config.enabledVenues.length !== 1) {
+      throw new FundingDomainError(
+        "WITHDRAWAL_COMPLETION_PERSISTENCE_BLOCKED",
+        "Withdrawal completion persistence must be scoped to exactly one reviewed venue for controlled persistence.",
+        409
+      );
     }
     if (!this.config.persistenceEnabled || !this.config.enabledVenues.includes(input.leg.sourceVenue)) {
       throw new FundingDomainError(
@@ -194,6 +211,7 @@ export class ArtifactBackedWithdrawalCompletionPersistenceGate implements Withdr
         venue,
         approvedHosts: this.config.approvedHostsByVenue?.[venue] ?? [],
         maxAgeHours: this.config.maxAgeHours,
+        production: this.config.production === true,
         now: this.now(),
         blockers
       });
@@ -234,6 +252,7 @@ export const buildWithdrawalCompletionPersistenceGateFromEnv = (
     ...withdrawalEvidenceVenues.filter((venue) => env[`${venue}_WITHDRAWAL_COMPLETION_PERSISTENCE_ENABLED`] === "true")
   ]),
   maxAgeHours: positiveInt(env.FUNDING_WITHDRAWAL_COMPLETION_SMOKE_MAX_AGE_HOURS, 24),
+  production: isProductionEnv(env),
   artifactPathByVenue: Object.fromEntries(withdrawalEvidenceVenues.map((venue) => [
     venue,
     env[`${venue}_WITHDRAWAL_EVIDENCE_SMOKE_ARTIFACT_PATH`]
@@ -250,6 +269,7 @@ export const validateWithdrawalEvidenceSmokeArtifact = (
     venue: FundingVenue;
     approvedHosts: readonly string[];
     maxAgeHours: number;
+    production?: boolean;
     now: Date;
     blockers: string[];
   }
@@ -290,6 +310,9 @@ export const validateWithdrawalEvidenceSmokeArtifact = (
   if (artifact.config?.authMode === "BEARER" && artifact.config.apiKeyConfigured !== true) {
     input.blockers.push("Artifact BEARER auth mode must have an API key configured.");
   }
+  if (artifact.config?.mode === "STUB" || JSON.stringify(artifact.evidenceResult?.evidence ?? {}).toLowerCase().includes("fixture")) {
+    input.blockers.push("Artifact must not be fixture-backed for withdrawal completion persistence.");
+  }
   const evidence = artifact.evidenceResult;
   if (!evidence ||
     evidence.status !== "COMPLETED" ||
@@ -306,6 +329,10 @@ export const validateWithdrawalEvidenceSmokeArtifact = (
   } else if (!artifact.config?.evidenceUrlHost || !input.approvedHosts.includes(artifact.config.evidenceUrlHost)) {
     input.blockers.push(`Artifact evidenceUrlHost must match an operator-approved host. observed=${artifact.config?.evidenceUrlHost ?? "missing"}`);
   }
+  if (input.production && artifact.config?.evidenceUrlHost && isLoopbackHost(artifact.config.evidenceUrlHost)) {
+    input.blockers.push("Production withdrawal completion persistence must not use localhost or loopback evidence hosts.");
+  }
+  validateExactCompletionEvidence(artifact, input.venue, input.blockers);
 };
 
 export class ConfigurableVenueWithdrawalEvidenceChecker implements WithdrawalCompletionEvidenceChecker {
@@ -649,6 +676,85 @@ const parseVenueList = (value: string | undefined): FundingVenue[] =>
     .filter((venue): venue is FundingVenue => isWithdrawalEvidenceVenueSupported(venue));
 
 const uniqueVenues = (venues: readonly FundingVenue[]): FundingVenue[] => [...new Set(venues)];
+
+const isProductionEnv = (env: NodeJS.ProcessEnv): boolean =>
+  env.NODE_ENV === "production" || env.LOTUS_ENV === "production";
+
+const isLoopbackHost = (host: string): boolean => {
+  const normalized = host.toLowerCase().split(":")[0] ?? "";
+  return normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1" ||
+    normalized.endsWith(".localhost");
+};
+
+const validateExactCompletionEvidence = (
+  artifact: WithdrawalEvidenceSmokeArtifact,
+  venue: FundingVenue,
+  blockers: string[]
+): void => {
+  const selected = artifact.selectedWithdrawal;
+  const evidence = artifact.evidenceResult;
+  if (!selected || !evidence) {
+    return;
+  }
+  if (selected.sourceVenue !== venue) {
+    blockers.push(`Selected withdrawal source venue must be ${venue}.`);
+  }
+  if (!selected.withdrawalTxHash || !evidence.withdrawalTxHash ||
+    selected.withdrawalTxHash.toLowerCase() !== evidence.withdrawalTxHash.toLowerCase()) {
+    blockers.push("Artifact completion evidence must match the submitted withdrawal tx hash.");
+  }
+  if (!evidence.destinationChain || !evidence.destinationWalletAddress || !evidence.token || !evidence.amount) {
+    blockers.push("Artifact completion evidence must include destination chain, destination wallet, token, and amount.");
+  }
+  if (selected.destinationChain && evidence.destinationChain &&
+    selected.destinationChain.toUpperCase() !== evidence.destinationChain.toUpperCase()) {
+    blockers.push("Artifact completion evidence destination chain must match the selected withdrawal.");
+  }
+  if (selected.destinationWalletAddress && evidence.destinationWalletAddress &&
+    selected.destinationWalletAddress.toLowerCase() !== evidence.destinationWalletAddress.toLowerCase()) {
+    blockers.push("Artifact completion evidence destination wallet must match the selected withdrawal.");
+  }
+  const confirmations = numberValue(evidence.evidence?.confirmations);
+  const minimumConfirmations = numberValue(artifact.config?.minimumConfirmations) ?? 1;
+  if (confirmations === null || confirmations < minimumConfirmations) {
+    blockers.push("Artifact completion evidence must include sufficient confirmations.");
+  }
+  if (venue === "PREDICT_FUN") {
+    validatePredictFunBscUsdtEvidence(artifact, blockers);
+  }
+};
+
+const validatePredictFunBscUsdtEvidence = (
+  artifact: WithdrawalEvidenceSmokeArtifact,
+  blockers: string[]
+): void => {
+  const selected = artifact.selectedWithdrawal;
+  const evidence = artifact.evidenceResult;
+  if (!selected || !evidence) {
+    return;
+  }
+  if (selected.destinationChain?.toUpperCase() !== "BSC" || evidence.destinationChain?.toUpperCase() !== "BSC") {
+    blockers.push("Predict.fun withdrawal evidence must be for destinationChain=BSC.");
+  }
+  if (evidence.token?.toUpperCase() !== "USDT") {
+    blockers.push("Predict.fun withdrawal evidence must be for token=USDT.");
+  }
+  const observedAmount = decimalValue(evidence.amount);
+  const requiredAmount = decimalValue(selected.requiredAmount);
+  if (observedAmount === null || requiredAmount === null || observedAmount < requiredAmount) {
+    blockers.push("Predict.fun withdrawal evidence amount must be greater than or equal to the selected withdrawal amount.");
+  }
+};
+
+const decimalValue = (value: string | null | undefined): number | null => {
+  if (!value || !value.trim()) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+};
 
 const isArtifactFresh = (generatedAt: string | undefined, maxAgeHours: number, now: Date): boolean => {
   if (!generatedAt) {

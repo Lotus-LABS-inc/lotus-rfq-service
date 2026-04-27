@@ -2423,6 +2423,41 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/VenueBalances" }
         "401": { $ref: "#/components/responses/Error" }
+  /user/withdrawal-wallets:
+    get:
+      tags: [User]
+      summary: Read user withdrawal destination wallets.
+      description: Returns frontend-safe public withdrawal destination wallet metadata for the authenticated user. Lotus never stores private keys, seed phrases, Privy secrets, ZeroDev signer material, or wallet auth tokens.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: none
+      x-lotus-danger: low
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/UserWithdrawalWallets" }
+        "401": { $ref: "#/components/responses/Error" }
+  /user/withdrawal-wallets/evm:
+    put:
+      tags: [User]
+      summary: Add or replace the user's EVM withdrawal wallet.
+      description: Stores only a public EVM address and optional label. Predict.fun BSC USDT withdrawals should require this user-controlled wallet before frontend submission.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: user-withdrawal-wallet
+      x-lotus-danger: low
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertEvmWithdrawalWalletRequest"
+      responses:
+        "200": { $ref: "#/components/responses/UserWithdrawalWallet" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
   /funding/withdrawals:
     post:
       tags: [Funding]
@@ -2884,6 +2919,22 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/VenueBalanceListResponse"
+    UserWithdrawalWallets:
+      description: User withdrawal destination wallet list.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UserWithdrawalWalletListResponse"
+    UserWithdrawalWallet:
+      description: User withdrawal destination wallet.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [wallet]
+            properties:
+              wallet:
+                $ref: "#/components/schemas/UserWithdrawalWallet"
     WithdrawalIntent:
       description: Frontend-safe withdrawal intent response.
       content:
@@ -3388,6 +3439,51 @@ components:
         balances:
           type: array
           items: { $ref: "#/components/schemas/VenueBalance" }
+    UserWithdrawalWallet:
+      type: object
+      additionalProperties: false
+      required: [userId, chainFamily, address, label, verifiedAt, createdAt, updatedAt]
+      properties:
+        userId: { type: string }
+        chainFamily:
+          type: string
+          enum: [EVM]
+        address:
+          type: string
+          description: Public destination wallet address only. Never a private key or signer secret.
+        label:
+          type: string
+          nullable: true
+        verifiedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    UserWithdrawalWalletListResponse:
+      type: object
+      additionalProperties: false
+      required: [wallets]
+      properties:
+        wallets:
+          type: array
+          items: { $ref: "#/components/schemas/UserWithdrawalWallet" }
+    UpsertEvmWithdrawalWalletRequest:
+      type: object
+      additionalProperties: false
+      required: [address]
+      properties:
+        address:
+          type: string
+          pattern: "^0x[a-fA-F0-9]{40}$"
+          description: EVM-compatible wallet address for receiving withdrawals such as Predict.fun BSC USDT.
+        label:
+          type: string
+          maxLength: 80
     WithdrawalStatus:
       type: string
       enum:
@@ -3481,7 +3577,7 @@ components:
         providerStatus:
           type: object
           additionalProperties: true
-          description: Sanitized provider status metadata. Polymarket Bridge sandbox rows may include provider=POLYMARKET_BRIDGE, mode=SANDBOX_DRY_RUN, bridgeAddressPresent, status, completionPersisted=false, and warnings. Raw Bridge payloads, API keys, auth headers, private keys, DB URLs, and live withdrawal internals must not be returned.
+          description: Sanitized provider status metadata. Polymarket Bridge sandbox rows may include provider=POLYMARKET_BRIDGE, mode=SANDBOX_DRY_RUN, bridgeAddressPresent, status, completionPersisted=false, and warnings. Predict.fun user-wallet dry-run rows may include provider=PREDICT_FUN_USER_WALLET, mode=USER_WALLET_DRY_RUN, walletModel=PRIVY_ZERODEV, destinationWalletProfileRequired=true, evmWithdrawalWalletPresent, instructionsUrl, completionPersisted=false, and warnings such as "Add an EVM-compatible wallet to receive BSC USDT withdrawals." Raw provider payloads, API keys, auth headers, private keys, wallet seeds, Privy secrets, ZeroDev signer material, DB URLs, and live withdrawal internals must not be returned.
         txHashes:
           type: array
           items: { type: string }
@@ -3516,6 +3612,34 @@ components:
         completionPersisted:
           type: boolean
           enum: [false]
+    PredictFunUserWalletWithdrawalPreview:
+      type: object
+      additionalProperties: false
+      description: Optional frontend-safe Predict.fun user-wallet dry-run preview. It is available only when disabled-by-default Predict.fun adapter wiring is explicitly enabled and does not represent backend signing, backend broadcast, live venue mutation, or completion evidence.
+      properties:
+        provider: { type: string, enum: [PREDICT_FUN_USER_WALLET] }
+        mode: { type: string, enum: [USER_WALLET_DRY_RUN] }
+        walletModel: { type: string, enum: [PRIVY_ZERODEV] }
+        instructionsUrl: { type: string }
+        destinationWalletProfileRequired: { type: boolean }
+        evmWithdrawalWalletPresent: { type: boolean }
+        destinationChain: { type: string }
+        destinationToken: { type: string }
+        destinationAddress: { type: string }
+        amount: { type: string }
+        estimatedFees: { type: string }
+        estimatedTimeSeconds:
+          type: integer
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+        warnings:
+          type: array
+          items: { type: string }
+        completionPersisted:
+          type: boolean
+          enum: [false]
     WithdrawalIntentResponse:
       type: object
       additionalProperties: true
@@ -3532,6 +3656,8 @@ components:
           properties:
             polymarketBridge:
               $ref: "#/components/schemas/PolymarketBridgeWithdrawalPreview"
+            predictFunUserWallet:
+              $ref: "#/components/schemas/PredictFunUserWalletWithdrawalPreview"
         totalEstimatedFees: { type: string }
         totalEstimatedTimeSeconds: { type: integer }
         sources:

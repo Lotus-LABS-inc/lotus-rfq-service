@@ -56,6 +56,10 @@ import {
   PolymarketBridgeWithdrawalAdapter
 } from "../src/core/funding/polymarket-bridge-withdrawal-adapter.js";
 import {
+  PredictFunWithdrawalAdapter,
+  getPredictFunWithdrawalConfigFromEnv
+} from "../src/core/funding/predictfun-withdrawal-adapter.js";
+import {
   normalizeLifiQuote,
   normalizeLifiStatus,
   type LifiRouteProvider
@@ -73,7 +77,8 @@ const env = {
 const withdrawalEnv = {
   ...env,
   POLYMARKET_FUNDING_WITHDRAWALS_ENABLED: "true",
-  LIMITLESS_FUNDING_WITHDRAWALS_ENABLED: "true"
+  LIMITLESS_FUNDING_WITHDRAWALS_ENABLED: "true",
+  PREDICT_FUN_FUNDING_WITHDRAWALS_ENABLED: "true"
 } as NodeJS.ProcessEnv;
 
 const executionRequest = (): ExecutionRequestV0 => ({
@@ -224,8 +229,29 @@ class InMemoryFundingRepository implements FundingRepository {
   public async listVenueBalances(): Promise<VenueBalanceView[]> {
     return this.ready
       ? [{
-          venue: "POLYMARKET",
+        venue: "POLYMARKET",
+        token: "USDC",
+        readyAmount: "100",
+        pendingWithdrawalAmount: "0",
+        availableAmount: "100",
+        updatedAt: new Date().toISOString()
+      }, {
+        venue: "POLYMARKET",
+        token: "USDT",
+        readyAmount: "100",
+        pendingWithdrawalAmount: "0",
+        availableAmount: "100",
+        updatedAt: new Date().toISOString()
+      }, {
+          venue: "PREDICT_FUN",
           token: "USDC",
+          readyAmount: "100",
+          pendingWithdrawalAmount: "0",
+          availableAmount: "100",
+          updatedAt: new Date().toISOString()
+        }, {
+          venue: "PREDICT_FUN",
+          token: "USDT",
           readyAmount: "100",
           pendingWithdrawalAmount: "0",
           availableAmount: "100",
@@ -490,6 +516,18 @@ describe("Funding v0 domain", () => {
     expect(matrix.MYRIAD.readinessStatus).toBe("READY");
     expect(matrix.PREDICT_FUN.readinessStatus).toBe("READY");
     expect(buildVenueCapabilityMatrix({ env: {} as NodeJS.ProcessEnv }).OPINION.readinessStatus).toBe("DISABLED");
+    const predictFunBscUsdtMatrix = buildVenueCapabilityMatrix({
+      env: {
+        ...env,
+        PREDICT_FUN_FUNDING_PREFERRED_CHAIN: "BSC",
+        PREDICT_FUN_FUNDING_PREFERRED_CHAIN_ID: "56",
+        PREDICT_FUN_FUNDING_PREFERRED_TOKEN: "USDT"
+      } as NodeJS.ProcessEnv
+    });
+    expect(predictFunBscUsdtMatrix.PREDICT_FUN.preferredChain).toBe("BSC");
+    expect(predictFunBscUsdtMatrix.PREDICT_FUN.preferredChainId).toBe(56);
+    expect(predictFunBscUsdtMatrix.PREDICT_FUN.preferredToken).toBe("USDT");
+    expect(predictFunBscUsdtMatrix.PREDICT_FUN.supportedTokens).toEqual(["USDT"]);
     const repository = new InMemoryFundingRepository();
     const service = new FundingService(repository, new StubLifiProvider(), {
       lifiQuotesEnabled: true,
@@ -1167,6 +1205,143 @@ describe("Funding v0 domain", () => {
     const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
     expect(quoted.routeLegs[0]!.providerStatus).toEqual({});
     expect(quoted.intent.aggregateRouteQuote).not.toHaveProperty("polymarketBridge");
+  });
+
+  it("keeps default withdrawal quote behavior when Predict.fun adapter is not wired", async () => {
+    const repository = new InMemoryFundingRepository();
+    repository.ready = true;
+    const service = new FundingService(repository, new StubLifiProvider(), {
+      lifiQuotesEnabled: true,
+      liveSubmitEnabled: false,
+      env: withdrawalEnv
+    });
+    const created = await service.createWithdrawalIntent("user-1", {
+      token: "USDC",
+      amount: "40",
+      destinationChain: "POLYGON",
+      destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+      idempotencyKey: "withdraw-predictfun-default-v0",
+      sources: [{ sourceVenue: "PREDICT_FUN", sourcePercentage: 100 }]
+    });
+    const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
+    expect(quoted.routeLegs[0]!.providerStatus).toEqual({});
+    expect(quoted.intent.aggregateRouteQuote).not.toHaveProperty("predictFunUserWallet");
+  });
+
+  it("returns safe Predict.fun user-wallet metadata for single-source dry-run withdrawal quotes", async () => {
+    const repository = new InMemoryFundingRepository();
+    repository.ready = true;
+    const predictEnv = {
+      ...withdrawalEnv,
+      PREDICT_FUN_WITHDRAWAL_ADAPTER_ENABLED: "true",
+      PREDICT_FUN_WITHDRAWAL_ADAPTER_MODE: "USER_WALLET_DRY_RUN",
+      PREDICT_FUN_WITHDRAWAL_ADAPTER_DRY_RUN_ONLY: "true",
+      PREDICT_FUN_WITHDRAWAL_INSTRUCTIONS_URL: "https://docs.predict.fun/knowledge-base/wallets"
+    } as NodeJS.ProcessEnv;
+    const service = new FundingService(
+      repository,
+      new StubLifiProvider(),
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env: predictEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      new PredictFunWithdrawalAdapter(getPredictFunWithdrawalConfigFromEnv(predictEnv))
+    );
+    const created = await service.createWithdrawalIntent("user-1", {
+      token: "USDT",
+      amount: "40",
+      destinationChain: "BSC",
+      destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+      idempotencyKey: "withdraw-predictfun-user-wallet",
+      sources: [{ sourceVenue: "PREDICT_FUN", sourcePercentage: 100 }]
+    });
+    const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
+    const serializedQuote = JSON.stringify(quoted);
+
+    expect(quoted.routeLegs[0]!.providerStatus).toMatchObject({
+      provider: "PREDICT_FUN_USER_WALLET",
+      mode: "USER_WALLET_DRY_RUN",
+      walletModel: "PRIVY_ZERODEV",
+      completionPersisted: false,
+      destinationWalletProfileRequired: true,
+      evmWithdrawalWalletPresent: false,
+      instructionsUrl: "https://docs.predict.fun/knowledge-base/wallets"
+    });
+    expect(quoted.intent.aggregateRouteQuote).toMatchObject({
+      predictFunUserWallet: {
+        provider: "PREDICT_FUN_USER_WALLET",
+        mode: "USER_WALLET_DRY_RUN",
+        walletModel: "PRIVY_ZERODEV",
+        destinationWalletProfileRequired: true,
+        evmWithdrawalWalletPresent: false,
+        completionPersisted: false
+      }
+    });
+    expect(quoted.routeLegs[0]!.routeQuote.transactionRequest).toBeNull();
+    expect(serializedQuote).toContain("Add an EVM-compatible wallet to receive BSC USDT withdrawals.");
+    expect(serializedQuote).toContain("Lotus does not hold keys");
+    expect(serializedQuote).not.toContain("privateKey");
+    expect(serializedQuote).not.toContain("walletSeed");
+    expect(serializedQuote).not.toContain("privySecret");
+    expect(serializedQuote).not.toContain("zeroDevSigner");
+    expect(serializedQuote).not.toContain("authorization");
+    expect(serializedQuote).not.toContain("jwt");
+    expect(serializedQuote).not.toContain("rawProviderPayload");
+
+    const submitted = await service.submitWithdrawalRouteLeg("user-1", created.intent.withdrawalIntentId, {
+      withdrawalRouteLegId: quoted.routeLegs[0]!.withdrawalRouteLegId,
+      txHash: "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    });
+    expect(submitted.routeLegs[0]!.status).toBe("VENUE_RELEASE_PENDING");
+
+    const refreshed = await service.refreshWithdrawalStatus("user-1", created.intent.withdrawalIntentId);
+    expect(refreshed.routeLegs[0]!.status).toBe("VENUE_RELEASE_PENDING");
+    expect(refreshed.reconciliations).toEqual([]);
+  });
+
+  it("does not silently use Predict.fun adapter for multi-source withdrawals", async () => {
+    const repository = new InMemoryFundingRepository();
+    repository.ready = true;
+    const predictEnv = {
+      ...withdrawalEnv,
+      PREDICT_FUN_WITHDRAWAL_ADAPTER_ENABLED: "true",
+      PREDICT_FUN_WITHDRAWAL_ADAPTER_MODE: "USER_WALLET_DRY_RUN",
+      PREDICT_FUN_WITHDRAWAL_ADAPTER_DRY_RUN_ONLY: "true",
+      PREDICT_FUN_WITHDRAWAL_INSTRUCTIONS_URL: "https://docs.predict.fun/knowledge-base/wallets"
+    } as NodeJS.ProcessEnv;
+    const service = new FundingService(
+      repository,
+      new StubLifiProvider(),
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env: predictEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      new PredictFunWithdrawalAdapter(getPredictFunWithdrawalConfigFromEnv(predictEnv))
+    );
+    const created = await service.createWithdrawalIntent("user-1", {
+      token: "USDT",
+      amount: "40",
+      destinationChain: "BSC",
+      destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+      idempotencyKey: "withdraw-predictfun-multi-source",
+      sources: [
+        { sourceVenue: "PREDICT_FUN", sourcePercentage: 50 },
+        { sourceVenue: "POLYMARKET", sourcePercentage: 50 }
+      ]
+    });
+    const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
+    expect(quoted.routeLegs.some((leg) => leg.providerStatus.provider === "PREDICT_FUN_USER_WALLET")).toBe(false);
+    expect(quoted.intent.aggregateRouteQuote).not.toHaveProperty("predictFunUserWallet");
   });
 
   it("fails closed when LI.FI quotes are disabled or split is invalid", async () => {

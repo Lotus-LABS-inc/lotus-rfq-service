@@ -17,7 +17,9 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
   const myriadDepositAddress = envValue(env, "MYRIAD_FUNDING_DESTINATION_ADDRESS");
   const predictFunDepositAddress = envValue(env, "PREDICT_FUN_FUNDING_DESTINATION_ADDRESS");
   const solanaUsdcAddress = envValue(env, "SOLANA_USDC_TOKEN_ADDRESS") ?? "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const solanaUsdtAddress = envValue(env, "SOLANA_USDT_TOKEN_ADDRESS") ?? "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY1p8ARw5ygP2Z7n";
   const polygonUsdcAddress = envValue(env, "POLYGON_USDC_TOKEN_ADDRESS") ?? "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
+  const bscUsdtAddress = envValue(env, "BSC_USDT_TOKEN_ADDRESS") ?? "0x55d398326f99059fF775485246999027B3197955";
   const limitlessPreferredChain = envValue(env, "LIMITLESS_FUNDING_PREFERRED_CHAIN") ?? "BASE";
   const limitlessPreferredChainId = Number.parseInt(envValue(env, "LIMITLESS_FUNDING_PREFERRED_CHAIN_ID") ?? "8453", 10);
   const limitlessUsdcAddress = envValue(env, "LIMITLESS_USDC_TOKEN_ADDRESS") ?? "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
@@ -29,7 +31,11 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
   const myriadUsdcAddress = envValue(env, "MYRIAD_USDC_TOKEN_ADDRESS") ?? polygonUsdcAddress;
   const predictFunPreferredChain = envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_CHAIN") ?? "POLYGON";
   const predictFunPreferredChainId = Number.parseInt(envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_CHAIN_ID") ?? "137", 10);
-  const predictFunUsdcAddress = envValue(env, "PREDICT_FUN_USDC_TOKEN_ADDRESS") ?? polygonUsdcAddress;
+  const predictFunPreferredToken = envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_TOKEN") ?? "USDC";
+  const predictFunPreferredTokenAddress = predictFunPreferredToken === "USDT"
+    ? envValue(env, "PREDICT_FUN_USDT_TOKEN_ADDRESS") ?? bscUsdtAddress
+    : envValue(env, "PREDICT_FUN_USDC_TOKEN_ADDRESS") ?? polygonUsdcAddress;
+  const predictFunSourceTokenAddress = predictFunPreferredToken === "USDT" ? solanaUsdtAddress : solanaUsdcAddress;
   const supportsWithdrawal = (venue: FundingVenue): boolean => envValue(env, `${venue}_FUNDING_WITHDRAWALS_ENABLED`) === "true";
 
   return {
@@ -102,10 +108,11 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       depositAddress: predictFunDepositAddress,
       preferredChain: predictFunPreferredChain,
       preferredChainId: predictFunPreferredChainId,
-      preferredTokenAddress: predictFunUsdcAddress,
-      sourceTokenAddressByChain: { SOLANA: solanaUsdcAddress },
+      preferredToken: predictFunPreferredToken,
+      preferredTokenAddress: predictFunPreferredTokenAddress,
+      sourceTokenAddressByChain: { SOLANA: predictFunSourceTokenAddress },
       supportsWithdrawal: supportsWithdrawal("PREDICT_FUN"),
-      configuredNote: "Predict.fun funding quote path is configured for Solana USDC to the operator-approved Predict.fun funding destination.",
+      configuredNote: `Predict.fun funding quote path is configured for Solana ${predictFunPreferredToken} to the operator-approved Predict.fun funding destination.`,
       missingNote: "Set PREDICT_FUN_FUNDING_DESTINATION_ADDRESS before enabling Predict.fun funding quotes; do not confuse Predict.fun with PredictIt."
     })
   };
@@ -135,6 +142,7 @@ const configurableCapability = (input: {
   depositAddress: string | null;
   preferredChain: string;
   preferredChainId: number;
+  preferredToken?: string;
   preferredTokenAddress: string;
   sourceTokenAddressByChain: Record<string, string>;
   supportsWithdrawal: boolean;
@@ -143,9 +151,9 @@ const configurableCapability = (input: {
 }): VenueCapability => ({
   venue: input.venue,
   supportedChains: ["SOLANA"],
-  supportedTokens: ["USDC"],
+  supportedTokens: [input.preferredToken ?? "USDC"],
   preferredChain: input.preferredChain,
-  preferredToken: "USDC",
+  preferredToken: input.preferredToken ?? "USDC",
   preferredChainId: Number.isFinite(input.preferredChainId) && input.preferredChainId > 0 ? input.preferredChainId : 137,
   preferredTokenAddress: input.preferredTokenAddress,
   sourceTokenAddressByChain: input.sourceTokenAddressByChain,

@@ -15,6 +15,7 @@ import { RFQExecutionRepository } from "../db/repositories/rfq-execution-reposit
 import { registerHealthRoute } from "./routes/health.js";
 import { registerMetricsRoute } from "./routes/metrics.js";
 import { registerFundingRoutes } from "./routes/funding.js";
+import { registerUserWithdrawalWalletRoutes } from "./routes/user-withdrawal-wallets.js";
 import { registerInternalPolymarketFundingBalanceRoute } from "./routes/internal-polymarket-funding-balance.js";
 import { registerInternalLimitlessWithdrawalEvidenceRoute } from "./routes/internal-limitless-withdrawal-evidence.js";
 import { registerRFQRoute } from "./routes/rfq.js";
@@ -159,6 +160,7 @@ import { ExecutionIntentRepository } from "../repositories/execution-intent.repo
 import { ExecutionRecordRepository } from "../repositories/execution-record.repository.js";
 import { ExecutionControlRepository } from "../repositories/execution-control.repository.js";
 import { FundingRepository } from "../repositories/funding.repository.js";
+import { UserWithdrawalWalletRepository } from "../repositories/user-withdrawal-wallet.repository.js";
 import { PairEdgeRepository } from "../repositories/pair-edge.repository.js";
 import { CompatibilityOverrideService } from "../canonical/compatibility-override-service.js";
 import { PairMatchReviewService } from "./admin/pair-match-review-service.js";
@@ -220,6 +222,10 @@ import {
   HttpPolymarketBridgeWithdrawalClient,
   PolymarketBridgeWithdrawalAdapter
 } from "../core/funding/polymarket-bridge-withdrawal-adapter.js";
+import {
+  getPredictFunWithdrawalConfigFromEnv,
+  PredictFunWithdrawalAdapter
+} from "../core/funding/predictfun-withdrawal-adapter.js";
 import { LifiRestClient, buildLifiClientConfigFromEnv } from "../integrations/lifi/lifi-client.js";
 
 export interface ServerDependencies {
@@ -337,6 +343,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const executionIntentRepository = new ExecutionIntentRepository(dependencies.pgPool);
   const executionRecordRepository = new ExecutionRecordRepository(dependencies.pgPool);
   const fundingRepository = new FundingRepository(dependencies.pgPool);
+  const userWithdrawalWalletRepository = new UserWithdrawalWalletRepository(dependencies.pgPool);
   const polymarketBridgeWithdrawalConfig = getPolymarketBridgeWithdrawalConfigFromEnv(process.env);
   const polymarketBridgeWithdrawalAdapter = polymarketBridgeWithdrawalConfig.configured && polymarketBridgeWithdrawalConfig.apiBaseUrl
     ? new PolymarketBridgeWithdrawalAdapter(
@@ -348,6 +355,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         }),
         polymarketBridgeWithdrawalConfig
       )
+    : null;
+  const predictFunWithdrawalConfig = getPredictFunWithdrawalConfigFromEnv(process.env);
+  const predictFunWithdrawalAdapter = predictFunWithdrawalConfig.configured
+    ? new PredictFunWithdrawalAdapter(predictFunWithdrawalConfig)
     : null;
   const fundingService = new FundingService(
     fundingRepository,
@@ -361,7 +372,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     buildFundingVenueReadinessCheckersFromEnv(process.env),
     buildPolymarketWithdrawalEvidenceCheckerFromEnv(process.env),
     buildWithdrawalCompletionPersistenceGateFromEnv(process.env),
-    polymarketBridgeWithdrawalAdapter
+    polymarketBridgeWithdrawalAdapter,
+    predictFunWithdrawalAdapter,
+    userWithdrawalWalletRepository
   );
   const polymarketFundingBalanceReadService = new PolymarketFundingBalanceReadService(
     buildPolymarketFundingBalanceReadConfigFromEnv(process.env)
@@ -921,6 +934,14 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     submitWithdrawalRouteLeg: (userId, withdrawalIntentId, request) =>
       fundingService.submitWithdrawalRouteLeg(userId, withdrawalIntentId, request),
     refreshWithdrawalStatus: (userId, withdrawalIntentId) => fundingService.refreshWithdrawalStatus(userId, withdrawalIntentId)
+  });
+  await registerUserWithdrawalWalletRoutes(app, userAuthMiddleware, {
+    listWallets: (userId) => userWithdrawalWalletRepository.listWallets(userId),
+    upsertEvmWallet: (userId, request) => userWithdrawalWalletRepository.upsertEvmWallet({
+      userId,
+      address: request.address,
+      label: request.label ?? null
+    })
   });
   await registerInternalPolymarketFundingBalanceRoute(app, polymarketFundingBalanceReadService, {
     bearerToken: process.env.POLYMARKET_FUNDING_READ_API_KEY,

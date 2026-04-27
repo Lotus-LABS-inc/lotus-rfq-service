@@ -10,6 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { FundingReadinessAdminService } from "../../src/api/admin/funding-readiness-admin-service.js";
 import { registerAdminFundingReadinessRoutes } from "../../src/api/admin/funding-readiness.routes.js";
 import { registerFundingRoutes } from "../../src/api/routes/funding.js";
+import { registerUserWithdrawalWalletRoutes } from "../../src/api/routes/user-withdrawal-wallets.js";
 import { createAdminAuthMiddleware, createUserAuthMiddleware } from "../../src/api/user-auth-middleware.js";
 import {
   FundingReadinessChecker,
@@ -19,11 +20,18 @@ import {
 } from "../../src/core/funding/funding-service.js";
 import type { FundingRouteQuote } from "../../src/core/funding/types.js";
 import {
+  ConfigurableVenueFundingReadinessChecker,
   PolymarketFundingReadinessChecker,
+  type FundingBalanceReadClient,
   type PolymarketFundingBalanceReadClient
 } from "../../src/core/funding/venue-readiness.js";
+import {
+  PredictFunWithdrawalAdapter,
+  getPredictFunWithdrawalConfigFromEnv
+} from "../../src/core/funding/predictfun-withdrawal-adapter.js";
 import type { LifiRouteProvider } from "../../src/integrations/lifi/lifi-client.js";
 import { FundingRepository } from "../../src/repositories/funding.repository.js";
+import { UserWithdrawalWalletRepository } from "../../src/repositories/user-withdrawal-wallet.repository.js";
 import {
   ApprovedLaneExecutionGate,
   ExecutionPreflightService,
@@ -42,11 +50,13 @@ loadDotenv({
 const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const ENV_READY = Boolean(TEST_DB_URL);
 const fundingEnv = {
-  POLYMARKET_FUNDING_DESTINATION_ADDRESS: "0x1111111111111111111111111111111111111111"
+  POLYMARKET_FUNDING_DESTINATION_ADDRESS: "0x1111111111111111111111111111111111111111",
+  PREDICT_FUN_FUNDING_DESTINATION_ADDRESS: "0x6666666666666666666666666666666666666666"
 } as NodeJS.ProcessEnv;
 const withdrawalEnv = {
   ...fundingEnv,
-  POLYMARKET_FUNDING_WITHDRAWALS_ENABLED: "true"
+  POLYMARKET_FUNDING_WITHDRAWALS_ENABLED: "true",
+  PREDICT_FUN_FUNDING_WITHDRAWALS_ENABLED: "true"
 } as NodeJS.ProcessEnv;
 
 class MockLifiProvider implements LifiRouteProvider {
@@ -83,6 +93,14 @@ class MockLifiProvider implements LifiRouteProvider {
 }
 
 class MockPolymarketBalanceReadClient implements PolymarketFundingBalanceReadClient {
+  public usableBalance = "0";
+
+  public async fetchUsableUsdcBalance(): Promise<{ usableBalance: string; raw?: Record<string, unknown> }> {
+    return { usableBalance: this.usableBalance, raw: { source: "db-integration-test" } };
+  }
+}
+
+class MockGenericBalanceReadClient implements FundingBalanceReadClient {
   public usableBalance = "0";
 
   public async fetchUsableUsdcBalance(): Promise<{ usableBalance: string; raw?: Record<string, unknown> }> {
@@ -197,6 +215,20 @@ const buildUserFundingApp = async (fundingService: FundingService) => {
   return app;
 };
 
+const buildUserWithdrawalWalletApp = async (repository: UserWithdrawalWalletRepository) => {
+  const app = Fastify({ logger: false });
+  await app.register(fastifyJwt, { secret: "test-secret" });
+  await registerUserWithdrawalWalletRoutes(app, createUserAuthMiddleware(), {
+    listWallets: (userId) => repository.listWallets(userId),
+    upsertEvmWallet: (userId, request) => repository.upsertEvmWallet({
+      userId,
+      address: request.address,
+      label: request.label ?? null
+    })
+  });
+  return app;
+};
+
 const applyFundingMigration = async (pool: Pool): Promise<void> => {
   const sql = await readFile(
     path.resolve(process.cwd(), "sql", "migrations", "2026_04_25_create_funding_flow_v0_tables.sql"),
@@ -208,6 +240,11 @@ const applyFundingMigration = async (pool: Pool): Promise<void> => {
     "utf8"
   );
   await pool.query(withdrawalSql);
+  const walletSql = await readFile(
+    path.resolve(process.cwd(), "sql", "migrations", "2026_04_27_create_user_withdrawal_wallets.sql"),
+    "utf8"
+  );
+  await pool.query(walletSql);
 };
 
 const clearFundingTables = async (pool: Pool): Promise<void> => {
@@ -222,7 +259,8 @@ const clearFundingTables = async (pool: Pool): Promise<void> => {
       funding_reconciliation_records,
       funding_route_legs,
       funding_targets,
-      funding_intents
+      funding_intents,
+      user_withdrawal_wallets
     RESTART IDENTITY CASCADE`
   );
 };
@@ -340,6 +378,56 @@ describe.skipIf(!ENV_READY)("Funding flow v0 DB integration", () => {
       "FUNDING_LEG_READY_TO_TRADE",
       "FUNDING_READY_TO_TRADE"
     ]);
+  });
+
+  it("persists user-scoped EVM withdrawal wallets without exposing custody material", async () => {
+    const walletRepository = new UserWithdrawalWalletRepository(pool);
+    const app = await buildUserWithdrawalWalletApp(walletRepository);
+    const userToken = app.jwt.sign({ userId: "wallet-user-1", role: "USER" });
+    const otherToken = app.jwt.sign({ userId: "wallet-user-2", role: "USER" });
+
+    const upsert = await app.inject({
+      method: "PUT",
+      url: "/user/withdrawal-wallets/evm",
+      headers: { authorization: `Bearer ${userToken}` },
+      payload: {
+        address: "0x1111111111111111111111111111111111111111",
+        label: "BSC USDT receiver"
+      }
+    });
+    expect(upsert.statusCode).toBe(200);
+    expect(upsert.json()).toMatchObject({
+      wallet: {
+        userId: "wallet-user-1",
+        chainFamily: "EVM",
+        address: "0x1111111111111111111111111111111111111111",
+        verifiedAt: null
+      }
+    });
+    await expect(walletRepository.hasEvmWithdrawalWallet(
+      "wallet-user-1",
+      "0x1111111111111111111111111111111111111111"
+    )).resolves.toBe(true);
+
+    const own = await app.inject({
+      method: "GET",
+      url: "/user/withdrawal-wallets",
+      headers: { authorization: `Bearer ${userToken}` }
+    });
+    expect(own.statusCode).toBe(200);
+    expect(own.json().wallets).toHaveLength(1);
+    expect(own.body).not.toContain("privateKey");
+    expect(own.body).not.toContain("seedPhrase");
+    expect(own.body).not.toContain("privySecret");
+    expect(own.body).not.toContain("zeroDevSigner");
+
+    const other = await app.inject({
+      method: "GET",
+      url: "/user/withdrawal-wallets",
+      headers: { authorization: `Bearer ${otherToken}` }
+    });
+    expect(other.json()).toEqual({ wallets: [] });
+    await app.close();
   });
 
   it("persists Polymarket READY_TO_TRADE only through status reconciliation flow", async () => {
@@ -658,6 +746,153 @@ describe.skipIf(!ENV_READY)("Funding flow v0 DB integration", () => {
       expect(serialized).not.toContain("privateKey");
       expect(serialized).not.toContain("apiKey");
       expect(serialized).not.toContain("server-side-secret");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rehearses Predict.fun user-wallet withdrawal quote through API against seeded venue-ready balance", async () => {
+    const userId = `withdrawal-predictfun-api-user-${randomUUID()}`;
+    const predictBalance = new MockGenericBalanceReadClient();
+    const predictEnv = {
+      ...withdrawalEnv,
+      PREDICT_FUN_WITHDRAWAL_ADAPTER_ENABLED: "true",
+      PREDICT_FUN_WITHDRAWAL_ADAPTER_MODE: "USER_WALLET_DRY_RUN",
+      PREDICT_FUN_WITHDRAWAL_ADAPTER_DRY_RUN_ONLY: "true",
+      PREDICT_FUN_WITHDRAWAL_INSTRUCTIONS_URL: "https://docs.predict.fun/knowledge-base/wallets",
+      PREDICT_FUN_FUNDING_PREFERRED_CHAIN: "BSC",
+      PREDICT_FUN_FUNDING_PREFERRED_CHAIN_ID: "56",
+      PREDICT_FUN_FUNDING_PREFERRED_TOKEN: "USDT"
+    } as NodeJS.ProcessEnv;
+    const predictFundingService = new FundingService(
+      repository,
+      lifi,
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        venueReadinessChecksEnabled: true,
+        env: predictEnv
+      },
+      new Map([[
+        "PREDICT_FUN",
+        new ConfigurableVenueFundingReadinessChecker("PREDICT_FUN", predictBalance, {
+          enabled: true,
+          env: predictEnv
+        })
+      ]])
+    );
+    const createdFunding = await predictFundingService.createIntent(userId, {
+      sourceChain: "SOLANA",
+      sourceToken: "USDT",
+      sourceAmount: "100",
+      sourceWalletAddress: "solana-wallet-address",
+      idempotencyKey: `funding-for-predictfun-withdrawal-api-${randomUUID()}`,
+      targets: [{ targetVenue: "PREDICT_FUN", targetPercentage: 100 }]
+    });
+    const quotedFunding = await predictFundingService.quoteIntent(userId, createdFunding.intent.fundingIntentId);
+    await predictFundingService.submitRouteLeg(userId, createdFunding.intent.fundingIntentId, {
+      routeLegId: quotedFunding.routeLegs[0]!.routeLegId,
+      txHash: `0x${"4".repeat(64)}`
+    });
+    predictBalance.usableBalance = "100";
+    await predictFundingService.refreshIntentStatus(userId, createdFunding.intent.fundingIntentId);
+
+    const withdrawalService = new FundingService(
+      repository,
+      lifi,
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        venueReadinessChecksEnabled: false,
+        env: predictEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      new PredictFunWithdrawalAdapter(getPredictFunWithdrawalConfigFromEnv(predictEnv))
+    );
+    const app = await buildUserFundingApp(withdrawalService);
+    try {
+      const token = app.jwt.sign({ userId, role: "USER" });
+      const headers = { authorization: `Bearer ${token}` };
+
+      const createdWithdrawal = await app.inject({
+        method: "POST",
+        url: "/funding/withdrawals",
+        headers,
+        payload: {
+          token: "USDT",
+          amount: "40",
+          destinationChain: "BSC",
+          destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+          idempotencyKey: `withdrawal-predictfun-api-${randomUUID()}`,
+          sources: [{ sourceVenue: "PREDICT_FUN", sourcePercentage: 100 }]
+        }
+      });
+      expect(createdWithdrawal.statusCode).toBe(201);
+      const createdWithdrawalBody = createdWithdrawal.json() as { withdrawalIntentId: string };
+
+      const quotedWithdrawal = await app.inject({
+        method: "POST",
+        url: `/funding/withdrawals/${createdWithdrawalBody.withdrawalIntentId}/quote`,
+        headers
+      });
+      expect(quotedWithdrawal.statusCode).toBe(200);
+      const quotedWithdrawalBody = quotedWithdrawal.json() as {
+        currentStatus: string;
+        routePreview: Record<string, unknown>;
+        routeLegs: Array<{
+          withdrawalRouteLegId: string;
+          routeQuote: { transactionRequest: unknown; userSafeSummary: string };
+          providerStatus: Record<string, unknown>;
+        }>;
+      };
+      expect(quotedWithdrawalBody.currentStatus).toBe("USER_SIGNATURE_REQUIRED");
+      expect(quotedWithdrawalBody.routeLegs[0]!.providerStatus).toMatchObject({
+        provider: "PREDICT_FUN_USER_WALLET",
+        mode: "USER_WALLET_DRY_RUN",
+        walletModel: "PRIVY_ZERODEV",
+        completionPersisted: false
+      });
+      expect(quotedWithdrawalBody.routeLegs[0]!.routeQuote.transactionRequest).toBeNull();
+      expect(quotedWithdrawalBody.routePreview).toMatchObject({
+        predictFunUserWallet: {
+          provider: "PREDICT_FUN_USER_WALLET",
+          mode: "USER_WALLET_DRY_RUN",
+          walletModel: "PRIVY_ZERODEV",
+          completionPersisted: false
+        }
+      });
+
+      const submittedWithdrawal = await app.inject({
+        method: "POST",
+        url: `/funding/withdrawals/${createdWithdrawalBody.withdrawalIntentId}/submit`,
+        headers,
+        payload: {
+          withdrawalRouteLegId: quotedWithdrawalBody.routeLegs[0]!.withdrawalRouteLegId,
+          txHash: `0x${"3".repeat(64)}`
+        }
+      });
+      expect(submittedWithdrawal.statusCode).toBe(202);
+
+      const status = await app.inject({
+        method: "GET",
+        url: `/funding/withdrawals/${createdWithdrawalBody.withdrawalIntentId}/status`,
+        headers
+      });
+      expect(status.statusCode).toBe(200);
+      expect(status.json()).toMatchObject({ currentStatus: "WITHDRAWING" });
+
+      const serialized = `${quotedWithdrawal.body}${submittedWithdrawal.body}${status.body}`;
+      expect(serialized).toContain("Lotus does not hold keys");
+      expect(serialized).not.toContain("privateKey");
+      expect(serialized).not.toContain("walletSeed");
+      expect(serialized).not.toContain("privySecret");
+      expect(serialized).not.toContain("zeroDevSigner");
+      expect(serialized).not.toContain("authorization");
+      expect(serialized).not.toContain("jwt");
+      expect(serialized).not.toContain("rawProviderPayload");
     } finally {
       await app.close();
     }

@@ -305,11 +305,158 @@ Next adapter phase decision:
 
 - Current v0 status: DB-backed withdrawal records exist; evidence smoke and completion gate coverage exist; no live withdrawal execution.
 - Known evidence smoke coverage: read-only smoke and completion gate artifacts are supported.
-- Believed live withdrawal path: unknown until Limitless withdrawal docs, auth model, and status/evidence fields are reviewed.
-- Required docs/API validation: official withdrawal docs, destination support, supported tokens/chains, status endpoint, cancellation behavior, rate limits, and sandbox/test mode.
+- Believed live withdrawal path: official Limitless docs describe managed server-wallet withdrawals through `POST /portfolio/withdraw`, with status/history evidence available separately. This is materially different from Polymarket Bridge; Lotus must not generate a manual Bridge address for Limitless unless Limitless later documents that flow.
+- Required docs/API validation: official `POST /portfolio/withdraw` docs, portfolio history/status docs, scoped `withdrawal` auth, destination support, supported tokens/chains, cancellation behavior, rate limits, and sandbox/test mode.
 - Required auth/config: venue-specific feature flag default off, server-side credentials only, approved evidence/read hosts, timeout, minimum confirmations, redaction policy.
 - Required tests: mocked adapter tests, insufficient/ambiguous evidence tests, status/evidence tests, controlled live-read smoke, no-secret regression, admin visibility.
-- Blockers before live adapter: no operator-approved withdrawal API contract, no validated user authorization semantics, no sandbox adapter rehearsal.
+- Blockers before live adapter: no reviewed live user-authorization semantics for server-wallet withdrawals, no operator-approved production auth model, no sandbox adapter rehearsal that proves read/status compatibility, no explicit approval to call the live withdraw endpoint.
+
+#### Limitless Withdrawal API Finding
+
+Official Limitless docs indicate that withdrawal execution is exposed as a server-wallet API operation, not a Bridge address/user-transfer workflow. Therefore the first Limitless adapter must be scoped as dry-run/read-status only.
+
+Limitless account creation and managed wallet/sub-account semantics are a precondition for any withdrawal adapter work. Lotus must not treat a Limitless server wallet as Lotus custody. The acceptable Model A interpretation is:
+
+- the user controls the EOA used to authorize or create the Limitless account/sub-account
+- Limitless controls the venue-managed account mechanics
+- Lotus stores only user id, venue refs, profile/account ids, route-leg refs, submitted refs, and sanitized evidence
+- Lotus never stores the user's EOA private key
+- Lotus never signs as the user
+- Lotus never calls live withdrawal execution until the exact user-authorization model is reviewed
+
+Expected safe v1 flow:
+
+```text
+Lotus prepares a review-only withdrawal quote
+-> Lotus prepares non-executable operator/user instructions
+-> Lotus optionally reads portfolio history/status
+-> Lotus normalizes status/evidence
+-> Lotus persists completion only if evidence is exact and gate-approved
+```
+
+This flow does not authorize `POST /portfolio/withdraw`. Calling the live withdrawal endpoint is a separate future phase requiring security review, scoped credentials, operator signoff, redaction review, and explicit feature flags.
+
+Official docs reviewed:
+
+- `https://docs.limitless.exchange/api-reference/portfolio/withdraw`
+- `https://docs.limitless.exchange/api-reference/portfolio/history`
+
+#### Limitless Adapter Boundary Decision
+
+Classification: `SERVER_INITIATED_WITHDRAWAL`.
+
+`POST /portfolio/withdraw` is not a Lotus-safe user action-preparation endpoint. The official docs describe it as a server-wallet withdrawal that transfers ERC20 funds from a managed sub-account using scoped server authentication. The endpoint requires withdrawal-capable HMAC/API-token credentials and does not document a per-withdrawal user EOA signature or user-broadcast transaction.
+
+Lotus must not expose this endpoint as frontend-safe instructions or wire it into user withdrawal quote/status flows as if it were `USER_AUTHORIZED_ACTION`. Calling it from Lotus would mean Lotus is initiating a venue-side withdrawal under partner/server credentials.
+
+Allowed next work is limited to read-only portfolio history/status evidence mapping and an SDK upgrade review for `@limitless-exchange/sdk >= 1.0.6`. Completion persistence must not use this path until real evidence fields are validated and a separate security/custody review explicitly approves the server-initiated withdrawal model or Limitless provides a documented user-authorized withdrawal flow.
+
+#### Limitless Withdrawal Dry-Run Command
+
+Before the dry-run can be considered meaningful, operators must complete the account/sub-account readiness checklist:
+
+- Confirm whether the intended Limitless account is a normal account, managed wallet, delegated account, or sub-account.
+- Confirm the user-controlled EOA that owns or authorized the account.
+- Confirm whether a numeric `profileId` is required for the Programmatic API.
+- Confirm the API token is scoped to the same account/profile and has only the minimum read/status scopes needed for dry-run.
+- Confirm whether `x-on-behalf-of` is required; if required, it must be a positive integer profile id that the token is authorized to use.
+- Confirm no user private key, session cookie, or signing secret is stored in Lotus config.
+- Confirm the dry-run target is portfolio history/status only, not `POST /portfolio/withdraw`.
+- Record the account/profile decision in the operator artifact or deployment notes before any live withdrawal execution design continues.
+
+Prefer the SDK-backed Programmatic API diagnostic before the manual HTTP dry-run:
+
+```bash
+npm run funding:limitless-sdk-auth-dry-run
+```
+
+This command constructs the official SDK `HttpClient` with server-side HMAC credentials, then calls only read-only `PortfolioFetcher` methods:
+
+- `getPositions()`
+- `getUserHistory(1, 25)`
+- `getProfile(address)` only when `LIMITLESS_WITHDRAWAL_ADAPTER_PROFILE_WALLET_ADDRESS` is configured
+
+If the installed SDK helper sends a `page` parameter that the live API rejects, the diagnostic may fall back to `HttpClient.get('/portfolio/history?limit=25')`. That fallback still uses the SDK HMAC client and remains read-only.
+
+Expected successful SDK dry-run fields:
+
+- `status=COMPLETED`
+- `mode=SDK_HMAC_READ_ONLY`
+- `positionsRead=true`
+- `historyRead=true`
+- `profileReadAttempted=false` unless a profile wallet address is configured
+- `redactionVerified=true`
+- `safety.liveVenueWithdrawalEndpointCalled=false`
+- `safety.backendSignedTransaction=false`
+- `safety.backendBroadcastedTransaction=false`
+- `safety.completionPersisted=false`
+
+The SDK diagnostic is authentication/read validation only. It must not call trading, account creation, delegated signing, order, approval, or withdrawal mutation methods.
+
+Operators can validate the disabled-by-default Limitless adapter with:
+
+```bash
+npm run funding:limitless-withdrawal-dry-run
+```
+
+Default behavior uses mocked Limitless responses. Real HTTP dry-run reads require explicit operator config:
+
+```text
+LIMITLESS_WITHDRAWAL_ADAPTER_ENABLED=true
+LIMITLESS_WITHDRAWAL_ADAPTER_BASE_URL=https://api.limitless.exchange
+LIMITLESS_WITHDRAWAL_ADAPTER_AUTH_MODE=NONE|API_KEY|HMAC
+LIMITLESS_WITHDRAWAL_ADAPTER_API_KEY=<server-side only>
+LIMITLESS_WITHDRAWAL_ADAPTER_HMAC_SECRET=<server-side only, if HMAC>
+LIMITLESS_WITHDRAWAL_ADAPTER_ON_BEHALF_OF_PROFILE_ID=<optional managed wallet profile id>
+LIMITLESS_WITHDRAWAL_ADAPTER_HISTORY_PATH=/portfolio/history
+LIMITLESS_WITHDRAWAL_ADAPTER_HISTORY_QUERY=limit=25
+LIMITLESS_WITHDRAWAL_ADAPTER_TIMESTAMP_FORMAT=ISO
+LIMITLESS_WITHDRAWAL_ADAPTER_TIMEOUT_MS=5000
+LIMITLESS_WITHDRAWAL_ADAPTER_DRY_RUN_ONLY=true
+```
+
+For Limitless Programmatic API reads, `HMAC` mode uses the documented headers `lmts-api-key`, `lmts-timestamp`, and `lmts-signature`. The signature payload is:
+
+```text
+{timestamp}
+{HTTP METHOD}
+{request path with query string}
+{request body}
+```
+
+`LIMITLESS_WITHDRAWAL_ADAPTER_HMAC_SECRET` must be the base64 secret from the Limitless programmatic API setup. The adapter base64-decodes it before signing. If the API key is scoped to a managed wallet profile, set `LIMITLESS_WITHDRAWAL_ADAPTER_ON_BEHALF_OF_PROFILE_ID`; the client sends it as `x-on-behalf-of`.
+
+`LIMITLESS_WITHDRAWAL_ADAPTER_TIMESTAMP_FORMAT` may be `ISO` or `UNIX_MS`. Use `UNIX_MS` if the Programmatic API token expects millisecond timestamps in `lmts-timestamp`.
+
+`LIMITLESS_WITHDRAWAL_ADAPTER_HISTORY_PATH` and `LIMITLESS_WITHDRAWAL_ADAPTER_HISTORY_QUERY` are diagnostic dry-run controls. Limitless portfolio history uses cursor pagination, so the safe default query is `limit=25`; add `cursor=<value>` only when continuing a documented page. These controls let operators test the exact documented portfolio history/status path and query shape without changing runtime withdrawal behavior. They must not be used to point at a mutation endpoint.
+
+The command writes:
+
+```text
+artifacts/funding/limitless-withdrawal-dry-run.json
+artifacts/funding/limitless-withdrawal-dry-run.md
+```
+
+Expected successful artifact fields:
+
+- `status=COMPLETED`
+- `quotePrepared=true`
+- `userActionPrepared=true`
+- `statusFetched=true`
+- `evidenceNormalized=true`
+- `redactionVerified=true`
+- `safety.liveVenueWithdrawalEndpointCalled=false`
+- `safety.backendSignedTransaction=false`
+- `safety.backendBroadcastedTransaction=false`
+- `safety.completionPersisted=false`
+
+Real HTTP dry-run interpretation:
+
+- A `COMPLETED` dry-run artifact proves review-only quote preparation, portfolio-history/status read compatibility, evidence normalization, and redaction only.
+- It does not prove live withdrawal execution.
+- It does not call `POST /portfolio/withdraw`.
+- It does not persist completion.
+- Live Limitless withdrawal execution must remain disabled until a separate adapter implementation gate explicitly approves it.
 
 ### OPINION
 
@@ -335,11 +482,93 @@ Next adapter phase decision:
 
 - Current v0 status: DB-backed withdrawal records exist; evidence smoke and completion gate coverage exist; no live withdrawal execution.
 - Known evidence smoke coverage: read-only smoke and completion gate artifacts are supported.
-- Believed live withdrawal path: unknown until Predict.fun withdrawal docs and API auth are reviewed. Predict.fun must not be confused with PredictIt or any other Predict-branded venue.
-- Required docs/API validation: official withdrawal docs, supported destination chains/tokens, auth model, user authorization requirements, status API, rate limits, and sandbox/test mode.
-- Required auth/config: venue-specific feature flag default off, server-side credentials only, approved evidence/read hosts, timeout, minimum confirmations, redaction policy.
-- Required tests: mocked adapter tests, venue-name safety tests, exact-scope evidence tests, controlled live-read smoke, no-secret regression, admin visibility.
-- Blockers before live adapter: no reviewed live withdrawal path, no sandbox/test mode confirmation, no operator-approved venue identity mapping.
+- Classification: `USER_WALLET_AUTHORIZED_ACTION_CANDIDATE`.
+- Believed live withdrawal path: Predict.fun wallet docs describe user wallets backed by Privy/ZeroDev, not a Lotus-controlled server wallet. Predict.fun must not be confused with PredictIt or any other Predict-branded venue.
+- Required docs/API validation: official withdrawal/action docs or UI flow confirmation, supported destination chains/tokens, auth model, user authorization requirements, status/evidence API, rate limits, and sandbox/test mode.
+- Required auth/config: venue-specific feature flag default off, server-side evidence/read credentials only, approved evidence/read hosts, timeout, minimum confirmations, redaction policy.
+- Required tests: mocked adapter tests, venue-name safety tests, exact-scope evidence tests, controlled user-wallet rehearsal, controlled live-read smoke, no-secret regression, admin visibility.
+- Blockers before live adapter: no validated Lotus adapter for the exact user-wallet withdrawal action/evidence path, no sandbox/test mode confirmation, no operator-approved venue identity mapping.
+
+#### Predict.fun Wallet/ZeroDev Withdrawal Design
+
+Predict.fun withdrawal work must follow a frontend/user-wallet authorization model. Lotus may prepare frontend-safe instructions, but the user must authorize, sign, or confirm withdrawal activity through Predict.fun, Privy, ZeroDev, or a user-controlled wallet path.
+
+Lotus must not:
+
+- hold, request, import, export, or store user private keys or wallet seeds
+- perform ZeroDev smart-account operations server-side for users
+- use Privy admin/user impersonation to move funds
+- store Privy secrets, ZeroDev signer material, session cookies, or user JWTs as withdrawal authority
+- sign or broadcast Predict.fun withdrawal transactions from the backend
+- call live withdrawal mutation APIs unless a future documented flow proves the action is user-authorized and frontend-approved
+
+Intended safe flow:
+
+```text
+User creates a Lotus withdrawal intent
+-> Lotus validates venue-ready balance and destination scope
+-> Lotus returns Predict.fun-specific frontend instructions only
+-> User completes the Predict.fun / Privy / ZeroDev wallet action
+-> User submits tx hash or reference to Lotus
+-> Lotus reads sanitized evidence
+-> Lotus persists completion only through the existing evidence gate
+```
+
+Future Predict.fun validation must prove the evidence fields for exact scope matching: transaction hash, destination address, destination chain, destination token, amount, completed time, and wallet/account id. No user-facing rollout or completion persistence should proceed until a controlled user-wallet rehearsal artifact is completed, redacted, reviewed, and fresh.
+
+#### Predict.fun BSC/USDT Evidence And Wallet Requirement
+
+For the current Predict.fun withdrawal phase, Lotus treats Predict.fun withdrawals as BSC USDT only:
+
+- `destinationChain=BSC`
+- `destinationToken=USDT`
+- BSC USDT token address `0x55d398326f99059fF775485246999027B3197955`
+
+Predict.fun completion evidence can be checked with the internal `BSC_ONCHAIN` evidence mode. This mode reads a BSC transaction receipt through an operator-approved RPC endpoint, finds an ERC20/BEP20 `Transfer` log for the configured USDT contract, and fail-closes unless the transfer matches the expected destination wallet, token, amount, chain, submitted tx hash, and minimum confirmation policy.
+
+The evidence mode is read-only. It does not call Predict.fun, Privy, ZeroDev, LI.FI, or a live venue withdrawal endpoint. It does not sign, broadcast, move funds, or persist completion by itself.
+
+Predict.fun withdrawals also require a user-controlled EVM-compatible receive wallet before the frontend should let a user create the withdrawal intent. Lotus stores only public wallet metadata through the user withdrawal wallet profile surface:
+
+- `GET /user/withdrawal-wallets`
+- `PUT /user/withdrawal-wallets/evm`
+
+Stored wallet fields are public receive metadata only: address, chain family, label, verification timestamp, and created/updated timestamps. Lotus must not store private keys, wallet seeds, Privy secrets, ZeroDev signer material, session cookies, user JWTs, or wallet auth tokens.
+
+Frontend copy should be explicit:
+
+```text
+Add an EVM-compatible wallet to receive BSC USDT withdrawals.
+```
+
+#### Predict.fun User-Wallet Dry-Run Command
+
+Operators can validate the disabled-by-default Predict.fun instruction adapter with:
+
+```bash
+npm run funding:predictfun-withdrawal-dry-run
+```
+
+The command does not call Predict.fun, Privy, ZeroDev, a live withdrawal API, LI.FI execution, or any venue mutation path. It prepares only frontend-safe instruction metadata and writes:
+
+- `artifacts/funding/predictfun-withdrawal-dry-run.json`
+- `artifacts/funding/predictfun-withdrawal-dry-run.md`
+
+Expected successful fields:
+
+- `status=COMPLETED`
+- `mode=USER_WALLET_DRY_RUN`
+- `quotePrepared=true`
+- `userActionPrepared=true`
+- `redactionVerified=true`
+- `safety.backendSignedTransaction=false`
+- `safety.backendBroadcastedTransaction=false`
+- `safety.backendPrivateKeyHandling=false`
+- `safety.backendZeroDevSigning=false`
+- `safety.privyUserImpersonation=false`
+- `safety.completionPersisted=false`
+
+When `PREDICT_FUN_FUNDING_WITHDRAWALS_ENABLED=true`, `PREDICT_FUN_WITHDRAWAL_ADAPTER_ENABLED=true`, `PREDICT_FUN_WITHDRAWAL_ADAPTER_MODE=USER_WALLET_DRY_RUN`, and `PREDICT_FUN_WITHDRAWAL_ADAPTER_DRY_RUN_ONLY=true`, `POST /funding/withdrawals/:id/quote` may return frontend-safe `routePreview.predictFunUserWallet` metadata for a single-source `PREDICT_FUN` withdrawal. This sandbox wiring still does not sign, broadcast, hold keys, impersonate Privy users, run ZeroDev operations server-side, move funds, persist completion, or enable live withdrawal execution.
 
 ## 7. Safety Gates Before Live Withdrawal Execution
 

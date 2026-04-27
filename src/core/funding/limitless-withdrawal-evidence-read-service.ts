@@ -53,8 +53,10 @@ export interface InternalWithdrawalEvidenceReadServiceConfig {
   fixturePath?: string | undefined;
   readMode?: InternalWithdrawalEvidenceReadMode | undefined;
   polygonRpcUrl?: string | undefined;
+  bscRpcUrl?: string | undefined;
   bridgeStatusBaseUrl?: string | undefined;
   usdcTokenAddress?: string | undefined;
+  usdtTokenAddress?: string | undefined;
   minimumConfirmations?: number | undefined;
   fetchImpl?: typeof fetch | undefined;
   env?: NodeJS.ProcessEnv | undefined;
@@ -83,7 +85,7 @@ export class LimitlessWithdrawalEvidenceMalformedError extends Error {
   }
 }
 
-export type InternalWithdrawalEvidenceReadMode = "FIXTURE" | "POLYGON_ONCHAIN";
+export type InternalWithdrawalEvidenceReadMode = "FIXTURE" | "POLYGON_ONCHAIN" | "BSC_ONCHAIN";
 
 export const buildInternalWithdrawalEvidenceReadConfigFromEnv = (
   venue: FundingVenue,
@@ -94,8 +96,10 @@ export const buildInternalWithdrawalEvidenceReadConfigFromEnv = (
   readMode: readModeFromEnv(env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_READ_MODE`]),
   fixturePath: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_FIXTURE_PATH`],
   polygonRpcUrl: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_POLYGON_RPC_URL`],
+  bscRpcUrl: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_BSC_RPC_URL`],
   bridgeStatusBaseUrl: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_BRIDGE_STATUS_BASE_URL`],
   usdcTokenAddress: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_USDC_ADDRESS`],
+  usdtTokenAddress: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_USDT_ADDRESS`],
   minimumConfirmations: positiveInt(env[`${venue}_WITHDRAWAL_MIN_CONFIRMATIONS`], 1),
   env
 });
@@ -114,9 +118,14 @@ export class InternalWithdrawalEvidenceReadService {
     const resolved = this.resolveConfig(venue);
     return {
       enabled: resolved.enabled,
-      configured: resolved.enabled && (nonEmpty(resolved.fixturePath) || (resolved.readMode === "POLYGON_ONCHAIN" && nonEmpty(resolved.polygonRpcUrl))),
+      configured: resolved.enabled && (
+        nonEmpty(resolved.fixturePath) ||
+        (resolved.readMode === "POLYGON_ONCHAIN" && nonEmpty(resolved.polygonRpcUrl)) ||
+        (resolved.readMode === "BSC_ONCHAIN" && nonEmpty(resolved.bscRpcUrl))
+      ),
       fixturePathConfigured: nonEmpty(resolved.fixturePath),
-      onchainConfigured: resolved.readMode === "POLYGON_ONCHAIN" && nonEmpty(resolved.polygonRpcUrl),
+      onchainConfigured: (resolved.readMode === "POLYGON_ONCHAIN" && nonEmpty(resolved.polygonRpcUrl)) ||
+        (resolved.readMode === "BSC_ONCHAIN" && nonEmpty(resolved.bscRpcUrl)),
       readMode: resolved.readMode,
       credentialsServerSideOnly: true
     };
@@ -142,6 +151,18 @@ export class InternalWithdrawalEvidenceReadService {
       });
     }
 
+    if (input.sourceVenue === "PREDICT_FUN" && resolved.readMode === "BSC_ONCHAIN") {
+      if (!resolved.bscRpcUrl) {
+        throw new LimitlessWithdrawalEvidenceReadNotConfiguredError("PREDICT_FUN BSC withdrawal evidence RPC URL is not configured.");
+      }
+      return this.readPredictFunBscOnchainEvidence(input, {
+        bscRpcUrl: resolved.bscRpcUrl,
+        usdtTokenAddress: resolved.usdtTokenAddress,
+        minimumConfirmations: resolved.minimumConfirmations,
+        fetchImpl: resolved.fetchImpl
+      });
+    }
+
     if (!resolved.fixturePath) {
       throw new LimitlessWithdrawalEvidenceReadNotConfiguredError(`${input.sourceVenue} withdrawal evidence fixture path is not configured.`);
     }
@@ -159,8 +180,10 @@ export class InternalWithdrawalEvidenceReadService {
     readMode: InternalWithdrawalEvidenceReadMode;
     fixturePath?: string | undefined;
     polygonRpcUrl?: string | undefined;
+    bscRpcUrl?: string | undefined;
     bridgeStatusBaseUrl?: string | undefined;
     usdcTokenAddress: string;
+    usdtTokenAddress: string;
     minimumConfirmations: number;
     fetchImpl: typeof fetch;
   } {
@@ -170,8 +193,10 @@ export class InternalWithdrawalEvidenceReadService {
         readMode: this.config.readMode ?? "FIXTURE",
         fixturePath: this.config.fixturePath,
         polygonRpcUrl: this.config.polygonRpcUrl,
+        bscRpcUrl: this.config.bscRpcUrl,
         bridgeStatusBaseUrl: this.config.bridgeStatusBaseUrl,
         usdcTokenAddress: this.config.usdcTokenAddress ?? POLYGON_USDC_TOKEN_ADDRESS,
+        usdtTokenAddress: this.config.usdtTokenAddress ?? BSC_USDT_TOKEN_ADDRESS,
         minimumConfirmations: this.config.minimumConfirmations ?? 1,
         fetchImpl: this.config.fetchImpl ?? fetch
       };
@@ -182,8 +207,10 @@ export class InternalWithdrawalEvidenceReadService {
       readMode: readModeFromEnv(env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_READ_MODE`]),
       fixturePath: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_FIXTURE_PATH`],
       polygonRpcUrl: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_POLYGON_RPC_URL`],
+      bscRpcUrl: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_BSC_RPC_URL`],
       bridgeStatusBaseUrl: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_BRIDGE_STATUS_BASE_URL`],
       usdcTokenAddress: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_USDC_ADDRESS`] ?? POLYGON_USDC_TOKEN_ADDRESS,
+      usdtTokenAddress: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_USDT_ADDRESS`] ?? BSC_USDT_TOKEN_ADDRESS,
       minimumConfirmations: positiveInt(env[`${venue}_WITHDRAWAL_MIN_CONFIRMATIONS`], 1),
       fetchImpl: this.config.fetchImpl ?? fetch
     };
@@ -324,6 +351,84 @@ export class InternalWithdrawalEvidenceReadService {
       return null;
     }
   }
+
+  private async readPredictFunBscOnchainEvidence(
+    input: InternalWithdrawalEvidenceReadInput,
+    config: {
+      bscRpcUrl: string;
+      usdtTokenAddress: string;
+      minimumConfirmations: number;
+      fetchImpl: typeof fetch;
+    }
+  ): Promise<InternalWithdrawalEvidenceReadOutput> {
+    const receipt = await rpcCall({
+      rpcUrl: config.bscRpcUrl,
+      fetchImpl: config.fetchImpl,
+      chainName: "BSC"
+    }, "eth_getTransactionReceipt", [input.withdrawalTxHash]);
+    if (!isRecord(receipt)) {
+      return {
+        sourceVenue: input.sourceVenue,
+        withdrawalTxHash: input.withdrawalTxHash,
+        status: "PENDING",
+        venueReleased: false,
+        destinationReceived: false,
+        completed: false,
+        reason: "PREDICT_FUN_WITHDRAWAL_BSC_RECEIPT_PENDING"
+      };
+    }
+    if (stringValue(receipt.status) !== "0x1") {
+      return {
+        sourceVenue: input.sourceVenue,
+        withdrawalTxHash: input.withdrawalTxHash,
+        status: "FAILED",
+        venueReleased: false,
+        destinationReceived: false,
+        completed: false,
+        reason: "PREDICT_FUN_WITHDRAWAL_BSC_TX_FAILED"
+      };
+    }
+    const transfer = findErc20Transfer(receipt, config.usdtTokenAddress);
+    if (!transfer) {
+      return {
+        sourceVenue: input.sourceVenue,
+        withdrawalTxHash: input.withdrawalTxHash,
+        status: "UNKNOWN",
+        venueReleased: false,
+        destinationReceived: false,
+        completed: false,
+        reason: "PREDICT_FUN_WITHDRAWAL_BSC_USDT_TRANSFER_NOT_FOUND"
+      };
+    }
+    const currentBlockHex = await rpcCall({
+      rpcUrl: config.bscRpcUrl,
+      fetchImpl: config.fetchImpl,
+      chainName: "BSC"
+    }, "eth_blockNumber", []);
+    const currentBlock = hexToBigInt(stringValue(currentBlockHex));
+    const txBlock = hexToBigInt(stringValue(receipt.blockNumber));
+    const confirmations = currentBlock !== null && txBlock !== null && currentBlock >= txBlock
+      ? Number(currentBlock - txBlock + 1n)
+      : 0;
+    const enoughConfirmations = confirmations >= config.minimumConfirmations;
+    return {
+      sourceVenue: input.sourceVenue,
+      withdrawalTxHash: input.withdrawalTxHash,
+      status: enoughConfirmations ? "COMPLETED" : "DESTINATION_RECEIVED",
+      venueReleased: enoughConfirmations,
+      destinationReceived: true,
+      completed: enoughConfirmations,
+      destinationChain: "BSC",
+      destinationWalletAddress: transfer.to,
+      token: "USDT",
+      amount: transfer.amount,
+      confirmations,
+      ...(stringValue(transfer.observedAt) ? { observedAt: transfer.observedAt } : {}),
+      reason: enoughConfirmations
+        ? "PREDICT_FUN_WITHDRAWAL_BSC_USDT_DESTINATION_CONFIRMED"
+        : "PREDICT_FUN_WITHDRAWAL_BSC_CONFIRMATIONS_PENDING"
+    };
+  }
 }
 
 export class LimitlessWithdrawalEvidenceReadService extends InternalWithdrawalEvidenceReadService {
@@ -404,11 +509,16 @@ const equalsIgnoreCase = (a: string | undefined, b: string): boolean =>
   typeof a === "string" && a.toLowerCase() === b.toLowerCase();
 
 const POLYGON_USDC_TOKEN_ADDRESS = "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359";
+const BSC_USDT_TOKEN_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
 const POLYMARKET_BRIDGE_STATUS_BASE_URL = "https://bridge.polymarket.com";
 const ERC20_TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 
 const readModeFromEnv = (value: string | undefined): InternalWithdrawalEvidenceReadMode =>
-  value?.trim().toUpperCase() === "POLYGON_ONCHAIN" ? "POLYGON_ONCHAIN" : "FIXTURE";
+  value?.trim().toUpperCase() === "POLYGON_ONCHAIN"
+    ? "POLYGON_ONCHAIN"
+    : value?.trim().toUpperCase() === "BSC_ONCHAIN"
+      ? "BSC_ONCHAIN"
+      : "FIXTURE";
 
 const positiveInt = (value: string | undefined, fallback: number): number => {
   const parsed = Number.parseInt(value ?? "", 10);
@@ -418,15 +528,19 @@ const positiveInt = (value: string | undefined, fallback: number): number => {
 const rpcCall = async (
   config: {
     polygonRpcUrl?: string;
+    rpcUrl?: string;
     fetchImpl: typeof fetch;
+    chainName?: string;
   },
   method: string,
   params: unknown[]
 ): Promise<unknown> => {
-  if (!config.polygonRpcUrl) {
-    throw new LimitlessWithdrawalEvidenceReadNotConfiguredError("Polygon RPC URL is not configured.");
+  const rpcUrl = config.rpcUrl ?? config.polygonRpcUrl;
+  const chainName = config.chainName ?? "Polygon";
+  if (!rpcUrl) {
+    throw new LimitlessWithdrawalEvidenceReadNotConfiguredError(`${chainName} RPC URL is not configured.`);
   }
-  const response = await config.fetchImpl(config.polygonRpcUrl, {
+  const response = await config.fetchImpl(rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -437,14 +551,14 @@ const rpcCall = async (
     })
   });
   if (!response.ok) {
-    throw new LimitlessWithdrawalEvidenceNotFoundError("Polygon RPC evidence read failed.");
+    throw new LimitlessWithdrawalEvidenceNotFoundError(`${chainName} RPC evidence read failed.`);
   }
   const payload = await response.json() as unknown;
   if (!isRecord(payload)) {
-    throw new LimitlessWithdrawalEvidenceMalformedError("Polygon RPC response is malformed.");
+    throw new LimitlessWithdrawalEvidenceMalformedError(`${chainName} RPC response is malformed.`);
   }
   if (payload.error) {
-    throw new LimitlessWithdrawalEvidenceNotFoundError("Polygon RPC returned an error.");
+    throw new LimitlessWithdrawalEvidenceNotFoundError(`${chainName} RPC returned an error.`);
   }
   return payload.result;
 };
@@ -453,10 +567,17 @@ const findUsdcTransfer = (
   receipt: Record<string, unknown>,
   usdcTokenAddress: string
 ): { from: string; to: string; amount: string; observedAt?: string } | null => {
+  return findErc20Transfer(receipt, usdcTokenAddress);
+};
+
+const findErc20Transfer = (
+  receipt: Record<string, unknown>,
+  tokenAddress: string
+): { from: string; to: string; amount: string; observedAt?: string } | null => {
   const logs = Array.isArray(receipt.logs) ? receipt.logs.filter(isRecord) : [];
   for (const log of logs) {
     const topics = Array.isArray(log.topics) ? log.topics : [];
-    if (!equalsIgnoreCase(stringValue(log.address), usdcTokenAddress) ||
+    if (!equalsIgnoreCase(stringValue(log.address), tokenAddress) ||
       !equalsIgnoreCase(typeof topics[0] === "string" ? topics[0] : undefined, ERC20_TRANSFER_TOPIC)) {
       continue;
     }

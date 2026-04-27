@@ -310,6 +310,110 @@ describe("Limitless internal withdrawal evidence read service", () => {
     expect(result).not.toHaveProperty("destinationWalletAddress");
   });
 
+  it("maps Predict.fun BSC USDT destination evidence to completed only after confirmations", async () => {
+    const service = new InternalWithdrawalEvidenceReadService({
+      env: {
+        PREDICT_FUN_INTERNAL_WITHDRAWAL_EVIDENCE_READ_ENABLED: "true",
+        PREDICT_FUN_INTERNAL_WITHDRAWAL_EVIDENCE_READ_MODE: "BSC_ONCHAIN",
+        PREDICT_FUN_INTERNAL_WITHDRAWAL_EVIDENCE_BSC_RPC_URL: "https://bsc.example/rpc",
+        PREDICT_FUN_INTERNAL_WITHDRAWAL_EVIDENCE_USDT_ADDRESS: "0x55d398326f99059fF775485246999027B3197955",
+        PREDICT_FUN_WITHDRAWAL_MIN_CONFIRMATIONS: "2"
+      } as NodeJS.ProcessEnv,
+      fetchImpl: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as { method: string };
+        if (body.method === "eth_blockNumber") {
+          return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x65" }));
+        }
+        return new Response(JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            status: "0x1",
+            blockNumber: "0x64",
+            logs: [{
+              address: "0x55d398326f99059fF775485246999027B3197955",
+              topics: [
+                "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                "0x000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "0x0000000000000000000000005c2a7bf969c813dd79587b6aada5877476281072"
+              ],
+              data: "0x00000000000000000000000000000000000000000000000000000000002d9fb0",
+              blockTimestamp: "0x69ee6dae"
+            }]
+          }
+        }));
+      }
+    });
+
+    const result = await service.readEvidence({
+      userId: "user-1",
+      withdrawalIntentId: "withdrawal-1",
+      withdrawalRouteLegId: "leg-1",
+      sourceVenue: "PREDICT_FUN",
+      withdrawalTxHash: "0x1753a9a83088a8ffe1934dc81d9e283123025f74e885febc82e8b8684169db6f"
+    });
+
+    expect(result).toMatchObject({
+      sourceVenue: "PREDICT_FUN",
+      status: "COMPLETED",
+      venueReleased: true,
+      destinationReceived: true,
+      completed: true,
+      destinationChain: "BSC",
+      destinationWalletAddress: "0x5c2a7bf969c813dd79587b6aada5877476281072",
+      token: "USDT",
+      amount: "2.99",
+      confirmations: 2,
+      reason: "PREDICT_FUN_WITHDRAWAL_BSC_USDT_DESTINATION_CONFIRMED"
+    });
+  });
+
+  it("fails closed when Predict.fun BSC evidence has no USDT transfer", async () => {
+    const service = new InternalWithdrawalEvidenceReadService({
+      env: {
+        PREDICT_FUN_INTERNAL_WITHDRAWAL_EVIDENCE_READ_ENABLED: "true",
+        PREDICT_FUN_INTERNAL_WITHDRAWAL_EVIDENCE_READ_MODE: "BSC_ONCHAIN",
+        PREDICT_FUN_INTERNAL_WITHDRAWAL_EVIDENCE_BSC_RPC_URL: "https://bsc.example/rpc",
+        PREDICT_FUN_INTERNAL_WITHDRAWAL_EVIDENCE_USDT_ADDRESS: "0x55d398326f99059fF775485246999027B3197955"
+      } as NodeJS.ProcessEnv,
+      fetchImpl: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as { method: string };
+        if (body.method === "eth_blockNumber") {
+          return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x65" }));
+        }
+        return new Response(JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            status: "0x1",
+            blockNumber: "0x64",
+            logs: [{
+              address: "0x0000000000000000000000000000000000000000",
+              topics: [
+                "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                "0x000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "0x0000000000000000000000005c2a7bf969c813dd79587b6aada5877476281072"
+              ],
+              data: "0x00000000000000000000000000000000000000000000000000000000002d9fb0"
+            }]
+          }
+        }));
+      }
+    });
+
+    await expect(service.readEvidence({
+      userId: "user-1",
+      withdrawalIntentId: "withdrawal-1",
+      withdrawalRouteLegId: "leg-1",
+      sourceVenue: "PREDICT_FUN",
+      withdrawalTxHash: "0x1753a9a83088a8ffe1934dc81d9e283123025f74e885febc82e8b8684169db6f"
+    })).resolves.toMatchObject({
+      status: "UNKNOWN",
+      completed: false,
+      reason: "PREDICT_FUN_WITHDRAWAL_BSC_USDT_TRANSFER_NOT_FOUND"
+    });
+  });
+
   it("requires fresh non-synthetic read-only smoke evidence before completion persistence", () => {
     const blockers: string[] = [];
     validateWithdrawalEvidenceSmokeArtifact({
@@ -331,19 +435,30 @@ describe("Limitless internal withdrawal evidence read service", () => {
         evidenceUrlConfigured: true,
         evidenceUrlHost: "evidence.lotus.internal",
         authMode: "BEARER",
-        apiKeyConfigured: true
+        apiKeyConfigured: true,
+        minimumConfirmations: 1
       },
       selectedWithdrawal: {
         synthetic: false,
         sourceVenue: "LIMITLESS",
-        withdrawalTxHash: "0x1111111111111111111111111111111111111111111111111111111111111111"
+        withdrawalTxHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        destinationChain: "POLYGON",
+        destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+        requiredAmount: "40"
       },
       evidenceResult: {
         status: "COMPLETED",
         venueReleased: true,
         destinationReceived: true,
         completed: true,
-        withdrawalTxHash: "0x1111111111111111111111111111111111111111111111111111111111111111"
+        withdrawalTxHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        destinationChain: "POLYGON",
+        destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+        token: "USDC",
+        amount: "40",
+        evidence: {
+          confirmations: 12
+        }
       },
       mappingObserved: "COMPLETED",
       redactionVerified: true,

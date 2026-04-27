@@ -40,6 +40,12 @@ import type {
   PolymarketBridgeWithdrawalQuote,
   PolymarketBridgeUserAction
 } from "./polymarket-bridge-withdrawal-adapter.js";
+import {
+  buildPredictFunUserWalletProviderStatus,
+  type PredictFunUserWalletAction,
+  type PredictFunWithdrawalAdapter,
+  type PredictFunWithdrawalQuote
+} from "./predictfun-withdrawal-adapter.js";
 
 export interface FundingRepository {
   findIntentById(id: string): Promise<FundingIntent | null>;
@@ -158,6 +164,10 @@ export interface WithdrawalCompletionPersistenceGate {
   }): Promise<void>;
 }
 
+export interface UserWithdrawalWalletReader {
+  hasEvmWithdrawalWallet(userId: string, address?: string | null): Promise<boolean>;
+}
+
 export class FundingService {
   public constructor(
     private readonly repository: FundingRepository,
@@ -166,7 +176,9 @@ export class FundingService {
     private readonly venueReadinessCheckers: ReadonlyMap<FundingVenue, VenueFundingReadinessChecker> = new Map(),
     private readonly withdrawalCompletionChecker: WithdrawalCompletionEvidenceChecker | null = null,
     private readonly withdrawalCompletionPersistenceGate: WithdrawalCompletionPersistenceGate | null = null,
-    private readonly polymarketBridgeWithdrawalAdapter: PolymarketBridgeWithdrawalAdapter | null = null
+    private readonly polymarketBridgeWithdrawalAdapter: PolymarketBridgeWithdrawalAdapter | null = null,
+    private readonly predictFunWithdrawalAdapter: PredictFunWithdrawalAdapter | null = null,
+    private readonly userWithdrawalWalletReader: UserWithdrawalWalletReader | null = null
   ) {}
 
   public listVenueCapabilities(): VenueCapability[] {
@@ -565,6 +577,9 @@ export class FundingService {
       if (this.shouldUsePolymarketBridgeSandbox(view, source)) {
         return this.buildPolymarketBridgeWithdrawalRouteLeg(view.intent, source);
       }
+      if (this.shouldUsePredictFunUserWalletDryRun(view, source)) {
+        return this.buildPredictFunWithdrawalRouteLeg(userId, view.intent, source);
+      }
       return buildWithdrawalRouteLeg(view.intent, source);
     }));
     await this.repository.replaceWithdrawalRouteLegs(withdrawalIntentId, routeLegs);
@@ -727,6 +742,14 @@ export class FundingService {
     return capabilities.supportsWithdrawal && capabilities.readinessStatus === "DRY_RUN_READY";
   }
 
+  private shouldUsePredictFunUserWalletDryRun(view: WithdrawalIntentView, source: WithdrawalSource): boolean {
+    if (!this.predictFunWithdrawalAdapter || view.sources.length !== 1 || source.sourceVenue !== "PREDICT_FUN") {
+      return false;
+    }
+    const capabilities = this.predictFunWithdrawalAdapter.getWithdrawalCapabilities();
+    return capabilities.supportsWithdrawal && capabilities.readinessStatus === "DRY_RUN_READY";
+  }
+
   private async buildPolymarketBridgeWithdrawalRouteLeg(
     intent: WithdrawalIntent,
     source: WithdrawalSource
@@ -749,6 +772,37 @@ export class FundingService {
       throw new FundingError(
         "WITHDRAWAL_PROVIDER_UNAVAILABLE",
         `Polymarket Bridge sandbox quote failed closed: ${normalized.message}`,
+        503
+      );
+    }
+  }
+
+  private async buildPredictFunWithdrawalRouteLeg(
+    userId: string,
+    intent: WithdrawalIntent,
+    source: WithdrawalSource
+  ): Promise<WithdrawalRouteLeg> {
+    if (!this.predictFunWithdrawalAdapter) {
+      return buildWithdrawalRouteLeg(intent, source);
+    }
+    try {
+      const quote = await this.predictFunWithdrawalAdapter.prepareWithdrawalQuote({
+        destinationChain: intent.destinationChain,
+        destinationToken: intent.token,
+        destinationAddress: intent.destinationWalletAddress,
+        amount: source.sourceAmount
+      });
+      const userAction = await this.predictFunWithdrawalAdapter.prepareUserAction(quote);
+      const evmWithdrawalWalletPresent = await this.userWithdrawalWalletReader?.hasEvmWithdrawalWallet(
+        userId,
+        intent.destinationWalletAddress
+      ) ?? false;
+      return buildPredictFunWithdrawalRouteLeg(intent, source, quote, userAction, evmWithdrawalWalletPresent);
+    } catch (error) {
+      const normalized = this.predictFunWithdrawalAdapter.normalizeWithdrawalError(error);
+      throw new FundingError(
+        "WITHDRAWAL_PROVIDER_UNAVAILABLE",
+        `Predict.fun user-wallet dry-run quote failed closed: ${normalized.message}`,
         503
       );
     }
@@ -1099,6 +1153,60 @@ const buildPolymarketBridgeWithdrawalRouteLeg = (
   };
 };
 
+const buildPredictFunWithdrawalRouteLeg = (
+  intent: WithdrawalIntent,
+  source: WithdrawalSource,
+  predictQuote: PredictFunWithdrawalQuote,
+  userAction: PredictFunUserWalletAction,
+  evmWithdrawalWalletPresent: boolean
+): WithdrawalRouteLeg => {
+  const now = new Date().toISOString();
+  const walletWarning = "Add an EVM-compatible wallet to receive BSC USDT withdrawals.";
+  const userSafeSummary = evmWithdrawalWalletPresent
+    ? "Predict.fun user-wallet dry run: user must complete withdrawal through Predict.fun, Privy, ZeroDev, or a user-controlled wallet. Lotus does not hold keys, sign, broadcast, custody, or move funds."
+    : `Predict.fun user-wallet dry run: ${walletWarning} Lotus does not hold keys, sign, broadcast, custody, or move funds.`;
+  const quote: WithdrawalRouteQuote = {
+    provider: "LOTUS_WITHDRAWAL_V0",
+    providerRouteId: `predictfun-user-wallet-${source.withdrawalSourceId}`,
+    sourceVenue: source.sourceVenue,
+    sourceToken: source.sourceToken,
+    sourceAmount: source.sourceAmount,
+    destinationChain: intent.destinationChain,
+    destinationWalletAddress: intent.destinationWalletAddress,
+    destinationAmountEstimate: predictQuote.amount,
+    estimatedFees: predictQuote.estimatedFees,
+    estimatedTimeSeconds: predictQuote.estimatedTimeSeconds,
+    expiresAt: predictQuote.expiresAt,
+    transactionRequest: null,
+    userSafeSummary
+  };
+  return {
+    withdrawalRouteLegId: randomUUID(),
+    withdrawalIntentId: intent.withdrawalIntentId,
+    withdrawalSourceId: source.withdrawalSourceId,
+    sourceVenue: source.sourceVenue,
+    sourceToken: source.sourceToken,
+    sourceAmount: source.sourceAmount,
+    destinationChain: intent.destinationChain,
+    destinationWalletAddress: intent.destinationWalletAddress,
+    destinationAmountEstimate: predictQuote.amount,
+    routeProvider: "LOTUS_WITHDRAWAL_V0",
+    routeQuote: quote,
+    txHashes: [],
+    providerStatus: buildPredictFunUserWalletProviderStatus({
+      quote: predictQuote,
+      userAction,
+      evmWithdrawalWalletPresent
+    }),
+    venueReleaseStatus: "NOT_SUBMITTED",
+    destinationStatus: "NOT_CONFIRMED",
+    status: "WITHDRAWAL_LEG_SIGNATURE_REQUIRED",
+    errorReason: null,
+    createdAt: now,
+    updatedAt: now
+  };
+};
+
 const buildPolymarketBridgeProviderStatus = (input: {
   quote: PolymarketBridgeWithdrawalQuote | null;
   userAction: PolymarketBridgeUserAction | null;
@@ -1172,7 +1280,8 @@ const summarizeWithdrawalQuotes = (routeLegs: readonly WithdrawalRouteLeg[]): Re
   totalEstimatedFees: routeLegs.reduce((sum, leg) => sum.plus(leg.routeQuote.estimatedFees), new Decimal(0)).toString(),
   nonCustodial: true,
   backendBroadcast: false,
-  ...summarizePolymarketBridgePreview(routeLegs)
+  ...summarizePolymarketBridgePreview(routeLegs),
+  ...summarizePredictFunUserWalletPreview(routeLegs)
 });
 
 const summarizePolymarketBridgePreview = (routeLegs: readonly WithdrawalRouteLeg[]): Record<string, unknown> => {
@@ -1200,6 +1309,39 @@ const summarizePolymarketBridgePreview = (routeLegs: readonly WithdrawalRouteLeg
       estimatedFees: quote.estimatedFees ?? bridgeLeg.routeQuote.estimatedFees,
       estimatedTimeSeconds: quote.estimatedTimeSeconds ?? bridgeLeg.routeQuote.estimatedTimeSeconds,
       expiresAt: quote.expiresAt ?? bridgeLeg.routeQuote.expiresAt,
+      warnings: Array.isArray(status.warnings) ? status.warnings : [],
+      completionPersisted: false
+    }
+  };
+};
+
+const summarizePredictFunUserWalletPreview = (routeLegs: readonly WithdrawalRouteLeg[]): Record<string, unknown> => {
+  const predictLeg = routeLegs.find((leg) => leg.providerStatus.provider === "PREDICT_FUN_USER_WALLET");
+  if (!predictLeg) {
+    return {};
+  }
+  const status = predictLeg.providerStatus;
+  const quote = status.quote && typeof status.quote === "object" && !Array.isArray(status.quote)
+    ? status.quote as Record<string, unknown>
+    : {};
+  const userAction = status.userAction && typeof status.userAction === "object" && !Array.isArray(status.userAction)
+    ? status.userAction as Record<string, unknown>
+    : {};
+  return {
+    predictFunUserWallet: {
+      provider: "PREDICT_FUN_USER_WALLET",
+      mode: "USER_WALLET_DRY_RUN",
+      walletModel: "PRIVY_ZERODEV",
+      instructionsUrl: typeof status.instructionsUrl === "string" ? status.instructionsUrl : userAction.instructionsUrl,
+      destinationWalletProfileRequired: status.destinationWalletProfileRequired === true,
+      evmWithdrawalWalletPresent: status.evmWithdrawalWalletPresent === true,
+      destinationChain: quote.destinationChain ?? predictLeg.destinationChain,
+      destinationToken: quote.destinationToken ?? predictLeg.sourceToken,
+      destinationAddress: quote.destinationAddress ?? predictLeg.destinationWalletAddress,
+      amount: quote.amount ?? predictLeg.destinationAmountEstimate,
+      estimatedFees: quote.estimatedFees ?? predictLeg.routeQuote.estimatedFees,
+      estimatedTimeSeconds: quote.estimatedTimeSeconds ?? predictLeg.routeQuote.estimatedTimeSeconds,
+      expiresAt: quote.expiresAt ?? predictLeg.routeQuote.expiresAt,
       warnings: Array.isArray(status.warnings) ? status.warnings : [],
       completionPersisted: false
     }

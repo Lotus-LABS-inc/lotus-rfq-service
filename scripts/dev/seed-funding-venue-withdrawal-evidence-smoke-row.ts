@@ -54,10 +54,11 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const artifactDir = join(process.cwd(), "artifacts", "funding");
 const amount = process.env.FUNDING_WITHDRAWAL_EVIDENCE_SEED_AMOUNT ?? "40";
 const readyAmount = process.env.FUNDING_WITHDRAWAL_EVIDENCE_SEED_READY_AMOUNT ?? "100";
-const token = "USDC";
 const explicitWithdrawalTxHash = process.env.FUNDING_WITHDRAWAL_EVIDENCE_SEED_WITHDRAWAL_TX_HASH?.trim() ?? null;
 const explicitDestinationAddress = process.env.FUNDING_WITHDRAWAL_EVIDENCE_SEED_DESTINATION_ADDRESS?.trim() ?? null;
 const explicitDestinationChain = process.env.FUNDING_WITHDRAWAL_EVIDENCE_SEED_DESTINATION_CHAIN?.trim() ?? null;
+const token = process.env.FUNDING_WITHDRAWAL_EVIDENCE_SEED_TOKEN?.trim() ||
+  (requestedVenue === "PREDICT_FUN" && explicitDestinationChain?.toUpperCase() === "BSC" ? "USDT" : "USDC");
 
 if (!databaseUrl) {
   throw new Error("TEST_DATABASE_URL or DATABASE_URL is required to seed a withdrawal evidence smoke row.");
@@ -152,7 +153,14 @@ const withSeedEnv = (venue: FundingVenue): NodeJS.ProcessEnv => ({
   ...process.env,
   [`${venue}_FUNDING_DESTINATION_ADDRESS`]:
     process.env[`${venue}_FUNDING_DESTINATION_ADDRESS`]?.trim() || fallbackAddressForVenue(venue),
-  [`${venue}_FUNDING_WITHDRAWALS_ENABLED`]: "true"
+  [`${venue}_FUNDING_WITHDRAWALS_ENABLED`]: "true",
+  ...(venue === "PREDICT_FUN" && token === "USDT"
+    ? {
+        PREDICT_FUN_FUNDING_PREFERRED_CHAIN: explicitDestinationChain ?? process.env.PREDICT_FUN_FUNDING_PREFERRED_CHAIN ?? "BSC",
+        PREDICT_FUN_FUNDING_PREFERRED_CHAIN_ID: process.env.PREDICT_FUN_FUNDING_PREFERRED_CHAIN_ID ?? "56",
+        PREDICT_FUN_FUNDING_PREFERRED_TOKEN: "USDT"
+      }
+    : {})
 });
 
 const safety = (): Artifact["safety"] => ({
