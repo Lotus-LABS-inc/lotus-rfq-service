@@ -226,6 +226,14 @@ import {
   getPredictFunWithdrawalConfigFromEnv,
   PredictFunWithdrawalAdapter
 } from "../core/funding/predictfun-withdrawal-adapter.js";
+import {
+  getMyriadWithdrawalConfigFromEnv,
+  MyriadWalletWithdrawalAdapter
+} from "../core/funding/myriad-withdrawal-adapter.js";
+import {
+  getOpinionWithdrawalConfigFromEnv,
+  OpinionSafeWithdrawalAdapter
+} from "../core/funding/opinion-withdrawal-adapter.js";
 import { LifiRestClient, buildLifiClientConfigFromEnv } from "../integrations/lifi/lifi-client.js";
 
 export interface ServerDependencies {
@@ -360,6 +368,14 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const predictFunWithdrawalAdapter = predictFunWithdrawalConfig.configured
     ? new PredictFunWithdrawalAdapter(predictFunWithdrawalConfig)
     : null;
+  const myriadWithdrawalConfig = getMyriadWithdrawalConfigFromEnv(process.env);
+  const myriadWithdrawalAdapter = myriadWithdrawalConfig.configured
+    ? new MyriadWalletWithdrawalAdapter(myriadWithdrawalConfig)
+    : null;
+  const opinionWithdrawalConfig = getOpinionWithdrawalConfigFromEnv(process.env);
+  const opinionWithdrawalAdapter = opinionWithdrawalConfig.configured
+    ? new OpinionSafeWithdrawalAdapter(opinionWithdrawalConfig)
+    : null;
   const fundingService = new FundingService(
     fundingRepository,
     new LifiRestClient(buildLifiClientConfigFromEnv(process.env)),
@@ -374,7 +390,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     buildWithdrawalCompletionPersistenceGateFromEnv(process.env),
     polymarketBridgeWithdrawalAdapter,
     predictFunWithdrawalAdapter,
-    userWithdrawalWalletRepository
+    userWithdrawalWalletRepository,
+    myriadWithdrawalAdapter,
+    opinionWithdrawalAdapter
   );
   const polymarketFundingBalanceReadService = new PolymarketFundingBalanceReadService(
     buildPolymarketFundingBalanceReadConfigFromEnv(process.env)

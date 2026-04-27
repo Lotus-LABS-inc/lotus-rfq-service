@@ -307,6 +307,9 @@ Suggested fields:
 - `requiresFinalizationStep`
 - `supportsDirectDeposit`
 - `supportsWithdrawal`
+- `withdrawalMode`: `USER_SIGNED`, `AUTO_RESOLUTION_ONLY`, `PARTNER_MANAGED_BACKEND`, or `UNSUPPORTED`
+- `userSignedWithdrawalSupported`
+- `partnerManagedWithdrawal`: disabled backend/partner withdrawal metadata when a venue exposes a non-user-signed server path
 - `readinessStatus`
 - `notes`
 
@@ -1607,9 +1610,21 @@ npm run funding:limitless-sdk-auth-dry-run
 npm run funding:limitless-withdrawal-dry-run
 ```
 
-Limitless is not treated as a Polymarket Bridge clone. Official Limitless docs describe a managed server-wallet withdrawal endpoint, so the SDK auth dry-run should be used first to validate HMAC portfolio reads through the official SDK. The manual dry-run then prepares only a review-safe quote/action summary and may read portfolio history/status. Neither command may call `POST /portfolio/withdraw`, sign, broadcast, move funds, call LI.FI execution, persist completion, or enable live venue withdrawal execution.
+Limitless is not treated as a Polymarket Bridge clone. Official Limitless docs and team confirmation describe normal EOA/user-wallet payouts as native market-resolution settlement, not an explicit user-signed withdrawal API. Lotus models this as `withdrawalMode=AUTO_RESOLUTION_ONLY` and `userSignedWithdrawalSupported=false`.
 
-Boundary decision: Limitless `POST /portfolio/withdraw` is classified as `SERVER_INITIATED_WITHDRAWAL`, not `USER_AUTHORIZED_ACTION`. It must remain blocked from Lotus user endpoint wiring unless a future security/custody review explicitly approves Lotus-initiated server-wallet withdrawals or Limitless provides a documented user-authorized withdrawal flow.
+Limitless `POST /portfolio/withdraw` is represented separately as disabled `PARTNER_MANAGED_BACKEND`: partner-only, backend-initiated, HMAC-authenticated, withdrawal-scope gated, and withdrawing managed server-wallet sub-account funds to the partner address. `POST /portfolio/redeem` is also backend-initiated for redeeming winning positions after resolution. The SDK auth dry-run should be used only to validate HMAC portfolio reads through the official SDK. The manual dry-run may read portfolio history/status only. Neither command may call `POST /portfolio/withdraw`, `POST /portfolio/redeem`, sign, broadcast, move funds, call LI.FI execution, persist completion, or enable live venue withdrawal execution.
+
+Boundary decision: Limitless user mode is `AUTO_RESOLUTION_ONLY`, not `USER_AUTHORIZED_ACTION`. Partner-managed backend withdrawal must remain blocked from Lotus user endpoint wiring unless a future security/custody review explicitly approves Lotus-initiated server-wallet withdrawals or Limitless provides a documented user-authorized withdrawal flow.
+
+Partner-managed Limitless withdrawal is not approved by capability config or read-only HMAC diagnostics. The explicit approval gate is:
+
+```bash
+npm run funding:limitless-partner-managed-withdrawal-gate
+```
+
+The gate is blocked by default and emits `artifacts/funding/limitless-partner-managed-withdrawal-gate.json` and `.md`. It requires `LIMITLESS_PARTNER_MANAGED_WITHDRAWALS_ENABLED=true`, `LIMITLESS_PARTNER_MANAGED_WITHDRAWAL_APPROVAL_VENUE=LIMITLESS`, an approval id, a security/custody review id, an operator approver, and fresh approval timestamps. It does not call `POST /portfolio/withdraw`, does not call `POST /portfolio/redeem`, does not sign, does not broadcast, does not persist completion, and does not change the custody model.
+
+User-facing withdrawal routes must remain unable to trigger Limitless `POST /portfolio/withdraw` or `POST /portfolio/redeem` even if read-only Limitless HMAC config is present. A static test enforces this boundary.
 
 If the installed SDK `PortfolioFetcher.getUserHistory(1, 25)` sends a `page` query rejected by the live API, the SDK auth dry-run may fall back to the SDK `HttpClient.get('/portfolio/history?limit=25')` read. This remains an SDK-backed, HMAC-authenticated, read-only diagnostic.
 
@@ -1667,10 +1682,16 @@ Predict.fun withdrawal design is separate from Limitless. Predict.fun is classif
 Predict.fun has a disabled-by-default instruction dry-run:
 
 ```bash
+npm run funding:opinion-withdrawal-dry-run
 npm run funding:predictfun-withdrawal-dry-run
+npm run funding:myriad-withdrawal-dry-run
 ```
 
 The command emits `artifacts/funding/predictfun-withdrawal-dry-run.json` and `.md` with `status=COMPLETED`, `quotePrepared=true`, `userActionPrepared=true`, and `redactionVerified=true` when the safe instruction path is valid. It does not call Predict.fun, Privy, ZeroDev, a live withdrawal endpoint, LI.FI execution, or any venue mutation path. If explicitly enabled with `PREDICT_FUN_WITHDRAWAL_ADAPTER_ENABLED=true`, `PREDICT_FUN_WITHDRAWAL_ADAPTER_MODE=USER_WALLET_DRY_RUN`, and `PREDICT_FUN_WITHDRAWAL_ADAPTER_DRY_RUN_ONLY=true`, a single-source `PREDICT_FUN` withdrawal quote may include `routePreview.predictFunUserWallet` and sanitized `providerStatus` metadata only. Users still submit their own tx hash/reference through the existing submit endpoint after completing any wallet action outside Lotus.
+
+`funding:opinion-withdrawal-dry-run` emits `artifacts/funding/opinion-withdrawal-dry-run.json` and `.md` for the first Opinion rail: BNB Smart Chain `USDT`. It does not call Opinion, does not sign as a Gnosis Safe owner, does not broadcast, and does not persist completion. If explicitly enabled with `OPINION_WITHDRAWAL_ADAPTER_ENABLED=true`, `OPINION_WITHDRAWAL_ADAPTER_MODE=USER_SAFE_DRY_RUN`, and `OPINION_WITHDRAWAL_ADAPTER_DRY_RUN_ONLY=true`, a single-source `OPINION` withdrawal quote may include `routePreview.opinionSafeUserAction` and sanitized `providerStatus` metadata only.
+
+`funding:myriad-withdrawal-dry-run` emits `artifacts/funding/myriad-withdrawal-dry-run.json` and `.md` for the first Myriad rail: BNB Smart Chain `USD1`. It does not call Myriad or ThirdWeb, does not sign, does not broadcast, and does not persist completion. If explicitly enabled with `MYRIAD_WITHDRAWAL_ADAPTER_ENABLED=true`, `MYRIAD_WITHDRAWAL_ADAPTER_MODE=USER_WALLET_DRY_RUN`, and `MYRIAD_WITHDRAWAL_ADAPTER_DRY_RUN_ONLY=true`, a single-source `MYRIAD` withdrawal quote may include `routePreview.myriadUserWallet` and sanitized `providerStatus` metadata only. Abstract `USDC.e` is deferred to a later adapter pass.
 
 To start a controlled user-transfer rehearsal, operators can run:
 
@@ -1969,9 +1990,9 @@ This summary is read-only. It does not enable persistence, call LI.FI execution,
 
 - Polymarket: Bridge user-transfer validated; recovery-review edge case exists; not broad live execution.
 - Predict.fun: user-wallet BSC USDT path validated; requires EVM receive wallet; production-readiness gate required.
-- Limitless: blocked as `SERVER_INITIATED_WITHDRAWAL`.
-- Opinion: evidence coverage exists; live/user-authorized path not classified yet.
-- Myriad: evidence coverage exists; live/user-authorized path not classified yet.
+- Limitless: EOA/user mode is `AUTO_RESOLUTION_ONLY`; partner-managed backend withdrawal is disabled and blocked pending custody/security/operator approval.
+- Opinion: classified as `USER_SAFE_AUTHORIZED_ACTION_CANDIDATE`; requires `OpinionSafeWithdrawalAdapter` design, user-signed Gnosis Safe rehearsal, and exact completion evidence before any rollout.
+- Myriad: classified as `USER_WALLET_AUTHORIZED_ACTION_CANDIDATE`; requires `MyriadWalletWithdrawalAdapter` design, user-wallet rehearsal, and exact USD1/USDC.e completion evidence before any rollout.
 
 The validator writes:
 

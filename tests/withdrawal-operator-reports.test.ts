@@ -89,11 +89,29 @@ describe("withdrawal operator reports", () => {
       "MYRIAD"
     ]);
     expect(artifact.venues.find((row) => row.venue === "LIMITLESS")).toMatchObject({
-      classification: "SERVER_INITIATED_WITHDRAWAL",
+      classification: "AUTO_RESOLUTION_ONLY_WITH_PARTNER_MANAGED_BACKEND_BLOCKED",
+      withdrawalMode: "AUTO_RESOLUTION_ONLY",
+      partnerManagedWithdrawal: {
+        mode: "PARTNER_MANAGED_BACKEND",
+        enabled: false,
+        requiresHmacAuth: true,
+        requiresWithdrawalScope: true,
+        requiresCustodySecurityApproval: true
+      },
       executionAllowed: false
     });
     expect(artifact.venues.find((row) => row.venue === "PREDICT_FUN")).toMatchObject({
       classification: "USER_WALLET_AUTHORIZED_ACTION_CANDIDATE",
+      executionAllowed: false
+    });
+    expect(artifact.venues.find((row) => row.venue === "OPINION")).toMatchObject({
+      classification: "USER_SAFE_AUTHORIZED_ACTION_CANDIDATE",
+      rolloutStatus: "BSC_USDT_DRY_RUN_AND_EVIDENCE_GATE_REQUIRED",
+      executionAllowed: false
+    });
+    expect(artifact.venues.find((row) => row.venue === "MYRIAD")).toMatchObject({
+      classification: "USER_WALLET_AUTHORIZED_ACTION_CANDIDATE",
+      rolloutStatus: "WALLET_ACTION_DESIGN_REQUIRED",
       executionAllowed: false
     });
     expect(JSON.stringify(artifact)).not.toMatch(/authorization|privateKey|seed phrase|rawProviderPayload/i);

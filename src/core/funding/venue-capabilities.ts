@@ -26,9 +26,18 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
   const opinionPreferredChain = envValue(env, "OPINION_FUNDING_PREFERRED_CHAIN") ?? "POLYGON";
   const opinionPreferredChainId = Number.parseInt(envValue(env, "OPINION_FUNDING_PREFERRED_CHAIN_ID") ?? "137", 10);
   const opinionUsdcAddress = envValue(env, "OPINION_USDC_TOKEN_ADDRESS") ?? polygonUsdcAddress;
+  const opinionPreferredToken = envValue(env, "OPINION_FUNDING_PREFERRED_TOKEN") ?? "USDC";
+  const opinionPreferredTokenAddress = opinionPreferredToken === "USDT"
+    ? envValue(env, "OPINION_USDT_TOKEN_ADDRESS") ?? envValue(env, "OPINION_INTERNAL_WITHDRAWAL_EVIDENCE_USDT_ADDRESS") ?? bscUsdtAddress
+    : opinionUsdcAddress;
+  const opinionSourceTokenAddress = opinionPreferredToken === "USDT" ? solanaUsdtAddress : solanaUsdcAddress;
   const myriadPreferredChain = envValue(env, "MYRIAD_FUNDING_PREFERRED_CHAIN") ?? "POLYGON";
   const myriadPreferredChainId = Number.parseInt(envValue(env, "MYRIAD_FUNDING_PREFERRED_CHAIN_ID") ?? "137", 10);
   const myriadUsdcAddress = envValue(env, "MYRIAD_USDC_TOKEN_ADDRESS") ?? polygonUsdcAddress;
+  const myriadPreferredToken = envValue(env, "MYRIAD_FUNDING_PREFERRED_TOKEN") ?? "USDC";
+  const myriadPreferredTokenAddress = myriadPreferredToken === "USD1"
+    ? envValue(env, "MYRIAD_USD1_TOKEN_ADDRESS") ?? envValue(env, "MYRIAD_INTERNAL_WITHDRAWAL_EVIDENCE_USD1_ADDRESS") ?? myriadUsdcAddress
+    : myriadUsdcAddress;
   const predictFunPreferredChain = envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_CHAIN") ?? "POLYGON";
   const predictFunPreferredChainId = Number.parseInt(envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_CHAIN_ID") ?? "137", 10);
   const predictFunPreferredToken = envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_TOKEN") ?? "USDC";
@@ -54,6 +63,9 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       requiresFinalizationStep: true,
       supportsDirectDeposit: true,
       supportsWithdrawal: supportsWithdrawal("POLYMARKET"),
+      withdrawalMode: "USER_SIGNED",
+      userSignedWithdrawalSupported: true,
+      partnerManagedWithdrawal: null,
       readinessStatus: polymarketDepositAddress ? "READY" : "DISABLED",
       depositAddressConfigured: Boolean(polymarketDepositAddress),
       notes: polymarketDepositAddress
@@ -74,22 +86,33 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       autoCreditSupported: false,
       requiresFinalizationStep: true,
       supportsDirectDeposit: true,
-      supportsWithdrawal: supportsWithdrawal("LIMITLESS"),
+      supportsWithdrawal: false,
+      withdrawalMode: "AUTO_RESOLUTION_ONLY",
+      userSignedWithdrawalSupported: false,
+      partnerManagedWithdrawal: {
+        mode: "PARTNER_MANAGED_BACKEND",
+        enabled: false,
+        requiresHmacAuth: true,
+        requiresWithdrawalScope: true,
+        requiresCustodySecurityApproval: true,
+        notes: "Limitless POST /portfolio/withdraw is partner-only, HMAC-authenticated, withdrawal-scope gated, and withdraws managed server-wallet sub-account funds to the partner address. Lotus user-signed withdrawal remains unsupported."
+      },
       readinessStatus: limitlessDepositAddress ? "READY" : "DISABLED",
       depositAddressConfigured: Boolean(limitlessDepositAddress),
       notes: limitlessDepositAddress
-        ? "Limitless funding quote path is configured for Solana USDC to the operator-approved Limitless funding destination."
-        : "Set LIMITLESS_FUNDING_DESTINATION_ADDRESS before enabling Limitless funding quotes."
+        ? "Limitless funding quote path is configured. Withdrawal mode is AUTO_RESOLUTION_ONLY for EOA/user accounts; partner-managed backend withdrawal remains disabled."
+        : "Set LIMITLESS_FUNDING_DESTINATION_ADDRESS before enabling Limitless funding quotes. Limitless user-signed withdrawals are not supported."
     },
     OPINION: configurableCapability({
       venue: "OPINION",
       depositAddress: opinionDepositAddress,
       preferredChain: opinionPreferredChain,
       preferredChainId: opinionPreferredChainId,
-      preferredTokenAddress: opinionUsdcAddress,
-      sourceTokenAddressByChain: { SOLANA: solanaUsdcAddress },
+      preferredToken: opinionPreferredToken,
+      preferredTokenAddress: opinionPreferredTokenAddress,
+      sourceTokenAddressByChain: { SOLANA: opinionSourceTokenAddress },
       supportsWithdrawal: supportsWithdrawal("OPINION"),
-      configuredNote: "Opinion funding quote path is configured for Solana USDC to the operator-approved Opinion funding destination.",
+      configuredNote: `Opinion funding quote path is configured for Solana ${opinionPreferredToken} to the operator-approved Opinion funding destination.`,
       missingNote: "Set OPINION_FUNDING_DESTINATION_ADDRESS before enabling Opinion funding quotes."
     }),
     MYRIAD: configurableCapability({
@@ -97,10 +120,11 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       depositAddress: myriadDepositAddress,
       preferredChain: myriadPreferredChain,
       preferredChainId: myriadPreferredChainId,
-      preferredTokenAddress: myriadUsdcAddress,
+      preferredToken: myriadPreferredToken,
+      preferredTokenAddress: myriadPreferredTokenAddress,
       sourceTokenAddressByChain: { SOLANA: solanaUsdcAddress },
       supportsWithdrawal: supportsWithdrawal("MYRIAD"),
-      configuredNote: "Myriad funding quote path is configured for Solana USDC to the operator-approved Myriad funding destination.",
+      configuredNote: `Myriad funding quote path is configured for Solana ${myriadPreferredToken} to the operator-approved Myriad funding destination.`,
       missingNote: "Set MYRIAD_FUNDING_DESTINATION_ADDRESS before enabling Myriad funding quotes."
     }),
     PREDICT_FUN: configurableCapability({
@@ -161,6 +185,9 @@ const configurableCapability = (input: {
   requiresFinalizationStep: true,
   supportsDirectDeposit: true,
   supportsWithdrawal: input.supportsWithdrawal,
+  withdrawalMode: "USER_SIGNED",
+  userSignedWithdrawalSupported: true,
+  partnerManagedWithdrawal: null,
   readinessStatus: input.depositAddress ? "READY" : "DISABLED",
   depositAddressConfigured: Boolean(input.depositAddress),
   notes: input.depositAddress ? input.configuredNote : input.missingNote

@@ -63,6 +63,14 @@ export interface WithdrawalRolloutStatusArtifact {
   venues: Array<{
     venue: FundingVenue;
     classification: string;
+    withdrawalMode: "USER_SIGNED" | "AUTO_RESOLUTION_ONLY" | "PARTNER_MANAGED_BACKEND" | "UNSUPPORTED";
+    partnerManagedWithdrawal: {
+      mode: "PARTNER_MANAGED_BACKEND";
+      enabled: boolean;
+      requiresHmacAuth: boolean;
+      requiresWithdrawalScope: boolean;
+      requiresCustodySecurityApproval: boolean;
+    } | null;
     rolloutStatus: string;
     executionAllowed: boolean;
     notes: string[];
@@ -170,6 +178,8 @@ export const buildWithdrawalRolloutStatus = (now: Date): WithdrawalRolloutStatus
     {
       venue: "POLYMARKET",
       classification: "USER_TRANSFER_BRIDGE_VALIDATED",
+      withdrawalMode: "USER_SIGNED",
+      partnerManagedWithdrawal: null,
       rolloutStatus: "SANDBOX_VALIDATED_REVIEW_REQUIRED",
       executionAllowed: false,
       notes: [
@@ -181,6 +191,8 @@ export const buildWithdrawalRolloutStatus = (now: Date): WithdrawalRolloutStatus
     {
       venue: "PREDICT_FUN",
       classification: "USER_WALLET_AUTHORIZED_ACTION_CANDIDATE",
+      withdrawalMode: "USER_SIGNED",
+      partnerManagedWithdrawal: null,
       rolloutStatus: "BSC_USDT_EVIDENCE_VALIDATED_GATE_REQUIRED",
       executionAllowed: false,
       notes: [
@@ -191,32 +203,49 @@ export const buildWithdrawalRolloutStatus = (now: Date): WithdrawalRolloutStatus
     },
     {
       venue: "LIMITLESS",
-      classification: "SERVER_INITIATED_WITHDRAWAL",
+      classification: "AUTO_RESOLUTION_ONLY_WITH_PARTNER_MANAGED_BACKEND_BLOCKED",
+      withdrawalMode: "AUTO_RESOLUTION_ONLY",
+      partnerManagedWithdrawal: {
+        mode: "PARTNER_MANAGED_BACKEND",
+        enabled: false,
+        requiresHmacAuth: true,
+        requiresWithdrawalScope: true,
+        requiresCustodySecurityApproval: true
+      },
       rolloutStatus: "BLOCKED_SECURITY_CUSTODY_REVIEW_REQUIRED",
       executionAllowed: false,
       notes: [
-        "Documented withdraw path is server-initiated.",
-        "Blocked from user endpoint wiring and completion persistence."
+        "EOA/user-wallet mode does not expose a normal user-signed withdrawal API.",
+        "Resolved-market payouts settle automatically on-chain through native Limitless mechanics.",
+        "Documented POST /portfolio/withdraw path is partner-managed, backend-initiated, HMAC-authenticated, and withdrawal-scope gated.",
+        "Partner-managed withdrawal is disabled and blocked from user endpoint wiring and completion persistence."
       ]
     },
     {
       venue: "OPINION",
-      classification: "UNCLASSIFIED_WITHDRAWAL_PATH",
-      rolloutStatus: "READ_ONLY_EVIDENCE_COVERAGE_ONLY",
+      classification: "USER_SAFE_AUTHORIZED_ACTION_CANDIDATE",
+      withdrawalMode: "USER_SIGNED",
+      partnerManagedWithdrawal: null,
+      rolloutStatus: "BSC_USDT_DRY_RUN_AND_EVIDENCE_GATE_REQUIRED",
       executionAllowed: false,
       notes: [
-        "Evidence coverage exists.",
-        "Live/user-authorized withdrawal path not classified yet."
+        "Official Builder Mode docs describe user-controlled Gnosis Safe signing.",
+        "OpinionSafeWithdrawalAdapter dry-run supports BSC USDT user-action instructions.",
+        "Requires controlled user-signed Safe rehearsal and evidence gate review before rollout.",
+        "No backend Safe owner signing or backend broadcast."
       ]
     },
     {
       venue: "MYRIAD",
-      classification: "UNCLASSIFIED_WITHDRAWAL_PATH",
-      rolloutStatus: "READ_ONLY_EVIDENCE_COVERAGE_ONLY",
+      classification: "USER_WALLET_AUTHORIZED_ACTION_CANDIDATE",
+      withdrawalMode: "USER_SIGNED",
+      partnerManagedWithdrawal: null,
+      rolloutStatus: "WALLET_ACTION_DESIGN_REQUIRED",
       executionAllowed: false,
       notes: [
-        "Evidence coverage exists.",
-        "Live/user-authorized withdrawal path not classified yet."
+        "Official docs describe a non-custodial ThirdWeb wallet model.",
+        "Requires MyriadWalletWithdrawalAdapter design and controlled user-wallet rehearsal.",
+        "No backend private-key handling or backend broadcast."
       ]
     }
   ],
@@ -256,10 +285,10 @@ export const renderWithdrawalRolloutStatusMarkdown = (artifact: WithdrawalRollou
   `- Status: ${artifact.status}`,
   `- Generated at: ${artifact.generatedAt}`,
   "",
-  "| Venue | Classification | Rollout Status | Execution Allowed | Notes |",
-  "|---|---|---|---|---|",
+  "| Venue | Classification | Withdrawal Mode | Partner Managed | Rollout Status | Execution Allowed | Notes |",
+  "|---|---|---|---|---|---|---|",
   ...artifact.venues.map((row) =>
-    `| ${row.venue} | ${row.classification} | ${row.rolloutStatus} | ${row.executionAllowed} | ${row.notes.join("; ")} |`
+    `| ${row.venue} | ${row.classification} | ${row.withdrawalMode} | ${row.partnerManagedWithdrawal ? `${row.partnerManagedWithdrawal.mode} enabled=${row.partnerManagedWithdrawal.enabled}` : "none"} | ${row.rolloutStatus} | ${row.executionAllowed} | ${row.notes.join("; ")} |`
   ),
   "",
   "This report is read-only and does not call evidence services, venue APIs, LI.FI, or mutate the database."

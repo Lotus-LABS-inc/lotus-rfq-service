@@ -414,6 +414,168 @@ describe("Limitless internal withdrawal evidence read service", () => {
     });
   });
 
+  it("maps Myriad BSC USD1 destination evidence to completed only after confirmations", async () => {
+    const service = new InternalWithdrawalEvidenceReadService({
+      env: {
+        MYRIAD_INTERNAL_WITHDRAWAL_EVIDENCE_READ_ENABLED: "true",
+        MYRIAD_INTERNAL_WITHDRAWAL_EVIDENCE_READ_MODE: "BSC_ONCHAIN",
+        MYRIAD_INTERNAL_WITHDRAWAL_EVIDENCE_BSC_RPC_URL: "https://bsc.example/rpc",
+        MYRIAD_INTERNAL_WITHDRAWAL_EVIDENCE_USD1_ADDRESS: "0x1111111111111111111111111111111111111111",
+        MYRIAD_WITHDRAWAL_MIN_CONFIRMATIONS: "2"
+      } as NodeJS.ProcessEnv,
+      fetchImpl: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as { method: string };
+        if (body.method === "eth_blockNumber") {
+          return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x65" }));
+        }
+        return new Response(JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            status: "0x1",
+            blockNumber: "0x64",
+            logs: [{
+              address: "0x1111111111111111111111111111111111111111",
+              topics: [
+                "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                "0x000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "0x0000000000000000000000005c2a7bf969c813dd79587b6aada5877476281072"
+              ],
+              data: "0x0000000000000000000000000000000000000000000000022b1c8c1227a00000",
+              blockTimestamp: "0x69ee6dae"
+            }]
+          }
+        }));
+      }
+    });
+
+    const result = await service.readEvidence({
+      userId: "user-1",
+      withdrawalIntentId: "withdrawal-1",
+      withdrawalRouteLegId: "leg-1",
+      sourceVenue: "MYRIAD",
+      withdrawalTxHash: "0x1753a9a83088a8ffe1934dc81d9e283123025f74e885febc82e8b8684169db6f"
+    });
+
+    expect(result).toMatchObject({
+      sourceVenue: "MYRIAD",
+      status: "COMPLETED",
+      venueReleased: true,
+      destinationReceived: true,
+      completed: true,
+      destinationChain: "BSC",
+      destinationWalletAddress: "0x5c2a7bf969c813dd79587b6aada5877476281072",
+      token: "USD1",
+      amount: "40",
+      confirmations: 2,
+      reason: "MYRIAD_WITHDRAWAL_BSC_USD1_DESTINATION_CONFIRMED"
+    });
+  });
+
+  it("fails closed when Myriad BSC evidence has no USD1 transfer", async () => {
+    const service = new InternalWithdrawalEvidenceReadService({
+      env: {
+        MYRIAD_INTERNAL_WITHDRAWAL_EVIDENCE_READ_ENABLED: "true",
+        MYRIAD_INTERNAL_WITHDRAWAL_EVIDENCE_READ_MODE: "BSC_ONCHAIN",
+        MYRIAD_INTERNAL_WITHDRAWAL_EVIDENCE_BSC_RPC_URL: "https://bsc.example/rpc",
+        MYRIAD_INTERNAL_WITHDRAWAL_EVIDENCE_USD1_ADDRESS: "0x1111111111111111111111111111111111111111"
+      } as NodeJS.ProcessEnv,
+      fetchImpl: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as { method: string };
+        if (body.method === "eth_blockNumber") {
+          return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x65" }));
+        }
+        return new Response(JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            status: "0x1",
+            blockNumber: "0x64",
+            logs: [{
+              address: "0x0000000000000000000000000000000000000000",
+              topics: [
+                "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                "0x000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "0x0000000000000000000000005c2a7bf969c813dd79587b6aada5877476281072"
+              ],
+              data: "0x0000000000000000000000000000000000000000000000000000000002625a00"
+            }]
+          }
+        }));
+      }
+    });
+
+    await expect(service.readEvidence({
+      userId: "user-1",
+      withdrawalIntentId: "withdrawal-1",
+      withdrawalRouteLegId: "leg-1",
+      sourceVenue: "MYRIAD",
+      withdrawalTxHash: "0x1753a9a83088a8ffe1934dc81d9e283123025f74e885febc82e8b8684169db6f"
+    })).resolves.toMatchObject({
+      status: "UNKNOWN",
+      completed: false,
+      reason: "MYRIAD_WITHDRAWAL_BSC_USD1_TRANSFER_NOT_FOUND"
+    });
+  });
+
+  it("maps Opinion BSC USDT destination evidence to completed only after confirmations", async () => {
+    const service = new InternalWithdrawalEvidenceReadService({
+      env: {
+        OPINION_INTERNAL_WITHDRAWAL_EVIDENCE_READ_ENABLED: "true",
+        OPINION_INTERNAL_WITHDRAWAL_EVIDENCE_READ_MODE: "BSC_ONCHAIN",
+        OPINION_INTERNAL_WITHDRAWAL_EVIDENCE_BSC_RPC_URL: "https://bsc.example/rpc",
+        OPINION_INTERNAL_WITHDRAWAL_EVIDENCE_USDT_ADDRESS: "0x55d398326f99059fF775485246999027B3197955",
+        OPINION_WITHDRAWAL_MIN_CONFIRMATIONS: "2"
+      } as NodeJS.ProcessEnv,
+      fetchImpl: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as { method: string };
+        if (body.method === "eth_blockNumber") {
+          return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x65" }));
+        }
+        return new Response(JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            status: "0x1",
+            blockNumber: "0x64",
+            logs: [{
+              address: "0x55d398326f99059fF775485246999027B3197955",
+              topics: [
+                "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                "0x00000000000000000000000040bbccb7d226d62273f0ce415634b8f91a6cafc4",
+                "0x0000000000000000000000005c2a7bf969c813dd79587b6aada5877476281072"
+              ],
+              data: "0x0000000000000000000000000000000000000000000000005df3df2189650000",
+              blockTimestamp: "0x69ee6dae"
+            }]
+          }
+        }));
+      }
+    });
+
+    const result = await service.readEvidence({
+      userId: "user-1",
+      withdrawalIntentId: "withdrawal-1",
+      withdrawalRouteLegId: "leg-1",
+      sourceVenue: "OPINION",
+      withdrawalTxHash: "0xb4718cf1f5bf6f1332dcc5ef4c8534668dd2765329d317b64d413b173b8bdb35"
+    });
+
+    expect(result).toMatchObject({
+      sourceVenue: "OPINION",
+      status: "COMPLETED",
+      venueReleased: true,
+      destinationReceived: true,
+      completed: true,
+      destinationChain: "BSC",
+      destinationWalletAddress: "0x5c2a7bf969c813dd79587b6aada5877476281072",
+      token: "USDT",
+      amount: "6.77",
+      confirmations: 2,
+      reason: "OPINION_WITHDRAWAL_BSC_USDT_DESTINATION_CONFIRMED"
+    });
+  });
+
   it("requires fresh non-synthetic read-only smoke evidence before completion persistence", () => {
     const blockers: string[] = [];
     validateWithdrawalEvidenceSmokeArtifact({

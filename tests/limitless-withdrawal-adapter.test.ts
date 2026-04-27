@@ -49,6 +49,27 @@ describe("Limitless withdrawal adapter dry-run/read-status", () => {
     });
   });
 
+  it("classifies Limitless as auto-resolution-only with disabled partner-managed backend withdrawal", () => {
+    const adapter = new LimitlessWithdrawalAdapter(new MockLimitlessWithdrawalClient(), enabledConfig);
+
+    expect(adapter.getWithdrawalCapabilities()).toMatchObject({
+      venue: "LIMITLESS",
+      supportsWithdrawal: false,
+      withdrawalMode: "AUTO_RESOLUTION_ONLY",
+      userSignedWithdrawalSupported: false,
+      partnerManagedWithdrawal: {
+        mode: "PARTNER_MANAGED_BACKEND",
+        enabled: false,
+        requiresHmacAuth: true,
+        requiresWithdrawalScope: true,
+        requiresCustodySecurityApproval: true
+      },
+      supportsApiInitiatedWithdrawal: false,
+      supportsUserBroadcastReference: false,
+      requiresUserSignature: false
+    });
+  });
+
   it("prepares review-only quote and user action without provider internals", async () => {
     const adapter = new LimitlessWithdrawalAdapter(new MockLimitlessWithdrawalClient(), enabledConfig, {
       now: () => new Date("2026-04-26T00:00:00.000Z")

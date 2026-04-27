@@ -69,6 +69,15 @@ const withdrawalLegStates = [
 
 export type WithdrawalLegState = (typeof withdrawalLegStates)[number];
 
+const withdrawalCapabilityModes = [
+  "USER_SIGNED",
+  "AUTO_RESOLUTION_ONLY",
+  "PARTNER_MANAGED_BACKEND",
+  "UNSUPPORTED"
+] as const;
+
+export type WithdrawalCapabilityMode = (typeof withdrawalCapabilityModes)[number];
+
 const fundingAuditEventTypes = [
   "FUNDING_INTENT_CREATED",
   "FUNDING_ROUTES_QUOTED",
@@ -242,6 +251,16 @@ const VenueCapabilitySchema = z.object({
   requiresFinalizationStep: z.boolean(),
   supportsDirectDeposit: z.boolean(),
   supportsWithdrawal: z.boolean(),
+  withdrawalMode: z.enum(withdrawalCapabilityModes),
+  userSignedWithdrawalSupported: z.boolean(),
+  partnerManagedWithdrawal: z.object({
+    mode: z.literal("PARTNER_MANAGED_BACKEND"),
+    enabled: z.boolean(),
+    requiresHmacAuth: z.boolean(),
+    requiresWithdrawalScope: z.boolean(),
+    requiresCustodySecurityApproval: z.boolean(),
+    notes: z.string()
+  }).nullable(),
   readinessStatus: z.enum(["READY", "DISABLED", "PLANNED", "UNKNOWN"]),
   depositAddressConfigured: z.boolean(),
   notes: z.string()

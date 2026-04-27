@@ -121,7 +121,16 @@ export class LimitlessWithdrawalAdapter {
   public getWithdrawalCapabilities(): {
     venue: "LIMITLESS";
     supportsWithdrawal: boolean;
-    supportsApiInitiatedWithdrawal: true;
+    withdrawalMode: "AUTO_RESOLUTION_ONLY";
+    userSignedWithdrawalSupported: false;
+    partnerManagedWithdrawal: {
+      mode: "PARTNER_MANAGED_BACKEND";
+      enabled: false;
+      requiresHmacAuth: true;
+      requiresWithdrawalScope: true;
+      requiresCustodySecurityApproval: true;
+    };
+    supportsApiInitiatedWithdrawal: false;
     supportsUserBroadcastReference: false;
     requiresUserSignature: false;
     requiresVenueAuth: boolean;
@@ -130,15 +139,25 @@ export class LimitlessWithdrawalAdapter {
   } {
     return {
       venue: "LIMITLESS",
-      supportsWithdrawal: this.config.enabled,
-      supportsApiInitiatedWithdrawal: true,
+      supportsWithdrawal: false,
+      withdrawalMode: "AUTO_RESOLUTION_ONLY",
+      userSignedWithdrawalSupported: false,
+      partnerManagedWithdrawal: {
+        mode: "PARTNER_MANAGED_BACKEND",
+        enabled: false,
+        requiresHmacAuth: true,
+        requiresWithdrawalScope: true,
+        requiresCustodySecurityApproval: true
+      },
+      supportsApiInitiatedWithdrawal: false,
       supportsUserBroadcastReference: false,
       requiresUserSignature: false,
       requiresVenueAuth: this.config.authMode !== "NONE",
       readinessStatus: !this.config.enabled ? "DISABLED" : this.config.configured ? "DRY_RUN_READY" : "NOT_CONFIGURED",
       notes: [
-        "Dry-run/read-status only. The documented server-wallet withdraw endpoint is not called.",
-        "Live withdrawal execution requires a separate security review and explicit operator approval."
+        "EOA/user mode is AUTO_RESOLUTION_ONLY; normal user-signed withdrawal is not supported.",
+        "Dry-run/read-status only. The documented server-wallet withdraw/redeem endpoints are not called.",
+        "Partner-managed backend withdrawal requires a separate custody/security review and explicit operator approval."
       ]
     };
   }

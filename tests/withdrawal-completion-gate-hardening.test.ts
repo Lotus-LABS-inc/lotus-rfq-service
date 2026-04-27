@@ -90,6 +90,55 @@ describe("withdrawal completion persistence gate hardening", () => {
     expect(blockers).toContain("Predict.fun withdrawal evidence amount must be greater than or equal to the selected withdrawal amount.");
   });
 
+  it("requires exact Myriad BSC USD1 evidence fields", () => {
+    const blockers: string[] = [];
+    validateWithdrawalEvidenceSmokeArtifact({
+      ...validMyriadArtifact(),
+      evidenceResult: {
+        ...validMyriadArtifact().evidenceResult!,
+        destinationChain: "ABSTRACT",
+        token: "USDC.e",
+        amount: "1"
+      }
+    }, {
+      venue: "MYRIAD",
+      approvedHosts: ["127.0.0.1:4012"],
+      maxAgeHours: 24,
+      now,
+      blockers
+    });
+
+    expect(blockers).toContain("Artifact completion evidence destination chain must match the selected withdrawal.");
+    expect(blockers).toContain("Myriad withdrawal evidence must be for destinationChain=BSC.");
+    expect(blockers).toContain("Myriad withdrawal evidence must be for token=USD1.");
+    expect(blockers).toContain("Myriad withdrawal evidence amount must be greater than or equal to the selected withdrawal amount.");
+  });
+
+  it("requires exact Opinion BSC USDT evidence fields", () => {
+    const blockers: string[] = [];
+    validateWithdrawalEvidenceSmokeArtifact({
+      ...validOpinionArtifact(),
+      evidenceResult: {
+        ...validOpinionArtifact().evidenceResult!,
+        destinationChain: "POLYGON",
+        token: "USDC",
+        amount: "1"
+      }
+    }, {
+      venue: "OPINION",
+      approvedHosts: ["127.0.0.1:4012"],
+      maxAgeHours: 24,
+      now,
+      blockers
+    });
+
+    expect(blockers).toContain("Artifact completion evidence destination chain must match the selected withdrawal.");
+    expect(blockers).toContain("Opinion withdrawal evidence must be for destinationChain=BSC.");
+    expect(blockers).toContain("Opinion withdrawal evidence must be for token=USDT.");
+    expect(blockers).toContain("Opinion withdrawal evidence amount must be greater than or equal to the selected withdrawal amount.");
+  });
+
+
   it("rejects persistence when more than one venue is enabled", async () => {
     const dir = await mkdtemp(join(tmpdir(), "withdrawal-gate-"));
     const artifactPath = join(dir, "predict-fun-withdrawal-evidence-smoke-test.json");
@@ -162,6 +211,106 @@ const validPredictFunArtifact = (): WithdrawalEvidenceSmokeArtifact => ({
     evidence: {
       confirmations: 12,
       source: "predict_fun_withdrawal_evidence"
+    }
+  },
+  mappingObserved: "COMPLETED",
+  redactionVerified: true,
+  blockers: []
+});
+
+const validMyriadArtifact = (): WithdrawalEvidenceSmokeArtifact => ({
+  generatedAt: "2026-04-27T00:00:00.000Z",
+  venue: "MYRIAD",
+  status: "COMPLETED",
+  readOnly: true,
+  persistedCompletionResult: false,
+  reconciliationRecordsBefore: 0,
+  reconciliationRecordsAfter: 0,
+  liveLifiExecutionEnabled: false,
+  fundingPreflightEnforcementEnabled: false,
+  liveVenueWithdrawalExecutionEnabled: false,
+  backendBroadcastedTransaction: false,
+  backendSignedTransaction: false,
+  config: {
+    mode: "LIVE_READ",
+    configured: true,
+    evidenceUrlConfigured: true,
+    evidenceUrlHost: "127.0.0.1:4012",
+    authMode: "NONE",
+    apiKeyConfigured: false,
+    minimumConfirmations: 1
+  },
+  selectedWithdrawal: {
+    synthetic: false,
+    sourceVenue: "MYRIAD",
+    withdrawalTxHash: "0xabc",
+    destinationChain: "BSC",
+    destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+    requiredAmount: "40"
+  },
+  evidenceResult: {
+    status: "COMPLETED",
+    venueReleased: true,
+    destinationReceived: true,
+    completed: true,
+    withdrawalTxHash: "0xabc",
+    destinationChain: "BSC",
+    destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+    token: "USD1",
+    amount: "40",
+    evidence: {
+      confirmations: 12,
+      source: "myriad_withdrawal_evidence"
+    }
+  },
+  mappingObserved: "COMPLETED",
+  redactionVerified: true,
+  blockers: []
+});
+
+const validOpinionArtifact = (): WithdrawalEvidenceSmokeArtifact => ({
+  generatedAt: "2026-04-27T00:00:00.000Z",
+  venue: "OPINION",
+  status: "COMPLETED",
+  readOnly: true,
+  persistedCompletionResult: false,
+  reconciliationRecordsBefore: 0,
+  reconciliationRecordsAfter: 0,
+  liveLifiExecutionEnabled: false,
+  fundingPreflightEnforcementEnabled: false,
+  liveVenueWithdrawalExecutionEnabled: false,
+  backendBroadcastedTransaction: false,
+  backendSignedTransaction: false,
+  config: {
+    mode: "LIVE_READ",
+    configured: true,
+    evidenceUrlConfigured: true,
+    evidenceUrlHost: "127.0.0.1:4012",
+    authMode: "NONE",
+    apiKeyConfigured: false,
+    minimumConfirmations: 1
+  },
+  selectedWithdrawal: {
+    synthetic: false,
+    sourceVenue: "OPINION",
+    withdrawalTxHash: "0xabc",
+    destinationChain: "BSC",
+    destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+    requiredAmount: "6.77"
+  },
+  evidenceResult: {
+    status: "COMPLETED",
+    venueReleased: true,
+    destinationReceived: true,
+    completed: true,
+    withdrawalTxHash: "0xabc",
+    destinationChain: "BSC",
+    destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+    token: "USDT",
+    amount: "6.77",
+    evidence: {
+      confirmations: 12,
+      source: "opinion_withdrawal_evidence"
     }
   },
   mappingObserved: "COMPLETED",

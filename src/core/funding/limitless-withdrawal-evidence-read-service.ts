@@ -57,6 +57,7 @@ export interface InternalWithdrawalEvidenceReadServiceConfig {
   bridgeStatusBaseUrl?: string | undefined;
   usdcTokenAddress?: string | undefined;
   usdtTokenAddress?: string | undefined;
+  usd1TokenAddress?: string | undefined;
   minimumConfirmations?: number | undefined;
   fetchImpl?: typeof fetch | undefined;
   env?: NodeJS.ProcessEnv | undefined;
@@ -100,6 +101,7 @@ export const buildInternalWithdrawalEvidenceReadConfigFromEnv = (
   bridgeStatusBaseUrl: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_BRIDGE_STATUS_BASE_URL`],
   usdcTokenAddress: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_USDC_ADDRESS`],
   usdtTokenAddress: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_USDT_ADDRESS`],
+  usd1TokenAddress: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_USD1_ADDRESS`],
   minimumConfirmations: positiveInt(env[`${venue}_WITHDRAWAL_MIN_CONFIRMATIONS`], 1),
   env
 });
@@ -125,7 +127,9 @@ export class InternalWithdrawalEvidenceReadService {
       ),
       fixturePathConfigured: nonEmpty(resolved.fixturePath),
       onchainConfigured: (resolved.readMode === "POLYGON_ONCHAIN" && nonEmpty(resolved.polygonRpcUrl)) ||
-        (resolved.readMode === "BSC_ONCHAIN" && nonEmpty(resolved.bscRpcUrl)),
+        (resolved.readMode === "BSC_ONCHAIN" && nonEmpty(resolved.bscRpcUrl) && (
+          venue !== "MYRIAD" || nonEmpty(resolved.usd1TokenAddress)
+        )),
       readMode: resolved.readMode,
       credentialsServerSideOnly: true
     };
@@ -163,6 +167,30 @@ export class InternalWithdrawalEvidenceReadService {
       });
     }
 
+    if (input.sourceVenue === "OPINION" && resolved.readMode === "BSC_ONCHAIN") {
+      if (!resolved.bscRpcUrl) {
+        throw new LimitlessWithdrawalEvidenceReadNotConfiguredError("OPINION BSC USDT withdrawal evidence RPC URL is not configured.");
+      }
+      return this.readOpinionBscOnchainEvidence(input, {
+        bscRpcUrl: resolved.bscRpcUrl,
+        usdtTokenAddress: resolved.usdtTokenAddress,
+        minimumConfirmations: resolved.minimumConfirmations,
+        fetchImpl: resolved.fetchImpl
+      });
+    }
+
+    if (input.sourceVenue === "MYRIAD" && resolved.readMode === "BSC_ONCHAIN") {
+      if (!resolved.bscRpcUrl || !resolved.usd1TokenAddress) {
+        throw new LimitlessWithdrawalEvidenceReadNotConfiguredError("MYRIAD BSC USD1 withdrawal evidence RPC URL or token address is not configured.");
+      }
+      return this.readMyriadBscOnchainEvidence(input, {
+        bscRpcUrl: resolved.bscRpcUrl,
+        usd1TokenAddress: resolved.usd1TokenAddress,
+        minimumConfirmations: resolved.minimumConfirmations,
+        fetchImpl: resolved.fetchImpl
+      });
+    }
+
     if (!resolved.fixturePath) {
       throw new LimitlessWithdrawalEvidenceReadNotConfiguredError(`${input.sourceVenue} withdrawal evidence fixture path is not configured.`);
     }
@@ -184,6 +212,7 @@ export class InternalWithdrawalEvidenceReadService {
     bridgeStatusBaseUrl?: string | undefined;
     usdcTokenAddress: string;
     usdtTokenAddress: string;
+    usd1TokenAddress?: string | undefined;
     minimumConfirmations: number;
     fetchImpl: typeof fetch;
   } {
@@ -197,6 +226,7 @@ export class InternalWithdrawalEvidenceReadService {
         bridgeStatusBaseUrl: this.config.bridgeStatusBaseUrl,
         usdcTokenAddress: this.config.usdcTokenAddress ?? POLYGON_USDC_TOKEN_ADDRESS,
         usdtTokenAddress: this.config.usdtTokenAddress ?? BSC_USDT_TOKEN_ADDRESS,
+        usd1TokenAddress: this.config.usd1TokenAddress,
         minimumConfirmations: this.config.minimumConfirmations ?? 1,
         fetchImpl: this.config.fetchImpl ?? fetch
       };
@@ -211,6 +241,7 @@ export class InternalWithdrawalEvidenceReadService {
       bridgeStatusBaseUrl: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_BRIDGE_STATUS_BASE_URL`],
       usdcTokenAddress: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_USDC_ADDRESS`] ?? POLYGON_USDC_TOKEN_ADDRESS,
       usdtTokenAddress: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_USDT_ADDRESS`] ?? BSC_USDT_TOKEN_ADDRESS,
+      usd1TokenAddress: env[`${venue}_INTERNAL_WITHDRAWAL_EVIDENCE_USD1_ADDRESS`],
       minimumConfirmations: positiveInt(env[`${venue}_WITHDRAWAL_MIN_CONFIRMATIONS`], 1),
       fetchImpl: this.config.fetchImpl ?? fetch
     };
@@ -429,6 +460,162 @@ export class InternalWithdrawalEvidenceReadService {
         : "PREDICT_FUN_WITHDRAWAL_BSC_CONFIRMATIONS_PENDING"
     };
   }
+
+  private async readMyriadBscOnchainEvidence(
+    input: InternalWithdrawalEvidenceReadInput,
+    config: {
+      bscRpcUrl: string;
+      usd1TokenAddress: string;
+      minimumConfirmations: number;
+      fetchImpl: typeof fetch;
+    }
+  ): Promise<InternalWithdrawalEvidenceReadOutput> {
+    const receipt = await rpcCall({
+      rpcUrl: config.bscRpcUrl,
+      fetchImpl: config.fetchImpl,
+      chainName: "BSC"
+    }, "eth_getTransactionReceipt", [input.withdrawalTxHash]);
+    if (!isRecord(receipt)) {
+      return {
+        sourceVenue: input.sourceVenue,
+        withdrawalTxHash: input.withdrawalTxHash,
+        status: "PENDING",
+        venueReleased: false,
+        destinationReceived: false,
+        completed: false,
+        reason: "MYRIAD_WITHDRAWAL_BSC_RECEIPT_PENDING"
+      };
+    }
+    if (stringValue(receipt.status) !== "0x1") {
+      return {
+        sourceVenue: input.sourceVenue,
+        withdrawalTxHash: input.withdrawalTxHash,
+        status: "FAILED",
+        venueReleased: false,
+        destinationReceived: false,
+        completed: false,
+        reason: "MYRIAD_WITHDRAWAL_BSC_TX_FAILED"
+      };
+    }
+    const transfer = findErc20Transfer(receipt, config.usd1TokenAddress, 18);
+    if (!transfer) {
+      return {
+        sourceVenue: input.sourceVenue,
+        withdrawalTxHash: input.withdrawalTxHash,
+        status: "UNKNOWN",
+        venueReleased: false,
+        destinationReceived: false,
+        completed: false,
+        reason: "MYRIAD_WITHDRAWAL_BSC_USD1_TRANSFER_NOT_FOUND"
+      };
+    }
+    const currentBlockHex = await rpcCall({
+      rpcUrl: config.bscRpcUrl,
+      fetchImpl: config.fetchImpl,
+      chainName: "BSC"
+    }, "eth_blockNumber", []);
+    const currentBlock = hexToBigInt(stringValue(currentBlockHex));
+    const txBlock = hexToBigInt(stringValue(receipt.blockNumber));
+    const confirmations = currentBlock !== null && txBlock !== null && currentBlock >= txBlock
+      ? Number(currentBlock - txBlock + 1n)
+      : 0;
+    const enoughConfirmations = confirmations >= config.minimumConfirmations;
+    return {
+      sourceVenue: input.sourceVenue,
+      withdrawalTxHash: input.withdrawalTxHash,
+      status: enoughConfirmations ? "COMPLETED" : "DESTINATION_RECEIVED",
+      venueReleased: enoughConfirmations,
+      destinationReceived: true,
+      completed: enoughConfirmations,
+      destinationChain: "BSC",
+      destinationWalletAddress: transfer.to,
+      token: "USD1",
+      amount: transfer.amount,
+      confirmations,
+      ...(stringValue(transfer.observedAt) ? { observedAt: transfer.observedAt } : {}),
+      reason: enoughConfirmations
+        ? "MYRIAD_WITHDRAWAL_BSC_USD1_DESTINATION_CONFIRMED"
+        : "MYRIAD_WITHDRAWAL_BSC_CONFIRMATIONS_PENDING"
+    };
+  }
+
+  private async readOpinionBscOnchainEvidence(
+    input: InternalWithdrawalEvidenceReadInput,
+    config: {
+      bscRpcUrl: string;
+      usdtTokenAddress: string;
+      minimumConfirmations: number;
+      fetchImpl: typeof fetch;
+    }
+  ): Promise<InternalWithdrawalEvidenceReadOutput> {
+    const receipt = await rpcCall({
+      rpcUrl: config.bscRpcUrl,
+      fetchImpl: config.fetchImpl,
+      chainName: "BSC"
+    }, "eth_getTransactionReceipt", [input.withdrawalTxHash]);
+    if (!isRecord(receipt)) {
+      return {
+        sourceVenue: input.sourceVenue,
+        withdrawalTxHash: input.withdrawalTxHash,
+        status: "PENDING",
+        venueReleased: false,
+        destinationReceived: false,
+        completed: false,
+        reason: "OPINION_WITHDRAWAL_BSC_RECEIPT_PENDING"
+      };
+    }
+    if (stringValue(receipt.status) !== "0x1") {
+      return {
+        sourceVenue: input.sourceVenue,
+        withdrawalTxHash: input.withdrawalTxHash,
+        status: "FAILED",
+        venueReleased: false,
+        destinationReceived: false,
+        completed: false,
+        reason: "OPINION_WITHDRAWAL_BSC_TX_FAILED"
+      };
+    }
+    const transfer = findErc20Transfer(receipt, config.usdtTokenAddress, 18);
+    if (!transfer) {
+      return {
+        sourceVenue: input.sourceVenue,
+        withdrawalTxHash: input.withdrawalTxHash,
+        status: "UNKNOWN",
+        venueReleased: false,
+        destinationReceived: false,
+        completed: false,
+        reason: "OPINION_WITHDRAWAL_BSC_USDT_TRANSFER_NOT_FOUND"
+      };
+    }
+    const currentBlockHex = await rpcCall({
+      rpcUrl: config.bscRpcUrl,
+      fetchImpl: config.fetchImpl,
+      chainName: "BSC"
+    }, "eth_blockNumber", []);
+    const currentBlock = hexToBigInt(stringValue(currentBlockHex));
+    const txBlock = hexToBigInt(stringValue(receipt.blockNumber));
+    const confirmations = currentBlock !== null && txBlock !== null && currentBlock >= txBlock
+      ? Number(currentBlock - txBlock + 1n)
+      : 0;
+    const enoughConfirmations = confirmations >= config.minimumConfirmations;
+    return {
+      sourceVenue: input.sourceVenue,
+      withdrawalTxHash: input.withdrawalTxHash,
+      status: enoughConfirmations ? "COMPLETED" : "DESTINATION_RECEIVED",
+      venueReleased: enoughConfirmations,
+      destinationReceived: true,
+      completed: enoughConfirmations,
+      destinationChain: "BSC",
+      destinationWalletAddress: transfer.to,
+      token: "USDT",
+      amount: transfer.amount,
+      confirmations,
+      ...(stringValue(transfer.observedAt) ? { observedAt: transfer.observedAt } : {}),
+      reason: enoughConfirmations
+        ? "OPINION_WITHDRAWAL_BSC_USDT_DESTINATION_CONFIRMED"
+        : "OPINION_WITHDRAWAL_BSC_CONFIRMATIONS_PENDING"
+    };
+  }
 }
 
 export class LimitlessWithdrawalEvidenceReadService extends InternalWithdrawalEvidenceReadService {
@@ -572,7 +759,8 @@ const findUsdcTransfer = (
 
 const findErc20Transfer = (
   receipt: Record<string, unknown>,
-  tokenAddress: string
+  tokenAddress: string,
+  tokenDecimals = 6
 ): { from: string; to: string; amount: string; observedAt?: string } | null => {
   const logs = Array.isArray(receipt.logs) ? receipt.logs.filter(isRecord) : [];
   for (const log of logs) {
@@ -583,7 +771,7 @@ const findErc20Transfer = (
     }
     const from = addressFromTopic(typeof topics[1] === "string" ? topics[1] : undefined);
     const to = addressFromTopic(typeof topics[2] === "string" ? topics[2] : undefined);
-    const amount = amountFromUsdcData(stringValue(log.data));
+    const amount = amountFromErc20Data(stringValue(log.data), tokenDecimals);
     if (from && to && amount) {
       const parsed = {
         from,
@@ -604,17 +792,21 @@ const addressFromTopic = (topic: string | undefined): string | null => {
   return `0x${topic.slice(-40)}`;
 };
 
-const amountFromUsdcData = (data: string | undefined): string | null => {
+const amountFromErc20Data = (data: string | undefined, decimals: number): string | null => {
   const value = hexToBigInt(data);
   if (value === null) {
     return null;
   }
-  const units = value / 1_000_000n;
-  const remainder = value % 1_000_000n;
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 36) {
+    return null;
+  }
+  const divisor = 10n ** BigInt(decimals);
+  const units = value / divisor;
+  const remainder = value % divisor;
   if (remainder === 0n) {
     return units.toString();
   }
-  return `${units.toString()}.${remainder.toString().padStart(6, "0").replace(/0+$/, "")}`;
+  return `${units.toString()}.${remainder.toString().padStart(decimals, "0").replace(/0+$/, "")}`;
 };
 
 const hexToBigInt = (value: string | undefined): bigint | null => {

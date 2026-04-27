@@ -46,6 +46,18 @@ import {
   type PredictFunWithdrawalAdapter,
   type PredictFunWithdrawalQuote
 } from "./predictfun-withdrawal-adapter.js";
+import {
+  buildMyriadUserWalletProviderStatus,
+  type MyriadUserWalletAction,
+  type MyriadWalletWithdrawalAdapter,
+  type MyriadWithdrawalQuote
+} from "./myriad-withdrawal-adapter.js";
+import {
+  buildOpinionSafeUserActionProviderStatus,
+  type OpinionSafeUserAction,
+  type OpinionSafeWithdrawalAdapter,
+  type OpinionWithdrawalQuote
+} from "./opinion-withdrawal-adapter.js";
 
 export interface FundingRepository {
   findIntentById(id: string): Promise<FundingIntent | null>;
@@ -178,7 +190,9 @@ export class FundingService {
     private readonly withdrawalCompletionPersistenceGate: WithdrawalCompletionPersistenceGate | null = null,
     private readonly polymarketBridgeWithdrawalAdapter: PolymarketBridgeWithdrawalAdapter | null = null,
     private readonly predictFunWithdrawalAdapter: PredictFunWithdrawalAdapter | null = null,
-    private readonly userWithdrawalWalletReader: UserWithdrawalWalletReader | null = null
+    private readonly userWithdrawalWalletReader: UserWithdrawalWalletReader | null = null,
+    private readonly myriadWithdrawalAdapter: MyriadWalletWithdrawalAdapter | null = null,
+    private readonly opinionWithdrawalAdapter: OpinionSafeWithdrawalAdapter | null = null
   ) {}
 
   public listVenueCapabilities(): VenueCapability[] {
@@ -580,6 +594,12 @@ export class FundingService {
       if (this.shouldUsePredictFunUserWalletDryRun(view, source)) {
         return this.buildPredictFunWithdrawalRouteLeg(userId, view.intent, source);
       }
+      if (this.shouldUseMyriadUserWalletDryRun(view, source)) {
+        return this.buildMyriadWithdrawalRouteLeg(view.intent, source);
+      }
+      if (this.shouldUseOpinionSafeDryRun(view, source)) {
+        return this.buildOpinionWithdrawalRouteLeg(view.intent, source);
+      }
       return buildWithdrawalRouteLeg(view.intent, source);
     }));
     await this.repository.replaceWithdrawalRouteLegs(withdrawalIntentId, routeLegs);
@@ -750,6 +770,22 @@ export class FundingService {
     return capabilities.supportsWithdrawal && capabilities.readinessStatus === "DRY_RUN_READY";
   }
 
+  private shouldUseMyriadUserWalletDryRun(view: WithdrawalIntentView, source: WithdrawalSource): boolean {
+    if (!this.myriadWithdrawalAdapter || view.sources.length !== 1 || source.sourceVenue !== "MYRIAD") {
+      return false;
+    }
+    const capabilities = this.myriadWithdrawalAdapter.getWithdrawalCapabilities();
+    return capabilities.supportsWithdrawal && capabilities.readinessStatus === "DRY_RUN_READY";
+  }
+
+  private shouldUseOpinionSafeDryRun(view: WithdrawalIntentView, source: WithdrawalSource): boolean {
+    if (!this.opinionWithdrawalAdapter || view.sources.length !== 1 || source.sourceVenue !== "OPINION") {
+      return false;
+    }
+    const capabilities = this.opinionWithdrawalAdapter.getWithdrawalCapabilities();
+    return capabilities.supportsWithdrawal && capabilities.readinessStatus === "DRY_RUN_READY";
+  }
+
   private async buildPolymarketBridgeWithdrawalRouteLeg(
     intent: WithdrawalIntent,
     source: WithdrawalSource
@@ -803,6 +839,58 @@ export class FundingService {
       throw new FundingError(
         "WITHDRAWAL_PROVIDER_UNAVAILABLE",
         `Predict.fun user-wallet dry-run quote failed closed: ${normalized.message}`,
+        503
+      );
+    }
+  }
+
+  private async buildMyriadWithdrawalRouteLeg(
+    intent: WithdrawalIntent,
+    source: WithdrawalSource
+  ): Promise<WithdrawalRouteLeg> {
+    if (!this.myriadWithdrawalAdapter) {
+      return buildWithdrawalRouteLeg(intent, source);
+    }
+    try {
+      const quote = await this.myriadWithdrawalAdapter.prepareWithdrawalQuote({
+        destinationChain: intent.destinationChain,
+        destinationToken: intent.token,
+        destinationAddress: intent.destinationWalletAddress,
+        amount: source.sourceAmount
+      });
+      const userAction = await this.myriadWithdrawalAdapter.prepareUserAction(quote);
+      return buildMyriadWithdrawalRouteLeg(intent, source, quote, userAction);
+    } catch (error) {
+      const normalized = this.myriadWithdrawalAdapter.normalizeWithdrawalError(error);
+      throw new FundingError(
+        "WITHDRAWAL_PROVIDER_UNAVAILABLE",
+        `Myriad user-wallet dry-run quote failed closed: ${normalized.message}`,
+        503
+      );
+    }
+  }
+
+  private async buildOpinionWithdrawalRouteLeg(
+    intent: WithdrawalIntent,
+    source: WithdrawalSource
+  ): Promise<WithdrawalRouteLeg> {
+    if (!this.opinionWithdrawalAdapter) {
+      return buildWithdrawalRouteLeg(intent, source);
+    }
+    try {
+      const quote = await this.opinionWithdrawalAdapter.prepareWithdrawalQuote({
+        destinationChain: intent.destinationChain,
+        destinationToken: intent.token,
+        destinationAddress: intent.destinationWalletAddress,
+        amount: source.sourceAmount
+      });
+      const userAction = await this.opinionWithdrawalAdapter.prepareUserAction(quote);
+      return buildOpinionWithdrawalRouteLeg(intent, source, quote, userAction);
+    } catch (error) {
+      const normalized = this.opinionWithdrawalAdapter.normalizeWithdrawalError(error);
+      throw new FundingError(
+        "WITHDRAWAL_PROVIDER_UNAVAILABLE",
+        `Opinion Safe dry-run quote failed closed: ${normalized.message}`,
         503
       );
     }
@@ -1207,6 +1295,102 @@ const buildPredictFunWithdrawalRouteLeg = (
   };
 };
 
+const buildMyriadWithdrawalRouteLeg = (
+  intent: WithdrawalIntent,
+  source: WithdrawalSource,
+  myriadQuote: MyriadWithdrawalQuote,
+  userAction: MyriadUserWalletAction
+): WithdrawalRouteLeg => {
+  const now = new Date().toISOString();
+  const quote: WithdrawalRouteQuote = {
+    provider: "LOTUS_WITHDRAWAL_V0",
+    providerRouteId: `myriad-user-wallet-${source.withdrawalSourceId}`,
+    sourceVenue: source.sourceVenue,
+    sourceToken: source.sourceToken,
+    sourceAmount: source.sourceAmount,
+    destinationChain: intent.destinationChain,
+    destinationWalletAddress: intent.destinationWalletAddress,
+    destinationAmountEstimate: myriadQuote.amount,
+    estimatedFees: myriadQuote.estimatedFees,
+    estimatedTimeSeconds: myriadQuote.estimatedTimeSeconds,
+    expiresAt: myriadQuote.expiresAt,
+    transactionRequest: null,
+    userSafeSummary: "Myriad user-wallet dry run: user must complete withdrawal through the Myriad/ThirdWeb wallet UI. Lotus does not hold keys, sign, broadcast, custody, or move funds."
+  };
+  return {
+    withdrawalRouteLegId: randomUUID(),
+    withdrawalIntentId: intent.withdrawalIntentId,
+    withdrawalSourceId: source.withdrawalSourceId,
+    sourceVenue: source.sourceVenue,
+    sourceToken: source.sourceToken,
+    sourceAmount: source.sourceAmount,
+    destinationChain: intent.destinationChain,
+    destinationWalletAddress: intent.destinationWalletAddress,
+    destinationAmountEstimate: myriadQuote.amount,
+    routeProvider: "LOTUS_WITHDRAWAL_V0",
+    routeQuote: quote,
+    txHashes: [],
+    providerStatus: buildMyriadUserWalletProviderStatus({
+      quote: myriadQuote,
+      userAction
+    }),
+    venueReleaseStatus: "NOT_SUBMITTED",
+    destinationStatus: "NOT_CONFIRMED",
+    status: "WITHDRAWAL_LEG_SIGNATURE_REQUIRED",
+    errorReason: null,
+    createdAt: now,
+    updatedAt: now
+  };
+};
+
+const buildOpinionWithdrawalRouteLeg = (
+  intent: WithdrawalIntent,
+  source: WithdrawalSource,
+  opinionQuote: OpinionWithdrawalQuote,
+  userAction: OpinionSafeUserAction
+): WithdrawalRouteLeg => {
+  const now = new Date().toISOString();
+  const quote: WithdrawalRouteQuote = {
+    provider: "LOTUS_WITHDRAWAL_V0",
+    providerRouteId: `opinion-safe-user-action-${source.withdrawalSourceId}`,
+    sourceVenue: source.sourceVenue,
+    sourceToken: source.sourceToken,
+    sourceAmount: source.sourceAmount,
+    destinationChain: intent.destinationChain,
+    destinationWalletAddress: intent.destinationWalletAddress,
+    destinationAmountEstimate: opinionQuote.amount,
+    estimatedFees: opinionQuote.estimatedFees,
+    estimatedTimeSeconds: opinionQuote.estimatedTimeSeconds,
+    expiresAt: opinionQuote.expiresAt,
+    transactionRequest: null,
+    userSafeSummary: "Opinion Safe dry run: user must complete withdrawal through Opinion/Gnosis Safe/user wallet. Lotus does not hold keys, sign, broadcast, custody, or move funds."
+  };
+  return {
+    withdrawalRouteLegId: randomUUID(),
+    withdrawalIntentId: intent.withdrawalIntentId,
+    withdrawalSourceId: source.withdrawalSourceId,
+    sourceVenue: source.sourceVenue,
+    sourceToken: source.sourceToken,
+    sourceAmount: source.sourceAmount,
+    destinationChain: intent.destinationChain,
+    destinationWalletAddress: intent.destinationWalletAddress,
+    destinationAmountEstimate: opinionQuote.amount,
+    routeProvider: "LOTUS_WITHDRAWAL_V0",
+    routeQuote: quote,
+    txHashes: [],
+    providerStatus: buildOpinionSafeUserActionProviderStatus({
+      quote: opinionQuote,
+      userAction
+    }),
+    venueReleaseStatus: "NOT_SUBMITTED",
+    destinationStatus: "NOT_CONFIRMED",
+    status: "WITHDRAWAL_LEG_SIGNATURE_REQUIRED",
+    errorReason: null,
+    createdAt: now,
+    updatedAt: now
+  };
+};
+
 const buildPolymarketBridgeProviderStatus = (input: {
   quote: PolymarketBridgeWithdrawalQuote | null;
   userAction: PolymarketBridgeUserAction | null;
@@ -1281,7 +1465,9 @@ const summarizeWithdrawalQuotes = (routeLegs: readonly WithdrawalRouteLeg[]): Re
   nonCustodial: true,
   backendBroadcast: false,
   ...summarizePolymarketBridgePreview(routeLegs),
-  ...summarizePredictFunUserWalletPreview(routeLegs)
+  ...summarizePredictFunUserWalletPreview(routeLegs),
+  ...summarizeMyriadUserWalletPreview(routeLegs),
+  ...summarizeOpinionSafeUserActionPreview(routeLegs)
 });
 
 const summarizePolymarketBridgePreview = (routeLegs: readonly WithdrawalRouteLeg[]): Record<string, unknown> => {
@@ -1342,6 +1528,68 @@ const summarizePredictFunUserWalletPreview = (routeLegs: readonly WithdrawalRout
       estimatedFees: quote.estimatedFees ?? predictLeg.routeQuote.estimatedFees,
       estimatedTimeSeconds: quote.estimatedTimeSeconds ?? predictLeg.routeQuote.estimatedTimeSeconds,
       expiresAt: quote.expiresAt ?? predictLeg.routeQuote.expiresAt,
+      warnings: Array.isArray(status.warnings) ? status.warnings : [],
+      completionPersisted: false
+    }
+  };
+};
+
+const summarizeMyriadUserWalletPreview = (routeLegs: readonly WithdrawalRouteLeg[]): Record<string, unknown> => {
+  const myriadLeg = routeLegs.find((leg) => leg.providerStatus.provider === "MYRIAD_USER_WALLET");
+  if (!myriadLeg) {
+    return {};
+  }
+  const status = myriadLeg.providerStatus;
+  const quote = status.quote && typeof status.quote === "object" && !Array.isArray(status.quote)
+    ? status.quote as Record<string, unknown>
+    : {};
+  const userAction = status.userAction && typeof status.userAction === "object" && !Array.isArray(status.userAction)
+    ? status.userAction as Record<string, unknown>
+    : {};
+  return {
+    myriadUserWallet: {
+      provider: "MYRIAD_USER_WALLET",
+      mode: "USER_WALLET_DRY_RUN",
+      walletModel: "THIRDWEB",
+      instructionsUrl: typeof status.instructionsUrl === "string" ? status.instructionsUrl : userAction.instructionsUrl,
+      destinationChain: quote.destinationChain ?? myriadLeg.destinationChain,
+      destinationToken: quote.destinationToken ?? myriadLeg.sourceToken,
+      destinationAddress: quote.destinationAddress ?? myriadLeg.destinationWalletAddress,
+      amount: quote.amount ?? myriadLeg.destinationAmountEstimate,
+      estimatedFees: quote.estimatedFees ?? myriadLeg.routeQuote.estimatedFees,
+      estimatedTimeSeconds: quote.estimatedTimeSeconds ?? myriadLeg.routeQuote.estimatedTimeSeconds,
+      expiresAt: quote.expiresAt ?? myriadLeg.routeQuote.expiresAt,
+      warnings: Array.isArray(status.warnings) ? status.warnings : [],
+      completionPersisted: false
+    }
+  };
+};
+
+const summarizeOpinionSafeUserActionPreview = (routeLegs: readonly WithdrawalRouteLeg[]): Record<string, unknown> => {
+  const opinionLeg = routeLegs.find((leg) => leg.providerStatus.provider === "OPINION_SAFE_USER_ACTION");
+  if (!opinionLeg) {
+    return {};
+  }
+  const status = opinionLeg.providerStatus;
+  const quote = status.quote && typeof status.quote === "object" && !Array.isArray(status.quote)
+    ? status.quote as Record<string, unknown>
+    : {};
+  const userAction = status.userAction && typeof status.userAction === "object" && !Array.isArray(status.userAction)
+    ? status.userAction as Record<string, unknown>
+    : {};
+  return {
+    opinionSafeUserAction: {
+      provider: "OPINION_SAFE_USER_ACTION",
+      mode: "USER_SAFE_DRY_RUN",
+      walletModel: "GNOSIS_SAFE_OR_USER_EOA",
+      instructionsUrl: typeof status.instructionsUrl === "string" ? status.instructionsUrl : userAction.instructionsUrl,
+      destinationChain: quote.destinationChain ?? opinionLeg.destinationChain,
+      destinationToken: quote.destinationToken ?? opinionLeg.sourceToken,
+      destinationAddress: quote.destinationAddress ?? opinionLeg.destinationWalletAddress,
+      amount: quote.amount ?? opinionLeg.destinationAmountEstimate,
+      estimatedFees: quote.estimatedFees ?? opinionLeg.routeQuote.estimatedFees,
+      estimatedTimeSeconds: quote.estimatedTimeSeconds ?? opinionLeg.routeQuote.estimatedTimeSeconds,
+      expiresAt: quote.expiresAt ?? opinionLeg.routeQuote.expiresAt,
       warnings: Array.isArray(status.warnings) ? status.warnings : [],
       completionPersisted: false
     }

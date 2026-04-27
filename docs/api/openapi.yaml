@@ -2499,7 +2499,7 @@ paths:
     post:
       tags: [Funding]
       summary: Quote non-custodial withdrawal route legs.
-      description: Creates a frontend-safe withdrawal preview using Lotus withdrawal v0 scaffolding. It fails closed when venue withdrawal capability is disabled, source venue-ready balance is insufficient, destination wallet is invalid, or capability state is unknown.
+      description: Creates a frontend-safe withdrawal preview using Lotus withdrawal v0 scaffolding. It fails closed when venue withdrawal capability is disabled, source venue-ready balance is insufficient, destination wallet is invalid, capability state is unknown, or the venue is classified as AUTO_RESOLUTION_ONLY. Limitless EOA/user mode is AUTO_RESOLUTION_ONLY and does not expose a normal user-signed withdrawal API; its partner-managed backend withdrawal path is not wired to this endpoint.
       x-lotus-status: implemented
       x-lotus-callable: true
       x-lotus-auth: user
@@ -3375,6 +3375,24 @@ components:
           items: { type: string }
         preferredChain: { type: string }
         preferredToken: { type: string }
+        supportsWithdrawal: { type: boolean }
+        withdrawalMode:
+          type: string
+          enum: [USER_SIGNED, AUTO_RESOLUTION_ONLY, PARTNER_MANAGED_BACKEND, UNSUPPORTED]
+          description: User-facing withdrawal model. AUTO_RESOLUTION_ONLY means normal user-signed withdrawal intents are not supported and payouts settle through venue-native market resolution.
+        userSignedWithdrawalSupported: { type: boolean }
+        partnerManagedWithdrawal:
+          type: object
+          nullable: true
+          additionalProperties: false
+          description: Disabled partner/backend withdrawal model metadata. This is not a user endpoint and requires explicit custody/security/operator approval before implementation.
+          properties:
+            mode: { type: string, enum: [PARTNER_MANAGED_BACKEND] }
+            enabled: { type: boolean }
+            requiresHmacAuth: { type: boolean }
+            requiresWithdrawalScope: { type: boolean }
+            requiresCustodySecurityApproval: { type: boolean }
+            notes: { type: string }
         readinessStatus: { type: string }
     FundingStatus:
       type: object

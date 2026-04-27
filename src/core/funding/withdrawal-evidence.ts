@@ -724,6 +724,12 @@ const validateExactCompletionEvidence = (
   if (venue === "PREDICT_FUN") {
     validatePredictFunBscUsdtEvidence(artifact, blockers);
   }
+  if (venue === "MYRIAD") {
+    validateMyriadBscUsd1Evidence(artifact, blockers);
+  }
+  if (venue === "OPINION") {
+    validateOpinionBscUsdtEvidence(artifact, blockers);
+  }
 };
 
 const validatePredictFunBscUsdtEvidence = (
@@ -745,6 +751,50 @@ const validatePredictFunBscUsdtEvidence = (
   const requiredAmount = decimalValue(selected.requiredAmount);
   if (observedAmount === null || requiredAmount === null || observedAmount < requiredAmount) {
     blockers.push("Predict.fun withdrawal evidence amount must be greater than or equal to the selected withdrawal amount.");
+  }
+};
+
+const validateMyriadBscUsd1Evidence = (
+  artifact: WithdrawalEvidenceSmokeArtifact,
+  blockers: string[]
+): void => {
+  const selected = artifact.selectedWithdrawal;
+  const evidence = artifact.evidenceResult;
+  if (!selected || !evidence) {
+    return;
+  }
+  if (selected.destinationChain?.toUpperCase() !== "BSC" || evidence.destinationChain?.toUpperCase() !== "BSC") {
+    blockers.push("Myriad withdrawal evidence must be for destinationChain=BSC.");
+  }
+  if (evidence.token?.toUpperCase() !== "USD1") {
+    blockers.push("Myriad withdrawal evidence must be for token=USD1.");
+  }
+  const observedAmount = decimalValue(evidence.amount);
+  const requiredAmount = decimalValue(selected.requiredAmount);
+  if (observedAmount === null || requiredAmount === null || observedAmount < requiredAmount) {
+    blockers.push("Myriad withdrawal evidence amount must be greater than or equal to the selected withdrawal amount.");
+  }
+};
+
+const validateOpinionBscUsdtEvidence = (
+  artifact: WithdrawalEvidenceSmokeArtifact,
+  blockers: string[]
+): void => {
+  const selected = artifact.selectedWithdrawal;
+  const evidence = artifact.evidenceResult;
+  if (!selected || !evidence) {
+    return;
+  }
+  if (selected.destinationChain?.toUpperCase() !== "BSC" || evidence.destinationChain?.toUpperCase() !== "BSC") {
+    blockers.push("Opinion withdrawal evidence must be for destinationChain=BSC.");
+  }
+  if (evidence.token?.toUpperCase() !== "USDT") {
+    blockers.push("Opinion withdrawal evidence must be for token=USDT.");
+  }
+  const observedAmount = decimalValue(evidence.amount);
+  const requiredAmount = decimalValue(selected.requiredAmount);
+  if (observedAmount === null || requiredAmount === null || observedAmount < requiredAmount) {
+    blockers.push("Opinion withdrawal evidence amount must be greater than or equal to the selected withdrawal amount.");
   }
 };
 

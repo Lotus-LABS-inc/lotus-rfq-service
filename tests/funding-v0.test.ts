@@ -60,6 +60,14 @@ import {
   getPredictFunWithdrawalConfigFromEnv
 } from "../src/core/funding/predictfun-withdrawal-adapter.js";
 import {
+  MyriadWalletWithdrawalAdapter,
+  getMyriadWithdrawalConfigFromEnv
+} from "../src/core/funding/myriad-withdrawal-adapter.js";
+import {
+  OpinionSafeWithdrawalAdapter,
+  getOpinionWithdrawalConfigFromEnv
+} from "../src/core/funding/opinion-withdrawal-adapter.js";
+import {
   normalizeLifiQuote,
   normalizeLifiStatus,
   type LifiRouteProvider
@@ -78,7 +86,9 @@ const withdrawalEnv = {
   ...env,
   POLYMARKET_FUNDING_WITHDRAWALS_ENABLED: "true",
   LIMITLESS_FUNDING_WITHDRAWALS_ENABLED: "true",
-  PREDICT_FUN_FUNDING_WITHDRAWALS_ENABLED: "true"
+  OPINION_FUNDING_WITHDRAWALS_ENABLED: "true",
+  PREDICT_FUN_FUNDING_WITHDRAWALS_ENABLED: "true",
+  MYRIAD_FUNDING_WITHDRAWALS_ENABLED: "true"
 } as NodeJS.ProcessEnv;
 
 const executionRequest = (): ExecutionRequestV0 => ({
@@ -243,8 +253,29 @@ class InMemoryFundingRepository implements FundingRepository {
         availableAmount: "100",
         updatedAt: new Date().toISOString()
       }, {
+        venue: "POLYMARKET",
+        token: "USD1",
+        readyAmount: "100",
+        pendingWithdrawalAmount: "0",
+        availableAmount: "100",
+        updatedAt: new Date().toISOString()
+      }, {
           venue: "PREDICT_FUN",
           token: "USDC",
+          readyAmount: "100",
+          pendingWithdrawalAmount: "0",
+          availableAmount: "100",
+          updatedAt: new Date().toISOString()
+        }, {
+          venue: "OPINION",
+          token: "USDT",
+          readyAmount: "100",
+          pendingWithdrawalAmount: "0",
+          availableAmount: "100",
+          updatedAt: new Date().toISOString()
+        }, {
+          venue: "MYRIAD",
+          token: "USD1",
           readyAmount: "100",
           pendingWithdrawalAmount: "0",
           availableAmount: "100",
@@ -515,6 +546,38 @@ describe("Funding v0 domain", () => {
     expect(matrix.OPINION.readinessStatus).toBe("READY");
     expect(matrix.MYRIAD.readinessStatus).toBe("READY");
     expect(matrix.PREDICT_FUN.readinessStatus).toBe("READY");
+    expect(matrix.POLYMARKET).toMatchObject({
+      withdrawalMode: "USER_SIGNED",
+      userSignedWithdrawalSupported: true,
+      partnerManagedWithdrawal: null
+    });
+    expect(matrix.OPINION).toMatchObject({
+      withdrawalMode: "USER_SIGNED",
+      userSignedWithdrawalSupported: true,
+      partnerManagedWithdrawal: null
+    });
+    expect(matrix.MYRIAD).toMatchObject({
+      withdrawalMode: "USER_SIGNED",
+      userSignedWithdrawalSupported: true,
+      partnerManagedWithdrawal: null
+    });
+    expect(matrix.PREDICT_FUN).toMatchObject({
+      withdrawalMode: "USER_SIGNED",
+      userSignedWithdrawalSupported: true,
+      partnerManagedWithdrawal: null
+    });
+    expect(buildVenueCapabilityMatrix({ env: withdrawalEnv }).LIMITLESS).toMatchObject({
+      supportsWithdrawal: false,
+      withdrawalMode: "AUTO_RESOLUTION_ONLY",
+      userSignedWithdrawalSupported: false,
+      partnerManagedWithdrawal: {
+        mode: "PARTNER_MANAGED_BACKEND",
+        enabled: false,
+        requiresHmacAuth: true,
+        requiresWithdrawalScope: true,
+        requiresCustodySecurityApproval: true
+      }
+    });
     expect(buildVenueCapabilityMatrix({ env: {} as NodeJS.ProcessEnv }).OPINION.readinessStatus).toBe("DISABLED");
     const predictFunBscUsdtMatrix = buildVenueCapabilityMatrix({
       env: {
@@ -528,6 +591,31 @@ describe("Funding v0 domain", () => {
     expect(predictFunBscUsdtMatrix.PREDICT_FUN.preferredChainId).toBe(56);
     expect(predictFunBscUsdtMatrix.PREDICT_FUN.preferredToken).toBe("USDT");
     expect(predictFunBscUsdtMatrix.PREDICT_FUN.supportedTokens).toEqual(["USDT"]);
+    const opinionBscUsdtMatrix = buildVenueCapabilityMatrix({
+      env: {
+        ...env,
+        OPINION_FUNDING_PREFERRED_CHAIN: "BSC",
+        OPINION_FUNDING_PREFERRED_CHAIN_ID: "56",
+        OPINION_FUNDING_PREFERRED_TOKEN: "USDT"
+      } as NodeJS.ProcessEnv
+    });
+    expect(opinionBscUsdtMatrix.OPINION.preferredChain).toBe("BSC");
+    expect(opinionBscUsdtMatrix.OPINION.preferredChainId).toBe(56);
+    expect(opinionBscUsdtMatrix.OPINION.preferredToken).toBe("USDT");
+    expect(opinionBscUsdtMatrix.OPINION.supportedTokens).toEqual(["USDT"]);
+    const myriadBscUsd1Matrix = buildVenueCapabilityMatrix({
+      env: {
+        ...env,
+        MYRIAD_FUNDING_PREFERRED_CHAIN: "BSC",
+        MYRIAD_FUNDING_PREFERRED_CHAIN_ID: "56",
+        MYRIAD_FUNDING_PREFERRED_TOKEN: "USD1",
+        MYRIAD_USD1_TOKEN_ADDRESS: "0x8d0d000ee44948fc98c9b98a4fa4921476f08b0d"
+      } as NodeJS.ProcessEnv
+    });
+    expect(myriadBscUsd1Matrix.MYRIAD.preferredChain).toBe("BSC");
+    expect(myriadBscUsd1Matrix.MYRIAD.preferredChainId).toBe(56);
+    expect(myriadBscUsd1Matrix.MYRIAD.preferredToken).toBe("USD1");
+    expect(myriadBscUsd1Matrix.MYRIAD.supportedTokens).toEqual(["USD1"]);
     const repository = new InMemoryFundingRepository();
     const service = new FundingService(repository, new StubLifiProvider(), {
       lifiQuotesEnabled: true,
@@ -1088,6 +1176,22 @@ describe("Funding v0 domain", () => {
       sources: [{ sourceVenue: "POLYMARKET", sourcePercentage: 100 }]
     })).rejects.toMatchObject({ code: "WITHDRAWAL_SOURCE_BALANCE_INSUFFICIENT" });
 
+    const limitlessRepository = new InMemoryFundingRepository();
+    limitlessRepository.ready = true;
+    const limitless = new FundingService(limitlessRepository, new StubLifiProvider(), {
+      lifiQuotesEnabled: true,
+      liveSubmitEnabled: false,
+      env: withdrawalEnv
+    });
+    await expect(limitless.createWithdrawalIntent("user-1", {
+      token: "USDC",
+      amount: "100",
+      destinationChain: "BASE",
+      destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+      idempotencyKey: "withdraw-limitless-auto-resolution-only",
+      sources: [{ sourceVenue: "LIMITLESS", sourcePercentage: 100 }]
+    })).rejects.toMatchObject({ code: "WITHDRAWAL_CAPABILITY_DISABLED" });
+
     const duplicateVenueRepository = new InMemoryFundingRepository();
     duplicateVenueRepository.ready = true;
     const duplicateVenue = new FundingService(duplicateVenueRepository, new StubLifiProvider(), {
@@ -1342,6 +1446,242 @@ describe("Funding v0 domain", () => {
     const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
     expect(quoted.routeLegs.some((leg) => leg.providerStatus.provider === "PREDICT_FUN_USER_WALLET")).toBe(false);
     expect(quoted.intent.aggregateRouteQuote).not.toHaveProperty("predictFunUserWallet");
+  });
+
+  it("returns safe Myriad user-wallet instructions for single-source BSC USD1 withdrawals", async () => {
+    const repository = new InMemoryFundingRepository();
+    repository.ready = true;
+    const myriadEnv = {
+      ...withdrawalEnv,
+      MYRIAD_WITHDRAWAL_ADAPTER_ENABLED: "true",
+      MYRIAD_WITHDRAWAL_ADAPTER_MODE: "USER_WALLET_DRY_RUN",
+      MYRIAD_WITHDRAWAL_ADAPTER_DRY_RUN_ONLY: "true",
+      MYRIAD_WITHDRAWAL_INSTRUCTIONS_URL: "https://docs.myriad.markets/deposit-and-withdraw"
+    } as NodeJS.ProcessEnv;
+    const service = new FundingService(
+      repository,
+      new StubLifiProvider(),
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env: myriadEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      new MyriadWalletWithdrawalAdapter(getMyriadWithdrawalConfigFromEnv(myriadEnv))
+    );
+    const created = await service.createWithdrawalIntent("user-1", {
+      token: "USD1",
+      amount: "40",
+      destinationChain: "BSC",
+      destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+      idempotencyKey: "withdraw-myriad-user-wallet",
+      sources: [{ sourceVenue: "MYRIAD", sourcePercentage: 100 }]
+    });
+    const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
+    const serializedQuote = JSON.stringify(quoted);
+
+    expect(quoted.routeLegs[0]!.providerStatus).toMatchObject({
+      provider: "MYRIAD_USER_WALLET",
+      mode: "USER_WALLET_DRY_RUN",
+      walletModel: "THIRDWEB",
+      completionPersisted: false,
+      instructionsUrl: "https://docs.myriad.markets/deposit-and-withdraw"
+    });
+    expect(quoted.intent.aggregateRouteQuote).toMatchObject({
+      myriadUserWallet: {
+        provider: "MYRIAD_USER_WALLET",
+        mode: "USER_WALLET_DRY_RUN",
+        walletModel: "THIRDWEB",
+        destinationChain: "BSC",
+        destinationToken: "USD1",
+        completionPersisted: false
+      }
+    });
+    expect(quoted.routeLegs[0]!.routeQuote.transactionRequest).toBeNull();
+    expect(serializedQuote).toContain("Myriad/ThirdWeb wallet UI");
+    expect(serializedQuote).toContain("Lotus does not hold keys");
+    expect(serializedQuote).not.toContain("privateKey");
+    expect(serializedQuote).not.toContain("walletSeed");
+    expect(serializedQuote).not.toContain("thirdwebSigner");
+    expect(serializedQuote).not.toContain("authorization");
+    expect(serializedQuote).not.toContain("sessionToken");
+    expect(serializedQuote).not.toContain("rawProviderPayload");
+
+    const submitted = await service.submitWithdrawalRouteLeg("user-1", created.intent.withdrawalIntentId, {
+      withdrawalRouteLegId: quoted.routeLegs[0]!.withdrawalRouteLegId,
+      txHash: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    });
+    expect(submitted.routeLegs[0]!.status).toBe("VENUE_RELEASE_PENDING");
+
+    const refreshed = await service.refreshWithdrawalStatus("user-1", created.intent.withdrawalIntentId);
+    expect(refreshed.routeLegs[0]!.status).toBe("VENUE_RELEASE_PENDING");
+    expect(refreshed.reconciliations).toEqual([]);
+  });
+
+  it("does not silently use Myriad adapter for multi-source withdrawals", async () => {
+    const repository = new InMemoryFundingRepository();
+    repository.ready = true;
+    const myriadEnv = {
+      ...withdrawalEnv,
+      MYRIAD_WITHDRAWAL_ADAPTER_ENABLED: "true",
+      MYRIAD_WITHDRAWAL_ADAPTER_MODE: "USER_WALLET_DRY_RUN",
+      MYRIAD_WITHDRAWAL_ADAPTER_DRY_RUN_ONLY: "true",
+      MYRIAD_WITHDRAWAL_INSTRUCTIONS_URL: "https://docs.myriad.markets/deposit-and-withdraw"
+    } as NodeJS.ProcessEnv;
+    const service = new FundingService(
+      repository,
+      new StubLifiProvider(),
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env: myriadEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      new MyriadWalletWithdrawalAdapter(getMyriadWithdrawalConfigFromEnv(myriadEnv))
+    );
+    const created = await service.createWithdrawalIntent("user-1", {
+      token: "USD1",
+      amount: "40",
+      destinationChain: "BSC",
+      destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+      idempotencyKey: "withdraw-myriad-multi-source",
+      sources: [
+        { sourceVenue: "MYRIAD", sourcePercentage: 50 },
+        { sourceVenue: "POLYMARKET", sourcePercentage: 50 }
+      ]
+    });
+    const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
+    expect(quoted.routeLegs.some((leg) => leg.providerStatus.provider === "MYRIAD_USER_WALLET")).toBe(false);
+    expect(quoted.intent.aggregateRouteQuote).not.toHaveProperty("myriadUserWallet");
+  });
+
+  it("returns safe Opinion Safe user-action instructions for single-source BSC USDT withdrawals", async () => {
+    const repository = new InMemoryFundingRepository();
+    repository.ready = true;
+    const opinionEnv = {
+      ...withdrawalEnv,
+      OPINION_WITHDRAWAL_ADAPTER_ENABLED: "true",
+      OPINION_WITHDRAWAL_ADAPTER_MODE: "USER_SAFE_DRY_RUN",
+      OPINION_WITHDRAWAL_ADAPTER_DRY_RUN_ONLY: "true",
+      OPINION_WITHDRAWAL_INSTRUCTIONS_URL: "https://docs.opinion.trade/developer-guide/opinion-clob-typescript-sdk/builder-mode/split-merge-redeem"
+    } as NodeJS.ProcessEnv;
+    const service = new FundingService(
+      repository,
+      new StubLifiProvider(),
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env: opinionEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      new OpinionSafeWithdrawalAdapter(getOpinionWithdrawalConfigFromEnv(opinionEnv))
+    );
+    const created = await service.createWithdrawalIntent("user-1", {
+      token: "USDT",
+      amount: "40",
+      destinationChain: "BSC",
+      destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+      idempotencyKey: "withdraw-opinion-safe-user-action",
+      sources: [{ sourceVenue: "OPINION", sourcePercentage: 100 }]
+    });
+    const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
+    const serializedQuote = JSON.stringify(quoted);
+
+    expect(quoted.routeLegs[0]!.providerStatus).toMatchObject({
+      provider: "OPINION_SAFE_USER_ACTION",
+      mode: "USER_SAFE_DRY_RUN",
+      walletModel: "GNOSIS_SAFE_OR_USER_EOA",
+      completionPersisted: false,
+      instructionsUrl: "https://docs.opinion.trade/developer-guide/opinion-clob-typescript-sdk/builder-mode/split-merge-redeem"
+    });
+    expect(quoted.intent.aggregateRouteQuote).toMatchObject({
+      opinionSafeUserAction: {
+        provider: "OPINION_SAFE_USER_ACTION",
+        mode: "USER_SAFE_DRY_RUN",
+        walletModel: "GNOSIS_SAFE_OR_USER_EOA",
+        destinationChain: "BSC",
+        destinationToken: "USDT",
+        completionPersisted: false
+      }
+    });
+    expect(quoted.routeLegs[0]!.routeQuote.transactionRequest).toBeNull();
+    expect(serializedQuote).toContain("Opinion/Gnosis Safe/user wallet");
+    expect(serializedQuote).toContain("Lotus does not hold keys");
+    expect(serializedQuote).not.toContain("privateKey");
+    expect(serializedQuote).not.toContain("walletSeed");
+    expect(serializedQuote).not.toContain("safeOwnerKey");
+    expect(serializedQuote).not.toContain("authorization");
+    expect(serializedQuote).not.toContain("sessionToken");
+    expect(serializedQuote).not.toContain("rawProviderPayload");
+
+    const submitted = await service.submitWithdrawalRouteLeg("user-1", created.intent.withdrawalIntentId, {
+      withdrawalRouteLegId: quoted.routeLegs[0]!.withdrawalRouteLegId,
+      txHash: "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    });
+    expect(submitted.routeLegs[0]!.status).toBe("VENUE_RELEASE_PENDING");
+
+    const refreshed = await service.refreshWithdrawalStatus("user-1", created.intent.withdrawalIntentId);
+    expect(refreshed.routeLegs[0]!.status).toBe("VENUE_RELEASE_PENDING");
+    expect(refreshed.reconciliations).toEqual([]);
+  });
+
+  it("does not silently use Opinion adapter for multi-source withdrawals", async () => {
+    const repository = new InMemoryFundingRepository();
+    repository.ready = true;
+    const opinionEnv = {
+      ...withdrawalEnv,
+      OPINION_WITHDRAWAL_ADAPTER_ENABLED: "true",
+      OPINION_WITHDRAWAL_ADAPTER_MODE: "USER_SAFE_DRY_RUN",
+      OPINION_WITHDRAWAL_ADAPTER_DRY_RUN_ONLY: "true",
+      OPINION_WITHDRAWAL_INSTRUCTIONS_URL: "https://docs.opinion.trade/developer-guide/opinion-clob-typescript-sdk/builder-mode/split-merge-redeem"
+    } as NodeJS.ProcessEnv;
+    const service = new FundingService(
+      repository,
+      new StubLifiProvider(),
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env: opinionEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      new OpinionSafeWithdrawalAdapter(getOpinionWithdrawalConfigFromEnv(opinionEnv))
+    );
+    const created = await service.createWithdrawalIntent("user-1", {
+      token: "USDT",
+      amount: "40",
+      destinationChain: "BSC",
+      destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+      idempotencyKey: "withdraw-opinion-multi-source",
+      sources: [
+        { sourceVenue: "OPINION", sourcePercentage: 50 },
+        { sourceVenue: "POLYMARKET", sourcePercentage: 50 }
+      ]
+    });
+    const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
+    expect(quoted.routeLegs.some((leg) => leg.providerStatus.provider === "OPINION_SAFE_USER_ACTION")).toBe(false);
+    expect(quoted.intent.aggregateRouteQuote).not.toHaveProperty("opinionSafeUserAction");
   });
 
   it("fails closed when LI.FI quotes are disabled or split is invalid", async () => {

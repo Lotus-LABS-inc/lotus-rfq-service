@@ -86,6 +86,9 @@ Required fields:
 |---|---|
 | `venue` | Lotus venue identifier such as `POLYMARKET`, `LIMITLESS`, `OPINION`, `MYRIAD`, or `PREDICT_FUN`. |
 | `supportsWithdrawal` | Whether Lotus should expose withdrawal flow for this venue. |
+| `withdrawalMode` | One of `USER_SIGNED`, `AUTO_RESOLUTION_ONLY`, `PARTNER_MANAGED_BACKEND`, or `UNSUPPORTED`. |
+| `userSignedWithdrawalSupported` | Whether Lotus can model the venue as a user-signed or user-authorized withdrawal action. |
+| `partnerManagedWithdrawal` | Disabled partner/backend withdrawal metadata when a venue has a server-initiated path that is not a user action. |
 | `supportsApiInitiatedWithdrawal` | Whether the venue has an API-supported user-authorized withdrawal path. |
 | `supportsUserBroadcastReference` | Whether Lotus can track a user-broadcast transaction or external reference. |
 | `supportedDestinationChains` | Destination chains the venue can withdraw to. |
@@ -305,6 +308,9 @@ Next adapter phase decision:
 
 - Current v0 status: DB-backed withdrawal records exist; evidence smoke and completion gate coverage exist; no live withdrawal execution.
 - Known evidence smoke coverage: read-only smoke and completion gate artifacts are supported.
+- Withdrawal mode: `AUTO_RESOLUTION_ONLY` for EOA/user-wallet accounts. Normal user-signed withdrawal is not supported today.
+- User-signed withdrawal supported: `false`.
+- Partner-managed withdrawal mode: `PARTNER_MANAGED_BACKEND`, disabled by default, HMAC-authenticated, withdrawal-scope gated, and blocked pending explicit custody/security/operator approval.
 - Believed live withdrawal path: official Limitless docs describe managed server-wallet withdrawals through `POST /portfolio/withdraw`, with status/history evidence available separately. This is materially different from Polymarket Bridge; Lotus must not generate a manual Bridge address for Limitless unless Limitless later documents that flow.
 - Required docs/API validation: official `POST /portfolio/withdraw` docs, portfolio history/status docs, scoped `withdrawal` auth, destination support, supported tokens/chains, cancellation behavior, rate limits, and sandbox/test mode.
 - Required auth/config: venue-specific feature flag default off, server-side credentials only, approved evidence/read hosts, timeout, minimum confirmations, redaction policy.
@@ -313,7 +319,9 @@ Next adapter phase decision:
 
 #### Limitless Withdrawal API Finding
 
-Official Limitless docs indicate that withdrawal execution is exposed as a server-wallet API operation, not a Bridge address/user-transfer workflow. Therefore the first Limitless adapter must be scoped as dry-run/read-status only.
+Official Limitless docs and team confirmation indicate that withdrawal execution is exposed as a server-wallet API operation, not a Bridge address/user-transfer workflow. Therefore the first Limitless adapter must be scoped as dry-run/read-status only.
+
+In EOA/user-controlled wallet mode, users sign trading orders, but there is no public API where a user signs or broadcasts an explicit withdrawal. Resolved-market payouts happen automatically on-chain through Limitless native resolution mechanics. Lotus should classify this user mode as `AUTO_RESOLUTION_ONLY`, not `USER_SIGNED`.
 
 Limitless account creation and managed wallet/sub-account semantics are a precondition for any withdrawal adapter work. Lotus must not treat a Limitless server wallet as Lotus custody. The acceptable Model A interpretation is:
 
@@ -343,13 +351,37 @@ Official docs reviewed:
 
 #### Limitless Adapter Boundary Decision
 
-Classification: `SERVER_INITIATED_WITHDRAWAL`.
+Classification: user mode `AUTO_RESOLUTION_ONLY`; partner mode `PARTNER_MANAGED_BACKEND` disabled.
 
-`POST /portfolio/withdraw` is not a Lotus-safe user action-preparation endpoint. The official docs describe it as a server-wallet withdrawal that transfers ERC20 funds from a managed sub-account using scoped server authentication. The endpoint requires withdrawal-capable HMAC/API-token credentials and does not document a per-withdrawal user EOA signature or user-broadcast transaction.
+`POST /portfolio/withdraw` is not a Lotus-safe user action-preparation endpoint. The official docs describe it as a server-wallet withdrawal that transfers ERC20 funds from a managed sub-account to the partner address using scoped server authentication. The endpoint requires withdrawal-capable HMAC/API-token credentials and does not document a per-withdrawal user EOA signature or user-broadcast transaction.
+
+`POST /portfolio/redeem` is also backend-initiated for redeeming winning positions after resolution. It must not be treated as a user-signed withdrawal endpoint.
 
 Lotus must not expose this endpoint as frontend-safe instructions or wire it into user withdrawal quote/status flows as if it were `USER_AUTHORIZED_ACTION`. Calling it from Lotus would mean Lotus is initiating a venue-side withdrawal under partner/server credentials.
 
 Allowed next work is limited to read-only portfolio history/status evidence mapping and an SDK upgrade review for `@limitless-exchange/sdk >= 1.0.6`. Completion persistence must not use this path until real evidence fields are validated and a separate security/custody review explicitly approves the server-initiated withdrawal model or Limitless provides a documented user-authorized withdrawal flow.
+
+#### Limitless Partner-Managed Approval Gate
+
+Partner-managed Limitless withdrawal is not approved by capability config, HMAC read credentials, or a successful dry-run. It requires a separate operator/internal approval gate:
+
+```bash
+npm run funding:limitless-partner-managed-withdrawal-gate
+```
+
+The gate is blocked by default. It only passes in operator/internal gate context when all explicit approval metadata is present, fresh, and scoped to `LIMITLESS`:
+
+```bash
+LIMITLESS_PARTNER_MANAGED_WITHDRAWALS_ENABLED=true
+LIMITLESS_PARTNER_MANAGED_WITHDRAWAL_APPROVAL_VENUE=LIMITLESS
+LIMITLESS_PARTNER_MANAGED_WITHDRAWAL_APPROVAL_ID=<approval id>
+LIMITLESS_PARTNER_MANAGED_WITHDRAWAL_SECURITY_REVIEW_ID=<security/custody review id>
+LIMITLESS_PARTNER_MANAGED_WITHDRAWAL_OPERATOR_APPROVED_BY=<operator ref>
+LIMITLESS_PARTNER_MANAGED_WITHDRAWAL_APPROVED_AT=<ISO timestamp>
+LIMITLESS_PARTNER_MANAGED_WITHDRAWAL_APPROVAL_EXPIRES_AT=<ISO timestamp>
+```
+
+Passing this gate still does not implement or call `POST /portfolio/withdraw` or `POST /portfolio/redeem`. It is only an approval artifact. A separate implementation pass must keep user-facing routes unable to call those mutation endpoints unless custody/security review explicitly approves a backend-managed withdrawal model.
 
 #### Limitless Withdrawal Dry-Run Command
 
@@ -462,21 +494,67 @@ Real HTTP dry-run interpretation:
 
 - Current v0 status: DB-backed withdrawal records exist; evidence smoke and completion gate coverage exist; no live withdrawal execution.
 - Known evidence smoke coverage: read-only smoke and completion gate artifacts are supported.
-- Believed live withdrawal path: unknown until Opinion withdrawal docs and auth model are reviewed.
-- Required docs/API validation: official withdrawal docs, destination support, token support, user authorization requirements, status API, rate limits, and sandbox/test mode.
-- Required auth/config: venue-specific feature flag default off, server-side credentials only, approved evidence/read hosts, timeout, minimum confirmations, redaction policy.
-- Required tests: mocked adapter tests, exact-scope evidence tests, malformed response tests, controlled live-read smoke, no-secret regression, admin visibility.
-- Blockers before live adapter: no reviewed live withdrawal path, no operator-approved auth model, no sandbox withdrawal rehearsal.
+- Classification: `USER_SAFE_AUTHORIZED_ACTION_CANDIDATE`.
+- Docs reviewed: `https://docs.opinion.trade/developer-guide/opinion-clob-typescript-sdk/builder-mode` and `https://docs.opinion.trade/developer-guide/opinion-clob-typescript-sdk/builder-mode/split-merge-redeem`.
+- Believed live withdrawal path: Opinion Builder Mode describes non-custodial user management where users retain control of funds through Gnosis Safe wallets and sign operations with their own keys. Builder API keys authenticate builder calls, but the user EOA signs Safe transactions.
+- Required docs/API validation: exact `Split / Merge / Redeem / Withdraw` page behavior, destination support, token support, Safe transaction shape, status API, rate limits, sandbox/test mode, and whether withdrawal is available as a Safe transaction rather than a server-initiated transfer.
+- Required auth/config: venue-specific feature flag default off, server-side builder API key only, user-controlled EOA/Safe references only, approved evidence/read hosts, timeout, minimum confirmations, redaction policy.
+- Required tests: mocked Safe-action adapter tests, exact-scope evidence tests, malformed response tests, controlled user-signature rehearsal, controlled live-read smoke, no-secret regression, admin visibility.
+- Current Lotus dry-run: `OpinionSafeWithdrawalAdapter` may prepare disabled-by-default BNB Smart Chain `USDT` instructions in `USER_SAFE_DRY_RUN` mode only.
+- Blockers before live adapter: no reviewed broad rollout, no production evidence host review, and no approved Opinion mutation endpoint. BSC/USDT completion still requires fresh non-synthetic evidence smoke and completion gate review.
+
+#### Opinion Safe Withdrawal Boundary Decision
+
+Opinion is not classified as `SERVER_INITIATED_WITHDRAWAL` based on the reviewed docs. The relevant Builder Mode docs state that users retain control of funds through Gnosis Safe wallets and sign operations with their own keys. They also list token operations, including `Split / Merge / Redeem / Withdraw`, as Safe transactions.
+
+Allowed next work:
+
+- run `npm run funding:opinion-withdrawal-dry-run` and review the redacted artifact
+- prepare frontend/operator-safe Safe action instructions only
+- require the user EOA/Safe owner to sign the Safe transaction
+- record user-submitted tx hash/reference
+- map completion only from exact on-chain or venue evidence
+
+Blocked behavior:
+
+- no backend user private key handling
+- no backend Safe owner signing
+- no backend transaction broadcast
+- no live Opinion withdrawal mutation from Lotus until a controlled user-signed Safe rehearsal passes
+- no completion persistence without a fresh, non-synthetic, redacted evidence smoke and completion gate
 
 ### MYRIAD
 
 - Current v0 status: DB-backed withdrawal records exist; evidence smoke and completion gate coverage exist; no live withdrawal execution.
 - Known evidence smoke coverage: read-only smoke and completion gate artifacts are supported.
-- Believed live withdrawal path: unknown until Myriad withdrawal docs and API auth are reviewed.
-- Required docs/API validation: official withdrawal docs, destination support, token support, status/finality fields, rate limits, and sandbox/test mode.
-- Required auth/config: venue-specific feature flag default off, server-side credentials only, approved evidence/read hosts, timeout, minimum confirmations, redaction policy.
-- Required tests: mocked adapter tests, fail-closed status tests, exact destination evidence tests, controlled live-read smoke, no-secret regression, admin visibility.
-- Blockers before live adapter: no reviewed live withdrawal path, no sandbox/test evidence for user-authorized withdrawals, no operator signoff.
+- Classification: `USER_WALLET_AUTHORIZED_ACTION_CANDIDATE`.
+- Docs reviewed: `https://docs.myriad.markets/deposit-and-withdraw`.
+- Believed live withdrawal path: Myriad docs describe a non-custodial account powered by ThirdWeb where funds are either in the user's wallet or in smart contracts. User-facing withdrawal supports moving funds to an Ethereum-compatible wallet on BNB Smart Chain in USD1, or to an Abstract Wallet in USDC.e.
+- Required docs/API validation: exact withdrawal UI/action path, supported destination rails (`BNB Smart Chain` USD1 and `Abstract Wallet` USDC.e), user authorization semantics, status/finality fields, chain/token contract addresses, and sandbox/test mode.
+- Required auth/config: venue-specific feature flag default off, server-side read/evidence credentials only if needed, user wallet references only, approved evidence/read hosts, timeout, minimum confirmations, redaction policy.
+- Required tests: mocked user-wallet instruction adapter tests, fail-closed status tests, exact destination evidence tests for BNB USD1, controlled user-wallet rehearsal, no-secret regression, admin visibility.
+- Current Lotus dry-run: `MyriadWalletWithdrawalAdapter` may prepare disabled-by-default BNB Smart Chain `USD1` instructions in `USER_WALLET_DRY_RUN` mode only.
+- Blockers before live adapter: no controlled user-wallet rehearsal, no operator-approved production evidence host, and no reviewed Abstract USDC.e support. BNB/USD1 completion still requires fresh non-synthetic evidence smoke and completion gate review.
+
+#### Myriad Wallet Withdrawal Boundary Decision
+
+Myriad is not classified as `SERVER_INITIATED_WITHDRAWAL` based on the reviewed docs. Myriad's user docs state that the account uses a non-custodial crypto wallet and that funds are not in Myriad's possession. Withdrawals are described as user-facing wallet movements to an Ethereum-compatible BNB Smart Chain wallet in USD1 or to an Abstract Wallet in USDC.e.
+
+Allowed next work:
+
+- run `npm run funding:myriad-withdrawal-dry-run` and review the redacted artifact
+- prepare frontend-safe user-wallet instructions only for BNB Smart Chain `USD1`
+- require the user to complete the Myriad/ThirdWeb wallet action outside Lotus
+- record user-submitted tx hash/reference
+- map completion only from exact BNB USD1 evidence in this pass
+
+Blocked behavior:
+
+- no backend private key export/import
+- no backend ThirdWeb wallet signing
+- no backend transaction broadcast
+- no server-side withdrawal execution from Lotus unless future docs prove a user-authorized action model
+- no completion persistence without a fresh, non-synthetic, redacted evidence smoke and completion gate
 
 ### PREDICT_FUN
 
