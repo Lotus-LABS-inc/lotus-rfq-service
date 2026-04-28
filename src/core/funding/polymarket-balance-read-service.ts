@@ -115,6 +115,28 @@ const toDecimal = (value: string) => {
 const collateralAtomicUnitsToUsdc = (value: string) =>
   toDecimal(value).div(new Decimal(10).pow(COLLATERAL_TOKEN_DECIMALS));
 
+const collateralAllowanceAtomicUnits = (response: BalanceAllowanceResponse): string => {
+  if (nonEmpty(response.allowance)) {
+    return response.allowance!;
+  }
+
+  const allowances = (response as unknown as { allowances?: unknown }).allowances;
+  if (!allowances || typeof allowances !== "object" || Array.isArray(allowances)) {
+    throw new Error("Polymarket collateral balance response did not include an allowance.");
+  }
+
+  const parsedAllowances = Object.values(allowances).map((value) => {
+    if (typeof value !== "string" || value.trim().length === 0) {
+      throw new Error("Polymarket collateral allowance response included a malformed allowance.");
+    }
+    return toDecimal(value.trim());
+  });
+  if (parsedAllowances.length === 0) {
+    throw new Error("Polymarket collateral allowance response was empty.");
+  }
+  return Decimal.min(...parsedAllowances).toFixed();
+};
+
 const decimalToPlainString = (value: ReturnType<typeof toDecimal>): string =>
   value.toDecimalPlaces(COLLATERAL_TOKEN_DECIMALS, Decimal.ROUND_DOWN).toFixed();
 
@@ -200,7 +222,7 @@ export class PolymarketFundingBalanceReadService {
     const client = this.clientFactory(this.config);
     const response = await client.getBalanceAllowance({ asset_type: AssetType.COLLATERAL });
     const balance = collateralAtomicUnitsToUsdc(response.balance);
-    const allowance = collateralAtomicUnitsToUsdc(response.allowance);
+    const allowance = collateralAtomicUnitsToUsdc(collateralAllowanceAtomicUnits(response));
     const usableBalance = Decimal.min(balance, allowance);
     return { usableBalance: decimalToPlainString(usableBalance) };
   }

@@ -52,6 +52,29 @@ describe("Polymarket internal funding balance read service", () => {
     expect(client.lastAssetType).toBe(AssetType.COLLATERAL);
   });
 
+  it("reads CLOB v2 collateral balance with an allowances map", async () => {
+    const client = new StubBalanceAllowanceClient({
+      balance: "125000000",
+      allowances: {
+        "0x1111111111111111111111111111111111111111": "120000000",
+        "0x2222222222222222222222222222222222222222": "90000000"
+      }
+    } as unknown as BalanceAllowanceResponse);
+    const service = new PolymarketFundingBalanceReadService(
+      completeConfig,
+      () => client
+    );
+
+    const result = await service.readUsableBalance({
+      userId: "user-1",
+      fundingIntentId: "intent-1",
+      routeLegId: "leg-1"
+    });
+
+    expect(result).toEqual({ usableBalance: "90" });
+    expect(client.lastAssetType).toBe(AssetType.COLLATERAL);
+  });
+
   it("stays disabled unless explicit internal balance-read config is enabled", () => {
     expect(buildPolymarketFundingBalanceReadConfigFromEnv({} as NodeJS.ProcessEnv)).toMatchObject({
       enabled: false,
