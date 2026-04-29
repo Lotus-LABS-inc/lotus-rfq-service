@@ -23,6 +23,7 @@
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" \"tests/**/*.ts\"",
     "repo:audit": "knip --no-exit-code",
     "admin:bootstrap-approve-market-lanes": "tsx scripts/admin/approve-market-lanes.ts",
+    "admin:bootstrap-owner": "tsx scripts/admin/bootstrap-owner.ts",
     "execution:polymarket-live-submit-harness": "tsx scripts/execution/polymarket-live-submit-harness.ts",
     "metrics:check": "node scripts/dev/check-metrics.mjs",
     "db:migrate:test": "node scripts/db/db-migrate-test.mjs",
@@ -296,6 +297,7 @@
   },
   "dependencies": {
     "@ethersproject/wallet": "^5.8.0",
+    "@fastify/cors": "^11.2.0",
     "@fastify/jwt": "^10.0.0",
     "@fastify/websocket": "^11.2.0",
     "@limitless-exchange/sdk": "^1.0.4",

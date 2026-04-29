@@ -214,6 +214,163 @@ export class MonetizationRepository {
     );
     return result.rows[0]!.id;
   }
+
+  public async listPolicies(limit = 50): Promise<MonetizationPolicyRow[]> {
+    const result = await this.pool.query<MonetizationPolicyRow>(
+      `SELECT
+          id,
+          version,
+          enabled,
+          mode,
+          currency,
+          price_improvement_share_bps,
+          execution_fee_bps,
+          fast_lane_fee_bps,
+          ghost_fill_protection_fee_bps,
+          max_total_fee_bps,
+          capture_mode,
+          config,
+          created_at,
+          updated_at
+         FROM monetization_fee_policies
+        ORDER BY updated_at DESC
+        LIMIT $1`,
+      [limit]
+    );
+    return result.rows;
+  }
+
+  public async listLedgerEntries(filter: MonetizationLedgerFilter = {}): Promise<MonetizationLedgerRow[]> {
+    const conditions: string[] = [];
+    const values: unknown[] = [];
+    const addCondition = (sql: string, value: unknown): void => {
+      values.push(value);
+      conditions.push(sql.replace("?", `$${values.length}`));
+    };
+    if (filter.status) addCondition("status = ?", filter.status);
+    if (filter.venue) addCondition("upper(venue) = upper(?)", filter.venue);
+    if (filter.revenueSource) addCondition("revenue_source = ?", filter.revenueSource);
+    if (filter.captureMode) addCondition("capture_mode = ?", filter.captureMode);
+    if (filter.policyVersion) addCondition("fee_policy_version = ?", filter.policyVersion);
+    values.push(filter.limit ?? 100);
+    const result = await this.pool.query<MonetizationLedgerRow>(
+      `SELECT
+          id,
+          idempotency_key,
+          execution_id,
+          rfq_id,
+          quote_id,
+          user_id,
+          venue,
+          lane_id,
+          fee_policy_version,
+          fee_type,
+          status,
+          amount,
+          currency,
+          capture_mode,
+          revenue_source,
+          actual_builder_fee_collected,
+          shadow_improvement_fee,
+          uncollected_improvement_opportunity,
+          settlement_status,
+          source_event_id,
+          metadata,
+          created_at
+         FROM execution_fee_ledger
+        ${conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""}
+        ORDER BY created_at DESC
+        LIMIT $${values.length}`,
+      values
+    );
+    return result.rows;
+  }
+
+  public async getSummary(): Promise<MonetizationSummaryRow[]> {
+    const result = await this.pool.query<MonetizationSummaryRow>(
+      `SELECT
+          COALESCE(venue, 'UNKNOWN') AS venue,
+          COALESCE(lane_id, 'UNKNOWN') AS lane,
+          COALESCE(capture_mode, 'UNKNOWN') AS capture_mode,
+          COALESCE(revenue_source, 'UNKNOWN') AS revenue_source,
+          fee_policy_version AS policy_version,
+          currency,
+          COUNT(*)::int AS row_count,
+          COALESCE(SUM(actual_builder_fee_collected), 0)::text AS actual_builder_fees_collected,
+          COALESCE(SUM(shadow_improvement_fee), 0)::text AS shadow_improvement_fees,
+          COALESCE(SUM(uncollected_improvement_opportunity), 0)::text AS uncollected_improvement_opportunity,
+          COALESCE(SUM(amount), 0)::text AS ledger_amount
+         FROM execution_fee_ledger
+        GROUP BY venue, lane_id, capture_mode, revenue_source, fee_policy_version, currency
+        ORDER BY fee_policy_version DESC, venue ASC, lane ASC`
+    );
+    return result.rows;
+  }
+}
+
+export interface MonetizationLedgerFilter {
+  status?: string;
+  venue?: string;
+  revenueSource?: string;
+  captureMode?: string;
+  policyVersion?: string;
+  limit?: number;
+}
+
+export interface MonetizationPolicyRow {
+  id: string;
+  version: string;
+  enabled: boolean;
+  mode: string;
+  currency: string;
+  price_improvement_share_bps: number;
+  execution_fee_bps: number;
+  fast_lane_fee_bps: number;
+  ghost_fill_protection_fee_bps: number;
+  max_total_fee_bps: number;
+  capture_mode: string;
+  config: Record<string, unknown>;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface MonetizationLedgerRow {
+  id: string;
+  idempotency_key: string;
+  execution_id: string | null;
+  rfq_id: string | null;
+  quote_id: string | null;
+  user_id: string;
+  venue: string | null;
+  lane_id: string | null;
+  fee_policy_version: string;
+  fee_type: string;
+  status: string;
+  amount: string;
+  currency: string;
+  capture_mode: string | null;
+  revenue_source: string | null;
+  actual_builder_fee_collected: string;
+  shadow_improvement_fee: string;
+  uncollected_improvement_opportunity: string;
+  settlement_status: string | null;
+  source_event_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: Date;
+}
+
+export interface MonetizationSummaryRow {
+  venue: string;
+  lane: string;
+  capture_mode: string;
+  revenue_source: string;
+  policy_version: string;
+  currency: string;
+  row_count: number;
+  actual_builder_fees_collected: string;
+  shadow_improvement_fees: string;
+  uncollected_improvement_opportunity: string;
+  ledger_amount: string;
 }
 
 const sameNumericAmount = (left: string, right: string): boolean =>

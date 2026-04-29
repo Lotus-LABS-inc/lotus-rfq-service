@@ -38,6 +38,10 @@ tags:
   - name: Resolution Risk
   - name: Admin Lanes
   - name: Admin Execution Venues
+  - name: Admin Auth
+  - name: Admin Ops
+  - name: Admin Monetization
+  - name: Admin Schema Map
   - name: Admin Execution Control
   - name: Admin Risk
   - name: Admin SOR
@@ -335,6 +339,223 @@ paths:
                     $ref: "#/components/schemas/ExecutionVenueStatus"
         "404":
           $ref: "#/components/responses/Error"
+
+  /admin/auth/login:
+    post:
+      tags: [Admin Auth]
+      summary: Exchange an owner-generated admin login key for a short-lived admin JWT.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: public-login
+      x-lotus-side-effects: creates-session
+      x-lotus-danger: high
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminLoginRequest"
+      responses:
+        "200": { $ref: "#/components/responses/AdminLogin" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+  /admin/auth/me:
+    get:
+      tags: [Admin Auth]
+      summary: Return the current admin identity from the JWT.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/auth/members:
+    get:
+      tags: [Admin Auth]
+      summary: List admin members and non-secret key metadata. Owner-only.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin-owner
+      x-lotus-side-effects: none
+      x-lotus-danger: high
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminMembers" }
+    post:
+      tags: [Admin Auth]
+      summary: Create or reactivate an admin member by work email. Owner-only.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin-owner
+      x-lotus-side-effects: creates-admin-member
+      x-lotus-danger: high
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminMemberCreateRequest"
+      responses:
+        "201": { $ref: "#/components/responses/AdminMember" }
+        "403": { $ref: "#/components/responses/Error" }
+  /admin/auth/members/{memberId}/keys:
+    parameters:
+      - name: memberId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin Auth]
+      summary: Generate a new admin login key for a member. Owner-only; plaintext key is returned once.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin-owner
+      x-lotus-side-effects: creates-admin-key
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201": { $ref: "#/components/responses/AdminKeyCreated" }
+  /admin/auth/keys/{keyId}/revoke:
+    parameters:
+      - name: keyId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin Auth]
+      summary: Revoke an admin login key. Owner-only.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin-owner
+      x-lotus-side-effects: revokes-admin-key
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/auth/members/{memberId}/disable:
+    parameters:
+      - name: memberId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin Auth]
+      summary: Disable an admin member. Owner-only.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin-owner
+      x-lotus-side-effects: disables-admin-member
+      x-lotus-danger: critical
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminMember" }
+  /admin/ops/summary:
+    get:
+      tags: [Admin Ops]
+      summary: Frontend-safe overview for the admin dashboard.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminOpsSummary" }
+  /admin/executions:
+    get:
+      tags: [Admin Ops]
+      summary: List frontend-safe execution records with optional filters.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 250 } }
+        - { name: state, in: query, schema: { type: string } }
+        - { name: venue, in: query, schema: { type: string } }
+        - { name: settlementStatus, in: query, schema: { type: string } }
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/executions/{executionId}:
+    parameters:
+      - $ref: "#/components/parameters/ExecutionId"
+    get:
+      tags: [Admin Ops]
+      summary: Get execution record, intent, and control audit detail.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+        "404": { $ref: "#/components/responses/Error" }
+  /admin/funding/summary:
+    get:
+      tags: [Admin Ops]
+      summary: Dashboard-friendly alias for funding readiness summary.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminFundingReadinessSummary" }
+  /admin/monetization/summary:
+    get:
+      tags: [Admin Monetization]
+      summary: Summarize actual builder fees separately from shadow opportunity.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminMonetizationSummary" }
+  /admin/monetization/ledger:
+    get:
+      tags: [Admin Monetization]
+      summary: List monetization ledger rows.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminMonetizationLedger" }
+  /admin/monetization/policies:
+    get:
+      tags: [Admin Monetization]
+      summary: List versioned monetization policy snapshots.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+  /admin/schema-map:
+    get:
+      tags: [Admin Schema Map]
+      summary: Return DB schema visualizer data as JSON for the admin frontend.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminSchemaMap" }
 
   /admin/crypto-lanes:
     get:
@@ -2953,6 +3174,62 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/AdminFundingReadinessSummaryResponse"
+    AdminLogin:
+      description: Admin login token response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AdminLoginResponse"
+    AdminMembers:
+      description: Admin member list.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [members]
+            properties:
+              members:
+                type: array
+                items: { $ref: "#/components/schemas/AdminMember" }
+    AdminMember:
+      description: Admin member response.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [member]
+            properties:
+              member: { $ref: "#/components/schemas/AdminMember" }
+    AdminKeyCreated:
+      description: Admin key creation response. loginKey is returned once.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AdminKeyCreatedResponse"
+    AdminOpsSummary:
+      description: Admin dashboard overview.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AdminOpsSummaryResponse"
+    AdminMonetizationSummary:
+      description: Monetization summary separating collected and shadow amounts.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AdminMonetizationSummaryResponse"
+    AdminMonetizationLedger:
+      description: Monetization ledger rows.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AdminMonetizationLedgerResponse"
+    AdminSchemaMap:
+      description: DB schema map for the admin visualizer.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AdminSchemaMapResponse"
   schemas:
     ErrorResponse:
       type: object
@@ -2965,6 +3242,127 @@ components:
         details:
           type: object
           additionalProperties: true
+    AdminLoginRequest:
+      type: object
+      required: [email, loginKey]
+      properties:
+        email: { type: string, format: email }
+        loginKey:
+          type: string
+          description: Owner-generated admin login key. Never log or expose after login.
+    AdminLoginResponse:
+      type: object
+      required: [token, tokenType, expiresInSeconds, member]
+      properties:
+        token: { type: string }
+        tokenType: { type: string, enum: [Bearer] }
+        expiresInSeconds: { type: integer }
+        member: { $ref: "#/components/schemas/AdminMember" }
+    AdminMemberCreateRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+        displayName: { type: string }
+        role: { type: string, enum: [OWNER, ADMIN], default: ADMIN }
+    AdminMember:
+      type: object
+      additionalProperties: true
+      required: [id, email, role, status]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        displayName: { type: string, nullable: true }
+        role: { type: string, enum: [OWNER, ADMIN] }
+        status: { type: string, enum: [ACTIVE, DISABLED] }
+        keys:
+          type: array
+          items: { $ref: "#/components/schemas/AdminAuthKey" }
+    AdminAuthKey:
+      type: object
+      additionalProperties: true
+      description: Non-secret key metadata. keyHash is never returned.
+      properties:
+        id: { type: string, format: uuid }
+        adminMemberId: { type: string, format: uuid }
+        keyId: { type: string }
+        status: { type: string, enum: [ACTIVE, REVOKED] }
+        lastUsedAt: { type: string, format: date-time, nullable: true }
+        expiresAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+    AdminKeyCreatedResponse:
+      type: object
+      required: [key, loginKey]
+      properties:
+        key: { $ref: "#/components/schemas/AdminAuthKey" }
+        loginKey:
+          type: string
+          description: Plaintext login key returned once.
+    AdminOpsSummaryResponse:
+      type: object
+      required: [summary]
+      properties:
+        summary:
+          type: object
+          additionalProperties: true
+    AdminMonetizationSummaryResponse:
+      type: object
+      required: [summary]
+      properties:
+        summary:
+          type: object
+          required: [generatedAt, totals, rows]
+          properties:
+            generatedAt: { type: string, format: date-time }
+            totals:
+              type: object
+              required: [actualBuilderFeesCollected, shadowImprovementFees, uncollectedImprovementOpportunity]
+              properties:
+                actualBuilderFeesCollected: { type: string }
+                shadowImprovementFees: { type: string }
+                uncollectedImprovementOpportunity: { type: string }
+            rows:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+    AdminMonetizationLedgerResponse:
+      type: object
+      required: [ledger]
+      properties:
+        ledger:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    AdminSchemaMapResponse:
+      type: object
+      required: [schemaMap]
+      properties:
+        schemaMap:
+          type: object
+          required: [generatedAt, groups, tables, relationships]
+          properties:
+            generatedAt: { type: string, format: date-time }
+            groups:
+              type: array
+              items:
+                type: object
+                required: [name, tableCount, relationshipCount]
+                properties:
+                  name: { type: string }
+                  tableCount: { type: integer }
+                  relationshipCount: { type: integer }
+            tables:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            relationships:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
     PaginatedResponse:
       type: object
       properties:

@@ -4,6 +4,9 @@ import "@fastify/jwt";
 export interface UserAuth {
     userId: string;
     role: "USER" | "ADMIN";
+    email?: string;
+    adminMemberId?: string;
+    adminRole?: "OWNER" | "ADMIN";
 }
 
 export interface AdminPreviewMiddlewareConfig {
@@ -43,6 +46,22 @@ export const createAdminAuthMiddleware = () => {
             reply.status(401).send({
                 code: "UNAUTHORIZED",
                 message: "Missing or invalid authentication token."
+            });
+        }
+    };
+};
+
+export const createAdminOwnerAuthMiddleware = () => {
+    const adminAuthMiddleware = createAdminAuthMiddleware();
+    return async (request: FastifyRequest, reply: FastifyReply) => {
+        await adminAuthMiddleware(request, reply);
+        if (reply.sent) {
+            return;
+        }
+        if (request.user.adminRole !== "OWNER") {
+            return reply.status(403).send({
+                code: "FORBIDDEN",
+                message: "Owner admin role required for this action."
             });
         }
     };

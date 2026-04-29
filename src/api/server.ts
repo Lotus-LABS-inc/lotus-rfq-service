@@ -28,9 +28,11 @@ import { registerWebSocketPlugin } from "../ws/plugin.js";
 import type { RFQDomainEvent } from "../core/rfq-engine/rfq-domain-events.js";
 import { LPStatsRepository } from "../repositories/lp-stats.repository.js";
 import fastifyJwt from "@fastify/jwt";
+import fastifyCors from "@fastify/cors";
 import {
   createUserAuthMiddleware,
   createAdminAuthMiddleware,
+  createAdminOwnerAuthMiddleware,
   createAdminSimulationPreviewMiddleware
 } from "./user-auth-middleware.js";
 import { ExposureRepository } from "../repositories/exposure.repository.js";
@@ -87,6 +89,14 @@ import { registerAdminExecutionVenuesRoutes } from "./admin/execution-venues.rou
 import { ExecutionVenuesAdminService } from "./admin/execution-venues-admin-service.js";
 import { registerAdminFundingReadinessRoutes } from "./admin/funding-readiness.routes.js";
 import { FundingReadinessAdminService } from "./admin/funding-readiness-admin-service.js";
+import { registerAdminAuthRoutes } from "./admin/admin-auth.routes.js";
+import { AdminAuthService } from "./admin/admin-auth-service.js";
+import { registerAdminOpsRoutes } from "./admin/admin-ops.routes.js";
+import { registerAdminMonetizationRoutes } from "./admin/monetization.routes.js";
+import { registerAdminSchemaMapRoutes } from "./admin/schema-map.routes.js";
+import { SchemaMapService } from "./admin/schema-map-service.js";
+import { AdminAuthRepository } from "../repositories/admin-auth.repository.js";
+import { buildAdminCorsOptions, parseAdminCorsOrigins } from "./admin-cors.js";
 import { PairShadowObservationRepository } from "../shadow/pair-shadow-observation-repository.js";
 import { PairShadowRuntimeWriter } from "../shadow/pair-shadow-runtime-writer.js";
 import { PairShadowRuntimeHooks } from "../shadow/pair-shadow-runtime-hooks.js";
@@ -298,6 +308,11 @@ export interface ServerDependencies {
   executionScopeAuthorities?: ExecutionScopeAuthorityRegistry;
 }
 
+const parseAdminJwtTtlSeconds = (value: string | undefined): number => {
+  const parsed = Number(value ?? "3600");
+  return Number.isFinite(parsed) && parsed >= 300 && parsed <= 86_400 ? Math.trunc(parsed) : 3600;
+};
+
 export const buildServer = async (dependencies: ServerDependencies): Promise<FastifyInstance> => {
   const app = Fastify({
     logger: false
@@ -306,6 +321,11 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const sorCanaryShadowEnabled = dependencies.sorCanaryShadowEnabled ?? false;
   const sorCanaryPercent = dependencies.sorCanaryPercent ?? 0;
   const internalCrossEnabled = dependencies.internalCrossEnabled ?? false;
+
+  const adminCorsOrigins = parseAdminCorsOrigins(process.env.ADMIN_CORS_ORIGINS);
+  if (adminCorsOrigins.length > 0) {
+    await app.register(fastifyCors, buildAdminCorsOptions(adminCorsOrigins));
+  }
 
   await app.register(fastifyJwt, {
     secret: dependencies.jwtSecret
@@ -406,6 +426,11 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const executionControlRepository = new ExecutionControlRepository(dependencies.pgPool);
   const monetizationPolicy = getMonetizationPolicyFromEnv(process.env);
   const monetizationRepository = new MonetizationRepository(dependencies.pgPool);
+  const adminAuthRepository = new AdminAuthRepository(dependencies.pgPool);
+  const adminAuthService = new AdminAuthService(adminAuthRepository, {
+    keyPepper: process.env.ADMIN_AUTH_KEY_PEPPER,
+    allowedEmailDomains: process.env.ADMIN_ALLOWED_EMAIL_DOMAINS
+  });
   const executionAuditWriter = new ExecutionAuditWriter(
     executionIntentRepository,
     executionRecordRepository,
@@ -1636,8 +1661,35 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     }
   });
   const adminAuthMiddleware = createAdminAuthMiddleware();
+  const adminOwnerAuthMiddleware = createAdminOwnerAuthMiddleware();
   const simulationPreviewAdminMiddleware = createAdminSimulationPreviewMiddleware({
     enabled: dependencies.devSimulationPreviewEnabled ?? false
+  });
+  const executionVenuesAdminService = new ExecutionVenuesAdminService({
+    env: process.env,
+    repoRoot: process.cwd()
+  });
+  const fundingReadinessAdminService = new FundingReadinessAdminService({
+    repository: fundingRepository,
+    env: process.env
+  });
+  await registerAdminAuthRoutes(app, adminAuthMiddleware, {
+    adminAuthService,
+    ownerMiddleware: adminOwnerAuthMiddleware,
+    jwtTtlSeconds: parseAdminJwtTtlSeconds(process.env.ADMIN_JWT_TTL_SECONDS)
+  });
+  await registerAdminOpsRoutes(app, adminAuthMiddleware, {
+    executionIntentRepository,
+    executionRecordRepository,
+    executionControlRepository,
+    fundingReadinessAdminService,
+    executionVenuesAdminService
+  });
+  await registerAdminMonetizationRoutes(app, adminAuthMiddleware, {
+    monetizationRepository
+  });
+  await registerAdminSchemaMapRoutes(app, adminAuthMiddleware, {
+    schemaMapService: new SchemaMapService(dependencies.pgPool)
   });
   await registerAdminRiskRoutes(app, adminAuthMiddleware, {
     riskEngine,
@@ -1790,16 +1842,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     cryptoAdminService
   });
   await registerAdminExecutionVenuesRoutes(app, adminAuthMiddleware, {
-    executionVenuesAdminService: new ExecutionVenuesAdminService({
-      env: process.env,
-      repoRoot: process.cwd()
-    })
+    executionVenuesAdminService
   });
   await registerAdminFundingReadinessRoutes(app, adminAuthMiddleware, {
-    fundingReadinessAdminService: new FundingReadinessAdminService({
-      repository: fundingRepository,
-      env: process.env
-    })
+    fundingReadinessAdminService
   });
   await registerAdminSimulationRoutes(app, simulationPreviewAdminMiddleware, {
     simulationAdminService: new SimulationAdminService({
