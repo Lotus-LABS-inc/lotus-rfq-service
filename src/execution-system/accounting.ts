@@ -1,4 +1,4 @@
-import type { ExecutionLegV0, SettlementStatusV0 } from "./types.js";
+import type { ExecutionFeeSummary, ExecutionLegV0, SettlementStatusV0 } from "./types.js";
 
 export interface AccountingRecordV0 {
   executionId: string;
@@ -9,7 +9,7 @@ export interface AccountingRecordV0 {
   side: "buy" | "sell";
   filledSize: string;
   averagePrice: number;
-  fees: Record<string, number>;
+  fees: ExecutionFeeSummary;
   settlementStatus: SettlementStatusV0;
   createdAt: string;
 }
@@ -29,7 +29,7 @@ export class AccountingUpdateService {
     candidateId: string;
     side: "buy" | "sell";
     legs: readonly ExecutionLegV0[];
-    fees: Record<string, number>;
+    fees: ExecutionFeeSummary;
   }): { records: AccountingRecordV0[]; positions: PositionUpdateV0[] } {
     const verifiedLegs = input.legs.filter((leg) => leg.settlementStatus === "SETTLEMENT_VERIFIED");
     const records = verifiedLegs.map((leg) => ({

@@ -1,4 +1,4 @@
-import type { ExecutionStateV0, ExecutionSystemMetadataV0 } from "./types.js";
+import type { ExecutionFeeSummary, ExecutionStateV0, ExecutionSystemMetadataV0 } from "./types.js";
 
 const mapExecutionStateToUserStatus = (state: ExecutionStateV0): string => {
   switch (state) {
@@ -43,7 +43,7 @@ export interface FrontendExecutionStatusV0 {
   settlementStatus: string;
   ghostFillStatus: string;
   fallbackStatus: "not_used" | "used" | "unavailable";
-  feeSummary: Record<string, number>;
+  feeSummary: ExecutionFeeSummary;
   adapterStatus: readonly {
     venue: string;
     legStatus: string;

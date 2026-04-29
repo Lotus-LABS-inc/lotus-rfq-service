@@ -60,10 +60,23 @@ const isoDateString = z.string().datetime();
 const positiveNumericString = z.string().regex(/^\d+(\.\d+)?$/);
 
 export const ExecutionFeeSummarySchema = z.object({
+  policyVersion: z.string().min(1).optional(),
+  currency: z.string().min(1).optional(),
+  mode: z.enum(["DISABLED", "SHADOW", "ENFORCED"]).optional(),
+  captureMode: z.enum(["DISABLED", "SHADOW", "BUILDER_FEE_ONLY", "SHADOW_PLUS_BUILDER_FEE", "SMART_FEE_ROUTER_PLANNED"]).optional(),
+  revenueSource: z.enum(["POLYMARKET_BUILDER_FEE", "VENUE_BUILDER_FEE", "SHADOW_PRICE_IMPROVEMENT", "MANUAL_INVOICE_PLANNED", "SMART_FEE_ROUTER_PLANNED"]).optional(),
   priceImprovementFee: z.number().nonnegative(),
+  executionFee: z.number().nonnegative().optional(),
   fastLaneFee: z.number().nonnegative(),
   ghostFillProtectionFee: z.number().nonnegative(),
   futureSettlementFee: z.number().nonnegative(),
+  totalLotusFee: z.number().nonnegative().optional(),
+  notionalCap: z.number().nonnegative().optional(),
+  capApplied: z.boolean().optional(),
+  actualBuilderFeesCollected: z.number().nonnegative().optional(),
+  shadowImprovementFees: z.number().nonnegative().optional(),
+  uncollectedImprovementOpportunity: z.number().nonnegative().optional(),
+  userFeeDisclosureLabel: z.string().min(1).optional(),
   totalFees: z.number().nonnegative()
 });
 
@@ -224,10 +237,23 @@ export interface ExecutionCheckResult {
 }
 
 export const zeroFees = (): ExecutionFeeSummary => ({
+  policyVersion: "disabled",
+  currency: "USDC",
+  mode: "DISABLED",
+  captureMode: "DISABLED",
+  revenueSource: "SHADOW_PRICE_IMPROVEMENT",
   priceImprovementFee: 0,
+  executionFee: 0,
   fastLaneFee: 0,
   ghostFillProtectionFee: 0,
   futureSettlementFee: 0,
+  totalLotusFee: 0,
+  notionalCap: 0,
+  capApplied: false,
+  actualBuilderFeesCollected: 0,
+  shadowImprovementFees: 0,
+  uncollectedImprovementOpportunity: 0,
+  userFeeDisclosureLabel: "Estimated Lotus improvement share, not collected.",
   totalFees: 0
 });
 

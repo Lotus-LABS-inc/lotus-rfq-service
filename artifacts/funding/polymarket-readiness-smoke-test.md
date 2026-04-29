@@ -1,7 +1,7 @@
 # Polymarket Funding Readiness Smoke Test
 
-Generated: 2026-04-26T01:44:02.955Z
-Status: NO_ELIGIBLE_CONFIRMED_ROW
+Generated: 2026-04-28T01:28:05.328Z
+Status: COMPLETED
 
 ## Safety
 
@@ -16,21 +16,21 @@ Status: NO_ELIGIBLE_CONFIRMED_ROW
 - Mode: LIVE_READ
 - Configured: true
 - Balance URL configured: true
-- Balance URL host: localhost:4001
-- Auth mode: NONE
+- Balance URL host: ops.uselotus.xyz
+- Auth mode: BEARER
 - API key configured: true
 - Timeout ms: 5000
 - Minimum confirmations: 0
 
 ## Result
 
-- Mapping observed: none
-- Reason: none
+- Mapping observed: VENUE_CREDIT_PENDING
+- Reason: POLYMARKET_USABLE_BALANCE_BELOW_REQUIRED_AMOUNT
 - Ready to trade observed: false
 
 ## Blockers
 
-- No POLYMARKET funding route leg with confirmed destination status was found.
+- none
 
 ## Warnings
 

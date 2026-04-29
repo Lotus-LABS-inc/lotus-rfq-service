@@ -69,6 +69,7 @@ export class ExecutionSystemSubmissionHandler implements ExecutionSubmissionHand
       ...(binding?.scopeId ? { executionScopeToken: `${binding.scopeKind}:${binding.scopeId}` } : {}),
       ...(stringMetadata(metadata, "fallbackLaneId") ? { fallbackLaneId: stringMetadata(metadata, "fallbackLaneId")! } : {}),
       metadata: {
+        ...(stringMetadata(metadata, "quoteId") ? { quoteId: stringMetadata(metadata, "quoteId")! } : {}),
         routeLegs: extractRouteLegs(input.request.submissionPayload)
       }
     };

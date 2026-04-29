@@ -1,12 +1,15 @@
 {
-  "generatedAt": "2026-04-24T23:55:40.107Z",
+  "generatedAt": "2026-04-28T01:32:19.680Z",
   "submitted": false,
   "plan": {
-    "enabled": true,
-    "allowed": true,
-    "mode": "LIVE_SUBMIT_READY",
-    "blockers": [],
+    "enabled": false,
+    "allowed": false,
+    "mode": "DRY_RUN_CHECKLIST",
+    "blockers": [
+      "POLYMARKET_LIVE_SUBMIT_HARNESS_ENABLED must be true"
+    ],
     "warnings": [
+      "Harness is disabled; this run is a checklist only and cannot submit.",
       "Polygon mainnet detected; use the smallest possible operator-approved order."
     ],
     "safeConfig": {
@@ -36,41 +39,7 @@
     "credentialsServerSideOnly": true,
     "liveSubmissionStatus": "LIVE_CLIENT_DISABLED"
   },
-  "preparedOrder": {
-    "venue": "POLYMARKET",
-    "clientOrderId": "polymarket-live-harness-1777074938924",
-    "payload": {
-      "venueMarketId": "0xaf5e903876ad42de97e1cf02c2ef8484df69bcfc5541b96a400116557d1e504e",
-      "venueOutcomeId": "24728518923560590462781163189278709895252190308448350456902151936161951637265",
-      "side": "buy",
-      "size": "5",
-      "price": 0.01,
-      "metadata": {
-        "adapter": "PolymarketExecutionAdapterV2",
-        "readinessState": "LIVE_READY",
-        "clobV2DryRun": {
-          "adapter": "PolymarketExecutionAdapterV2",
-          "dryRun": true,
-          "orderHash": "6f89515be836bf7c3756d9c6937faa891760000174c77459890ae3c7c4878b47",
-          "orderDigest": "692fb06ddbbf65fde86afda2d8c286b61c52b56fa11e9397a30746279909f455",
-          "marketId": "0xaf5e903876ad42de97e1cf02c2ef8484df69bcfc5541b96a400116557d1e504e",
-          "outcomeId": "24728518923560590462781163189278709895252190308448350456902151936161951637265",
-          "side": "BUY",
-          "size": "5",
-          "price": "0.0100",
-          "builderCode": "0x6c4b67c64d2acb6381b5c8a5016495aece3d922799553ef2989254777f21c15c",
-          "chainId": "137",
-          "clobHost": "https://clob-v2.polymarket.com",
-          "createdAt": "2026-04-24T23:55:38.924Z",
-          "blockers": []
-        }
-      }
-    }
-  },
+  "preparedOrder": null,
   "submitResult": null,
-  "error": {
-    "code": "POLYMARKET_V2_UNAUTHORIZED",
-    "message": "Unauthorized/Invalid api key",
-    "status": 401
-  }
+  "error": null
 }

@@ -576,6 +576,22 @@ describe("PolymarketExecutionAdapterV2", () => {
     expect(mapPolymarketV2SettlementState({ ghostFillConfirmed: true }).status).toBe("GHOST_FILL_CONFIRMED");
   });
 
+  it("preserves builder fee evidence on verified settlement without exposing auth secrets", () => {
+    const settlement = mapPolymarketV2SettlementState({
+      settlementStatus: "settled",
+      builderFeeAmount: "0.25",
+      builderFeeBps: "5"
+    });
+    expect(settlement).toMatchObject({
+      status: "SETTLEMENT_VERIFIED",
+      evidence: {
+        builderFeeAmount: "0.25",
+        builderFeeBps: "5"
+      }
+    });
+    expect(JSON.stringify(settlement)).not.toContain("POLYMARKET_API_SECRET");
+  });
+
   it("writes fail-closed audit and does not emit accounting when disabled adapter is used by orchestrator", async () => {
     const audit = new InMemoryExecutionAuditSink();
     const { orchestrator } = buildOrchestrator({

@@ -8,6 +8,11 @@ import { GhostFillProtectionService } from "./ghost-fill.js";
 import { ExecutionPreflightService } from "./preflight.js";
 import { SettlementVerificationService } from "./settlement.js";
 import { ExecutionStateMachineV0 } from "./state-machine.js";
+import {
+  isBuilderFeeCaptureEnabled,
+  isShadowImprovementEnabled,
+  type MonetizationPolicy
+} from "./monetization-policy.js";
 import type {
   ExecutionLegV0,
   ExecutionRequestV0,
@@ -19,6 +24,7 @@ import type {
 } from "./types.js";
 import { validateExecutionRequest, zeroFees } from "./types.js";
 import { ExecutionVenueAdapterRegistry } from "./venue-adapter.js";
+import type { MonetizationRepository } from "../repositories/monetization.repository.js";
 
 export interface ExecutionSystemOrchestratorDeps {
   preflight: ExecutionPreflightService;
@@ -28,6 +34,11 @@ export interface ExecutionSystemOrchestratorDeps {
   fallback: FallbackPolicyService;
   accounting: AccountingUpdateService;
   fees: ExecutionFeeService;
+  monetization?: {
+    policy: MonetizationPolicy;
+    repository: Pick<MonetizationRepository, "createLedgerEntry" | "upsertPolicy">;
+    polymarketBuilderCodeConfigured?: boolean;
+  };
   audit: ExecutionAuditSink;
   now?: () => Date;
 }
@@ -55,6 +66,7 @@ export class ExecutionSystemOrchestrator {
     const stateMachine = new ExecutionStateMachineV0();
     const auditEventIds: string[] = [];
     const legs = this.buildLegs(request);
+    const settlementEvidenceByLegId = new Map<string, Record<string, unknown>>();
     let settlementStatus: SettlementStatusV0 = "SETTLEMENT_PENDING";
     let ghostFillStatus: GhostFillStatusV0 = "NOT_APPLICABLE";
     let fallbackUsed = false;
@@ -82,6 +94,33 @@ export class ExecutionSystemOrchestrator {
     await writeAudit("EXECUTION_CREATED");
     stateMachine.transitionTo("PREFLIGHT_CHECKING");
     await writeAudit("PREFLIGHT_STARTED");
+
+    if (this.deps.monetization &&
+      isBuilderFeeCaptureEnabled(this.deps.monetization.policy) &&
+      request.venuePath.some((venue) => venue.toUpperCase() === "POLYMARKET") &&
+      this.deps.monetization.polymarketBuilderCodeConfigured === false) {
+      stateMachine.transitionTo("PREFLIGHT_FAILED");
+      await writeAudit("PREFLIGHT_FAILED", {
+        code: "POLYMARKET_BUILDER_CODE_MISSING",
+        reason: "Polymarket builder-fee monetization requires POLYMARKET_BUILDER_CODE."
+      });
+      stateMachine.transitionTo("FAILED_CLOSED");
+      await writeAudit("FAILED_CLOSED", {
+        code: "POLYMARKET_BUILDER_CODE_MISSING",
+        reason: "Polymarket builder-fee monetization requires POLYMARKET_BUILDER_CODE."
+      });
+      return this.finish({
+        request,
+        state: stateMachine.current(),
+        legs,
+        settlementStatus,
+        ghostFillStatus,
+        fallbackUsed,
+        fallbackReason,
+        feeSummary,
+        auditEventIds
+      });
+    }
 
     const preflight = await this.deps.preflight.evaluate({
       request,
@@ -146,6 +185,7 @@ export class ExecutionSystemOrchestrator {
 
         await writeAudit("SETTLEMENT_CHECK_STARTED", { legId: leg.executionLegId });
         const settlement = await this.deps.settlement.verify(leg);
+        settlementEvidenceByLegId.set(leg.executionLegId, settlement.evidence);
         const ghost = this.deps.ghostFill.classify({
           leg,
           fillState: fill,
@@ -210,6 +250,80 @@ export class ExecutionSystemOrchestrator {
     }
     const averagePrice = this.averagePrice(legs);
     feeSummary = this.deps.fees.realized({ request, realizedPrice: averagePrice });
+    if (this.deps.monetization && this.deps.monetization.policy.captureMode !== "DISABLED") {
+      const { policy, repository } = this.deps.monetization;
+      await repository.upsertPolicy(policy);
+      if (isShadowImprovementEnabled(policy)) {
+        await repository.createLedgerEntry({
+          idempotencyKey: `${request.executionId}:SHADOW_PRICE_IMPROVEMENT:${policy.policyVersion}`,
+          executionId: request.executionId,
+          rfqId: request.rfqId,
+          quoteId: stringMetadata(request.metadata, "quoteId"),
+          userId: request.userId,
+          venue: request.venuePath.join("|"),
+          laneId: request.selectedLaneId,
+          feePolicyVersion: policy.policyVersion,
+          feeType: "LOTUS_SHADOW_PRICE_IMPROVEMENT",
+          status: "SHADOW_ONLY",
+          amount: String(feeSummary.shadowImprovementFees ?? feeSummary.totalLotusFee ?? feeSummary.totalFees),
+          currency: feeSummary.currency ?? policy.currency,
+          captureMode: policy.captureMode,
+          revenueSource: "SHADOW_PRICE_IMPROVEMENT",
+          shadowImprovementFee: String(feeSummary.shadowImprovementFees ?? feeSummary.totalLotusFee ?? feeSummary.totalFees),
+          uncollectedImprovementOpportunity: String(feeSummary.uncollectedImprovementOpportunity ?? feeSummary.totalLotusFee ?? feeSummary.totalFees),
+          settlementStatus: "SETTLEMENT_VERIFIED",
+          metadata: {
+            feeSummary,
+            executionMode: request.executionMode,
+            capApplied: feeSummary.capApplied ?? false,
+            disclosure: "Estimated Lotus improvement share, not collected."
+          }
+        });
+      }
+      const builderFeeRows = isBuilderFeeCaptureEnabled(policy)
+        ? legs
+            .filter((leg) => leg.venue.toUpperCase() === "POLYMARKET")
+            .map((leg) => ({
+              leg,
+              amount: extractConfirmedBuilderFeeAmount(leg, settlementEvidenceByLegId.get(leg.executionLegId))
+            }))
+            .filter((entry): entry is { leg: ExecutionLegV0; amount: number } => entry.amount !== null && entry.amount > 0)
+        : [];
+      const actualBuilderFeesCollected = builderFeeRows.reduce((sum, entry) => sum + entry.amount, 0);
+      if (actualBuilderFeesCollected > 0) {
+        feeSummary = {
+          ...feeSummary,
+          actualBuilderFeesCollected,
+          userFeeDisclosureLabel: "Lotus builder fee collected by venue where supported."
+        };
+      }
+      for (const entry of builderFeeRows) {
+        const amount = entry.amount.toFixed(8);
+        await repository.createLedgerEntry({
+          idempotencyKey: `${request.executionId}:POLYMARKET_BUILDER_FEE:${entry.leg.executionLegId}:${policy.policyVersion}`,
+          executionId: request.executionId,
+          rfqId: request.rfqId,
+          quoteId: stringMetadata(request.metadata, "quoteId"),
+          userId: request.userId,
+          venue: entry.leg.venue,
+          laneId: request.selectedLaneId,
+          feePolicyVersion: policy.policyVersion,
+          feeType: "LOTUS_BUILDER_FEE",
+          status: "COLLECTED_BUILDER_FEE",
+          amount,
+          currency: feeSummary.currency ?? policy.currency,
+          captureMode: policy.captureMode,
+          revenueSource: "POLYMARKET_BUILDER_FEE",
+          actualBuilderFeeCollected: amount,
+          settlementStatus: "SETTLEMENT_VERIFIED",
+          metadata: {
+            executionMode: request.executionMode,
+            builderFeeEvidenceConfirmed: true,
+            disclosure: "Lotus builder fee collected by venue where supported."
+          }
+        });
+      }
+    }
     this.deps.accounting.buildPostSettlementUpdate({
       executionId: request.executionId,
       userId: request.userId,
@@ -375,3 +489,71 @@ export class ExecutionSystemOrchestrator {
     return filled.reduce((sum, leg) => sum + leg.price, 0) / filled.length;
   }
 }
+
+const stringMetadata = (metadata: Readonly<Record<string, unknown>> | undefined, key: string): string | null => {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+};
+
+const numericMetadata = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  }
+  return null;
+};
+
+const findNumericEvidence = (value: unknown, keys: readonly string[]): number | null => {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    const found = numericMetadata(record[key]);
+    if (found !== null) {
+      return found;
+    }
+  }
+  for (const entry of Object.values(record)) {
+    const found = findNumericEvidence(entry, keys);
+    if (found !== null) {
+      return found;
+    }
+  }
+  return null;
+};
+
+const extractConfirmedBuilderFeeAmount = (
+  leg: ExecutionLegV0,
+  evidence: Record<string, unknown> | undefined
+): number | null => {
+  if (!evidence) {
+    return null;
+  }
+  const directAmount = findNumericEvidence(evidence, [
+    "builderFeeAmount",
+    "builder_fee_amount",
+    "builderFeeCollected",
+    "builder_fee_collected",
+    "builderFee",
+    "builder_fee"
+  ]);
+  if (directAmount !== null) {
+    return directAmount;
+  }
+  const feeBps = findNumericEvidence(evidence, [
+    "builderFeeBps",
+    "builder_fee_bps",
+    "builderFeeRateBps",
+    "builder_fee_rate_bps",
+    "tbf",
+    "mbf"
+  ]);
+  if (feeBps === null) {
+    return null;
+  }
+  return Number(leg.size) * leg.price * feeBps / 10_000;
+};

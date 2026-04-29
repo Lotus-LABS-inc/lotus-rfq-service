@@ -18,10 +18,10 @@ This harness is operator-controlled and is not part of normal CI or startup flow
 
 ## Current Result
 
-- Mode: LIVE_SUBMIT_READY
+- Mode: DRY_RUN_CHECKLIST
 - Submitted: false
-- Error: POLYMARKET_V2_UNAUTHORIZED (401): Unauthorized/Invalid api key
-- Blockers: none
-- Warnings: Polygon mainnet detected; use the smallest possible operator-approved order.
+- Error: none
+- Blockers: POLYMARKET_LIVE_SUBMIT_HARNESS_ENABLED must be true
+- Warnings: Harness is disabled; this run is a checklist only and cannot submit.; Polygon mainnet detected; use the smallest possible operator-approved order.
 
 Secrets are intentionally omitted from this artifact.

@@ -57,6 +57,8 @@ export interface RedisClient {
 
 interface RedisOptions {
   lazyConnect: boolean;
+  connectTimeout?: number;
+  retryStrategy?: (times: number) => number | null;
 }
 
 interface RedisConstructor {
@@ -68,7 +70,9 @@ const RedisCtor = require("ioredis") as RedisConstructor;
 
 export const createRedisClient = ({ redisUrl, logger }: RedisModuleConfig): RedisClient => {
   const options: RedisOptions = {
-    lazyConnect: true
+    lazyConnect: true,
+    connectTimeout: 10_000,
+    retryStrategy: (times: number) => Math.min(times * 500, 2_000)
   };
 
   const client = new RedisCtor(redisUrl, options);

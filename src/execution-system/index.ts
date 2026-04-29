@@ -4,6 +4,7 @@ export * from "./fallback.js";
 export * from "./fees.js";
 export * from "./ghost-fill.js";
 export * from "./lane-authority.js";
+export * from "./monetization-policy.js";
 export * from "./orchestrator.js";
 export * from "./polymarket-execution-adapter-v2.js";
 export * from "./polymarket-live-submit-harness.js";

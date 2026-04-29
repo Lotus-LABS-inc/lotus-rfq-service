@@ -483,7 +483,8 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
     }
     return mapPolymarketV2SettlementState({
       settlementStatus: trade.status,
-      finalityStatus: trade.transaction_hash ? "verified" : trade.status
+      finalityStatus: trade.transaction_hash ? "verified" : trade.status,
+      ...extractPolymarketBuilderFeeEvidence(trade)
     });
   }
 
@@ -604,31 +605,50 @@ export const mapPolymarketV2SettlementState = (input: {
   settlementStatus?: string | null;
   ghostFillSuspected?: boolean;
   ghostFillConfirmed?: boolean;
+  builderFeeAmount?: string | number | null;
+  builderFeeBps?: string | number | null;
 }): VenueSettlementState => {
+  const feeEvidence = {
+    ...(input.builderFeeAmount !== undefined && input.builderFeeAmount !== null ? { builderFeeAmount: input.builderFeeAmount } : {}),
+    ...(input.builderFeeBps !== undefined && input.builderFeeBps !== null ? { builderFeeBps: input.builderFeeBps } : {})
+  };
   if (input.ghostFillConfirmed) {
     return {
       status: "GHOST_FILL_CONFIRMED",
-      evidence: { source: "polymarket_v2", reason: "ghost_fill_confirmed" }
+      evidence: { source: "polymarket_v2", reason: "ghost_fill_confirmed", ...feeEvidence }
     };
   }
   if (input.ghostFillSuspected) {
     return {
       status: "GHOST_FILL_SUSPECTED",
-      evidence: { source: "polymarket_v2", reason: "ghost_fill_suspected" }
+      evidence: { source: "polymarket_v2", reason: "ghost_fill_suspected", ...feeEvidence }
     };
   }
 
   const normalized = `${input.finalityStatus ?? input.settlementStatus ?? ""}`.trim().toLowerCase();
   if (["verified", "settled", "final", "finalized", "confirmed"].includes(normalized)) {
-    return { status: "SETTLEMENT_VERIFIED", evidence: { source: "polymarket_v2", finalityStatus: normalized } };
+    return { status: "SETTLEMENT_VERIFIED", evidence: { source: "polymarket_v2", finalityStatus: normalized, ...feeEvidence } };
   }
   if (["pending", "open", "submitted"].includes(normalized)) {
-    return { status: "SETTLEMENT_PENDING", evidence: { source: "polymarket_v2", finalityStatus: normalized } };
+    return { status: "SETTLEMENT_PENDING", evidence: { source: "polymarket_v2", finalityStatus: normalized, ...feeEvidence } };
   }
   if (["timeout", "timed_out"].includes(normalized)) {
-    return { status: "SETTLEMENT_TIMEOUT", evidence: { source: "polymarket_v2", finalityStatus: normalized } };
+    return { status: "SETTLEMENT_TIMEOUT", evidence: { source: "polymarket_v2", finalityStatus: normalized, ...feeEvidence } };
   }
-  return { status: "SETTLEMENT_UNKNOWN", evidence: { source: "polymarket_v2", finalityStatus: normalized || null } };
+  return { status: "SETTLEMENT_UNKNOWN", evidence: { source: "polymarket_v2", finalityStatus: normalized || null, ...feeEvidence } };
+};
+
+const extractPolymarketBuilderFeeEvidence = (trade: Trade): {
+  builderFeeAmount?: string | number;
+  builderFeeBps?: string | number;
+} => {
+  const record = trade as unknown as Record<string, unknown>;
+  const amount = record.builderFeeAmount ?? record.builder_fee_amount ?? record.builderFee ?? record.builder_fee;
+  const bps = record.builderFeeBps ?? record.builder_fee_bps ?? record.builderFeeRateBps ?? record.builder_fee_rate_bps ?? record.tbf ?? record.mbf;
+  return {
+    ...(typeof amount === "string" || typeof amount === "number" ? { builderFeeAmount: amount } : {}),
+    ...(typeof bps === "string" || typeof bps === "number" ? { builderFeeBps: bps } : {})
+  };
 };
 
 const parsePreparedPolymarketPayload = (order: PreparedVenueOrder): {

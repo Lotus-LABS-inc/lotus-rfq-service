@@ -102,6 +102,40 @@ const defaultModules: BootstrapModules = {
   closePgPool
 };
 
+const sleep = (durationMs: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, durationMs);
+  });
+
+const connectRedisForStartup = async (
+  client: RedisClient,
+  connect: (client: RedisClient) => Promise<void>,
+  logger: Logger
+): Promise<void> => {
+  const maxAttempts = 5;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await connect(client);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxAttempts) {
+        break;
+      }
+      const retryDelayMs = attempt * 1_000;
+      logger.warn(
+        { err: error, attempt, maxAttempts, retryDelayMs },
+        "Redis startup connection failed. Retrying before failing service startup."
+      );
+      await sleep(retryDelayMs);
+    }
+  }
+
+  throw lastError;
+};
+
 export const startService = async (
   modules: Partial<BootstrapModules> = {}
 ): Promise<ServiceRuntime> => {
@@ -117,7 +151,7 @@ export const startService = async (
 
   let redisConnected = false;
   try {
-    await impl.connectRedis(redisClient);
+    await connectRedisForStartup(redisClient, impl.connectRedis, logger);
     redisConnected = true;
   } catch (error) {
     if (!env.DEV_SIMULATION_PREVIEW_ENABLED) {

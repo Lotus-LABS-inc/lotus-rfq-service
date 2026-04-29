@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { Logger } from "pino";
 import type { Pool } from "pg";
@@ -195,6 +196,8 @@ import {
   ExecutionSystemSubmissionHandler,
   ExecutionVenueAdapterRegistry,
   FallbackPolicyService,
+  getMonetizationPolicyFromEnv,
+  getPolymarketExecutionAdapterV2EnvStatus,
   GhostFillProtectionService,
   PolymarketExecutionAdapterV2,
   buildPolymarketExecutionAdapterV2ConfigFromEnv,
@@ -204,6 +207,7 @@ import {
   TestExecutionAdapter,
   alwaysHealthyPreflightDeps
 } from "../execution-system/index.js";
+import { MonetizationRepository } from "../repositories/monetization.repository.js";
 import { FundingReadinessChecker, FundingService } from "../core/funding/funding-service.js";
 import {
   PolymarketFundingBalanceReadService,
@@ -400,6 +404,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const internalWithdrawalEvidenceReadService = new InternalWithdrawalEvidenceReadService({ env: process.env });
   const failureRecoveryManager = new FailureRecoveryManager(dependencies.pgPool);
   const executionControlRepository = new ExecutionControlRepository(dependencies.pgPool);
+  const monetizationPolicy = getMonetizationPolicyFromEnv(process.env);
+  const monetizationRepository = new MonetizationRepository(dependencies.pgPool);
   const executionAuditWriter = new ExecutionAuditWriter(
     executionIntentRepository,
     executionRecordRepository,
@@ -927,7 +933,16 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       ghostFill: new GhostFillProtectionService(),
       fallback: new FallbackPolicyService(laneGate),
       accounting: new AccountingUpdateService(),
-      fees: new ExecutionFeeService(),
+      fees: new ExecutionFeeService({ policy: monetizationPolicy, futureSettlementFee: 0 }),
+      ...(monetizationPolicy.captureMode !== "DISABLED"
+        ? {
+            monetization: {
+              policy: monetizationPolicy,
+              repository: monetizationRepository,
+              polymarketBuilderCodeConfigured: getPolymarketExecutionAdapterV2EnvStatus(process.env).builderCodeConfigured
+            }
+          }
+        : {}),
       audit: new RepositoryExecutionAuditSink(executionControlRepository)
     }));
   }
@@ -1086,6 +1101,92 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       const requestedNotional = (
         Number.parseFloat(session.quantity) * Number.parseFloat(quote.price)
       ).toFixed(8);
+      if (monetizationPolicy.captureMode !== "DISABLED") {
+        const feeService = new ExecutionFeeService({ policy: monetizationPolicy, futureSettlementFee: 0 });
+        const preview = feeService.preview({
+          executionId: "00000000-0000-0000-0000-000000000000",
+          rfqId: session.id,
+          userId: session.taker_id,
+          canonicalTopicKey: session.canonical_market_id,
+          candidateId: session.canonical_market_id,
+          side: session.side,
+          size: session.quantity,
+          selectedLaneId: "RFQ_ACCEPT_PREVIEW",
+          venuePath: ["RFQ_ACCEPT_PREVIEW"],
+          executionMode: "SINGLE_VENUE",
+          approvedScopeHash: session.idempotency_key,
+          maxSlippage: 0,
+          fastLaneEnabled: false,
+          ghostFillProtectionEnabled: true,
+          expectedPrice: Number.parseFloat(quote.price),
+          expectedFees: {
+            policyVersion: monetizationPolicy.policyVersion,
+            currency: monetizationPolicy.currency,
+            mode: monetizationPolicy.mode,
+            priceImprovementFee: 0,
+            executionFee: 0,
+            fastLaneFee: 0,
+            ghostFillProtectionFee: 0,
+            futureSettlementFee: 0,
+            totalLotusFee: 0,
+            notionalCap: 0,
+            capApplied: false,
+            totalFees: 0
+          },
+          idempotencyKey: `${session.idempotency_key}:fee-preview`,
+          createdAt: new Date().toISOString(),
+          metadata: { quoteId: request.quoteId }
+        });
+        const maxLotusFee = (Number.parseFloat(requestedNotional) * monetizationPolicy.maxTotalFeeBps / 10_000).toFixed(8);
+        const disclosureHash = createHash("sha256")
+          .update(JSON.stringify({
+            rfqId: session.id,
+            quoteId: request.quoteId,
+            policyVersion: monetizationPolicy.policyVersion,
+            maxLotusFee,
+            currency: monetizationPolicy.currency
+          }))
+          .digest("hex");
+        await monetizationRepository.upsertPolicy(monetizationPolicy);
+        await monetizationRepository.createLedgerEntry({
+          idempotencyKey: `${session.id}:quote:${request.quoteId}:${monetizationPolicy.policyVersion}:PREVIEWED`,
+          rfqId: session.id,
+          quoteId: request.quoteId,
+          userId: session.taker_id,
+          laneId: "RFQ_ACCEPT_PREVIEW",
+          feePolicyVersion: monetizationPolicy.policyVersion,
+          feeType: "LOTUS_TOTAL",
+          status: "PREVIEWED",
+          amount: String(preview.totalLotusFee ?? preview.totalFees),
+          currency: monetizationPolicy.currency,
+          metadata: { feeSummary: preview, maxLotusFee }
+        });
+        await monetizationRepository.createAuthorization({
+          idempotencyKey: `${session.id}:quote:${request.quoteId}:${monetizationPolicy.policyVersion}`,
+          rfqId: session.id,
+          quoteId: request.quoteId,
+          userId: session.taker_id,
+          feePolicyVersion: monetizationPolicy.policyVersion,
+          feeDisclosureHash: disclosureHash,
+          maxLotusFee,
+          maxPassThroughFee: "0",
+          currency: monetizationPolicy.currency,
+          feeSummary: preview
+        });
+        await monetizationRepository.createLedgerEntry({
+          idempotencyKey: `${session.id}:quote:${request.quoteId}:${monetizationPolicy.policyVersion}:AUTHORIZED`,
+          rfqId: session.id,
+          quoteId: request.quoteId,
+          userId: session.taker_id,
+          laneId: "RFQ_ACCEPT_AUTHORIZATION",
+          feePolicyVersion: monetizationPolicy.policyVersion,
+          feeType: "LOTUS_TOTAL",
+          status: "AUTHORIZED",
+          amount: maxLotusFee,
+          currency: monetizationPolicy.currency,
+          metadata: { feeSummary: preview, feeDisclosureHash: disclosureHash }
+        });
+      }
       const canonicalIdentity = await resolveCanonicalIdentity(
         dependencies.pgPool,
         session.canonical_market_id

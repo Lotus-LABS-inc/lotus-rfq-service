@@ -80,7 +80,9 @@ export class NotConfiguredExecutionAdapter implements ExecutionVenueAdapter {
 
 export interface TestExecutionAdapterOptions {
   settlementStatus?: SettlementStatusV0;
+  settlementEvidence?: Record<string, unknown>;
   fillStatus?: VenueFillState["status"];
+  fillPrice?: number;
   failSubmit?: boolean;
   offchainFilled?: boolean;
 }
@@ -116,7 +118,7 @@ export class TestExecutionAdapter implements ExecutionVenueAdapter {
       fillId: `test-fill-${randomUUID()}`,
       status: fillStatus === "PARTIAL_FILL" ? "PARTIAL_FILL" : fillStatus === "FILLED" ? "FILLED" : "SUBMITTED",
       filledSize: fillStatus === "OPEN" ? "0" : "1",
-      averagePrice: 0.5
+      averagePrice: this.options.fillPrice ?? 0.5
     };
   }
 
@@ -125,7 +127,7 @@ export class TestExecutionAdapter implements ExecutionVenueAdapter {
     return {
       status,
       filledSize: status === "OPEN" ? "0" : "1",
-      averagePrice: 0.5,
+      averagePrice: this.options.fillPrice ?? 0.5,
       ...(this.options.offchainFilled !== undefined ? { offchainFilled: this.options.offchainFilled } : {})
     };
   }
@@ -138,7 +140,8 @@ export class TestExecutionAdapter implements ExecutionVenueAdapter {
     return {
       status: this.options.settlementStatus ?? "SETTLEMENT_VERIFIED",
       evidence: {
-        adapter: "test"
+        adapter: "test",
+        ...(this.options.settlementEvidence ?? {})
       }
     };
   }

@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-04-26T01:44:02.955Z",
-  "status": "NO_ELIGIBLE_CONFIRMED_ROW",
+  "generatedAt": "2026-04-28T01:28:05.328Z",
+  "status": "COMPLETED",
   "readOnly": true,
   "persistedReadinessResult": false,
   "liveLifiExecutionEnabled": false,
@@ -9,18 +9,46 @@
     "mode": "LIVE_READ",
     "configured": true,
     "balanceUrlConfigured": true,
-    "balanceUrlHost": "localhost:4001",
-    "authMode": "NONE",
+    "balanceUrlHost": "ops.uselotus.xyz",
+    "authMode": "BEARER",
     "apiKeyConfigured": true,
     "timeoutMs": 5000,
     "minimumConfirmations": 0
   },
-  "selectedRow": null,
-  "readinessResult": null,
-  "mappingObserved": null,
+  "selectedRow": {
+    "fundingIntentId": "ec952b8b-4ad8-4ada-a5e6-1eeff7d4ca52",
+    "userId": "sandbox-pair-funding-user-08be3ec2-1e8f-47b4-9584-26466ea47a32",
+    "targetVenue": "POLYMARKET",
+    "routeLegId": "546392b9-963c-4e39-827e-074f3946687d",
+    "destinationStatus": "CONFIRMED",
+    "venueCreditStatus": "UNKNOWN",
+    "requiredAmount": "50",
+    "txHashes": [
+      "0xb610dd49f3db4366a312d1cf8d2eda2bbc580dff70324906a4ffe9de9a541486"
+    ]
+  },
+  "readinessResult": {
+    "venue": "POLYMARKET",
+    "token": "USDC",
+    "checkedAt": "2026-04-28T01:28:06.981Z",
+    "status": "VENUE_CREDIT_PENDING",
+    "destinationReceived": true,
+    "venueCreditConfirmed": false,
+    "readyToTrade": false,
+    "usableBalance": "0",
+    "reason": "POLYMARKET_USABLE_BALANCE_BELOW_REQUIRED_AMOUNT",
+    "evidence": {
+      "source": "polymarket_funding_readiness",
+      "checkerMode": "LIVE_READ",
+      "authMode": "BEARER",
+      "minimumConfirmations": 0,
+      "redactionPolicy": "SERVER_SAFE_DEFAULT",
+      "requiredAmount": "50",
+      "usableBalance": "0"
+    }
+  },
+  "mappingObserved": "VENUE_CREDIT_PENDING",
   "redactionVerified": true,
-  "blockers": [
-    "No POLYMARKET funding route leg with confirmed destination status was found."
-  ],
+  "blockers": [],
   "warnings": []
 }
