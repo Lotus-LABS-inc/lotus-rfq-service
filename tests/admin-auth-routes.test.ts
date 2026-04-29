@@ -1,7 +1,8 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import fastifyJwt from "@fastify/jwt";
 import { describe, expect, it } from "vitest";
+import type { AdminEmailDelivery, AdminMagicLinkEmailInput } from "../src/api/admin/admin-email-delivery.js";
 import { AdminAuthService } from "../src/api/admin/admin-auth-service.js";
 import { registerAdminAuthRoutes } from "../src/api/admin/admin-auth.routes.js";
 import { createAdminAuthMiddleware, createAdminOwnerAuthMiddleware } from "../src/api/user-auth-middleware.js";
@@ -59,6 +60,7 @@ class FakeAdminAuthRepository {
       adminMemberId: input.adminMemberId,
       keyId: input.keyId,
       keyHash: input.keyHash,
+      keyType: input.keyType ?? "LOGIN_KEY",
       status: "ACTIVE",
       lastUsedAt: null,
       expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
@@ -95,7 +97,42 @@ class FakeAdminAuthRepository {
   public async createAuditEvent(): Promise<void> {}
 }
 
+class FakeAdminEmailDelivery implements AdminEmailDelivery {
+  public readonly sent: AdminMagicLinkEmailInput[] = [];
+
+  public async sendAdminMagicLink(input: AdminMagicLinkEmailInput): Promise<{ providerMessageId: string | null }> {
+    this.sent.push(input);
+    return { providerMessageId: "fake-message-id" };
+  }
+}
+
 const buildApp = async () => {
+  const repository = new FakeAdminAuthRepository();
+  const emailDelivery = new FakeAdminEmailDelivery();
+  const service = new AdminAuthService(repository as unknown as AdminAuthRepository, {
+    keyPepper: "admin-test-pepper-at-least-thirty-two-characters",
+    allowedEmailDomains: "lotus.example",
+    adminFrontendBaseUrl: "https://admin.lotus.example",
+    magicLinkTtlSeconds: 900
+  }, emailDelivery);
+  const owner = await service.createMember({
+    email: "owner@lotus.example",
+    role: "OWNER",
+    actorId: null
+  });
+  const ownerKey = await service.createKey({ memberId: owner.id, actorId: owner.id });
+
+  const app = Fastify({ logger: false });
+  await app.register(fastifyJwt, { secret: "test-secret-at-least-thirty-two-characters" });
+  await registerAdminAuthRoutes(app, createAdminAuthMiddleware(), {
+    adminAuthService: service,
+    ownerMiddleware: createAdminOwnerAuthMiddleware(),
+    jwtTtlSeconds: 3600
+  });
+  return { app, repository, emailDelivery, owner, ownerKey };
+};
+
+const buildAppWithoutEmailDelivery = async () => {
   const repository = new FakeAdminAuthRepository();
   const service = new AdminAuthService(repository as unknown as AdminAuthRepository, {
     keyPepper: "admin-test-pepper-at-least-thirty-two-characters",
@@ -115,7 +152,7 @@ const buildApp = async () => {
     ownerMiddleware: createAdminOwnerAuthMiddleware(),
     jwtTtlSeconds: 3600
   });
-  return { app, repository, owner, ownerKey };
+  return { app, ownerKey };
 };
 
 describe("admin auth routes", () => {
@@ -170,7 +207,7 @@ describe("admin auth routes", () => {
       method: "POST",
       url: "/admin/auth/members",
       headers: { authorization: `Bearer ${ownerToken}` },
-      payload: { email: "ops@lotus.example", role: "ADMIN" }
+      payload: { email: "ops@lotus.example", role: "ADMIN", sendInvite: false }
     });
     expect(createMember.statusCode).toBe(201);
     const memberId = createMember.json().member.id;
@@ -199,6 +236,115 @@ describe("admin auth routes", () => {
       payload: { email: "second@lotus.example", role: "ADMIN" }
     });
     expect(forbidden.statusCode).toBe(403);
+    await app.close();
+  });
+
+  it("fails closed when invite delivery is not configured", async () => {
+    const { app, ownerKey } = await buildAppWithoutEmailDelivery();
+    const login = await app.inject({
+      method: "POST",
+      url: "/admin/auth/login",
+      payload: { email: "owner@lotus.example", loginKey: ownerKey.loginKey }
+    });
+    const ownerToken = login.json().token;
+    const createMember = await app.inject({
+      method: "POST",
+      url: "/admin/auth/members",
+      headers: { authorization: `Bearer ${ownerToken}` },
+      payload: { email: "no-delivery@lotus.example", role: "ADMIN" }
+    });
+    expect(createMember.statusCode).toBe(503);
+    expect(createMember.json()).toMatchObject({ code: "ADMIN_EMAIL_NOT_CONFIGURED" });
+    await app.close();
+  });
+
+  it("creates a member and emails a magic login link without returning plaintext credentials", async () => {
+    const { app, emailDelivery, ownerKey } = await buildApp();
+    const login = await app.inject({
+      method: "POST",
+      url: "/admin/auth/login",
+      payload: { email: "owner@lotus.example", loginKey: ownerKey.loginKey }
+    });
+    const ownerToken = login.json().token;
+    const createMember = await app.inject({
+      method: "POST",
+      url: "/admin/auth/members",
+      headers: { authorization: `Bearer ${ownerToken}` },
+      payload: { email: "magic@lotus.example", role: "ADMIN" }
+    });
+    expect(createMember.statusCode).toBe(201);
+    expect(createMember.json()).toMatchObject({
+      member: { email: "magic@lotus.example", role: "ADMIN" },
+      invite: { sent: true, deliveryStatus: "SENT" }
+    });
+    expect(createMember.body).not.toContain("loginKey");
+    expect(createMember.body).not.toContain("lotus_magic_");
+    expect(emailDelivery.sent).toHaveLength(1);
+    expect(emailDelivery.sent[0]?.magicLink).toContain("/admin-access/magic?token=lotus_magic_");
+    await app.close();
+  });
+
+  it("exchanges a magic link once and rejects reuse", async () => {
+    const { app, emailDelivery, ownerKey } = await buildApp();
+    const login = await app.inject({
+      method: "POST",
+      url: "/admin/auth/login",
+      payload: { email: "owner@lotus.example", loginKey: ownerKey.loginKey }
+    });
+    const ownerToken = login.json().token;
+    const createMember = await app.inject({
+      method: "POST",
+      url: "/admin/auth/members",
+      headers: { authorization: `Bearer ${ownerToken}` },
+      payload: { email: "once@lotus.example", role: "ADMIN" }
+    });
+    expect(createMember.statusCode).toBe(201);
+    const magicToken = new URL(emailDelivery.sent[0]!.magicLink).searchParams.get("token");
+    expect(magicToken).toMatch(/^lotus_magic_/);
+
+    const first = await app.inject({
+      method: "POST",
+      url: "/admin/auth/magic-login",
+      payload: { token: magicToken }
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({
+      tokenType: "Bearer",
+      member: { email: "once@lotus.example", role: "ADMIN" }
+    });
+
+    const second = await app.inject({
+      method: "POST",
+      url: "/admin/auth/magic-login",
+      payload: { token: magicToken }
+    });
+    expect(second.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it("rejects expired magic links", async () => {
+    const { app, repository, owner } = await buildApp();
+    const member = await repository.upsertMember({
+      email: "expired@lotus.example",
+      role: "ADMIN",
+      createdBy: owner.id
+    });
+    const keyId = "1234567890abcdef12";
+    const token = `lotus_magic_${keyId}_expiredSecretExpiredSecretExpiredSecret`;
+    await repository.createKey({
+      adminMemberId: member.id,
+      keyId,
+      keyHash: createHmac("sha256", "admin-test-pepper-at-least-thirty-two-characters").update(token).digest("hex"),
+      keyType: "MAGIC_LINK",
+      expiresAt: "2026-04-28T00:00:00.000Z",
+      createdBy: owner.id
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/admin/auth/magic-login",
+      payload: { token }
+    });
+    expect(response.statusCode).toBe(401);
     await app.close();
   });
 });

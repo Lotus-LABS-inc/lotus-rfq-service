@@ -7,10 +7,15 @@ const loginBodySchema = z.object({
   loginKey: z.string().min(24)
 });
 
+const magicLoginBodySchema = z.object({
+  token: z.string().min(24)
+});
+
 const createMemberBodySchema = z.object({
   email: z.string().email(),
   displayName: z.string().min(1).optional(),
-  role: z.enum(["OWNER", "ADMIN"]).default("ADMIN")
+  role: z.enum(["OWNER", "ADMIN"]).default("ADMIN"),
+  sendInvite: z.boolean().default(true)
 });
 
 const memberParamsSchema = z.object({
@@ -44,23 +49,21 @@ export const registerAdminAuthRoutes = async (
 
     try {
       const result = await deps.adminAuthService.login(parsed.data.email, parsed.data.loginKey);
-      const expiresInSeconds = deps.jwtTtlSeconds;
-      const token = app.jwt.sign(
-        {
-          userId: result.member.id,
-          role: "ADMIN",
-          email: result.member.email,
-          adminMemberId: result.member.id,
-          adminRole: result.member.role
-        },
-        { expiresIn: expiresInSeconds }
-      );
-      return reply.send({
-        token,
-        tokenType: "Bearer",
-        expiresInSeconds,
-        member: safeMember(result.member)
-      });
+      return reply.send(buildJwtResponse(app, result.member, deps.jwtTtlSeconds));
+    } catch (error) {
+      return handleAdminAuthError(reply, error);
+    }
+  });
+
+  app.post("/admin/auth/magic-login", async (request, reply) => {
+    const parsed = magicLoginBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: parsed.error.flatten() });
+    }
+
+    try {
+      const result = await deps.adminAuthService.magicLogin(parsed.data.token);
+      return reply.send(buildJwtResponse(app, result.member, deps.jwtTtlSeconds));
     } catch (error) {
       return handleAdminAuthError(reply, error);
     }
@@ -96,7 +99,36 @@ export const registerAdminAuthRoutes = async (
         displayName: parsed.data.displayName ?? null,
         actorId: request.user.adminMemberId ?? request.user.userId
       });
-      return reply.status(201).send({ member: safeMember(member) });
+      if (!parsed.data.sendInvite) {
+        return reply.status(201).send({ member: safeMember(member) });
+      }
+      const invite = await deps.adminAuthService.sendInvite({
+        memberId: member.id,
+        actorId: request.user.adminMemberId ?? request.user.userId
+      });
+      return reply.status(201).send({
+        member: safeMember(member),
+        invite: safeInvite(invite.invite)
+      });
+    } catch (error) {
+      return handleAdminAuthError(reply, error);
+    }
+  });
+
+  app.post("/admin/auth/members/:memberId/invite", { preHandler: deps.ownerMiddleware }, async (request, reply) => {
+    const parsedParams = memberParamsSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: parsedParams.error.flatten() });
+    }
+    try {
+      const result = await deps.adminAuthService.sendInvite({
+        memberId: parsedParams.data.memberId,
+        actorId: request.user.adminMemberId ?? request.user.userId
+      });
+      return reply.status(201).send({
+        member: safeMember(result.member),
+        invite: safeInvite(result.invite)
+      });
     } catch (error) {
       return handleAdminAuthError(reply, error);
     }
@@ -161,10 +193,58 @@ const safeMember = <T extends { createdAt: Date; updatedAt: Date }>(member: T): 
   updatedAt: member.updatedAt.toISOString()
 });
 
+const safeInvite = <T extends {
+  key: { createdAt: Date; expiresAt: Date | null };
+  sent: boolean;
+  expiresAt: Date;
+  deliveryStatus: string;
+}>(invite: T): {
+  key: Record<string, unknown> & { createdAt: string; expiresAt: string | null };
+  sent: boolean;
+  expiresAt: string;
+  deliveryStatus: string;
+} => ({
+  key: {
+    ...(invite.key as Record<string, unknown>),
+    createdAt: invite.key.createdAt.toISOString(),
+    expiresAt: invite.key.expiresAt?.toISOString() ?? null
+  },
+  sent: invite.sent,
+  expiresAt: invite.expiresAt.toISOString(),
+  deliveryStatus: invite.deliveryStatus
+});
+
+const buildJwtResponse = (
+  app: FastifyInstance,
+  member: { id: string; email: string; role: string; createdAt: Date; updatedAt: Date },
+  expiresInSeconds: number
+) => {
+  const token = app.jwt.sign(
+    {
+      userId: member.id,
+      role: "ADMIN",
+      email: member.email,
+      adminMemberId: member.id,
+      adminRole: member.role
+    },
+    { expiresIn: expiresInSeconds }
+  );
+  return {
+    token,
+    tokenType: "Bearer",
+    expiresInSeconds,
+    member: safeMember(member)
+  };
+};
+
 const handleAdminAuthError = (reply: FastifyReply, error: unknown) => {
   if (error instanceof AdminAuthError) {
     const status = error.code === "ADMIN_AUTH_NOT_CONFIGURED"
       ? 503
+      : error.code === "ADMIN_EMAIL_NOT_CONFIGURED"
+        ? 503
+        : error.code === "ADMIN_EMAIL_DELIVERY_FAILED"
+          ? 502
       : error.code.endsWith("_NOT_FOUND")
         ? 404
         : error.code === "EMAIL_DOMAIN_NOT_ALLOWED" || error.code === "CANNOT_DISABLE_SELF"

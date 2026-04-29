@@ -359,6 +359,25 @@ paths:
         "200": { $ref: "#/components/responses/AdminLogin" }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+  /admin/auth/magic-login:
+    post:
+      tags: [Admin Auth]
+      summary: Exchange a one-time emailed magic login token for a short-lived admin JWT.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: public-login
+      x-lotus-side-effects: creates-session
+      x-lotus-danger: high
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminMagicLoginRequest"
+      responses:
+        "200": { $ref: "#/components/responses/AdminLogin" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
   /admin/auth/me:
     get:
       tags: [Admin Auth]
@@ -385,7 +404,7 @@ paths:
         "200": { $ref: "#/components/responses/AdminMembers" }
     post:
       tags: [Admin Auth]
-      summary: Create or reactivate an admin member by work email. Owner-only.
+      summary: Create or reactivate an admin member by work email and optionally send a magic login invite. Owner-only.
       x-lotus-status: implemented
       x-lotus-callable: true
       x-lotus-auth: admin-owner
@@ -399,8 +418,27 @@ paths:
             schema:
               $ref: "#/components/schemas/AdminMemberCreateRequest"
       responses:
-        "201": { $ref: "#/components/responses/AdminMember" }
+        "201": { $ref: "#/components/responses/AdminMemberInvite" }
         "403": { $ref: "#/components/responses/Error" }
+  /admin/auth/members/{memberId}/invite:
+    parameters:
+      - name: memberId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin Auth]
+      summary: Send a short-lived one-time magic login link to an admin member. Owner-only.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin-owner
+      x-lotus-side-effects: sends-admin-invite
+      x-lotus-danger: high
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201": { $ref: "#/components/responses/AdminMemberInvite" }
+        "403": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /admin/auth/members/{memberId}/keys:
     parameters:
       - name: memberId
@@ -3200,6 +3238,16 @@ components:
             required: [member]
             properties:
               member: { $ref: "#/components/schemas/AdminMember" }
+    AdminMemberInvite:
+      description: Admin member response with optional secret-free invite delivery metadata.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [member]
+            properties:
+              member: { $ref: "#/components/schemas/AdminMember" }
+              invite: { $ref: "#/components/schemas/AdminInvite" }
     AdminKeyCreated:
       description: Admin key creation response. loginKey is returned once.
       content:
@@ -3250,6 +3298,13 @@ components:
         loginKey:
           type: string
           description: Owner-generated admin login key. Never log or expose after login.
+    AdminMagicLoginRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: One-time magic login token from the emailed admin link. Never log or expose after login.
     AdminLoginResponse:
       type: object
       required: [token, tokenType, expiresInSeconds, member]
@@ -3265,6 +3320,10 @@ components:
         email: { type: string, format: email }
         displayName: { type: string }
         role: { type: string, enum: [OWNER, ADMIN], default: ADMIN }
+        sendInvite:
+          type: boolean
+          default: true
+          description: When true, backend sends a Resend magic-login invite and does not return plaintext credentials.
     AdminMember:
       type: object
       additionalProperties: true
@@ -3286,6 +3345,7 @@ components:
         id: { type: string, format: uuid }
         adminMemberId: { type: string, format: uuid }
         keyId: { type: string }
+        keyType: { type: string, enum: [LOGIN_KEY, MAGIC_LINK] }
         status: { type: string, enum: [ACTIVE, REVOKED] }
         lastUsedAt: { type: string, format: date-time, nullable: true }
         expiresAt: { type: string, format: date-time, nullable: true }
@@ -3298,6 +3358,15 @@ components:
         loginKey:
           type: string
           description: Plaintext login key returned once.
+    AdminInvite:
+      type: object
+      description: Secret-free admin invite delivery metadata. The magic token is sent only by email.
+      required: [sent, expiresAt, deliveryStatus, key]
+      properties:
+        sent: { type: boolean }
+        expiresAt: { type: string, format: date-time }
+        deliveryStatus: { type: string, enum: [SENT] }
+        key: { $ref: "#/components/schemas/AdminAuthKey" }
     AdminOpsSummaryResponse:
       type: object
       required: [summary]

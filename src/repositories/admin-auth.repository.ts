@@ -3,6 +3,7 @@ import type { Pool } from "pg";
 export type AdminMemberRole = "OWNER" | "ADMIN";
 export type AdminMemberStatus = "ACTIVE" | "DISABLED";
 export type AdminAuthKeyStatus = "ACTIVE" | "REVOKED";
+export type AdminAuthKeyType = "LOGIN_KEY" | "MAGIC_LINK";
 
 interface AdminMemberRow {
   id: string;
@@ -20,6 +21,7 @@ interface AdminAuthKeyRow {
   admin_member_id: string;
   key_id: string;
   key_hash: string;
+  key_type: AdminAuthKeyType;
   status: AdminAuthKeyStatus;
   last_used_at: Date | null;
   expires_at: Date | null;
@@ -45,6 +47,7 @@ export interface AdminAuthKey {
   adminMemberId: string;
   keyId: string;
   keyHash: string;
+  keyType: AdminAuthKeyType;
   status: AdminAuthKeyStatus;
   lastUsedAt: Date | null;
   expiresAt: Date | null;
@@ -65,6 +68,7 @@ export interface CreateAdminAuthKeyInput {
   adminMemberId: string;
   keyId: string;
   keyHash: string;
+  keyType?: AdminAuthKeyType;
   createdBy?: string | null;
   expiresAt?: string | null;
 }
@@ -146,15 +150,17 @@ export class AdminAuthRepository {
           admin_member_id,
           key_id,
           key_hash,
+          key_type,
           status,
           expires_at,
           created_by
-       ) VALUES ($1::uuid, $2, $3, 'ACTIVE', $4::timestamptz, $5::uuid)
+       ) VALUES ($1::uuid, $2, $3, $4, 'ACTIVE', $5::timestamptz, $6::uuid)
        RETURNING *`,
       [
         input.adminMemberId,
         input.keyId,
         input.keyHash,
+        input.keyType ?? "LOGIN_KEY",
         input.expiresAt ?? null,
         input.createdBy ?? null
       ]
@@ -250,6 +256,7 @@ const mapAdminAuthKeyRow = (row: AdminAuthKeyRow): AdminAuthKey => ({
   adminMemberId: row.admin_member_id,
   keyId: row.key_id,
   keyHash: row.key_hash,
+  keyType: row.key_type ?? "LOGIN_KEY",
   status: row.status,
   lastUsedAt: row.last_used_at ? new Date(row.last_used_at) : null,
   expiresAt: row.expires_at ? new Date(row.expires_at) : null,

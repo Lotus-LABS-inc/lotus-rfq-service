@@ -5,6 +5,7 @@ import type {
   AdminMember,
   AdminMemberRole
 } from "../../repositories/admin-auth.repository.js";
+import type { AdminEmailDelivery } from "./admin-email-delivery.js";
 
 export class AdminAuthError extends Error {
   public constructor(
@@ -19,6 +20,8 @@ export class AdminAuthError extends Error {
 export interface AdminAuthServiceConfig {
   keyPepper: string | undefined;
   allowedEmailDomains?: string | undefined;
+  adminFrontendBaseUrl?: string | undefined;
+  magicLinkTtlSeconds?: number | undefined;
 }
 
 export interface AdminLoginResult {
@@ -31,12 +34,23 @@ export interface AdminKeyCreatedResult {
   loginKey: string;
 }
 
+export interface AdminInviteResult {
+  member: AdminMember;
+  invite: {
+    key: Omit<AdminAuthKey, "keyHash">;
+    sent: boolean;
+    expiresAt: Date;
+    deliveryStatus: "SENT";
+  };
+}
+
 export class AdminAuthService {
   private readonly allowedDomains: string[];
 
   public constructor(
     private readonly repository: AdminAuthRepository,
-    private readonly config: AdminAuthServiceConfig
+    private readonly config: AdminAuthServiceConfig,
+    private readonly emailDelivery: AdminEmailDelivery | null = null
   ) {
     this.allowedDomains = parseAllowedDomains(config.allowedEmailDomains);
   }
@@ -55,7 +69,7 @@ export class AdminAuthService {
       this.repository.findMemberByEmail(normalizedEmail),
       this.repository.findKeyByKeyId(parsedKey.keyId)
     ]);
-    if (!member || member.status !== "ACTIVE" || !key || key.status !== "ACTIVE") {
+    if (!member || member.status !== "ACTIVE" || !key || key.status !== "ACTIVE" || key.keyType !== "LOGIN_KEY") {
       throw new AdminAuthError("INVALID_CREDENTIALS", "Invalid admin credentials.");
     }
     if (key.adminMemberId !== member.id) {
@@ -72,6 +86,44 @@ export class AdminAuthService {
     await this.repository.createAuditEvent({
       actorAdminMemberId: member.id,
       eventType: "ADMIN_AUTH_LOGIN",
+      targetType: "admin_member",
+      targetId: member.id,
+      metadata: { keyId: key.keyId }
+    });
+    return { member, key };
+  }
+
+  public async magicLogin(magicToken: string): Promise<AdminLoginResult> {
+    this.assertPepperConfigured();
+    const parsedKey = parseMagicToken(magicToken);
+    if (!parsedKey) {
+      throw new AdminAuthError("INVALID_CREDENTIALS", "Invalid admin credentials.");
+    }
+
+    const key = await this.repository.findKeyByKeyId(parsedKey.keyId);
+    if (!key || key.status !== "ACTIVE" || key.keyType !== "MAGIC_LINK") {
+      throw new AdminAuthError("INVALID_CREDENTIALS", "Invalid admin credentials.");
+    }
+    if (key.lastUsedAt) {
+      throw new AdminAuthError("INVALID_CREDENTIALS", "Invalid admin credentials.");
+    }
+    if (key.expiresAt && key.expiresAt.getTime() <= Date.now()) {
+      throw new AdminAuthError("INVALID_CREDENTIALS", "Invalid admin credentials.");
+    }
+    if (!constantTimeEqual(hashLoginKey(magicToken, this.config.keyPepper!), key.keyHash)) {
+      throw new AdminAuthError("INVALID_CREDENTIALS", "Invalid admin credentials.");
+    }
+
+    const member = await this.repository.findMemberById(key.adminMemberId);
+    if (!member || member.status !== "ACTIVE") {
+      throw new AdminAuthError("INVALID_CREDENTIALS", "Invalid admin credentials.");
+    }
+    this.assertWorkEmail(member.email);
+
+    await this.repository.markKeyUsed(key.id);
+    await this.repository.createAuditEvent({
+      actorAdminMemberId: member.id,
+      eventType: "ADMIN_MAGIC_LOGIN",
       targetType: "admin_member",
       targetId: member.id,
       metadata: { keyId: key.keyId }
@@ -126,6 +178,7 @@ export class AdminAuthService {
       adminMemberId: member.id,
       keyId: generated.keyId,
       keyHash: hashLoginKey(generated.loginKey, this.config.keyPepper!),
+      keyType: "LOGIN_KEY",
       expiresAt: input.expiresAt ?? null,
       createdBy: input.actorId
     });
@@ -139,6 +192,81 @@ export class AdminAuthService {
     return {
       key: safeKey(key),
       loginKey: generated.loginKey
+    };
+  }
+
+  public async sendInvite(input: {
+    memberId: string;
+    actorId: string;
+  }): Promise<AdminInviteResult> {
+    this.assertPepperConfigured();
+    this.assertInviteDeliveryConfigured();
+
+    const member = await this.repository.findMemberById(input.memberId);
+    if (!member || member.status !== "ACTIVE") {
+      throw new AdminAuthError("ADMIN_MEMBER_NOT_FOUND", "Admin member not found.");
+    }
+    this.assertWorkEmail(member.email);
+
+    const generated = generateMagicToken();
+    const expiresAt = new Date(Date.now() + resolveMagicLinkTtlSeconds(this.config.magicLinkTtlSeconds) * 1000);
+    const key = await this.repository.createKey({
+      adminMemberId: member.id,
+      keyId: generated.keyId,
+      keyHash: hashLoginKey(generated.magicToken, this.config.keyPepper!),
+      keyType: "MAGIC_LINK",
+      expiresAt: expiresAt.toISOString(),
+      createdBy: input.actorId
+    });
+
+    await this.repository.createAuditEvent({
+      actorAdminMemberId: input.actorId,
+      eventType: "ADMIN_MAGIC_LINK_CREATED",
+      targetType: "admin_auth_key",
+      targetId: key.id,
+      metadata: { adminMemberId: member.id, keyId: key.keyId, expiresAt: expiresAt.toISOString() }
+    });
+
+    try {
+      const delivery = await this.emailDelivery!.sendAdminMagicLink({
+        to: member.email,
+        magicLink: buildMagicLink(this.config.adminFrontendBaseUrl!, generated.magicToken),
+        expiresAt
+      });
+      await this.repository.createAuditEvent({
+        actorAdminMemberId: input.actorId,
+        eventType: "ADMIN_MAGIC_LINK_SENT",
+        targetType: "admin_auth_key",
+        targetId: key.id,
+        metadata: {
+          adminMemberId: member.id,
+          keyId: key.keyId,
+          providerMessageId: delivery.providerMessageId
+        }
+      });
+    } catch (error) {
+      await this.repository.createAuditEvent({
+        actorAdminMemberId: input.actorId,
+        eventType: "ADMIN_MAGIC_LINK_SEND_FAILED",
+        targetType: "admin_auth_key",
+        targetId: key.id,
+        metadata: {
+          adminMemberId: member.id,
+          keyId: key.keyId,
+          reason: error instanceof Error ? error.message : "unknown"
+        }
+      });
+      throw new AdminAuthError("ADMIN_EMAIL_DELIVERY_FAILED", "Admin invite email delivery failed.");
+    }
+
+    return {
+      member,
+      invite: {
+        key: safeKey(key),
+        sent: true,
+        expiresAt,
+        deliveryStatus: "SENT"
+      }
     };
   }
 
@@ -164,6 +292,12 @@ export class AdminAuthService {
   private assertPepperConfigured(): void {
     if (!this.config.keyPepper || this.config.keyPepper.length < 32) {
       throw new AdminAuthError("ADMIN_AUTH_NOT_CONFIGURED", "ADMIN_AUTH_KEY_PEPPER must be configured.");
+    }
+  }
+
+  private assertInviteDeliveryConfigured(): void {
+    if (!this.emailDelivery || !this.config.adminFrontendBaseUrl) {
+      throw new AdminAuthError("ADMIN_EMAIL_NOT_CONFIGURED", "Admin invite email delivery is not configured.");
     }
   }
 
@@ -195,8 +329,22 @@ const generateLoginKey = (): { keyId: string; loginKey: string } => {
   };
 };
 
+const generateMagicToken = (): { keyId: string; magicToken: string } => {
+  const keyId = randomBytes(9).toString("hex");
+  const secret = randomBytes(32).toString("base64url");
+  return {
+    keyId,
+    magicToken: `lotus_magic_${keyId}_${secret}`
+  };
+};
+
 const parseLoginKey = (loginKey: string): { keyId: string } | null => {
   const match = /^lotus_admin_([a-f0-9]{18})_[A-Za-z0-9_-]{32,}$/.exec(loginKey);
+  return match?.[1] ? { keyId: match[1] } : null;
+};
+
+const parseMagicToken = (magicToken: string): { keyId: string } | null => {
+  const match = /^lotus_magic_([a-f0-9]{18})_[A-Za-z0-9_-]{32,}$/.exec(magicToken);
   return match?.[1] ? { keyId: match[1] } : null;
 };
 
@@ -212,4 +360,13 @@ const constantTimeEqual = (left: string, right: string): boolean => {
 const safeKey = (key: AdminAuthKey): Omit<AdminAuthKey, "keyHash"> => {
   const { keyHash: _keyHash, ...rest } = key;
   return rest;
+};
+
+const resolveMagicLinkTtlSeconds = (value: number | undefined): number =>
+  Number.isFinite(value) && value ? Math.max(60, Math.min(3600, Math.trunc(value))) : 900;
+
+const buildMagicLink = (adminFrontendBaseUrl: string, magicToken: string): string => {
+  const url = new URL("/admin-access/magic", adminFrontendBaseUrl);
+  url.searchParams.set("token", magicToken);
+  return url.toString();
 };

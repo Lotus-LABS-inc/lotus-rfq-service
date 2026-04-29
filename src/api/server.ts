@@ -91,6 +91,7 @@ import { registerAdminFundingReadinessRoutes } from "./admin/funding-readiness.r
 import { FundingReadinessAdminService } from "./admin/funding-readiness-admin-service.js";
 import { registerAdminAuthRoutes } from "./admin/admin-auth.routes.js";
 import { AdminAuthService } from "./admin/admin-auth-service.js";
+import { buildAdminEmailDeliveryFromEnv } from "./admin/admin-email-delivery.js";
 import { registerAdminOpsRoutes } from "./admin/admin-ops.routes.js";
 import { registerAdminMonetizationRoutes } from "./admin/monetization.routes.js";
 import { registerAdminSchemaMapRoutes } from "./admin/schema-map.routes.js";
@@ -313,6 +314,11 @@ const parseAdminJwtTtlSeconds = (value: string | undefined): number => {
   return Number.isFinite(parsed) && parsed >= 300 && parsed <= 86_400 ? Math.trunc(parsed) : 3600;
 };
 
+const parseAdminMagicLinkTtlSeconds = (value: string | undefined): number => {
+  const parsed = Number(value ?? "900");
+  return Number.isFinite(parsed) && parsed >= 60 && parsed <= 3600 ? Math.trunc(parsed) : 900;
+};
+
 export const buildServer = async (dependencies: ServerDependencies): Promise<FastifyInstance> => {
   const app = Fastify({
     logger: false
@@ -429,8 +435,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const adminAuthRepository = new AdminAuthRepository(dependencies.pgPool);
   const adminAuthService = new AdminAuthService(adminAuthRepository, {
     keyPepper: process.env.ADMIN_AUTH_KEY_PEPPER,
-    allowedEmailDomains: process.env.ADMIN_ALLOWED_EMAIL_DOMAINS
-  });
+    allowedEmailDomains: process.env.ADMIN_ALLOWED_EMAIL_DOMAINS,
+    adminFrontendBaseUrl: process.env.ADMIN_FRONTEND_BASE_URL,
+    magicLinkTtlSeconds: parseAdminMagicLinkTtlSeconds(process.env.ADMIN_MAGIC_LINK_TTL_SECONDS)
+  }, buildAdminEmailDeliveryFromEnv(process.env));
   const executionAuditWriter = new ExecutionAuditWriter(
     executionIntentRepository,
     executionRecordRepository,
