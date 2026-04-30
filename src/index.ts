@@ -121,6 +121,13 @@ const connectRedisForStartup = async (
       return;
     } catch (error) {
       lastError = error;
+      if (isRedisAlreadyConnectingOrConnected(error)) {
+        logger.warn(
+          { err: error, attempt, maxAttempts },
+          "Redis startup connect raced with the client's reconnect loop. Continuing startup."
+        );
+        return;
+      }
       if (attempt === maxAttempts) {
         break;
       }
@@ -135,6 +142,9 @@ const connectRedisForStartup = async (
 
   throw lastError;
 };
+
+const isRedisAlreadyConnectingOrConnected = (error: unknown): boolean =>
+  error instanceof Error && error.message === "Redis is already connecting/connected";
 
 export const startService = async (
   modules: Partial<BootstrapModules> = {}
