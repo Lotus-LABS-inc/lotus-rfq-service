@@ -1,5 +1,6 @@
 import { createHash, createHmac } from "node:crypto";
 import type { Logger } from "pino";
+import type { Pool, PoolClient } from "pg";
 import type { RedisClient } from "../../db/redis.js";
 
 export type AdminAuthRateLimitScope = "request_login_link" | "manual_login";
@@ -80,6 +81,105 @@ export class RedisAdminAuthRateLimiter implements AdminAuthRateLimiter {
       await this.config.redis.expire(key, windowSeconds);
     }
     return count;
+  }
+}
+
+export interface PgAdminAuthRateLimiterConfig {
+  pool: Pool;
+  logger: Pick<Logger, "warn">;
+  keyPepper?: string | undefined;
+  requestLoginLink: AdminAuthRateLimitConfig;
+  manualLogin: AdminAuthRateLimitConfig;
+}
+
+export class PgAdminAuthRateLimiter implements AdminAuthRateLimiter {
+  public constructor(private readonly config: PgAdminAuthRateLimiterConfig) {}
+
+  public async consume(input: AdminAuthRateLimitInput): Promise<AdminAuthRateLimitResult> {
+    const limits = input.scope === "request_login_link"
+      ? this.config.requestLoginLink
+      : this.config.manualLogin;
+    const emailHash = hashIdentifier(input.email, this.config.keyPepper);
+    const ipHash = hashIdentifier(input.ip, this.config.keyPepper);
+
+    let client: PoolClient | null = null;
+    try {
+      client = await this.config.pool.connect();
+      await client.query("BEGIN");
+      const emailCount = await this.countRecent(client, input.scope, "email", emailHash, limits.windowSeconds);
+      const ipCount = await this.countRecent(client, input.scope, "ip", ipHash, limits.windowSeconds);
+      if (emailCount >= limits.maxPerEmail) {
+        await client.query("COMMIT");
+        return { allowed: false, reason: "EMAIL_LIMIT" };
+      }
+      if (ipCount >= limits.maxPerIp) {
+        await client.query("COMMIT");
+        return { allowed: false, reason: "IP_LIMIT" };
+      }
+      await this.insertConsumed(client, input.scope, "email", emailHash);
+      await this.insertConsumed(client, input.scope, "ip", ipHash);
+      await client.query("COMMIT");
+      return { allowed: true };
+    } catch (error) {
+      await client?.query("ROLLBACK").catch(() => undefined);
+      this.config.logger.warn({ err: error, scope: input.scope }, "Admin auth Postgres rate limit storage unavailable.");
+      return { allowed: false, reason: "STORAGE_UNAVAILABLE" };
+    } finally {
+      client?.release();
+    }
+  }
+
+  private async countRecent(
+    client: PoolClient,
+    scope: AdminAuthRateLimitScope,
+    kind: "email" | "ip",
+    identifierHash: string,
+    windowSeconds: number
+  ): Promise<number> {
+    const result = await client.query<{ count: string }>(
+      `SELECT count(*)::text AS count
+         FROM admin_audit_events
+        WHERE event_type = 'ADMIN_AUTH_RATE_LIMIT_CONSUMED'
+          AND created_at >= now() - ($1::int * interval '1 second')
+          AND metadata->>'scope' = $2
+          AND metadata->>'kind' = $3
+          AND metadata->>'identifierHash' = $4`,
+      [windowSeconds, scope, kind, identifierHash]
+    );
+    return Number.parseInt(result.rows[0]?.count ?? "0", 10);
+  }
+
+  private async insertConsumed(
+    client: PoolClient,
+    scope: AdminAuthRateLimitScope,
+    kind: "email" | "ip",
+    identifierHash: string
+  ): Promise<void> {
+    await client.query(
+      `INSERT INTO admin_audit_events (
+          actor_admin_member_id,
+          event_type,
+          target_type,
+          target_id,
+          metadata
+       ) VALUES (NULL, 'ADMIN_AUTH_RATE_LIMIT_CONSUMED', 'admin_auth', NULL, $1::jsonb)`,
+      [JSON.stringify({ scope, kind, identifierHash })]
+    );
+  }
+}
+
+export class FallbackAdminAuthRateLimiter implements AdminAuthRateLimiter {
+  public constructor(
+    private readonly primary: AdminAuthRateLimiter,
+    private readonly fallback: AdminAuthRateLimiter
+  ) {}
+
+  public async consume(input: AdminAuthRateLimitInput): Promise<AdminAuthRateLimitResult> {
+    const primaryResult = await this.primary.consume(input);
+    if (primaryResult.reason !== "STORAGE_UNAVAILABLE") {
+      return primaryResult;
+    }
+    return this.fallback.consume(input);
   }
 }
 

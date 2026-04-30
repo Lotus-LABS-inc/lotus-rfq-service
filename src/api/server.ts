@@ -91,7 +91,12 @@ import { registerAdminFundingReadinessRoutes } from "./admin/funding-readiness.r
 import { FundingReadinessAdminService } from "./admin/funding-readiness-admin-service.js";
 import { registerAdminAuthRoutes } from "./admin/admin-auth.routes.js";
 import { AdminAuthService } from "./admin/admin-auth-service.js";
-import { createAdminAuthRateLimitConfig, RedisAdminAuthRateLimiter } from "./admin/admin-auth-rate-limiter.js";
+import {
+  createAdminAuthRateLimitConfig,
+  FallbackAdminAuthRateLimiter,
+  PgAdminAuthRateLimiter,
+  RedisAdminAuthRateLimiter
+} from "./admin/admin-auth-rate-limiter.js";
 import { buildAdminEmailDeliveryFromEnv } from "./admin/admin-email-delivery.js";
 import { registerAdminOpsRoutes } from "./admin/admin-ops.routes.js";
 import { registerAdminMonetizationRoutes } from "./admin/monetization.routes.js";
@@ -441,13 +446,22 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     magicLinkTtlSeconds: parseAdminMagicLinkTtlSeconds(process.env.ADMIN_MAGIC_LINK_TTL_SECONDS)
   }, buildAdminEmailDeliveryFromEnv(process.env));
   const adminAuthRateLimits = createAdminAuthRateLimitConfig(process.env);
-  const adminAuthRateLimiter = new RedisAdminAuthRateLimiter({
-    redis: dependencies.redisClient,
-    logger: dependencies.logger,
-    keyPepper: process.env.ADMIN_AUTH_KEY_PEPPER,
-    requestLoginLink: adminAuthRateLimits.requestLoginLink,
-    manualLogin: adminAuthRateLimits.manualLogin
-  });
+  const adminAuthRateLimiter = new FallbackAdminAuthRateLimiter(
+    new RedisAdminAuthRateLimiter({
+      redis: dependencies.redisClient,
+      logger: dependencies.logger,
+      keyPepper: process.env.ADMIN_AUTH_KEY_PEPPER,
+      requestLoginLink: adminAuthRateLimits.requestLoginLink,
+      manualLogin: adminAuthRateLimits.manualLogin
+    }),
+    new PgAdminAuthRateLimiter({
+      pool: dependencies.pgPool,
+      logger: dependencies.logger,
+      keyPepper: process.env.ADMIN_AUTH_KEY_PEPPER,
+      requestLoginLink: adminAuthRateLimits.requestLoginLink,
+      manualLogin: adminAuthRateLimits.manualLogin
+    })
+  );
   const executionAuditWriter = new ExecutionAuditWriter(
     executionIntentRepository,
     executionRecordRepository,
