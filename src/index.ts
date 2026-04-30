@@ -146,6 +146,20 @@ const connectRedisForStartup = async (
 const isRedisAlreadyConnectingOrConnected = (error: unknown): boolean =>
   error instanceof Error && error.message === "Redis is already connecting/connected";
 
+const isTransientRedisStartupError = (error: unknown): boolean => {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    isRedisAlreadyConnectingOrConnected(error) ||
+    error.message.includes("ECONNRESET") ||
+    error.message.includes("Connection is closed") ||
+    error.message.includes("ETIMEDOUT") ||
+    error.message.includes("Socket closed unexpectedly")
+  );
+};
+
 export const startService = async (
   modules: Partial<BootstrapModules> = {}
 ): Promise<ServiceRuntime> => {
@@ -164,13 +178,13 @@ export const startService = async (
     await connectRedisForStartup(redisClient, impl.connectRedis, logger);
     redisConnected = true;
   } catch (error) {
-    if (!env.DEV_SIMULATION_PREVIEW_ENABLED) {
+    if (!env.DEV_SIMULATION_PREVIEW_ENABLED && !isTransientRedisStartupError(error)) {
       throw error;
     }
 
     logger.warn(
       { err: error },
-      "Redis connection failed during dev simulation preview startup. Continuing without an active Redis connection."
+      "Redis connection failed during startup. Continuing while the Redis client reconnects in the background."
     );
   }
 

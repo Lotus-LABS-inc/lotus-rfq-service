@@ -68,6 +68,34 @@ interface RedisConstructor {
 const require = createRequire(import.meta.url);
 const RedisCtor = require("ioredis") as RedisConstructor;
 
+const attachRedisLifecycleLogging = (
+  client: RedisClient,
+  logger: Logger,
+  clientRole: "primary" | "duplicate"
+): void => {
+  client.on("connect", () => {
+    logger.info({ redisClient: clientRole }, "Redis connection established.");
+  });
+
+  client.on("error", (error: Error) => {
+    logger.error({ err: error, redisClient: clientRole }, "Redis connection error.");
+  });
+
+  client.on("end", () => {
+    logger.warn({ redisClient: clientRole }, "Redis connection closed.");
+  });
+};
+
+const attachDuplicateLifecycleLogging = (client: RedisClient, logger: Logger): RedisClient => {
+  const duplicate = client.duplicate.bind(client);
+  client.duplicate = (() => {
+    const duplicatedClient = duplicate();
+    attachRedisLifecycleLogging(duplicatedClient, logger, "duplicate");
+    return attachDuplicateLifecycleLogging(duplicatedClient, logger);
+  }) as RedisClient["duplicate"];
+  return client;
+};
+
 export const createRedisClient = ({ redisUrl, logger }: RedisModuleConfig): RedisClient => {
   const options: RedisOptions = {
     lazyConnect: true,
@@ -77,19 +105,8 @@ export const createRedisClient = ({ redisUrl, logger }: RedisModuleConfig): Redi
 
   const client = new RedisCtor(redisUrl, options);
 
-  client.on("connect", () => {
-    logger.info("Redis connection established.");
-  });
-
-  client.on("error", (error: Error) => {
-    logger.error({ err: error }, "Redis connection error.");
-  });
-
-  client.on("end", () => {
-    logger.warn("Redis connection closed.");
-  });
-
-  return client;
+  attachRedisLifecycleLogging(client, logger, "primary");
+  return attachDuplicateLifecycleLogging(client, logger);
 };
 
 export const connectRedis = async (client: RedisClient): Promise<void> => {

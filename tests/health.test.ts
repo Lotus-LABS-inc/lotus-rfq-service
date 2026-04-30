@@ -465,4 +465,41 @@ describe("bootstrap lifecycle", () => {
 
     await runtime.shutdown();
   });
+
+  it("continues startup when Redis closes transiently during production startup", async () => {
+    const mockApp = {
+      listen: vi.fn(async () => {
+        callOrder.push("listen");
+      }),
+      close: vi.fn(async () => {
+        callOrder.push("app.close");
+      })
+    } as unknown as FastifyInstance;
+    let attempts = 0;
+
+    const runtime = await startService({
+      loadEnv: () => createRuntimeEnv({ NODE_ENV: "production" }),
+      createLogger: () => createTestLogger(),
+      createRedisClient: () => ({} as unknown as RedisClient),
+      connectRedis: async () => {
+        attempts += 1;
+        throw new Error("Connection is closed.");
+      },
+      createPgPool: () => ({} as unknown as Pool),
+      createDrizzleDb: () => ({} as AppDb),
+      buildServer: async () => mockApp,
+      disconnectRedis: async () => {
+        callOrder.push("disconnectRedis");
+      },
+      closePgPool: async () => {
+        callOrder.push("closePgPool");
+      }
+    });
+
+    expect(attempts).toBe(5);
+    expect(callOrder).toEqual(["listen"]);
+
+    await runtime.shutdown();
+    expect(callOrder).toEqual(["listen", "app.close", "closePgPool"]);
+  }, 20_000);
 });
