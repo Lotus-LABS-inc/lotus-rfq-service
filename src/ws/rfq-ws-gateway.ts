@@ -46,6 +46,7 @@ const SOCKET_OPEN = 1;
 const DEFAULT_REDIS_CHANNEL = "rfq:gateway:events";
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 15000;
 const DEFAULT_SLOW_CLIENT_BUFFER_BYTES = 256 * 1024;
+const SUBSCRIPTION_RETRY_DELAY_MS = 5000;
 
 export class RFQWebSocketGateway {
   private readonly publisher: RedisClient;
@@ -58,6 +59,9 @@ export class RFQWebSocketGateway {
   private readonly socketState = new Map<GatewaySocket, SocketState>();
   private readonly onRedisMessageBound: (channel: string, message: string) => void;
   private heartbeatTimer: NodeJS.Timeout | undefined;
+  private subscriptionRetryTimer: NodeJS.Timeout | undefined;
+  private stopped = true;
+  private subscribed = false;
 
   public constructor(config: RFQWebSocketGatewayConfig) {
     this.publisher = config.publisher;
@@ -73,23 +77,40 @@ export class RFQWebSocketGateway {
   }
 
   public async start(): Promise<void> {
-    await this.subscriber.connect();
-    await this.subscriber.subscribe(this.redisChannel);
+    this.stopped = false;
     this.subscriber.on("message", this.onRedisMessageBound);
     this.heartbeatTimer = setInterval(() => {
       this.performHeartbeatSweep();
     }, this.heartbeatIntervalMs);
+    await this.startRedisSubscription();
   }
 
   public async stop(): Promise<void> {
+    this.stopped = true;
+    if (this.subscriptionRetryTimer) {
+      clearTimeout(this.subscriptionRetryTimer);
+      this.subscriptionRetryTimer = undefined;
+    }
+
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = undefined;
     }
 
     this.subscriber.off("message", this.onRedisMessageBound);
-    await this.subscriber.unsubscribe(this.redisChannel);
-    await this.subscriber.quit();
+    if (this.subscribed) {
+      try {
+        await this.subscriber.unsubscribe(this.redisChannel);
+      } catch (error) {
+        this.logger.warn({ err: error }, "Failed to unsubscribe RFQ WebSocket Redis subscriber.");
+      }
+      this.subscribed = false;
+    }
+    try {
+      await this.subscriber.quit();
+    } catch (error) {
+      this.logger.warn({ err: error }, "Failed to close RFQ WebSocket Redis subscriber.");
+    }
 
     for (const socket of this.socketState.keys()) {
       socket.close(1001, "Server shutdown");
@@ -97,6 +118,46 @@ export class RFQWebSocketGateway {
 
     this.topicSubscribers.clear();
     this.socketState.clear();
+  }
+
+  private async startRedisSubscription(): Promise<void> {
+    try {
+      await this.connectSubscriber();
+      await this.subscriber.subscribe(this.redisChannel);
+      this.subscribed = true;
+    } catch (error) {
+      this.subscribed = false;
+      this.logger.warn(
+        { err: error, retryDelayMs: SUBSCRIPTION_RETRY_DELAY_MS },
+        "RFQ WebSocket Redis subscription unavailable. Retrying in the background."
+      );
+      this.scheduleSubscriptionRetry();
+    }
+  }
+
+  private async connectSubscriber(): Promise<void> {
+    try {
+      await this.subscriber.connect();
+    } catch (error) {
+      if (error instanceof Error && error.message === "Redis is already connecting/connected") {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  private scheduleSubscriptionRetry(): void {
+    if (this.stopped || this.subscriptionRetryTimer) {
+      return;
+    }
+
+    this.subscriptionRetryTimer = setTimeout(() => {
+      this.subscriptionRetryTimer = undefined;
+      if (!this.stopped) {
+        void this.startRedisSubscription();
+      }
+    }, SUBSCRIPTION_RETRY_DELAY_MS);
+    this.subscriptionRetryTimer.unref?.();
   }
 
   public registerConnection(socket: GatewaySocket): void {

@@ -194,6 +194,18 @@ class FakeSocket {
   }
 }
 
+class FlakyRedisSubscriber extends FakeRedisClient {
+  public connectAttempts = 0;
+
+  public async connect(): Promise<unknown> {
+    this.connectAttempts += 1;
+    if (this.connectAttempts === 1) {
+      throw new Error("Connection is closed.");
+    }
+    return undefined;
+  }
+}
+
 describe("RFQWebSocketGateway", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -225,6 +237,30 @@ describe("RFQWebSocketGateway", () => {
     const quoteEvent = payloads.find((entry) => entry.type === "QUOTE_RECEIVED");
     expect(quoteEvent).toBeTruthy();
     expect(quoteEvent?.payload).toEqual({ quoteId: "q1" });
+
+    await gateway.stop();
+  });
+
+  it("does not fail service startup when Redis subscriber is temporarily unavailable", async () => {
+    vi.useFakeTimers();
+    const bus = new FakeRedisBus();
+    const subscriber = new FlakyRedisSubscriber(bus);
+    const logger = { warn: vi.fn(), error: vi.fn() };
+    const gateway = new RFQWebSocketGateway({
+      publisher: new FakeRedisClient(bus),
+      subscriber,
+      logger
+    });
+
+    await expect(gateway.start()).resolves.toBeUndefined();
+    expect(subscriber.connectAttempts).toBe(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ retryDelayMs: 5000 }),
+      "RFQ WebSocket Redis subscription unavailable. Retrying in the background."
+    );
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(subscriber.connectAttempts).toBe(2);
 
     await gateway.stop();
   });
