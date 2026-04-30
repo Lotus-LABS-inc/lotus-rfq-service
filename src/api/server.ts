@@ -94,7 +94,7 @@ import { AdminAuthService } from "./admin/admin-auth-service.js";
 import {
   createAdminAuthRateLimitConfig,
   FallbackAdminAuthRateLimiter,
-  PgAdminAuthRateLimiter,
+  InMemoryAdminAuthRateLimiter,
   RedisAdminAuthRateLimiter
 } from "./admin/admin-auth-rate-limiter.js";
 import { buildAdminEmailDeliveryFromEnv } from "./admin/admin-email-delivery.js";
@@ -451,12 +451,11 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       redis: dependencies.redisClient,
       logger: dependencies.logger,
       keyPepper: process.env.ADMIN_AUTH_KEY_PEPPER,
+      operationTimeoutMs: 250,
       requestLoginLink: adminAuthRateLimits.requestLoginLink,
       manualLogin: adminAuthRateLimits.manualLogin
     }),
-    new PgAdminAuthRateLimiter({
-      pool: dependencies.pgPool,
-      logger: dependencies.logger,
+    new InMemoryAdminAuthRateLimiter({
       keyPepper: process.env.ADMIN_AUTH_KEY_PEPPER,
       requestLoginLink: adminAuthRateLimits.requestLoginLink,
       manualLogin: adminAuthRateLimits.manualLogin

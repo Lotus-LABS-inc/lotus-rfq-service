@@ -3,10 +3,18 @@ import Fastify from "fastify";
 import fastifyJwt from "@fastify/jwt";
 import { describe, expect, it } from "vitest";
 import type { AdminEmailDelivery, AdminMagicLinkEmailInput } from "../src/api/admin/admin-email-delivery.js";
-import type { AdminAuthRateLimiter, AdminAuthRateLimitInput, AdminAuthRateLimitResult } from "../src/api/admin/admin-auth-rate-limiter.js";
+import {
+  FallbackAdminAuthRateLimiter,
+  InMemoryAdminAuthRateLimiter,
+  RedisAdminAuthRateLimiter,
+  type AdminAuthRateLimiter,
+  type AdminAuthRateLimitInput,
+  type AdminAuthRateLimitResult
+} from "../src/api/admin/admin-auth-rate-limiter.js";
 import { AdminAuthService } from "../src/api/admin/admin-auth-service.js";
 import { registerAdminAuthRoutes } from "../src/api/admin/admin-auth.routes.js";
 import { createAdminAuthMiddleware, createAdminOwnerAuthMiddleware } from "../src/api/user-auth-middleware.js";
+import type { RedisClient } from "../src/db/redis.js";
 import type {
   AdminAuthKey,
   AdminAuthRepository,
@@ -137,6 +145,26 @@ class FakeAdminAuthRateLimiter implements AdminAuthRateLimiter {
     return this.result;
   }
 }
+
+const buildFallbackRateLimiterWithRedis = (redis: Partial<RedisClient>): AdminAuthRateLimiter => {
+  const limits = {
+    requestLoginLink: { windowSeconds: 900, maxPerEmail: 3, maxPerIp: 20 },
+    manualLogin: { windowSeconds: 900, maxPerEmail: 5, maxPerIp: 30 }
+  };
+  return new FallbackAdminAuthRateLimiter(
+    new RedisAdminAuthRateLimiter({
+      redis: redis as RedisClient,
+      logger: { warn: () => undefined },
+      keyPepper: "admin-test-pepper-at-least-thirty-two-characters",
+      operationTimeoutMs: 5,
+      ...limits
+    }),
+    new InMemoryAdminAuthRateLimiter({
+      keyPepper: "admin-test-pepper-at-least-thirty-two-characters",
+      ...limits
+    })
+  );
+};
 
 const buildApp = async (options: {
   emailDeliveryFails?: boolean;
@@ -357,7 +385,15 @@ describe("admin auth routes", () => {
     expect(response.body).not.toContain("keyHash");
     expect(emailDelivery.sent).toHaveLength(1);
     expect(emailDelivery.sent[0]?.magicLink).toContain("/login?token=lotus_magic_");
-    expect(repository.auditEvents.map((event) => event.eventType)).toContain("ADMIN_LOGIN_LINK_REQUESTED");
+    expect([...repository.keys.values()]).toEqual([
+      expect.objectContaining({ keyType: "LOGIN_KEY" }),
+      expect.objectContaining({ keyType: "MAGIC_LINK", status: "ACTIVE" })
+    ]);
+    expect(repository.auditEvents.map((event) => event.eventType)).toEqual(expect.arrayContaining([
+      "ADMIN_LOGIN_LINK_REQUESTED",
+      "ADMIN_MAGIC_LINK_CREATED",
+      "ADMIN_MAGIC_LINK_SENT"
+    ]));
     await app.close();
   });
 
@@ -369,6 +405,7 @@ describe("admin auth routes", () => {
       createdBy: owner.id
     });
     await repository.disableMember(disabled.id);
+    const keyCountBefore = repository.keys.size;
 
     for (const email of ["missing@lotus.example", "disabled@lotus.example", "outside@example.com"]) {
       const response = await app.inject({
@@ -384,7 +421,14 @@ describe("admin auth routes", () => {
     }
 
     expect(emailDelivery.sent).toHaveLength(0);
+    expect(repository.keys.size).toBe(keyCountBefore);
     expect(repository.auditEvents.map((event) => event.eventType)).toContain("ADMIN_LOGIN_LINK_NOT_SENT");
+    expect(repository.auditEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        eventType: "ADMIN_LOGIN_LINK_NOT_SENT",
+        metadata: expect.objectContaining({ reason: "EMAIL_DOMAIN_NOT_ALLOWED" })
+      })
+    ]));
     await app.close();
   });
 
@@ -408,6 +452,54 @@ describe("admin auth routes", () => {
     await app.close();
   });
 
+  it("falls back in memory when Redis rate-limit storage is unavailable", async () => {
+    const rateLimiter = buildFallbackRateLimiterWithRedis({
+      incrbyfloat: async () => {
+        throw new Error("redis unavailable");
+      },
+      expire: async () => 0
+    });
+    const { app, emailDelivery, repository } = await buildApp({ rateLimiter });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/admin/auth/request-login-link",
+      payload: { email: "owner@lotus.example" }
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toEqual({
+      message: "If this email is authorized, a login link has been sent."
+    });
+    expect(emailDelivery.sent).toHaveLength(1);
+    expect(repository.auditEvents.map((event) => event.eventType)).toEqual(expect.arrayContaining([
+      "ADMIN_LOGIN_LINK_REQUESTED",
+      "ADMIN_MAGIC_LINK_CREATED",
+      "ADMIN_MAGIC_LINK_SENT"
+    ]));
+    await app.close();
+  });
+
+  it("bounds Redis rate-limit timeouts and still returns the generic response quickly", async () => {
+    const rateLimiter = buildFallbackRateLimiterWithRedis({
+      incrbyfloat: async () => new Promise<string>(() => undefined),
+      expire: async () => 0
+    });
+    const { app, emailDelivery } = await buildApp({ rateLimiter });
+    const startedAt = Date.now();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/admin/auth/request-login-link",
+      payload: { email: "owner@lotus.example" }
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(Date.now() - startedAt).toBeLessThan(500);
+    expect(emailDelivery.sent).toHaveLength(1);
+    await app.close();
+  });
+
   it("returns the same self-service response when email delivery fails", async () => {
     const { app, emailDelivery, repository } = await buildApp({ emailDeliveryFails: true });
 
@@ -423,6 +515,14 @@ describe("admin auth routes", () => {
     });
     expect(emailDelivery.sent).toHaveLength(0);
     expect(repository.auditEvents.map((event) => event.eventType)).toContain("ADMIN_MAGIC_LINK_SEND_FAILED");
+    expect(repository.auditEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        eventType: "ADMIN_MAGIC_LINK_SEND_FAILED",
+        metadata: expect.not.objectContaining({
+          providerMessageId: expect.any(String)
+        })
+      })
+    ]));
     await app.close();
   });
 
