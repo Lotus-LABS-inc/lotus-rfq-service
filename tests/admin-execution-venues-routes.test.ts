@@ -17,7 +17,7 @@ const adminMiddleware: preHandlerHookHandler = async (request) => {
 const liveReadyEnv: NodeJS.ProcessEnv = {
   POLYMARKET_EXECUTION_MODE: "v2",
   POLYMARKET_LIVE_EXECUTION_ENABLED: "true",
-  POLYMARKET_CLOB_HOST: "https://clob-v2.polymarket.com",
+  POLYMARKET_CLOB_HOST: "https://clob.polymarket.com",
   POLYMARKET_CHAIN_ID: "137",
   POLYMARKET_API_KEY: "server-side-key",
   POLYMARKET_API_SECRET: "server-side-secret",

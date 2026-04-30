@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-26T02:11:42.940Z",
+  "generatedAt": "2026-04-30T22:21:47.277Z",
   "venue": "PREDICT_FUN",
   "status": "COMPLETED",
   "readOnly": true,
@@ -10,48 +10,46 @@
     "mode": "LIVE_READ",
     "configured": true,
     "balanceUrlConfigured": true,
-    "balanceUrlHost": "localhost:4001",
-    "authMode": "NONE",
+    "balanceUrlHost": "ops.uselotus.xyz",
+    "authMode": "BEARER",
     "apiKeyConfigured": true,
-    "timeoutMs": 5000,
+    "timeoutMs": 15000,
     "minimumConfirmations": 0
   },
   "selectedRow": {
-    "fundingIntentId": "4b1f3e3b-eabf-4f91-8a55-7e3c8659868a",
+    "fundingIntentId": "c20d2606-fc8f-42a1-b0d4-bc4bb5f17c57",
     "userId": "smoke-predict_fun-readiness-user",
     "targetVenue": "PREDICT_FUN",
-    "routeLegId": "f21bf91c-e98c-43f2-ab86-b7f3d7cc5f7a",
+    "routeLegId": "92ab787c-d8d7-47c5-82fd-5ddc272d9beb",
     "destinationStatus": "CONFIRMED",
     "venueCreditStatus": "PENDING",
     "requiredAmount": "100",
     "txHashes": [
-      "0x5d5f1d1b3a224c5ba9b3dd0f09753f1e97f2f9109e914c0e8992c5ac8b462a65"
+      "0xade66c39e21e4a4990873476c782f1112b9b7f2fba674dcbab1352a5c70df655"
     ]
   },
   "readinessResult": {
     "venue": "PREDICT_FUN",
     "token": "USDC",
-    "checkedAt": "2026-04-26T02:11:43.186Z",
-    "status": "READY_TO_TRADE",
+    "checkedAt": "2026-04-30T22:22:02.417Z",
+    "status": "VENUE_CREDIT_PENDING",
     "destinationReceived": true,
-    "venueCreditConfirmed": true,
-    "readyToTrade": true,
-    "usableBalance": "1000",
-    "reason": "PREDICT_FUN_USABLE_BALANCE_CONFIRMED",
+    "venueCreditConfirmed": false,
+    "readyToTrade": false,
+    "usableBalance": "7.2019817712e-7",
+    "reason": "PREDICT_FUN_USABLE_BALANCE_BELOW_REQUIRED_AMOUNT",
     "evidence": {
       "source": "predict_fun_funding_readiness",
       "checkerMode": "LIVE_READ",
-      "authMode": "NONE",
+      "authMode": "BEARER",
       "minimumConfirmations": 0,
       "redactionPolicy": "SERVER_SAFE_DEFAULT",
       "requiredAmount": "100",
-      "usableBalance": "1000"
+      "usableBalance": "7.2019817712e-7"
     }
   },
-  "mappingObserved": "READY_TO_TRADE",
+  "mappingObserved": "VENUE_CREDIT_PENDING",
   "redactionVerified": true,
   "blockers": [],
-  "warnings": [
-    "READY_TO_TRADE was observed by the read-only smoke test but was not persisted."
-  ]
+  "warnings": []
 }

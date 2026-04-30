@@ -1,16 +1,16 @@
 # All Venue Funding Readiness Gate Summary
 
-Generated: 2026-04-30T21:52:43.008Z
+Generated: 2026-04-30T22:23:34.651Z
 Status: FAILED
 Max age hours: 24
 
 | Venue | Status | Source | Age Hours | Preflight | Ready Evidence | Blockers |
 |---|---|---|---:|---|---|---|
-| POLYMARKET | STALE | pair_rehearsal | 116.72 | yes | yes | Artifact is stale at 116.72h. |
-| LIMITLESS | STALE | pair_rehearsal | 116.72 | yes | yes | Artifact is stale at 116.72h. |
-| OPINION | STALE | single_venue_rehearsal | 115.79 | yes | yes | Artifact is stale at 115.79h. |
-| MYRIAD | STALE | single_venue_rehearsal | 115.72 | yes | yes | Artifact is stale at 115.72h. |
-| PREDICT_FUN | STALE | single_venue_rehearsal | 115.68 | yes | yes | Artifact is stale at 115.68h. |
+| POLYMARKET | FAILED | pair_rehearsal | 0.03 | no | no | Artifact status is FAILED, expected COMPLETED.; Execution preflight did not pass.; No persisted readiness row is recorded.; Admin readiness visibility is not confirmed.; Route leg is not fully ready.; Venue evidence does not show READY_TO_TRADE. |
+| LIMITLESS | FAILED | pair_rehearsal | 0.03 | no | no | Artifact status is FAILED, expected COMPLETED.; Execution preflight did not pass.; No persisted readiness row is recorded.; Admin readiness visibility is not confirmed.; Route leg is not fully ready.; Venue evidence does not show READY_TO_TRADE. |
+| OPINION | FAILED | single_venue_rehearsal | 0.04 | no | no | Artifact status is REFUSED_CONFIG_INCOMPLETE, expected COMPLETED.; Execution preflight did not pass.; No persisted readiness row is recorded.; Admin readiness visibility is not confirmed.; Route leg is not fully ready.; Venue evidence does not show READY_TO_TRADE. |
+| MYRIAD | FAILED | single_venue_rehearsal | 0.04 | no | no | Artifact status is REFUSED_CONFIG_INCOMPLETE, expected COMPLETED.; Execution preflight did not pass.; No persisted readiness row is recorded.; Admin readiness visibility is not confirmed.; Route leg is not fully ready.; Venue evidence does not show READY_TO_TRADE. |
+| PREDICT_FUN | FAILED | single_venue_rehearsal | 0.04 | no | no | Artifact status is REFUSED_CONFIG_INCOMPLETE, expected COMPLETED.; Execution preflight did not pass.; No persisted readiness row is recorded.; Admin readiness visibility is not confirmed.; Route leg is not fully ready.; Venue evidence does not show READY_TO_TRADE. |
 
 ## Safety
 

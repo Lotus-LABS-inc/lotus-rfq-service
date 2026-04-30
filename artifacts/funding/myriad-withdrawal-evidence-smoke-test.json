@@ -1,7 +1,7 @@
 {
   "artifactSchemaVersion": 1,
-  "generatedAt": "2026-04-30T22:24:01.997Z",
-  "venue": "POLYMARKET",
+  "generatedAt": "2026-04-30T22:24:02.053Z",
+  "venue": "MYRIAD",
   "status": "FAILED",
   "readOnly": true,
   "persistedCompletionResult": false,
@@ -24,8 +24,8 @@
   },
   "selectedWithdrawal": {
     "withdrawalIntentId": "00000000-0000-4000-8000-000000000001",
-    "userId": "synthetic-polymarket-withdrawal-smoke-user",
-    "sourceVenue": "POLYMARKET",
+    "userId": "synthetic-myriad-withdrawal-smoke-user",
+    "sourceVenue": "MYRIAD",
     "withdrawalRouteLegId": "00000000-0000-4000-8000-000000000002",
     "synthetic": true,
     "withdrawalStatus": "WITHDRAWING",
@@ -42,10 +42,10 @@
     "venueReleased": false,
     "destinationReceived": false,
     "completed": false,
-    "checkedAt": "2026-04-30T22:24:05.473Z",
-    "reason": "POLYMARKET_WITHDRAWAL_EVIDENCE_READ_UNAVAILABLE",
+    "checkedAt": "2026-04-30T22:24:05.327Z",
+    "reason": "MYRIAD_WITHDRAWAL_EVIDENCE_READ_UNAVAILABLE",
     "evidence": {
-      "source": "polymarket_withdrawal_evidence",
+      "source": "myriad_withdrawal_evidence",
       "checkerMode": "LIVE_READ",
       "authMode": "BEARER",
       "minimumConfirmations": 1,
@@ -56,10 +56,10 @@
   "mappingObserved": "UNKNOWN",
   "redactionVerified": true,
   "blockers": [
-    "No submitted POLYMARKET withdrawal row existed; smoke used synthetic sandbox identifiers.",
+    "No submitted MYRIAD withdrawal row existed; smoke used synthetic sandbox identifiers.",
     "Exact completed withdrawal evidence was not observed. mapping=UNKNOWN, completed=false."
   ],
   "warnings": [
-    "No submitted POLYMARKET withdrawal row existed; smoke used synthetic sandbox identifiers and expected a fail-closed mapping."
+    "No submitted MYRIAD withdrawal row existed; smoke used synthetic sandbox identifiers and expected a fail-closed mapping."
   ]
 }

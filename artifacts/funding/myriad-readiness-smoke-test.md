@@ -1,6 +1,6 @@
 # MYRIAD Funding Readiness Smoke Test
 
-Generated: 2026-04-26T02:09:18.926Z
+Generated: 2026-04-30T22:21:47.309Z
 Status: COMPLETED
 
 ## Safety
@@ -16,17 +16,17 @@ Status: COMPLETED
 - Mode: LIVE_READ
 - Configured: true
 - Balance URL configured: true
-- Balance URL host: localhost:4001
-- Auth mode: NONE
+- Balance URL host: ops.uselotus.xyz
+- Auth mode: BEARER
 - API key configured: true
 - Timeout ms: 5000
 - Minimum confirmations: 0
 
 ## Result
 
-- Mapping observed: READY_TO_TRADE
-- Reason: MYRIAD_USABLE_BALANCE_CONFIRMED
-- Ready to trade observed: true
+- Mapping observed: UNKNOWN
+- Reason: MYRIAD_READINESS_READ_UNAVAILABLE
+- Ready to trade observed: false
 
 ## Blockers
 
@@ -34,4 +34,4 @@ Status: COMPLETED
 
 ## Warnings
 
-- READY_TO_TRADE was observed by the read-only smoke test but was not persisted.
+- none

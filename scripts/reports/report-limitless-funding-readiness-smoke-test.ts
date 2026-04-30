@@ -22,6 +22,7 @@ type SmokeStatus =
 
 interface SmokeArtifact {
   generatedAt: string;
+  venue: "LIMITLESS";
   status: SmokeStatus;
   readOnly: true;
   persistedReadinessResult: false;
@@ -63,6 +64,7 @@ const buildBaseArtifact = (): SmokeArtifact => {
   const config = getLimitlessFundingReadinessConfigFromEnv(process.env);
   return {
     generatedAt: new Date().toISOString(),
+    venue: "LIMITLESS",
     status: "FAILED",
     readOnly: true,
     persistedReadinessResult: false,

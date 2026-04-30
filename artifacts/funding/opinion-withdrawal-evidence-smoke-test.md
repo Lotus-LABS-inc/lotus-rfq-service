@@ -1,6 +1,6 @@
-# POLYMARKET Withdrawal Evidence Smoke Test
+# OPINION Withdrawal Evidence Smoke Test
 
-Generated: 2026-04-30T22:24:01.997Z
+Generated: 2026-04-30T22:24:02.070Z
 
 - Status: FAILED
 - Read only: true
@@ -17,9 +17,9 @@ Generated: 2026-04-30T22:24:01.997Z
 
 ## Blockers
 
-- No submitted POLYMARKET withdrawal row existed; smoke used synthetic sandbox identifiers.
+- No submitted OPINION withdrawal row existed; smoke used synthetic sandbox identifiers.
 - Exact completed withdrawal evidence was not observed. mapping=UNKNOWN, completed=false.
 
 ## Warnings
 
-- No submitted POLYMARKET withdrawal row existed; smoke used synthetic sandbox identifiers and expected a fail-closed mapping.
+- No submitted OPINION withdrawal row existed; smoke used synthetic sandbox identifiers and expected a fail-closed mapping.

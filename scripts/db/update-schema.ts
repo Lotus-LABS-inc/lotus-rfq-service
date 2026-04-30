@@ -3,7 +3,10 @@ import pg from 'pg';
 const { Pool } = pg;
 
 async function run() {
-    const connectionString = 'postgresql://postgres.qwkstkvsnqtvamjjfhxi:lotusmarkets2669@aws-1-eu-west-1.pooler.supabase.com:5432/postgres';
+    const connectionString = process.env.SUPABASE_DB_URL ?? process.env.DATABASE_URL;
+    if (!connectionString) {
+        throw new Error('SUPABASE_DB_URL or DATABASE_URL is required.');
+    }
     const pool = new Pool({ connectionString });
     try {
         console.log('Adding columns if missing...');

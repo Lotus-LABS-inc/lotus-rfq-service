@@ -2,7 +2,11 @@ import pg from 'pg';
 const { Client } = pg;
 
 async function run() {
-  const c = new Client({connectionString: 'postgresql://postgres.qwkstkvsnqtvamjjfhxi:lotusmarkets2669@aws-1-eu-west-1.pooler.supabase.com:5432/postgres'});
+  const connectionString = process.env.SUPABASE_DB_URL ?? process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error('SUPABASE_DB_URL or DATABASE_URL is required.');
+  }
+  const c = new Client({connectionString});
   await c.connect();
   const cryptoEventId = '22222222-2222-4222-8222-222222222222';
 

@@ -398,7 +398,15 @@ describe("monetization shadow report safety", () => {
     expect(source).toContain("noSettlementDeduction");
     expect(source).toContain("noWalletMovement");
     expect([...source.matchAll(/process\.env\.([A-Z0-9_]+)/g)].map((match) => match[1]).sort()).toEqual([
+      "ADMIN_API_BASE_URL",
+      "ADMIN_SMOKE_BASE_URL",
+      "ADMIN_SMOKE_EMAIL",
+      "ADMIN_SMOKE_JWT",
+      "ADMIN_SMOKE_LOGIN_KEY",
       "DATABASE_URL",
+      "LOTUS_BACKEND_URL",
+      "REPORT_DB_CONNECT_TIMEOUT_MS",
+      "SUPABASE_DB_URL",
       "TEST_DATABASE_URL"
     ]);
   });

@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-04-26T01:09:45.851Z",
-  "status": "COMPLETED",
+  "generatedAt": "2026-04-30T22:21:32.003Z",
+  "status": "FAILED",
   "blockers": [],
   "sandboxLane": {
     "laneId": "CRYPTO_BTC_ATH_BY_DATE_PAIR_LIMITLESS_POLYMARKET",
@@ -11,46 +11,50 @@
     ],
     "scopeKind": "CRYPTO_LANE"
   },
-  "fundingIntentId": "d5dd6a0f-4875-4753-b7c9-04a9a8371c79",
-  "userId": "sandbox-pair-funding-user-86433474-304b-4117-ba45-cf29bcfe5508",
+  "fundingIntentId": "c5dfcf5c-c757-46c3-a070-213d320b3476",
+  "userId": "sandbox-pair-funding-user-530dd78a-6c90-43bc-b544-07ba491af339",
   "sourceAmount": "100",
   "executionSize": "10",
   "routeLegs": [
     {
-      "routeLegId": "252a3a60-4186-4fac-ae01-76c81238ed0e",
+      "routeLegId": "cfece026-8f27-4a54-8ea7-844a0ac589bc",
       "targetVenue": "LIMITLESS",
-      "routeLegStatus": "LEG_READY_TO_TRADE",
+      "routeLegStatus": "LEG_VENUE_CREDIT_PENDING",
       "destinationStatus": "CONFIRMED",
-      "venueCreditStatus": "CONFIRMED",
+      "venueCreditStatus": "UNKNOWN",
       "destinationAmountEstimate": "50"
     },
     {
-      "routeLegId": "3cf59fc8-b6a1-4877-9820-0d4bfb437b47",
+      "routeLegId": "4e8d7e58-c92f-4220-bd7d-49afb9c31e04",
       "targetVenue": "POLYMARKET",
-      "routeLegStatus": "LEG_READY_TO_TRADE",
+      "routeLegStatus": "LEG_VENUE_CREDIT_PENDING",
       "destinationStatus": "CONFIRMED",
-      "venueCreditStatus": "CONFIRMED",
+      "venueCreditStatus": "UNKNOWN",
       "destinationAmountEstimate": "50"
     }
   ],
   "venueEvidence": [
     {
-      "targetVenue": "LIMITLESS",
-      "readyToTrade": true
+      "targetVenue": "POLYMARKET",
+      "readyToTrade": false,
+      "reason": "POLYMARKET_READINESS_READ_UNAVAILABLE"
     },
     {
-      "targetVenue": "POLYMARKET",
-      "readyToTrade": true
+      "targetVenue": "LIMITLESS",
+      "readyToTrade": false,
+      "reason": "LIMITLESS_READINESS_READ_UNAVAILABLE"
     }
   ],
-  "persistedReadinessRows": 2,
-  "adminReadinessVisible": true,
-  "summaryReadyToTradeCount": 4,
+  "persistedReadinessRows": 0,
+  "adminReadinessVisible": false,
+  "summaryReadyToTradeCount": 0,
   "lifiQuoteCalls": 2,
   "lifiStatusCalls": 2,
   "executionPreflight": {
-    "ok": true,
-    "checkedAt": "2026-04-26T01:09:45.843Z"
+    "ok": false,
+    "code": "FUNDING_UNAVAILABLE",
+    "reason": "User funding is not available.",
+    "checkedAt": "2026-04-30T22:21:31.984Z"
   },
   "safety": {
     "defaultFundingPreflightEnforcementEnabled": false,

@@ -1,19 +1,18 @@
 # OPINION Funding Readiness Sandbox Preflight
 
-Generated: 2026-04-26T02:05:26.238Z
+Generated: 2026-04-30T22:21:21.516Z
 
 ## Result
 
-- Status: COMPLETED
+- Status: REFUSED_CONFIG_INCOMPLETE
 - Lane: CRYPTO_BTC_ATH_BY_DATE_SINGLE_OPINION
 - Venue path: OPINION
-- Funding intent: 2c8ed972-cf09-46db-8150-c4df15c84f31
-- Persisted readiness rows: 1
-- Preflight passed: true
+- Funding intent: none
+- Persisted readiness rows: 0
+- Preflight passed: false
 
 ## Venue Evidence
 
-- OPINION: READY_TO_TRADE (no reason)
 
 ## Safety
 

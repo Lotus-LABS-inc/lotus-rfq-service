@@ -22,6 +22,7 @@ type SmokeStatus =
 
 interface SmokeArtifact {
   generatedAt: string;
+  venue: "POLYMARKET";
   status: SmokeStatus;
   readOnly: true;
   persistedReadinessResult: false;
@@ -63,6 +64,7 @@ const buildBaseArtifact = (): SmokeArtifact => {
   const config = getPolymarketFundingReadinessConfigFromEnv(process.env);
   return {
     generatedAt: new Date().toISOString(),
+    venue: "POLYMARKET",
     status: "FAILED",
     readOnly: true,
     persistedReadinessResult: false,

@@ -1,6 +1,7 @@
 {
-  "generatedAt": "2026-04-26T01:44:12.257Z",
-  "status": "NO_ELIGIBLE_CONFIRMED_ROW",
+  "generatedAt": "2026-04-30T22:23:16.036Z",
+  "venue": "LIMITLESS",
+  "status": "COMPLETED",
   "readOnly": true,
   "persistedReadinessResult": false,
   "liveLifiExecutionEnabled": false,
@@ -9,18 +10,46 @@
     "mode": "LIVE_READ",
     "configured": true,
     "balanceUrlConfigured": true,
-    "balanceUrlHost": "localhost:4001",
+    "balanceUrlHost": "ops.uselotus.xyz",
     "authMode": "BEARER",
     "apiKeyConfigured": true,
     "timeoutMs": 5000,
     "minimumConfirmations": 0
   },
-  "selectedRow": null,
-  "readinessResult": null,
-  "mappingObserved": null,
+  "selectedRow": {
+    "fundingIntentId": "c5dfcf5c-c757-46c3-a070-213d320b3476",
+    "userId": "sandbox-pair-funding-user-530dd78a-6c90-43bc-b544-07ba491af339",
+    "targetVenue": "LIMITLESS",
+    "routeLegId": "cfece026-8f27-4a54-8ea7-844a0ac589bc",
+    "destinationStatus": "CONFIRMED",
+    "venueCreditStatus": "UNKNOWN",
+    "requiredAmount": "50",
+    "txHashes": [
+      "0xb86463f0684b4d41a7472e5b3f61fcd4feb8a0bef5b04579b28e0bc6b38bbb27"
+    ]
+  },
+  "readinessResult": {
+    "venue": "LIMITLESS",
+    "token": "USDC",
+    "checkedAt": "2026-04-30T22:23:17.864Z",
+    "status": "VENUE_CREDIT_PENDING",
+    "destinationReceived": true,
+    "venueCreditConfirmed": false,
+    "readyToTrade": false,
+    "usableBalance": "0",
+    "reason": "LIMITLESS_USABLE_BALANCE_BELOW_REQUIRED_AMOUNT",
+    "evidence": {
+      "source": "limitless_funding_readiness",
+      "checkerMode": "LIVE_READ",
+      "authMode": "BEARER",
+      "minimumConfirmations": 0,
+      "redactionPolicy": "SERVER_SAFE_DEFAULT",
+      "requiredAmount": "50",
+      "usableBalance": "0"
+    }
+  },
+  "mappingObserved": "VENUE_CREDIT_PENDING",
   "redactionVerified": true,
-  "blockers": [
-    "No LIMITLESS funding route leg with confirmed destination status was found."
-  ],
+  "blockers": [],
   "warnings": []
 }

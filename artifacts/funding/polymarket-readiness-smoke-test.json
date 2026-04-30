@@ -1,5 +1,6 @@
 {
-  "generatedAt": "2026-04-28T01:28:05.328Z",
+  "generatedAt": "2026-04-30T22:23:16.024Z",
+  "venue": "POLYMARKET",
   "status": "COMPLETED",
   "readOnly": true,
   "persistedReadinessResult": false,
@@ -16,26 +17,26 @@
     "minimumConfirmations": 0
   },
   "selectedRow": {
-    "fundingIntentId": "ec952b8b-4ad8-4ada-a5e6-1eeff7d4ca52",
-    "userId": "sandbox-pair-funding-user-08be3ec2-1e8f-47b4-9584-26466ea47a32",
+    "fundingIntentId": "c5dfcf5c-c757-46c3-a070-213d320b3476",
+    "userId": "sandbox-pair-funding-user-530dd78a-6c90-43bc-b544-07ba491af339",
     "targetVenue": "POLYMARKET",
-    "routeLegId": "546392b9-963c-4e39-827e-074f3946687d",
+    "routeLegId": "4e8d7e58-c92f-4220-bd7d-49afb9c31e04",
     "destinationStatus": "CONFIRMED",
     "venueCreditStatus": "UNKNOWN",
     "requiredAmount": "50",
     "txHashes": [
-      "0xb610dd49f3db4366a312d1cf8d2eda2bbc580dff70324906a4ffe9de9a541486"
+      "0xeea63b87854b47a5bafcac16ad64211c1532f8ecc5564afa968e3d9d47052f80"
     ]
   },
   "readinessResult": {
     "venue": "POLYMARKET",
     "token": "USDC",
-    "checkedAt": "2026-04-28T01:28:06.981Z",
+    "checkedAt": "2026-04-30T22:23:17.863Z",
     "status": "VENUE_CREDIT_PENDING",
     "destinationReceived": true,
     "venueCreditConfirmed": false,
     "readyToTrade": false,
-    "usableBalance": "0",
+    "usableBalance": "0.389444",
     "reason": "POLYMARKET_USABLE_BALANCE_BELOW_REQUIRED_AMOUNT",
     "evidence": {
       "source": "polymarket_funding_readiness",
@@ -44,7 +45,7 @@
       "minimumConfirmations": 0,
       "redactionPolicy": "SERVER_SAFE_DEFAULT",
       "requiredAmount": "50",
-      "usableBalance": "0"
+      "usableBalance": "0.389444"
     }
   },
   "mappingObserved": "VENUE_CREDIT_PENDING",

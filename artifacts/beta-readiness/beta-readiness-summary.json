@@ -1,35 +1,33 @@
 {
   "artifactSchemaVersion": 1,
-  "generatedAt": "2026-04-30T21:56:10.291Z",
+  "generatedAt": "2026-04-30T22:24:20.169Z",
   "status": "BLOCKED",
   "components": [
     {
       "component": "admin_api_smoke",
-      "status": "MISSING",
+      "status": "PASSED",
       "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\admin\\admin-api-smoke-latest.json",
-      "generatedAt": null,
-      "blockers": [
-        "Run npm run admin:api-smoke."
-      ],
-      "notes": []
+      "generatedAt": "2026-04-30T22:11:48.631Z",
+      "blockers": [],
+      "notes": [
+        "baseUrl=https://lotus-backend-g1e1.onrender.com"
+      ]
     },
     {
       "component": "trading_readiness",
-      "status": "BLOCKED",
+      "status": "PASSED",
       "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\execution\\execution-system-v0-summary.json",
-      "generatedAt": "2026-04-30T21:55:59.572Z",
-      "blockers": [
-        "Last Polymarket harness attempt failed with POLYMARKET_V2_SDK_ERROR."
-      ],
+      "generatedAt": "2026-04-30T22:11:14.060Z",
+      "blockers": [],
       "notes": [
-        "lastHarnessSubmitted=false"
+        "lastHarnessSubmitted=true"
       ]
     },
     {
       "component": "funding_readiness",
       "status": "BLOCKED",
       "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\all-venue-readiness-gate-summary.json",
-      "generatedAt": "2026-04-30T21:52:43.008Z",
+      "generatedAt": "2026-04-30T22:23:34.651Z",
       "blockers": [
         "Funding gate failed for 5 venue(s)."
       ],
@@ -41,7 +39,7 @@
       "component": "withdrawal_readiness",
       "status": "BLOCKED",
       "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\all-venue-withdrawal-completion-gate-summary.json",
-      "generatedAt": "2026-04-30T21:52:49.925Z",
+      "generatedAt": "2026-04-30T22:24:16.157Z",
       "blockers": [
         "Withdrawal completion gate failed for 5 venue(s)."
       ],
@@ -51,19 +49,20 @@
     },
     {
       "component": "monetization_readiness",
-      "status": "MISSING",
+      "status": "PASSED",
       "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\monetization\\monetization-shadow-summary.json",
-      "generatedAt": null,
-      "blockers": [
-        "Run npm run report:monetization:private-beta."
-      ],
-      "notes": []
+      "generatedAt": "2026-04-30T22:19:55.364Z",
+      "blockers": [],
+      "notes": [
+        "actualBuilderFeesCollected=0",
+        "uncollectedImprovementOpportunity=0"
+      ]
     },
     {
       "component": "observability",
       "status": "PASSED",
       "artifactPath": null,
-      "generatedAt": "2026-04-30T21:56:10.291Z",
+      "generatedAt": "2026-04-30T22:24:20.169Z",
       "blockers": [],
       "notes": [
         "/health=200",

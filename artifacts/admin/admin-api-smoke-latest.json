@@ -1,0 +1,103 @@
+{
+  "artifactSchemaVersion": 1,
+  "generatedAt": "2026-04-30T22:11:48.631Z",
+  "status": "PASSED",
+  "baseUrl": "https://lotus-backend-g1e1.onrender.com",
+  "authMode": "LOGIN_KEY",
+  "endpoints": [
+    {
+      "path": "/admin/ops/summary",
+      "statusCode": 200,
+      "ok": true,
+      "elapsedMs": 645,
+      "bodyBytes": 1111,
+      "topLevelKeys": [
+        "summary"
+      ],
+      "secretFindings": [],
+      "error": null
+    },
+    {
+      "path": "/admin/executions",
+      "statusCode": 200,
+      "ok": true,
+      "elapsedMs": 319,
+      "bodyBytes": 17,
+      "topLevelKeys": [
+        "executions"
+      ],
+      "secretFindings": [],
+      "error": null
+    },
+    {
+      "path": "/admin/funding/summary",
+      "statusCode": 200,
+      "ok": true,
+      "elapsedMs": 317,
+      "bodyBytes": 747,
+      "topLevelKeys": [
+        "summary"
+      ],
+      "secretFindings": [],
+      "error": null
+    },
+    {
+      "path": "/admin/funding/readiness/summary",
+      "statusCode": 200,
+      "ok": true,
+      "elapsedMs": 427,
+      "bodyBytes": 747,
+      "topLevelKeys": [
+        "summary"
+      ],
+      "secretFindings": [],
+      "error": null
+    },
+    {
+      "path": "/admin/execution-venues",
+      "statusCode": 200,
+      "ok": true,
+      "elapsedMs": 250,
+      "bodyBytes": 830,
+      "topLevelKeys": [
+        "venues"
+      ],
+      "secretFindings": [],
+      "error": null
+    },
+    {
+      "path": "/admin/monetization/summary",
+      "statusCode": 200,
+      "ok": true,
+      "elapsedMs": 334,
+      "bodyBytes": 195,
+      "topLevelKeys": [
+        "summary"
+      ],
+      "secretFindings": [],
+      "error": null
+    },
+    {
+      "path": "/admin/schema-map",
+      "statusCode": 200,
+      "ok": true,
+      "elapsedMs": 1368,
+      "bodyBytes": 219323,
+      "topLevelKeys": [
+        "schemaMap"
+      ],
+      "secretFindings": [],
+      "error": null
+    }
+  ],
+  "responseTime": {
+    "maxMs": 1368,
+    "averageMs": 522.86
+  },
+  "safety": {
+    "readOnly": true,
+    "secretScanPassed": true,
+    "noPayloadsStored": true,
+    "noAdminCredentialStored": true
+  }
+}

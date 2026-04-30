@@ -1,7 +1,9 @@
 {
-  "generatedAt": "2026-04-26T02:05:26.238Z",
-  "status": "COMPLETED",
-  "blockers": [],
+  "generatedAt": "2026-04-30T22:21:21.516Z",
+  "status": "REFUSED_CONFIG_INCOMPLETE",
+  "blockers": [
+    "No persisted READY_TO_TRADE OPINION funding row is available for rehearsal."
+  ],
   "sandboxLane": {
     "laneId": "CRYPTO_BTC_ATH_BY_DATE_SINGLE_OPINION",
     "laneState": "OPERATOR_APPROVED_SANDBOX",
@@ -10,36 +12,19 @@
     ],
     "scopeKind": "CRYPTO_LANE"
   },
-  "fundingIntentId": "2c8ed972-cf09-46db-8150-c4df15c84f31",
-  "routeLegId": "9d3fdb58-ede8-4860-a758-a4916cabf987",
-  "userId": "smoke-opinion-readiness-user",
+  "fundingIntentId": null,
+  "routeLegId": null,
+  "userId": null,
   "executionSize": "10",
-  "routeLegs": [
-    {
-      "routeLegId": "9d3fdb58-ede8-4860-a758-a4916cabf987",
-      "targetVenue": "OPINION",
-      "routeLegStatus": "LEG_READY_TO_TRADE",
-      "destinationStatus": "CONFIRMED",
-      "venueCreditStatus": "CONFIRMED",
-      "destinationAmountEstimate": "100"
-    }
-  ],
-  "venueEvidence": [
-    {
-      "targetVenue": "OPINION",
-      "readyToTrade": true,
-      "destinationReceived": true,
-      "venueCreditConfirmed": true,
-      "reason": null,
-      "lastCheckedAt": "2026-04-26T02:05:12.406Z"
-    }
-  ],
-  "persistedReadinessRows": 1,
-  "adminReadinessVisible": true,
-  "summaryReadyToTradeCount": 1,
+  "routeLegs": [],
+  "venueEvidence": [],
+  "persistedReadinessRows": 0,
+  "adminReadinessVisible": false,
+  "summaryReadyToTradeCount": 0,
   "executionPreflight": {
-    "ok": true,
-    "checkedAt": "2026-04-26T02:05:26.225Z"
+    "ok": false,
+    "code": "FUNDING_READY_ROW_MISSING",
+    "reason": "Persisted venue readiness is missing."
   },
   "safety": {
     "defaultFundingPreflightEnforcementEnabled": false,

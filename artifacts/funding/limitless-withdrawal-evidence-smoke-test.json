@@ -1,7 +1,7 @@
 {
   "artifactSchemaVersion": 1,
-  "generatedAt": "2026-04-30T22:24:01.997Z",
-  "venue": "POLYMARKET",
+  "generatedAt": "2026-04-30T22:24:02.050Z",
+  "venue": "LIMITLESS",
   "status": "FAILED",
   "readOnly": true,
   "persistedCompletionResult": false,
@@ -16,7 +16,7 @@
     "mode": "LIVE_READ",
     "configured": true,
     "evidenceUrlConfigured": true,
-    "evidenceUrlHost": "api.uselotus.xyz",
+    "evidenceUrlHost": "api.uselotus.xtz",
     "authMode": "BEARER",
     "apiKeyConfigured": true,
     "timeoutMs": 5000,
@@ -24,8 +24,8 @@
   },
   "selectedWithdrawal": {
     "withdrawalIntentId": "00000000-0000-4000-8000-000000000001",
-    "userId": "synthetic-polymarket-withdrawal-smoke-user",
-    "sourceVenue": "POLYMARKET",
+    "userId": "synthetic-limitless-withdrawal-smoke-user",
+    "sourceVenue": "LIMITLESS",
     "withdrawalRouteLegId": "00000000-0000-4000-8000-000000000002",
     "synthetic": true,
     "withdrawalStatus": "WITHDRAWING",
@@ -33,7 +33,7 @@
     "venueReleaseStatus": "PENDING",
     "destinationStatus": "PENDING",
     "withdrawalTxHash": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-    "destinationChain": "POLYGON",
+    "destinationChain": "BASE",
     "destinationWalletAddress": "0x1111111111111111111111111111111111111111",
     "requiredAmount": "1"
   },
@@ -42,10 +42,10 @@
     "venueReleased": false,
     "destinationReceived": false,
     "completed": false,
-    "checkedAt": "2026-04-30T22:24:05.473Z",
-    "reason": "POLYMARKET_WITHDRAWAL_EVIDENCE_READ_UNAVAILABLE",
+    "checkedAt": "2026-04-30T22:24:02.339Z",
+    "reason": "LIMITLESS_WITHDRAWAL_EVIDENCE_READ_UNAVAILABLE",
     "evidence": {
-      "source": "polymarket_withdrawal_evidence",
+      "source": "limitless_withdrawal_evidence",
       "checkerMode": "LIVE_READ",
       "authMode": "BEARER",
       "minimumConfirmations": 1,
@@ -56,10 +56,10 @@
   "mappingObserved": "UNKNOWN",
   "redactionVerified": true,
   "blockers": [
-    "No submitted POLYMARKET withdrawal row existed; smoke used synthetic sandbox identifiers.",
+    "No submitted LIMITLESS withdrawal row existed; smoke used synthetic sandbox identifiers.",
     "Exact completed withdrawal evidence was not observed. mapping=UNKNOWN, completed=false."
   ],
   "warnings": [
-    "No submitted POLYMARKET withdrawal row existed; smoke used synthetic sandbox identifiers and expected a fail-closed mapping."
+    "No submitted LIMITLESS withdrawal row existed; smoke used synthetic sandbox identifiers and expected a fail-closed mapping."
   ]
 }

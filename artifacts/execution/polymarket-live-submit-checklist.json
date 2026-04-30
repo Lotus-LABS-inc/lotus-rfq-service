@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-04-30T21:49:00.325Z",
-  "submitted": false,
+  "generatedAt": "2026-04-30T22:10:52.866Z",
+  "submitted": true,
   "plan": {
     "enabled": true,
     "allowed": true,
@@ -10,7 +10,7 @@
       "Polygon mainnet detected; use the smallest possible operator-approved order."
     ],
     "safeConfig": {
-      "clobHost": "https://clob-v2.polymarket.com",
+      "clobHost": "https://clob.polymarket.com",
       "chainId": "137",
       "side": "buy",
       "size": "5",
@@ -38,7 +38,7 @@
   },
   "preparedOrder": {
     "venue": "POLYMARKET",
-    "clientOrderId": "polymarket-live-harness-1777585736487",
+    "clientOrderId": "polymarket-live-harness-1777587051110",
     "payload": {
       "venueMarketId": "0xaf5e903876ad42de97e1cf02c2ef8484df69bcfc5541b96a400116557d1e504e",
       "venueOutcomeId": "24728518923560590462781163189278709895252190308448350456902151936161951637265",
@@ -51,8 +51,8 @@
         "clobV2DryRun": {
           "adapter": "PolymarketExecutionAdapterV2",
           "dryRun": true,
-          "orderHash": "052fab84453febf64fb398d72558a898951924115f65dc5702a344a711254eb7",
-          "orderDigest": "405573ad9431bb3b68e792d7f0b1c43eb07a876350458c75d4af41d40e6b1e16",
+          "orderHash": "cbbe28be792dcafe4286c65c384aba4da30faeadc752e553df36855c14bfa831",
+          "orderDigest": "be20fe760b5c3c00f2f5cdf0ce830c94b233c6d092bfbd102ee2a589a2cdfff5",
           "marketId": "0xaf5e903876ad42de97e1cf02c2ef8484df69bcfc5541b96a400116557d1e504e",
           "outcomeId": "24728518923560590462781163189278709895252190308448350456902151936161951637265",
           "side": "BUY",
@@ -60,16 +60,18 @@
           "price": "0.0100",
           "builderCode": "<redacted>",
           "chainId": "137",
-          "clobHost": "https://clob-v2.polymarket.com",
-          "createdAt": "2026-04-30T21:48:56.487Z",
+          "clobHost": "https://clob.polymarket.com",
+          "createdAt": "2026-04-30T22:10:51.111Z",
           "blockers": []
         }
       }
     }
   },
-  "submitResult": null,
-  "error": {
-    "code": "POLYMARKET_V2_SDK_ERROR",
-    "message": "Request failed with status code 405"
-  }
+  "submitResult": {
+    "venueOrderId": "0xf28a71806eefe51e9718446466ab8d44602c4f2ea1ccdf24334a738a6cf2f138",
+    "status": "SUBMITTED",
+    "filledSize": "0",
+    "averagePrice": 0
+  },
+  "error": null
 }

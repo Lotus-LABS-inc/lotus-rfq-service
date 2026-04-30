@@ -149,7 +149,7 @@ Do not enable live Polymarket submission until:
 - `POLYMARKET_EXECUTION_MODE=v2` is set intentionally.
 - `POLYMARKET_LIVE_EXECUTION_ENABLED=true` is set intentionally.
 - All required `POLYMARKET_*` env keys are present server-side only.
-- `POLYMARKET_CLOB_HOST` uses `https://clob-v2.polymarket.com` before the 2026-04-28 V2 cutover and `https://clob.polymarket.com` after V2 takes over production.
+- `POLYMARKET_CLOB_HOST` uses the live V2 host `https://clob.polymarket.com`.
 - The repo uses `@polymarket/clob-client-v2` and does not depend on legacy `@polymarket/clob-client` or `@polymarket/builder-signing-sdk`.
 - V2 order creation uses `builderCode` and does not send legacy `nonce`, `feeRateBps`, or `taker` fields from Lotus.
 - Dependency critical/high advisories are remediated or formally risk-accepted.

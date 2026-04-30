@@ -19,8 +19,8 @@ This harness is operator-controlled and is not part of normal CI or startup flow
 ## Current Result
 
 - Mode: LIVE_SUBMIT_READY
-- Submitted: false
-- Error: POLYMARKET_V2_SDK_ERROR: Request failed with status code 405
+- Submitted: true
+- Error: none
 - Blockers: none
 - Warnings: Polygon mainnet detected; use the smallest possible operator-approved order.
 

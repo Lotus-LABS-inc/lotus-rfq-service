@@ -1,20 +1,20 @@
 # Pair Funding Readiness Sandbox Preflight
 
-Generated: 2026-04-26T01:09:45.851Z
+Generated: 2026-04-30T22:21:32.003Z
 
 ## Result
 
-- Status: COMPLETED
+- Status: FAILED
 - Lane: CRYPTO_BTC_ATH_BY_DATE_PAIR_LIMITLESS_POLYMARKET
 - Venue path: LIMITLESS, POLYMARKET
-- Funding intent: d5dd6a0f-4875-4753-b7c9-04a9a8371c79
-- Persisted readiness rows: 2
-- Preflight passed: true
+- Funding intent: c5dfcf5c-c757-46c3-a070-213d320b3476
+- Persisted readiness rows: 0
+- Preflight passed: false
 
 ## Venue Evidence
 
-- LIMITLESS: READY_TO_TRADE (no reason)
-- POLYMARKET: READY_TO_TRADE (no reason)
+- POLYMARKET: NOT_READY (POLYMARKET_READINESS_READ_UNAVAILABLE)
+- LIMITLESS: NOT_READY (LIMITLESS_READINESS_READ_UNAVAILABLE)
 
 ## Safety
 

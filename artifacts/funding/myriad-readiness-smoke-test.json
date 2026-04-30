@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-26T02:09:18.926Z",
+  "generatedAt": "2026-04-30T22:21:47.309Z",
   "venue": "MYRIAD",
   "status": "COMPLETED",
   "readOnly": true,
@@ -10,48 +10,45 @@
     "mode": "LIVE_READ",
     "configured": true,
     "balanceUrlConfigured": true,
-    "balanceUrlHost": "localhost:4001",
-    "authMode": "NONE",
+    "balanceUrlHost": "ops.uselotus.xyz",
+    "authMode": "BEARER",
     "apiKeyConfigured": true,
     "timeoutMs": 5000,
     "minimumConfirmations": 0
   },
   "selectedRow": {
-    "fundingIntentId": "7f0a331f-10c8-4f86-8112-01fa927093d7",
+    "fundingIntentId": "b80be048-7f54-47b2-92a1-ef663c7a04a8",
     "userId": "smoke-myriad-readiness-user",
     "targetVenue": "MYRIAD",
-    "routeLegId": "5ae48408-b42e-47ad-b918-4469ff35b497",
+    "routeLegId": "23d079c9-06b7-48e3-8315-43081b77741e",
     "destinationStatus": "CONFIRMED",
     "venueCreditStatus": "PENDING",
     "requiredAmount": "100",
     "txHashes": [
-      "0x2cab87b73caf488aa2e8549eb7d8520651e7d5f9bada49eb997d2df9a5b93549"
+      "0x48245234e30e438eada47fb651828b199f042f0a73e84968a66538b40a2ab7fa"
     ]
   },
   "readinessResult": {
     "venue": "MYRIAD",
     "token": "USDC",
-    "checkedAt": "2026-04-26T02:09:19.202Z",
-    "status": "READY_TO_TRADE",
+    "checkedAt": "2026-04-30T22:21:52.504Z",
+    "status": "UNKNOWN",
     "destinationReceived": true,
-    "venueCreditConfirmed": true,
-    "readyToTrade": true,
-    "usableBalance": "1000",
-    "reason": "MYRIAD_USABLE_BALANCE_CONFIRMED",
+    "venueCreditConfirmed": false,
+    "readyToTrade": false,
+    "usableBalance": null,
+    "reason": "MYRIAD_READINESS_READ_UNAVAILABLE",
     "evidence": {
       "source": "myriad_funding_readiness",
       "checkerMode": "LIVE_READ",
-      "authMode": "NONE",
+      "authMode": "BEARER",
       "minimumConfirmations": 0,
       "redactionPolicy": "SERVER_SAFE_DEFAULT",
-      "requiredAmount": "100",
-      "usableBalance": "1000"
+      "error": "READ_UNAVAILABLE"
     }
   },
-  "mappingObserved": "READY_TO_TRADE",
+  "mappingObserved": "UNKNOWN",
   "redactionVerified": true,
   "blockers": [],
-  "warnings": [
-    "READY_TO_TRADE was observed by the read-only smoke test but was not persisted."
-  ]
+  "warnings": []
 }

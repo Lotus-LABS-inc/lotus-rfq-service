@@ -1,0 +1,30 @@
+{
+  "generatedAt": "2026-04-30T22:19:55.364Z",
+  "mode": "PRIVATE_BETA_MONETIZATION",
+  "source": "DATABASE",
+  "policyVersions": [],
+  "currencies": [],
+  "captureModes": [],
+  "revenueSources": [],
+  "ledgerRows": 0,
+  "previewedRows": 0,
+  "authorizedRows": 0,
+  "shadowOnlyRows": 0,
+  "collectedBuilderFeeRows": 0,
+  "failedOrNoChargeExecutions": 0,
+  "actualBuilderFeesCollected": 0,
+  "shadowImprovementFees": 0,
+  "uncollectedImprovementOpportunity": 0,
+  "capAppliedCount": 0,
+  "averageFeeBps": 0,
+  "actualBuilderFeesByVenue": {},
+  "shadowOpportunityByVenue": {},
+  "shadowOpportunityByLane": {},
+  "safety": {
+    "shadowIsNotCollectedRevenue": true,
+    "smartFeeRouterLive": false,
+    "noSecretsIncluded": true,
+    "noSettlementDeduction": true,
+    "noWalletMovement": true
+  }
+}

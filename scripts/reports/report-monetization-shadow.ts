@@ -6,9 +6,13 @@ import { Pool } from "pg";
 loadDotenv();
 
 const databaseUrl = process.env.SUPABASE_DB_URL ?? process.env.DATABASE_URL ?? process.env.TEST_DATABASE_URL;
-if (!databaseUrl) {
-  throw new Error("SUPABASE_DB_URL, DATABASE_URL, or TEST_DATABASE_URL is required to generate the monetization shadow report.");
-}
+const adminBaseUrl = normalizeBaseUrl(
+  process.env.ADMIN_SMOKE_BASE_URL ??
+  process.env.ADMIN_API_BASE_URL ??
+  process.env.LOTUS_BACKEND_URL ??
+  ""
+);
+const dbConnectTimeoutMs = parsePositiveInt(process.env.REPORT_DB_CONNECT_TIMEOUT_MS, 5_000);
 
 interface LedgerRow {
   fee_policy_version: string;
@@ -26,7 +30,6 @@ interface LedgerRow {
 }
 
 const artifactDir = join(process.cwd(), "artifacts", "monetization");
-const pool = new Pool({ connectionString: databaseUrl });
 
 const numberFromMetadata = (metadata: Record<string, unknown> | null, key: string): number | null => {
   const summary = metadata?.feeSummary;
@@ -59,24 +62,7 @@ const csvCell = (value: unknown): string => {
 };
 
 try {
-  const result = await pool.query<LedgerRow>(
-    `SELECT
-        fee_policy_version,
-        status,
-        amount::text,
-        currency,
-        capture_mode,
-        revenue_source,
-        actual_builder_fee_collected::text,
-        shadow_improvement_fee::text,
-        uncollected_improvement_opportunity::text,
-        venue,
-        lane_id,
-        metadata
-       FROM execution_fee_ledger
-      ORDER BY created_at ASC`
-  );
-  const rows = result.rows;
+  const { rows, source } = await loadLedgerRows();
   const shadowRows = rows.filter((row) => row.status === "SHADOW_ONLY" || row.status === "REALIZED_SHADOW");
   const builderFeeRows = rows.filter((row) => row.status === "COLLECTED_BUILDER_FEE");
   const authorized = rows.filter((row) => row.status === "AUTHORIZED");
@@ -109,6 +95,7 @@ try {
   const summary = {
     generatedAt: new Date().toISOString(),
     mode: "PRIVATE_BETA_MONETIZATION",
+    source,
     policyVersions,
     currencies,
     captureModes,
@@ -222,6 +209,140 @@ try {
     "utf8"
   );
   console.log(`Monetization shadow report written to ${artifactDir}`);
-} finally {
-  await pool.end();
+} catch (error) {
+  console.error("Failed to generate monetization shadow report.");
+  throw error;
+}
+
+async function loadLedgerRows(): Promise<{ rows: LedgerRow[]; source: "DATABASE" | "ADMIN_API" }> {
+  if (databaseUrl) {
+    try {
+      return { rows: await loadLedgerRowsFromDatabase(databaseUrl), source: "DATABASE" };
+    } catch (error) {
+      if (!adminBaseUrl) {
+        throw error;
+      }
+      const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "unknown";
+      console.warn(`Direct monetization DB report unavailable (${code}); falling back to admin API.`);
+    }
+  }
+  if (!adminBaseUrl) {
+    throw new Error("Set SUPABASE_DB_URL, DATABASE_URL, TEST_DATABASE_URL, or ADMIN_API_BASE_URL to generate the monetization report.");
+  }
+  return { rows: await loadLedgerRowsFromAdminApi(), source: "ADMIN_API" };
+}
+
+async function loadLedgerRowsFromDatabase(connectionString: string): Promise<LedgerRow[]> {
+  const pool = new Pool({ connectionString, connectionTimeoutMillis: dbConnectTimeoutMs });
+  try {
+    const result = await pool.query<LedgerRow>(
+      `SELECT
+          fee_policy_version,
+          status,
+          amount::text,
+          currency,
+          capture_mode,
+          revenue_source,
+          actual_builder_fee_collected::text,
+          shadow_improvement_fee::text,
+          uncollected_improvement_opportunity::text,
+          venue,
+          lane_id,
+          metadata
+         FROM execution_fee_ledger
+        ORDER BY created_at ASC`
+    );
+    return result.rows;
+  } finally {
+    await pool.end();
+  }
+}
+
+async function loadLedgerRowsFromAdminApi(): Promise<LedgerRow[]> {
+  const token = await resolveAdminToken();
+  const response = await fetch(`${adminBaseUrl}/admin/monetization/ledger?limit=250`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) {
+    throw new Error(`Admin monetization ledger request failed with HTTP ${response.status}.`);
+  }
+  const payload = await response.json() as { ledger?: AdminLedgerRow[] };
+  if (!Array.isArray(payload.ledger)) {
+    throw new Error("Admin monetization ledger response did not include a ledger array.");
+  }
+  return payload.ledger.map((row) => ({
+    fee_policy_version: safeString(row.policyVersion),
+    status: safeString(row.status),
+    amount: safeString(row.amount, "0"),
+    currency: safeString(row.currency),
+    capture_mode: nullableString(row.captureMode),
+    revenue_source: nullableString(row.revenueSource),
+    actual_builder_fee_collected: safeString(row.actualBuilderFeeCollected, "0"),
+    shadow_improvement_fee: safeString(row.shadowImprovementFee, "0"),
+    uncollected_improvement_opportunity: safeString(row.uncollectedImprovementOpportunity, "0"),
+    venue: nullableString(row.venue),
+    lane_id: nullableString(row.laneId),
+    metadata: isRecord(row.metadata) ? row.metadata : null
+  }));
+}
+
+async function resolveAdminToken(): Promise<string> {
+  const jwt = process.env.ADMIN_SMOKE_JWT?.trim();
+  if (jwt) {
+    return jwt;
+  }
+  const email = process.env.ADMIN_SMOKE_EMAIL?.trim();
+  const loginKey = process.env.ADMIN_SMOKE_LOGIN_KEY?.trim();
+  if (!email || !loginKey) {
+    throw new Error("Admin API monetization fallback requires ADMIN_SMOKE_JWT, or ADMIN_SMOKE_EMAIL and ADMIN_SMOKE_LOGIN_KEY.");
+  }
+  const response = await fetch(`${adminBaseUrl}/admin/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, loginKey })
+  });
+  if (!response.ok) {
+    throw new Error(`Admin API monetization fallback login failed with HTTP ${response.status}.`);
+  }
+  const payload = await response.json() as { token?: unknown };
+  if (typeof payload.token !== "string" || payload.token.length === 0) {
+    throw new Error("Admin API monetization fallback login response did not include a JWT.");
+  }
+  return payload.token;
+}
+
+interface AdminLedgerRow {
+  policyVersion?: unknown;
+  status?: unknown;
+  amount?: unknown;
+  currency?: unknown;
+  captureMode?: unknown;
+  revenueSource?: unknown;
+  actualBuilderFeeCollected?: unknown;
+  shadowImprovementFee?: unknown;
+  uncollectedImprovementOpportunity?: unknown;
+  venue?: unknown;
+  laneId?: unknown;
+  metadata?: unknown;
+}
+
+function normalizeBaseUrl(value: string): string {
+  return value.trim().replace(/\/+$/, "");
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function safeString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

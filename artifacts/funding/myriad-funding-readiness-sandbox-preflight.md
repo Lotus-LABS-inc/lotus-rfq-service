@@ -1,19 +1,18 @@
 # MYRIAD Funding Readiness Sandbox Preflight
 
-Generated: 2026-04-26T02:09:47.669Z
+Generated: 2026-04-30T22:21:21.517Z
 
 ## Result
 
-- Status: COMPLETED
+- Status: REFUSED_CONFIG_INCOMPLETE
 - Lane: CRYPTO_BTC_ATH_BY_DATE_SINGLE_MYRIAD
 - Venue path: MYRIAD
-- Funding intent: 7f0a331f-10c8-4f86-8112-01fa927093d7
-- Persisted readiness rows: 1
-- Preflight passed: true
+- Funding intent: none
+- Persisted readiness rows: 0
+- Preflight passed: false
 
 ## Venue Evidence
 
-- MYRIAD: READY_TO_TRADE (no reason)
 
 ## Safety
 

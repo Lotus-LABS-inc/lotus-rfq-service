@@ -1,19 +1,18 @@
 # PREDICT_FUN Funding Readiness Sandbox Preflight
 
-Generated: 2026-04-26T02:12:07.408Z
+Generated: 2026-04-30T22:21:21.517Z
 
 ## Result
 
-- Status: COMPLETED
+- Status: REFUSED_CONFIG_INCOMPLETE
 - Lane: CRYPTO_BTC_ATH_BY_DATE_SINGLE_PREDICT_FUN
 - Venue path: PREDICT_FUN
-- Funding intent: 4b1f3e3b-eabf-4f91-8a55-7e3c8659868a
-- Persisted readiness rows: 1
-- Preflight passed: true
+- Funding intent: none
+- Persisted readiness rows: 0
+- Preflight passed: false
 
 ## Venue Evidence
 
-- PREDICT_FUN: READY_TO_TRADE (no reason)
 
 ## Safety
 

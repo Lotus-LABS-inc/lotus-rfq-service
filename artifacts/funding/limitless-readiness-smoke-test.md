@@ -1,7 +1,7 @@
 # Limitless Funding Readiness Smoke Test
 
-Generated: 2026-04-26T01:44:12.257Z
-Status: NO_ELIGIBLE_CONFIRMED_ROW
+Generated: 2026-04-30T22:23:16.036Z
+Status: COMPLETED
 
 ## Safety
 
@@ -16,7 +16,7 @@ Status: NO_ELIGIBLE_CONFIRMED_ROW
 - Mode: LIVE_READ
 - Configured: true
 - Balance URL configured: true
-- Balance URL host: localhost:4001
+- Balance URL host: ops.uselotus.xyz
 - Auth mode: BEARER
 - API key configured: true
 - Timeout ms: 5000
@@ -24,13 +24,13 @@ Status: NO_ELIGIBLE_CONFIRMED_ROW
 
 ## Result
 
-- Mapping observed: none
-- Reason: none
+- Mapping observed: VENUE_CREDIT_PENDING
+- Reason: LIMITLESS_USABLE_BALANCE_BELOW_REQUIRED_AMOUNT
 - Ready to trade observed: false
 
 ## Blockers
 
-- No LIMITLESS funding route leg with confirmed destination status was found.
+- none
 
 ## Warnings
 

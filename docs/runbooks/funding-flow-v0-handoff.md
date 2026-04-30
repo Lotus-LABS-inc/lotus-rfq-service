@@ -551,7 +551,7 @@ Activation rules:
 - `POLYMARKET_INTERNAL_BALANCE_READ_ENABLED=true` is required.
 - CLOB envs must be complete: `POLYMARKET_CLOB_HOST`, `POLYMARKET_CHAIN_ID`, `POLYMARKET_API_KEY`, `POLYMARKET_API_SECRET`, `POLYMARKET_API_PASSPHRASE`, and `POLYMARKET_PRIVATE_KEY`.
 - Polymarket CLOB V2 must use `@polymarket/clob-client-v2`; legacy `@polymarket/clob-client` and `@polymarket/builder-signing-sdk` are not valid for production.
-- Before the 2026-04-28 cutover, point `POLYMARKET_CLOB_HOST` at `https://clob-v2.polymarket.com`; after cutover, `https://clob.polymarket.com` serves V2.
+- Point `POLYMARKET_CLOB_HOST` at the live V2 host `https://clob.polymarket.com`.
 - Builder attribution uses `POLYMARKET_BUILDER_CODE` / `builderCode`; old `POLY_BUILDER_*` HMAC builder headers are not used.
 - If `POLYMARKET_FUNDING_READ_API_KEY` is configured, callers must use `Authorization: Bearer <token>`.
 - If no bearer token is configured, local development allows loopback-only access; production must configure bearer auth.

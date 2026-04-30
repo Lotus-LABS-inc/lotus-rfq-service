@@ -233,7 +233,7 @@ Execution readiness is separate from funding and withdrawal readiness.
 |---|---:|---|---:|---|
 | `POLYMARKET_EXECUTION_MODE` | Yes | `disabled` | No | Set to `v2` only for reviewed Polymarket V2 dry-run/live path. |
 | `POLYMARKET_LIVE_EXECUTION_ENABLED` | Yes | `false` | No | Must remain false until live submit approval. |
-| `POLYMARKET_CLOB_HOST` | If Polymarket execution enabled | `https://clob-v2.polymarket.com` before cutover; `https://clob.polymarket.com` after cutover | No | Official V2 host only. |
+| `POLYMARKET_CLOB_HOST` | If Polymarket execution enabled | `https://clob.polymarket.com` | No | Official live V2 host only. |
 | `POLYMARKET_CHAIN_ID` | If Polymarket execution enabled | `137` | No | Must match venue chain. |
 | `POLYMARKET_API_KEY` | If live Polymarket submit enabled | `<secret>` | Yes | Server-side only. |
 | `POLYMARKET_API_SECRET` | If live Polymarket submit enabled | `<secret>` | Yes | Server-side only. |
@@ -390,7 +390,7 @@ Withdrawal completion persistence may be enabled only after:
 |---|---|---|
 | `POLYMARKET_EXECUTION_MODE` | `disabled` | Set to `v2` only after V2 readiness review. |
 | `POLYMARKET_LIVE_EXECUTION_ENABLED` | `false` | Must remain false until live submit approval. |
-| `POLYMARKET_CLOB_HOST` | `https://clob-v2.polymarket.com` or `https://clob.polymarket.com` | Use pre-cutover V2 host before 2026-04-28; post-cutover production host after V2 takes over. |
+| `POLYMARKET_CLOB_HOST` | `https://clob.polymarket.com` | Live V2 production host. |
 | `POLYMARKET_CHAIN_ID` | `137` | Polygon mainnet. |
 | `POLYMARKET_BUILDER_CODE` | `<builder-code>` | Required for V2 builder attribution. |
 | `POLYMARKET_API_KEY` | `<secret>` | Secret manager only. |

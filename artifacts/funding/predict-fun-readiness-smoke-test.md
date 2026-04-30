@@ -1,6 +1,6 @@
 # PREDICT_FUN Funding Readiness Smoke Test
 
-Generated: 2026-04-26T02:11:42.940Z
+Generated: 2026-04-30T22:21:47.277Z
 Status: COMPLETED
 
 ## Safety
@@ -16,17 +16,17 @@ Status: COMPLETED
 - Mode: LIVE_READ
 - Configured: true
 - Balance URL configured: true
-- Balance URL host: localhost:4001
-- Auth mode: NONE
+- Balance URL host: ops.uselotus.xyz
+- Auth mode: BEARER
 - API key configured: true
-- Timeout ms: 5000
+- Timeout ms: 15000
 - Minimum confirmations: 0
 
 ## Result
 
-- Mapping observed: READY_TO_TRADE
-- Reason: PREDICT_FUN_USABLE_BALANCE_CONFIRMED
-- Ready to trade observed: true
+- Mapping observed: VENUE_CREDIT_PENDING
+- Reason: PREDICT_FUN_USABLE_BALANCE_BELOW_REQUIRED_AMOUNT
+- Ready to trade observed: false
 
 ## Blockers
 
@@ -34,4 +34,4 @@ Status: COMPLETED
 
 ## Warnings
 
-- READY_TO_TRADE was observed by the read-only smoke test but was not persisted.
+- none

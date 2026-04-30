@@ -6,8 +6,12 @@ import { ResolutionRiskReadService } from "../../src/core/rfq-engine/resolution-
 import { OrderRouter } from "../../src/core/sor/order-router.js";
 
 // Mock dependencies
+const connectionString = process.env.SUPABASE_DB_URL ?? process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error("SUPABASE_DB_URL or DATABASE_URL is required.");
+}
 const pool = new Pool({
-  connectionString: "postgresql://postgres.qwkstkvsnqtvamjjfhxi:lotusmarkets2669@aws-1-eu-west-1.pooler.supabase.com:5432/postgres"
+  connectionString
 });
 
 async function run() {
