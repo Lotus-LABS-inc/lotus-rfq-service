@@ -3,6 +3,7 @@ import Fastify from "fastify";
 import fastifyJwt from "@fastify/jwt";
 import { describe, expect, it } from "vitest";
 import type { AdminEmailDelivery, AdminMagicLinkEmailInput } from "../src/api/admin/admin-email-delivery.js";
+import type { AdminAuthRateLimiter, AdminAuthRateLimitInput, AdminAuthRateLimitResult } from "../src/api/admin/admin-auth-rate-limiter.js";
 import { AdminAuthService } from "../src/api/admin/admin-auth-service.js";
 import { registerAdminAuthRoutes } from "../src/api/admin/admin-auth.routes.js";
 import { createAdminAuthMiddleware, createAdminOwnerAuthMiddleware } from "../src/api/user-auth-middleware.js";
@@ -17,6 +18,13 @@ import type {
 class FakeAdminAuthRepository {
   public readonly members = new Map<string, AdminMember>();
   public readonly keys = new Map<string, AdminAuthKey>();
+  public readonly auditEvents: Array<{
+    actorAdminMemberId?: string | null;
+    eventType: string;
+    targetType?: string | null;
+    targetId?: string | null;
+    metadata?: Record<string, unknown>;
+  }> = [];
 
   public async findMemberByEmail(email: string): Promise<AdminMember | null> {
     return [...this.members.values()].find((member) => member.email === email.toLowerCase()) ?? null;
@@ -94,21 +102,48 @@ class FakeAdminAuthRepository {
     return revoked;
   }
 
-  public async createAuditEvent(): Promise<void> {}
+  public async createAuditEvent(input: {
+    actorAdminMemberId?: string | null;
+    eventType: string;
+    targetType?: string | null;
+    targetId?: string | null;
+    metadata?: Record<string, unknown>;
+  }): Promise<void> {
+    this.auditEvents.push(input);
+  }
 }
 
 class FakeAdminEmailDelivery implements AdminEmailDelivery {
   public readonly sent: AdminMagicLinkEmailInput[] = [];
 
+  public constructor(private readonly fail = false) {}
+
   public async sendAdminMagicLink(input: AdminMagicLinkEmailInput): Promise<{ providerMessageId: string | null }> {
+    if (this.fail) {
+      throw new Error("delivery failed");
+    }
     this.sent.push(input);
     return { providerMessageId: "fake-message-id" };
   }
 }
 
-const buildApp = async () => {
+class FakeAdminAuthRateLimiter implements AdminAuthRateLimiter {
+  public readonly consumed: AdminAuthRateLimitInput[] = [];
+
+  public constructor(private readonly result: AdminAuthRateLimitResult = { allowed: true }) {}
+
+  public async consume(input: AdminAuthRateLimitInput): Promise<AdminAuthRateLimitResult> {
+    this.consumed.push(input);
+    return this.result;
+  }
+}
+
+const buildApp = async (options: {
+  emailDeliveryFails?: boolean;
+  rateLimiter?: AdminAuthRateLimiter;
+} = {}) => {
   const repository = new FakeAdminAuthRepository();
-  const emailDelivery = new FakeAdminEmailDelivery();
+  const emailDelivery = new FakeAdminEmailDelivery(options.emailDeliveryFails ?? false);
   const service = new AdminAuthService(repository as unknown as AdminAuthRepository, {
     keyPepper: "admin-test-pepper-at-least-thirty-two-characters",
     allowedEmailDomains: "lotus.example",
@@ -126,6 +161,7 @@ const buildApp = async () => {
   await app.register(fastifyJwt, { secret: "test-secret-at-least-thirty-two-characters" });
   await registerAdminAuthRoutes(app, createAdminAuthMiddleware(), {
     adminAuthService: service,
+    rateLimiter: options.rateLimiter,
     ownerMiddleware: createAdminOwnerAuthMiddleware(),
     jwtTtlSeconds: 3600
   });
@@ -192,6 +228,27 @@ describe("admin auth routes", () => {
       payload: { email: "owner@lotus.example", loginKey: ownerKey.loginKey }
     });
     expect(revoked.statusCode).toBe(401);
+    expect(repository.auditEvents.map((event) => event.eventType)).toContain("ADMIN_AUTH_LOGIN_FAILED");
+    await app.close();
+  });
+
+  it("rate limits manual break-glass login attempts without exposing account state", async () => {
+    const rateLimiter = new FakeAdminAuthRateLimiter({ allowed: false, reason: "IP_LIMIT" });
+    const { app, repository, ownerKey } = await buildApp({ rateLimiter });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/admin/auth/login",
+      payload: {
+        email: "owner@lotus.example",
+        loginKey: ownerKey.loginKey
+      }
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({ code: "INVALID_CREDENTIALS" });
+    expect(rateLimiter.consumed[0]).toMatchObject({ scope: "manual_login", email: "owner@lotus.example" });
+    expect(repository.auditEvents.map((event) => event.eventType)).toContain("ADMIN_AUTH_LOGIN_RATE_LIMITED");
     await app.close();
   });
 
@@ -280,7 +337,92 @@ describe("admin auth routes", () => {
     expect(createMember.body).not.toContain("loginKey");
     expect(createMember.body).not.toContain("lotus_magic_");
     expect(emailDelivery.sent).toHaveLength(1);
-    expect(emailDelivery.sent[0]?.magicLink).toContain("/admin-access/magic?token=lotus_magic_");
+    expect(emailDelivery.sent[0]?.magicLink).toContain("/login?token=lotus_magic_");
+    await app.close();
+  });
+
+  it("sends a self-service magic login link with an enumeration-safe response", async () => {
+    const { app, emailDelivery, repository } = await buildApp();
+    const response = await app.inject({
+      method: "POST",
+      url: "/admin/auth/request-login-link",
+      payload: { email: "owner@lotus.example" }
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toEqual({
+      message: "If this email is authorized, a login link has been sent."
+    });
+    expect(response.body).not.toContain("lotus_magic_");
+    expect(response.body).not.toContain("keyHash");
+    expect(emailDelivery.sent).toHaveLength(1);
+    expect(emailDelivery.sent[0]?.magicLink).toContain("/login?token=lotus_magic_");
+    expect(repository.auditEvents.map((event) => event.eventType)).toContain("ADMIN_LOGIN_LINK_REQUESTED");
+    await app.close();
+  });
+
+  it("returns the same self-service response for unknown, disabled, and disallowed emails without sending", async () => {
+    const { app, emailDelivery, repository, owner } = await buildApp();
+    const disabled = await repository.upsertMember({
+      email: "disabled@lotus.example",
+      role: "ADMIN",
+      createdBy: owner.id
+    });
+    await repository.disableMember(disabled.id);
+
+    for (const email of ["missing@lotus.example", "disabled@lotus.example", "outside@example.com"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/admin/auth/request-login-link",
+        payload: { email }
+      });
+
+      expect(response.statusCode).toBe(202);
+      expect(response.json()).toEqual({
+        message: "If this email is authorized, a login link has been sent."
+      });
+    }
+
+    expect(emailDelivery.sent).toHaveLength(0);
+    expect(repository.auditEvents.map((event) => event.eventType)).toContain("ADMIN_LOGIN_LINK_NOT_SENT");
+    await app.close();
+  });
+
+  it("returns the same self-service response when rate limited and sends no email", async () => {
+    const rateLimiter = new FakeAdminAuthRateLimiter({ allowed: false, reason: "EMAIL_LIMIT" });
+    const { app, emailDelivery, repository } = await buildApp({ rateLimiter });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/admin/auth/request-login-link",
+      payload: { email: "owner@lotus.example" }
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toEqual({
+      message: "If this email is authorized, a login link has been sent."
+    });
+    expect(emailDelivery.sent).toHaveLength(0);
+    expect(rateLimiter.consumed[0]).toMatchObject({ scope: "request_login_link", email: "owner@lotus.example" });
+    expect(repository.auditEvents.map((event) => event.eventType)).toContain("ADMIN_LOGIN_LINK_RATE_LIMITED");
+    await app.close();
+  });
+
+  it("returns the same self-service response when email delivery fails", async () => {
+    const { app, emailDelivery, repository } = await buildApp({ emailDeliveryFails: true });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/admin/auth/request-login-link",
+      payload: { email: "owner@lotus.example" }
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toEqual({
+      message: "If this email is authorized, a login link has been sent."
+    });
+    expect(emailDelivery.sent).toHaveLength(0);
+    expect(repository.auditEvents.map((event) => event.eventType)).toContain("ADMIN_MAGIC_LINK_SEND_FAILED");
     await app.close();
   });
 

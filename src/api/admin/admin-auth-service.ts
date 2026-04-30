@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type {
   AdminAuthKey,
   AdminAuthRepository,
@@ -42,6 +42,10 @@ export interface AdminInviteResult {
     expiresAt: Date;
     deliveryStatus: "SENT";
   };
+}
+
+export interface AdminRequestLoginLinkResult {
+  sent: boolean;
 }
 
 export class AdminAuthService {
@@ -91,6 +95,54 @@ export class AdminAuthService {
       metadata: { keyId: key.keyId }
     });
     return { member, key };
+  }
+
+  public async auditManualLoginFailure(input: {
+    email: string;
+    reason: string;
+  }): Promise<void> {
+    await this.repository.createAuditEvent({
+      actorAdminMemberId: null,
+      eventType: "ADMIN_AUTH_LOGIN_FAILED",
+      targetType: "admin_auth",
+      targetId: null,
+      metadata: {
+        emailHash: hashIdentifier(normalizeEmail(input.email), this.config.keyPepper),
+        reason: input.reason
+      }
+    });
+  }
+
+  public async auditManualLoginRateLimited(input: {
+    email: string;
+    reason: string;
+  }): Promise<void> {
+    await this.repository.createAuditEvent({
+      actorAdminMemberId: null,
+      eventType: "ADMIN_AUTH_LOGIN_RATE_LIMITED",
+      targetType: "admin_auth",
+      targetId: null,
+      metadata: {
+        emailHash: hashIdentifier(normalizeEmail(input.email), this.config.keyPepper),
+        reason: input.reason
+      }
+    });
+  }
+
+  public async auditLoginLinkRateLimited(input: {
+    email: string;
+    reason: string;
+  }): Promise<void> {
+    await this.repository.createAuditEvent({
+      actorAdminMemberId: null,
+      eventType: "ADMIN_LOGIN_LINK_RATE_LIMITED",
+      targetType: "admin_auth",
+      targetId: null,
+      metadata: {
+        emailHash: hashIdentifier(normalizeEmail(input.email), this.config.keyPepper),
+        reason: input.reason
+      }
+    });
   }
 
   public async magicLogin(magicToken: string): Promise<AdminLoginResult> {
@@ -195,6 +247,44 @@ export class AdminAuthService {
     };
   }
 
+  public async requestLoginLink(email: string): Promise<AdminRequestLoginLinkResult> {
+    const normalizedEmail = normalizeEmail(email);
+    await this.repository.createAuditEvent({
+      actorAdminMemberId: null,
+      eventType: "ADMIN_LOGIN_LINK_REQUESTED",
+      targetType: "admin_auth",
+      targetId: null,
+      metadata: { emailHash: hashIdentifier(normalizedEmail, this.config.keyPepper) }
+    });
+
+    try {
+      this.assertPepperConfigured();
+      this.assertInviteDeliveryConfigured();
+      this.assertWorkEmail(normalizedEmail);
+    } catch (error) {
+      await this.auditLoginLinkNotSent(normalizedEmail, error instanceof AdminAuthError ? error.code : "REQUEST_NOT_ELIGIBLE");
+      return { sent: false };
+    }
+
+    const member = await this.repository.findMemberByEmail(normalizedEmail);
+    if (!member || member.status !== "ACTIVE") {
+      await this.auditLoginLinkNotSent(normalizedEmail, "ADMIN_MEMBER_NOT_ACTIVE");
+      return { sent: false };
+    }
+
+    try {
+      await this.createAndSendMagicLink({
+        member,
+        actorId: null,
+        source: "SELF_SERVICE"
+      });
+      return { sent: true };
+    } catch (error) {
+      await this.auditLoginLinkNotSent(normalizedEmail, error instanceof AdminAuthError ? error.code : "ADMIN_EMAIL_DELIVERY_FAILED");
+      return { sent: false };
+    }
+  }
+
   public async sendInvite(input: {
     memberId: string;
     actorId: string;
@@ -208,56 +298,11 @@ export class AdminAuthService {
     }
     this.assertWorkEmail(member.email);
 
-    const generated = generateMagicToken();
-    const expiresAt = new Date(Date.now() + resolveMagicLinkTtlSeconds(this.config.magicLinkTtlSeconds) * 1000);
-    const key = await this.repository.createKey({
-      adminMemberId: member.id,
-      keyId: generated.keyId,
-      keyHash: hashLoginKey(generated.magicToken, this.config.keyPepper!),
-      keyType: "MAGIC_LINK",
-      expiresAt: expiresAt.toISOString(),
-      createdBy: input.actorId
+    const { key, expiresAt } = await this.createAndSendMagicLink({
+      member,
+      actorId: input.actorId,
+      source: "OWNER_INVITE"
     });
-
-    await this.repository.createAuditEvent({
-      actorAdminMemberId: input.actorId,
-      eventType: "ADMIN_MAGIC_LINK_CREATED",
-      targetType: "admin_auth_key",
-      targetId: key.id,
-      metadata: { adminMemberId: member.id, keyId: key.keyId, expiresAt: expiresAt.toISOString() }
-    });
-
-    try {
-      const delivery = await this.emailDelivery!.sendAdminMagicLink({
-        to: member.email,
-        magicLink: buildMagicLink(this.config.adminFrontendBaseUrl!, generated.magicToken),
-        expiresAt
-      });
-      await this.repository.createAuditEvent({
-        actorAdminMemberId: input.actorId,
-        eventType: "ADMIN_MAGIC_LINK_SENT",
-        targetType: "admin_auth_key",
-        targetId: key.id,
-        metadata: {
-          adminMemberId: member.id,
-          keyId: key.keyId,
-          providerMessageId: delivery.providerMessageId
-        }
-      });
-    } catch (error) {
-      await this.repository.createAuditEvent({
-        actorAdminMemberId: input.actorId,
-        eventType: "ADMIN_MAGIC_LINK_SEND_FAILED",
-        targetType: "admin_auth_key",
-        targetId: key.id,
-        metadata: {
-          adminMemberId: member.id,
-          keyId: key.keyId,
-          reason: error instanceof Error ? error.message : "unknown"
-        }
-      });
-      throw new AdminAuthError("ADMIN_EMAIL_DELIVERY_FAILED", "Admin invite email delivery failed.");
-    }
 
     return {
       member,
@@ -309,6 +354,83 @@ export class AdminAuthService {
     if (!domain || !this.allowedDomains.includes(domain)) {
       throw new AdminAuthError("EMAIL_DOMAIN_NOT_ALLOWED", "Admin email domain is not allowed.");
     }
+  }
+
+  private async createAndSendMagicLink(input: {
+    member: AdminMember;
+    actorId: string | null;
+    source: "OWNER_INVITE" | "SELF_SERVICE";
+  }): Promise<{ key: AdminAuthKey; expiresAt: Date }> {
+    const generated = generateMagicToken();
+    const expiresAt = new Date(Date.now() + resolveMagicLinkTtlSeconds(this.config.magicLinkTtlSeconds) * 1000);
+    const key = await this.repository.createKey({
+      adminMemberId: input.member.id,
+      keyId: generated.keyId,
+      keyHash: hashLoginKey(generated.magicToken, this.config.keyPepper!),
+      keyType: "MAGIC_LINK",
+      expiresAt: expiresAt.toISOString(),
+      createdBy: input.actorId
+    });
+
+    await this.repository.createAuditEvent({
+      actorAdminMemberId: input.actorId,
+      eventType: "ADMIN_MAGIC_LINK_CREATED",
+      targetType: "admin_auth_key",
+      targetId: key.id,
+      metadata: {
+        adminMemberId: input.member.id,
+        keyId: key.keyId,
+        expiresAt: expiresAt.toISOString(),
+        source: input.source
+      }
+    });
+
+    try {
+      await this.emailDelivery!.sendAdminMagicLink({
+        to: input.member.email,
+        magicLink: buildMagicLink(this.config.adminFrontendBaseUrl!, generated.magicToken),
+        expiresAt
+      });
+      await this.repository.createAuditEvent({
+        actorAdminMemberId: input.actorId,
+        eventType: "ADMIN_MAGIC_LINK_SENT",
+        targetType: "admin_auth_key",
+        targetId: key.id,
+        metadata: {
+          adminMemberId: input.member.id,
+          keyId: key.keyId,
+          source: input.source
+        }
+      });
+      return { key, expiresAt };
+    } catch (error) {
+      await this.repository.createAuditEvent({
+        actorAdminMemberId: input.actorId,
+        eventType: "ADMIN_MAGIC_LINK_SEND_FAILED",
+        targetType: "admin_auth_key",
+        targetId: key.id,
+        metadata: {
+          adminMemberId: input.member.id,
+          keyId: key.keyId,
+          reason: error instanceof Error ? error.message : "unknown",
+          source: input.source
+        }
+      });
+      throw new AdminAuthError("ADMIN_EMAIL_DELIVERY_FAILED", "Admin invite email delivery failed.");
+    }
+  }
+
+  private async auditLoginLinkNotSent(email: string, reason: string): Promise<void> {
+    await this.repository.createAuditEvent({
+      actorAdminMemberId: null,
+      eventType: "ADMIN_LOGIN_LINK_NOT_SENT",
+      targetType: "admin_auth",
+      targetId: null,
+      metadata: {
+        emailHash: hashIdentifier(email, this.config.keyPepper),
+        reason
+      }
+    });
   }
 }
 
@@ -366,7 +488,15 @@ const resolveMagicLinkTtlSeconds = (value: number | undefined): number =>
   Number.isFinite(value) && value ? Math.max(60, Math.min(3600, Math.trunc(value))) : 900;
 
 const buildMagicLink = (adminFrontendBaseUrl: string, magicToken: string): string => {
-  const url = new URL("/admin-access/magic", adminFrontendBaseUrl);
+  const url = new URL("/login", adminFrontendBaseUrl);
   url.searchParams.set("token", magicToken);
   return url.toString();
+};
+
+const hashIdentifier = (value: string, pepper: string | undefined): string => {
+  const normalized = value.trim().toLowerCase();
+  if (pepper) {
+    return createHmac("sha256", pepper).update(normalized).digest("hex");
+  }
+  return createHash("sha256").update(normalized).digest("hex");
 };

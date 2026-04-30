@@ -1,10 +1,15 @@
 import type { FastifyInstance, FastifyReply, preHandlerHookHandler } from "fastify";
 import { z } from "zod";
 import { AdminAuthError, AdminAuthService } from "./admin-auth-service.js";
+import type { AdminAuthRateLimiter, AdminAuthRateLimitScope } from "./admin-auth-rate-limiter.js";
 
 const loginBodySchema = z.object({
   email: z.string().email(),
   loginKey: z.string().min(24)
+});
+
+const requestLoginLinkBodySchema = z.object({
+  email: z.string().email()
 });
 
 const magicLoginBodySchema = z.object({
@@ -32,25 +37,74 @@ const createKeyBodySchema = z.object({
 
 export interface AdminAuthRouteDeps {
   adminAuthService: AdminAuthService;
+  rateLimiter?: AdminAuthRateLimiter | undefined;
   jwtTtlSeconds: number;
   ownerMiddleware: preHandlerHookHandler;
 }
+
+const GENERIC_LOGIN_LINK_RESPONSE = {
+  message: "If this email is authorized, a login link has been sent."
+};
 
 export const registerAdminAuthRoutes = async (
   app: FastifyInstance,
   adminMiddleware: preHandlerHookHandler,
   deps: AdminAuthRouteDeps
 ): Promise<void> => {
+  app.post("/admin/auth/request-login-link", async (request, reply) => {
+    const parsed = requestLoginLinkBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: parsed.error.flatten() });
+    }
+
+    const rateLimit = await consumeAdminAuthRateLimit(deps.rateLimiter, {
+      scope: "request_login_link",
+      email: parsed.data.email,
+      ip: request.ip
+    });
+    if (!rateLimit.allowed) {
+      await deps.adminAuthService.auditLoginLinkRateLimited({
+        email: parsed.data.email,
+        reason: rateLimit.reason ?? "RATE_LIMITED"
+      }).catch(() => undefined);
+      return reply.status(202).send(GENERIC_LOGIN_LINK_RESPONSE);
+    }
+
+    try {
+      await deps.adminAuthService.requestLoginLink(parsed.data.email);
+    } catch {
+      // Keep the public login-link request enumeration-safe even if delivery or storage fails.
+    }
+    return reply.status(202).send(GENERIC_LOGIN_LINK_RESPONSE);
+  });
+
   app.post("/admin/auth/login", async (request, reply) => {
     const parsed = loginBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ code: "INVALID_REQUEST", details: parsed.error.flatten() });
     }
 
+    const rateLimit = await consumeAdminAuthRateLimit(deps.rateLimiter, {
+      scope: "manual_login",
+      email: parsed.data.email,
+      ip: request.ip
+    });
+    if (!rateLimit.allowed) {
+      await deps.adminAuthService.auditManualLoginRateLimited({
+        email: parsed.data.email,
+        reason: rateLimit.reason ?? "RATE_LIMITED"
+      }).catch(() => undefined);
+      return reply.status(401).send({ code: "INVALID_CREDENTIALS", message: "Invalid admin credentials." });
+    }
+
     try {
       const result = await deps.adminAuthService.login(parsed.data.email, parsed.data.loginKey);
       return reply.send(buildJwtResponse(app, result.member, deps.jwtTtlSeconds));
     } catch (error) {
+      await deps.adminAuthService.auditManualLoginFailure({
+        email: parsed.data.email,
+        reason: error instanceof AdminAuthError ? error.code : "ADMIN_AUTH_ERROR"
+      }).catch(() => undefined);
       return handleAdminAuthError(reply, error);
     }
   });
@@ -182,6 +236,16 @@ export const registerAdminAuthRoutes = async (
       return handleAdminAuthError(reply, error);
     }
   });
+};
+
+const consumeAdminAuthRateLimit = async (
+  rateLimiter: AdminAuthRateLimiter | undefined,
+  input: { scope: AdminAuthRateLimitScope; email: string; ip: string }
+) => {
+  if (!rateLimiter) {
+    return { allowed: true } as const;
+  }
+  return rateLimiter.consume(input);
 };
 
 const safeMember = <T extends { createdAt: Date; updatedAt: Date }>(member: T): Omit<T, "createdAt" | "updatedAt"> & {

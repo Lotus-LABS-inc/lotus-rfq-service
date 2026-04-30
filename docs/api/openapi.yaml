@@ -359,6 +359,26 @@ paths:
         "200": { $ref: "#/components/responses/AdminLogin" }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+  /admin/auth/request-login-link:
+    post:
+      tags: [Admin Auth]
+      summary: Request a self-service one-time admin magic login link.
+      description: |
+        Public login endpoint for the admin frontend. The response is always generic for syntactically valid email requests and never reveals whether the email belongs to an admin member.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: public-login
+      x-lotus-side-effects: may-send-admin-login-link
+      x-lotus-danger: high
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminRequestLoginLinkRequest"
+      responses:
+        "202": { $ref: "#/components/responses/AdminRequestLoginLink" }
+        "400": { $ref: "#/components/responses/Error" }
   /admin/auth/magic-login:
     post:
       tags: [Admin Auth]
@@ -3218,6 +3238,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/AdminLoginResponse"
+    AdminRequestLoginLink:
+      description: Generic self-service login-link request response. Does not reveal account existence or delivery status.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AdminRequestLoginLinkResponse"
     AdminMembers:
       description: Admin member list.
       content:
@@ -3305,6 +3331,18 @@ components:
         token:
           type: string
           description: One-time magic login token from the emailed admin link. Never log or expose after login.
+    AdminRequestLoginLinkRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+    AdminRequestLoginLinkResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          example: If this email is authorized, a login link has been sent.
     AdminLoginResponse:
       type: object
       required: [token, tokenType, expiresInSeconds, member]

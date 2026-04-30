@@ -6,6 +6,7 @@ describe("admin OpenAPI contract", () => {
     const openApi = await readFile(new URL("../docs/api/openapi.yaml", import.meta.url), "utf8");
     for (const path of [
       "/admin/auth/login:",
+      "/admin/auth/request-login-link:",
       "/admin/auth/magic-login:",
       "/admin/auth/me:",
       "/admin/auth/members:",
@@ -21,6 +22,8 @@ describe("admin OpenAPI contract", () => {
       expect(openApi).toContain(path);
     }
     expect(openApi).toContain("AdminLoginRequest:");
+    expect(openApi).toContain("AdminRequestLoginLinkRequest:");
+    expect(openApi).toContain("AdminRequestLoginLinkResponse:");
     expect(openApi).toContain("AdminMagicLoginRequest:");
     expect(openApi).toContain("AdminInvite:");
     expect(openApi).toContain("AdminMonetizationSummaryResponse:");
