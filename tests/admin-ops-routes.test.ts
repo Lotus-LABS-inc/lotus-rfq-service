@@ -23,7 +23,11 @@ const record = {
   retryLineage: [],
   providerExecutionKey: null,
   replayEnvelopeId: null,
-  metadata: {},
+  metadata: {
+    feeSummary: {
+      builderCode: "server-side-builder-code"
+    }
+  },
   createdAt: new Date("2026-04-29T00:00:00.000Z"),
   updatedAt: new Date("2026-04-29T00:00:00.000Z")
 };
@@ -70,6 +74,8 @@ describe("admin ops routes", () => {
     expect(detail.statusCode).toBe(200);
     expect(detail.body).not.toContain("privateKey");
     expect(detail.body).not.toContain("API_SECRET");
+    expect(detail.body).not.toContain("server-side-builder-code");
+    expect(detail.json().execution.record.metadata.feeSummary.builderCode).toBe("<redacted>");
     await app.close();
   });
 });

@@ -18,10 +18,10 @@ This harness is operator-controlled and is not part of normal CI or startup flow
 
 ## Current Result
 
-- Mode: DRY_RUN_CHECKLIST
+- Mode: LIVE_SUBMIT_READY
 - Submitted: false
-- Error: none
-- Blockers: POLYMARKET_LIVE_SUBMIT_HARNESS_ENABLED must be true
-- Warnings: Harness is disabled; this run is a checklist only and cannot submit.; Polygon mainnet detected; use the smallest possible operator-approved order.
+- Error: POLYMARKET_V2_SDK_ERROR: Request failed with status code 405
+- Blockers: none
+- Warnings: Polygon mainnet detected; use the smallest possible operator-approved order.
 
 Secrets are intentionally omitted from this artifact.

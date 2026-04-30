@@ -565,6 +565,7 @@ describe("PolymarketExecutionAdapterV2", () => {
     expect(output).not.toContain(completeEnv.POLY_API_SECRET);
     expect(output).not.toContain("generated-header-signature");
     expect(output).not.toContain("0xgeneratedordersignature");
+    expect(output).not.toContain(completeEnv.POLY_BUILDER_CODE);
     expect(output).toContain("<redacted>");
   });
 

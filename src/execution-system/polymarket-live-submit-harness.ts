@@ -155,7 +155,7 @@ export const runPolymarketLiveSubmitHarness = async (
       side: preparedOrder.payload.side,
       size: preparedOrder.payload.size,
       price: preparedOrder.payload.price,
-      metadata: preparedOrder.payload.metadata
+      metadata: redactSensitivePolymarketHarnessArtifactValue(preparedOrder.payload.metadata)
     }
   };
   const submitResult = await adapter.submitOrder(preparedOrder).catch((error: unknown) => {
@@ -186,4 +186,34 @@ export const runPolymarketLiveSubmitHarness = async (
     preparedOrder: safePreparedOrder,
     submitResult
   };
+};
+
+const sensitiveArtifactKeys = [
+  /^api[-_]?key$/i,
+  /^api[-_]?secret$/i,
+  /^api[-_]?passphrase$/i,
+  /^private[-_]?key$/i,
+  /^auth[-_]?header$/i,
+  /^authorization$/i,
+  /^signature$/i,
+  /^builder[-_]?code$/i,
+  /^builder$/i,
+  /^owner$/i
+];
+
+export const redactSensitivePolymarketHarnessArtifactValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactSensitivePolymarketHarnessArtifactValue(entry));
+  }
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [
+      key,
+      sensitiveArtifactKeys.some((pattern) => pattern.test(key))
+        ? "<redacted>"
+        : redactSensitivePolymarketHarnessArtifactValue(child)
+    ])
+  );
 };

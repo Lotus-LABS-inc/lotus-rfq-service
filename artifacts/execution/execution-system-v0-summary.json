@@ -1,32 +1,20 @@
 {
-  "generatedAt": "2026-04-28T01:32:19.583Z",
+  "generatedAt": "2026-04-30T21:55:59.572Z",
   "version": "execution-system-v0",
   "polymarketExecutionAdapterV2": {
     "adapter": "PolymarketExecutionAdapterV2",
     "venue": "POLYMARKET",
-    "executionMode": "disabled",
-    "featureFlagSelected": false,
-    "liveExecutionEnabled": false,
-    "readinessState": "NOT_CONFIGURED",
-    "requiredEnvPresent": false,
-    "missingEnv": [
-      "POLYMARKET_CLOB_HOST",
-      "POLYMARKET_CHAIN_ID",
-      "POLYMARKET_API_KEY",
-      "POLYMARKET_API_SECRET",
-      "POLYMARKET_API_PASSPHRASE",
-      "POLYMARKET_BUILDER_CODE",
-      "POLYMARKET_PRIVATE_KEY"
-    ],
-    "dryRunRequiredEnvPresent": false,
-    "missingDryRunEnv": [
-      "POLYMARKET_CLOB_HOST",
-      "POLYMARKET_CHAIN_ID",
-      "POLYMARKET_BUILDER_CODE"
-    ],
-    "builderCodeConfigured": false,
+    "executionMode": "v2",
+    "featureFlagSelected": true,
+    "liveExecutionEnabled": true,
+    "readinessState": "LIVE_READY",
+    "requiredEnvPresent": true,
+    "missingEnv": [],
+    "dryRunRequiredEnvPresent": true,
+    "missingDryRunEnv": [],
+    "builderCodeConfigured": true,
     "credentialsServerSideOnly": true,
-    "liveSubmissionStatus": "NOT_CONFIGURED"
+    "liveSubmissionStatus": "LIVE_CLIENT_DISABLED"
   },
   "authority": {
     "matcherEvidenceExecutableByItself": false,

@@ -5,9 +5,9 @@ import { Pool } from "pg";
 
 loadDotenv();
 
-const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
+const databaseUrl = process.env.SUPABASE_DB_URL ?? process.env.DATABASE_URL ?? process.env.TEST_DATABASE_URL;
 if (!databaseUrl) {
-  throw new Error("DATABASE_URL or TEST_DATABASE_URL is required to generate the monetization shadow report.");
+  throw new Error("SUPABASE_DB_URL, DATABASE_URL, or TEST_DATABASE_URL is required to generate the monetization shadow report.");
 }
 
 interface LedgerRow {

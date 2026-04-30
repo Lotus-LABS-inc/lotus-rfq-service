@@ -1,12 +1,12 @@
 # Funding Readiness Operator Summary
 
-Generated: 2026-04-26T02:12:29.659Z
+Generated: 2026-04-30T21:52:35.660Z
 
 ## Totals
 
-- Funding intents: 3
-- Route legs: 3
-- READY_TO_TRADE rows: 3
+- Funding intents: 0
+- Route legs: 0
+- READY_TO_TRADE rows: 0
 - VENUE_CREDIT_PENDING rows: 0
 - DESTINATION_NOT_CONFIRMED rows: 0
 - FAILED rows: 0
@@ -16,33 +16,31 @@ Generated: 2026-04-26T02:12:29.659Z
 
 ## Counts By Venue
 
-- PREDICT_FUN: 1
-- MYRIAD: 1
-- OPINION: 1
+- none: 0
 
 ## Counts By Readiness Status
 
 - UNKNOWN: 0
 - DESTINATION_NOT_CONFIRMED: 0
 - VENUE_CREDIT_PENDING: 0
-- READY_TO_TRADE: 3
+- READY_TO_TRADE: 0
 - FAILED: 0
 
 ## Counts By Checker Mode
 
 - DISABLED: 0
 - STUB: 0
-- LIVE_READ: 3
+- LIVE_READ: 0
 - NOT_CONFIGURED: 0
 
 ## Counts By Route Provider
 
-- LIFI: 3
+- none: 0
 
 ## Stale Age Buckets
 
 - NEVER_CHECKED: 0
-- UNDER_1H: 3
+- UNDER_1H: 0
 - ONE_TO_24H: 0
 - ONE_TO_7D: 0
 - OVER_7D: 0

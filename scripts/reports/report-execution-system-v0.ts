@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { config as loadDotenv } from "dotenv";
 import {
   executableLaneStates,
   executionAuditEventsV0,
@@ -7,6 +8,8 @@ import {
   getPolymarketExecutionAdapterV2EnvStatus,
   settlementStatuses
 } from "../../src/execution-system/index.js";
+
+loadDotenv();
 
 const artifactDir = join(process.cwd(), "artifacts", "execution");
 

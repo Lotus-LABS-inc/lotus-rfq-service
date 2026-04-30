@@ -1,0 +1,107 @@
+{
+  "artifactSchemaVersion": 1,
+  "generatedAt": "2026-04-30T21:56:10.291Z",
+  "status": "BLOCKED",
+  "components": [
+    {
+      "component": "admin_api_smoke",
+      "status": "MISSING",
+      "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\admin\\admin-api-smoke-latest.json",
+      "generatedAt": null,
+      "blockers": [
+        "Run npm run admin:api-smoke."
+      ],
+      "notes": []
+    },
+    {
+      "component": "trading_readiness",
+      "status": "BLOCKED",
+      "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\execution\\execution-system-v0-summary.json",
+      "generatedAt": "2026-04-30T21:55:59.572Z",
+      "blockers": [
+        "Last Polymarket harness attempt failed with POLYMARKET_V2_SDK_ERROR."
+      ],
+      "notes": [
+        "lastHarnessSubmitted=false"
+      ]
+    },
+    {
+      "component": "funding_readiness",
+      "status": "BLOCKED",
+      "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\all-venue-readiness-gate-summary.json",
+      "generatedAt": "2026-04-30T21:52:43.008Z",
+      "blockers": [
+        "Funding gate failed for 5 venue(s)."
+      ],
+      "notes": [
+        "passedVenues=0"
+      ]
+    },
+    {
+      "component": "withdrawal_readiness",
+      "status": "BLOCKED",
+      "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\all-venue-withdrawal-completion-gate-summary.json",
+      "generatedAt": "2026-04-30T21:52:49.925Z",
+      "blockers": [
+        "Withdrawal completion gate failed for 5 venue(s)."
+      ],
+      "notes": [
+        "passedVenues=0"
+      ]
+    },
+    {
+      "component": "monetization_readiness",
+      "status": "MISSING",
+      "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\monetization\\monetization-shadow-summary.json",
+      "generatedAt": null,
+      "blockers": [
+        "Run npm run report:monetization:private-beta."
+      ],
+      "notes": []
+    },
+    {
+      "component": "observability",
+      "status": "PASSED",
+      "artifactPath": null,
+      "generatedAt": "2026-04-30T21:56:10.291Z",
+      "blockers": [],
+      "notes": [
+        "/health=200",
+        "/metrics=200"
+      ]
+    }
+  ],
+  "trading": {
+    "currentLiveVenue": "POLYMARKET",
+    "polymarket": {
+      "readinessState": "LIVE_READY",
+      "liveExecutionEnabled": true,
+      "featureFlagSelected": true,
+      "requiredEnvPresent": true,
+      "missingEnv": [],
+      "dryRunRequiredEnvPresent": true,
+      "missingDryRunEnv": []
+    }
+  },
+  "observability": {
+    "healthUrl": "https://lotus-backend-g1e1.onrender.com/health",
+    "metricsUrl": "https://lotus-backend-g1e1.onrender.com/metrics",
+    "alertThresholds": {
+      "adminAuthFailures": "Investigate if ADMIN_AUTH_LOGIN_FAILED or ADMIN_MAGIC_LOGIN failures spike above 5 in 15 minutes.",
+      "adminRateLimit": "Investigate if ADMIN_LOGIN_LINK_RATE_LIMITED or ADMIN_AUTH_LOGIN_RATE_LIMITED appears for an active operator.",
+      "redisUnavailable": "Investigate any Redis connection error lasting more than 5 minutes; admin login falls back but realtime paths may degrade.",
+      "databaseErrors": "Page operator on repeated pg connection/query failures or /health failure.",
+      "failedExecutionSubmissions": "Block live trading on any failed venue submit until execution record and venue state are reconciled.",
+      "fundingReadinessStale": "Block beta order flow for venues with readiness evidence older than 24 hours.",
+      "withdrawalCompletionFailures": "Block withdrawal completion persistence for venues with failed completion gates.",
+      "resendDeliveryFailures": "Investigate any ADMIN_MAGIC_LINK_SEND_FAILED for active admins."
+    }
+  },
+  "safety": {
+    "readOnlyReport": true,
+    "liveSubmitRequiresOperatorFlags": true,
+    "noSecretsIncluded": true,
+    "frontendDirectSecretAccess": false,
+    "shadowMonetizationIsNotCollectedRevenue": true
+  }
+}

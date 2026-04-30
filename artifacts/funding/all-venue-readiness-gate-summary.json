@@ -1,17 +1,17 @@
 {
-  "generatedAt": "2026-04-26T02:18:12.232Z",
+  "generatedAt": "2026-04-30T21:52:43.008Z",
   "maxAgeHours": 24,
-  "status": "PASSED",
-  "passedVenues": 5,
-  "failedVenues": 0,
+  "status": "FAILED",
+  "passedVenues": 0,
+  "failedVenues": 5,
   "rows": [
     {
       "venue": "POLYMARKET",
-      "status": "PASSED",
+      "status": "STALE",
       "coverageSource": "pair_rehearsal",
       "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\pair-funding-readiness-sandbox-preflight.json",
       "generatedAt": "2026-04-26T01:09:45.851Z",
-      "ageHours": 1.1407,
+      "ageHours": 116.7159,
       "maxAgeHours": 24,
       "artifactStatus": "COMPLETED",
       "executionPreflightOk": true,
@@ -21,15 +21,17 @@
       "safetyOk": true,
       "routeLegReady": true,
       "venueEvidenceReady": true,
-      "blockers": []
+      "blockers": [
+        "Artifact is stale at 116.72h."
+      ]
     },
     {
       "venue": "LIMITLESS",
-      "status": "PASSED",
+      "status": "STALE",
       "coverageSource": "pair_rehearsal",
       "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\pair-funding-readiness-sandbox-preflight.json",
       "generatedAt": "2026-04-26T01:09:45.851Z",
-      "ageHours": 1.1407,
+      "ageHours": 116.7159,
       "maxAgeHours": 24,
       "artifactStatus": "COMPLETED",
       "executionPreflightOk": true,
@@ -39,15 +41,17 @@
       "safetyOk": true,
       "routeLegReady": true,
       "venueEvidenceReady": true,
-      "blockers": []
+      "blockers": [
+        "Artifact is stale at 116.72h."
+      ]
     },
     {
       "venue": "OPINION",
-      "status": "PASSED",
+      "status": "STALE",
       "coverageSource": "single_venue_rehearsal",
       "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\opinion-funding-readiness-sandbox-preflight.json",
       "generatedAt": "2026-04-26T02:05:26.238Z",
-      "ageHours": 0.2128,
+      "ageHours": 115.788,
       "maxAgeHours": 24,
       "artifactStatus": "COMPLETED",
       "executionPreflightOk": true,
@@ -57,15 +61,17 @@
       "safetyOk": true,
       "routeLegReady": true,
       "venueEvidenceReady": true,
-      "blockers": []
+      "blockers": [
+        "Artifact is stale at 115.79h."
+      ]
     },
     {
       "venue": "MYRIAD",
-      "status": "PASSED",
+      "status": "STALE",
       "coverageSource": "single_venue_rehearsal",
       "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\myriad-funding-readiness-sandbox-preflight.json",
       "generatedAt": "2026-04-26T02:09:47.669Z",
-      "ageHours": 0.1402,
+      "ageHours": 115.7154,
       "maxAgeHours": 24,
       "artifactStatus": "COMPLETED",
       "executionPreflightOk": true,
@@ -75,15 +81,17 @@
       "safetyOk": true,
       "routeLegReady": true,
       "venueEvidenceReady": true,
-      "blockers": []
+      "blockers": [
+        "Artifact is stale at 115.72h."
+      ]
     },
     {
       "venue": "PREDICT_FUN",
-      "status": "PASSED",
+      "status": "STALE",
       "coverageSource": "single_venue_rehearsal",
       "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\predict-fun-funding-readiness-sandbox-preflight.json",
       "generatedAt": "2026-04-26T02:12:07.408Z",
-      "ageHours": 0.1013,
+      "ageHours": 115.6766,
       "maxAgeHours": 24,
       "artifactStatus": "COMPLETED",
       "executionPreflightOk": true,
@@ -93,7 +101,9 @@
       "safetyOk": true,
       "routeLegReady": true,
       "venueEvidenceReady": true,
-      "blockers": []
+      "blockers": [
+        "Artifact is stale at 115.68h."
+      ]
     }
   ],
   "safety": {

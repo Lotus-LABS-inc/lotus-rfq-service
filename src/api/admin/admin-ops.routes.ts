@@ -77,7 +77,7 @@ export const registerAdminOpsRoutes = async (
         if (parsed.data.settlementStatus && record.settlementStatus !== parsed.data.settlementStatus) return false;
         return true;
       });
-      return reply.send({ executions: records });
+      return reply.send({ executions: redactAdminSensitiveValue(records) });
     } catch (error) {
       app.log.error({ err: error }, "Failed to list admin executions.");
       return reply.status(500).send({ code: "ADMIN_EXECUTIONS_ERROR", message: "Failed to list executions." });
@@ -98,7 +98,7 @@ export const registerAdminOpsRoutes = async (
         deps.executionIntentRepository.findById(record.executionIntentId),
         deps.executionControlRepository.listControlAuditByRecord(record.id)
       ]);
-      return reply.send({ execution: { record, intent, audit } });
+      return reply.send({ execution: redactAdminSensitiveValue({ record, intent, audit }) });
     } catch (error) {
       app.log.error({ err: error }, "Failed to load admin execution detail.");
       return reply.status(500).send({ code: "ADMIN_EXECUTION_DETAIL_ERROR", message: "Failed to load execution." });
@@ -121,3 +121,39 @@ const countBy = <T>(rows: T[], keyOf: (row: T) => string): Record<string, number
     counts[key] = (counts[key] ?? 0) + 1;
     return counts;
   }, {});
+
+const sensitiveAdminKeys = [
+  /^api[-_]?key$/i,
+  /^api[-_]?secret$/i,
+  /^api[-_]?passphrase$/i,
+  /^private[-_]?key$/i,
+  /^auth[-_]?header$/i,
+  /^authorization$/i,
+  /^password$/i,
+  /^secret$/i,
+  /^signature$/i,
+  /^login[-_]?key$/i,
+  /^key[-_]?hash$/i,
+  /^builder[-_]?code$/i,
+  /^builder$/i
+];
+
+const redactAdminSensitiveValue = (value: unknown): unknown => {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactAdminSensitiveValue(entry));
+  }
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [
+      key,
+      sensitiveAdminKeys.some((pattern) => pattern.test(key))
+        ? "<redacted>"
+        : redactAdminSensitiveValue(child)
+    ])
+  );
+};

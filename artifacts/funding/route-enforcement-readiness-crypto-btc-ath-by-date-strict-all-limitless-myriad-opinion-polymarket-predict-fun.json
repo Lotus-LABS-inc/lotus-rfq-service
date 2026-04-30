@@ -1,0 +1,158 @@
+{
+  "generatedAt": "2026-04-30T21:54:44.213Z",
+  "status": "FAILED",
+  "routeOrLaneId": "CRYPTO_BTC_ATH_BY_DATE_STRICT_ALL_LIMITLESS_MYRIAD_OPINION_POLYMARKET_PREDICT_FUN",
+  "requiredVenues": [
+    "POLYMARKET",
+    "LIMITLESS",
+    "OPINION",
+    "MYRIAD",
+    "PREDICT_FUN"
+  ],
+  "maxAgeHours": 24,
+  "allVenueGateSummaryPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\all-venue-readiness-gate-summary.json",
+  "routeRehearsalArtifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\route-crypto-btc-ath-by-date-strict-all-limitless-myriad-opinion-polymarket-predict-fun-funding-readiness-sandbox-preflight.json",
+  "blockers": [
+    "All-venue gate summary status is FAILED, expected PASSED.",
+    "POLYMARKET venue gate status is STALE, expected PASSED.",
+    "POLYMARKET venue gate artifact is missing, invalid, or stale.",
+    "POLYMARKET venue gate has blockers: Artifact is stale at 116.72h.",
+    "LIMITLESS venue gate status is STALE, expected PASSED.",
+    "LIMITLESS venue gate artifact is missing, invalid, or stale.",
+    "LIMITLESS venue gate has blockers: Artifact is stale at 116.72h.",
+    "OPINION venue gate status is STALE, expected PASSED.",
+    "OPINION venue gate artifact is missing, invalid, or stale.",
+    "OPINION venue gate has blockers: Artifact is stale at 115.79h.",
+    "MYRIAD venue gate status is STALE, expected PASSED.",
+    "MYRIAD venue gate artifact is missing, invalid, or stale.",
+    "MYRIAD venue gate has blockers: Artifact is stale at 115.72h.",
+    "PREDICT_FUN venue gate status is STALE, expected PASSED.",
+    "PREDICT_FUN venue gate artifact is missing, invalid, or stale.",
+    "PREDICT_FUN venue gate has blockers: Artifact is stale at 115.68h.",
+    "Route rehearsal artifact is missing or unreadable."
+  ],
+  "allVenueGate": {
+    "status": "FAILED",
+    "generatedAt": "2026-04-30T21:52:43.008Z",
+    "fresh": true,
+    "requiredVenueRows": [
+      {
+        "venue": "POLYMARKET",
+        "status": "STALE",
+        "coverageSource": "pair_rehearsal",
+        "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\pair-funding-readiness-sandbox-preflight.json",
+        "generatedAt": "2026-04-26T01:09:45.851Z",
+        "ageHours": 116.7159,
+        "maxAgeHours": 24,
+        "artifactStatus": "COMPLETED",
+        "executionPreflightOk": true,
+        "persistedReadinessRows": 2,
+        "adminReadinessVisible": true,
+        "redactionVerified": true,
+        "safetyOk": true,
+        "routeLegReady": true,
+        "venueEvidenceReady": true,
+        "blockers": [
+          "Artifact is stale at 116.72h."
+        ]
+      },
+      {
+        "venue": "LIMITLESS",
+        "status": "STALE",
+        "coverageSource": "pair_rehearsal",
+        "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\pair-funding-readiness-sandbox-preflight.json",
+        "generatedAt": "2026-04-26T01:09:45.851Z",
+        "ageHours": 116.7159,
+        "maxAgeHours": 24,
+        "artifactStatus": "COMPLETED",
+        "executionPreflightOk": true,
+        "persistedReadinessRows": 2,
+        "adminReadinessVisible": true,
+        "redactionVerified": true,
+        "safetyOk": true,
+        "routeLegReady": true,
+        "venueEvidenceReady": true,
+        "blockers": [
+          "Artifact is stale at 116.72h."
+        ]
+      },
+      {
+        "venue": "OPINION",
+        "status": "STALE",
+        "coverageSource": "single_venue_rehearsal",
+        "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\opinion-funding-readiness-sandbox-preflight.json",
+        "generatedAt": "2026-04-26T02:05:26.238Z",
+        "ageHours": 115.788,
+        "maxAgeHours": 24,
+        "artifactStatus": "COMPLETED",
+        "executionPreflightOk": true,
+        "persistedReadinessRows": 1,
+        "adminReadinessVisible": true,
+        "redactionVerified": true,
+        "safetyOk": true,
+        "routeLegReady": true,
+        "venueEvidenceReady": true,
+        "blockers": [
+          "Artifact is stale at 115.79h."
+        ]
+      },
+      {
+        "venue": "MYRIAD",
+        "status": "STALE",
+        "coverageSource": "single_venue_rehearsal",
+        "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\myriad-funding-readiness-sandbox-preflight.json",
+        "generatedAt": "2026-04-26T02:09:47.669Z",
+        "ageHours": 115.7154,
+        "maxAgeHours": 24,
+        "artifactStatus": "COMPLETED",
+        "executionPreflightOk": true,
+        "persistedReadinessRows": 1,
+        "adminReadinessVisible": true,
+        "redactionVerified": true,
+        "safetyOk": true,
+        "routeLegReady": true,
+        "venueEvidenceReady": true,
+        "blockers": [
+          "Artifact is stale at 115.72h."
+        ]
+      },
+      {
+        "venue": "PREDICT_FUN",
+        "status": "STALE",
+        "coverageSource": "single_venue_rehearsal",
+        "artifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\predict-fun-funding-readiness-sandbox-preflight.json",
+        "generatedAt": "2026-04-26T02:12:07.408Z",
+        "ageHours": 115.6766,
+        "maxAgeHours": 24,
+        "artifactStatus": "COMPLETED",
+        "executionPreflightOk": true,
+        "persistedReadinessRows": 1,
+        "adminReadinessVisible": true,
+        "redactionVerified": true,
+        "safetyOk": true,
+        "routeLegReady": true,
+        "venueEvidenceReady": true,
+        "blockers": [
+          "Artifact is stale at 115.68h."
+        ]
+      }
+    ]
+  },
+  "routeRehearsal": {
+    "status": null,
+    "generatedAt": null,
+    "fresh": false,
+    "executionPreflightOk": false,
+    "persistedReadinessRows": 0,
+    "adminReadinessVisible": false,
+    "redactionVerified": false,
+    "safetyOk": false
+  },
+  "safety": {
+    "readOnlyValidator": true,
+    "liveLifiExecutionEnabled": false,
+    "fundingPreflightEnforcementChanged": false,
+    "backendBroadcastedTransaction": false,
+    "liveVenueSubmissionEnabled": false
+  }
+}

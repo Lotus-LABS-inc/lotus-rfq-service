@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const SCRIPT_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = path.dirname(SCRIPT_FILE);
-const ROOT_DIR = path.resolve(SCRIPT_DIR, "..");
+const ROOT_DIR = path.resolve(SCRIPT_DIR, "..", "..");
 const SRC_DIR = path.join(ROOT_DIR, "src");
 const METRICS_FILE = path.join(SRC_DIR, "observability", "metrics.ts");
 

@@ -1,0 +1,118 @@
+{
+  "artifactSchemaVersion": 1,
+  "generatedAt": "2026-04-30T21:52:49.925Z",
+  "status": "FAILED",
+  "passedVenues": 0,
+  "failedVenues": 5,
+  "maxAgeHours": 24,
+  "rows": [
+    {
+      "venue": "POLYMARKET",
+      "status": "FAILED",
+      "smokeArtifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\polymarket-withdrawal-evidence-smoke-test.json",
+      "generatedAt": null,
+      "ageHours": null,
+      "artifactStatus": null,
+      "mappingObserved": null,
+      "completedEvidence": false,
+      "fresh": false,
+      "redacted": false,
+      "nonSynthetic": false,
+      "readOnly": false,
+      "noSmokePersistence": false,
+      "approvedHost": true,
+      "runtimePersistenceEnabledForVenue": false,
+      "blockers": [
+        "Withdrawal evidence smoke artifact is missing or unreadable at C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\polymarket-withdrawal-evidence-smoke-test.json."
+      ]
+    },
+    {
+      "venue": "LIMITLESS",
+      "status": "FAILED",
+      "smokeArtifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\limitless-withdrawal-evidence-smoke-test.json",
+      "generatedAt": null,
+      "ageHours": null,
+      "artifactStatus": null,
+      "mappingObserved": null,
+      "completedEvidence": false,
+      "fresh": false,
+      "redacted": false,
+      "nonSynthetic": false,
+      "readOnly": false,
+      "noSmokePersistence": false,
+      "approvedHost": true,
+      "runtimePersistenceEnabledForVenue": false,
+      "blockers": [
+        "Withdrawal evidence smoke artifact is missing or unreadable at C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\limitless-withdrawal-evidence-smoke-test.json."
+      ]
+    },
+    {
+      "venue": "OPINION",
+      "status": "FAILED",
+      "smokeArtifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\opinion-withdrawal-evidence-smoke-test.json",
+      "generatedAt": null,
+      "ageHours": null,
+      "artifactStatus": null,
+      "mappingObserved": null,
+      "completedEvidence": false,
+      "fresh": false,
+      "redacted": false,
+      "nonSynthetic": false,
+      "readOnly": false,
+      "noSmokePersistence": false,
+      "approvedHost": true,
+      "runtimePersistenceEnabledForVenue": false,
+      "blockers": [
+        "Withdrawal evidence smoke artifact is missing or unreadable at C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\opinion-withdrawal-evidence-smoke-test.json."
+      ]
+    },
+    {
+      "venue": "MYRIAD",
+      "status": "FAILED",
+      "smokeArtifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\myriad-withdrawal-evidence-smoke-test.json",
+      "generatedAt": null,
+      "ageHours": null,
+      "artifactStatus": null,
+      "mappingObserved": null,
+      "completedEvidence": false,
+      "fresh": false,
+      "redacted": false,
+      "nonSynthetic": false,
+      "readOnly": false,
+      "noSmokePersistence": false,
+      "approvedHost": true,
+      "runtimePersistenceEnabledForVenue": false,
+      "blockers": [
+        "Withdrawal evidence smoke artifact is missing or unreadable at C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\myriad-withdrawal-evidence-smoke-test.json."
+      ]
+    },
+    {
+      "venue": "PREDICT_FUN",
+      "status": "FAILED",
+      "smokeArtifactPath": "C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\predict-fun-withdrawal-evidence-smoke-test.json",
+      "generatedAt": null,
+      "ageHours": null,
+      "artifactStatus": null,
+      "mappingObserved": null,
+      "completedEvidence": false,
+      "fresh": false,
+      "redacted": false,
+      "nonSynthetic": false,
+      "readOnly": false,
+      "noSmokePersistence": false,
+      "approvedHost": true,
+      "runtimePersistenceEnabledForVenue": false,
+      "blockers": [
+        "Withdrawal evidence smoke artifact is missing or unreadable at C:\\Users\\Admin\\Documents\\lotus-RFQ-service\\lotus-rfq-service\\artifacts\\funding\\predict-fun-withdrawal-evidence-smoke-test.json."
+      ]
+    }
+  ],
+  "safety": {
+    "readOnlyReport": true,
+    "liveLifiExecutionEnabled": false,
+    "liveVenueWithdrawalExecutionEnabled": false,
+    "backendBroadcastedTransaction": false,
+    "backendSignedTransaction": false,
+    "persistenceChanged": false
+  }
+}

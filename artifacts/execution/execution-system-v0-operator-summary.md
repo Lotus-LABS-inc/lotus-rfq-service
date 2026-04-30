@@ -1,6 +1,6 @@
 # Execution System v0 Operator Summary
 
-Generated: 2026-04-28T01:32:19.583Z
+Generated: 2026-04-30T21:55:59.572Z
 
 ## Authority
 
@@ -11,10 +11,10 @@ Generated: 2026-04-28T01:32:19.583Z
 ## Safety Posture
 
 - Live venue submission fails closed unless a venue adapter is explicitly configured.
-- Polymarket V2 adapter status: NOT_CONFIGURED.
-- Polymarket V2 feature flag selected: false.
-- Polymarket live execution enabled: false.
-- Polymarket env readiness: missing POLYMARKET_CLOB_HOST, POLYMARKET_CHAIN_ID, POLYMARKET_API_KEY, POLYMARKET_API_SECRET, POLYMARKET_API_PASSPHRASE, POLYMARKET_BUILDER_CODE, POLYMARKET_PRIVATE_KEY.
+- Polymarket V2 adapter status: LIVE_CLIENT_DISABLED.
+- Polymarket V2 feature flag selected: true.
+- Polymarket live execution enabled: true.
+- Polymarket env readiness: complete.
 - Accounting updates only after settlement/finality verification.
 - Polymarket ghost-fill protection hooks are present for protected modes.
 - Fallback can only use approved fallback scope; otherwise execution fails closed.

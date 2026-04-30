@@ -423,7 +423,8 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
       config.apiKey,
       config.apiSecret,
       config.apiPassphrase,
-      config.privateKey
+      config.privateKey,
+      config.builderCode
     ].filter((value): value is string => nonEmpty(value));
   }
 
@@ -755,11 +756,17 @@ const redactStringValues = (value: string, sensitiveValues: readonly string[]): 
     .replace(/("POLY_PASSPHRASE"\s*:\s*")[^"]+(")/gi, "$1<redacted>$2")
     .replace(/("signature"\s*:\s*")[^"]+(")/gi, "$1<redacted>$2")
     .replace(/("owner"\s*:\s*")[^"]+(")/gi, "$1<redacted>$2")
+    .replace(/("builder"\s*:\s*")[^"]+(")/gi, "$1<redacted>$2")
+    .replace(/("builderCode"\s*:\s*")[^"]+(")/gi, "$1<redacted>$2")
+    .replace(/("builder_code"\s*:\s*")[^"]+(")/gi, "$1<redacted>$2")
     .replace(/(\\?"POLY_SIGNATURE\\?"\s*:\s*\\?")[^"\\]+(\\?")/gi, "$1<redacted>$2")
     .replace(/(\\?"POLY_API_KEY\\?"\s*:\s*\\?")[^"\\]+(\\?")/gi, "$1<redacted>$2")
     .replace(/(\\?"POLY_PASSPHRASE\\?"\s*:\s*\\?")[^"\\]+(\\?")/gi, "$1<redacted>$2")
     .replace(/(\\?"signature\\?"\s*:\s*\\?")[^"\\]+(\\?")/gi, "$1<redacted>$2")
-    .replace(/(\\?"owner\\?"\s*:\s*\\?")[^"\\]+(\\?")/gi, "$1<redacted>$2");
+    .replace(/(\\?"owner\\?"\s*:\s*\\?")[^"\\]+(\\?")/gi, "$1<redacted>$2")
+    .replace(/(\\?"builder\\?"\s*:\s*\\?")[^"\\]+(\\?")/gi, "$1<redacted>$2")
+    .replace(/(\\?"builderCode\\?"\s*:\s*\\?")[^"\\]+(\\?")/gi, "$1<redacted>$2")
+    .replace(/(\\?"builder_code\\?"\s*:\s*\\?")[^"\\]+(\\?")/gi, "$1<redacted>$2");
 };
 
 const redactPolymarketSdkLog = (value: unknown, sensitiveValues: readonly string[]): unknown => {
@@ -773,7 +780,7 @@ const redactPolymarketSdkLog = (value: unknown, sensitiveValues: readonly string
     return Object.fromEntries(
       Object.entries(value).map(([key, entry]) => [
         key,
-        /api[_-]?key|secret|passphrase|signature|private/i.test(key)
+        /api[_-]?key|secret|passphrase|signature|private|builder/i.test(key)
           ? "<redacted>"
           : redactPolymarketSdkLog(entry, sensitiveValues)
       ])

@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   evaluatePolymarketLiveSubmitHarness,
   getPolymarketExecutionAdapterV2EnvStatus,
-  polymarketLiveSubmitOperatorConfirmation
+  polymarketLiveSubmitOperatorConfirmation,
+  redactSensitivePolymarketHarnessArtifactValue
 } from "../src/execution-system/index.js";
 
 const liveReadyEnv = {
@@ -97,5 +98,30 @@ describe("Polymarket live-submit harness guard", () => {
     });
     expect(plan.allowed).toBe(false);
     expect(plan.blockers).toContain("POLYMARKET_LIVE_SUBMIT_SIZE exceeds max size 0.05");
+  });
+
+  it("redacts builder and auth material from harness artifacts", () => {
+    const redacted = redactSensitivePolymarketHarnessArtifactValue({
+      metadata: {
+        builderCode: "lotus-builder",
+        clobV2DryRun: {
+          builder_code: "lotus-builder",
+          signature: "venue-signature",
+          publicField: "ok"
+        }
+      }
+    });
+    expect(JSON.stringify(redacted)).not.toContain("lotus-builder");
+    expect(JSON.stringify(redacted)).not.toContain("venue-signature");
+    expect(redacted).toMatchObject({
+      metadata: {
+        builderCode: "<redacted>",
+        clobV2DryRun: {
+          builder_code: "<redacted>",
+          signature: "<redacted>",
+          publicField: "ok"
+        }
+      }
+    });
   });
 });
