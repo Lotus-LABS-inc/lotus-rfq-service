@@ -15,14 +15,22 @@ export interface AdminEmailDelivery {
 export interface ResendAdminEmailDeliveryConfig {
   apiKey: string;
   from: string;
+  timeoutMs?: number | undefined;
 }
 
 export class ResendAdminEmailDelivery implements AdminEmailDelivery {
   public constructor(private readonly config: ResendAdminEmailDeliveryConfig) {}
 
   public async sendAdminMagicLink(input: AdminMagicLinkEmailInput): Promise<AdminEmailDeliveryResult> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, this.config.timeoutMs ?? 10_000);
+    timeout.unref?.();
+
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
+      signal: controller.signal,
       headers: {
         Authorization: `Bearer ${this.config.apiKey}`,
         "Content-Type": "application/json"
@@ -34,6 +42,8 @@ export class ResendAdminEmailDelivery implements AdminEmailDelivery {
         text: buildTextBody(input),
         html: buildHtmlBody(input)
       })
+    }).finally(() => {
+      clearTimeout(timeout);
     });
 
     if (!response.ok) {

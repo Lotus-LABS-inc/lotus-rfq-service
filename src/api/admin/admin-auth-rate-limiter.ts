@@ -29,6 +29,7 @@ export interface RedisAdminAuthRateLimiterConfig {
   redis: RedisClient;
   logger: Pick<Logger, "warn">;
   keyPepper?: string | undefined;
+  operationTimeoutMs?: number | undefined;
   requestLoginLink: AdminAuthRateLimitConfig;
   manualLogin: AdminAuthRateLimitConfig;
 }
@@ -37,6 +38,14 @@ export class RedisAdminAuthRateLimiter implements AdminAuthRateLimiter {
   public constructor(private readonly config: RedisAdminAuthRateLimiterConfig) {}
 
   public async consume(input: AdminAuthRateLimitInput): Promise<AdminAuthRateLimitResult> {
+    return withTimeout(
+      this.consumeWithRedis(input),
+      this.config.operationTimeoutMs ?? 1000,
+      { allowed: false, reason: "STORAGE_UNAVAILABLE" }
+    );
+  }
+
+  private async consumeWithRedis(input: AdminAuthRateLimitInput): Promise<AdminAuthRateLimitResult> {
     const limits = input.scope === "request_login_link"
       ? this.config.requestLoginLink
       : this.config.manualLogin;
@@ -102,3 +111,12 @@ const hashIdentifier = (value: string, pepper: string | undefined): string => {
   }
   return createHash("sha256").update(normalized).digest("hex");
 };
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> =>
+  Promise.race([
+    promise,
+    new Promise<T>((resolve) => {
+      const timer = setTimeout(() => resolve(fallback), timeoutMs);
+      timer.unref?.();
+    })
+  ]);
