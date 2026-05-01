@@ -69,6 +69,7 @@ import {
 } from "../src/core/funding/opinion-withdrawal-adapter.js";
 import {
   fromBaseUnitAmount,
+  LifiRestClient,
   normalizeLifiQuote,
   normalizeLifiStatus,
   toBaseUnitAmount,
@@ -1851,6 +1852,28 @@ describe("Funding v0 domain", () => {
       toAddress: "destination",
       targetVenue: "POLYMARKET"
     }, 60)).toThrow(FundingError);
+  });
+
+  it("normalizes LI.FI status chain parameters before provider lookup", async () => {
+    let requestedUrl: URL | null = null;
+    const client = new LifiRestClient({
+      baseUrl: "https://li.quest",
+      timeoutMs: 1000,
+      quoteTtlSeconds: 60,
+      quotesEnabled: true
+    }, (async (input) => {
+      requestedUrl = new URL(String(input));
+      return new Response(JSON.stringify({ status: "DONE", substatus: "COMPLETED" }), { status: 200 });
+    }) as typeof fetch);
+
+    await expect(client.status({
+      txHash: "2gU42AjTDTBiSeN5xcF2S3kRayRC3W6AeqnbYv7U5ndhBeF27obhjLSPraxX4W9LodeWQ8LmyPRHKwKJcqAU6y3V",
+      fromChain: "SOLANA",
+      toChain: "POLYGON"
+    })).resolves.toMatchObject({ status: "DONE_COMPLETED" });
+
+    expect(requestedUrl?.searchParams.get("fromChain")).toBe("SOL");
+    expect(requestedUrl?.searchParams.get("toChain")).toBe("137");
   });
 
   it("gates execution preflight on exact ready funding when enabled", async () => {

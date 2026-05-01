@@ -64,8 +64,8 @@ export class LifiRestClient implements LifiRouteProvider {
   public async status(input: LifiStatusRequest): Promise<{ status: NormalizedLifiStatus; raw: Record<string, unknown> }> {
     const url = new URL("/v1/status", this.config.baseUrl);
     url.searchParams.set("txHash", input.txHash);
-    url.searchParams.set("fromChain", input.fromChain);
-    url.searchParams.set("toChain", input.toChain);
+    url.searchParams.set("fromChain", toLifiChain(input.fromChain));
+    url.searchParams.set("toChain", toLifiChain(input.toChain));
     if (input.bridge) {
       url.searchParams.set("bridge", input.bridge);
     }
