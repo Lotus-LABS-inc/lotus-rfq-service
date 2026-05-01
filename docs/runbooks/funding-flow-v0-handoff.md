@@ -62,6 +62,17 @@ Turnkey backend implementation path:
 - Venue targets continue to use `<VENUE>_FUNDING_DESTINATION_ADDRESS` by default. A venue can opt into `USER_TURNKEY_EVM_WALLET` with `<VENUE>_FUNDING_DESTINATION_MODE`, but that only changes the route destination address. It does not change readiness or custody rules.
 - The backend never exposes Turnkey sub-organization ids, wallet account ids, API keys, export bundles, or signing material in frontend responses.
 
+Controlled Turnkey production smoke:
+
+- Rotate any exposed Turnkey API key before setting `TURNKEY_ENABLED=true` in Render.
+- Keep every `<VENUE>_FUNDING_DESTINATION_MODE=VENUE_DEPOSIT_ENV` for the first smoke.
+- Use a dedicated production smoke user JWT, not an admin JWT.
+- Run `npm run funding:turnkey-wallet-production-smoke` with `TURNKEY_SMOKE_BASE_URL`, `TURNKEY_SMOKE_USER_JWT`, `TURNKEY_SMOKE_TARGET_VENUE`, `TURNKEY_SMOKE_SOURCE_CHAIN`, `TURNKEY_SMOKE_SOURCE_TOKEN`, and `TURNKEY_SMOKE_SOURCE_AMOUNT`.
+- The smoke calls `POST /user/wallets/ensure-defaults`, `GET /user/wallets`, and `POST /funding/intents` without `sourceWalletAddress`.
+- The smoke writes redacted artifacts under `artifacts/funding/turnkey-wallet-production-smoke-*`.
+- Passing smoke means wallet defaults are idempotent, responses contain public metadata only, the funding intent binds `sourceWalletId`, and no `READY_TO_TRADE` shortcut is observed.
+- Passing smoke does not approve signing, broadcasting, custody, or `USER_TURNKEY_EVM_WALLET` destination mode.
+
 In plain terms:
 
 1. A user chooses a source wallet, source chain, source token, and amount.

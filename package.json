@@ -95,6 +95,7 @@
     "funding:opinion-readiness-smoke": "tsx scripts/reports/report-funding-venue-readiness-smoke-test.ts OPINION",
     "funding:myriad-readiness-smoke": "tsx scripts/reports/report-funding-venue-readiness-smoke-test.ts MYRIAD",
     "funding:predictfun-readiness-smoke": "tsx scripts/reports/report-funding-venue-readiness-smoke-test.ts PREDICT_FUN",
+    "funding:turnkey-wallet-production-smoke": "tsx scripts/reports/report-turnkey-wallet-production-smoke.ts",
     "funding:seed-venue-readiness-smoke": "tsx scripts/dev/seed-funding-venue-readiness-smoke-row.ts",
     "funding:seed-opinion-readiness-smoke": "tsx scripts/dev/seed-funding-venue-readiness-smoke-row.ts OPINION",
     "funding:venue-readiness-reconcile": "tsx scripts/dev/reconcile-funding-venue-readiness-from-smoke.ts",
