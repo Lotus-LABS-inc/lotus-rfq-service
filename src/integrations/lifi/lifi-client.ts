@@ -244,5 +244,8 @@ const tokenDecimals = (token: string): number | null => {
   if (/^0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174$/i.test(normalized)) {
     return 6;
   }
+  if (/^0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913$/i.test(normalized)) {
+    return 6;
+  }
   return null;
 };

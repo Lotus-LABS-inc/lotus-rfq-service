@@ -1839,6 +1839,7 @@ describe("Funding v0 domain", () => {
     expect(toLifiChain("POLYGON")).toBe("137");
     expect(toBaseUnitAmount("1.25", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")).toBe("1250000");
     expect(fromBaseUnitAmount("991788", "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")).toBe("0.991788");
+    expect(fromBaseUnitAmount("1991998", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")).toBe("1.991998");
     expect(() => normalizeLifiQuote({
       action: { toChainId: 10, toToken: { address: "0xwrong" } },
       estimate: {}
