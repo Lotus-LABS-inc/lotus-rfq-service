@@ -104,6 +104,12 @@ class MockTurnkeyProvisioner implements TurnkeyWalletProvisioner {
   }
 }
 
+class FailingTurnkeyProvisioner implements TurnkeyWalletProvisioner {
+  public async provisionDefaultWallets(): Promise<ProvisionedUserWallet[]> {
+    throw new Error("Turnkey error 3: user missing valid credential: internal-id");
+  }
+}
+
 describe("user wallet service", () => {
   it("parses Turnkey config with disabled defaults and validates complete credentials", () => {
     const disabled = getTurnkeyWalletConfigFromEnv({});
@@ -155,6 +161,23 @@ describe("user wallet service", () => {
       userId: "user-1",
       sourceChain: "SOLANA"
     })).resolves.toMatchObject({ address: solana?.address });
+  });
+
+  it("converts provider provisioning failures into safe unavailable errors", async () => {
+    const repository = new InMemoryUserWalletRepository();
+    const service = new UserWalletService(repository, {
+      turnkeyEnabled: true,
+      defaultSolanaWalletEnabled: true,
+      defaultEvmWalletEnabled: true
+    }, new FailingTurnkeyProvisioner());
+
+    await expect(service.ensureDefaultWallets("user-1", "user@example.com")).rejects.toMatchObject({
+      code: "USER_WALLET_UNAVAILABLE",
+      message: "Turnkey wallet provisioning is temporarily unavailable.",
+      statusCode: 503
+    });
+    expect(repository.auditEvents.map((event) => event.eventType)).toContain("USER_WALLET_PROVISIONING_FAILED");
+    expect(JSON.stringify(repository.auditEvents)).not.toContain("internal-id");
   });
 });
 

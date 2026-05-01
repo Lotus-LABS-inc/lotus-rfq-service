@@ -79,10 +79,10 @@ const endpointResults: EndpointResult[] = [];
 const blockers: string[] = [];
 const warnings: string[] = [];
 
-const firstEnsure = await requestJson("ensure_defaults_first", "POST", "/user/wallets/ensure-defaults");
+const firstEnsure = await requestJson("ensure_defaults_first", "POST", "/user/wallets/ensure-defaults", {});
 const firstEnsureRawWallets = walletValuesFromPayload(firstEnsure.payload);
 const firstEnsureWallets = firstEnsureRawWallets.map(summarizeSafeWallet);
-const secondEnsure = await requestJson("ensure_defaults_second", "POST", "/user/wallets/ensure-defaults");
+const secondEnsure = await requestJson("ensure_defaults_second", "POST", "/user/wallets/ensure-defaults", {});
 const secondEnsureRawWallets = walletValuesFromPayload(secondEnsure.payload);
 const secondEnsureWallets = secondEnsureRawWallets.map(summarizeSafeWallet);
 const listWallets = await requestJson("list_wallets", "GET", "/user/wallets");

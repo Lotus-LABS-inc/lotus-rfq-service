@@ -71,10 +71,6 @@ export class TurnkeyUserWalletProvisioner implements TurnkeyWalletProvisioner {
         authenticators: [],
         oauthProviders: []
       }],
-      disableEmailRecovery: true,
-      disableEmailAuth: true,
-      disableOtpEmailAuth: true,
-      disableSmsAuth: true,
       wallet: {
         walletName: "Lotus Wallet",
         accounts

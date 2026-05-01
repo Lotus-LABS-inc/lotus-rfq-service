@@ -108,11 +108,11 @@ export class UserWalletService {
       throw new UserWalletError("TURNKEY_DISABLED", "Turnkey wallet provisioning is disabled.", 503);
     }
 
-    const provisioned = await this.turnkeyProvisioner.provisionDefaultWallets({
+    const provisioned = await this.provisionDefaultWallets({
       userId,
       ...(email !== undefined ? { email } : {}),
-      includeSolana: needsSolana,
-      includeEvm: needsEvm
+      needsSolana,
+      needsEvm
     });
     for (const wallet of provisioned) {
       const stored = await this.repository.upsertWallet({
@@ -144,6 +144,38 @@ export class UserWalletService {
       });
     }
     return this.repository.listWallets(userId);
+  }
+
+  private async provisionDefaultWallets(input: {
+    userId: string;
+    email?: string | null;
+    needsSolana: boolean;
+    needsEvm: boolean;
+  }): Promise<ProvisionedUserWallet[]> {
+    try {
+      return await this.turnkeyProvisioner!.provisionDefaultWallets({
+        userId: input.userId,
+        ...(input.email !== undefined ? { email: input.email } : {}),
+        includeSolana: input.needsSolana,
+        includeEvm: input.needsEvm
+      });
+    } catch (error) {
+      await this.repository.appendWalletAuditEvent({
+        userId: input.userId,
+        eventType: "USER_WALLET_PROVISIONING_FAILED",
+        payload: {
+          provider: "TURNKEY",
+          needsSolana: input.needsSolana,
+          needsEvm: input.needsEvm,
+          errorName: error instanceof Error ? error.name : "UnknownError"
+        }
+      });
+      throw new UserWalletError(
+        "USER_WALLET_UNAVAILABLE",
+        "Turnkey wallet provisioning is temporarily unavailable.",
+        503
+      );
+    }
   }
 
   public async upsertExternalEvmWithdrawalWallet(input: {
