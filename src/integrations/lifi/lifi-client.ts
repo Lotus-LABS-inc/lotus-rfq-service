@@ -49,11 +49,11 @@ export class LifiRestClient implements LifiRouteProvider {
     }
 
     const url = new URL("/v1/quote", this.config.baseUrl);
-    url.searchParams.set("fromChain", input.fromChain);
-    url.searchParams.set("toChain", input.toChain);
+    url.searchParams.set("fromChain", toLifiChain(input.fromChain));
+    url.searchParams.set("toChain", toLifiChain(input.toChain));
     url.searchParams.set("fromToken", input.fromToken);
     url.searchParams.set("toToken", input.toToken);
-    url.searchParams.set("fromAmount", input.fromAmount);
+    url.searchParams.set("fromAmount", toBaseUnitAmount(input.fromAmount, input.fromToken));
     url.searchParams.set("fromAddress", input.fromAddress);
     url.searchParams.set("toAddress", input.toAddress);
 
@@ -115,7 +115,8 @@ export const normalizeLifiQuote = (
   const action = isRecord(payload.action) ? payload.action : {};
   const estimate = isRecord(payload.estimate) ? payload.estimate : {};
   const transactionRequest = isRecord(payload.transactionRequest) ? payload.transactionRequest : null;
-  const toAmount = stringValue(estimate.toAmount) ?? stringValue(payload.toAmount) ?? "0";
+  const rawToAmount = stringValue(estimate.toAmount) ?? stringValue(payload.toAmount) ?? "0";
+  const toAmount = fromBaseUnitAmount(rawToAmount, input.toToken);
   const feeCosts = Array.isArray(estimate.feeCosts) ? estimate.feeCosts : [];
   const gasCosts = Array.isArray(estimate.gasCosts) ? estimate.gasCosts : [];
   const estimatedFees = String(feeCosts.length + gasCosts.length);
@@ -142,6 +143,36 @@ export const normalizeLifiQuote = (
     transactionRequest: transactionRequest ? safeTransactionRequest(transactionRequest) : null,
     userSafeSummary: `Route ${input.fromAmount} from ${input.fromChain} to ${input.targetVenue} via LI.FI.`
   };
+};
+
+export const toLifiChain = (chain: string): string => {
+  const normalized = chain.trim().toUpperCase();
+  if (normalized === "SOLANA") return "SOL";
+  if (normalized === "POLYGON") return "137";
+  if (normalized === "BSC" || normalized === "BNB" || normalized === "BNB_SMART_CHAIN") return "56";
+  return chain;
+};
+
+export const toBaseUnitAmount = (amount: string, token: string): string => {
+  const decimals = tokenDecimals(token);
+  if (decimals === null) {
+    return amount;
+  }
+  const [whole, fraction = ""] = amount.split(".");
+  const paddedFraction = fraction.padEnd(decimals, "0").slice(0, decimals);
+  const normalized = `${whole}${paddedFraction}`.replace(/^0+(?=\d)/, "");
+  return normalized.length > 0 ? normalized : "0";
+};
+
+export const fromBaseUnitAmount = (amount: string, token: string): string => {
+  const decimals = tokenDecimals(token);
+  if (decimals === null) {
+    return amount;
+  }
+  const padded = amount.padStart(decimals + 1, "0");
+  const whole = padded.slice(0, -decimals) || "0";
+  const fraction = padded.slice(-decimals).replace(/0+$/, "");
+  return fraction.length > 0 ? `${whole}.${fraction}` : whole;
 };
 
 export const normalizeLifiStatus = (payload: Record<string, unknown>): NormalizedLifiStatus => {
@@ -201,3 +232,17 @@ const stringValue = (value: unknown): string | null => {
 
 const numberValue = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
+
+const tokenDecimals = (token: string): number | null => {
+  const normalized = token.trim();
+  if (/^(USDC|USDT|USD1)$/i.test(normalized)) {
+    return 6;
+  }
+  if (normalized === "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v") {
+    return 6;
+  }
+  if (/^0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174$/i.test(normalized)) {
+    return 6;
+  }
+  return null;
+};

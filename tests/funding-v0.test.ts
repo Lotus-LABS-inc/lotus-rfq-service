@@ -68,8 +68,11 @@ import {
   getOpinionWithdrawalConfigFromEnv
 } from "../src/core/funding/opinion-withdrawal-adapter.js";
 import {
+  fromBaseUnitAmount,
   normalizeLifiQuote,
   normalizeLifiStatus,
+  toBaseUnitAmount,
+  toLifiChain,
   type LifiRouteProvider
 } from "../src/integrations/lifi/lifi-client.js";
 import type { UserWallet } from "../src/core/funding/user-wallets.js";
@@ -1829,7 +1832,12 @@ describe("Funding v0 domain", () => {
       targetVenue: "POLYMARKET"
     }, 60);
     expect(JSON.stringify(quote)).not.toContain("secret");
+    expect(quote.destinationAmountEstimate).toBe("0.00099");
     expect(normalizeLifiStatus({ status: "DONE", substatus: "PARTIAL" })).toBe("DONE_PARTIAL");
+    expect(toLifiChain("SOLANA")).toBe("SOL");
+    expect(toLifiChain("POLYGON")).toBe("137");
+    expect(toBaseUnitAmount("1.25", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")).toBe("1250000");
+    expect(fromBaseUnitAmount("991788", "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")).toBe("0.991788");
     expect(() => normalizeLifiQuote({
       action: { toChainId: 10, toToken: { address: "0xwrong" } },
       estimate: {}
