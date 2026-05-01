@@ -17,6 +17,7 @@ import { registerHealthRoute } from "./routes/health.js";
 import { registerMetricsRoute } from "./routes/metrics.js";
 import { registerFundingRoutes } from "./routes/funding.js";
 import { registerUserWithdrawalWalletRoutes } from "./routes/user-withdrawal-wallets.js";
+import { registerUserWalletRoutes } from "./routes/user-wallets.js";
 import { registerInternalPolymarketFundingBalanceRoute } from "./routes/internal-polymarket-funding-balance.js";
 import { registerInternalLimitlessWithdrawalEvidenceRoute } from "./routes/internal-limitless-withdrawal-evidence.js";
 import { registerRFQRoute } from "./routes/rfq.js";
@@ -178,7 +179,7 @@ import { ExecutionIntentRepository } from "../repositories/execution-intent.repo
 import { ExecutionRecordRepository } from "../repositories/execution-record.repository.js";
 import { ExecutionControlRepository } from "../repositories/execution-control.repository.js";
 import { FundingRepository } from "../repositories/funding.repository.js";
-import { UserWithdrawalWalletRepository } from "../repositories/user-withdrawal-wallet.repository.js";
+import { UserWalletRepository } from "../repositories/user-wallet.repository.js";
 import { PairEdgeRepository } from "../repositories/pair-edge.repository.js";
 import { CompatibilityOverrideService } from "../canonical/compatibility-override-service.js";
 import { PairMatchReviewService } from "./admin/pair-match-review-service.js";
@@ -256,6 +257,12 @@ import {
   OpinionSafeWithdrawalAdapter
 } from "../core/funding/opinion-withdrawal-adapter.js";
 import { LifiRestClient, buildLifiClientConfigFromEnv } from "../integrations/lifi/lifi-client.js";
+import {
+  getTurnkeyWalletConfigFromEnv,
+  isTurnkeyWalletConfigReady,
+  TurnkeyUserWalletProvisioner
+} from "../integrations/turnkey/turnkey-wallet-client.js";
+import { UserWalletService } from "../core/funding/user-wallets.js";
 
 export interface ServerDependencies {
   logger: Logger;
@@ -387,7 +394,16 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const executionIntentRepository = new ExecutionIntentRepository(dependencies.pgPool);
   const executionRecordRepository = new ExecutionRecordRepository(dependencies.pgPool);
   const fundingRepository = new FundingRepository(dependencies.pgPool);
-  const userWithdrawalWalletRepository = new UserWithdrawalWalletRepository(dependencies.pgPool);
+  const userWalletRepository = new UserWalletRepository(dependencies.pgPool);
+  const turnkeyWalletConfig = getTurnkeyWalletConfigFromEnv(process.env);
+  const turnkeyWalletProvisioner = isTurnkeyWalletConfigReady(turnkeyWalletConfig)
+    ? new TurnkeyUserWalletProvisioner(turnkeyWalletConfig)
+    : null;
+  const userWalletService = new UserWalletService(userWalletRepository, {
+    turnkeyEnabled: turnkeyWalletConfig.enabled,
+    defaultSolanaWalletEnabled: turnkeyWalletConfig.defaultSolanaWalletEnabled,
+    defaultEvmWalletEnabled: turnkeyWalletConfig.defaultEvmWalletEnabled
+  }, turnkeyWalletProvisioner);
   const polymarketBridgeWithdrawalConfig = getPolymarketBridgeWithdrawalConfigFromEnv(process.env);
   const polymarketBridgeWithdrawalAdapter = polymarketBridgeWithdrawalConfig.configured && polymarketBridgeWithdrawalConfig.apiBaseUrl
     ? new PolymarketBridgeWithdrawalAdapter(
@@ -426,9 +442,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     buildWithdrawalCompletionPersistenceGateFromEnv(process.env),
     polymarketBridgeWithdrawalAdapter,
     predictFunWithdrawalAdapter,
-    userWithdrawalWalletRepository,
+    userWalletService,
     myriadWithdrawalAdapter,
-    opinionWithdrawalAdapter
+    opinionWithdrawalAdapter,
+    userWalletService
   );
   const polymarketFundingBalanceReadService = new PolymarketFundingBalanceReadService(
     buildPolymarketFundingBalanceReadConfigFromEnv(process.env)
@@ -1023,9 +1040,14 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       fundingService.submitWithdrawalRouteLeg(userId, withdrawalIntentId, request),
     refreshWithdrawalStatus: (userId, withdrawalIntentId) => fundingService.refreshWithdrawalStatus(userId, withdrawalIntentId)
   });
+  await registerUserWalletRoutes(app, userAuthMiddleware, {
+    listWallets: (userId) => userWalletService.listWallets(userId),
+    ensureDefaultWallets: (userId, email) => userWalletService.ensureDefaultWallets(userId, email)
+  });
   await registerUserWithdrawalWalletRoutes(app, userAuthMiddleware, {
-    listWallets: (userId) => userWithdrawalWalletRepository.listWallets(userId),
-    upsertEvmWallet: (userId, request) => userWithdrawalWalletRepository.upsertEvmWallet({
+    listWallets: async (userId) => (await userWalletService.listWallets(userId))
+      .filter((wallet) => wallet.chainFamily === "EVM" && wallet.purpose === "WITHDRAWAL_DESTINATION"),
+    upsertEvmWallet: (userId, request) => userWalletService.upsertExternalEvmWithdrawalWallet({
       userId,
       address: request.address,
       label: request.label ?? null

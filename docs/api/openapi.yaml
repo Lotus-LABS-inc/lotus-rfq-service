@@ -2716,6 +2716,35 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/UserWithdrawalWallets" }
         "401": { $ref: "#/components/responses/Error" }
+  /user/wallets:
+    get:
+      tags: [User]
+      summary: Read user funding wallet metadata.
+      description: Returns frontend-safe public wallet metadata for Turnkey or external wallets. It never returns private keys, seed phrases, export bundles, Turnkey auth material, or signer credentials.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: none
+      x-lotus-danger: low
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/UserWallets" }
+        "401": { $ref: "#/components/responses/Error" }
+  /user/wallets/ensure-defaults:
+    post:
+      tags: [User]
+      summary: Ensure default Turnkey Solana and EVM wallets exist.
+      description: Idempotently provisions or returns user-controlled exportable Turnkey wallets. Lotus stores public metadata only and does not sign, broadcast, or export keys.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: user-wallet
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/UserWallets" }
+        "401": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /user/withdrawal-wallets/evm:
     put:
       tags: [User]
@@ -3214,6 +3243,12 @@ components:
             properties:
               wallet:
                 $ref: "#/components/schemas/UserWithdrawalWallet"
+    UserWallets:
+      description: User wallet metadata list.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UserWalletListResponse"
     WithdrawalIntent:
       description: Frontend-safe withdrawal intent response.
       content:
@@ -3815,13 +3850,18 @@ components:
             $ref: "#/components/schemas/FundingTarget"
     CreateFundingIntentRequest:
       type: object
-      required: [sourceChain, sourceToken, sourceAmount, sourceWalletAddress, idempotencyKey, targets]
+      required: [sourceChain, sourceToken, sourceAmount, idempotencyKey, targets]
       additionalProperties: false
       properties:
         sourceChain: { type: string, example: SOLANA }
         sourceToken: { type: string, example: USDC }
         sourceAmount: { type: string, example: "100" }
-        sourceWalletAddress: { type: string }
+        sourceWalletAddress:
+          type: string
+          description: External source wallet address. Optional when sourceWalletId is supplied or a default Solana Turnkey funding wallet exists.
+        sourceWalletId:
+          type: string
+          description: Stored user wallet id. If supplied, backend resolves the address server-side and rejects wallets not owned by the user.
         idempotencyKey: { type: string }
         targets:
           type: array
@@ -3931,6 +3971,12 @@ components:
       properties:
         fundingIntentId: { type: string }
         currentStatus: { type: string }
+        sourceWalletId:
+          type: string
+          nullable: true
+        sourceWalletAddress:
+          type: string
+          description: Public source wallet address only.
         routePreview:
           $ref: "#/components/schemas/FundingRoutePreview"
     VenueBalance:
@@ -3995,6 +4041,46 @@ components:
         wallets:
           type: array
           items: { $ref: "#/components/schemas/UserWithdrawalWallet" }
+    UserWallet:
+      type: object
+      additionalProperties: false
+      required: [walletId, provider, chainFamily, chain, address, purpose, venue, exportable, status, createdAt, updatedAt]
+      properties:
+        walletId: { type: string }
+        provider:
+          type: string
+          enum: [TURNKEY, EXTERNAL]
+        chainFamily:
+          type: string
+          enum: [SOLANA, EVM]
+        chain: { type: string }
+        address:
+          type: string
+          description: Public wallet address only.
+        purpose:
+          type: string
+          enum: [DEFAULT_FUNDING, VENUE_TARGET, WITHDRAWAL_DESTINATION]
+        venue:
+          nullable: true
+          $ref: "#/components/schemas/Venue"
+        exportable: { type: boolean }
+        status:
+          type: string
+          enum: [ACTIVE, DISABLED]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    UserWalletListResponse:
+      type: object
+      additionalProperties: false
+      required: [wallets]
+      properties:
+        wallets:
+          type: array
+          items: { $ref: "#/components/schemas/UserWallet" }
     UpsertEvmWithdrawalWalletRequest:
       type: object
       additionalProperties: false

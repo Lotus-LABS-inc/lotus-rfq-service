@@ -35,6 +35,10 @@ Before enabling funding runtime beyond local/sandbox:
 - `FUNDING_VENUE_READINESS_CHECKS_ENABLED` is intentionally set for the environment.
 - `FUNDING_PREFLIGHT_ENFORCEMENT_ENABLED` is enabled before any live venue execution depends on funded balances.
 - `FUNDING_LIVE_SUBMIT_ENABLED` remains false for v0 because backend does not sign or broadcast user wallet transactions.
+- Turnkey embedded wallets, when added, must remain user-controlled and exportable. Lotus may store public wallet metadata and provider wallet ids for routing/reconciliation, but must not store private keys, seed phrases, Turnkey auth tokens, or user-wallet signer material.
+- Turnkey EVM venue wallets may be used as EVM route targets and later direct EVM funding sources, but they do not bypass venue readiness. Trade readiness still requires venue-specific usable balance or credit evidence.
+- Turnkey server integration may provision wallet metadata, but backend routes must not call Turnkey signing, export-wallet, export-wallet-account, or transaction-broadcast APIs for user wallets.
+- `<VENUE>_FUNDING_DESTINATION_MODE=USER_TURNKEY_EVM_WALLET` is opt-in per venue and must fail closed when the user has no active exportable Turnkey EVM wallet.
 - Venue destination envs such as `POLYMARKET_FUNDING_DESTINATION_ADDRESS` and `LIMITLESS_FUNDING_DESTINATION_ADDRESS` are configured and reviewed before quote enablement.
 - Venue readiness envs such as `*_FUNDING_READINESS_MODE`, `*_FUNDING_READINESS_ENABLED`, `*_FUNDING_BALANCE_URL`, `*_FUNDING_READ_AUTH_MODE`, and `*_FUNDING_READ_API_KEY` are reviewed before any checker can mark balances `READY_TO_TRADE`.
 - Polymarket, Limitless, Opinion, Myriad, and Predict.fun funding readiness default to `DISABLED`; `LIVE_READ` requires an operator-approved read endpoint and server-side-only credentials where needed.

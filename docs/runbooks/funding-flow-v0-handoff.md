@@ -47,6 +47,21 @@ Model A: non-custodial funding preparation.
 
 In Model A, Lotus generates route instructions, validates that the route matches operator-approved funding capabilities, tracks the user-broadcast transaction, and reconciles whether capital became venue-ready. The user signs with their own wallet. Lotus does not custody user funds, sign wallet transactions, broadcast user wallet transactions, pool user funds, or internally allocate user balances in v0.
 
+Turnkey wallet direction:
+
+- Private beta may provision user-controlled Turnkey wallets as the default funding source, starting with Solana wallets for USDC/USDT deposits.
+- Venue-specific EVM wallets provisioned through Turnkey must also remain user-controlled and exportable. They are route targets for EVM-based venues now and can later become direct EVM funding sources when the product supports that flow.
+- Lotus stores only wallet metadata needed for routing and reconciliation, such as user id, provider wallet id, public address, chain, and token support. Lotus must not store private keys, seed phrases, Turnkey auth material, or backend signer credentials for user wallets.
+- Knowing the user's Turnkey wallet address simplifies verification and reconciliation, but it does not replace venue readiness checks. Funds are trade-ready only after the venue-specific balance or credit evidence passes.
+
+Turnkey backend implementation path:
+
+- `POST /user/wallets/ensure-defaults` creates or returns the user's default Turnkey Solana and EVM wallets.
+- `GET /user/wallets` returns frontend-safe wallet metadata only: provider, chain family, chain, public address, purpose, exportability, status, and timestamps.
+- Funding intents may use `sourceWalletId`; when omitted for Solana funding, Lotus can use the user's active default Solana Turnkey wallet.
+- Venue targets continue to use `<VENUE>_FUNDING_DESTINATION_ADDRESS` by default. A venue can opt into `USER_TURNKEY_EVM_WALLET` with `<VENUE>_FUNDING_DESTINATION_MODE`, but that only changes the route destination address. It does not change readiness or custody rules.
+- The backend never exposes Turnkey sub-organization ids, wallet account ids, API keys, export bundles, or signing material in frontend responses.
+
 In plain terms:
 
 1. A user chooses a source wallet, source chain, source token, and amount.

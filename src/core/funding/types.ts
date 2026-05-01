@@ -129,7 +129,8 @@ export const CreateFundingIntentSchema = z.object({
   sourceChain: z.string().min(1),
   sourceToken: z.string().min(1),
   sourceAmount: positiveAmount,
-  sourceWalletAddress: z.string().min(1),
+  sourceWalletAddress: z.string().min(1).optional(),
+  sourceWalletId: z.string().min(1).optional(),
   idempotencyKey: z.string().min(1),
   targets: z.array(FundingTargetRequestSchema).min(1)
 });
@@ -154,6 +155,7 @@ const FundingIntentSchema = z.object({
   sourceToken: z.string().min(1),
   sourceAmount: positiveAmount,
   sourceWalletAddress: z.string().min(1),
+  sourceWalletId: z.string().min(1).nullable().optional(),
   status: z.enum(fundingAggregateStates),
   idempotencyKey: z.string().min(1),
   aggregateRouteQuote: z.record(z.string(), z.unknown()),
@@ -396,6 +398,10 @@ export type FundingFailureCode =
   | "VENUE_CAPABILITY_DISABLED"
   | "SOURCE_CHAIN_UNSUPPORTED"
   | "SOURCE_TOKEN_UNSUPPORTED"
+  | "SOURCE_WALLET_NOT_FOUND"
+  | "SOURCE_WALLET_FORBIDDEN"
+  | "SOURCE_WALLET_UNAVAILABLE"
+  | "TARGET_WALLET_NOT_CONFIGURED"
   | "TARGET_SPLIT_INVALID"
   | "TARGET_DESTINATION_NOT_CONFIGURED"
   | "ROUTE_QUOTE_FAILED"

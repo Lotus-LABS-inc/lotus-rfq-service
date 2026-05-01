@@ -186,6 +186,8 @@ const toFundingResponse = (view: FundingIntentView): Record<string, unknown> => 
   sourceChain: view.intent.sourceChain,
   sourceToken: view.intent.sourceToken,
   sourceAmount: view.intent.sourceAmount,
+  sourceWalletId: view.intent.sourceWalletId ?? null,
+  sourceWalletAddress: view.intent.sourceWalletAddress,
   routePreview: view.intent.aggregateRouteQuote,
   totalEstimatedFees: view.intent.totalEstimatedFees,
   totalEstimatedTimeSeconds: view.intent.totalEstimatedTimeSeconds,

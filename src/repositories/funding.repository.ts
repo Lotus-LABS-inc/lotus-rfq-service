@@ -25,6 +25,7 @@ interface FundingIntentRow {
   source_token: string;
   source_amount: string;
   source_wallet_address: string;
+  source_wallet_id: string | null;
   status: FundingAggregateState;
   idempotency_key: string;
   aggregate_route_quote: Record<string, unknown>;
@@ -247,10 +248,10 @@ export class FundingRepository implements FundingRepositoryContract {
       await client.query("BEGIN");
       const result = await client.query<FundingIntentRow>(
         `INSERT INTO funding_intents (
-          id, user_id, source_chain, source_token, source_amount, source_wallet_address, status,
+          id, user_id, source_chain, source_token, source_amount, source_wallet_address, source_wallet_id, status,
           idempotency_key, aggregate_route_quote, total_estimated_fees, total_estimated_time_seconds, audit_event_ids
         ) VALUES (
-          $1::uuid, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12::jsonb
+          $1::uuid, $2, $3, $4, $5, $6, $7::uuid, $8, $9, $10::jsonb, $11, $12, $13::jsonb
         )
         ON CONFLICT (user_id, idempotency_key) DO UPDATE SET updated_at = funding_intents.updated_at
         RETURNING *`,
@@ -261,6 +262,7 @@ export class FundingRepository implements FundingRepositoryContract {
           input.sourceToken,
           input.sourceAmount,
           input.sourceWalletAddress,
+          input.sourceWalletId ?? null,
           input.status,
           input.idempotencyKey,
           JSON.stringify(input.aggregateRouteQuote),
@@ -934,6 +936,7 @@ const mapIntent = (row: FundingIntentRow): FundingIntent => ({
   sourceToken: row.source_token,
   sourceAmount: row.source_amount,
   sourceWalletAddress: row.source_wallet_address,
+  sourceWalletId: row.source_wallet_id,
   status: row.status,
   idempotencyKey: row.idempotency_key,
   aggregateRouteQuote: row.aggregate_route_quote ?? {},

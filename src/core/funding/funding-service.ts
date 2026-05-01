@@ -29,7 +29,7 @@ import {
   type WithdrawalRouteQuote,
   type WithdrawalSource
 } from "./types.js";
-import { buildVenueCapabilityMatrix, getVenueDepositAddress } from "./venue-capabilities.js";
+import { buildVenueCapabilityMatrix, getVenueDepositAddress, getVenueFundingDestinationMode } from "./venue-capabilities.js";
 import type {
   VenueFundingReadinessChecker,
   VenueFundingReadinessResult
@@ -58,6 +58,7 @@ import {
   type OpinionSafeWithdrawalAdapter,
   type OpinionWithdrawalQuote
 } from "./opinion-withdrawal-adapter.js";
+import { UserWalletError, type UserWallet, type UserWalletService } from "./user-wallets.js";
 
 export interface FundingRepository {
   findIntentById(id: string): Promise<FundingIntent | null>;
@@ -192,7 +193,8 @@ export class FundingService {
     private readonly predictFunWithdrawalAdapter: PredictFunWithdrawalAdapter | null = null,
     private readonly userWithdrawalWalletReader: UserWithdrawalWalletReader | null = null,
     private readonly myriadWithdrawalAdapter: MyriadWalletWithdrawalAdapter | null = null,
-    private readonly opinionWithdrawalAdapter: OpinionSafeWithdrawalAdapter | null = null
+    private readonly opinionWithdrawalAdapter: OpinionSafeWithdrawalAdapter | null = null,
+    private readonly userWalletService: Pick<UserWalletService, "resolveFundingSourceWallet" | "resolveUserTurnkeyEvmFundingWallet"> | null = null
   ) {}
 
   public listVenueCapabilities(): VenueCapability[] {
@@ -214,6 +216,11 @@ export class FundingService {
     if (existing) {
       return this.getIntent(userId, existing.fundingIntentId);
     }
+    const sourceWallet = await this.resolveSourceWallet(userId, input);
+    const sourceWalletAddress = sourceWallet?.address ?? input.sourceWalletAddress;
+    if (!sourceWalletAddress) {
+      throw new FundingError("SOURCE_WALLET_UNAVAILABLE", "Funding source wallet address is required.", 400);
+    }
     const targets = this.buildTargets(input, randomUUID());
     const now = new Date().toISOString();
     const intent: FundingIntent = {
@@ -222,7 +229,8 @@ export class FundingService {
       sourceChain: input.sourceChain,
       sourceToken: input.sourceToken,
       sourceAmount: input.sourceAmount,
-      sourceWalletAddress: input.sourceWalletAddress,
+      sourceWalletAddress,
+      sourceWalletId: sourceWallet?.walletId ?? input.sourceWalletId ?? null,
       status: "INTENT_CREATED",
       idempotencyKey: input.idempotencyKey,
       aggregateRouteQuote: {},
@@ -236,7 +244,12 @@ export class FundingService {
     await this.repository.appendAuditEvent({
       fundingIntentId: created.fundingIntentId,
       eventType: "FUNDING_INTENT_CREATED",
-      payload: { sourceChain: input.sourceChain, sourceToken: input.sourceToken, targetCount: input.targets.length }
+      payload: {
+        sourceChain: input.sourceChain,
+        sourceToken: input.sourceToken,
+        targetCount: input.targets.length,
+        sourceWalletProvider: sourceWallet?.provider ?? "EXTERNAL"
+      }
     });
     return this.getIntent(userId, created.fundingIntentId);
   }
@@ -273,7 +286,7 @@ export class FundingService {
     for (const target of view.targets) {
       const capability = matrix[target.targetVenue];
       this.assertCapabilityReady(capability, view.intent);
-      const depositAddress = getVenueDepositAddress(target.targetVenue, this.config.env);
+      const depositAddress = await this.resolveFundingDestinationAddress(userId, target.targetVenue);
       if (!depositAddress) {
         throw new FundingError("TARGET_DESTINATION_NOT_CONFIGURED", `${target.targetVenue} funding destination is not configured.`, 409);
       }
@@ -1062,6 +1075,47 @@ export class FundingService {
     if (!capability.supportedTokens.includes(intent.sourceToken)) {
       throw new FundingError("SOURCE_TOKEN_UNSUPPORTED", "Source token is not supported for this venue.", 409);
     }
+  }
+
+  private async resolveSourceWallet(userId: string, input: CreateFundingIntentInput): Promise<UserWallet | null> {
+    if (!this.userWalletService) {
+      if (input.sourceWalletId) {
+        throw new FundingError("SOURCE_WALLET_UNAVAILABLE", "Stored funding source wallets are not configured.", 503);
+      }
+      return null;
+    }
+    try {
+      return await this.userWalletService.resolveFundingSourceWallet({
+        userId,
+        sourceChain: input.sourceChain,
+        sourceWalletId: input.sourceWalletId ?? null
+      });
+    } catch (error) {
+      if (error instanceof UserWalletError) {
+        if (error.code === "USER_WALLET_NOT_FOUND") {
+          throw new FundingError("SOURCE_WALLET_NOT_FOUND", error.message, 404);
+        }
+        if (error.code === "USER_WALLET_FORBIDDEN") {
+          throw new FundingError("SOURCE_WALLET_FORBIDDEN", error.message, 403);
+        }
+        if (error.code === "USER_WALLET_UNAVAILABLE") {
+          throw new FundingError("SOURCE_WALLET_UNAVAILABLE", error.message, 409);
+        }
+      }
+      throw error;
+    }
+  }
+
+  private async resolveFundingDestinationAddress(userId: string, venue: FundingVenue): Promise<string | null> {
+    const mode = getVenueFundingDestinationMode(venue, this.config.env);
+    if (mode === "VENUE_DEPOSIT_ENV") {
+      return getVenueDepositAddress(venue, this.config.env);
+    }
+    const wallet = await this.userWalletService?.resolveUserTurnkeyEvmFundingWallet(userId);
+    if (!wallet || wallet.provider !== "TURNKEY" || wallet.chainFamily !== "EVM" || !wallet.exportable) {
+      throw new FundingError("TARGET_WALLET_NOT_CONFIGURED", `${venue} requires an active exportable Turnkey EVM wallet.`, 409);
+    }
+    return wallet.address;
   }
 }
 

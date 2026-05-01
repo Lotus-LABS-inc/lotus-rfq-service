@@ -72,6 +72,7 @@ import {
   normalizeLifiStatus,
   type LifiRouteProvider
 } from "../src/integrations/lifi/lifi-client.js";
+import type { UserWallet } from "../src/core/funding/user-wallets.js";
 import { zeroFees, type ExecutionRequestV0 } from "../src/execution-system/types.js";
 
 const env = {
@@ -110,6 +111,25 @@ const executionRequest = (): ExecutionRequestV0 => ({
   expectedFees: zeroFees(),
   idempotencyKey: "execution-idem",
   createdAt: "2026-04-25T00:00:00.000Z"
+});
+
+const userWallet = (overrides: Partial<UserWallet>): UserWallet => ({
+  walletId: "wallet-1",
+  userId: "user-1",
+  provider: "TURNKEY",
+  providerSubOrgId: "suborg-1",
+  providerWalletId: "turnkey-wallet-1",
+  providerWalletAccountId: "account-1",
+  chainFamily: "SOLANA",
+  chain: "SOLANA",
+  address: "So11111111111111111111111111111111111111111",
+  purpose: "DEFAULT_FUNDING",
+  venue: null,
+  exportable: true,
+  status: "ACTIVE",
+  createdAt: "2026-05-01T00:00:00.000Z",
+  updatedAt: "2026-05-01T00:00:00.000Z",
+  ...overrides
 });
 
 class InMemoryFundingRepository implements FundingRepository {
@@ -653,6 +673,86 @@ describe("Funding v0 domain", () => {
       routeLegId: quoted.routeLegs[0]!.routeLegId,
       txHash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     })).rejects.toMatchObject({ code: "FUNDING_ROUTE_REPLAY_BLOCKED" });
+  });
+
+  it("resolves default Turnkey Solana source wallets without marking funds ready", async () => {
+    const repository = new InMemoryFundingRepository();
+    const solanaWallet = userWallet({
+      walletId: "wallet-sol",
+      userId: "user-1",
+      chainFamily: "SOLANA",
+      chain: "SOLANA",
+      address: "So11111111111111111111111111111111111111111"
+    });
+    const service = new FundingService(
+      repository,
+      new StubLifiProvider(),
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {
+        resolveFundingSourceWallet: async (input) => input.userId === "user-1" ? solanaWallet : null,
+        resolveUserTurnkeyEvmFundingWallet: async () => null
+      }
+    );
+    const created = await service.createIntent("user-1", {
+      sourceChain: "SOLANA",
+      sourceToken: "USDC",
+      sourceAmount: "100",
+      idempotencyKey: "turnkey-source",
+      targets: [{ targetVenue: "POLYMARKET", targetPercentage: 100 }]
+    });
+    expect(created.intent.sourceWalletId).toBe("wallet-sol");
+    expect(created.intent.sourceWalletAddress).toBe(solanaWallet.address);
+    expect(repository.ready).toBe(false);
+  });
+
+  it("rejects missing Turnkey EVM target wallets when a venue opts into user wallet destinations", async () => {
+    const repository = new InMemoryFundingRepository();
+    const service = new FundingService(
+      repository,
+      new StubLifiProvider(),
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env: {
+          ...env,
+          POLYMARKET_FUNDING_DESTINATION_MODE: "USER_TURNKEY_EVM_WALLET"
+        } as NodeJS.ProcessEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {
+        resolveFundingSourceWallet: async () => null,
+        resolveUserTurnkeyEvmFundingWallet: async () => null
+      }
+    );
+    const created = await service.createIntent("user-1", {
+      sourceChain: "SOLANA",
+      sourceToken: "USDC",
+      sourceAmount: "100",
+      sourceWalletAddress: "So11111111111111111111111111111111111111111",
+      idempotencyKey: "turnkey-target",
+      targets: [{ targetVenue: "POLYMARKET", targetPercentage: 100 }]
+    });
+    await expect(service.quoteIntent("user-1", created.intent.fundingIntentId))
+      .rejects.toMatchObject({ code: "TARGET_WALLET_NOT_CONFIGURED" });
   });
 
   it("creates split-capable withdrawal intents, quotes route legs, and records user-broadcast tx hashes", async () => {
