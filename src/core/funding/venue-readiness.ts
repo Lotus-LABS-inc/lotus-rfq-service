@@ -82,6 +82,7 @@ export interface FundingReadinessConfig {
   authMode?: FundingReadinessAuthMode;
   timeoutMs?: number;
   minimumConfirmations?: number;
+  balanceTolerance?: string;
   redactionPolicy?: FundingReadinessRedactionPolicy;
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
@@ -101,6 +102,7 @@ export interface OperatorFundingReadinessConfig {
   authMode: FundingReadinessAuthMode;
   timeoutMs: number;
   minimumConfirmations: number;
+  balanceTolerance: string;
   redactionPolicy: FundingReadinessRedactionPolicy;
   configured: boolean;
 }
@@ -123,6 +125,11 @@ const safeDecimal = (value: string) => {
   } catch {
     return null;
   }
+};
+
+const parseBalanceTolerance = (value: string | undefined): string => {
+  const parsed = safeDecimal(value?.trim() || "0.000001");
+  return parsed ? parsed.toString() : "0.000001";
 };
 
 const destinationReceivedForLeg = (leg: FundingRouteLeg): boolean =>
@@ -160,6 +167,7 @@ export const getFundingReadinessConfigFromEnv = (
   const authMode = env[`${prefix}_FUNDING_READ_AUTH_MODE`] === "BEARER" ? "BEARER" : "NONE";
   const timeoutMs = Number.parseInt(env[`${prefix}_FUNDING_READ_TIMEOUT_MS`] ?? "5000", 10);
   const minimumConfirmations = Number.parseInt(env[`${prefix}_FUNDING_MIN_CONFIRMATIONS`] ?? "0", 10);
+  const balanceTolerance = parseBalanceTolerance(env[`${prefix}_FUNDING_BALANCE_TOLERANCE`]);
   return {
     venue,
     enabled: mode !== "DISABLED",
@@ -168,6 +176,7 @@ export const getFundingReadinessConfigFromEnv = (
     authMode,
     timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 5_000,
     minimumConfirmations: Number.isFinite(minimumConfirmations) && minimumConfirmations > 0 ? minimumConfirmations : 0,
+    balanceTolerance,
     redactionPolicy: "SERVER_SAFE_DEFAULT",
     configured: mode === "STUB" || (mode === "LIVE_READ" && balanceUrlValid)
   };
@@ -180,6 +189,7 @@ const stripVenue = (config: OperatorFundingReadinessConfig): Omit<OperatorFundin
   authMode: config.authMode,
   timeoutMs: config.timeoutMs,
   minimumConfirmations: config.minimumConfirmations,
+  balanceTolerance: config.balanceTolerance,
   redactionPolicy: config.redactionPolicy,
   configured: config.configured
 });
@@ -234,6 +244,7 @@ export class ConfigurableVenueFundingReadinessChecker implements VenueFundingRea
       authMode: config.authMode ?? "NONE",
       timeoutMs: config.timeoutMs ?? 5_000,
       minimumConfirmations: config.minimumConfirmations ?? 0,
+      balanceTolerance: parseBalanceTolerance(config.balanceTolerance),
       redactionPolicy: config.redactionPolicy ?? "SERVER_SAFE_DEFAULT",
       configured: config.mode === "STUB" || (config.mode === "LIVE_READ" && Boolean(config.balanceUrl)) || (config.enabled === true && !config.mode)
     };
@@ -302,7 +313,15 @@ export class ConfigurableVenueFundingReadinessChecker implements VenueFundingRea
           evidence: this.safeEvidence({ rawStatus: "malformed_balance" })
         });
       }
-      if (usableBalance.greaterThanOrEqualTo(requiredAmount)) {
+      const balanceTolerance = safeDecimal(this.operatorConfig.balanceTolerance) ?? new Decimal(0);
+      const effectiveRequiredAmount = Decimal.max(requiredAmount.minus(balanceTolerance), 0);
+      const comparisonEvidence = {
+        requiredAmount: requiredAmount.toString(),
+        usableBalance: usableBalance.toString(),
+        balanceTolerance: balanceTolerance.toString(),
+        effectiveRequiredAmount: effectiveRequiredAmount.toString()
+      };
+      if (usableBalance.greaterThanOrEqualTo(effectiveRequiredAmount)) {
         return this.result({
           status: "READY_TO_TRADE",
           destinationReceived: true,
@@ -310,7 +329,7 @@ export class ConfigurableVenueFundingReadinessChecker implements VenueFundingRea
           readyToTrade: true,
           usableBalance: usableBalance.toString(),
           reason: `${this.venue}_USABLE_BALANCE_CONFIRMED`,
-          evidence: this.safeEvidence({ requiredAmount: requiredAmount.toString(), usableBalance: usableBalance.toString() })
+          evidence: this.safeEvidence(comparisonEvidence)
         });
       }
       return this.result({
@@ -320,7 +339,7 @@ export class ConfigurableVenueFundingReadinessChecker implements VenueFundingRea
         readyToTrade: false,
         usableBalance: usableBalance.toString(),
         reason: `${this.venue}_USABLE_BALANCE_BELOW_REQUIRED_AMOUNT`,
-        evidence: this.safeEvidence({ requiredAmount: requiredAmount.toString(), usableBalance: usableBalance.toString() })
+        evidence: this.safeEvidence(comparisonEvidence)
       });
     } catch (error) {
       return this.result({

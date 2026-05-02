@@ -67,6 +67,7 @@ Controlled Turnkey production smoke:
 - Rotate any exposed Turnkey API key before setting `TURNKEY_ENABLED=true` in Render.
 - Keep every `<VENUE>_FUNDING_DESTINATION_MODE=VENUE_DEPOSIT_ENV` for the first smoke.
 - Use a dedicated production smoke user JWT, not an admin JWT.
+- For email-backed funding tests, use `polymarket-funding-test@uselotus.xyz` as the canonical test email unless the operator has confirmed a different email has an active Turnkey embedded Solana wallet and can sign through Wallet Kit. A Lotus JWT email only authorizes Lotus API access; the Turnkey login must resolve to the sub-organization that owns the funded wallet.
 - Run `npm run funding:turnkey-wallet-production-smoke` with `TURNKEY_SMOKE_BASE_URL`, `TURNKEY_SMOKE_USER_JWT`, `TURNKEY_SMOKE_TARGET_VENUE`, `TURNKEY_SMOKE_SOURCE_CHAIN`, `TURNKEY_SMOKE_SOURCE_TOKEN`, and `TURNKEY_SMOKE_SOURCE_AMOUNT`.
 - The smoke calls `POST /user/wallets/ensure-defaults`, `GET /user/wallets`, and `POST /funding/intents` without `sourceWalletAddress`.
 - The smoke writes redacted artifacts under `artifacts/funding/turnkey-wallet-production-smoke-*`.
@@ -524,6 +525,7 @@ Funding v0 is implemented fail-closed by default. Operators must configure these
 - `POLYMARKET_FUNDING_READ_AUTH_MODE=NONE` by default; use `BEARER` only with server-side operator-approved read credentials
 - `POLYMARKET_FUNDING_READ_API_KEY` is server-side only and must never be returned in API responses, artifacts, logs, or receipts
 - `POLYMARKET_FUNDING_READ_TIMEOUT_MS=5000`
+- `POLYMARKET_FUNDING_BALANCE_TOLERANCE=0.000001` allows only atomic-unit stablecoin rounding dust in readiness comparisons; it must not be used to cover material underfunding
 - `POLYMARKET_FUNDING_MIN_CONFIRMATIONS=0` unless a venue-specific finality policy requires more confirmations
 - `POLYMARKET_INTERNAL_BALANCE_READ_ENABLED=false` by default; set to `true` only when the internal read-only CLOB balance service should serve `/internal/polymarket/funding-balance`
 - `LIMITLESS_FUNDING_DESTINATION_ADDRESS` required before Limitless funding quotes can be enabled
@@ -535,9 +537,10 @@ Funding v0 is implemented fail-closed by default. Operators must configure these
 - `LIMITLESS_FUNDING_READ_AUTH_MODE=NONE` by default; use `BEARER` only with server-side operator-approved read credentials
 - `LIMITLESS_FUNDING_READ_API_KEY` is server-side only and must never be returned in API responses, artifacts, logs, or receipts
 - `LIMITLESS_FUNDING_READ_TIMEOUT_MS=5000`
+- `LIMITLESS_FUNDING_BALANCE_TOLERANCE=0.000001` allows only atomic-unit stablecoin rounding dust in readiness comparisons; it must not be used to cover material underfunding
 - `LIMITLESS_FUNDING_MIN_CONFIRMATIONS=0` unless a venue-specific finality policy requires more confirmations
 - `OPINION_FUNDING_DESTINATION_ADDRESS`, `MYRIAD_FUNDING_DESTINATION_ADDRESS`, and `PREDICT_FUN_FUNDING_DESTINATION_ADDRESS` are required before those venues can be used for funding quotes
-- `OPINION_*`, `MYRIAD_*`, and `PREDICT_FUN_*` readiness envs follow the same disabled-by-default balance-read pattern: `*_FUNDING_READINESS_MODE=DISABLED`, `*_FUNDING_BALANCE_URL`, `*_FUNDING_READ_AUTH_MODE`, `*_FUNDING_READ_API_KEY`, `*_FUNDING_READ_TIMEOUT_MS`, and `*_FUNDING_MIN_CONFIRMATIONS`
+- `OPINION_*`, `MYRIAD_*`, and `PREDICT_FUN_*` readiness envs follow the same disabled-by-default balance-read pattern: `*_FUNDING_READINESS_MODE=DISABLED`, `*_FUNDING_BALANCE_URL`, `*_FUNDING_READ_AUTH_MODE`, `*_FUNDING_READ_API_KEY`, `*_FUNDING_READ_TIMEOUT_MS`, `*_FUNDING_BALANCE_TOLERANCE`, and `*_FUNDING_MIN_CONFIRMATIONS`
 - `OPINION_FUNDING_PREFERRED_CHAIN`, `MYRIAD_FUNDING_PREFERRED_CHAIN`, and `PREDICT_FUN_FUNDING_PREFERRED_CHAIN` default to `POLYGON` until operator-approved venue capability data says otherwise
 - `SOLANA_USDC_TOKEN_ADDRESS` and `POLYGON_USDC_TOKEN_ADDRESS` may override default token addresses
 

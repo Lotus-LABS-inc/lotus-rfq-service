@@ -2034,11 +2034,13 @@ describe("Funding v0 domain", () => {
     expect(getLimitlessFundingReadinessConfigFromEnv({
       LIMITLESS_FUNDING_READINESS_MODE: "LIVE_READ",
       LIMITLESS_FUNDING_BALANCE_URL: "https://operator.example/limitless-readiness",
-      LIMITLESS_FUNDING_READ_AUTH_MODE: "BEARER"
+      LIMITLESS_FUNDING_READ_AUTH_MODE: "BEARER",
+      LIMITLESS_FUNDING_BALANCE_TOLERANCE: "0.000002"
     } as NodeJS.ProcessEnv)).toMatchObject({
       enabled: true,
       mode: "LIVE_READ",
       authMode: "BEARER",
+      balanceTolerance: "0.000002",
       configured: true
     });
 
@@ -2105,6 +2107,21 @@ describe("Funding v0 domain", () => {
         readyToTrade: false,
         reason: "LIMITLESS_USABLE_BALANCE_BELOW_REQUIRED_AMOUNT"
       });
+
+    balanceClient.usableBalance = "49.999999";
+    const dustReady = await checker.check({ userId: "user-1", intent, leg, reconciliations: [] });
+    expect(dustReady).toMatchObject({
+      venue: "LIMITLESS",
+      status: "READY_TO_TRADE",
+      readyToTrade: true,
+      reason: "LIMITLESS_USABLE_BALANCE_CONFIRMED",
+      evidence: {
+        requiredAmount: "50",
+        usableBalance: "49.999999",
+        balanceTolerance: "0.000001",
+        effectiveRequiredAmount: "49.999999"
+      }
+    });
 
     balanceClient.usableBalance = "50";
     const ready = await checker.check({ userId: "user-1", intent, leg, reconciliations: [] });

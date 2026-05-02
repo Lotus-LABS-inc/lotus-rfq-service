@@ -291,6 +291,7 @@ Generic venue funding env pattern:
 | `<VENUE>_FUNDING_READ_AUTH_MODE` | Yes per venue | `BEARER` | No | `NONE` only if service is otherwise protected. |
 | `<VENUE>_FUNDING_READ_API_KEY` | If auth enabled | `<server-side key>` | Yes | Server-side only. |
 | `<VENUE>_FUNDING_READ_TIMEOUT_MS` | Yes per venue | `5000` | No | Production timeout. |
+| `<VENUE>_FUNDING_BALANCE_TOLERANCE` | Yes per venue | `0.000001` | No | Atomic-unit rounding tolerance only; must not cover material underfunding. |
 | `<VENUE>_FUNDING_MIN_CONFIRMATIONS` | Yes per venue | `1` | No | Chain/venue-specific finality policy. |
 
 Funding gate commands:
