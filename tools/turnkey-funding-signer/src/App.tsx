@@ -348,6 +348,28 @@ export function App() {
     signingKind === "EVM" && !evmRpcUrl.trim() ? "EVM RPC URL missing." : null
   ].filter((value): value is string => value !== null);
 
+  const refreshApprovedWallets = async () => {
+    if (!session) {
+      setMessage("Turnkey session is not active yet. Complete login first, then click Refresh.");
+      setStep("error");
+      return;
+    }
+    if (!sessionOrgMatches) {
+      setMessage(`Turnkey session org must be ${requiredSubOrgId}.`);
+      setStep("error");
+      return;
+    }
+    try {
+      await refreshWallets({ organizationId: requiredSubOrgId });
+      setMessage("Turnkey wallets refreshed.");
+      setStep("ready");
+    } catch (error) {
+      console.error("Turnkey wallet refresh failed", error);
+      setMessage(formatSafeError(error));
+      setStep("error");
+    }
+  };
+
   const fetchIntent = async () => {
     if (!canFetch) {
       setMessage("Paste a Lotus user JWT and funding intent id first.");
@@ -384,8 +406,8 @@ export function App() {
     setMessage("Opening Turnkey login.");
     try {
       await handleLogin({ title: "Sign in to Turnkey" });
-      await refreshWallets();
-      setMessage("Turnkey session ready.");
+      setMessage("Turnkey login completed. Click Refresh after the approved session org appears.");
+      setStep("ready");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Turnkey login failed.");
       setStep("error");
@@ -413,7 +435,7 @@ export function App() {
         accounts: ["ADDRESS_FORMAT_SOLANA", "ADDRESS_FORMAT_ETHEREUM"],
         organizationId: requiredSubOrgId
       });
-      await refreshWallets({ organizationId: requiredSubOrgId });
+      await refreshApprovedWallets();
       setCreatedWalletSummary(JSON.stringify(result, null, 2));
       setMessage("Wallet creation request completed. Confirm the displayed Solana address before sending funds.");
       setStep("ready");
@@ -665,7 +687,7 @@ export function App() {
             <button type="button" onClick={() => void loginTurnkey()}>
               Login
             </button>
-            <button type="button" onClick={() => void refreshWallets()} disabled={!session}>
+            <button type="button" onClick={() => void refreshApprovedWallets()} disabled={!session}>
               Refresh
             </button>
             <button type="button" onClick={() => void createCurrentSubOrgWallet()} disabled={!session || !sessionOrgMatches}>
