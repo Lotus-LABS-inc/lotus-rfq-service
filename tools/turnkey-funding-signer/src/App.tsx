@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { KeyFormat, useTurnkey } from "@turnkey/react-wallet-kit";
+import { serializeTransaction } from "viem";
 import { getFundingIntent, quoteFundingIntent, submitFundingTxHash } from "./api";
 import type { FundingIntentResponse, FundingRouteLegResponse, TurnkeyWalletAccountLike, TurnkeyWalletLike } from "./types";
 
@@ -7,7 +8,9 @@ const DEFAULT_INTENT_ID = "";
 const DEFAULT_ROUTE_LEG_ID = "";
 const DEFAULT_REQUIRED_SUB_ORG_ID = "94b3ca90-5489-4d0b-9a1f-e9e71ba20ffb";
 const DEFAULT_SOLANA_RPC_URL = "https://solana-rpc.publicnode.com";
+const DEFAULT_BSC_RPC_URL = "https://bsc-dataseed.binance.org";
 const SOLANA_TRANSACTION_TYPE = "TRANSACTION_TYPE_SOLANA";
+const ETHEREUM_TRANSACTION_TYPE = "TRANSACTION_TYPE_ETHEREUM";
 type RouteSigningKind = "SOLANA" | "EVM" | "UNKNOWN";
 
 type StepState = "idle" | "loading" | "ready" | "signing" | "submitted" | "error";
@@ -16,6 +19,14 @@ type SignTransaction = (params: {
   walletAccount: TurnkeyWalletAccountLike;
   unsignedTransaction: string;
   transactionType: string;
+  organizationId?: string;
+}) => Promise<string>;
+
+type SignAndSendTransaction = (params: {
+  walletAccount: TurnkeyWalletAccountLike;
+  unsignedTransaction: string;
+  transactionType: string;
+  rpcUrl?: string;
   organizationId?: string;
 }) => Promise<string>;
 
@@ -35,23 +46,6 @@ type ExportWalletAccount = (params: {
   keyFormat?: KeyFormat;
   organizationId?: string;
 }) => Promise<void>;
-
-type EthSendTransaction = (params: {
-  organizationId?: string;
-  transaction: {
-    from: string;
-    to: string;
-    caip2: string;
-    value?: string;
-    data?: string;
-  };
-}) => Promise<string>;
-
-type PollTransactionStatus = (params: {
-  organizationId?: string;
-  sendTransactionStatusId: string;
-  pollingIntervalMs?: number;
-}) => Promise<Record<string, unknown>>;
 
 const isSolanaAccount = (account: TurnkeyWalletAccountLike): boolean => {
   const format = account.addressFormat?.toUpperCase() ?? "";
@@ -225,15 +219,69 @@ const routeSigningKind = (leg: FundingRouteLegResponse | null): RouteSigningKind
 
 const evmCaip2 = (chainId: number | undefined): string => `eip155:${chainId ?? 1}`;
 
-const extractTransactionHash = (status: Record<string, unknown>): string => {
-  if (typeof status.txHash === "string" && status.txHash.length > 0) {
-    return status.txHash;
+const bigintFromRpcQuantity = (value: string | undefined, fallback = 0n): bigint => {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) {
+    return fallback;
   }
-  const eth = status.eth;
-  if (eth && typeof eth === "object" && "txHash" in eth && typeof eth.txHash === "string") {
-    return eth.txHash;
+  if (trimmed.startsWith("0x")) {
+    return BigInt(trimmed);
   }
-  throw new Error("Turnkey transaction status did not include a transaction hash.");
+  return BigInt(trimmed);
+};
+
+const numberFromRpcQuantity = (value: string): number => Number(bigintFromRpcQuantity(value));
+
+const toRpcQuantity = (value: string | undefined, fallback = 0n): string => `0x${bigintFromRpcQuantity(value, fallback).toString(16)}`;
+
+const rpcCall = async <T,>(rpcUrl: string, method: string, params: unknown[]): Promise<T> => {
+  const response = await fetch(rpcUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params })
+  });
+  const payload = await response.json().catch(() => null) as { result?: T; error?: { message?: unknown } } | null;
+  if (!response.ok || payload?.error) {
+    const message = typeof payload?.error?.message === "string"
+      ? payload.error.message
+      : `${response.status} ${response.statusText}`.trim();
+    throw new Error(`EVM RPC Error: ${message}`);
+  }
+  if (payload?.result === undefined) {
+    throw new Error(`EVM RPC did not return a result for ${method}.`);
+  }
+  return payload.result;
+};
+
+const buildUnsignedEvmTransaction = async (input: {
+  rpcUrl: string;
+  from: string;
+  to: string;
+  chainId: number;
+  data?: string;
+  value?: string;
+}): Promise<string> => {
+  const request = {
+    from: input.from,
+    to: input.to,
+    value: toRpcQuantity(input.value),
+    data: input.data ?? "0x"
+  };
+  const [nonce, gasPrice, estimatedGas] = await Promise.all([
+    rpcCall<string>(input.rpcUrl, "eth_getTransactionCount", [input.from, "pending"]),
+    rpcCall<string>(input.rpcUrl, "eth_gasPrice", []),
+    rpcCall<string>(input.rpcUrl, "eth_estimateGas", [request])
+  ]);
+  return serializeTransaction({
+    type: "legacy",
+    chainId: input.chainId,
+    nonce: numberFromRpcQuantity(nonce),
+    gasPrice: bigintFromRpcQuantity(gasPrice),
+    gas: bigintFromRpcQuantity(estimatedGas),
+    to: input.to as `0x${string}`,
+    value: bigintFromRpcQuantity(input.value, 0n),
+    data: (input.data ?? "0x") as `0x${string}`
+  });
 };
 
 export function App() {
@@ -244,8 +292,7 @@ export function App() {
     wallets,
     createWallet,
     signTransaction,
-    ethSendTransaction,
-    pollTransactionStatus,
+    signAndSendTransaction,
     handleExportWallet,
     handleExportWalletAccount,
     session
@@ -261,6 +308,7 @@ export function App() {
   const [step, setStep] = useState<StepState>("idle");
   const [message, setMessage] = useState("Ready.");
   const [rpcUrl, setRpcUrl] = useState(import.meta.env.VITE_SOLANA_RPC_URL || DEFAULT_SOLANA_RPC_URL);
+  const [evmRpcUrl, setEvmRpcUrl] = useState(import.meta.env.VITE_BSC_RPC_URL || DEFAULT_BSC_RPC_URL);
 
   const requiredSubOrgId = import.meta.env.VITE_TURNKEY_REQUIRED_SUB_ORG_ID || DEFAULT_REQUIRED_SUB_ORG_ID;
   const sessionOrgMatches = session?.organizationId === requiredSubOrgId;
@@ -283,7 +331,7 @@ export function App() {
     && session
     && sessionOrgMatches
     && jwt.trim()
-    && (signingKind === "EVM" || (signingKind === "SOLANA" && rpcUrl.trim()))
+    && ((signingKind === "EVM" && evmRpcUrl.trim()) || (signingKind === "SOLANA" && rpcUrl.trim()))
   );
   const canExport = Boolean(session && sessionOrgMatches && matchingAccount);
   const signingBlockers = [
@@ -292,7 +340,8 @@ export function App() {
     !session ? "Turnkey browser session missing. Click Login." : null,
     session && !sessionOrgMatches ? `Turnkey session org must be ${requiredSubOrgId}.` : null,
     !matchingAccount ? "No Turnkey wallet account matches the funding source address." : null,
-    signingKind === "SOLANA" && !rpcUrl.trim() ? "Solana RPC URL missing." : null
+    signingKind === "SOLANA" && !rpcUrl.trim() ? "Solana RPC URL missing." : null,
+    signingKind === "EVM" && !evmRpcUrl.trim() ? "EVM RPC URL missing." : null
   ].filter((value): value is string => value !== null);
 
   const fetchIntent = async () => {
@@ -456,25 +505,24 @@ export function App() {
         if (!sender) {
           throw new Error("Direct transfer route is missing the EVM sender address.");
         }
-        const sendEvmTransaction = ethSendTransaction as unknown as EthSendTransaction;
-        const pollEvmTransaction = pollTransactionStatus as unknown as PollTransactionStatus;
-        setMessage("Submitting EVM direct transfer through Turnkey.");
-        const statusId = await sendEvmTransaction({
-          organizationId: session?.organizationId,
-          transaction: {
-            from: sender,
-            to: transactionRequest.to,
-            caip2: evmCaip2(transactionRequest.chainId),
-            value: transactionRequest.value ?? "0",
-            data: transactionRequest.data
-          }
+        const signAndSendEvmTransaction = signAndSendTransaction as unknown as SignAndSendTransaction;
+        setMessage("Preparing EVM direct transfer for Turnkey signing.");
+        const unsignedTransaction = await buildUnsignedEvmTransaction({
+          rpcUrl: evmRpcUrl.trim(),
+          from: sender,
+          to: transactionRequest.to,
+          chainId: transactionRequest.chainId,
+          value: transactionRequest.value ?? "0",
+          data: transactionRequest.data
         });
-        setMessage("Turnkey accepted the EVM transfer. Waiting for transaction hash.");
-        txHash = extractTransactionHash(await pollEvmTransaction({
+        setMessage(`Signing and broadcasting EVM direct transfer on ${evmCaip2(transactionRequest.chainId)}.`);
+        txHash = await signAndSendEvmTransaction({
           organizationId: session?.organizationId,
-          sendTransactionStatusId: statusId,
-          pollingIntervalMs: 1_000
-        }));
+          walletAccount: freshMatchingAccount,
+          unsignedTransaction,
+          transactionType: ETHEREUM_TRANSACTION_TYPE,
+          rpcUrl: evmRpcUrl.trim()
+        });
       } else {
         const signer = signTransaction as unknown as SignTransaction;
         if (!transactionRequest?.data) {
@@ -559,6 +607,17 @@ export function App() {
               />
             </label>
           ) : null}
+          {signingKind === "EVM" ? (
+            <label>
+              EVM RPC URL
+              <input
+                value={evmRpcUrl}
+                onChange={(event) => setEvmRpcUrl(event.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+          ) : null}
           <button type="submit" disabled={!canFetch || step === "loading"}>
             {step === "loading" ? "Loading" : "Fetch route"}
           </button>
@@ -637,6 +696,12 @@ export function App() {
             <div>
               <dt>RPC</dt>
               <dd>{rpcUrl}</dd>
+            </div>
+          ) : null}
+          {signingKind === "EVM" ? (
+            <div>
+              <dt>EVM RPC</dt>
+              <dd>{evmRpcUrl}</dd>
             </div>
           ) : null}
         </dl>

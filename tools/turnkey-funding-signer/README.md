@@ -7,7 +7,7 @@ This app does not use backend Turnkey credentials, does not export keys, and doe
 Supported route types:
 
 - LI.FI Solana routes: signs the unsigned Solana transaction and broadcasts through the configured Solana RPC.
-- Direct same-chain EVM routes, including BNB/BSC USDT: submits the EVM transfer through Turnkey Wallet Kit and records the returned transaction hash.
+- Direct same-chain EVM routes, including BNB/BSC USDT: builds a normal EVM transaction, signs it through Turnkey Wallet Kit, broadcasts through the configured EVM RPC, and records the returned transaction hash. This avoids Turnkey's optional `ethSendTransaction` feature.
 
 ## Setup
 
@@ -17,6 +17,7 @@ Supported route types:
    - `VITE_TURNKEY_AUTH_PROXY_CONFIG_ID`
    - `VITE_TURNKEY_REQUIRED_SUB_ORG_ID=94b3ca90-5489-4d0b-9a1f-e9e71ba20ffb`
    - `VITE_SOLANA_RPC_URL` for Solana routes only
+   - `VITE_BSC_RPC_URL` for BNB/BSC direct-transfer routes
 3. Run:
 
 ```powershell
