@@ -233,6 +233,17 @@ const numberFromRpcQuantity = (value: string): number => Number(bigintFromRpcQua
 
 const toRpcQuantity = (value: string | undefined, fallback = 0n): string => `0x${bigintFromRpcQuantity(value, fallback).toString(16)}`;
 
+const toErc20BaseUnits = (amount: string, decimals = 6): bigint => {
+  const [whole = "0", fraction = ""] = amount.trim().split(".");
+  const paddedFraction = fraction.padEnd(decimals, "0").slice(0, decimals);
+  return BigInt(`${whole}${paddedFraction}`.replace(/^0+(?=\d)/, "") || "0");
+};
+
+const padHexWord = (value: string): string => value.toLowerCase().replace(/^0x/i, "").padStart(64, "0");
+
+const buildErc20ApproveData = (spender: string, amount: bigint): string =>
+  `0x095ea7b3${padHexWord(spender)}${amount.toString(16).padStart(64, "0")}`;
+
 const rpcCall = async <T,>(rpcUrl: string, method: string, params: unknown[]): Promise<T> => {
   const response = await fetch(rpcUrl, {
     method: "POST",
@@ -288,6 +299,20 @@ const broadcastSignedEvmTransaction = async (signedTransaction: string, rpcUrl: 
     signedTransaction.startsWith("0x") ? signedTransaction : `0x${signedTransaction}`
   ]);
 
+const waitForEvmReceipt = async (rpcUrl: string, txHash: string): Promise<void> => {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const receipt = await rpcCall<Record<string, unknown> | null>(rpcUrl, "eth_getTransactionReceipt", [txHash]);
+    if (receipt) {
+      if (receipt.status === "0x1") {
+        return;
+      }
+      throw new Error("EVM approval transaction reverted.");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  throw new Error("Timed out waiting for EVM approval confirmation.");
+};
+
 export function App() {
   const {
     authState,
@@ -308,6 +333,7 @@ export function App() {
   const [intent, setIntent] = useState<FundingIntentResponse | null>(null);
   const [selectedLeg, setSelectedLeg] = useState<FundingRouteLegResponse | null>(null);
   const [txSignature, setTxSignature] = useState("");
+  const [approvalTxHash, setApprovalTxHash] = useState("");
   const [createdWalletSummary, setCreatedWalletSummary] = useState("");
   const [step, setStep] = useState<StepState>("idle");
   const [message, setMessage] = useState("Ready.");
@@ -336,6 +362,15 @@ export function App() {
     && sessionOrgMatches
     && jwt.trim()
     && ((signingKind === "EVM" && evmRpcUrl.trim()) || (signingKind === "SOLANA" && rpcUrl.trim()))
+  );
+  const canApprove = Boolean(
+    signingKind === "EVM"
+    && selectedLeg?.routeQuote.transactionRequest?.to
+    && selectedLeg?.sourceToken?.startsWith("0x")
+    && matchingAccount
+    && session
+    && sessionOrgMatches
+    && evmRpcUrl.trim()
   );
   const canExport = Boolean(session && sessionOrgMatches && matchingAccount);
   const signingBlockers = [
@@ -584,6 +619,58 @@ export function App() {
     }
   };
 
+  const approveEvmTokenSpend = async () => {
+    if (!selectedLeg?.routeQuote.transactionRequest?.to || !selectedLeg.routeQuote.transactionRequest.chainId || !matchingAccount) {
+      setMessage("Load an EVM route and sign into the matching Turnkey wallet first.");
+      setStep("error");
+      return;
+    }
+    if (!selectedLeg.sourceToken.startsWith("0x")) {
+      setMessage("Current route source token is not an EVM ERC20 token.");
+      setStep("error");
+      return;
+    }
+    const sender = selectedLeg.routeQuote.transactionRequest.from ?? matchingAccount.address;
+    if (!sender) {
+      setMessage("EVM approval route is missing the sender address.");
+      setStep("error");
+      return;
+    }
+    setStep("signing");
+    setApprovalTxHash("");
+    try {
+      const spender = selectedLeg.routeQuote.transactionRequest.to;
+      const approveData = buildErc20ApproveData(spender, toErc20BaseUnits(selectedLeg.sourceAmount, 6));
+      const unsignedTransaction = await buildUnsignedEvmTransaction({
+        rpcUrl: evmRpcUrl.trim(),
+        from: sender,
+        to: selectedLeg.sourceToken,
+        chainId: selectedLeg.routeQuote.transactionRequest.chainId,
+        value: "0",
+        data: approveData
+      });
+      const signer = signTransaction as unknown as SignTransaction;
+      setMessage("Signing ERC20 approval with Turnkey.");
+      const signedTransaction = await signer({
+        organizationId: session?.organizationId,
+        walletAccount: matchingAccount,
+        unsignedTransaction,
+        transactionType: ETHEREUM_TRANSACTION_TYPE
+      });
+      setMessage("Broadcasting ERC20 approval on Base.");
+      const txHash = await broadcastSignedEvmTransaction(signedTransaction, evmRpcUrl.trim());
+      setApprovalTxHash(txHash);
+      setMessage("Waiting for approval confirmation.");
+      await waitForEvmReceipt(evmRpcUrl.trim(), txHash);
+      setMessage("Approval confirmed. You can now click Sign, broadcast, submit.");
+      setStep("ready");
+    } catch (error) {
+      console.error("EVM approval failed", error);
+      setMessage(formatSafeError(error));
+      setStep("error");
+    }
+  };
+
   return (
     <main className="shell">
       <section className="hero" aria-labelledby="page-title">
@@ -771,6 +858,11 @@ export function App() {
         <button type="button" className="primary" onClick={() => void signBroadcastAndSubmit()} disabled={!canSign || step === "signing"}>
           {step === "signing" ? "Signing" : "Sign, broadcast, submit"}
         </button>
+        {signingKind === "EVM" ? (
+          <button type="button" onClick={() => void approveEvmTokenSpend()} disabled={!canApprove || step === "signing"}>
+            Approve ERC20 spend
+          </button>
+        ) : null}
       </section>
 
       <section className="panel danger-panel">
@@ -815,6 +907,13 @@ export function App() {
         <section className="panel">
           <h2>Transaction signature</h2>
           <code>{txSignature}</code>
+        </section>
+      ) : null}
+
+      {approvalTxHash ? (
+        <section className="panel">
+          <h2>Approval transaction</h2>
+          <code>{approvalTxHash}</code>
         </section>
       ) : null}
 
