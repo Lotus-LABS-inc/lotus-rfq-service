@@ -521,6 +521,12 @@ For user-wallet venues, the frontend should require or strongly prompt a saved E
 
 Stored wallet metadata must be public receive metadata only. Never store private keys, seed phrases, Privy secrets, ZeroDev signer material, ThirdWeb signer material, Safe owner keys, session cookies, or user JWTs.
 
+Beta withdrawal routing rule:
+
+- Limitless is treated separately from proxy venues. Because beta funding lands as Base USDC and is available in the Limitless account, the Lotus withdrawal intent should prepare bridge-back from the user's available Base USDC path to the user's Solana wallet after evidence confirms funds are available. Do not wire user-facing routes to `POST /portfolio/withdraw` unless the partner-managed approval gate and custody/security review explicitly pass.
+- Proxy/account venues must release funds from the venue proxy, Safe, embedded wallet, or venue-managed account to the user's EVM receive wallet first. Only after that EVM receipt is proven should Lotus prepare or automate the bridge-back leg to Solana.
+- No withdrawal flow may mark completion from a Solana destination request alone when funds are still inside a venue proxy/account.
+
 ## 14. Artifact Freshness And Storage
 
 Operator artifacts are deployment evidence. They must be generated fresh for production rollout and reviewed before signoff.

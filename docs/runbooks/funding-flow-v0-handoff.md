@@ -1204,6 +1204,15 @@ Useful when RFQ accept fails or an execution is waiting on reservation/finalizat
 
 Withdrawal v0 is a DB-backed non-custodial skeleton. It lets the frontend build the withdrawal screen and lets operators validate lifecycle state, but it does not call live venue withdrawal APIs, does not sign, does not broadcast, and does not custody funds.
 
+### Withdrawal Routing Truth For Beta
+
+Withdrawal routing must be venue-specific. Do not assume every venue supports the same "withdraw directly to Solana" flow.
+
+- Limitless: beta funding lands as USDC on Base and becomes available in the Limitless account. Normal user withdrawal is not a venue API pull path for Lotus. The supported Lotus withdrawal intent for beta is bridge-back preparation from the user's available Base USDC path back to the user's Solana wallet, after venue availability/evidence is confirmed. Limitless partner-managed backend withdrawal remains blocked unless the separate approval gate passes.
+- Proxy/account venues: when the venue uses a proxy, Safe, embedded wallet, or venue-managed account, the withdrawal path is two-stage: venue/proxy release to the user's EVM receive wallet first, then bridge from that EVM wallet back to Solana. The bridge-back leg can be automated only after the user-controlled EVM wallet has received funds and user signing requirements are satisfied.
+- Lotus must not skip the proxy-to-EVM evidence step. A Solana destination request is not completion evidence for funds still held by a venue proxy/account.
+- Backend wallet knowledge, venue balance, or a funding-ready row must not authorize backend signing, key export, custody, or a direct settlement cut.
+
 ```http
 POST /funding/withdrawals
 ```

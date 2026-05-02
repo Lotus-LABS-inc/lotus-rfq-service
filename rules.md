@@ -174,6 +174,15 @@ Do not use any Turnkey sub-organization other than `94b3ca90-5489-4d0b-9a1f-e9e7
 
 If a wallet is created under the wrong Turnkey sub-organization or email, do not attempt backend signing or private-key export through Lotus/Codex. Recover funds only through Turnkey's secure dashboard/export flow or by adding a valid user/auth method to the exact Turnkey sub-organization that owns the wallet.
 
+## Withdrawal Routing Rule
+
+Withdrawal flows are venue-specific and must stay evidence-based.
+
+- Limitless beta withdrawal intent means bridge-back from the user's available Base USDC path to Solana after Limitless availability/evidence is confirmed. Do not model normal Limitless user withdrawal as a direct Lotus call to `POST /portfolio/withdraw`; partner-managed backend withdrawal stays blocked unless the explicit approval gate passes.
+- Venues that use a proxy, Safe, embedded wallet, or venue-managed account must withdraw/release from that proxy/account to the user's EVM receive wallet first. Only then can Lotus prepare or automate a bridge-back leg from EVM to Solana.
+- Never mark a withdrawal complete from bridge intent creation, Solana destination request, venue balance, or wallet ownership alone. Completion requires exact evidence for the venue/proxy release and the destination receipt.
+- Backend must not sign, broadcast, export keys, custody funds, or move funds for withdrawal flows unless a separate reviewed implementation explicitly authorizes that behavior.
+
 ## Execution-Specific Note
 
 For execution work:
