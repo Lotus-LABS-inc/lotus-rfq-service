@@ -479,16 +479,16 @@ Limitless production rule: do not expose normal user withdrawal through Limitles
 | `MYRIAD_FUNDING_DESTINATION_MODE` | `VENUE_DEPOSIT_ENV` | Current beta path uses operator-approved venue deposit wallet, not user Turnkey destination mode. |
 | `MYRIAD_FUNDING_PREFERRED_CHAIN` | `BSC` | Myriad beta direct-transfer funding rail. Myriad may also expose USDC/Solana and USDC/Polygon venue deposit options, but each rail requires explicit operator env alignment. |
 | `MYRIAD_FUNDING_PREFERRED_CHAIN_ID` | `56` | BNB Smart Chain id. |
-| `MYRIAD_FUNDING_PREFERRED_TOKEN` | `USDT` | Current beta funding token. `USD1` remains supported by config for reviewed rails, but must not be mixed with a USDT ops-read. |
+| `MYRIAD_FUNDING_PREFERRED_TOKEN` | `USDT` | Current beta funding token. Myriad venue accounting normalizes ready USDT/USDC/USD1 deposits to USD1 for withdrawals because Myriad internally converts the balance. |
 | `MYRIAD_USDT_TOKEN_ADDRESS` | `0x55d398326f99059fF775485246999027B3197955` | BSC USDT contract for beta direct transfer. |
 | `MYRIAD_FUNDING_READINESS_MODE` | `LIVE_READ` | Live/operator read mode. |
 | `MYRIAD_FUNDING_BALANCE_URL` | `https://ops.example.com/lotus/myriad/balance` | Approved balance read service. |
 | `MYRIAD_FUNDING_READ_API_KEY` | `<secret>` | Secret manager only. |
-| `MYRIAD_OPS_FUNDING_BALANCE_MODE` | `ONCHAIN_ERC20` | Current beta readiness read for the BSC USDT deposit wallet. |
+| `MYRIAD_OPS_FUNDING_BALANCE_MODE` | `ONCHAIN_ERC20` | Current beta readiness read for the Myriad account balance wallet. For withdrawal readiness, read the BSC USD1 balance on the exported Myriad EVM wallet. |
 | `MYRIAD_OPS_FUNDING_BALANCE_RPC_URL` | `https://bsc.example.com/rpc` | Approved BSC RPC. |
-| `MYRIAD_OPS_FUNDING_BALANCE_WALLET_ADDRESS` | `0x1234...abcd` | Must match `MYRIAD_FUNDING_DESTINATION_ADDRESS` for the active rail. |
-| `MYRIAD_OPS_FUNDING_BALANCE_TOKEN_ADDRESS` | `0x55d398326f99059fF775485246999027B3197955` | Must match the active funding token. |
-| `MYRIAD_OPS_FUNDING_BALANCE_TOKEN_DECIMALS` | `18` | BSC USDT decimals. |
+| `MYRIAD_OPS_FUNDING_BALANCE_WALLET_ADDRESS` | `0x1234...abcd` | Must match the Myriad account/exported wallet that reflects venue-available funds for the active readiness read. |
+| `MYRIAD_OPS_FUNDING_BALANCE_TOKEN_ADDRESS` | `0x8d0D...f08B0d` | BSC USD1 contract for Myriad withdrawal readiness. |
+| `MYRIAD_OPS_FUNDING_BALANCE_TOKEN_DECIMALS` | `18` | BSC USD1 decimals. |
 | `MYRIAD_FUNDING_WITHDRAWALS_ENABLED` | `true` | Only after user-wallet gate review. |
 | `MYRIAD_WITHDRAWAL_ADAPTER_ENABLED` | `true` | Only for approved dry-run/user-wallet flow. |
 | `MYRIAD_WITHDRAWAL_ADAPTER_MODE` | `USER_WALLET_DRY_RUN` | No backend ThirdWeb signing. |

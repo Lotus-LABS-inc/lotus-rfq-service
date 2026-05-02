@@ -601,30 +601,30 @@ export class FundingRepository implements FundingRepositoryContract {
   public async listVenueBalances(userId: string): Promise<VenueBalanceView[]> {
     const result = await this.pool.query<VenueBalanceRow>(
       `WITH ready AS (
-         SELECT ft.target_venue AS venue,
-                ft.target_token AS token,
-                COALESCE(SUM((ft.target_amount)::numeric), 0) AS ready_amount,
-                MAX(fr.checked_at) AS updated_at
-           FROM funding_targets ft
-           JOIN funding_intents fi ON fi.id = ft.funding_intent_id
-           JOIN funding_route_legs fl ON fl.funding_target_id = ft.id
-           JOIN funding_reconciliation_records fr ON fr.route_leg_id = fl.id
-          WHERE fi.user_id = $1
-            AND fr.ready_to_trade = true
-          GROUP BY ft.target_venue, ft.target_token
-       ),
-       withdrawal_reservations AS (
-         SELECT fws.source_venue AS venue,
-                fws.source_token AS token,
-                COALESCE(SUM((fws.source_amount)::numeric), 0) AS pending_withdrawal_amount
-           FROM funding_withdrawal_sources fws
-           JOIN funding_withdrawal_intents fwi ON fwi.id = fws.withdrawal_intent_id
-          WHERE fwi.user_id = $1
-            AND fwi.status NOT IN ('FAILED', 'CANCELLED')
-          GROUP BY fws.source_venue, fws.source_token
-       )
-       SELECT ready.venue,
-              ready.token,
+           SELECT ft.target_venue AS venue,
+                  ${venueAccountingTokenSql("ft.target_venue", "ft.target_token")} AS token,
+                  COALESCE(SUM((ft.target_amount)::numeric), 0) AS ready_amount,
+                  MAX(fr.checked_at) AS updated_at
+             FROM funding_targets ft
+             JOIN funding_intents fi ON fi.id = ft.funding_intent_id
+             JOIN funding_route_legs fl ON fl.funding_target_id = ft.id
+             JOIN funding_reconciliation_records fr ON fr.route_leg_id = fl.id
+            WHERE fi.user_id = $1
+              AND fr.ready_to_trade = true
+            GROUP BY ft.target_venue, ${venueAccountingTokenSql("ft.target_venue", "ft.target_token")}
+         ),
+        withdrawal_reservations AS (
+           SELECT fws.source_venue AS venue,
+                  ${venueAccountingTokenSql("fws.source_venue", "fws.source_token")} AS token,
+                  COALESCE(SUM((fws.source_amount)::numeric), 0) AS pending_withdrawal_amount
+            FROM funding_withdrawal_sources fws
+            JOIN funding_withdrawal_intents fwi ON fwi.id = fws.withdrawal_intent_id
+            WHERE fwi.user_id = $1
+              AND fwi.status NOT IN ('FAILED', 'CANCELLED')
+            GROUP BY fws.source_venue, ${venueAccountingTokenSql("fws.source_venue", "fws.source_token")}
+         )
+         SELECT ready.venue,
+                ready.token,
               ready.ready_amount::text,
               COALESCE(withdrawal_reservations.pending_withdrawal_amount, 0)::text AS pending_withdrawal_amount,
               ready.updated_at
@@ -647,7 +647,7 @@ export class FundingRepository implements FundingRepositoryContract {
          JOIN funding_route_legs fl ON fl.id = fr.route_leg_id AND fl.funding_target_id = ft.id
         WHERE fi.user_id = $1
           AND ft.target_venue = $2
-          AND ft.target_token = $3
+          AND ${venueAccountingTokenSql("ft.target_venue", "ft.target_token")} = ${venueAccountingTokenSql("$2", "$3")}
           AND fr.target_venue = ft.target_venue
           AND fr.ready_to_trade = true`,
       [input.userId, input.venue, input.token]
@@ -1057,6 +1057,12 @@ const mapVenueBalance = (row: VenueBalanceRow): VenueBalanceView => {
     updatedAt: row.updated_at ? row.updated_at.toISOString() : null
   };
 };
+
+const venueAccountingTokenSql = (venueExpression: string, tokenExpression: string): string =>
+  `CASE
+     WHEN ${venueExpression} = 'MYRIAD' AND UPPER(${tokenExpression}) IN ('USD1', 'USDC', 'USDT') THEN 'USD1'
+     ELSE ${tokenExpression}
+   END`;
 
 const mapWithdrawalIntent = (row: WithdrawalIntentRow): WithdrawalIntent => ({
   withdrawalIntentId: row.id,
