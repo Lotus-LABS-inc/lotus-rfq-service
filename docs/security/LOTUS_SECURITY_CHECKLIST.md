@@ -42,6 +42,9 @@ Before enabling funding runtime beyond local/sandbox:
 - Venue destination envs such as `POLYMARKET_FUNDING_DESTINATION_ADDRESS` and `LIMITLESS_FUNDING_DESTINATION_ADDRESS` are configured and reviewed before quote enablement.
 - Venue readiness envs such as `*_FUNDING_READINESS_MODE`, `*_FUNDING_READINESS_ENABLED`, `*_FUNDING_BALANCE_URL`, `*_FUNDING_READ_AUTH_MODE`, and `*_FUNDING_READ_API_KEY` are reviewed before any checker can mark balances `READY_TO_TRADE`.
 - Polymarket, Limitless, Opinion, Myriad, and Predict.fun funding readiness default to `DISABLED`; `LIVE_READ` requires an operator-approved read endpoint and server-side-only credentials where needed.
+- Abandoned funding smoke-test intents may be cancelled only through `npm run admin:cancel-abandoned-funding-intents`. Run it dry-run first. It must fail closed for invalid IDs, missing rows, wrong user id, `READY_TO_TRADE` rows, or any ready-to-trade reconciliation evidence.
+- Cancelled funding intents are audit history, not active readiness blockers. Operator summaries may exclude `CANCELLED` rows, but detailed admin readiness lists should still expose them for traceability.
+- Do not manually update funding readiness rows or reconciliation rows to make dashboards look clean.
 - Before a new venue is used in funding enforcement, run its read-only smoke command and confirm the artifact is redacted, read-only, and either `COMPLETED` with expected mapping or fail-closed with a documented blocker.
 - Internal Polymarket balance reads require `POLYMARKET_INTERNAL_BALANCE_READ_ENABLED=true`, complete CLOB V2 read credentials, and bearer auth outside local loopback testing.
 - `/internal/polymarket/funding-balance` returns only `usableBalance`; it must not return raw CLOB responses, allowances, auth headers, API keys, or private keys.

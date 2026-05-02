@@ -2935,7 +2935,7 @@ paths:
     get:
       tags: [Admin Funding Readiness]
       summary: Export an operator-safe Funding Flow v0 readiness summary.
-      description: Read-only summary over persisted readiness rows. It does not call LI.FI, move funds, run live venue checks, or mark funds ready to trade.
+      description: Read-only summary over persisted readiness rows. It does not call LI.FI, move funds, run live venue checks, or mark funds ready to trade. CANCELLED funding intents are retained in detailed readiness lists for audit history, but excluded from active summary counts and blocker rows.
       x-lotus-status: implemented
       x-lotus-callable: true
       x-lotus-auth: admin

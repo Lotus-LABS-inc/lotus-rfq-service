@@ -468,9 +468,19 @@ Limitless production rule: do not expose normal user withdrawal. EOA/user mode i
 | Env | Example | Production expectation |
 |---|---|---|
 | `MYRIAD_FUNDING_DESTINATION_ADDRESS` | `0x1234...abcd` | Approved funding destination. |
+| `MYRIAD_FUNDING_DESTINATION_MODE` | `VENUE_DEPOSIT_ENV` | Current beta path uses operator-approved venue deposit wallet, not user Turnkey destination mode. |
+| `MYRIAD_FUNDING_PREFERRED_CHAIN` | `BSC` | Myriad beta direct-transfer funding rail. Myriad may also expose USDC/Solana and USDC/Polygon venue deposit options, but each rail requires explicit operator env alignment. |
+| `MYRIAD_FUNDING_PREFERRED_CHAIN_ID` | `56` | BNB Smart Chain id. |
+| `MYRIAD_FUNDING_PREFERRED_TOKEN` | `USDT` | Current beta funding token. `USD1` remains supported by config for reviewed rails, but must not be mixed with a USDT ops-read. |
+| `MYRIAD_USDT_TOKEN_ADDRESS` | `0x55d398326f99059fF775485246999027B3197955` | BSC USDT contract for beta direct transfer. |
 | `MYRIAD_FUNDING_READINESS_MODE` | `LIVE_READ` | Live/operator read mode. |
 | `MYRIAD_FUNDING_BALANCE_URL` | `https://ops.example.com/lotus/myriad/balance` | Approved balance read service. |
 | `MYRIAD_FUNDING_READ_API_KEY` | `<secret>` | Secret manager only. |
+| `MYRIAD_OPS_FUNDING_BALANCE_MODE` | `ONCHAIN_ERC20` | Current beta readiness read for the BSC USDT deposit wallet. |
+| `MYRIAD_OPS_FUNDING_BALANCE_RPC_URL` | `https://bsc.example.com/rpc` | Approved BSC RPC. |
+| `MYRIAD_OPS_FUNDING_BALANCE_WALLET_ADDRESS` | `0x1234...abcd` | Must match `MYRIAD_FUNDING_DESTINATION_ADDRESS` for the active rail. |
+| `MYRIAD_OPS_FUNDING_BALANCE_TOKEN_ADDRESS` | `0x55d398326f99059fF775485246999027B3197955` | Must match the active funding token. |
+| `MYRIAD_OPS_FUNDING_BALANCE_TOKEN_DECIMALS` | `18` | BSC USDT decimals. |
 | `MYRIAD_FUNDING_WITHDRAWALS_ENABLED` | `true` | Only after user-wallet gate review. |
 | `MYRIAD_WITHDRAWAL_ADAPTER_ENABLED` | `true` | Only for approved dry-run/user-wallet flow. |
 | `MYRIAD_WITHDRAWAL_ADAPTER_MODE` | `USER_WALLET_DRY_RUN` | No backend ThirdWeb signing. |
@@ -518,6 +528,8 @@ Operator artifacts are deployment evidence. They must be generated fresh for pro
 | Artifact family | Command | Required result |
 |---|---|---|
 | Funding readiness | `npm run funding:venue-gate-summary` | All production venues pass or are explicitly out of scope. |
+| Funding readiness operator summary | `npm run report:funding:readiness` | Active rows show no blockers. Abandoned test intents must be `CANCELLED`, not left as active blocker rows. |
+| Abandoned funding cleanup | `npm run admin:cancel-abandoned-funding-intents` | Dry-run first. Confirmed writes require `CANCEL_ABANDONED_FUNDING_CONFIRM=YES`; the script refuses ready-to-trade rows and ready reconciliation evidence. |
 | Route enforcement | `npm run funding:route-enforcement-ready -- <ROUTE_OR_LANE_ID>` or one of the pair/tri/strict-all convenience scripts | Exact production route passes. |
 | Withdrawal rollout | `npm run funding:withdrawal-rollout-status` | No unreviewed blocker for enabled venues. |
 | Withdrawal completion | `npm run funding:withdrawal-completion-gate-summary` | Enabled venues pass. |

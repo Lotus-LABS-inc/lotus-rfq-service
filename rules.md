@@ -146,6 +146,34 @@ For funding work:
 - reuse existing route/controller conventions
 - only create new funding files if the repo has no suitable existing place or the concern is clearly isolated
 
+## Funding Test Identity and Wallet Access Rule
+
+For any funding, withdrawal, Turnkey, LI.FI, or venue-readiness test that uses an email-backed user wallet, the canonical test email is:
+
+```text
+polymarket-funding-test@uselotus.xyz
+```
+
+For current email-backed wallet tests, the only approved Turnkey sub-organization is:
+
+```text
+94b3ca90-5489-4d0b-9a1f-e9e71ba20ffb
+```
+
+Never create, fund, or route from a test wallet for a new email until all of the following are true:
+
+1. the Lotus JWT `userId` and email are confirmed for that test identity
+2. `POST /user/wallets/ensure-defaults` has created or returned the wallet for that same identity
+3. the frontend Turnkey login for that same email can see the Solana/EVM account in Wallet Kit
+4. the visible Turnkey account address exactly matches the Lotus `sourceWalletAddress` or destination wallet being tested
+5. the test operator has confirmed the address before sending real funds
+
+A Lotus JWT email only authorizes Lotus API access. It does not prove the browser Turnkey session can sign with the funded wallet. Do not treat a wallet address as ready for funded tests until the same Turnkey login can see and sign with that account.
+
+Do not use any Turnkey sub-organization other than `94b3ca90-5489-4d0b-9a1f-e9e71ba20ffb` for current email-backed tests unless the operator explicitly updates this rule. The local signer and any future smoke scripts must fail closed when the active Turnkey session organization differs from the approved sub-organization.
+
+If a wallet is created under the wrong Turnkey sub-organization or email, do not attempt backend signing or private-key export through Lotus/Codex. Recover funds only through Turnkey's secure dashboard/export flow or by adding a valid user/auth method to the exact Turnkey sub-organization that owns the wallet.
+
 ## Execution-Specific Note
 
 For execution work:

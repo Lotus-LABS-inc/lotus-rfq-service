@@ -548,6 +548,9 @@ Funding v0 is implemented fail-closed by default. Operators must configure these
 - For Opinion BNB USDT, users can fund their Turnkey EVM wallet on BNB Chain and receive a direct same-chain ERC20 transfer route to the approved Opinion deposit wallet. Venue readiness still depends on the Opinion spot-balance read; wallet existence, wallet balance, or a submitted tx hash alone must not mark funds `READY_TO_TRADE`.
 - Opinion venue credit readiness must read the Opinion internal spot balance, not the swept on-chain deposit wallet. The ops-read service supports this with `OPINION_OPS_FUNDING_BALANCE_MODE=DIRECT_HTTP`, `OPINION_OPS_FUNDING_BALANCE_BASE_URL=https://openapi.opinion.trade/openapi`, `OPINION_OPS_FUNDING_BALANCE_PATH=user/balance?chain_id=56`, `OPINION_OPS_FUNDING_BALANCE_AUTH_MODE=API_KEY`, `OPINION_OPS_FUNDING_BALANCE_API_KEY_HEADER=apikey`, and `OPINION_OPS_FUNDING_BALANCE_RESPONSE_FIELD=result.balances.0.availableBalance`.
 - For chain-aware Opinion reads, use `OPINION_OPS_FUNDING_BALANCE_MODE=MULTI_DIRECT_HTTP` with reviewed paths such as `OPINION_OPS_FUNDING_BALANCE_PATH_BY_CHAIN_BNB=user/balance?chain_id=56`. Add `OPINION_OPS_FUNDING_BALANCE_PATH_BY_CHAIN_SOLANA` only after Opinion confirms the exact Solana `chain_id` and confirms that the Solana balance returned by `/user/balance` is usable trading balance. Missing chain paths fail closed and must not fall back to another chain.
+- Myriad live beta funding is currently BNB Chain USDT direct transfer: `MYRIAD_FUNDING_PREFERRED_CHAIN=BSC`, `MYRIAD_FUNDING_PREFERRED_CHAIN_ID=56`, `MYRIAD_FUNDING_PREFERRED_TOKEN=USDT`, and `MYRIAD_USDT_TOKEN_ADDRESS=0x55d398326f99059fF775485246999027B3197955`.
+- Myriad may present multiple deposit rails in the venue UI, including USDC/Solana, USDC/Polygon, and USDT/BNB. Lotus must operate one configured preferred rail at a time unless a multi-rail funding capability is explicitly implemented. The backend preferred rail, destination address, and ops-read token/chain must match exactly.
+- For Myriad BNB USDT, users can fund their Turnkey EVM wallet on BNB Chain and receive a direct same-chain ERC20 transfer route to the approved Myriad deposit wallet. Venue readiness still depends on the Myriad configured balance read; wallet existence, wallet balance, or a submitted tx hash alone must not mark funds `READY_TO_TRADE`.
 - `MYRIAD_FUNDING_PREFERRED_CHAIN` and `PREDICT_FUN_FUNDING_PREFERRED_CHAIN` default to `POLYGON` until operator-approved venue capability data says otherwise
 - `SOLANA_USDC_TOKEN_ADDRESS` and `POLYGON_USDC_TOKEN_ADDRESS` may override default token addresses
 
@@ -604,6 +607,35 @@ npm run funding:myriad-readiness-smoke
 npm run funding:predictfun-readiness-smoke
 npm run funding:venue-readiness-smoke -- OPINION
 ```
+
+### Abandoned Funding Intent Cleanup
+
+Operator readiness summaries are meant to describe active funding blockers. Abandoned smoke-test drafts must not remain as active blockers after a replacement intent has reached `READY_TO_TRADE`.
+
+Use the cleanup script only for abandoned, superseded intents:
+
+```bash
+ABANDONED_FUNDING_INTENT_IDS=<comma-separated funding intent ids> \
+ABANDONED_FUNDING_USER_ID=<expected user id> \
+npm run admin:cancel-abandoned-funding-intents
+```
+
+The first run is a dry run. To write:
+
+```bash
+ABANDONED_FUNDING_INTENT_IDS=<comma-separated funding intent ids> \
+ABANDONED_FUNDING_USER_ID=<expected user id> \
+CANCEL_ABANDONED_FUNDING_CONFIRM=YES \
+CANCEL_ABANDONED_FUNDING_REASON="Private beta funding smoke cleanup: abandoned superseded test intent." \
+npm run admin:cancel-abandoned-funding-intents
+```
+
+Safety rules:
+
+- The script fails closed for invalid UUIDs, missing rows, wrong user id, `READY_TO_TRADE` intents, or any ready-to-trade reconciliation evidence.
+- It marks the funding intent `CANCELLED`, open targets `LEG_CANCELLED`, open route legs `LEG_CANCELLED`, and writes a `FUNDING_CANCELLED` audit event.
+- Cancelled abandoned intents remain visible in detailed admin readiness lists for audit history, but are excluded from active operator readiness summary counts and blocker rows.
+- Do not use this script to hide live failures, partially funded user production flows, or rows with ambiguous real-money ownership.
 
 Required operator config:
 
