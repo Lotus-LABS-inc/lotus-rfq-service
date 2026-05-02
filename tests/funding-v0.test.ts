@@ -649,6 +649,30 @@ describe("Funding v0 domain", () => {
     expect(myriadBscUsd1Matrix.MYRIAD.preferredChainId).toBe(56);
     expect(myriadBscUsd1Matrix.MYRIAD.preferredToken).toBe("USD1");
     expect(myriadBscUsd1Matrix.MYRIAD.supportedTokens).toEqual(["USD1"]);
+    expect(myriadBscUsd1Matrix.MYRIAD.supportedChains).toEqual(expect.arrayContaining(["SOLANA", "BNB", "BSC", "56"]));
+    expect(myriadBscUsd1Matrix.MYRIAD.sourceTokenAddressByChain).toMatchObject({
+      BNB: "0x8d0d000ee44948fc98c9b98a4fa4921476f08b0d",
+      BSC: "0x8d0d000ee44948fc98c9b98a4fa4921476f08b0d",
+      "56": "0x8d0d000ee44948fc98c9b98a4fa4921476f08b0d"
+    });
+    const myriadBscUsdtMatrix = buildVenueCapabilityMatrix({
+      env: {
+        ...env,
+        MYRIAD_FUNDING_PREFERRED_CHAIN: "BSC",
+        MYRIAD_FUNDING_PREFERRED_CHAIN_ID: "56",
+        MYRIAD_FUNDING_PREFERRED_TOKEN: "USDT"
+      } as NodeJS.ProcessEnv
+    });
+    expect(myriadBscUsdtMatrix.MYRIAD.preferredChain).toBe("BSC");
+    expect(myriadBscUsdtMatrix.MYRIAD.preferredChainId).toBe(56);
+    expect(myriadBscUsdtMatrix.MYRIAD.preferredToken).toBe("USDT");
+    expect(myriadBscUsdtMatrix.MYRIAD.supportedTokens).toEqual(["USDT"]);
+    expect(myriadBscUsdtMatrix.MYRIAD.supportedChains).toEqual(expect.arrayContaining(["SOLANA", "BNB", "BSC", "56"]));
+    expect(myriadBscUsdtMatrix.MYRIAD.sourceTokenAddressByChain).toMatchObject({
+      BNB: "0x55d398326f99059fF775485246999027B3197955",
+      BSC: "0x55d398326f99059fF775485246999027B3197955",
+      "56": "0x55d398326f99059fF775485246999027B3197955"
+    });
     const repository = new InMemoryFundingRepository();
     const service = new FundingService(repository, new StubLifiProvider(), {
       lifiQuotesEnabled: true,

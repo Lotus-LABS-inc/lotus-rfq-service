@@ -48,9 +48,28 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
   const myriadPreferredChainId = Number.parseInt(envValue(env, "MYRIAD_FUNDING_PREFERRED_CHAIN_ID") ?? "137", 10);
   const myriadUsdcAddress = envValue(env, "MYRIAD_USDC_TOKEN_ADDRESS") ?? polygonUsdcAddress;
   const myriadPreferredToken = envValue(env, "MYRIAD_FUNDING_PREFERRED_TOKEN") ?? "USDC";
+  const myriadPreferredChainKey = normalizeChainKey(myriadPreferredChain);
   const myriadPreferredTokenAddress = myriadPreferredToken === "USD1"
     ? envValue(env, "MYRIAD_USD1_TOKEN_ADDRESS") ?? envValue(env, "MYRIAD_INTERNAL_WITHDRAWAL_EVIDENCE_USD1_ADDRESS") ?? myriadUsdcAddress
-    : myriadUsdcAddress;
+    : myriadPreferredToken === "USDT"
+      ? envValue(env, "MYRIAD_USDT_TOKEN_ADDRESS") ?? envValue(env, "MYRIAD_INTERNAL_WITHDRAWAL_EVIDENCE_USDT_ADDRESS") ?? bscUsdtAddress
+      : myriadUsdcAddress;
+  const myriadSourceTokenAddressByChain = {
+    SOLANA: solanaUsdcAddress,
+    ...(myriadPreferredToken === "USDC" && (myriadPreferredChainKey === "POLYGON" || myriadPreferredChainId === 137)
+      ? {
+        POLYGON: myriadPreferredTokenAddress,
+        "137": myriadPreferredTokenAddress
+      }
+      : {}),
+    ...((myriadPreferredToken === "USDT" || myriadPreferredToken === "USD1") && (myriadPreferredChainKey === "BNB" || myriadPreferredChainId === 56)
+      ? {
+        BNB: myriadPreferredTokenAddress,
+        BSC: myriadPreferredTokenAddress,
+        "56": myriadPreferredTokenAddress
+      }
+      : {})
+  };
   const predictFunPreferredChain = envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_CHAIN") ?? "POLYGON";
   const predictFunPreferredChainId = Number.parseInt(envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_CHAIN_ID") ?? "137", 10);
   const predictFunPreferredToken = envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_TOKEN") ?? "USDC";
@@ -146,9 +165,9 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       preferredChainId: myriadPreferredChainId,
       preferredToken: myriadPreferredToken,
       preferredTokenAddress: myriadPreferredTokenAddress,
-      sourceTokenAddressByChain: { SOLANA: solanaUsdcAddress },
+      sourceTokenAddressByChain: myriadSourceTokenAddressByChain,
       supportsWithdrawal: supportsWithdrawal("MYRIAD"),
-      configuredNote: `Myriad funding quote path is configured for Solana ${myriadPreferredToken} to the operator-approved Myriad funding destination.`,
+      configuredNote: `Myriad funding quote path is configured for approved ${myriadPreferredToken} source chains to the operator-approved Myriad funding destination.`,
       missingNote: "Set MYRIAD_FUNDING_DESTINATION_ADDRESS before enabling Myriad funding quotes."
     }),
     PREDICT_FUN: configurableCapability({
