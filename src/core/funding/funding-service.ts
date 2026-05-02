@@ -746,7 +746,8 @@ export class FundingService {
   public async refreshWithdrawalStatus(userId: string, withdrawalIntentId: string): Promise<WithdrawalIntentView> {
     const view = await this.getWithdrawalIntent(userId, withdrawalIntentId);
     await this.refreshPolymarketBridgeSandboxStatus(view);
-    if (!this.withdrawalCompletionChecker) {
+    const hasLimitlessBridgeBackLeg = view.routeLegs.some((leg) => leg.providerStatus.mode === "LIMITLESS_BRIDGE_BACK");
+    if (!this.withdrawalCompletionChecker && !hasLimitlessBridgeBackLeg) {
       return this.getWithdrawalIntent(userId, withdrawalIntentId);
     }
 
@@ -761,12 +762,14 @@ export class FundingService {
         refreshedStates.push(leg.status);
         continue;
       }
-      const result = await this.withdrawalCompletionChecker.check({
-        userId,
-        intent: view.intent,
-        leg,
-        reconciliations: view.reconciliations
-      });
+      const result = leg.providerStatus.mode === "LIMITLESS_BRIDGE_BACK"
+        ? await this.checkLimitlessBridgeBackStatus(view.intent, leg, latestTxHash)
+        : await this.withdrawalCompletionChecker!.check({
+            userId,
+            intent: view.intent,
+            leg,
+            reconciliations: view.reconciliations
+          });
       const nextStatus = this.mapWithdrawalCompletionResult(view.intent, leg, result);
       const completed = nextStatus === "WITHDRAWAL_LEG_COMPLETED";
       if (completed && this.withdrawalCompletionPersistenceGate) {
@@ -845,6 +848,80 @@ export class FundingService {
     }
     const capabilities = this.polymarketBridgeWithdrawalAdapter.getWithdrawalCapabilities();
     return capabilities.supportsWithdrawal && capabilities.readinessStatus === "DRY_RUN_READY";
+  }
+
+  private async checkLimitlessBridgeBackStatus(
+    intent: WithdrawalIntent,
+    leg: WithdrawalRouteLeg,
+    latestTxHash: string
+  ): Promise<WithdrawalCompletionEvidenceResult> {
+    const sourceChain = typeof leg.providerStatus.sourceChain === "string" ? leg.providerStatus.sourceChain : "BASE";
+    const destinationChain = typeof leg.providerStatus.destinationChain === "string"
+      ? leg.providerStatus.destinationChain
+      : intent.destinationChain;
+    try {
+      const { status, raw } = await this.lifi.status({
+        txHash: latestTxHash,
+        fromChain: sourceChain,
+        toChain: destinationChain
+      });
+      const receiving = isRecord(raw.receiving) ? raw.receiving : {};
+      const receivingToken = isRecord(receiving.token) ? receiving.token : {};
+      const destinationTxHash = typeof receiving.txHash === "string" ? receiving.txHash : null;
+      const receivedAmount = typeof receiving.amount === "string" ? receiving.amount : null;
+      const receivedTokenDecimals = typeof receivingToken.decimals === "number" ? receivingToken.decimals : 6;
+      const tokenSymbol = typeof receivingToken.symbol === "string" ? receivingToken.symbol : leg.sourceToken;
+      const completed = status === "DONE_COMPLETED";
+      const destinationReceived = completed || status === "DONE_PARTIAL";
+      const failed = status === "FAILED" || status === "DONE_REFUNDED";
+      return {
+        status: failed ? "FAILED" : completed ? "COMPLETED" : destinationReceived ? "DESTINATION_RECEIVED" : "UNKNOWN",
+        venueReleased: true,
+        destinationReceived,
+        completed,
+        withdrawalTxHash: latestTxHash,
+        destinationChain: intent.destinationChain,
+        destinationWalletAddress: intent.destinationWalletAddress,
+        token: tokenSymbol,
+        amount: receivedAmount ? fromBaseUnits(receivedAmount, receivedTokenDecimals) : null,
+        reason: failed
+          ? `LIFI_${status}`
+          : completed
+            ? "LIFI_BRIDGE_COMPLETED"
+            : destinationReceived
+              ? "LIFI_BRIDGE_DESTINATION_RECEIVED"
+              : `LIFI_${status}`,
+        evidence: {
+          source: "lifi_status",
+          status,
+          sourceChain,
+          destinationChain,
+          withdrawalTxHash: latestTxHash,
+          destinationTxHash,
+          lifiExplorerLink: typeof raw.lifiExplorerLink === "string" ? raw.lifiExplorerLink : null
+        }
+      };
+    } catch (error) {
+      return {
+        status: "UNKNOWN",
+        venueReleased: true,
+        destinationReceived: false,
+        completed: false,
+        withdrawalTxHash: latestTxHash,
+        destinationChain: intent.destinationChain,
+        destinationWalletAddress: intent.destinationWalletAddress,
+        token: leg.sourceToken,
+        amount: null,
+        reason: error instanceof Error ? `LIFI_STATUS_UNAVAILABLE: ${error.message}` : "LIFI_STATUS_UNAVAILABLE",
+        evidence: {
+          source: "lifi_status",
+          status: "UNKNOWN",
+          sourceChain,
+          destinationChain,
+          withdrawalTxHash: latestTxHash
+        }
+      };
+    }
   }
 
   private shouldUseLimitlessBridgeBack(view: WithdrawalIntentView, source: WithdrawalSource): boolean {
@@ -1375,6 +1452,9 @@ const summarizeQuotes = (routeLegs: readonly FundingRouteLeg[]): Record<string, 
 
 const normalizeFundingChain = (value: string): string => {
   const normalized = value.trim().toUpperCase();
+  if (normalized === "SOL" || normalized === "SOLANA" || normalized === "1151111081099710") {
+    return "SOLANA";
+  }
   if (normalized === "BSC" || normalized === "BNB_SMART_CHAIN" || normalized === "56") {
     return "BNB";
   }
@@ -1394,6 +1474,17 @@ const isEvmChain = (chainKey: string, rawChain: string): boolean =>
   ["BNB", "ETHEREUM", "POLYGON", "BASE"].includes(chainKey) || /^\d+$/.test(rawChain.trim());
 
 const isEvmAddress = (value: string): boolean => /^0x[a-fA-F0-9]{40}$/.test(value.trim());
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const fromBaseUnits = (amount: string, decimals: number): string => {
+  const normalized = amount.replace(/^0+(?=\d)/, "") || "0";
+  const padded = normalized.padStart(decimals + 1, "0");
+  const whole = padded.slice(0, -decimals) || "0";
+  const fraction = padded.slice(-decimals).replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : whole;
+};
 
 const tokenMatches = (
   requestedToken: string,
