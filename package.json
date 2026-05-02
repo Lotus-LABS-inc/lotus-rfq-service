@@ -25,6 +25,7 @@
     "admin:bootstrap-approve-market-lanes": "tsx scripts/admin/approve-market-lanes.ts",
     "admin:bootstrap-owner": "tsx scripts/admin/bootstrap-owner.ts",
     "admin:api-smoke": "tsx scripts/admin/admin-api-smoke.ts",
+    "admin:cancel-abandoned-funding-intents": "tsx scripts/admin/cancel-abandoned-funding-intents.ts",
     "execution:polymarket-live-submit-harness": "tsx scripts/execution/polymarket-live-submit-harness.ts",
     "metrics:check": "node scripts/dev/check-metrics.mjs",
     "db:migrate:test": "node scripts/db/db-migrate-test.mjs",

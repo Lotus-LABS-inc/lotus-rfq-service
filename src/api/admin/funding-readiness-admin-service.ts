@@ -258,6 +258,7 @@ export const buildFundingReadinessOperatorSummary = (
   rows: AdminFundingReadinessRow[],
   generatedAt = new Date().toISOString()
 ): FundingReadinessOperatorSummary => {
+  const activeRows = rows.filter((row) => row.aggregateFundingStatus !== "CANCELLED");
   const readinessCounts = emptyReadinessCounts();
   const checkerModeCounts = emptyCheckerModeCounts();
   const ageBuckets = emptyAgeBuckets();
@@ -266,7 +267,7 @@ export const buildFundingReadinessOperatorSummary = (
   const countsByAggregateStatus: Record<string, number> = {};
   const countsByRouteProvider: Record<string, number> = {};
 
-  for (const row of rows) {
+  for (const row of activeRows) {
     addCount(countsByVenue, row.targetVenue);
     addCount(countsByAggregateStatus, row.aggregateFundingStatus);
     addCount(countsByRouteProvider, row.routeProvider ?? "NONE");
@@ -279,7 +280,7 @@ export const buildFundingReadinessOperatorSummary = (
   return {
     generatedAt,
     totalFundingIntents: rowsByIntent.size,
-    totalRouteLegs: rows.filter((row) => row.routeLegId !== null).length,
+    totalRouteLegs: activeRows.filter((row) => row.routeLegId !== null).length,
     readyToTrade: readinessCounts.READY_TO_TRADE,
     venueCreditPending: readinessCounts.VENUE_CREDIT_PENDING,
     destinationNotConfirmed: readinessCounts.DESTINATION_NOT_CONFIRMED,
@@ -297,13 +298,13 @@ export const buildFundingReadinessOperatorSummary = (
     countsByRouteProvider,
     staleAgeBuckets: ageBuckets,
     blockedRows: {
-      destinationNotConfirmed: rows.filter((row) => row.readinessStatus === "DESTINATION_NOT_CONFIRMED"),
-      venueCreditPending: rows.filter((row) => row.readinessStatus === "VENUE_CREDIT_PENDING"),
-      checkerDisabledOrNotConfigured: rows.filter((row) => row.checkerMode === "DISABLED" || row.checkerMode === "NOT_CONFIGURED"),
-      failed: rows.filter((row) => row.readinessStatus === "FAILED"),
-      unknown: rows.filter((row) => row.readinessStatus === "UNKNOWN")
+      destinationNotConfirmed: activeRows.filter((row) => row.readinessStatus === "DESTINATION_NOT_CONFIRMED"),
+      venueCreditPending: activeRows.filter((row) => row.readinessStatus === "VENUE_CREDIT_PENDING"),
+      checkerDisabledOrNotConfigured: activeRows.filter((row) => row.checkerMode === "DISABLED" || row.checkerMode === "NOT_CONFIGURED"),
+      failed: activeRows.filter((row) => row.readinessStatus === "FAILED"),
+      unknown: activeRows.filter((row) => row.readinessStatus === "UNKNOWN")
     },
-    rows
+    rows: activeRows
   };
 };
 

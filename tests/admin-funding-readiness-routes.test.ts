@@ -327,6 +327,35 @@ describe("admin funding readiness routes", () => {
     await app.close();
   });
 
+  it("excludes cancelled abandoned intents from operator summary blockers", async () => {
+    const app = await buildApp(new FakeFundingReadinessRepository([
+      ...rows,
+      baseRow({
+        fundingIntentId: "intent-cancelled",
+        userId: "user-cancelled",
+        aggregateFundingStatus: "CANCELLED",
+        routeLegStatus: "LEG_CANCELLED",
+        bridgeStatus: "NOT_SUBMITTED",
+        destinationStatus: "NOT_CONFIRMED",
+        venueCreditStatus: "NOT_CONFIRMED",
+        readyToTrade: false,
+        auditEventIds: ["audit-cancelled"]
+      })
+    ]));
+    const adminToken = app.jwt.sign({ userId: "admin-1", role: "ADMIN" });
+    const response = await app.inject({
+      method: "GET",
+      url: "/admin/funding/readiness/summary",
+      headers: { authorization: `Bearer ${adminToken}` }
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().summary.totalFundingIntents).toBe(4);
+    expect(response.json().summary.failed).toBe(0);
+    expect(response.json().summary.rows.map((row: any) => row.fundingIntentId)).not.toContain("intent-cancelled");
+    expect(response.json().summary.blockedRows.failed).toHaveLength(0);
+    await app.close();
+  });
+
   it("documents the implemented admin funding readiness surface in OpenAPI", async () => {
     const openApi = await readFile(new URL("../docs/api/openapi.yaml", import.meta.url), "utf8");
     expect(openApi).toContain("Admin Funding Readiness");
