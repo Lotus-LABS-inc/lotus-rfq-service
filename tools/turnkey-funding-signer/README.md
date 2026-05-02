@@ -2,7 +2,12 @@
 
 Local-only operator page for signing a Lotus funding route with the user's Turnkey browser session.
 
-This app does not use backend Turnkey credentials, does not export keys, and does not ask the backend to sign. It fetches a quoted funding route, signs and broadcasts the LI.FI Solana transaction through Turnkey Wallet Kit in the browser, then submits the resulting Solana signature to Lotus.
+This app does not use backend Turnkey credentials, does not export keys, and does not ask the backend to sign. It fetches a quoted funding route, signs with the user's Turnkey browser session, broadcasts through the user-side wallet flow, then submits the resulting transaction hash/signature to Lotus.
+
+Supported route types:
+
+- LI.FI Solana routes: signs the unsigned Solana transaction and broadcasts through the configured Solana RPC.
+- Direct same-chain EVM routes, including BNB/BSC USDT: submits the EVM transfer through Turnkey Wallet Kit and records the returned transaction hash.
 
 ## Setup
 
@@ -11,7 +16,7 @@ This app does not use backend Turnkey credentials, does not export keys, and doe
    - `VITE_TURNKEY_ORGANIZATION_ID`
    - `VITE_TURNKEY_AUTH_PROXY_CONFIG_ID`
    - `VITE_TURNKEY_REQUIRED_SUB_ORG_ID=94b3ca90-5489-4d0b-9a1f-e9e71ba20ffb`
-   - `VITE_SOLANA_RPC_URL`
+   - `VITE_SOLANA_RPC_URL` for Solana routes only
 3. Run:
 
 ```powershell
@@ -41,11 +46,9 @@ For current email-backed tests, the only approved Turnkey sub-organization is:
 
 The signer refuses to sign if Wallet Kit authenticates into any other sub-organization.
 
-## Current Polymarket Test Values
+## Funding Route Values
 
-- Funding intent: `14a65f3c-2165-4101-9e4e-7ea437a32a46`
-- Route leg: `c5d7216e-8dff-4910-ae3c-7e6505dd6ec1`
-- Source address: `DhZs33FsdP6JiuKjqfiQx9E4jNauHPq63ehUVePZXLRi`
+Paste the funding intent id and route leg id from the current live smoke. The app intentionally does not ship stale default route IDs.
 
 After the transaction broadcasts, the app calls:
 
@@ -53,4 +56,4 @@ After the transaction broadcasts, the app calls:
 POST /funding/intents/:fundingIntentId/submit
 ```
 
-with the `routeLegId` and Solana transaction signature.
+with the `routeLegId` and transaction hash/signature.

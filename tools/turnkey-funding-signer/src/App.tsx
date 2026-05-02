@@ -3,12 +3,12 @@ import { KeyFormat, useTurnkey } from "@turnkey/react-wallet-kit";
 import { getFundingIntent, quoteFundingIntent, submitFundingTxHash } from "./api";
 import type { FundingIntentResponse, FundingRouteLegResponse, TurnkeyWalletAccountLike, TurnkeyWalletLike } from "./types";
 
-const DEFAULT_INTENT_ID = "14a65f3c-2165-4101-9e4e-7ea437a32a46";
-const DEFAULT_ROUTE_LEG_ID = "c5d7216e-8dff-4910-ae3c-7e6505dd6ec1";
+const DEFAULT_INTENT_ID = "";
+const DEFAULT_ROUTE_LEG_ID = "";
 const DEFAULT_REQUIRED_SUB_ORG_ID = "94b3ca90-5489-4d0b-9a1f-e9e71ba20ffb";
 const DEFAULT_SOLANA_RPC_URL = "https://solana-rpc.publicnode.com";
 const SOLANA_TRANSACTION_TYPE = "TRANSACTION_TYPE_SOLANA";
-type RouteSigningKind = "SOLANA" | "EVM";
+type RouteSigningKind = "SOLANA" | "EVM" | "UNKNOWN";
 
 type StepState = "idle" | "loading" | "ready" | "signing" | "submitted" | "error";
 
@@ -170,6 +170,9 @@ const findMatchingRouteAccount = (
   if (routeKind === "SOLANA") {
     return findMatchingSolanaAccount(wallets, sourceWalletAddress);
   }
+  if (routeKind === "UNKNOWN") {
+    return null;
+  }
   const accounts = wallets.flatMap((wallet) => wallet.accounts ?? []);
   const normalizedSource = normalizeComparableAddress(sourceWalletAddress);
   if (!normalizedSource) {
@@ -213,8 +216,12 @@ const selectPreferredLeg = (response: FundingIntentResponse, preferredRouteLegId
   return preferred ?? response.routeLegs[0] ?? null;
 };
 
-const routeSigningKind = (leg: FundingRouteLegResponse | null): RouteSigningKind =>
-  leg?.routeProvider === "DIRECT_TRANSFER" ? "EVM" : "SOLANA";
+const routeSigningKind = (leg: FundingRouteLegResponse | null): RouteSigningKind => {
+  if (!leg) {
+    return "UNKNOWN";
+  }
+  return leg.routeProvider === "DIRECT_TRANSFER" ? "EVM" : "SOLANA";
+};
 
 const evmCaip2 = (chainId: number | undefined): string => `eip155:${chainId ?? 1}`;
 
@@ -276,7 +283,7 @@ export function App() {
     && session
     && sessionOrgMatches
     && jwt.trim()
-    && (signingKind === "EVM" || rpcUrl.trim())
+    && (signingKind === "EVM" || (signingKind === "SOLANA" && rpcUrl.trim()))
   );
   const canExport = Boolean(session && sessionOrgMatches && matchingAccount);
   const signingBlockers = [
@@ -417,7 +424,7 @@ export function App() {
 
   const signBroadcastAndSubmit = async () => {
     if (!selectedLeg?.routeQuote.transactionRequest?.data || !matchingAccount) {
-      setMessage("Load the route and sign into the matching Turnkey Solana wallet first.");
+      setMessage("Load the route and sign into the matching Turnkey wallet first.");
       setStep("error");
       return;
     }
@@ -541,15 +548,17 @@ export function App() {
               autoComplete="off"
             />
           </label>
-          <label>
-            Solana RPC URL
-            <input
-              value={rpcUrl}
-              onChange={(event) => setRpcUrl(event.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </label>
+          {signingKind === "SOLANA" ? (
+            <label>
+              Solana RPC URL
+              <input
+                value={rpcUrl}
+                onChange={(event) => setRpcUrl(event.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+          ) : null}
           <button type="submit" disabled={!canFetch || step === "loading"}>
             {step === "loading" ? "Loading" : "Fetch route"}
           </button>
@@ -593,6 +602,10 @@ export function App() {
         <h2>Signing check</h2>
         <dl className="details">
           <div>
+            <dt>Signing path</dt>
+            <dd>{signingKind === "UNKNOWN" ? "route not loaded" : signingKind === "EVM" ? "EVM direct transfer" : "Solana transaction"}</dd>
+          </div>
+          <div>
             <dt>Source wallet</dt>
             <dd>{intent?.sourceWalletAddress ?? "route not loaded"}</dd>
           </div>
@@ -620,10 +633,12 @@ export function App() {
                 : "none"}
             </dd>
           </div>
-          <div>
-            <dt>RPC</dt>
-            <dd>{rpcUrl}</dd>
-          </div>
+          {signingKind === "SOLANA" ? (
+            <div>
+              <dt>RPC</dt>
+              <dd>{rpcUrl}</dd>
+            </div>
+          ) : null}
         </dl>
         {signingBlockers.length > 0 ? (
           <div className="blockers" role="status" aria-live="polite">
