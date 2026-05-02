@@ -245,6 +245,12 @@ Execution readiness is separate from funding and withdrawal readiness.
 | `POLYMARKET_FUNDER_ADDRESS` | Optional | `0x1234...abcd` | No | Required only when signer and funder differ. |
 | `POLYMARKET_TICK_SIZE` | Optional | `0.01` | No | Must match market tick size when used. |
 | `POLYMARKET_NEG_RISK` | Optional | `false` | No | Must match market risk mode. |
+| `LIMITLESS_EXECUTION_MODE` | Yes | `disabled` | No | Set to `backend_signer` only after Limitless SDK signing review. |
+| `LIMITLESS_LIVE_EXECUTION_ENABLED` | Yes | `false` | No | Must remain false until Limitless live-submit and settlement evidence review. |
+| `LIMITLESS_EXECUTION_PRIVATE_KEY` | If live Limitless submit enabled | `<secret>` | Yes | Server-side only; do not configure before explicit backend-signer approval. |
+| `OPINION_LIVE_EXECUTION_ENABLED` | Yes | `false` | No | Private beta backend submission remains disabled; user-signed backend relay only after builder-mode relay is implemented and reviewed. |
+| `MYRIAD_LIVE_EXECUTION_ENABLED` | Yes | `false` | No | Private beta backend submission remains disabled; user-signed flow only. |
+| `PREDICT_FUN_LIVE_EXECUTION_ENABLED` | Yes | `false` | No | Private beta backend submission remains disabled until OAuth signed-order relay, cancel/fill/status, and settlement semantics are implemented and reviewed. |
 
 Polymarket V2 migration notes:
 

@@ -33,6 +33,13 @@ export interface NormalizedVenueError {
   retryable: boolean;
 }
 
+export type ExecutionSigningModel =
+  | "BACKEND_SIGNER"
+  | "USER_SIGNED"
+  | "USER_SIGNED_BACKEND_RELAY"
+  | "DELEGATED_BACKEND_SIGNER"
+  | "NOT_SUPPORTED";
+
 export interface ExecutionVenueAdapter {
   readonly venue: string;
   prepareOrder(leg: ExecutionLegV0): Promise<PreparedVenueOrder>;

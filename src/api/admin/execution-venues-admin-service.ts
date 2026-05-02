@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  getLimitlessExecutionAdapterEnvStatus,
   getPolymarketExecutionAdapterV2EnvStatus,
+  type ExecutionSigningModel,
+  type LimitlessExecutionAdapterEnvStatus,
   type PolymarketExecutionAdapterV2EnvStatus
 } from "../../execution-system/index.js";
 
@@ -13,8 +16,12 @@ export type ExecutionVenueOperationalStatus =
 
 export interface ExecutionVenueReadinessSummary {
   venue: ExecutionVenue;
-  adapter: "PolymarketExecutionAdapterV2" | "NOT_IMPLEMENTED";
-  structuralReadiness: PolymarketExecutionAdapterV2EnvStatus["readinessState"] | "NOT_CONFIGURED";
+  adapter: "PolymarketExecutionAdapterV2" | "LimitlessExecutionAdapter" | "NOT_IMPLEMENTED";
+  executionSigningModel: ExecutionSigningModel;
+  structuralReadiness:
+    | PolymarketExecutionAdapterV2EnvStatus["readinessState"]
+    | LimitlessExecutionAdapterEnvStatus["readinessState"]
+    | "NOT_CONFIGURED";
   operationalStatus: ExecutionVenueOperationalStatus;
   marketRoutingCoverage: "COVERED_BY_MATCHING" | "UNKNOWN";
   liveSubmissionSupported: boolean;
@@ -78,6 +85,9 @@ export class ExecutionVenuesAdminService {
     if (!isExecutionVenue(venue)) {
       throw new ExecutionVenueNotFoundError(venue);
     }
+    if (venue === "LIMITLESS") {
+      return this.getLimitlessVenue();
+    }
     if (venue !== "POLYMARKET") {
       return this.getFailClosedVenue(venue);
     }
@@ -87,6 +97,7 @@ export class ExecutionVenuesAdminService {
     return {
       venue: "POLYMARKET",
       adapter: "PolymarketExecutionAdapterV2",
+      executionSigningModel: "BACKEND_SIGNER",
       structuralReadiness: adapterStatus.readinessState,
       operationalStatus,
       marketRoutingCoverage: "COVERED_BY_MATCHING",
@@ -105,10 +116,48 @@ export class ExecutionVenuesAdminService {
     };
   }
 
-  private getFailClosedVenue(venue: Exclude<ExecutionVenue, "POLYMARKET">): ExecutionVenueReadinessSummary {
+  private getLimitlessVenue(): ExecutionVenueReadinessSummary {
+    const adapterStatus = getLimitlessExecutionAdapterEnvStatus(this.env);
+    const operationalStatus = this.resolveLimitlessOperationalStatus(adapterStatus);
+    const blockers = this.limitlessBlockers(adapterStatus);
+    return {
+      venue: "LIMITLESS",
+      adapter: "LimitlessExecutionAdapter",
+      executionSigningModel: adapterStatus.executionSigningModel,
+      structuralReadiness: adapterStatus.readinessState,
+      operationalStatus,
+      marketRoutingCoverage: "COVERED_BY_MATCHING",
+      liveSubmissionSupported: true,
+      liveExecutionEnabled: adapterStatus.liveExecutionEnabled,
+      featureFlagSelected: adapterStatus.featureFlagSelected,
+      host: this.env.LIMITLESS_BASE_URL ?? null,
+      chainId: this.env.LIMITLESS_CHAIN_ID ?? this.env.LIMITLESS_FUNDING_PREFERRED_CHAIN_ID ?? null,
+      requiredEnvPresent: adapterStatus.requiredEnvPresent,
+      missingEnv: adapterStatus.missingEnv,
+      dryRunRequiredEnvPresent: adapterStatus.dryRunRequiredEnvPresent,
+      missingDryRunEnv: adapterStatus.missingDryRunEnv,
+      credentialsServerSideOnly: true,
+      lastHarnessAttempt: {
+        artifactPresent: false,
+        generatedAt: null,
+        mode: null,
+        submitted: null,
+        errorCode: null,
+        errorStatus: null,
+        errorMessage: null,
+        blockers,
+        warnings: []
+      },
+      operatorMessage: this.limitlessOperatorMessage(operationalStatus, adapterStatus)
+    };
+  }
+
+  private getFailClosedVenue(venue: Exclude<ExecutionVenue, "POLYMARKET" | "LIMITLESS">): ExecutionVenueReadinessSummary {
+    const executionSigningModel = this.userSignedVenueModel(venue);
     return {
       venue,
       adapter: "NOT_IMPLEMENTED",
+      executionSigningModel,
       structuralReadiness: "NOT_CONFIGURED",
       operationalStatus: "NOT_CONFIGURED",
       marketRoutingCoverage: "COVERED_BY_MATCHING",
@@ -130,10 +179,10 @@ export class ExecutionVenuesAdminService {
         errorCode: null,
         errorStatus: null,
         errorMessage: null,
-        blockers: [`${venue} live execution adapter is not implemented.`],
+        blockers: [`${venue} backend live execution is not enabled for signing model ${executionSigningModel}.`],
         warnings: []
       },
-      operatorMessage: `${venue} has market/routing coverage, but no reviewed live execution adapter is enabled. Orders must fail closed instead of submitting to this venue.`
+      operatorMessage: `${venue} has market/routing coverage, but requires a reviewed ${executionSigningModel} execution flow before live backend submission. Orders must fail closed instead of submitting to this venue.`
     };
   }
 
@@ -164,6 +213,64 @@ export class ExecutionVenuesAdminService {
       return "Polymarket V2 dry-run path is configured, but live execution is disabled.";
     }
     return "Polymarket V2 adapter is not fully configured.";
+  }
+
+  private resolveLimitlessOperationalStatus(
+    adapterStatus: LimitlessExecutionAdapterEnvStatus
+  ): ExecutionVenueOperationalStatus {
+    if (adapterStatus.readinessState === "LIVE_READY") {
+      return "STRUCTURALLY_READY";
+    }
+    if (adapterStatus.readinessState === "LIVE_DISABLED") {
+      return "LIVE_DISABLED";
+    }
+    return "NOT_CONFIGURED";
+  }
+
+  private limitlessBlockers(adapterStatus: LimitlessExecutionAdapterEnvStatus): string[] {
+    const blockers: string[] = [];
+    if (!adapterStatus.featureFlagSelected) {
+      blockers.push("LIMITLESS_EXECUTION_MODE must be backend_signer before this adapter is selected.");
+    }
+    if (!adapterStatus.dryRunRequiredEnvPresent) {
+      blockers.push(`Missing Limitless dry-run env: ${adapterStatus.missingDryRunEnv.join(", ")}.`);
+    }
+    if (!adapterStatus.liveExecutionEnabled) {
+      blockers.push("LIMITLESS_LIVE_EXECUTION_ENABLED is false.");
+    }
+    if (adapterStatus.liveExecutionEnabled && !adapterStatus.requiredEnvPresent) {
+      blockers.push(`Missing Limitless live env: ${adapterStatus.missingEnv.join(", ")}.`);
+    }
+    blockers.push("Settlement evidence reader is not implemented yet; live fills must remain operator-reviewed.");
+    return blockers;
+  }
+
+  private limitlessOperatorMessage(
+    status: ExecutionVenueOperationalStatus,
+    adapterStatus: LimitlessExecutionAdapterEnvStatus
+  ): string {
+    if (!adapterStatus.featureFlagSelected) {
+      return "Limitless backend-signer adapter is scaffolded but not selected. Set LIMITLESS_EXECUTION_MODE=backend_signer only after SDK signing and settlement evidence are reviewed.";
+    }
+    if (status === "STRUCTURALLY_READY") {
+      return "Limitless backend-signer adapter is structurally ready, but live fills still require reviewed settlement evidence before production enablement.";
+    }
+    if (status === "LIVE_DISABLED") {
+      return "Limitless dry-run path is configured, but live execution is disabled.";
+    }
+    return "Limitless backend-signer adapter is not fully configured.";
+  }
+
+  private userSignedVenueModel(
+    venue: Exclude<ExecutionVenue, "POLYMARKET" | "LIMITLESS">
+  ): ExecutionSigningModel {
+    if (venue === "OPINION" || venue === "PREDICT_FUN") {
+      return "USER_SIGNED_BACKEND_RELAY";
+    }
+    if (venue === "MYRIAD") {
+      return "USER_SIGNED";
+    }
+    return "NOT_SUPPORTED";
   }
 
   private async readPolymarketHarnessArtifact(): Promise<ExecutionVenueReadinessSummary["lastHarnessAttempt"]> {

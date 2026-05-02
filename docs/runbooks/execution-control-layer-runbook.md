@@ -114,13 +114,19 @@ Current scope:
 - no live order submission
 - no credential or secret exposure
 - venue entries for `POLYMARKET`, `LIMITLESS`, `OPINION`, `MYRIAD`, and `PREDICT_FUN`
-- non-Polymarket venues currently report market/routing coverage but fail closed for live submission until reviewed execution adapters exist
+- venue-by-venue hybrid execution model:
+  - `POLYMARKET`: `BACKEND_SIGNER` through `PolymarketExecutionAdapterV2`
+  - `LIMITLESS`: `BACKEND_SIGNER` scaffold through `LimitlessExecutionAdapter`, live flag default false
+  - `OPINION`: `USER_SIGNED_BACKEND_RELAY`; builder mode can relay user-signed orders, but Lotus must not sign Safe/user-wallet actions
+  - `PREDICT_FUN`: `USER_SIGNED_BACKEND_RELAY`; OAuth order API can relay signed orders when access is enabled, but Lotus must not sign orders with its own key
+  - `MYRIAD`: `USER_SIGNED` until official delegated/backend signing is reviewed
 
 Readiness fields:
 - `marketRoutingCoverage`: whether Lotus has matching/routing coverage for the venue family
 - `liveSubmissionSupported`: whether a reviewed live execution adapter exists for the venue
+- `executionSigningModel`: `BACKEND_SIGNER`, `USER_SIGNED`, `USER_SIGNED_BACKEND_RELAY`, `DELEGATED_BACKEND_SIGNER`, or `NOT_SUPPORTED`
 - `adapter`: concrete live execution adapter, or `NOT_IMPLEMENTED`
-- `structuralReadiness`: adapter/env readiness from the Polymarket V2 adapter config
+- `structuralReadiness`: adapter/env readiness from the selected venue adapter config
 - `operationalStatus`: operator-facing status derived from adapter readiness plus the latest harness artifact
 - `liveExecutionEnabled`: whether the live-execution env flag is enabled
 - `featureFlagSelected`: whether `POLYMARKET_EXECUTION_MODE=v2` is selected
@@ -142,9 +148,18 @@ Current Polymarket interpretation:
 
 Non-Polymarket interpretation:
 - `marketRoutingCoverage=COVERED_BY_MATCHING` means Lotus can surface venue market coverage for matching/routing review
-- `liveSubmissionSupported=false` means Lotus must not submit orders to that venue from the backend
-- `operationalStatus=NOT_CONFIGURED` is the expected private-beta status until a venue-specific execution adapter, smoke harness, settlement proof, and operator signoff are implemented
+- `LIMITLESS` may report `liveSubmissionSupported=true` only for the backend-signer adapter scaffold; `LIMITLESS_LIVE_EXECUTION_ENABLED=false` remains the default
+- `OPINION` and `PREDICT_FUN` may use backend relay only for user-signed order payloads after route-specific implementation, auth, cancel/fill/status reads, and settlement evidence are reviewed
+- `MYRIAD` remains `USER_SIGNED`; Lotus may prepare frontend-safe signing instructions later, but backend live submission must fail closed
+- `operationalStatus=NOT_CONFIGURED` is expected until a venue-specific execution adapter, smoke harness, settlement proof, and operator signoff are implemented
 - do not treat funding readiness or market coverage as live execution readiness
+
+Limitless backend-signer boundary:
+- `LIMITLESS_EXECUTION_MODE=backend_signer` selects the adapter scaffold
+- `LIMITLESS_LIVE_EXECUTION_ENABLED=true` is required before submit attempts
+- `LIMITLESS_BASE_URL`, `LIMITLESS_API_KEY`, and `LIMITLESS_EXECUTION_PRIVATE_KEY` are server-only live-submit inputs
+- `npm run execution:limitless-live-submit-harness` writes a redacted operator checklist artifact and remains blocked unless `LIMITLESS_LIVE_SUBMIT_HARNESS_ENABLED=true`, the operator confirmation string, and tiny order envs are configured
+- current Limitless settlement evidence is intentionally not auto-verified by the adapter; production enablement still needs a reviewed fill/status/settlement reader and live-submit harness
 
 Polymarket V2 dry-run boundary:
 - the `clobV2DryRun` metadata and dry-run signing fixture are Lotus-internal validation artifacts

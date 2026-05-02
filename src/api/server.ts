@@ -214,10 +214,12 @@ import {
   ExecutionSystemSubmissionHandler,
   ExecutionVenueAdapterRegistry,
   FallbackPolicyService,
+  LimitlessExecutionAdapter,
   getMonetizationPolicyFromEnv,
   getPolymarketExecutionAdapterV2EnvStatus,
   GhostFillProtectionService,
   PolymarketExecutionAdapterV2,
+  buildLimitlessExecutionAdapterConfigFromEnv,
   buildPolymarketExecutionAdapterV2ConfigFromEnv,
   RepositoryExecutionAuditSink,
   ScopeAuthorityLaneResolver,
@@ -986,6 +988,11 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     if (process.env.POLYMARKET_EXECUTION_MODE === "v2") {
       adapterRegistry.register(new PolymarketExecutionAdapterV2(
         buildPolymarketExecutionAdapterV2ConfigFromEnv(process.env)
+      ));
+    }
+    if (process.env.LIMITLESS_EXECUTION_MODE === "backend_signer") {
+      adapterRegistry.register(new LimitlessExecutionAdapter(
+        buildLimitlessExecutionAdapterConfigFromEnv(process.env)
       ));
     }
     const preflightDeps = alwaysHealthyPreflightDeps(laneGate);
