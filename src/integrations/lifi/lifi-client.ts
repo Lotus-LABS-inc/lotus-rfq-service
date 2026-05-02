@@ -261,5 +261,11 @@ const tokenDecimals = (token: string): number | null => {
   if (/^0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913$/i.test(normalized)) {
     return 6;
   }
+  if (/^0x55d398326f99059fF775485246999027B3197955$/i.test(normalized)) {
+    return 18;
+  }
+  if (/^0x8d0D000Ee44948FC98c9B98A4FA4921476f08B0d$/i.test(normalized)) {
+    return 18;
+  }
   return null;
 };
