@@ -198,7 +198,6 @@ export const verifyPhase3ASchema = async (pool: Pool): Promise<void> => {
 
 export const applyMigrations = async (pool: Pool): Promise<void> => {
   const migrationDirs = [
-    path.resolve(process.cwd(), "infra", "migrations"),
     path.resolve(process.cwd(), "sql", "migrations")
   ];
 

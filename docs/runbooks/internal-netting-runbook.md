@@ -92,7 +92,7 @@ npm run db:verify:supabase
 ```
 
 Then verify:
-1. `schema_migrations` contains the latest `infra/migrations` and `sql/migrations` filenames.
+1. `schema_migrations` contains the latest `sql/migrations` filenames. All SQL migrations live in `sql/migrations`.
 2. Latest internal-netting migrations are present, including:
    - `sql/migrations/2026_03_10_create_combo_netting_tables.sql`
    - `sql/migrations/2026_03_10_create_combo_netting_attempts.sql`

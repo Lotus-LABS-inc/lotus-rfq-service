@@ -33,7 +33,6 @@ const logger = pino({ level: "silent" });
 
 const applyMigrations = async (pool: Pool): Promise<void> => {
   const migrationDirs = [
-    path.resolve(process.cwd(), "infra", "migrations"),
     path.resolve(process.cwd(), "sql", "migrations"),
   ];
 

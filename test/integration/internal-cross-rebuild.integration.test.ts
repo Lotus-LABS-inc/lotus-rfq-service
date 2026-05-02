@@ -37,7 +37,7 @@ const applyMigrations = async (pool: Pool): Promise<void> => {
     return;
   }
 
-  for (const migrationsDir of [path.resolve(process.cwd(), "infra", "migrations"), path.resolve(process.cwd(), "sql", "migrations")]) {
+  for (const migrationsDir of [path.resolve(process.cwd(), "sql", "migrations")]) {
     const files = (await readdir(migrationsDir)).filter((name) => name.endsWith(".sql")).sort((a, b) => a.localeCompare(b));
     for (const file of files) {
       const sql = await readFile(path.join(migrationsDir, file), "utf8");

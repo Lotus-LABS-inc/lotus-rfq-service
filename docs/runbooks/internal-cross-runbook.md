@@ -185,7 +185,7 @@ npm run db:verify:supabase
 ```
 
 Then verify:
-1. `schema_migrations` contains the latest `infra/migrations` and `sql/migrations` filenames.
+1. `schema_migrations` contains the latest `sql/migrations` filenames. All SQL migrations live in `sql/migrations`.
 2. Latest internal-cross migrations are present, including:
    - `sql/migrations/2026_03_06_create_internal_trades.sql`
    - `sql/migrations/2026_03_10_create_internal_cross_admin_tables.sql`

@@ -26,7 +26,6 @@ export const loadRepoEnv = (repoRoot) => {
 };
 
 export const migrationDirsForRepo = (repoRoot) => [
-  path.join(repoRoot, "infra", "migrations"),
   path.join(repoRoot, "sql", "migrations")
 ];
 
