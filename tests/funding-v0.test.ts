@@ -1837,6 +1837,7 @@ describe("Funding v0 domain", () => {
     expect(normalizeLifiStatus({ status: "DONE", substatus: "PARTIAL" })).toBe("DONE_PARTIAL");
     expect(toLifiChain("SOLANA")).toBe("SOL");
     expect(toLifiChain("POLYGON")).toBe("137");
+    expect(toLifiChain("BASE")).toBe("8453");
     expect(toBaseUnitAmount("1.25", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")).toBe("1250000");
     expect(fromBaseUnitAmount("991788", "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")).toBe("0.991788");
     expect(fromBaseUnitAmount("1991998", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")).toBe("1.991998");
@@ -1870,11 +1871,11 @@ describe("Funding v0 domain", () => {
     await expect(client.status({
       txHash: "2gU42AjTDTBiSeN5xcF2S3kRayRC3W6AeqnbYv7U5ndhBeF27obhjLSPraxX4W9LodeWQ8LmyPRHKwKJcqAU6y3V",
       fromChain: "SOLANA",
-      toChain: "POLYGON"
+      toChain: "BASE"
     })).resolves.toMatchObject({ status: "DONE_COMPLETED" });
 
     expect(requestedUrl?.searchParams.get("fromChain")).toBe("SOL");
-    expect(requestedUrl?.searchParams.get("toChain")).toBe("137");
+    expect(requestedUrl?.searchParams.get("toChain")).toBe("8453");
   });
 
   it("gates execution preflight on exact ready funding when enabled", async () => {

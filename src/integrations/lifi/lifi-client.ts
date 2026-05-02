@@ -149,6 +149,7 @@ export const toLifiChain = (chain: string): string => {
   const normalized = chain.trim().toUpperCase();
   if (normalized === "SOLANA") return "SOL";
   if (normalized === "POLYGON") return "137";
+  if (normalized === "BASE") return "8453";
   if (normalized === "BSC" || normalized === "BNB" || normalized === "BNB_SMART_CHAIN") return "56";
   return chain;
 };
