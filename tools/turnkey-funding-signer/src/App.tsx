@@ -5,6 +5,7 @@ import {
   getFundingIntent,
   getWithdrawalIntent,
   quoteFundingIntent,
+  quoteStandaloneBridge,
   quoteWithdrawalIntent,
   submitFundingTxHash,
   submitWithdrawalTxHash
@@ -16,6 +17,13 @@ const DEFAULT_ROUTE_LEG_ID = "";
 const DEFAULT_REQUIRED_SUB_ORG_ID = "94b3ca90-5489-4d0b-9a1f-e9e71ba20ffb";
 const DEFAULT_SOLANA_RPC_URL = "https://solana-rpc.publicnode.com";
 const DEFAULT_BSC_RPC_URL = "https://bsc-dataseed.binance.org";
+const DEFAULT_BRIDGE_SOURCE_CHAIN = "BSC";
+const DEFAULT_BRIDGE_DESTINATION_CHAIN = "SOLANA";
+const DEFAULT_BRIDGE_SOURCE_TOKEN = "0x55d398326f99059fF775485246999027B3197955";
+const DEFAULT_BRIDGE_DESTINATION_TOKEN = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const DEFAULT_BRIDGE_SOURCE_AMOUNT = "5.8";
+const DEFAULT_BRIDGE_SOURCE_WALLET = "0xD1059eC5F635712f6dcEAd569a41dFD7970DAffa";
+const DEFAULT_BRIDGE_DESTINATION_WALLET = "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc";
 const SOLANA_TRANSACTION_TYPE = "TRANSACTION_TYPE_SOLANA";
 const ETHEREUM_TRANSACTION_TYPE = "TRANSACTION_TYPE_ETHEREUM";
 type RouteSigningKind = "SOLANA" | "EVM" | "UNKNOWN";
@@ -244,6 +252,15 @@ const padHexWord = (value: string): string => value.toLowerCase().replace(/^0x/i
 const buildErc20ApproveData = (spender: string, amount: bigint): string =>
   `0x095ea7b3${padHexWord(spender)}${amount.toString(16).padStart(64, "0")}`;
 
+const sourceTokenDecimals = (leg: FundingRouteLegResponse): number => {
+  const chain = leg.sourceChain.toUpperCase();
+  const token = leg.sourceToken.toLowerCase();
+  if (chain === "BSC" && token === DEFAULT_BRIDGE_SOURCE_TOKEN.toLowerCase()) {
+    return 18;
+  }
+  return 6;
+};
+
 const rpcCall = async <T,>(rpcUrl: string, method: string, params: unknown[]): Promise<T> => {
   const response = await fetch(rpcUrl, {
     method: "POST",
@@ -339,6 +356,9 @@ export function App() {
   const [message, setMessage] = useState("Ready.");
   const [rpcUrl, setRpcUrl] = useState(import.meta.env.VITE_SOLANA_RPC_URL || DEFAULT_SOLANA_RPC_URL);
   const [evmRpcUrl, setEvmRpcUrl] = useState(import.meta.env.VITE_BSC_RPC_URL || DEFAULT_BSC_RPC_URL);
+  const [bridgeSourceAmount, setBridgeSourceAmount] = useState(import.meta.env.VITE_STANDALONE_BRIDGE_SOURCE_AMOUNT || DEFAULT_BRIDGE_SOURCE_AMOUNT);
+  const [bridgeSourceWallet, setBridgeSourceWallet] = useState(import.meta.env.VITE_STANDALONE_BRIDGE_SOURCE_WALLET || DEFAULT_BRIDGE_SOURCE_WALLET);
+  const [bridgeDestinationWallet, setBridgeDestinationWallet] = useState(import.meta.env.VITE_STANDALONE_BRIDGE_DESTINATION_WALLET || DEFAULT_BRIDGE_DESTINATION_WALLET);
 
   const requiredSubOrgId = import.meta.env.VITE_TURNKEY_REQUIRED_SUB_ORG_ID || DEFAULT_REQUIRED_SUB_ORG_ID;
   const sessionOrgMatches = session?.organizationId === requiredSubOrgId;
@@ -354,13 +374,16 @@ export function App() {
     [wallets, matchingAccount]
   );
 
-  const canFetch = jwt.trim().length > 0 && fundingIntentId.trim().length > 0;
+  const standaloneBridgeMode = routeMode === "STANDALONE_BRIDGE";
+  const canFetch = standaloneBridgeMode
+    ? bridgeSourceAmount.trim().length > 0 && bridgeSourceWallet.trim().length > 0 && bridgeDestinationWallet.trim().length > 0
+    : jwt.trim().length > 0 && fundingIntentId.trim().length > 0;
   const canSign = Boolean(
     selectedLeg?.routeQuote.transactionRequest?.data
     && matchingAccount
     && session
     && sessionOrgMatches
-    && jwt.trim()
+    && (standaloneBridgeMode || jwt.trim())
     && ((signingKind === "EVM" && evmRpcUrl.trim()) || (signingKind === "SOLANA" && rpcUrl.trim()))
   );
   const canApprove = Boolean(
@@ -374,7 +397,7 @@ export function App() {
   );
   const canExport = Boolean(session && sessionOrgMatches && matchingAccount);
   const signingBlockers = [
-    !jwt.trim() ? "Lotus user JWT missing." : null,
+    !standaloneBridgeMode && !jwt.trim() ? "Lotus user JWT missing." : null,
     !selectedLeg?.routeQuote.transactionRequest?.data ? "Unsigned transaction missing. Fetch the quoted route first." : null,
     !session ? "Turnkey browser session missing. Click Login." : null,
     session && !sessionOrgMatches ? `Turnkey session org must be ${requiredSubOrgId}.` : null,
@@ -407,19 +430,35 @@ export function App() {
 
   const fetchIntent = async () => {
     if (!canFetch) {
-      setMessage("Paste a Lotus user JWT and funding intent id first.");
+      setMessage(standaloneBridgeMode
+        ? "Fill the standalone bridge amount, source wallet, and destination wallet first."
+        : "Paste a Lotus user JWT and funding intent id first.");
       setStep("error");
       return;
     }
     setStep("loading");
-    setMessage("Fetching funding intent.");
+    setMessage(standaloneBridgeMode ? "Fetching LI.FI standalone bridge quote." : "Fetching funding intent.");
     setIntent(null);
     setSelectedLeg(null);
     setTxSignature("");
     try {
-      const response = routeMode === "WITHDRAWAL"
-        ? await getWithdrawalIntent(jwt.trim(), fundingIntentId.trim())
-        : await getFundingIntent(jwt.trim(), fundingIntentId.trim());
+      const response = standaloneBridgeMode
+        ? await quoteStandaloneBridge({
+          sourceChain: DEFAULT_BRIDGE_SOURCE_CHAIN,
+          destinationChain: DEFAULT_BRIDGE_DESTINATION_CHAIN,
+          sourceTokenAddress: DEFAULT_BRIDGE_SOURCE_TOKEN,
+          destinationTokenAddress: DEFAULT_BRIDGE_DESTINATION_TOKEN,
+          sourceTokenSymbol: "USDT",
+          destinationTokenSymbol: "USDC",
+          sourceAmount: bridgeSourceAmount.trim(),
+          sourceDecimals: 18,
+          destinationDecimals: 6,
+          sourceWalletAddress: bridgeSourceWallet.trim(),
+          destinationWalletAddress: bridgeDestinationWallet.trim()
+        })
+        : routeMode === "WITHDRAWAL"
+          ? await getWithdrawalIntent(jwt.trim(), fundingIntentId.trim())
+          : await getFundingIntent(jwt.trim(), fundingIntentId.trim());
       const nextLeg = selectPreferredLeg(response, routeLegId);
       if (!nextLeg) {
         throw new Error("Route leg was not found on this funding intent.");
@@ -429,7 +468,7 @@ export function App() {
       }
       setIntent(response);
       setSelectedLeg(nextLeg);
-      setMessage(`${routeMode === "WITHDRAWAL" ? "Withdrawal" : "Funding"} route loaded.`);
+      setMessage(`${routeMode === "STANDALONE_BRIDGE" ? "Standalone bridge" : routeMode === "WITHDRAWAL" ? "Withdrawal" : "Funding"} route loaded.`);
       setStep("ready");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Failed to fetch funding intent.");
@@ -541,12 +580,26 @@ export function App() {
       return;
     }
     setStep("signing");
-    setMessage("Refreshing quote immediately before signing.");
+    setMessage(standaloneBridgeMode ? "Refreshing LI.FI standalone bridge quote immediately before signing." : "Refreshing quote immediately before signing.");
     setTxSignature("");
     try {
-      const refreshed = routeMode === "WITHDRAWAL"
-        ? await quoteWithdrawalIntent(jwt.trim(), fundingIntentId.trim())
-        : await quoteFundingIntent(jwt.trim(), fundingIntentId.trim());
+      const refreshed = standaloneBridgeMode
+        ? await quoteStandaloneBridge({
+          sourceChain: DEFAULT_BRIDGE_SOURCE_CHAIN,
+          destinationChain: DEFAULT_BRIDGE_DESTINATION_CHAIN,
+          sourceTokenAddress: DEFAULT_BRIDGE_SOURCE_TOKEN,
+          destinationTokenAddress: DEFAULT_BRIDGE_DESTINATION_TOKEN,
+          sourceTokenSymbol: "USDT",
+          destinationTokenSymbol: "USDC",
+          sourceAmount: bridgeSourceAmount.trim(),
+          sourceDecimals: 18,
+          destinationDecimals: 6,
+          sourceWalletAddress: bridgeSourceWallet.trim(),
+          destinationWalletAddress: bridgeDestinationWallet.trim()
+        })
+        : routeMode === "WITHDRAWAL"
+          ? await quoteWithdrawalIntent(jwt.trim(), fundingIntentId.trim())
+          : await quoteFundingIntent(jwt.trim(), fundingIntentId.trim());
       const freshLeg = selectPreferredLeg(refreshed, "");
       if (!freshLeg?.routeQuote.transactionRequest?.data) {
         throw new Error("Fresh quote did not include an unsigned transaction.");
@@ -605,6 +658,11 @@ export function App() {
         txHash = await broadcastSignedSolanaTransaction(signedTransaction, rpcUrl.trim());
       }
       setTxSignature(txHash);
+      if (standaloneBridgeMode) {
+        setMessage("Standalone bridge broadcast accepted. Track this hash in LI.FI/BscScan; no Lotus backend submit was made.");
+        setStep("submitted");
+        return;
+      }
       setMessage("Broadcast accepted. Submitting tx hash to Lotus.");
       const submitted = routeMode === "WITHDRAWAL"
         ? await submitWithdrawalTxHash(jwt.trim(), fundingIntentId.trim(), freshLeg.routeLegId, txHash)
@@ -640,7 +698,7 @@ export function App() {
     setApprovalTxHash("");
     try {
       const spender = selectedLeg.routeQuote.transactionRequest.to;
-      const approveData = buildErc20ApproveData(spender, toErc20BaseUnits(selectedLeg.sourceAmount, 6));
+      const approveData = buildErc20ApproveData(spender, toErc20BaseUnits(selectedLeg.sourceAmount, sourceTokenDecimals(selectedLeg)));
       const unsignedTransaction = await buildUnsignedEvmTransaction({
         rpcUrl: evmRpcUrl.trim(),
         from: sender,
@@ -695,34 +753,69 @@ export function App() {
             <select value={routeMode} onChange={(event) => setRouteMode(event.target.value as LotusRouteMode)}>
               <option value="FUNDING">Funding intent</option>
               <option value="WITHDRAWAL">Withdrawal intent</option>
+              <option value="STANDALONE_BRIDGE">Standalone bridge-back</option>
             </select>
           </label>
-          <label>
-            User JWT
-            <textarea
-              value={jwt}
-              onChange={(event) => setJwt(event.target.value)}
-              spellCheck={false}
-              autoComplete="off"
-              placeholder="Paste short-lived Lotus user JWT"
-            />
-          </label>
-          <label>
-            {routeMode === "WITHDRAWAL" ? "Withdrawal intent id" : "Funding intent id"}
-            <input
-              value={fundingIntentId}
-              onChange={(event) => setFundingIntentId(event.target.value)}
-              autoComplete="off"
-            />
-          </label>
-          <label>
-            Route leg id
-            <input
-              value={routeLegId}
-              onChange={(event) => setRouteLegId(event.target.value)}
-              autoComplete="off"
-            />
-          </label>
+          {standaloneBridgeMode ? (
+            <>
+              <label>
+                Source amount
+                <input
+                  value={bridgeSourceAmount}
+                  onChange={(event) => setBridgeSourceAmount(event.target.value)}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </label>
+              <label>
+                Source BSC wallet
+                <input
+                  value={bridgeSourceWallet}
+                  onChange={(event) => setBridgeSourceWallet(event.target.value)}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </label>
+              <label>
+                Destination Solana wallet
+                <input
+                  value={bridgeDestinationWallet}
+                  onChange={(event) => setBridgeDestinationWallet(event.target.value)}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              <label>
+                User JWT
+                <textarea
+                  value={jwt}
+                  onChange={(event) => setJwt(event.target.value)}
+                  spellCheck={false}
+                  autoComplete="off"
+                  placeholder="Paste short-lived Lotus user JWT"
+                />
+              </label>
+              <label>
+                {routeMode === "WITHDRAWAL" ? "Withdrawal intent id" : "Funding intent id"}
+                <input
+                  value={fundingIntentId}
+                  onChange={(event) => setFundingIntentId(event.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+              <label>
+                Route leg id
+                <input
+                  value={routeLegId}
+                  onChange={(event) => setRouteLegId(event.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+            </>
+          )}
           {signingKind === "SOLANA" ? (
             <label>
               Solana RPC URL
@@ -746,7 +839,7 @@ export function App() {
             </label>
           ) : null}
           <button type="submit" disabled={!canFetch || step === "loading"}>
-              {step === "loading" ? "Loading" : "Fetch route"}
+              {step === "loading" ? "Loading" : standaloneBridgeMode ? "Fetch bridge quote" : "Fetch route"}
           </button>
         </form>
 

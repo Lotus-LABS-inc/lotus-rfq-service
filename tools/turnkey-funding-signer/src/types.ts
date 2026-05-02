@@ -10,7 +10,7 @@ export interface FundingIntentResponse {
   userSafeMessage: string;
 }
 
-export type LotusRouteMode = "FUNDING" | "WITHDRAWAL";
+export type LotusRouteMode = "FUNDING" | "WITHDRAWAL" | "STANDALONE_BRIDGE";
 
 export interface FundingRouteLegResponse {
   routeLegId: string;

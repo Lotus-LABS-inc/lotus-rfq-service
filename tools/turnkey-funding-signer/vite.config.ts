@@ -17,6 +17,12 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: true,
           rewrite: (path) => path.replace(/^\/lotus-api/, "")
+        },
+        "/lifi-api": {
+          target: "https://li.quest",
+          changeOrigin: true,
+          secure: true,
+          rewrite: (path) => path.replace(/^\/lifi-api/, "")
         }
       }
     }
