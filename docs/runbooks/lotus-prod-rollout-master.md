@@ -276,6 +276,8 @@ Funding prepares venue-ready capital. It does not execute trades.
 | `LIFI_QUOTE_TIMEOUT_MS` | Yes | `10000` | No | Production timeout. |
 | `LIFI_QUOTE_TTL_SECONDS` | Yes | `60` | No | Quote TTL policy. |
 | `FUNDING_LIFI_QUOTES_ENABLED` | Yes | `true` | No | Quote-only can be enabled after review. |
+| `FUNDING_DIRECT_TRANSFER_QUOTES_ENABLED` | Yes | `true` | No | Allows same-chain ERC20 transfer routes when source and venue destination chain/token match; does not bypass venue readiness. |
+| `FUNDING_DIRECT_TRANSFER_QUOTE_TTL_SECONDS` | Yes | `300` | No | Quote TTL policy for direct transfer routes. |
 | `FUNDING_LIVE_SUBMIT_ENABLED` | Yes | `false` | No | Must stay false until live submit approval. |
 | `FUNDING_PREFLIGHT_ENFORCEMENT_ENABLED` | Yes | `false` | No | Must stay false until exact route gates pass. |
 | `FUNDING_VENUE_READINESS_CHECKS_ENABLED` | Yes | `true` | No | Enable only after all configured venue read services are approved. |

@@ -277,9 +277,6 @@ export class FundingService {
   }
 
   public async quoteIntent(userId: string, fundingIntentId: string): Promise<FundingIntentView> {
-    if (!this.config.lifiQuotesEnabled) {
-      throw new FundingError("LIFI_QUOTES_DISABLED", "LI.FI funding quotes are disabled.", 503);
-    }
     const view = await this.getIntent(userId, fundingIntentId);
     const matrix = buildVenueCapabilityMatrix({ env: this.config.env });
     const routeLegs: FundingRouteLeg[] = [];
@@ -294,16 +291,15 @@ export class FundingService {
       if (!sourceTokenAddress) {
         throw new FundingError("SOURCE_CHAIN_UNSUPPORTED", "Source chain is not supported for this venue.", 409);
       }
-      const quote = await this.lifi.quote({
-        fromChain: view.intent.sourceChain,
-        toChain: String(capability.preferredChainId),
-        fromToken: sourceTokenAddress,
-        toToken: capability.preferredTokenAddress,
-        fromAmount: target.targetAmount,
-        fromAddress: view.intent.sourceWalletAddress,
-        toAddress: depositAddress,
-        targetVenue: target.targetVenue
+      const directQuote = buildDirectTransferQuote({
+        intent: view.intent,
+        target,
+        capability,
+        sourceTokenAddress,
+        depositAddress,
+        ...(this.config.env ? { env: this.config.env } : {})
       });
+      const quote = directQuote ?? await this.quoteLifiRoute(view.intent, target, capability, sourceTokenAddress, depositAddress);
       routeLegs.push(buildRouteLeg(view.intent, target, quote));
     }
     await this.repository.replaceRouteLegs(fundingIntentId, routeLegs);
@@ -315,7 +311,7 @@ export class FundingService {
     await this.repository.appendAuditEvent({
       fundingIntentId,
       eventType: "FUNDING_ROUTES_QUOTED",
-      payload: { routeLegCount: routeLegs.length, provider: "LIFI" }
+      payload: { routeLegCount: routeLegs.length, providers: [...new Set(routeLegs.map((leg) => leg.routeProvider))] }
     });
     await this.repository.appendAuditEvent({
       fundingIntentId,
@@ -323,6 +319,28 @@ export class FundingService {
       payload: { routeLegCount: routeLegs.length }
     });
     return this.getIntent(userId, fundingIntentId);
+  }
+
+  private async quoteLifiRoute(
+    intent: FundingIntent,
+    target: FundingTarget,
+    capability: VenueCapability,
+    sourceTokenAddress: string,
+    depositAddress: string
+  ): Promise<FundingRouteQuote> {
+    if (!this.config.lifiQuotesEnabled) {
+      throw new FundingError("LIFI_QUOTES_DISABLED", "LI.FI funding quotes are disabled.", 503);
+    }
+    return this.lifi.quote({
+      fromChain: intent.sourceChain,
+      toChain: String(capability.preferredChainId),
+      fromToken: sourceTokenAddress,
+      toToken: capability.preferredTokenAddress,
+      fromAmount: target.targetAmount,
+      fromAddress: intent.sourceWalletAddress,
+      toAddress: depositAddress,
+      targetVenue: target.targetVenue
+    });
   }
 
   public async submitRouteLeg(userId: string, fundingIntentId: string, input: { routeLegId: string; txHash: string }): Promise<FundingIntentView> {
@@ -340,23 +358,49 @@ export class FundingService {
     if (!/^([A-Za-z0-9]{32,}|0x[a-fA-F0-9]{64})$/.test(input.txHash)) {
       throw new FundingError("ROUTE_SUBMISSION_FAILED", "Funding transaction hash is invalid.", 400);
     }
-    await this.repository.updateRouteLegSubmission({ routeLegId: leg.routeLegId, txHash: input.txHash, status: "LEG_BRIDGE_PENDING" });
+    const submittedStatus: FundingLegState = leg.routeProvider === "DIRECT_TRANSFER" ? "LEG_VENUE_CREDIT_PENDING" : "LEG_BRIDGE_PENDING";
+    await this.repository.updateRouteLegSubmission({ routeLegId: leg.routeLegId, txHash: input.txHash, status: submittedStatus });
+    if (leg.routeProvider === "DIRECT_TRANSFER") {
+      await this.repository.updateRouteLegProviderStatus({
+        routeLegId: leg.routeLegId,
+        status: "LEG_VENUE_CREDIT_PENDING",
+        bridgeStatus: "NOT_APPLICABLE",
+        destinationStatus: "PENDING",
+        venueCreditStatus: "PENDING",
+        providerStatus: {
+          provider: "DIRECT_TRANSFER",
+          txHash: input.txHash,
+          destinationChain: leg.destinationChain,
+          token: leg.destinationToken
+        },
+        errorReason: null
+      });
+    }
     const nextLegStates = view.routeLegs.map((candidate) =>
-      candidate.routeLegId === leg.routeLegId ? "LEG_BRIDGE_PENDING" : candidate.status
+      candidate.routeLegId === leg.routeLegId ? submittedStatus : candidate.status
     );
     await this.repository.updateIntentStatus(fundingIntentId, aggregateFundingStatus(nextLegStates));
     await this.repository.appendAuditEvent({
       fundingIntentId,
       routeLegId: leg.routeLegId,
       eventType: "FUNDING_LEG_SUBMITTED",
-      payload: { txHash: input.txHash, provider: "LIFI" }
+      payload: { txHash: input.txHash, provider: leg.routeProvider }
     });
-    await this.repository.appendAuditEvent({
-      fundingIntentId,
-      routeLegId: leg.routeLegId,
-      eventType: "FUNDING_LEG_BRIDGE_PENDING",
-      payload: { txHash: input.txHash }
-    });
+    if (leg.routeProvider === "DIRECT_TRANSFER") {
+      await this.repository.appendAuditEvent({
+        fundingIntentId,
+        routeLegId: leg.routeLegId,
+        eventType: "FUNDING_LEG_VENUE_CREDIT_PENDING",
+        payload: { txHash: input.txHash, provider: leg.routeProvider }
+      });
+    } else {
+      await this.repository.appendAuditEvent({
+        fundingIntentId,
+        routeLegId: leg.routeLegId,
+        eventType: "FUNDING_LEG_BRIDGE_PENDING",
+        payload: { txHash: input.txHash }
+      });
+    }
     return this.getIntent(userId, fundingIntentId);
   }
 
@@ -367,6 +411,15 @@ export class FundingService {
       const latestTxHash = leg.txHashes.at(-1);
       if (!latestTxHash || leg.status === "LEG_READY_TO_TRADE" || leg.status === "LEG_FAILED") {
         refreshedStates.push(leg.status);
+        continue;
+      }
+      if (leg.routeProvider === "DIRECT_TRANSFER") {
+        if (this.config.venueReadinessChecksEnabled) {
+          const verified = await this.verifyVenueReadiness(userId, fundingIntentId, leg.routeLegId);
+          refreshedStates.push(verified.routeLegs.find((candidate) => candidate.routeLegId === leg.routeLegId)?.status ?? leg.status);
+        } else {
+          refreshedStates.push(leg.status);
+        }
         continue;
       }
       const provider = await this.lifi.status({
@@ -1177,6 +1230,59 @@ const validateWithdrawalSplit = (input: CreateWithdrawalIntentInput): void => {
   }
 };
 
+const buildDirectTransferQuote = (input: {
+  intent: FundingIntent;
+  target: FundingTarget;
+  capability: VenueCapability;
+  sourceTokenAddress: string;
+  depositAddress: string;
+  env?: NodeJS.ProcessEnv;
+}): FundingRouteQuote | null => {
+  if (input.env?.FUNDING_DIRECT_TRANSFER_QUOTES_ENABLED === "false") {
+    return null;
+  }
+  const sourceChainKey = normalizeFundingChain(input.intent.sourceChain);
+  const destinationChainKey = normalizeFundingChain(input.capability.preferredChain);
+  if (!isEvmChain(sourceChainKey, input.intent.sourceChain) || sourceChainKey !== destinationChainKey) {
+    return null;
+  }
+  if (!isEvmAddress(input.intent.sourceWalletAddress) || !isEvmAddress(input.depositAddress) || !isEvmAddress(input.capability.preferredTokenAddress)) {
+    return null;
+  }
+  if (!tokenMatches(input.intent.sourceToken, input.capability.preferredToken, input.sourceTokenAddress, input.capability.preferredTokenAddress)) {
+    return null;
+  }
+  const decimals = directTransferTokenDecimals({
+    chainKey: sourceChainKey,
+    tokenSymbol: input.capability.preferredToken,
+    tokenAddress: input.capability.preferredTokenAddress,
+    ...(input.env ? { env: input.env } : {})
+  });
+  const atomicAmount = decimalToAtomicAmount(input.target.targetAmount, decimals);
+  const expiresAt = new Date(Date.now() + directTransferQuoteTtlSeconds(input.env) * 1000).toISOString();
+  return {
+    provider: "DIRECT_TRANSFER",
+    providerRouteId: `direct-${input.target.fundingTargetId}`,
+    sourceChain: input.intent.sourceChain,
+    sourceToken: input.sourceTokenAddress,
+    sourceAmount: input.target.targetAmount,
+    destinationChain: String(input.capability.preferredChainId),
+    destinationToken: input.capability.preferredTokenAddress,
+    destinationAmountEstimate: input.target.targetAmount,
+    estimatedFees: "0",
+    estimatedTimeSeconds: null,
+    expiresAt,
+    transactionRequest: {
+      from: input.intent.sourceWalletAddress,
+      to: input.capability.preferredTokenAddress,
+      data: encodeErc20Transfer(input.depositAddress, atomicAmount),
+      value: "0",
+      chainId: input.capability.preferredChainId
+    },
+    userSafeSummary: `Direct transfer ${input.target.targetAmount} ${input.capability.preferredToken} on ${input.capability.preferredChain} to ${input.target.targetVenue}.`
+  };
+};
+
 const buildRouteLeg = (intent: FundingIntent, target: FundingTarget, quote: FundingRouteQuote): FundingRouteLeg => {
   const now = new Date().toISOString();
   return {
@@ -1190,7 +1296,7 @@ const buildRouteLeg = (intent: FundingIntent, target: FundingTarget, quote: Fund
     destinationChain: target.targetChain,
     destinationToken: target.targetToken,
     destinationAmountEstimate: quote.destinationAmountEstimate,
-    routeProvider: "LIFI",
+    routeProvider: quote.provider,
     routeQuote: quote,
     txHashes: [],
     providerStatus: {},
@@ -1205,11 +1311,87 @@ const buildRouteLeg = (intent: FundingIntent, target: FundingTarget, quote: Fund
 };
 
 const summarizeQuotes = (routeLegs: readonly FundingRouteLeg[]): Record<string, unknown> => ({
-  provider: "LIFI",
+  providers: [...new Set(routeLegs.map((leg) => leg.routeProvider))],
   routeLegCount: routeLegs.length,
   targetVenues: routeLegs.map((leg) => leg.targetVenue),
   totalEstimatedFees: routeLegs.reduce((sum, leg) => sum.plus(leg.routeQuote.estimatedFees), new Decimal(0)).toString()
 });
+
+const normalizeFundingChain = (value: string): string => {
+  const normalized = value.trim().toUpperCase();
+  if (normalized === "BSC" || normalized === "BNB_SMART_CHAIN" || normalized === "56") {
+    return "BNB";
+  }
+  if (normalized === "ETHEREUM" || normalized === "ETH" || normalized === "1") {
+    return "ETHEREUM";
+  }
+  if (normalized === "POLYGON" || normalized === "MATIC" || normalized === "137") {
+    return "POLYGON";
+  }
+  if (normalized === "BASE" || normalized === "8453") {
+    return "BASE";
+  }
+  return normalized;
+};
+
+const isEvmChain = (chainKey: string, rawChain: string): boolean =>
+  ["BNB", "ETHEREUM", "POLYGON", "BASE"].includes(chainKey) || /^\d+$/.test(rawChain.trim());
+
+const isEvmAddress = (value: string): boolean => /^0x[a-fA-F0-9]{40}$/.test(value.trim());
+
+const tokenMatches = (
+  requestedToken: string,
+  preferredToken: string,
+  sourceTokenAddress: string,
+  preferredTokenAddress: string
+): boolean => {
+  const requested = requestedToken.trim();
+  return requested.toUpperCase() === preferredToken.trim().toUpperCase()
+    || requested.toLowerCase() === sourceTokenAddress.trim().toLowerCase()
+    || requested.toLowerCase() === preferredTokenAddress.trim().toLowerCase();
+};
+
+const directTransferQuoteTtlSeconds = (env?: NodeJS.ProcessEnv): number => {
+  const parsed = Number.parseInt(env?.FUNDING_DIRECT_TRANSFER_QUOTE_TTL_SECONDS ?? "300", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 300;
+};
+
+const directTransferTokenDecimals = (input: {
+  chainKey: string;
+  tokenSymbol: string;
+  tokenAddress: string;
+  env?: NodeJS.ProcessEnv;
+}): number => {
+  const envKey = `${input.chainKey}_${input.tokenSymbol.toUpperCase()}_TOKEN_DECIMALS`;
+  const parsed = Number.parseInt(input.env?.[envKey] ?? "", 10);
+  if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 36) {
+    return parsed;
+  }
+  if (input.chainKey === "BNB" && input.tokenSymbol.toUpperCase() === "USDT") {
+    return 18;
+  }
+  if (/^0x55d398326f99059ff775485246999027b3197955$/i.test(input.tokenAddress)) {
+    return 18;
+  }
+  if (/^(USDC|USDT|USD1)$/i.test(input.tokenSymbol)) {
+    return 6;
+  }
+  return 18;
+};
+
+const decimalToAtomicAmount = (amount: string, decimals: number): string => {
+  const parsed = new Decimal(amount);
+  if (!parsed.isFinite() || parsed.lessThanOrEqualTo(0)) {
+    throw new FundingError("ROUTE_QUOTE_FAILED", "Direct transfer amount is invalid.", 400);
+  }
+  return parsed.times(new Decimal(10).pow(decimals)).toDecimalPlaces(0, Decimal.ROUND_DOWN).toFixed(0);
+};
+
+const encodeErc20Transfer = (recipient: string, atomicAmount: string): string => {
+  const address = recipient.trim().replace(/^0x/i, "").toLowerCase();
+  const amountHex = BigInt(atomicAmount).toString(16);
+  return `0xa9059cbb${address.padStart(64, "0")}${amountHex.padStart(64, "0")}`;
+};
 
 const buildWithdrawalRouteLeg = (intent: WithdrawalIntent, source: WithdrawalSource): WithdrawalRouteLeg => {
   const now = new Date().toISOString();

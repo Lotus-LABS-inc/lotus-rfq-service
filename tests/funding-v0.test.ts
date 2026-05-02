@@ -830,6 +830,54 @@ describe("Funding v0 domain", () => {
     expect(lifi.quoteInputs[0]?.toAddress).not.toBe(env.OPINION_FUNDING_DESTINATION_ADDRESS);
   });
 
+  it("builds same-chain EVM direct transfer quotes without LI.FI", async () => {
+    const repository = new InMemoryFundingRepository();
+    const lifi = new StubLifiProvider();
+    const sourceWalletAddress = "0xD1059eC5F635712f6dcEAd569a41dFD7970DAffa";
+    const depositAddress = "0xEc556c0AcfcF18A424c250B2a19f58b9b8641400";
+    const service = new FundingService(repository, lifi, {
+      lifiQuotesEnabled: false,
+      liveSubmitEnabled: false,
+      env: {
+        ...env,
+        OPINION_FUNDING_DESTINATION_ADDRESS: depositAddress,
+        OPINION_FUNDING_PREFERRED_CHAIN: "BSC",
+        OPINION_FUNDING_PREFERRED_CHAIN_ID: "56",
+        OPINION_FUNDING_PREFERRED_TOKEN: "USDT",
+        OPINION_USDT_TOKEN_ADDRESS: "0x55d398326f99059fF775485246999027B3197955"
+      } as NodeJS.ProcessEnv
+    });
+    const created = await service.createIntent("user-1", {
+      sourceChain: "BSC",
+      sourceToken: "USDT",
+      sourceAmount: "3",
+      sourceWalletAddress,
+      idempotencyKey: "opinion-bsc-direct",
+      targets: [{ targetVenue: "OPINION", targetAmount: "3" }]
+    });
+    const quoted = await service.quoteIntent("user-1", created.intent.fundingIntentId);
+    const leg = quoted.routeLegs[0]!;
+    expect(lifi.quoteInputs).toHaveLength(0);
+    expect(leg.routeProvider).toBe("DIRECT_TRANSFER");
+    expect(leg.routeQuote.provider).toBe("DIRECT_TRANSFER");
+    expect(leg.routeQuote.transactionRequest).toMatchObject({
+      from: sourceWalletAddress,
+      to: "0x55d398326f99059fF775485246999027B3197955",
+      value: "0",
+      chainId: 56
+    });
+    expect(leg.routeQuote.transactionRequest?.data).toContain(depositAddress.toLowerCase().replace(/^0x/, "").padStart(64, "0"));
+    const atomicAmountHex = BigInt("3000000000000000000").toString(16).padStart(64, "0");
+    expect(leg.routeQuote.transactionRequest?.data).toContain(atomicAmountHex);
+    const submitted = await service.submitRouteLeg("user-1", created.intent.fundingIntentId, {
+      routeLegId: leg.routeLegId,
+      txHash: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    });
+    expect(submitted.routeLegs[0]!.status).toBe("LEG_VENUE_CREDIT_PENDING");
+    expect(submitted.routeLegs[0]!.destinationStatus).toBe("PENDING");
+    expect(submitted.intent.status).toBe("ROUTES_SUBMITTED");
+  });
+
   it("creates split-capable withdrawal intents, quotes route legs, and records user-broadcast tx hashes", async () => {
     const repository = new InMemoryFundingRepository();
     repository.ready = true;

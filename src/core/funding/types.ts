@@ -196,8 +196,11 @@ const SafeTransactionRequestSchema = z.object({
 
 export type SafeTransactionRequest = z.infer<typeof SafeTransactionRequestSchema>;
 
+const fundingRouteProviders = ["LIFI", "DIRECT_TRANSFER"] as const;
+export type FundingRouteProvider = (typeof fundingRouteProviders)[number];
+
 const FundingRouteQuoteSchema = z.object({
-  provider: z.literal("LIFI"),
+  provider: z.enum(fundingRouteProviders),
   providerRouteId: z.string().nullable(),
   sourceChain: z.string().min(1),
   sourceToken: z.string().min(1),
@@ -225,7 +228,7 @@ const FundingRouteLegSchema = z.object({
   destinationChain: z.string().min(1),
   destinationToken: z.string().min(1),
   destinationAmountEstimate: z.string(),
-  routeProvider: z.literal("LIFI"),
+  routeProvider: z.enum(fundingRouteProviders),
   routeQuote: FundingRouteQuoteSchema,
   txHashes: z.array(z.string()),
   providerStatus: z.record(z.string(), z.unknown()),

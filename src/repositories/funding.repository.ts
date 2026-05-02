@@ -6,6 +6,7 @@ import type {
   FundingLegState,
   FundingReconciliationRecord,
   FundingRouteLeg,
+  FundingRouteProvider,
   FundingTarget,
   FundingVenue,
   VenueBalanceView,
@@ -61,7 +62,7 @@ interface FundingRouteLegRow {
   destination_chain: string;
   destination_token: string;
   destination_amount_estimate: string;
-  route_provider: "LIFI";
+  route_provider: FundingRouteProvider;
   route_quote: FundingRouteLeg["routeQuote"];
   tx_hashes: string[];
   provider_status: Record<string, unknown>;
@@ -101,7 +102,7 @@ interface FundingAdminReadinessRow {
   destination_chain: string | null;
   destination_token: string | null;
   destination_amount_estimate: string | null;
-  route_provider: "LIFI" | null;
+  route_provider: FundingRouteProvider | null;
   aggregate_funding_status: FundingAggregateState;
   route_leg_status: FundingLegState | null;
   bridge_status: string | null;
@@ -207,7 +208,7 @@ export interface FundingAdminReadinessRecord {
   destinationChain: string | null;
   destinationToken: string | null;
   destinationAmountEstimate: string | null;
-  routeProvider: "LIFI" | null;
+  routeProvider: FundingRouteProvider | null;
   aggregateFundingStatus: FundingAggregateState;
   routeLegStatus: FundingLegState | null;
   bridgeStatus: string | null;

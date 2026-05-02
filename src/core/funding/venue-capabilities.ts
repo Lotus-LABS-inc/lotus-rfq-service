@@ -29,10 +29,21 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
   const opinionPreferredChainId = Number.parseInt(envValue(env, "OPINION_FUNDING_PREFERRED_CHAIN_ID") ?? "137", 10);
   const opinionUsdcAddress = envValue(env, "OPINION_USDC_TOKEN_ADDRESS") ?? polygonUsdcAddress;
   const opinionPreferredToken = envValue(env, "OPINION_FUNDING_PREFERRED_TOKEN") ?? "USDC";
+  const opinionPreferredChainKey = normalizeChainKey(opinionPreferredChain);
   const opinionPreferredTokenAddress = opinionPreferredToken === "USDT"
     ? envValue(env, "OPINION_USDT_TOKEN_ADDRESS") ?? envValue(env, "OPINION_INTERNAL_WITHDRAWAL_EVIDENCE_USDT_ADDRESS") ?? bscUsdtAddress
     : opinionUsdcAddress;
   const opinionSourceTokenAddress = opinionPreferredToken === "USDT" ? solanaUsdtAddress : solanaUsdcAddress;
+  const opinionSourceTokenAddressByChain = {
+    SOLANA: opinionSourceTokenAddress,
+    ...(opinionPreferredToken === "USDT" && (opinionPreferredChainKey === "BNB" || opinionPreferredChainId === 56)
+      ? {
+        BNB: opinionPreferredTokenAddress,
+        BSC: opinionPreferredTokenAddress,
+        "56": opinionPreferredTokenAddress
+      }
+      : {})
+  };
   const myriadPreferredChain = envValue(env, "MYRIAD_FUNDING_PREFERRED_CHAIN") ?? "POLYGON";
   const myriadPreferredChainId = Number.parseInt(envValue(env, "MYRIAD_FUNDING_PREFERRED_CHAIN_ID") ?? "137", 10);
   const myriadUsdcAddress = envValue(env, "MYRIAD_USDC_TOKEN_ADDRESS") ?? polygonUsdcAddress;
@@ -112,7 +123,7 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       preferredChainId: opinionPreferredChainId,
       preferredToken: opinionPreferredToken,
       preferredTokenAddress: opinionPreferredTokenAddress,
-      sourceTokenAddressByChain: { SOLANA: opinionSourceTokenAddress },
+      sourceTokenAddressByChain: opinionSourceTokenAddressByChain,
       supportsWithdrawal: supportsWithdrawal("OPINION"),
       configuredNote: `Opinion funding quote path is configured for Solana ${opinionPreferredToken} to the operator-approved Opinion funding destination.`,
       missingNote: "Set OPINION_FUNDING_DESTINATION_ADDRESS before enabling Opinion funding quotes."
@@ -187,7 +198,7 @@ const configurableCapability = (input: {
   missingNote: string;
 }): VenueCapability => ({
   venue: input.venue,
-  supportedChains: ["SOLANA"],
+  supportedChains: Object.keys(input.sourceTokenAddressByChain),
   supportedTokens: [input.preferredToken ?? "USDC"],
   preferredChain: input.preferredChain,
   preferredToken: input.preferredToken ?? "USDC",
@@ -205,3 +216,14 @@ const configurableCapability = (input: {
   depositAddressConfigured: Boolean(input.depositAddress),
   notes: input.depositAddress ? input.configuredNote : input.missingNote
 });
+
+const normalizeChainKey = (value: string): string => {
+  const normalized = value.trim().toUpperCase();
+  if (normalized === "BSC" || normalized === "BNB_SMART_CHAIN" || normalized === "56") {
+    return "BNB";
+  }
+  if (normalized === "SOL" || normalized === "SOLANA") {
+    return "SOLANA";
+  }
+  return normalized;
+};

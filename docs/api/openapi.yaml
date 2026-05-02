@@ -3899,7 +3899,7 @@ components:
         routeLegId: { type: string }
         fundingIntentId: { type: string }
         targetVenue: { $ref: "#/components/schemas/Venue" }
-        routeProvider: { type: string, enum: [LIFI, MANUAL, TEST] }
+        routeProvider: { type: string, enum: [LIFI, DIRECT_TRANSFER, MANUAL, TEST] }
         txHashes:
           type: array
           items: { type: string }
@@ -4329,7 +4329,7 @@ components:
         destinationChain: { type: string, nullable: true }
         destinationToken: { type: string, nullable: true }
         destinationAmountEstimate: { type: string, nullable: true }
-        routeProvider: { type: string, nullable: true, enum: [LIFI] }
+        routeProvider: { type: string, nullable: true, enum: [LIFI, DIRECT_TRANSFER] }
         routeLegId: { type: string, nullable: true }
         aggregateFundingStatus: { type: string }
         routeLegStatus: { type: string, nullable: true }
