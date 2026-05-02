@@ -29,7 +29,11 @@ const balanceQuerySchema = z.object({
   userId: z.string().min(1),
   fundingIntentId: z.string().min(1),
   routeLegId: z.string().min(1),
-  targetVenue: z.string().min(1).optional()
+  targetVenue: z.string().min(1).optional(),
+  sourceChain: z.string().min(1).optional(),
+  sourceToken: z.string().min(1).optional(),
+  destinationChain: z.string().min(1).optional(),
+  destinationToken: z.string().min(1).optional()
 });
 
 const evidenceQuerySchema = z.object({
@@ -183,6 +187,35 @@ const normalizeDirectBalance = (raw: unknown, responseField: string | undefined)
   return normalizeDirectBalanceFallback(raw);
 };
 
+const normalizeChainEnvKey = (value: string | undefined): string | null => {
+  const normalized = value?.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return normalized && normalized.length > 0 ? normalized : null;
+};
+
+const resolveDirectFundingBalancePath = (
+  venue: Exclude<FundingVenue, "POLYMARKET">,
+  input: OpsFundingBalanceInput,
+  env: NodeJS.ProcessEnv,
+  mode: string
+): string | undefined => {
+  if (mode !== "MULTI_DIRECT_HTTP") {
+    return env[`${venue}_OPS_FUNDING_BALANCE_PATH`]?.trim();
+  }
+
+  const destinationChain = normalizeChainEnvKey(input.destinationChain);
+  const sourceChain = normalizeChainEnvKey(input.sourceChain);
+  const chainCandidates = [destinationChain, sourceChain].filter((chain): chain is string => Boolean(chain));
+  for (const chain of chainCandidates) {
+    const chainSpecificPath = env[`${venue}_OPS_FUNDING_BALANCE_PATH_BY_CHAIN_${chain}`]?.trim() ||
+      env[`${venue}_OPS_FUNDING_BALANCE_PATH_${chain}`]?.trim();
+    if (chainSpecificPath) {
+      return chainSpecificPath;
+    }
+  }
+
+  return undefined;
+};
+
 const encodeErc20BalanceOfCall = (walletAddress: string): string =>
   `0x70a08231${walletAddress.trim().toLowerCase().replace(/^0x/, "").padStart(64, "0")}`;
 
@@ -261,7 +294,7 @@ const readDirectHttpFundingBalance = async (
   fetchImpl: typeof fetch
 ): Promise<PolymarketFundingBalanceReadOutput> => {
   const mode = `${env[`${venue}_OPS_FUNDING_BALANCE_MODE`] ?? "DISABLED"}`.trim().toUpperCase();
-  if (mode !== "DIRECT_HTTP") {
+  if (mode !== "DIRECT_HTTP" && mode !== "MULTI_DIRECT_HTTP") {
     throw new OpsFundingBalanceNotConfiguredError(`${venue} direct funding balance mode is disabled.`);
   }
 
@@ -271,7 +304,7 @@ const readDirectHttpFundingBalance = async (
         venue === "MYRIAD" ? env.MYRIAD_BASE_URL?.trim() :
           venue === "PREDICT_FUN" ? env.PREDICT_MAINNET_BASE_URL?.trim() :
             undefined);
-  const path = env[`${venue}_OPS_FUNDING_BALANCE_PATH`]?.trim();
+  const path = resolveDirectFundingBalancePath(venue, input, env, mode);
   if (!baseUrl || !path) {
     throw new OpsFundingBalanceNotConfiguredError(`${venue} direct funding balance base URL or path is not configured.`);
   }
@@ -381,6 +414,9 @@ const readOpsFundingBalance = async (
 ): Promise<PolymarketFundingBalanceReadOutput> => {
   const mode = `${env[`${venue}_OPS_FUNDING_BALANCE_MODE`] ?? "DISABLED"}`.trim().toUpperCase();
   if (mode === "DIRECT_HTTP") {
+    return readDirectHttpFundingBalance(venue, input, env, fetchImpl);
+  }
+  if (mode === "MULTI_DIRECT_HTTP") {
     return readDirectHttpFundingBalance(venue, input, env, fetchImpl);
   }
   if (mode === "ONCHAIN_ERC20") {

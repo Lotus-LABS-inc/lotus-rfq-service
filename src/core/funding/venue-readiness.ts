@@ -41,6 +41,10 @@ export interface FundingBalanceReadInput {
   fundingIntentId: string;
   routeLegId: string;
   targetVenue: FundingVenue;
+  sourceChain?: string;
+  sourceToken?: string;
+  destinationChain?: string;
+  destinationToken?: string;
 }
 
 export interface FundingBalanceReadClient {
@@ -298,7 +302,11 @@ export class ConfigurableVenueFundingReadinessChecker implements VenueFundingRea
         userId: input.userId,
         fundingIntentId: input.intent.fundingIntentId,
         routeLegId: input.leg.routeLegId,
-        targetVenue: this.venue
+        targetVenue: this.venue,
+        sourceChain: input.leg.sourceChain,
+        sourceToken: input.leg.sourceToken,
+        destinationChain: input.leg.destinationChain,
+        destinationToken: input.leg.destinationToken
       });
       const usableBalance = safeDecimal(balance.usableBalance);
       const requiredAmount = safeDecimal(input.leg.destinationAmountEstimate);
@@ -451,6 +459,18 @@ export class HttpFundingBalanceReadClient implements FundingBalanceReadClient {
       url.searchParams.set("fundingIntentId", input.fundingIntentId);
       url.searchParams.set("routeLegId", input.routeLegId);
       url.searchParams.set("targetVenue", input.targetVenue);
+      if (input.sourceChain) {
+        url.searchParams.set("sourceChain", input.sourceChain);
+      }
+      if (input.sourceToken) {
+        url.searchParams.set("sourceToken", input.sourceToken);
+      }
+      if (input.destinationChain) {
+        url.searchParams.set("destinationChain", input.destinationChain);
+      }
+      if (input.destinationToken) {
+        url.searchParams.set("destinationToken", input.destinationToken);
+      }
       const response = await (this.config.fetchImpl ?? fetch)(url, {
         method: "GET",
         headers: this.buildHeaders(),

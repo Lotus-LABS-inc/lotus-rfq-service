@@ -152,9 +152,10 @@ Non-Polymarket ops funding balance routes must stay `DISABLED` until an operator
 
 | Env pattern | Example | Production expectation |
 |---|---|---|
-| `<VENUE>_OPS_FUNDING_BALANCE_MODE` | `DISABLED`, `DIRECT_HTTP`, or `ONCHAIN_ERC20` | Default `DISABLED`; no static/fixture balances in production. |
+| `<VENUE>_OPS_FUNDING_BALANCE_MODE` | `DISABLED`, `DIRECT_HTTP`, `MULTI_DIRECT_HTTP`, or `ONCHAIN_ERC20` | Default `DISABLED`; no static/fixture balances in production. |
 | `<VENUE>_OPS_FUNDING_BALANCE_BASE_URL` | `https://api.venue.example` | Official/operator-approved venue API host only. |
 | `<VENUE>_OPS_FUNDING_BALANCE_PATH` | `/portfolio/balance` | Exact reviewed read-only path. |
+| `<VENUE>_OPS_FUNDING_BALANCE_PATH_BY_CHAIN_<CHAIN>` | `/portfolio/balance?chain_id=56` | Required only for `MULTI_DIRECT_HTTP`; chain key is normalized from the route destination chain, for example `BNB` or `SOLANA`. Missing paths fail closed. |
 | `<VENUE>_OPS_FUNDING_BALANCE_AUTH_MODE` | `NONE`, `BEARER`, `API_KEY`, or `HMAC` | Use the least-privileged read-only auth supported by the venue. |
 | `<VENUE>_OPS_FUNDING_BALANCE_API_KEY` | `<secret>` | Secret manager only. |
 | `<VENUE>_OPS_FUNDING_BALANCE_API_KEY_HEADER` | `x-api-key` | Required only for `API_KEY` mode. |
@@ -450,6 +451,7 @@ Limitless production rule: do not expose normal user withdrawal. EOA/user mode i
 | `OPINION_OPS_FUNDING_BALANCE_MODE` | `DIRECT_HTTP` | Reads Opinion internal spot balance. |
 | `OPINION_OPS_FUNDING_BALANCE_BASE_URL` | `https://openapi.opinion.trade/openapi` | Opinion OpenAPI host. |
 | `OPINION_OPS_FUNDING_BALANCE_PATH` | `user/balance?chain_id=56` | Required `chain_id` query; keep relative so `/openapi` remains in the base URL. |
+| `OPINION_OPS_FUNDING_BALANCE_PATH_BY_CHAIN_BNB` | `user/balance?chain_id=56` | Required for chain-aware `MULTI_DIRECT_HTTP` mode. Add a Solana path only after Opinion confirms the exact Solana chain id and that returned funds are usable trading balance. |
 | `OPINION_OPS_FUNDING_BALANCE_AUTH_MODE` | `API_KEY` | Server-side OpenAPI key only. |
 | `OPINION_OPS_FUNDING_BALANCE_API_KEY_HEADER` | `apikey` | Opinion OpenAPI header. |
 | `OPINION_OPS_FUNDING_BALANCE_RESPONSE_FIELD` | `result.balances.0.availableBalance` | Internal available spot balance. |

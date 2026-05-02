@@ -219,6 +219,83 @@ describe("ops read service", () => {
     expectNoSecrets(response.body);
   });
 
+  it("selects Opinion multi-chain direct balance paths from the route destination chain", async () => {
+    const requestedUrls: string[] = [];
+    const fetchImpl: typeof fetch = vi.fn(async (input) => {
+      requestedUrls.push(String(input));
+      return new Response(JSON.stringify({
+        result: {
+          balances: [
+            {
+              availableBalance: "3.079912",
+              quoteToken: "0x55d398326f99059ff775485246999027b3197955",
+              tokenDecimals: 18
+            }
+          ]
+        }
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    });
+    const app = await buildOpsReadServer({
+      env: {
+        NODE_ENV: "production",
+        OPINION_FUNDING_READ_API_KEY: "read-token",
+        OPINION_OPS_FUNDING_BALANCE_MODE: "MULTI_DIRECT_HTTP",
+        OPINION_OPS_FUNDING_BALANCE_BASE_URL: "https://openapi.opinion.trade/openapi",
+        OPINION_OPS_FUNDING_BALANCE_PATH_BY_CHAIN_BNB: "user/balance?chain_id=56",
+        OPINION_OPS_FUNDING_BALANCE_PATH_BY_CHAIN_SOLANA: "user/balance?chain_id=SOLANA_PLACEHOLDER",
+        OPINION_OPS_FUNDING_BALANCE_AUTH_MODE: "API_KEY",
+        OPINION_OPS_FUNDING_BALANCE_API_KEY_HEADER: "apikey",
+        OPINION_OPS_FUNDING_BALANCE_API_KEY: "opinion-openapi-token",
+        OPINION_OPS_FUNDING_BALANCE_RESPONSE_FIELD: "result.balances.0.availableBalance"
+      } as NodeJS.ProcessEnv,
+      fetchImpl
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/lotus/opinion/funding-balance?userId=user-1&fundingIntentId=funding-1&routeLegId=leg-1&destinationChain=BNB&destinationToken=USDT",
+      headers: { authorization: "Bearer read-token" }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ usableBalance: "3.079912" });
+    expect(requestedUrls).toHaveLength(1);
+    expect(requestedUrls[0]).toContain("/openapi/user/balance?chain_id=56");
+    expect(requestedUrls[0]).not.toContain("SOLANA_PLACEHOLDER");
+    expectNoSecrets(response.body);
+  });
+
+  it("fails closed for multi-chain Opinion balance reads when no route chain path is configured", async () => {
+    const app = await buildOpsReadServer({
+      env: {
+        NODE_ENV: "production",
+        OPINION_FUNDING_READ_API_KEY: "read-token",
+        OPINION_OPS_FUNDING_BALANCE_MODE: "MULTI_DIRECT_HTTP",
+        OPINION_OPS_FUNDING_BALANCE_BASE_URL: "https://openapi.opinion.trade/openapi",
+        OPINION_OPS_FUNDING_BALANCE_PATH_BY_CHAIN_BNB: "user/balance?chain_id=56",
+        OPINION_OPS_FUNDING_BALANCE_AUTH_MODE: "API_KEY",
+        OPINION_OPS_FUNDING_BALANCE_API_KEY_HEADER: "apikey",
+        OPINION_OPS_FUNDING_BALANCE_API_KEY: "opinion-openapi-token",
+        OPINION_OPS_FUNDING_BALANCE_RESPONSE_FIELD: "result.balances.0.availableBalance"
+      } as NodeJS.ProcessEnv
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/lotus/opinion/funding-balance?userId=user-1&fundingIntentId=funding-1&routeLegId=leg-1&destinationChain=SOLANA&destinationToken=USDT",
+      headers: { authorization: "Bearer read-token" }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({ code: "OPINION_FUNDING_BALANCE_READ_NOT_CONFIGURED" });
+    expectNoSecrets(response.body);
+  });
+
   it("reads on-chain ERC20 balances for non-Polymarket funding balance routes", async () => {
     const fetchImpl: typeof fetch = vi.fn(async (_input, init) => {
       const body = JSON.parse(String(init?.body)) as {
