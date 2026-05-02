@@ -958,9 +958,44 @@ export class FundingService {
       const receivedAmount = typeof receiving.amount === "string" ? receiving.amount : null;
       const receivedTokenDecimals = typeof receivingToken.decimals === "number" ? receivingToken.decimals : 6;
       const tokenSymbol = typeof receivingToken.symbol === "string" ? receivingToken.symbol : leg.sourceToken;
+      const observedFromAddress = firstString(raw.fromAddress, raw.senderAddress, raw.sendingAddress);
+      const observedToAddress = firstString(raw.toAddress, raw.receiverAddress, raw.recipientAddress);
+      const expectedSourceWalletAddress = stringOrNull(leg.providerStatus.sourceWalletAddress);
+      const sourceWalletMatches = expectedSourceWalletAddress !== null
+        && observedFromAddress !== null
+        && equalsIgnoreCase(observedFromAddress, expectedSourceWalletAddress);
+      const destinationWalletMatches = observedToAddress !== null
+        && equalsIgnoreCase(observedToAddress, intent.destinationWalletAddress);
       const completed = status === "DONE_COMPLETED";
       const destinationReceived = completed || status === "DONE_PARTIAL";
       const failed = status === "FAILED" || status === "DONE_REFUNDED";
+      if (!failed && (completed || destinationReceived) && (!sourceWalletMatches || !destinationWalletMatches)) {
+        return {
+          status: "UNKNOWN",
+          venueReleased: true,
+          destinationReceived: false,
+          completed: false,
+          withdrawalTxHash: latestTxHash,
+          destinationChain: intent.destinationChain,
+          destinationWalletAddress: observedToAddress,
+          token: tokenSymbol,
+          amount: receivedAmount ? fromBaseUnits(receivedAmount, receivedTokenDecimals) : null,
+          reason: "LIFI_BRIDGE_OWNERSHIP_UNVERIFIED",
+          evidence: {
+            source: "lifi_status",
+            status,
+            sourceChain,
+            destinationChain,
+            withdrawalTxHash: latestTxHash,
+            destinationTxHash,
+            expectedSourceWalletAddress,
+            observedFromAddress,
+            expectedDestinationWalletAddress: intent.destinationWalletAddress,
+            observedToAddress,
+            lifiExplorerLink: typeof raw.lifiExplorerLink === "string" ? raw.lifiExplorerLink : null
+          }
+        };
+      }
       return {
         status: failed ? "FAILED" : completed ? "COMPLETED" : destinationReceived ? "DESTINATION_RECEIVED" : "UNKNOWN",
         venueReleased: true,
@@ -968,7 +1003,7 @@ export class FundingService {
         completed,
         withdrawalTxHash: latestTxHash,
         destinationChain: intent.destinationChain,
-        destinationWalletAddress: intent.destinationWalletAddress,
+        destinationWalletAddress: observedToAddress,
         token: tokenSymbol,
         amount: receivedAmount ? fromBaseUnits(receivedAmount, receivedTokenDecimals) : null,
         reason: failed
@@ -985,6 +1020,10 @@ export class FundingService {
           destinationChain,
           withdrawalTxHash: latestTxHash,
           destinationTxHash,
+          expectedSourceWalletAddress,
+          observedFromAddress,
+          expectedDestinationWalletAddress: intent.destinationWalletAddress,
+          observedToAddress,
           lifiExplorerLink: typeof raw.lifiExplorerLink === "string" ? raw.lifiExplorerLink : null
         }
       };
@@ -2474,6 +2513,15 @@ const equalsIgnoreCase = (left: string | null | undefined, right: string | null 
   typeof left === "string" && typeof right === "string" && left.toLowerCase() === right.toLowerCase();
 
 const stringOrNull = (value: unknown): string | null => typeof value === "string" ? value : null;
+
+const firstString = (...values: unknown[]): string | null => {
+  for (const value of values) {
+    if (typeof value === "string" && value.length > 0) {
+      return value;
+    }
+  }
+  return null;
+};
 
 const toDecimalOrNull = (value: string | null | undefined) => {
   try {
