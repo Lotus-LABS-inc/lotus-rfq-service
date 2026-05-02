@@ -80,9 +80,9 @@ CREATE TABLE IF NOT EXISTS proposition_fingerprints (
 );
 
 CREATE INDEX IF NOT EXISTS idx_proposition_fingerprints_broad_key
-    ON proposition_fingerprints(broad_fingerprint_key);
+    ON proposition_fingerprints((md5(broad_fingerprint_key)));
 CREATE INDEX IF NOT EXISTS idx_proposition_fingerprints_strict_key
-    ON proposition_fingerprints(strict_fingerprint_key);
+    ON proposition_fingerprints((md5(strict_fingerprint_key)));
 CREATE INDEX IF NOT EXISTS idx_proposition_fingerprints_hash
     ON proposition_fingerprints(fingerprint_hash);
 
