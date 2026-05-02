@@ -232,7 +232,8 @@ const selectPreferredLeg = (response: FundingIntentResponse, preferredRouteLegId
   const preferred = preferredRouteLegId.trim()
     ? response.routeLegs.find((leg) => leg.routeLegId === preferredRouteLegId.trim()) ?? null
     : null;
-  return preferred ?? response.routeLegs[0] ?? null;
+  const signable = response.routeLegs.find((leg) => leg.routeQuote.transactionRequest?.data) ?? null;
+  return preferred ?? signable ?? response.routeLegs[0] ?? null;
 };
 
 const routeSigningKind = (leg: FundingRouteLegResponse | null): RouteSigningKind => {
