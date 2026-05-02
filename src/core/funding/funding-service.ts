@@ -646,7 +646,7 @@ export class FundingService {
   public async quoteWithdrawalIntent(userId: string, withdrawalIntentId: string): Promise<WithdrawalIntentView> {
     const view = await this.getWithdrawalIntent(userId, withdrawalIntentId);
     const matrix = buildVenueCapabilityMatrix({ env: this.config.env });
-    const routeLegs = await Promise.all(view.sources.map(async (source) => {
+    const routeLegSets = await Promise.all(view.sources.map(async (source) => {
       const capability = matrix[source.sourceVenue];
       if (!capability?.supportsWithdrawal) {
         throw new FundingError("WITHDRAWAL_CAPABILITY_DISABLED", `${source.sourceVenue} withdrawals are not enabled.`, 409);
@@ -660,11 +660,14 @@ export class FundingService {
       if (!hasBalance) {
         throw new FundingError("WITHDRAWAL_SOURCE_BALANCE_INSUFFICIENT", `${source.sourceVenue} venue-ready balance is insufficient.`, 409);
       }
+      if (this.shouldUseVenueEvmBridgeBack(view, source)) {
+        return this.buildVenueEvmBridgeBackWithdrawalRouteLegs(userId, view, source);
+      }
       if (this.shouldUsePolymarketBridgeSandbox(view, source)) {
-        return this.buildPolymarketBridgeWithdrawalRouteLeg(view.intent, source);
+        return [await this.buildPolymarketBridgeWithdrawalRouteLeg(view.intent, source)];
       }
       if (this.shouldUseLimitlessBridgeBack(view, source)) {
-        return this.buildLimitlessBridgeBackWithdrawalRouteLeg(userId, view.intent, source);
+        return [await this.buildLimitlessBridgeBackWithdrawalRouteLeg(userId, view.intent, source)];
       }
       if (source.sourceVenue === "LIMITLESS") {
         throw new FundingError(
@@ -674,16 +677,17 @@ export class FundingService {
         );
       }
       if (this.shouldUsePredictFunUserWalletDryRun(view, source)) {
-        return this.buildPredictFunWithdrawalRouteLeg(userId, view.intent, source);
+        return [await this.buildPredictFunWithdrawalRouteLeg(userId, view.intent, source)];
       }
       if (this.shouldUseMyriadUserWalletDryRun(view, source)) {
-        return this.buildMyriadWithdrawalRouteLeg(view.intent, source);
+        return [await this.buildMyriadWithdrawalRouteLeg(view.intent, source)];
       }
       if (this.shouldUseOpinionSafeDryRun(view, source)) {
-        return this.buildOpinionWithdrawalRouteLeg(view.intent, source);
+        return [await this.buildOpinionWithdrawalRouteLeg(view.intent, source)];
       }
-      return buildWithdrawalRouteLeg(view.intent, source);
+      return [buildWithdrawalRouteLeg(view.intent, source)];
     }));
+    const routeLegs = routeLegSets.flat();
     await this.repository.replaceWithdrawalRouteLegs(withdrawalIntentId, routeLegs);
     await this.repository.updateWithdrawalIntentStatus(withdrawalIntentId, "USER_SIGNATURE_REQUIRED", {
       aggregateRouteQuote: summarizeWithdrawalQuotes(routeLegs),
@@ -713,7 +717,7 @@ export class FundingService {
     if (!leg) {
       throw new FundingError("WITHDRAWAL_INTENT_NOT_FOUND", "Withdrawal route leg was not found.", 404);
     }
-    if (isWithdrawalQuoteExpired(leg)) {
+    if (isWithdrawalQuoteExpired(leg) && !allowsStaleWithdrawalSubmission(leg)) {
       throw new FundingError("WITHDRAWAL_ROUTE_STALE", "Withdrawal quote is stale. Request a new quote before submitting.", 409);
     }
     if (leg.txHashes.includes(input.txHash)) {
@@ -722,13 +726,13 @@ export class FundingService {
     if (!/^([A-Za-z0-9]{32,}|0x[a-fA-F0-9]{64})$/.test(input.txHash)) {
       throw new FundingError("WITHDRAWAL_SUBMISSION_FAILED", "Withdrawal transaction hash is invalid.", 400);
     }
-    const isLimitlessBridgeBack = leg.providerStatus.mode === "LIMITLESS_BRIDGE_BACK";
-    const submittedStatus: WithdrawalLegState = isLimitlessBridgeBack ? "DESTINATION_PENDING" : "VENUE_RELEASE_PENDING";
+    const isLifiBridgeBack = isLifiBridgeBackWithdrawalLeg(leg);
+    const submittedStatus: WithdrawalLegState = isLifiBridgeBack ? "DESTINATION_PENDING" : "VENUE_RELEASE_PENDING";
     await this.repository.updateWithdrawalRouteLegSubmission({
       withdrawalRouteLegId: leg.withdrawalRouteLegId,
       txHash: input.txHash,
       status: submittedStatus,
-      ...(isLimitlessBridgeBack ? { venueReleaseStatus: "CONFIRMED", destinationStatus: "PENDING" } : {})
+      ...(isLifiBridgeBack ? { venueReleaseStatus: "CONFIRMED", destinationStatus: "PENDING" } : {})
     });
     const nextLegStates = view.routeLegs.map((candidate) =>
       candidate.withdrawalRouteLegId === leg.withdrawalRouteLegId ? submittedStatus : candidate.status
@@ -746,8 +750,8 @@ export class FundingService {
   public async refreshWithdrawalStatus(userId: string, withdrawalIntentId: string): Promise<WithdrawalIntentView> {
     const view = await this.getWithdrawalIntent(userId, withdrawalIntentId);
     await this.refreshPolymarketBridgeSandboxStatus(view);
-    const hasLimitlessBridgeBackLeg = view.routeLegs.some((leg) => leg.providerStatus.mode === "LIMITLESS_BRIDGE_BACK");
-    if (!this.withdrawalCompletionChecker && !hasLimitlessBridgeBackLeg) {
+    const hasLifiBridgeBackLeg = view.routeLegs.some((leg) => isLifiBridgeBackWithdrawalLeg(leg));
+    if (!this.withdrawalCompletionChecker && !hasLifiBridgeBackLeg) {
       return this.getWithdrawalIntent(userId, withdrawalIntentId);
     }
 
@@ -762,8 +766,12 @@ export class FundingService {
         refreshedStates.push(leg.status);
         continue;
       }
-      const result = leg.providerStatus.mode === "LIMITLESS_BRIDGE_BACK"
-        ? await this.checkLimitlessBridgeBackStatus(view.intent, leg, latestTxHash)
+      if (!isLifiBridgeBackWithdrawalLeg(leg) && !this.withdrawalCompletionChecker) {
+        refreshedStates.push(leg.status);
+        continue;
+      }
+      const result = isLifiBridgeBackWithdrawalLeg(leg)
+        ? await this.checkLifiBridgeBackStatus(view.intent, leg, latestTxHash)
         : await this.withdrawalCompletionChecker!.check({
             userId,
             intent: view.intent,
@@ -850,7 +858,7 @@ export class FundingService {
     return capabilities.supportsWithdrawal && capabilities.readinessStatus === "DRY_RUN_READY";
   }
 
-  private async checkLimitlessBridgeBackStatus(
+  private async checkLifiBridgeBackStatus(
     intent: WithdrawalIntent,
     leg: WithdrawalRouteLeg,
     latestTxHash: string
@@ -932,6 +940,14 @@ export class FundingService {
       && normalizeFundingChain(view.intent.destinationChain) === "SOLANA";
   }
 
+  private shouldUseVenueEvmBridgeBack(view: WithdrawalIntentView, source: WithdrawalSource): boolean {
+    if (view.sources.length !== 1 || source.sourceVenue === "LIMITLESS") {
+      return false;
+    }
+    return this.config.env?.[`${source.sourceVenue}_WITHDRAWAL_BRIDGE_BACK_ENABLED`] === "true"
+      && normalizeFundingChain(view.intent.destinationChain) === "SOLANA";
+  }
+
   private shouldUsePredictFunUserWalletDryRun(view: WithdrawalIntentView, source: WithdrawalSource): boolean {
     if (!this.predictFunWithdrawalAdapter || view.sources.length !== 1 || source.sourceVenue !== "PREDICT_FUN") {
       return false;
@@ -1010,6 +1026,113 @@ export class FundingService {
       targetVenue: "LIMITLESS"
     });
     return buildLimitlessBridgeBackWithdrawalRouteLeg(intent, source, quote, sourceWallet.address);
+  }
+
+  private async buildVenueEvmBridgeBackWithdrawalRouteLegs(
+    userId: string,
+    view: WithdrawalIntentView,
+    source: WithdrawalSource
+  ): Promise<WithdrawalRouteLeg[]> {
+    const bridgePlan = await this.resolveVenueEvmBridgeBackPlan(userId, view.intent, source);
+    const firstHopIntent: WithdrawalIntent = {
+      ...view.intent,
+      token: bridgePlan.sourceTokenSymbol,
+      destinationChain: bridgePlan.sourceChain,
+      destinationWalletAddress: bridgePlan.sourceWalletAddress
+    };
+    const firstHopLeg = await this.buildSingleVenueWithdrawalRouteLeg(userId, view, firstHopIntent, source);
+    const quote = await this.lifi.quote({
+      fromChain: bridgePlan.sourceChain,
+      toChain: "SOLANA",
+      fromToken: bridgePlan.sourceTokenAddress,
+      toToken: bridgePlan.destinationTokenAddress,
+      fromAmount: source.sourceAmount,
+      fromAddress: bridgePlan.sourceWalletAddress,
+      toAddress: view.intent.destinationWalletAddress,
+      targetVenue: source.sourceVenue
+    });
+    return [
+      withVenueBridgeBackMetadata(firstHopLeg, {
+        finalDestinationChain: view.intent.destinationChain,
+        finalDestinationWalletAddress: view.intent.destinationWalletAddress
+      }),
+      buildVenueEvmBridgeBackWithdrawalRouteLeg({
+        intent: view.intent,
+        source,
+        bridgeQuote: quote,
+        sourceWalletAddress: bridgePlan.sourceWalletAddress,
+        sourceChain: bridgePlan.sourceChain,
+        sourceTokenSymbol: bridgePlan.sourceTokenSymbol,
+        destinationTokenSymbol: bridgePlan.destinationTokenSymbol
+      })
+    ];
+  }
+
+  private async buildSingleVenueWithdrawalRouteLeg(
+    userId: string,
+    view: WithdrawalIntentView,
+    intent: WithdrawalIntent,
+    source: WithdrawalSource
+  ): Promise<WithdrawalRouteLeg> {
+    if (this.shouldUsePolymarketBridgeSandbox({ ...view, intent }, source)) {
+      return this.buildPolymarketBridgeWithdrawalRouteLeg(intent, source);
+    }
+    if (this.shouldUsePredictFunUserWalletDryRun(view, source)) {
+      return this.buildPredictFunWithdrawalRouteLeg(userId, intent, source);
+    }
+    if (this.shouldUseMyriadUserWalletDryRun(view, source)) {
+      return this.buildMyriadWithdrawalRouteLeg(intent, source);
+    }
+    if (this.shouldUseOpinionSafeDryRun(view, source)) {
+      return this.buildOpinionWithdrawalRouteLeg(intent, source);
+    }
+    return buildWithdrawalRouteLeg(intent, source);
+  }
+
+  private async resolveVenueEvmBridgeBackPlan(
+    userId: string,
+    intent: WithdrawalIntent,
+    source: WithdrawalSource
+  ): Promise<{
+    sourceChain: string;
+    sourceTokenSymbol: string;
+    sourceTokenAddress: string;
+    sourceWalletAddress: string;
+    destinationTokenSymbol: string;
+    destinationTokenAddress: string;
+  }> {
+    const sourceWallet = await this.userWalletService?.resolveUserTurnkeyEvmFundingWallet(userId);
+    if (!sourceWallet || sourceWallet.chainFamily !== "EVM" || sourceWallet.status !== "ACTIVE") {
+      throw new FundingError("SOURCE_WALLET_UNAVAILABLE", `${source.sourceVenue} bridge-back requires an active user-controlled EVM wallet.`, 409);
+    }
+    const sourceChain = this.config.env?.[`${source.sourceVenue}_WITHDRAWAL_BRIDGE_BACK_SOURCE_CHAIN`]
+      ?? defaultWithdrawalBridgeBackSourceChain(source.sourceVenue);
+    const sourceTokenSymbol = source.sourceToken.toUpperCase();
+    const sourceTokenAddress = this.config.env?.[`${source.sourceVenue}_WITHDRAWAL_BRIDGE_BACK_SOURCE_TOKEN_ADDRESS`]
+      ?? defaultWithdrawalBridgeBackSourceTokenAddress(source.sourceVenue, sourceTokenSymbol);
+    const destinationTokenSymbol = this.config.env?.[`${source.sourceVenue}_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_SYMBOL`]
+      ?? defaultWithdrawalBridgeBackDestinationTokenSymbol(sourceTokenSymbol);
+    const destinationTokenAddress = this.config.env?.[`${source.sourceVenue}_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_ADDRESS`]
+      ?? this.config.env?.[`SOLANA_${destinationTokenSymbol}_TOKEN_ADDRESS`]
+      ?? defaultSolanaTokenAddress(destinationTokenSymbol);
+    if (!sourceChain || !sourceTokenAddress || !destinationTokenAddress) {
+      throw new FundingError(
+        "WITHDRAWAL_CAPABILITY_DISABLED",
+        `${source.sourceVenue} bridge-back is enabled but source/destination token mapping is not configured.`,
+        409
+      );
+    }
+    if (!isSolanaAddress(intent.destinationWalletAddress)) {
+      throw new FundingError("WITHDRAWAL_DESTINATION_INVALID", "Bridge-back withdrawals require a Solana destination wallet.", 400);
+    }
+    return {
+      sourceChain,
+      sourceTokenSymbol,
+      sourceTokenAddress,
+      sourceWalletAddress: sourceWallet.address,
+      destinationTokenSymbol,
+      destinationTokenAddress
+    };
   }
 
   private async buildPredictFunWithdrawalRouteLeg(
@@ -1169,9 +1292,10 @@ export class FundingService {
       return "DESTINATION_PENDING";
     }
     const observedAmount = toDecimalOrNull(result.amount);
+    const expectedToken = expectedWithdrawalResultToken(leg);
     const destinationMatches = equalsIgnoreCase(result.destinationWalletAddress, intent.destinationWalletAddress)
       && equalsIgnoreCase(result.destinationChain, intent.destinationChain)
-      && equalsIgnoreCase(result.token, leg.sourceToken)
+      && equalsIgnoreCase(result.token, expectedToken)
       && observedAmount !== null
       && observedAmount.gte(new Decimal(leg.destinationAmountEstimate));
     if (!destinationMatches) {
@@ -1686,6 +1810,86 @@ const buildLimitlessBridgeBackWithdrawalRouteLeg = (
   };
 };
 
+const buildVenueEvmBridgeBackWithdrawalRouteLeg = (input: {
+  intent: WithdrawalIntent;
+  source: WithdrawalSource;
+  bridgeQuote: FundingRouteQuote;
+  sourceWalletAddress: string;
+  sourceChain: string;
+  sourceTokenSymbol: string;
+  destinationTokenSymbol: string;
+}): WithdrawalRouteLeg => {
+  const now = new Date().toISOString();
+  const quote: WithdrawalRouteQuote = {
+    provider: "LOTUS_WITHDRAWAL_V0",
+    providerRouteId: input.bridgeQuote.providerRouteId ?? `${input.source.sourceVenue.toLowerCase()}-bridge-back-${input.source.withdrawalSourceId}`,
+    sourceVenue: input.source.sourceVenue,
+    sourceToken: input.source.sourceToken,
+    sourceAmount: input.source.sourceAmount,
+    destinationChain: input.intent.destinationChain,
+    destinationWalletAddress: input.intent.destinationWalletAddress,
+    destinationAmountEstimate: input.bridgeQuote.destinationAmountEstimate,
+    estimatedFees: input.bridgeQuote.estimatedFees,
+    estimatedTimeSeconds: input.bridgeQuote.estimatedTimeSeconds,
+    expiresAt: input.bridgeQuote.expiresAt,
+    transactionRequest: input.bridgeQuote.transactionRequest,
+    userSafeSummary: `${input.source.sourceVenue} bridge-back: after venue funds arrive in the user's EVM wallet, user signs a ${input.sourceChain} ${input.sourceTokenSymbol} to Solana ${input.destinationTokenSymbol} bridge route. Lotus does not sign, broadcast, custody, or move funds.`
+  };
+  return {
+    withdrawalRouteLegId: randomUUID(),
+    withdrawalIntentId: input.intent.withdrawalIntentId,
+    withdrawalSourceId: input.source.withdrawalSourceId,
+    sourceVenue: input.source.sourceVenue,
+    sourceToken: input.source.sourceToken,
+    sourceAmount: input.source.sourceAmount,
+    destinationChain: input.intent.destinationChain,
+    destinationWalletAddress: input.intent.destinationWalletAddress,
+    destinationAmountEstimate: input.bridgeQuote.destinationAmountEstimate,
+    routeProvider: "LOTUS_WITHDRAWAL_V0",
+    routeQuote: quote,
+    txHashes: [],
+    providerStatus: {
+      provider: "LIFI",
+      mode: "VENUE_EVM_BRIDGE_BACK",
+      sourceVenue: input.source.sourceVenue,
+      sourceChain: input.bridgeQuote.sourceChain,
+      sourceToken: input.bridgeQuote.sourceToken,
+      sourceTokenSymbol: input.sourceTokenSymbol,
+      destinationChain: input.bridgeQuote.destinationChain,
+      destinationToken: input.bridgeQuote.destinationToken,
+      destinationTokenSymbol: input.destinationTokenSymbol,
+      sourceWalletAddress: input.sourceWalletAddress,
+      requiresPriorVenueRelease: true,
+      backendBroadcast: false,
+      completionPersisted: false
+    },
+    venueReleaseStatus: "PENDING",
+    destinationStatus: "NOT_CONFIRMED",
+    status: "WITHDRAWAL_LEG_SIGNATURE_REQUIRED",
+    errorReason: null,
+    createdAt: now,
+    updatedAt: now
+  };
+};
+
+const withVenueBridgeBackMetadata = (
+  leg: WithdrawalRouteLeg,
+  input: { finalDestinationChain: string; finalDestinationWalletAddress: string }
+): WithdrawalRouteLeg => ({
+  ...leg,
+  providerStatus: {
+    ...leg.providerStatus,
+    bridgeBackPlanned: true,
+    finalDestinationChain: input.finalDestinationChain,
+    finalDestinationWalletAddress: input.finalDestinationWalletAddress,
+    backendBroadcast: false
+  },
+  routeQuote: {
+    ...leg.routeQuote,
+    userSafeSummary: `${leg.routeQuote.userSafeSummary} After this venue release is confirmed, Lotus has already prepared the user-signed bridge-back leg to the final Solana wallet.`
+  }
+});
+
 const buildPredictFunWithdrawalRouteLeg = (
   intent: WithdrawalIntent,
   source: WithdrawalSource,
@@ -1911,6 +2115,7 @@ const summarizeWithdrawalQuotes = (routeLegs: readonly WithdrawalRouteLeg[]): Re
   backendBroadcast: false,
   ...summarizePolymarketBridgePreview(routeLegs),
   ...summarizeLimitlessBridgeBackPreview(routeLegs),
+  ...summarizeVenueEvmBridgeBackPreview(routeLegs),
   ...summarizePredictFunUserWalletPreview(routeLegs),
   ...summarizeMyriadUserWalletPreview(routeLegs),
   ...summarizeOpinionSafeUserActionPreview(routeLegs)
@@ -1969,6 +2174,37 @@ const summarizeLimitlessBridgeBackPreview = (routeLegs: readonly WithdrawalRoute
       partnerManagedWithdrawalCalled: false,
       completionPersisted: false
     }
+  };
+};
+
+const summarizeVenueEvmBridgeBackPreview = (routeLegs: readonly WithdrawalRouteLeg[]): Record<string, unknown> => {
+  const bridgeBackLegs = routeLegs.filter((leg) => leg.providerStatus.provider === "LIFI" && leg.providerStatus.mode === "VENUE_EVM_BRIDGE_BACK");
+  if (bridgeBackLegs.length === 0) {
+    return {};
+  }
+  return {
+    venueEvmBridgeBack: bridgeBackLegs.map((leg) => {
+      const status = leg.providerStatus;
+      return {
+        provider: "LIFI",
+        mode: "VENUE_EVM_BRIDGE_BACK",
+        sourceVenue: leg.sourceVenue,
+        sourceChain: status.sourceChain ?? null,
+        sourceToken: status.sourceToken ?? leg.sourceToken,
+        sourceTokenSymbol: status.sourceTokenSymbol ?? leg.sourceToken,
+        destinationChain: status.destinationChain ?? leg.destinationChain,
+        destinationToken: status.destinationToken ?? leg.sourceToken,
+        destinationTokenSymbol: status.destinationTokenSymbol ?? leg.sourceToken,
+        destinationAddress: leg.destinationWalletAddress,
+        amount: leg.destinationAmountEstimate,
+        estimatedFees: leg.routeQuote.estimatedFees,
+        estimatedTimeSeconds: leg.routeQuote.estimatedTimeSeconds,
+        expiresAt: leg.routeQuote.expiresAt,
+        requiresPriorVenueRelease: true,
+        backendBroadcast: false,
+        completionPersisted: false
+      };
+    })
   };
 };
 
@@ -2068,6 +2304,66 @@ const summarizeOpinionSafeUserActionPreview = (routeLegs: readonly WithdrawalRou
 };
 
 const isWithdrawalQuoteExpired = (leg: WithdrawalRouteLeg): boolean => Date.parse(leg.routeQuote.expiresAt) <= Date.now();
+
+const isLifiBridgeBackWithdrawalLeg = (leg: WithdrawalRouteLeg): boolean =>
+  leg.providerStatus.provider === "LIFI"
+    && (leg.providerStatus.mode === "LIMITLESS_BRIDGE_BACK" || leg.providerStatus.mode === "VENUE_EVM_BRIDGE_BACK");
+
+const allowsStaleWithdrawalSubmission = (leg: WithdrawalRouteLeg): boolean =>
+  leg.routeQuote.transactionRequest === null && !isLifiBridgeBackWithdrawalLeg(leg);
+
+const expectedWithdrawalResultToken = (leg: WithdrawalRouteLeg): string => {
+  const destinationTokenSymbol = leg.providerStatus.destinationTokenSymbol;
+  return typeof destinationTokenSymbol === "string" ? destinationTokenSymbol : leg.sourceToken;
+};
+
+const defaultWithdrawalBridgeBackSourceChain = (venue: FundingVenue): string | null => {
+  switch (venue) {
+    case "POLYMARKET":
+      return "POLYGON";
+    case "OPINION":
+    case "MYRIAD":
+    case "PREDICT_FUN":
+      return "BSC";
+    case "LIMITLESS":
+      return "BASE";
+    default:
+      return null;
+  }
+};
+
+const defaultWithdrawalBridgeBackSourceTokenAddress = (venue: FundingVenue, tokenSymbol: string): string | null => {
+  const normalized = tokenSymbol.toUpperCase();
+  if (venue === "POLYMARKET" && normalized === "USDC") {
+    return "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359";
+  }
+  if ((venue === "OPINION" || venue === "PREDICT_FUN") && normalized === "USDT") {
+    return "0x55d398326f99059fF775485246999027B3197955";
+  }
+  if (venue === "MYRIAD" && normalized === "USD1") {
+    return "0x8d0D000Ee44948FC98c9B98A4FA4921476f08B0d";
+  }
+  return null;
+};
+
+const defaultWithdrawalBridgeBackDestinationTokenSymbol = (sourceTokenSymbol: string): string => {
+  const normalized = sourceTokenSymbol.toUpperCase();
+  return normalized === "USD1" ? "USDC" : normalized;
+};
+
+const defaultSolanaTokenAddress = (tokenSymbol: string): string | null => {
+  switch (tokenSymbol.toUpperCase()) {
+    case "USDC":
+      return "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    case "USDT":
+      return "Es9vMFrzaCERmJfrF4H2FYD4KCoNkYxWjBSGd3nccSvs";
+    default:
+      return null;
+  }
+};
+
+const isSolanaAddress = (value: string): boolean =>
+  /^[1-9A-HJ-NP-Za-km-z]{32,64}$/.test(value.trim()) && !isEvmAddress(value);
 
 const equalsIgnoreCase = (left: string | null | undefined, right: string | null | undefined): boolean =>
   typeof left === "string" && typeof right === "string" && left.toLowerCase() === right.toLowerCase();

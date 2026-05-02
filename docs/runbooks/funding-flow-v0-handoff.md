@@ -567,6 +567,21 @@ The backend only records a user-broadcast transaction hash on submit. It does no
 
 Do not let LI.FI status become the final source of truth for trade readiness. LI.FI can say a route completed, but Lotus still needs destination and venue-credit confirmation.
 
+### Withdrawal Full Exit Flow
+
+For beta withdrawals, a Solana destination should mean "full exit back to the user's Solana wallet" where the venue supports only an EVM/proxy first hop.
+
+Implemented backend behavior:
+
+- Limitless remains a special case: Lotus prepares a user-signed Base USDC to Solana bridge-back route and does not call partner-managed withdrawal APIs.
+- Proxy/account venues such as Polymarket, Opinion, Myriad, and Predict.fun can opt into `<VENUE>_WITHDRAWAL_BRIDGE_BACK_ENABLED=true`.
+- When that flag is enabled and the user requests a Solana destination, `POST /funding/withdrawals/:id/quote` returns two legs for a single-source withdrawal:
+  - venue/proxy release leg to the user's active Turnkey EVM wallet
+  - LI.FI bridge-back leg from that EVM wallet to the requested Solana wallet
+- The frontend must show the legs as ordered. The second leg should not be signed until the venue-release transaction is confirmed at the user's EVM wallet.
+- The backend still does not sign, broadcast, export keys, custody funds, or mark completion from route creation alone.
+- Manual venue-release tx/reference submission can be accepted after the instruction quote expires because it is evidence, not an executable LI.FI transaction. LI.FI bridge-back submissions still fail closed when stale and must be re-quoted.
+
 ### Internal Polymarket Balance Read Service
 
 Lotus can serve the Polymarket funding readiness read contract from an internal backend route:

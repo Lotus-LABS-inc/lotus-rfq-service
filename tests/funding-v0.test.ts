@@ -2007,6 +2007,142 @@ describe("Funding v0 domain", () => {
     expect(refreshed.reconciliations).toEqual([]);
   });
 
+  it("automatically prepares Opinion EVM-to-Solana bridge-back after the venue withdrawal leg", async () => {
+    const repository = new InMemoryFundingRepository();
+    repository.ready = true;
+    const lifi = new StubLifiProvider();
+    const evmWallet = userWallet({
+      walletId: "wallet-evm",
+      userId: "user-1",
+      chainFamily: "EVM",
+      chain: "BSC",
+      address: "0xD1059eC5F635712f6dcEAd569a41dFD7970DAffa"
+    });
+    const opinionEnv = {
+      ...withdrawalEnv,
+      OPINION_WITHDRAWAL_ADAPTER_ENABLED: "true",
+      OPINION_WITHDRAWAL_ADAPTER_MODE: "USER_SAFE_DRY_RUN",
+      OPINION_WITHDRAWAL_ADAPTER_DRY_RUN_ONLY: "true",
+      OPINION_WITHDRAWAL_BRIDGE_BACK_ENABLED: "true",
+      OPINION_WITHDRAWAL_INSTRUCTIONS_URL: "https://docs.opinion.trade/developer-guide/opinion-clob-typescript-sdk/builder-mode/split-merge-redeem"
+    } as NodeJS.ProcessEnv;
+    const service = new FundingService(
+      repository,
+      lifi,
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env: opinionEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      new OpinionSafeWithdrawalAdapter(getOpinionWithdrawalConfigFromEnv(opinionEnv)),
+      {
+        resolveFundingSourceWallet: async () => null,
+        resolveUserTurnkeyEvmFundingWallet: async () => evmWallet,
+        resolveVenueTargetWallet: async () => null
+      }
+    );
+
+    const created = await service.createWithdrawalIntent("user-1", {
+      token: "USDT",
+      amount: "5",
+      destinationChain: "SOLANA",
+      destinationWalletAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+      idempotencyKey: "withdraw-opinion-full-exit",
+      sources: [{ sourceVenue: "OPINION", sourcePercentage: 100 }]
+    });
+    const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
+
+    expect(quoted.routeLegs).toHaveLength(2);
+    expect(quoted.routeLegs[0]).toMatchObject({
+      sourceVenue: "OPINION",
+      destinationChain: "BSC",
+      destinationWalletAddress: evmWallet.address,
+      providerStatus: {
+        provider: "OPINION_SAFE_USER_ACTION",
+        mode: "USER_SAFE_DRY_RUN",
+        bridgeBackPlanned: true,
+        finalDestinationChain: "SOLANA",
+        finalDestinationWalletAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+        backendBroadcast: false
+      }
+    });
+    expect(quoted.routeLegs[1]).toMatchObject({
+      sourceVenue: "OPINION",
+      destinationChain: "SOLANA",
+      destinationWalletAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+      providerStatus: {
+        provider: "LIFI",
+        mode: "VENUE_EVM_BRIDGE_BACK",
+        sourceVenue: "OPINION",
+        sourceChain: "BSC",
+        sourceTokenSymbol: "USDT",
+        destinationChain: "SOLANA",
+        destinationTokenSymbol: "USDT",
+        sourceWalletAddress: evmWallet.address,
+        requiresPriorVenueRelease: true,
+        backendBroadcast: false
+      }
+    });
+    expect(lifi.quoteInputs[0]).toMatchObject({
+      fromChain: "BSC",
+      toChain: "SOLANA",
+      fromAddress: evmWallet.address,
+      toAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+      targetVenue: "OPINION"
+    });
+    expect(quoted.intent.aggregateRouteQuote).toMatchObject({
+      routeLegCount: 2,
+      venueEvmBridgeBack: [
+        {
+          provider: "LIFI",
+          mode: "VENUE_EVM_BRIDGE_BACK",
+          sourceVenue: "OPINION",
+          requiresPriorVenueRelease: true,
+          backendBroadcast: false,
+          completionPersisted: false
+        }
+      ]
+    });
+
+    const storedLegs = repository.withdrawalLegs.get(created.intent.withdrawalIntentId)!;
+    storedLegs[0] = {
+      ...storedLegs[0]!,
+      routeQuote: {
+        ...storedLegs[0]!.routeQuote,
+        expiresAt: new Date(Date.now() - 60_000).toISOString()
+      }
+    };
+    await expect(service.submitWithdrawalRouteLeg("user-1", created.intent.withdrawalIntentId, {
+      withdrawalRouteLegId: storedLegs[0]!.withdrawalRouteLegId,
+      txHash: "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    })).resolves.toMatchObject({
+      routeLegs: [
+        { status: "VENUE_RELEASE_PENDING" },
+        { status: "WITHDRAWAL_LEG_SIGNATURE_REQUIRED" }
+      ]
+    });
+
+    const latestStoredLegs = repository.withdrawalLegs.get(created.intent.withdrawalIntentId)!;
+    latestStoredLegs[1] = {
+      ...latestStoredLegs[1]!,
+      routeQuote: {
+        ...latestStoredLegs[1]!.routeQuote,
+        expiresAt: new Date(Date.now() - 60_000).toISOString()
+      }
+    };
+    await expect(service.submitWithdrawalRouteLeg("user-1", created.intent.withdrawalIntentId, {
+      withdrawalRouteLegId: latestStoredLegs[1]!.withdrawalRouteLegId,
+      txHash: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    })).rejects.toMatchObject({ code: "WITHDRAWAL_ROUTE_STALE" });
+  });
+
   it("does not silently use Opinion adapter for multi-source withdrawals", async () => {
     const repository = new InMemoryFundingRepository();
     repository.ready = true;
