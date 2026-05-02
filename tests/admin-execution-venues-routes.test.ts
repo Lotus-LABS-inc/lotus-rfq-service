@@ -64,12 +64,14 @@ describe("admin execution venue readiness routes", () => {
     });
     expect(listResponse.statusCode).toBe(200);
     const body = listResponse.json();
-    expect(body.venues).toHaveLength(1);
+    expect(body.venues).toHaveLength(5);
     expect(body.venues[0]).toMatchObject({
       venue: "POLYMARKET",
       adapter: "PolymarketExecutionAdapterV2",
       structuralReadiness: "LIVE_READY",
       operationalStatus: "EXTERNALLY_BLOCKED",
+      marketRoutingCoverage: "COVERED_BY_MATCHING",
+      liveSubmissionSupported: true,
       liveExecutionEnabled: true,
       requiredEnvPresent: true,
       lastHarnessAttempt: {
@@ -84,6 +86,14 @@ describe("admin execution venue readiness routes", () => {
     expect(serialized).not.toContain("server-side-secret");
     expect(serialized).not.toContain("server-side-passphrase");
     expect(serialized).not.toContain(liveReadyEnv.POLYMARKET_PRIVATE_KEY);
+    expect(body.venues.find((venue: { venue: string }) => venue.venue === "LIMITLESS")).toMatchObject({
+      venue: "LIMITLESS",
+      adapter: "NOT_IMPLEMENTED",
+      operationalStatus: "NOT_CONFIGURED",
+      marketRoutingCoverage: "COVERED_BY_MATCHING",
+      liveSubmissionSupported: false,
+      liveExecutionEnabled: false
+    });
 
     const detailResponse = await app.inject({
       method: "GET",
@@ -92,9 +102,16 @@ describe("admin execution venue readiness routes", () => {
     expect(detailResponse.statusCode).toBe(200);
     expect(detailResponse.json().venue.operatorMessage).toContain("structurally ready");
 
-    const missingResponse = await app.inject({
+    const nonPolymarketResponse = await app.inject({
       method: "GET",
       url: "/admin/execution-venues/limitless"
+    });
+    expect(nonPolymarketResponse.statusCode).toBe(200);
+    expect(nonPolymarketResponse.json().venue.operatorMessage).toContain("no reviewed live execution adapter");
+
+    const missingResponse = await app.inject({
+      method: "GET",
+      url: "/admin/execution-venues/kalshi"
     });
     expect(missingResponse.statusCode).toBe(404);
 

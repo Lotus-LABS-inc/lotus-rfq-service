@@ -12,10 +12,12 @@ export type ExecutionVenueOperationalStatus =
   | "NOT_CONFIGURED";
 
 export interface ExecutionVenueReadinessSummary {
-  venue: "POLYMARKET";
-  adapter: "PolymarketExecutionAdapterV2";
-  structuralReadiness: PolymarketExecutionAdapterV2EnvStatus["readinessState"];
+  venue: ExecutionVenue;
+  adapter: "PolymarketExecutionAdapterV2" | "NOT_IMPLEMENTED";
+  structuralReadiness: PolymarketExecutionAdapterV2EnvStatus["readinessState"] | "NOT_CONFIGURED";
   operationalStatus: ExecutionVenueOperationalStatus;
+  marketRoutingCoverage: "COVERED_BY_MATCHING" | "UNKNOWN";
+  liveSubmissionSupported: boolean;
   liveExecutionEnabled: boolean;
   featureFlagSelected: boolean;
   host: string | null;
@@ -53,6 +55,12 @@ const asString = (value: unknown): string | null =>
 const asStringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 
+const executionVenues = ["POLYMARKET", "LIMITLESS", "OPINION", "MYRIAD", "PREDICT_FUN"] as const;
+type ExecutionVenue = (typeof executionVenues)[number];
+
+const isExecutionVenue = (venue: string): venue is ExecutionVenue =>
+  executionVenues.includes(venue as ExecutionVenue);
+
 export class ExecutionVenuesAdminService {
   private readonly repoRoot: string;
   private readonly env: NodeJS.ProcessEnv;
@@ -63,12 +71,15 @@ export class ExecutionVenuesAdminService {
   }
 
   public async listVenues(): Promise<ExecutionVenueReadinessSummary[]> {
-    return [await this.getVenue("POLYMARKET")];
+    return Promise.all(executionVenues.map((venue) => this.getVenue(venue)));
   }
 
   public async getVenue(venue: string): Promise<ExecutionVenueReadinessSummary> {
-    if (venue !== "POLYMARKET") {
+    if (!isExecutionVenue(venue)) {
       throw new ExecutionVenueNotFoundError(venue);
+    }
+    if (venue !== "POLYMARKET") {
+      return this.getFailClosedVenue(venue);
     }
     const adapterStatus = getPolymarketExecutionAdapterV2EnvStatus(this.env);
     const lastHarnessAttempt = await this.readPolymarketHarnessArtifact();
@@ -78,6 +89,8 @@ export class ExecutionVenuesAdminService {
       adapter: "PolymarketExecutionAdapterV2",
       structuralReadiness: adapterStatus.readinessState,
       operationalStatus,
+      marketRoutingCoverage: "COVERED_BY_MATCHING",
+      liveSubmissionSupported: true,
       liveExecutionEnabled: adapterStatus.liveExecutionEnabled,
       featureFlagSelected: adapterStatus.featureFlagSelected,
       host: this.env.POLYMARKET_CLOB_HOST ?? this.env.POLY_CLOB_HOST ?? null,
@@ -89,6 +102,38 @@ export class ExecutionVenuesAdminService {
       credentialsServerSideOnly: true,
       lastHarnessAttempt,
       operatorMessage: this.operatorMessage(operationalStatus, lastHarnessAttempt.errorCode)
+    };
+  }
+
+  private getFailClosedVenue(venue: Exclude<ExecutionVenue, "POLYMARKET">): ExecutionVenueReadinessSummary {
+    return {
+      venue,
+      adapter: "NOT_IMPLEMENTED",
+      structuralReadiness: "NOT_CONFIGURED",
+      operationalStatus: "NOT_CONFIGURED",
+      marketRoutingCoverage: "COVERED_BY_MATCHING",
+      liveSubmissionSupported: false,
+      liveExecutionEnabled: false,
+      featureFlagSelected: false,
+      host: null,
+      chainId: null,
+      requiredEnvPresent: false,
+      missingEnv: [],
+      dryRunRequiredEnvPresent: false,
+      missingDryRunEnv: [],
+      credentialsServerSideOnly: true,
+      lastHarnessAttempt: {
+        artifactPresent: false,
+        generatedAt: null,
+        mode: null,
+        submitted: null,
+        errorCode: null,
+        errorStatus: null,
+        errorMessage: null,
+        blockers: [`${venue} live execution adapter is not implemented.`],
+        warnings: []
+      },
+      operatorMessage: `${venue} has market/routing coverage, but no reviewed live execution adapter is enabled. Orders must fail closed instead of submitting to this venue.`
     };
   }
 

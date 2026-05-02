@@ -103,15 +103,23 @@ Use the execution venue readiness surface to inspect adapter readiness before an
 Routes:
 - `GET /admin/execution-venues`
 - `GET /admin/execution-venues/POLYMARKET`
+- `GET /admin/execution-venues/LIMITLESS`
+- `GET /admin/execution-venues/OPINION`
+- `GET /admin/execution-venues/MYRIAD`
+- `GET /admin/execution-venues/PREDICT_FUN`
 
 Current scope:
 - read-only
 - admin-authenticated
 - no live order submission
 - no credential or secret exposure
-- one venue entry for `POLYMARKET`
+- venue entries for `POLYMARKET`, `LIMITLESS`, `OPINION`, `MYRIAD`, and `PREDICT_FUN`
+- non-Polymarket venues currently report market/routing coverage but fail closed for live submission until reviewed execution adapters exist
 
-Polymarket readiness fields:
+Readiness fields:
+- `marketRoutingCoverage`: whether Lotus has matching/routing coverage for the venue family
+- `liveSubmissionSupported`: whether a reviewed live execution adapter exists for the venue
+- `adapter`: concrete live execution adapter, or `NOT_IMPLEMENTED`
 - `structuralReadiness`: adapter/env readiness from the Polymarket V2 adapter config
 - `operationalStatus`: operator-facing status derived from adapter readiness plus the latest harness artifact
 - `liveExecutionEnabled`: whether the live-execution env flag is enabled
@@ -131,6 +139,12 @@ Current Polymarket interpretation:
 - `EXTERNALLY_BLOCKED` means the remaining blocker is outside Lotus local structure, typically API authorization or endpoint availability
 - this status does not authorize live submission by itself
 - approved-lane enforcement, execution-scope token validation, preflight, settlement verification, and ghost-fill protection still apply
+
+Non-Polymarket interpretation:
+- `marketRoutingCoverage=COVERED_BY_MATCHING` means Lotus can surface venue market coverage for matching/routing review
+- `liveSubmissionSupported=false` means Lotus must not submit orders to that venue from the backend
+- `operationalStatus=NOT_CONFIGURED` is the expected private-beta status until a venue-specific execution adapter, smoke harness, settlement proof, and operator signoff are implemented
+- do not treat funding readiness or market coverage as live execution readiness
 
 Polymarket V2 dry-run boundary:
 - the `clobV2DryRun` metadata and dry-run signing fixture are Lotus-internal validation artifacts

@@ -3826,9 +3826,36 @@ components:
       additionalProperties: true
       properties:
         venue: { $ref: "#/components/schemas/Venue" }
+        adapter:
+          type: string
+          enum: [PolymarketExecutionAdapterV2, NOT_IMPLEMENTED]
+        structuralReadiness:
+          type: string
+          enum: [NOT_CONFIGURED, LIVE_DISABLED, LIVE_READY]
+        operationalStatus:
+          type: string
+          enum: [NOT_CONFIGURED, LIVE_DISABLED, STRUCTURALLY_READY, EXTERNALLY_BLOCKED]
+        marketRoutingCoverage:
+          type: string
+          enum: [COVERED_BY_MATCHING, UNKNOWN]
+        liveSubmissionSupported: { type: boolean }
         status: { $ref: "#/components/schemas/VenueReadiness" }
         liveExecutionEnabled: { type: boolean }
+        featureFlagSelected: { type: boolean }
         envReady: { type: boolean }
+        requiredEnvPresent: { type: boolean }
+        missingEnv:
+          type: array
+          items: { type: string }
+        dryRunRequiredEnvPresent: { type: boolean }
+        missingDryRunEnv:
+          type: array
+          items: { type: string }
+        credentialsServerSideOnly: { type: boolean }
+        lastHarnessAttempt:
+          type: object
+          additionalProperties: true
+        operatorMessage: { type: string }
         notes:
           type: array
           items: { type: string }
