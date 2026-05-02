@@ -62,7 +62,10 @@ interface SmokeArtifact {
 
 const requestedVenue = (process.argv[2] ?? "").toUpperCase();
 const artifactDir = join(process.cwd(), "artifacts", "funding");
-const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
+const databaseUrl = process.env.FUNDING_SMOKE_DATABASE_URL
+  ?? process.env.SUPABASE_DB_URL
+  ?? process.env.TEST_DATABASE_URL
+  ?? process.env.DATABASE_URL;
 
 const buildBaseArtifact = (venue: FundingVenue | string): SmokeArtifact => {
   const config = isFundingVenueReadinessSupported(venue)
@@ -133,11 +136,11 @@ const run = async (): Promise<SmokeArtifact> => {
     return {
       ...artifact,
       status: "REFUSED_CONFIG_INCOMPLETE",
-      blockers: ["TEST_DATABASE_URL or DATABASE_URL is required to select a safe funding row."]
+      blockers: ["FUNDING_SMOKE_DATABASE_URL, SUPABASE_DB_URL, TEST_DATABASE_URL, or DATABASE_URL is required to select a safe funding row."]
     };
   }
 
-  const pool = new Pool({ connectionString: databaseUrl });
+  const pool = new Pool(poolConfigFor(databaseUrl));
   try {
     const repository = new FundingRepository(pool);
     const candidate = await selectCandidate(repository, requestedVenue);
@@ -310,6 +313,21 @@ const renderMarkdown = (artifact: SmokeArtifact): string => [
   ...(artifact.warnings.length > 0 ? artifact.warnings.map((warning) => `- ${warning}`) : ["- none"]),
   ""
 ].join("\n");
+
+const poolConfigFor = (connectionString: string) => ({
+  connectionString,
+  ...(requiresSsl(connectionString) ? { ssl: { rejectUnauthorized: false } } : {}),
+  connectionTimeoutMillis: Number.parseInt(process.env.FUNDING_SMOKE_DB_CONNECT_TIMEOUT_MS ?? "30000", 10)
+});
+
+const requiresSsl = (connectionString: string): boolean => {
+  try {
+    const url = new URL(connectionString);
+    return url.hostname.includes("supabase.") || url.hostname.includes("pooler.supabase.com") || url.searchParams.has("sslmode");
+  } catch {
+    return false;
+  }
+};
 
 const artifact = await run();
 const finalArtifact = isFundingVenueReadinessSupported(artifact.venue)

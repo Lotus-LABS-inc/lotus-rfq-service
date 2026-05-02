@@ -19,7 +19,7 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
-const pool = new Pool({ connectionString: databaseUrl });
+const pool = new Pool(poolConfigFor(databaseUrl));
 
 const run = async () => {
   const target = new URL(databaseUrl);
@@ -85,3 +85,11 @@ run()
     await pool.end();
     process.exit(1);
   });
+
+function poolConfigFor(connectionString) {
+  return {
+    connectionString,
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: Number.parseInt(process.env.SUPABASE_DB_CONNECT_TIMEOUT_MS ?? "30000", 10)
+  };
+}

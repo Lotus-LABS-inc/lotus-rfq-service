@@ -8,13 +8,26 @@ import { FundingRepository } from "../../src/repositories/funding.repository.js"
 
 loadDotenv();
 
-const databaseUrl = process.env.SUPABASE_DB_URL ?? process.env.DATABASE_URL ?? process.env.TEST_DATABASE_URL;
+const databaseUrl = process.env.FUNDING_SMOKE_DATABASE_URL ?? process.env.SUPABASE_DB_URL ?? process.env.DATABASE_URL ?? process.env.TEST_DATABASE_URL;
 if (!databaseUrl) {
   throw new Error("SUPABASE_DB_URL, DATABASE_URL, or TEST_DATABASE_URL is required to generate the funding readiness operator summary.");
 }
 
 const artifactDir = join(process.cwd(), "artifacts", "funding");
-const pool = new Pool({ connectionString: databaseUrl });
+const pool = new Pool({
+  connectionString: databaseUrl,
+  ...(requiresSsl(databaseUrl) ? { ssl: { rejectUnauthorized: false } } : {}),
+  connectionTimeoutMillis: Number.parseInt(process.env.FUNDING_SMOKE_DB_CONNECT_TIMEOUT_MS ?? "30000", 10)
+});
+
+function requiresSsl(connectionString: string): boolean {
+  try {
+    const url = new URL(connectionString);
+    return url.hostname.includes("supabase.") || url.hostname.includes("pooler.supabase.com") || url.searchParams.has("sslmode");
+  } catch {
+    return false;
+  }
+}
 
 function renderMarkdown(summary: Awaited<ReturnType<FundingReadinessAdminService["getSummary"]>>): string {
   return [

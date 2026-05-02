@@ -60,7 +60,11 @@ const artifact = {
   results: [] as CancelResult[]
 };
 
-const pool = new Pool({ connectionString: databaseUrl });
+const pool = new Pool({
+  connectionString: databaseUrl,
+  ...(requiresSsl(databaseUrl) ? { ssl: { rejectUnauthorized: false } } : {}),
+  connectionTimeoutMillis: Number.parseInt(process.env.SUPABASE_DB_CONNECT_TIMEOUT_MS ?? "30000", 10)
+});
 
 try {
   const rows = await loadCandidates(pool, fundingIntentIds);
@@ -124,6 +128,15 @@ function parseList(value: string | undefined): string[] {
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+function requiresSsl(connectionString: string): boolean {
+  try {
+    const url = new URL(connectionString);
+    return url.hostname.includes("supabase.") || url.hostname.includes("pooler.supabase.com") || url.searchParams.has("sslmode");
+  } catch {
+    return false;
+  }
 }
 
 async function loadCandidates(pool: Pool, ids: string[]): Promise<CandidateRow[]> {
