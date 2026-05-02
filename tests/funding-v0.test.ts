@@ -546,6 +546,27 @@ class CompletedLifiProvider extends StubLifiProvider {
   }
 }
 
+class CompletedBridgeBackLifiProvider extends StubLifiProvider {
+  public async status(): Promise<Awaited<ReturnType<LifiRouteProvider["status"]>>> {
+    return {
+      status: "DONE_COMPLETED",
+      raw: {
+        status: "DONE",
+        substatus: "COMPLETED",
+        receiving: {
+          txHash: "solana-destination-tx",
+          amount: "2990000",
+          token: {
+            symbol: "USDC",
+            decimals: 6
+          }
+        },
+        lifiExplorerLink: "https://scan.li.fi/tx/0xeeee"
+      }
+    };
+  }
+}
+
 describe("Funding v0 domain", () => {
   it("validates funding intent input and aggregate states", () => {
     expect(validateCreateFundingIntentInput({
@@ -2305,6 +2326,84 @@ describe("Funding v0 domain", () => {
       fromAddress: externalMyriadWallet,
       toAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
       targetVenue: "MYRIAD"
+    });
+  });
+
+  it("marks completed LI.FI bridge-back withdrawals complete even when execution amount is below quote estimate", async () => {
+    const repository = new InMemoryFundingRepository();
+    repository.ready = true;
+    const externalMyriadWallet = "0x4EE6eF8959D5D769347D51e2130D57bEb07Fab3B";
+    const myriadEnv = {
+      ...withdrawalEnv,
+      MYRIAD_WITHDRAWAL_ADAPTER_ENABLED: "true",
+      MYRIAD_WITHDRAWAL_ADAPTER_MODE: "USER_WALLET_DRY_RUN",
+      MYRIAD_WITHDRAWAL_ADAPTER_DRY_RUN_ONLY: "true",
+      MYRIAD_WITHDRAWAL_BRIDGE_BACK_ENABLED: "true",
+      MYRIAD_WITHDRAWAL_BRIDGE_BACK_SOURCE_CHAIN: "BSC",
+      MYRIAD_WITHDRAWAL_BRIDGE_BACK_SOURCE_TOKEN_ADDRESS: "0x8d0D000Ee44948FC98c9B98A4FA4921476f08B0d",
+      MYRIAD_WITHDRAWAL_BRIDGE_BACK_SOURCE_WALLET_ADDRESS: externalMyriadWallet,
+      MYRIAD_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_SYMBOL: "USDC",
+      MYRIAD_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_ADDRESS: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      MYRIAD_WITHDRAWAL_INSTRUCTIONS_URL: "https://docs.myriad.markets/deposit-and-withdraw"
+    } as NodeJS.ProcessEnv;
+    const service = new FundingService(
+      repository,
+      new CompletedBridgeBackLifiProvider(),
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env: myriadEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      new MyriadWalletWithdrawalAdapter(getMyriadWithdrawalConfigFromEnv(myriadEnv))
+    );
+
+    const created = await service.createWithdrawalIntent("user-1", {
+      token: "USD1",
+      amount: "3",
+      destinationChain: "SOLANA",
+      destinationWalletAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+      idempotencyKey: "withdraw-myriad-bridge-back-completed",
+      sources: [{ sourceVenue: "MYRIAD", sourcePercentage: 100 }]
+    });
+    const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
+    const bridgeLeg = quoted.routeLegs.find((leg) => leg.providerStatus.mode === "VENUE_EVM_BRIDGE_BACK")!;
+    const sourceWalletLeg = quoted.routeLegs.find((leg) => leg.providerStatus.bridgeBackPlanned === true)!;
+    await service.submitWithdrawalRouteLeg("user-1", created.intent.withdrawalIntentId, {
+      withdrawalRouteLegId: bridgeLeg.withdrawalRouteLegId,
+      txHash: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    });
+
+    const refreshed = await service.refreshWithdrawalStatus("user-1", created.intent.withdrawalIntentId);
+    expect(refreshed.intent.status).toBe("COMPLETED");
+    expect(refreshed.routeLegs.find((leg) => leg.withdrawalRouteLegId === sourceWalletLeg.withdrawalRouteLegId)).toMatchObject({
+      status: "WITHDRAWAL_LEG_COMPLETED",
+      venueReleaseStatus: "CONFIRMED",
+      destinationStatus: "CONFIRMED",
+      errorReason: null
+    });
+    expect(refreshed.routeLegs.find((leg) => leg.withdrawalRouteLegId === bridgeLeg.withdrawalRouteLegId)).toMatchObject({
+      status: "WITHDRAWAL_LEG_COMPLETED",
+      venueReleaseStatus: "CONFIRMED",
+      destinationStatus: "CONFIRMED",
+      errorReason: null
+    });
+    expect(refreshed.reconciliations.find((record) => record.withdrawalRouteLegId === sourceWalletLeg.withdrawalRouteLegId)).toMatchObject({
+      venueReleased: true,
+      destinationReceived: true,
+      completed: true,
+      notes: "VENUE_EVM_SOURCE_WALLET_EXIT_CONFIRMED_BY_BRIDGE_BACK"
+    });
+    expect(refreshed.reconciliations.find((record) => record.withdrawalRouteLegId === bridgeLeg.withdrawalRouteLegId)).toMatchObject({
+      venueReleased: true,
+      destinationReceived: true,
+      completed: true,
+      notes: "LIFI_BRIDGE_COMPLETED"
     });
   });
 

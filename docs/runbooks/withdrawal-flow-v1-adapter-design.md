@@ -613,6 +613,15 @@ Predict.fun withdrawals also require a user-controlled EVM-compatible receive wa
 
 Stored wallet fields are public receive metadata only: address, chain family, label, verification timestamp, and created/updated timestamps. Lotus must not store private keys, wallet seeds, Privy secrets, ZeroDev signer material, session cookies, user JWTs, or wallet auth tokens.
 
+For private beta full-exit routing, the Predict.fun first hop is BSC USDT into the user's Turnkey EVM wallet. If the user requests a Solana destination, Lotus should prepare the second leg as a user-signed LI.FI bridge-back to Solana USDC, not Solana USDT. The controlled production rehearsal used:
+
+- `PREDICT_FUN_WITHDRAWAL_BRIDGE_BACK_SOURCE_CHAIN=BSC`
+- `PREDICT_FUN_WITHDRAWAL_BRIDGE_BACK_SOURCE_TOKEN_ADDRESS=0x55d398326f99059fF775485246999027B3197955`
+- `PREDICT_FUN_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_SYMBOL=USDC`
+- `PREDICT_FUN_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_ADDRESS=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`
+
+LI.FI rejected Solana USDT for this bridge-back route during the beta rehearsal. Treat Solana USDC as the supported default unless a fresh route rehearsal proves otherwise.
+
 Frontend copy should be explicit:
 
 ```text

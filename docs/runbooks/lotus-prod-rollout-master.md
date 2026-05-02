@@ -509,11 +509,16 @@ Limitless production rule: do not expose normal user withdrawal through Limitles
 | `PREDICT_FUN_WITHDRAWAL_ADAPTER_ENABLED` | `true` | Only for approved user-wallet flow. |
 | `PREDICT_FUN_WITHDRAWAL_ADAPTER_MODE` | `USER_WALLET_DRY_RUN` | No backend Privy/ZeroDev signing. |
 | `PREDICT_FUN_WITHDRAWAL_ADAPTER_DRY_RUN_ONLY` | `true` | Keep true until live review. |
+| `PREDICT_FUN_WITHDRAWAL_BRIDGE_BACK_ENABLED` | `true` | Enables the user-signed BSC USDT -> Solana bridge-back leg after the Predict.fun venue exit reaches the user EVM wallet. |
+| `PREDICT_FUN_WITHDRAWAL_BRIDGE_BACK_SOURCE_CHAIN` | `BSC` | Predict.fun first-hop withdrawal rail. |
+| `PREDICT_FUN_WITHDRAWAL_BRIDGE_BACK_SOURCE_TOKEN_ADDRESS` | `0x55d398326f99059fF775485246999027B3197955` | BSC USDT contract. |
+| `PREDICT_FUN_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_SYMBOL` | `USDC` | Solana bridge-back output token; LI.FI rejected Solana USDT in the controlled beta rehearsal. |
+| `PREDICT_FUN_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_ADDRESS` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` | Solana USDC mint. |
 | `PREDICT_FUN_INTERNAL_WITHDRAWAL_EVIDENCE_READ_MODE` | `BSC_ONCHAIN` | BSC USDT rail evidence. |
 | `PREDICT_FUN_INTERNAL_WITHDRAWAL_EVIDENCE_BSC_RPC_URL` | `https://bsc.example.com/rpc` | Approved BSC RPC or wrapper. |
 | `PREDICT_FUN_INTERNAL_WITHDRAWAL_EVIDENCE_USDT_ADDRESS` | `0x55d398326f99059fF775485246999027B3197955` | BSC USDT contract. |
 
-Predict.fun production rule: user must have an EVM-compatible receiving wallet before starting BSC USDT withdrawal.
+Predict.fun production rule: user must have an EVM-compatible receiving wallet before starting BSC USDT withdrawal. In beta, the default withdrawal UX is Predict.fun -> user Turnkey EVM wallet on BSC USDT, then a user-signed LI.FI bridge-back to the user's Solana USDC wallet. Lotus does not sign, broadcast, custody, or impersonate Privy/ZeroDev users.
 
 ## 13. User Withdrawal Wallet Requirement
 
@@ -534,6 +539,7 @@ Beta withdrawal routing rule:
 - Limitless is treated separately from proxy venues. Because beta funding lands as Base USDC and is available in the Limitless account, the Lotus withdrawal intent should prepare bridge-back from the user's available Base USDC path to the user's Solana wallet after evidence confirms funds are available. Do not wire user-facing routes to `POST /portfolio/withdraw` unless the partner-managed approval gate and custody/security review explicitly pass.
 - Proxy/account venues must release funds from the venue proxy, Safe, embedded wallet, or venue-managed account to the user's EVM receive wallet first. When `<VENUE>_WITHDRAWAL_BRIDGE_BACK_ENABLED=true` and the user requests a Solana destination, Lotus prepares two legs: the venue release to the configured EVM receive wallet, then a user-signed LI.FI bridge-back leg from that EVM wallet to the final Solana wallet. The source can be the user's Turnkey EVM wallet or, for venues such as Myriad that release to an exported venue wallet, an explicitly configured external EVM source wallet. Lotus still does not sign, broadcast, custody, or move funds.
 - No withdrawal flow may mark completion from a Solana destination request alone when funds are still inside a venue proxy/account.
+- When a LI.FI bridge-back leg for a proxy/account venue is confirmed and it originates from the configured EVM source wallet, that bridge-back completion can satisfy the paired source-wallet exit leg. This avoids leaving full-exit withdrawals stuck in `PARTIALLY_COMPLETED` when the executable bridge transaction is the actual EVM source-wallet exit proof.
 - The bridge-back leg may be shown before the venue release is complete, but frontend signing should wait until the first-hop EVM receipt is confirmed. LI.FI quote expiry remains enforced for bridge-back transaction submissions; stale manual venue-release references may still be recorded because they are evidence references, not executable bridge quotes.
 
 Bridge-back env pattern for proxy/account venues:

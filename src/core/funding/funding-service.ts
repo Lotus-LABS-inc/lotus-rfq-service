@@ -756,13 +756,14 @@ export class FundingService {
     }
 
     const refreshedStates: WithdrawalLegState[] = [];
+    const autoCompletedLegIds = new Set<string>();
     for (const leg of view.routeLegs) {
       const latestTxHash = leg.txHashes.at(-1);
       if (!latestTxHash || leg.status === "WITHDRAWAL_LEG_COMPLETED" || leg.status === "WITHDRAWAL_LEG_FAILED") {
         refreshedStates.push(leg.status);
         continue;
       }
-      if (!["VENUE_RELEASE_PENDING", "DESTINATION_PENDING", "DESTINATION_RECEIVED"].includes(leg.status)) {
+      if (!["VENUE_RELEASE_PENDING", "DESTINATION_PENDING", "DESTINATION_RECEIVED", "WITHDRAWAL_LEG_RETRY_REQUIRED"].includes(leg.status)) {
         refreshedStates.push(leg.status);
         continue;
       }
@@ -834,10 +835,25 @@ export class FundingService {
           evidence: result.evidence ?? {}
         }
       });
+      if (completed && isLifiBridgeBackWithdrawalLeg(leg)) {
+        const completedSourceLegIds = await this.completeVenueEvmSourceLegsSatisfiedByBridgeBack({
+          withdrawalIntentId,
+          view,
+          bridgeBackLeg: leg,
+          bridgeBackTxHash: result.withdrawalTxHash ?? latestTxHash
+        });
+        for (const completedSourceLegId of completedSourceLegIds) {
+          autoCompletedLegIds.add(completedSourceLegId);
+        }
+      }
       refreshedStates.push(nextStatus);
     }
     if (refreshedStates.length > 0) {
-      const nextAggregateStatus = aggregateWithdrawalStatus(refreshedStates);
+      const nextAggregateStatus = aggregateWithdrawalStatus(view.routeLegs.map((leg, index) =>
+        autoCompletedLegIds.has(leg.withdrawalRouteLegId)
+          ? "WITHDRAWAL_LEG_COMPLETED"
+          : refreshedStates[index] ?? leg.status
+      ));
       await this.repository.updateWithdrawalIntentStatus(withdrawalIntentId, nextAggregateStatus);
       if (nextAggregateStatus === "COMPLETED" || nextAggregateStatus === "PARTIALLY_COMPLETED") {
         await this.repository.appendWithdrawalAuditEvent({
@@ -848,6 +864,69 @@ export class FundingService {
       }
     }
     return this.getWithdrawalIntent(userId, withdrawalIntentId);
+  }
+
+  private async completeVenueEvmSourceLegsSatisfiedByBridgeBack(input: {
+    withdrawalIntentId: string;
+    view: WithdrawalIntentView;
+    bridgeBackLeg: WithdrawalRouteLeg;
+    bridgeBackTxHash: string;
+  }): Promise<string[]> {
+    if (
+      input.bridgeBackLeg.providerStatus.provider !== "LIFI"
+      || input.bridgeBackLeg.providerStatus.mode !== "VENUE_EVM_BRIDGE_BACK"
+    ) {
+      return [];
+    }
+    const sourceLegs = input.view.routeLegs.filter((candidate) =>
+      candidate.withdrawalRouteLegId !== input.bridgeBackLeg.withdrawalRouteLegId
+      && candidate.withdrawalSourceId === input.bridgeBackLeg.withdrawalSourceId
+      && candidate.sourceVenue === input.bridgeBackLeg.sourceVenue
+      && candidate.status !== "WITHDRAWAL_LEG_COMPLETED"
+      && candidate.status !== "WITHDRAWAL_LEG_FAILED"
+      && candidate.providerStatus.bridgeBackPlanned === true
+      && equalsIgnoreCase(stringOrNull(candidate.providerStatus.finalDestinationChain), input.view.intent.destinationChain)
+      && equalsIgnoreCase(stringOrNull(candidate.providerStatus.finalDestinationWalletAddress), input.view.intent.destinationWalletAddress)
+    );
+    const completedLegIds: string[] = [];
+    for (const sourceLeg of sourceLegs) {
+      await this.repository.createWithdrawalReconciliationRecord({
+        withdrawalIntentId: input.withdrawalIntentId,
+        withdrawalRouteLegId: sourceLeg.withdrawalRouteLegId,
+        sourceVenue: sourceLeg.sourceVenue,
+        withdrawalTxHash: input.bridgeBackTxHash,
+        venueReleased: true,
+        destinationReceived: true,
+        completed: true,
+        notes: "VENUE_EVM_SOURCE_WALLET_EXIT_CONFIRMED_BY_BRIDGE_BACK"
+      });
+      await this.repository.updateWithdrawalRouteLegReconciliation({
+        withdrawalRouteLegId: sourceLeg.withdrawalRouteLegId,
+        status: "WITHDRAWAL_LEG_COMPLETED",
+        venueReleaseStatus: "CONFIRMED",
+        destinationStatus: "CONFIRMED",
+        providerStatus: {
+          ...sourceLeg.providerStatus,
+          source: "venue_evm_bridge_back_completion",
+          status: "COMPLETED",
+          reason: "VENUE_EVM_SOURCE_WALLET_EXIT_CONFIRMED_BY_BRIDGE_BACK",
+          bridgeBackWithdrawalRouteLegId: input.bridgeBackLeg.withdrawalRouteLegId
+        },
+        errorReason: null
+      });
+      await this.repository.appendWithdrawalAuditEvent({
+        withdrawalIntentId: input.withdrawalIntentId,
+        withdrawalRouteLegId: sourceLeg.withdrawalRouteLegId,
+        eventType: "WITHDRAWAL_LEG_COMPLETED",
+        payload: {
+          status: "COMPLETED",
+          reason: "VENUE_EVM_SOURCE_WALLET_EXIT_CONFIRMED_BY_BRIDGE_BACK",
+          bridgeBackWithdrawalRouteLegId: input.bridgeBackLeg.withdrawalRouteLegId
+        }
+      });
+      completedLegIds.push(sourceLeg.withdrawalRouteLegId);
+    }
+    return completedLegIds;
   }
 
   private shouldUsePolymarketBridgeSandbox(view: WithdrawalIntentView, source: WithdrawalSource): boolean {
@@ -1311,13 +1390,17 @@ export class FundingService {
     if (!result.destinationReceived) {
       return "DESTINATION_PENDING";
     }
-    const observedAmount = toDecimalOrNull(result.amount);
-    const expectedToken = expectedWithdrawalResultToken(leg);
-    const destinationMatches = equalsIgnoreCase(result.destinationWalletAddress, intent.destinationWalletAddress)
-      && equalsIgnoreCase(result.destinationChain, intent.destinationChain)
-      && equalsIgnoreCase(result.token, expectedToken)
-      && observedAmount !== null
-      && observedAmount.gte(new Decimal(leg.destinationAmountEstimate));
+      const observedAmount = toDecimalOrNull(result.amount);
+      const expectedToken = expectedWithdrawalResultToken(leg);
+      const amountMatches = observedAmount !== null
+        && (
+          observedAmount.gte(new Decimal(leg.destinationAmountEstimate))
+          || (result.completed && isLifiBridgeBackWithdrawalLeg(leg) && observedAmount.gt(0))
+        );
+      const destinationMatches = equalsIgnoreCase(result.destinationWalletAddress, intent.destinationWalletAddress)
+        && equalsIgnoreCase(result.destinationChain, intent.destinationChain)
+        && equalsIgnoreCase(result.token, expectedToken)
+        && amountMatches;
     if (!destinationMatches) {
       return "WITHDRAWAL_LEG_RETRY_REQUIRED";
     }
@@ -2389,6 +2472,8 @@ const isSolanaAddress = (value: string): boolean =>
 
 const equalsIgnoreCase = (left: string | null | undefined, right: string | null | undefined): boolean =>
   typeof left === "string" && typeof right === "string" && left.toLowerCase() === right.toLowerCase();
+
+const stringOrNull = (value: unknown): string | null => typeof value === "string" ? value : null;
 
 const toDecimalOrNull = (value: string | null | undefined) => {
   try {
