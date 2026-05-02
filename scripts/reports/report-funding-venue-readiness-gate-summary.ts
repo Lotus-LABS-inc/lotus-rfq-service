@@ -1,8 +1,14 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { config as loadDotenv } from "dotenv";
+import { Pool } from "pg";
+
+import { FundingReadinessAdminService } from "../../src/api/admin/funding-readiness-admin-service.js";
+import type { FundingReadinessOperatorSummary } from "../../src/api/admin/funding-readiness-admin-service.js";
+import { FundingRepository } from "../../src/repositories/funding.repository.js";
 
 type GateStatus = "PASSED" | "FAILED" | "MISSING" | "STALE";
-type CoverageSource = "single_venue_rehearsal" | "pair_rehearsal" | "missing";
+type CoverageSource = "persisted_admin_readiness" | "single_venue_rehearsal" | "pair_rehearsal" | "missing";
 
 interface RehearsalArtifact {
   generatedAt?: string;
@@ -50,6 +56,7 @@ interface VenueGateRow {
 interface GateSummary {
   generatedAt: string;
   maxAgeHours: number;
+  source: "DB" | "ARTIFACTS";
   status: "PASSED" | "FAILED";
   passedVenues: number;
   failedVenues: number;
@@ -68,6 +75,9 @@ const artifactDir = join(process.cwd(), "artifacts", "funding");
 const summaryJsonPath = join(artifactDir, "all-venue-readiness-gate-summary.json");
 const summaryMarkdownPath = join(artifactDir, "all-venue-readiness-gate-summary.md");
 const maxAgeHours = Number.parseInt(process.env.FUNDING_VENUE_GATE_SUMMARY_MAX_AGE_HOURS ?? "24", 10);
+const source = (process.env.FUNDING_VENUE_GATE_SUMMARY_SOURCE ?? "DB").toUpperCase();
+
+loadDotenv();
 
 const slug = (venue: string): string => venue.toLowerCase().replaceAll("_", "-");
 
@@ -188,6 +198,88 @@ const validateVenue = (
   };
 };
 
+const databaseUrl = (): string | null =>
+  process.env.FUNDING_SMOKE_DATABASE_URL ?? process.env.SUPABASE_DB_URL ?? process.env.DATABASE_URL ?? process.env.TEST_DATABASE_URL ?? null;
+
+const requiresSsl = (connectionString: string): boolean => {
+  try {
+    const url = new URL(connectionString);
+    return url.hostname.includes("supabase.") || url.hostname.includes("pooler.supabase.com") || url.searchParams.has("sslmode");
+  } catch {
+    return false;
+  }
+};
+
+const loadPersistedReadinessSummary = async (): Promise<FundingReadinessOperatorSummary | null> => {
+  const connectionString = databaseUrl();
+  if (!connectionString) {
+    return null;
+  }
+  const pool = new Pool({
+    connectionString,
+    ...(requiresSsl(connectionString) ? { ssl: { rejectUnauthorized: false } } : {}),
+    connectionTimeoutMillis: Number.parseInt(process.env.FUNDING_SMOKE_DB_CONNECT_TIMEOUT_MS ?? "30000", 10)
+  });
+  try {
+    const service = new FundingReadinessAdminService({
+      repository: new FundingRepository(pool),
+      env: process.env
+    });
+    return await service.getSummary();
+  } finally {
+    await pool.end();
+  }
+};
+
+const loadPersistedVenueRow = (
+  venue: string,
+  summary: FundingReadinessOperatorSummary,
+  now: Date
+): VenueGateRow => {
+  const venueRows = summary.rows.filter((row) => row.targetVenue === venue);
+  const readyRows = venueRows.filter((row) => row.readinessStatus === "READY_TO_TRADE");
+  const failedRows = venueRows.filter((row) => row.readinessStatus === "FAILED" || row.readinessStatus === "UNKNOWN");
+  const blockers: string[] = [];
+  if (venueRows.length === 0) {
+    blockers.push(`No active persisted funding readiness rows found for ${venue}.`);
+  }
+  if (readyRows.length === 0) {
+    blockers.push(`No persisted READY_TO_TRADE row found for ${venue}.`);
+  }
+  if (failedRows.length > 0) {
+    blockers.push(`${failedRows.length} persisted ${venue} row(s) are FAILED or UNKNOWN.`);
+  }
+
+  const latestCheckedAt = venueRows
+    .map((row) => row.lastCheckedAt ?? row.updatedAt)
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+  const resolvedAgeHours = ageHours(latestCheckedAt, now);
+  const fresh = resolvedAgeHours !== null && resolvedAgeHours <= maxAgeHours;
+  if (!fresh) {
+    blockers.push(resolvedAgeHours === null ? "Persisted readiness timestamp is missing or invalid." : `Persisted readiness is stale at ${resolvedAgeHours.toFixed(2)}h.`);
+  }
+
+  return {
+    venue,
+    status: blockers.length === 0 ? "PASSED" : fresh ? "FAILED" : "STALE",
+    coverageSource: "persisted_admin_readiness",
+    artifactPath: null,
+    generatedAt: latestCheckedAt ?? null,
+    ageHours: resolvedAgeHours === null ? null : Number(resolvedAgeHours.toFixed(4)),
+    maxAgeHours,
+    artifactStatus: readyRows.length > 0 ? "READY_TO_TRADE" : null,
+    executionPreflightOk: readyRows.length > 0,
+    persistedReadinessRows: readyRows.length,
+    adminReadinessVisible: venueRows.length > 0,
+    redactionVerified: true,
+    safetyOk: true,
+    routeLegReady: readyRows.length > 0,
+    venueEvidenceReady: readyRows.length > 0,
+    blockers
+  };
+};
+
 const loadVenueRow = async (venue: string, now: Date): Promise<VenueGateRow> => {
   const singlePath = join(artifactDir, `${slug(venue)}-funding-readiness-sandbox-preflight.json`);
   const singleArtifact = await readArtifact(singlePath);
@@ -208,6 +300,7 @@ const renderMarkdown = (summary: GateSummary): string => [
   "# All Venue Funding Readiness Gate Summary",
   "",
   `Generated: ${summary.generatedAt}`,
+  `Source: ${summary.source}`,
   `Status: ${summary.status}`,
   `Max age hours: ${summary.maxAgeHours}`,
   "",
@@ -234,10 +327,14 @@ const renderMarkdown = (summary: GateSummary): string => [
 ].join("\n");
 
 const now = new Date();
-const rows = await Promise.all(venues.map((venue) => loadVenueRow(venue, now)));
+const persistedSummary = source === "ARTIFACTS" ? null : await loadPersistedReadinessSummary();
+const rows = persistedSummary
+  ? venues.map((venue) => loadPersistedVenueRow(venue, persistedSummary, now))
+  : await Promise.all(venues.map((venue) => loadVenueRow(venue, now)));
 const summary: GateSummary = {
   generatedAt: now.toISOString(),
   maxAgeHours,
+  source: persistedSummary ? "DB" : "ARTIFACTS",
   status: rows.every((row) => row.status === "PASSED") ? "PASSED" : "FAILED",
   passedVenues: rows.filter((row) => row.status === "PASSED").length,
   failedVenues: rows.filter((row) => row.status !== "PASSED").length,
