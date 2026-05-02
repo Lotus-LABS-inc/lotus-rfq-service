@@ -817,13 +817,20 @@ export class FundingRepository implements FundingRepositoryContract {
     );
   }
 
-  public async updateWithdrawalRouteLegSubmission(input: { withdrawalRouteLegId: string; txHash: string; status: WithdrawalLegState }): Promise<void> {
+  public async updateWithdrawalRouteLegSubmission(input: {
+    withdrawalRouteLegId: string;
+    txHash: string;
+    status: WithdrawalLegState;
+    venueReleaseStatus?: string;
+    destinationStatus?: string;
+  }): Promise<void> {
     await this.pool.query(
       `WITH updated_leg AS (
         UPDATE funding_withdrawal_route_legs
            SET tx_hashes = tx_hashes || jsonb_build_array($2::text),
                status = $3,
-               venue_release_status = 'PENDING',
+               venue_release_status = COALESCE($4, 'PENDING'),
+               destination_status = COALESCE($5, destination_status),
                updated_at = now()
          WHERE id = $1::uuid
          RETURNING withdrawal_source_id
@@ -832,7 +839,13 @@ export class FundingRepository implements FundingRepositoryContract {
          SET status = $3,
              updated_at = now()
        WHERE id IN (SELECT withdrawal_source_id FROM updated_leg)`,
-      [input.withdrawalRouteLegId, input.txHash, input.status]
+      [
+        input.withdrawalRouteLegId,
+        input.txHash,
+        input.status,
+        input.venueReleaseStatus ?? null,
+        input.destinationStatus ?? null
+      ]
     );
   }
 

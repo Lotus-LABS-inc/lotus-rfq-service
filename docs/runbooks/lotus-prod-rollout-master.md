@@ -427,6 +427,11 @@ Withdrawal completion persistence may be enabled only after:
 | `LIMITLESS_WITHDRAWAL_ADAPTER_API_KEY` | `<secret>` | Read-only/diagnostic HMAC token only. |
 | `LIMITLESS_WITHDRAWAL_ADAPTER_HMAC_SECRET` | `<secret>` | Secret manager only. |
 | `LIMITLESS_WITHDRAWAL_ADAPTER_ON_BEHALF_OF_PROFILE_ID` | `1291576` | Optional authorized profile id for diagnostics. |
+| `LIMITLESS_FUNDING_WITHDRAWALS_ENABLED` | `true` | Required only for beta bridge-back route support. Does not enable partner-managed backend withdrawals. |
+| `LIMITLESS_WITHDRAWAL_BRIDGE_BACK_ENABLED` | `true` | Enables single-source user-signed Base USDC -> Solana USDC bridge-back quote path. |
+| `LIMITLESS_WITHDRAWAL_BRIDGE_BACK_SOURCE_CHAIN` | `BASE` | Source chain for user-signed bridge-back. |
+| `LIMITLESS_WITHDRAWAL_BRIDGE_BACK_SOURCE_TOKEN_ADDRESS` | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` | Base USDC token. |
+| `LIMITLESS_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_ADDRESS` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` | Solana USDC mint. |
 | `LIMITLESS_PARTNER_MANAGED_WITHDRAWALS_ENABLED` | `false` | Must remain false until custody/security approval. |
 | `LIMITLESS_PARTNER_MANAGED_WITHDRAWAL_APPROVAL_VENUE` | `LIMITLESS` | Required only for future approval gate. |
 | `LIMITLESS_PARTNER_MANAGED_WITHDRAWAL_APPROVAL_ID` | `SEC-2026-001` | Required only for future approval gate. |
@@ -435,7 +440,7 @@ Withdrawal completion persistence may be enabled only after:
 | `LIMITLESS_PARTNER_MANAGED_WITHDRAWAL_APPROVED_AT` | `2026-04-27T10:00:00Z` | Required only for future approval gate. |
 | `LIMITLESS_PARTNER_MANAGED_WITHDRAWAL_APPROVAL_EXPIRES_AT` | `2026-05-27T10:00:00Z` | Required only for future approval gate. |
 
-Limitless production rule: do not expose normal user withdrawal. EOA/user mode is automatic market-resolution payout only. `POST /portfolio/withdraw` and `POST /portfolio/redeem` must not be callable from user paths.
+Limitless production rule: do not expose normal user withdrawal through Limitless partner-managed APIs. EOA/user mode is automatic market-resolution payout only. For beta, the user-facing withdrawal path is only the bridge-back quote from available Base USDC to Solana USDC, signed by the user. `POST /portfolio/withdraw` and `POST /portfolio/redeem` must not be callable from user paths.
 
 ### Opinion
 

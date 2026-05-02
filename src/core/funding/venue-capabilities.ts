@@ -89,6 +89,7 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       : {})
   };
   const supportsWithdrawal = (venue: FundingVenue): boolean => envValue(env, `${venue}_FUNDING_WITHDRAWALS_ENABLED`) === "true";
+  const limitlessBridgeBackEnabled = supportsWithdrawal("LIMITLESS") && envValue(env, "LIMITLESS_WITHDRAWAL_BRIDGE_BACK_ENABLED") === "true";
 
   return {
     POLYMARKET: {
@@ -129,7 +130,7 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       autoCreditSupported: false,
       requiresFinalizationStep: true,
       supportsDirectDeposit: true,
-      supportsWithdrawal: false,
+      supportsWithdrawal: limitlessBridgeBackEnabled,
       withdrawalMode: "AUTO_RESOLUTION_ONLY",
       userSignedWithdrawalSupported: false,
       partnerManagedWithdrawal: {
@@ -143,7 +144,9 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       readinessStatus: limitlessDepositAddress ? "READY" : "DISABLED",
       depositAddressConfigured: Boolean(limitlessDepositAddress),
       notes: limitlessDepositAddress
-        ? "Limitless funding quote path is configured. Withdrawal mode is AUTO_RESOLUTION_ONLY for EOA/user accounts; partner-managed backend withdrawal remains disabled."
+        ? limitlessBridgeBackEnabled
+          ? "Limitless funding quote path is configured. Beta withdrawal support is limited to user-signed Base USDC bridge-back to Solana; partner-managed backend withdrawal remains disabled."
+          : "Limitless funding quote path is configured. Withdrawal mode is AUTO_RESOLUTION_ONLY for EOA/user accounts; partner-managed backend withdrawal remains disabled."
         : "Set LIMITLESS_FUNDING_DESTINATION_ADDRESS before enabling Limitless funding quotes. Limitless user-signed withdrawals are not supported."
     },
     OPINION: configurableCapability({

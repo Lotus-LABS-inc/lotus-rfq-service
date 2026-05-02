@@ -284,6 +284,13 @@ class InMemoryFundingRepository implements FundingRepository {
         availableAmount: "100",
         updatedAt: new Date().toISOString()
       }, {
+        venue: "LIMITLESS",
+        token: "USDC",
+        readyAmount: "100",
+        pendingWithdrawalAmount: "0",
+        availableAmount: "100",
+        updatedAt: new Date().toISOString()
+      }, {
           venue: "PREDICT_FUN",
           token: "USDC",
           readyAmount: "100",
@@ -356,13 +363,20 @@ class InMemoryFundingRepository implements FundingRepository {
     });
   }
 
-  public async updateWithdrawalRouteLegSubmission(input: { withdrawalRouteLegId: string; txHash: string; status: WithdrawalLegState }): Promise<void> {
+  public async updateWithdrawalRouteLegSubmission(input: {
+    withdrawalRouteLegId: string;
+    txHash: string;
+    status: WithdrawalLegState;
+    venueReleaseStatus?: string;
+    destinationStatus?: string;
+  }): Promise<void> {
     for (const [intentId, legs] of this.withdrawalLegs.entries()) {
       this.withdrawalLegs.set(intentId, legs.map((leg) => leg.withdrawalRouteLegId === input.withdrawalRouteLegId ? {
         ...leg,
         status: input.status,
         txHashes: [...leg.txHashes, input.txHash],
-        venueReleaseStatus: "PENDING"
+        venueReleaseStatus: input.venueReleaseStatus ?? "PENDING",
+        destinationStatus: input.destinationStatus ?? leg.destinationStatus
       } : leg));
     }
   }
@@ -604,6 +618,16 @@ describe("Funding v0 domain", () => {
         requiresWithdrawalScope: true,
         requiresCustodySecurityApproval: true
       }
+    });
+    expect(buildVenueCapabilityMatrix({
+      env: {
+        ...withdrawalEnv,
+        LIMITLESS_WITHDRAWAL_BRIDGE_BACK_ENABLED: "true"
+      } as NodeJS.ProcessEnv
+    }).LIMITLESS).toMatchObject({
+      supportsWithdrawal: true,
+      withdrawalMode: "AUTO_RESOLUTION_ONLY",
+      userSignedWithdrawalSupported: false
     });
     expect(buildVenueCapabilityMatrix({ env: {} as NodeJS.ProcessEnv }).OPINION.readinessStatus).toBe("DISABLED");
     const predictFunBscUsdtMatrix = buildVenueCapabilityMatrix({
@@ -1463,6 +1487,95 @@ describe("Funding v0 domain", () => {
         { sourceVenue: "POLYMARKET", sourcePercentage: 50 }
       ]
     })).rejects.toMatchObject({ code: "TARGET_SPLIT_INVALID" });
+  });
+
+  it("quotes Limitless beta withdrawals as user-signed Base USDC bridge-back to Solana", async () => {
+    const repository = new InMemoryFundingRepository();
+    repository.ready = true;
+    const lifi = new StubLifiProvider();
+    const evmWallet = userWallet({
+      walletId: "wallet-evm",
+      userId: "user-1",
+      chainFamily: "EVM",
+      chain: "BASE",
+      address: "0xD1059eC5F635712f6dcEAd569a41dFD7970DAffa"
+    });
+    const service = new FundingService(
+      repository,
+      lifi,
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env: {
+          ...withdrawalEnv,
+          LIMITLESS_WITHDRAWAL_BRIDGE_BACK_ENABLED: "true"
+        } as NodeJS.ProcessEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {
+        resolveFundingSourceWallet: async () => null,
+        resolveUserTurnkeyEvmFundingWallet: async () => evmWallet,
+        resolveVenueTargetWallet: async () => null
+      }
+    );
+
+    const created = await service.createWithdrawalIntent("user-1", {
+      token: "USDC",
+      amount: "10",
+      destinationChain: "SOLANA",
+      destinationWalletAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+      idempotencyKey: "withdraw-limitless-bridge-back",
+      sources: [{ sourceVenue: "LIMITLESS", sourcePercentage: 100 }]
+    });
+    const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
+
+    expect(lifi.quoteInputs[0]).toMatchObject({
+      fromChain: "BASE",
+      toChain: "SOLANA",
+      fromAddress: evmWallet.address,
+      toAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+      targetVenue: "LIMITLESS"
+    });
+    expect(quoted.routeLegs[0]).toMatchObject({
+      sourceVenue: "LIMITLESS",
+      destinationChain: "SOLANA",
+      venueReleaseStatus: "CONFIRMED",
+      destinationStatus: "NOT_CONFIRMED",
+      providerStatus: {
+        provider: "LIFI",
+        mode: "LIMITLESS_BRIDGE_BACK",
+        partnerManagedWithdrawalCalled: false,
+        completionPersisted: false
+      }
+    });
+    expect(quoted.routeLegs[0]!.routeQuote.transactionRequest).toBeTruthy();
+    expect(quoted.intent.aggregateRouteQuote).toMatchObject({
+      limitlessBridgeBack: {
+        provider: "LIFI",
+        mode: "LIMITLESS_BRIDGE_BACK",
+        partnerManagedWithdrawalCalled: false,
+        completionPersisted: false
+      }
+    });
+    expect(JSON.stringify(quoted.routeLegs[0]!.routeQuote)).not.toContain("portfolio/withdraw");
+    expect(JSON.stringify(quoted.routeLegs[0]!.providerStatus)).not.toContain("portfolio/withdraw");
+
+    const submitted = await service.submitWithdrawalRouteLeg("user-1", created.intent.withdrawalIntentId, {
+      withdrawalRouteLegId: quoted.routeLegs[0]!.withdrawalRouteLegId,
+      txHash: "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    });
+    expect(submitted.routeLegs[0]).toMatchObject({
+      status: "DESTINATION_PENDING",
+      venueReleaseStatus: "CONFIRMED",
+      destinationStatus: "PENDING"
+    });
   });
 
   it("uses Polymarket Bridge sandbox metadata only when explicitly enabled", async () => {

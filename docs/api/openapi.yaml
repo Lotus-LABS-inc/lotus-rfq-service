@@ -2807,7 +2807,7 @@ paths:
     post:
       tags: [Funding]
       summary: Quote non-custodial withdrawal route legs.
-      description: Creates a frontend-safe withdrawal preview using Lotus withdrawal v0 scaffolding. It fails closed when venue withdrawal capability is disabled, source venue-ready balance is insufficient, destination wallet is invalid, capability state is unknown, or the venue is classified as AUTO_RESOLUTION_ONLY. Limitless EOA/user mode is AUTO_RESOLUTION_ONLY and does not expose a normal user-signed withdrawal API; its partner-managed backend withdrawal path is not wired to this endpoint.
+      description: Creates a frontend-safe withdrawal preview using Lotus withdrawal v0 scaffolding. It fails closed when venue withdrawal capability is disabled, source venue-ready balance is insufficient, destination wallet is invalid, capability state is unknown, or the venue is classified as AUTO_RESOLUTION_ONLY without an approved bridge-back path. Limitless beta support is limited to an explicitly enabled user-signed Base USDC to Solana USDC bridge-back route; its partner-managed backend withdrawal path is not wired to this endpoint.
       x-lotus-status: implemented
       x-lotus-callable: true
       x-lotus-auth: user
@@ -4186,7 +4186,7 @@ components:
         providerStatus:
           type: object
           additionalProperties: true
-          description: Sanitized provider status metadata. Polymarket Bridge sandbox rows may include provider=POLYMARKET_BRIDGE, mode=SANDBOX_DRY_RUN, bridgeAddressPresent, status, completionPersisted=false, and warnings. Predict.fun user-wallet dry-run rows may include provider=PREDICT_FUN_USER_WALLET, mode=USER_WALLET_DRY_RUN, walletModel=PRIVY_ZERODEV, destinationWalletProfileRequired=true, evmWithdrawalWalletPresent, instructionsUrl, completionPersisted=false, and warnings such as "Add an EVM-compatible wallet to receive BSC USDT withdrawals." Raw provider payloads, API keys, auth headers, private keys, wallet seeds, Privy secrets, ZeroDev signer material, DB URLs, and live withdrawal internals must not be returned.
+          description: Sanitized provider status metadata. Limitless bridge-back rows may include provider=LIFI, mode=LIMITLESS_BRIDGE_BACK, source/destination chain and token, partnerManagedWithdrawalCalled=false, and completionPersisted=false. Polymarket Bridge sandbox rows may include provider=POLYMARKET_BRIDGE, mode=SANDBOX_DRY_RUN, bridgeAddressPresent, status, completionPersisted=false, and warnings. Predict.fun user-wallet dry-run rows may include provider=PREDICT_FUN_USER_WALLET, mode=USER_WALLET_DRY_RUN, walletModel=PRIVY_ZERODEV, destinationWalletProfileRequired=true, evmWithdrawalWalletPresent, instructionsUrl, completionPersisted=false, and warnings such as "Add an EVM-compatible wallet to receive BSC USDT withdrawals." Raw provider payloads, API keys, auth headers, private keys, wallet seeds, Privy secrets, ZeroDev signer material, DB URLs, and live withdrawal internals must not be returned.
         txHashes:
           type: array
           items: { type: string }
@@ -4249,6 +4249,32 @@ components:
         completionPersisted:
           type: boolean
           enum: [false]
+    LimitlessBridgeBackWithdrawalPreview:
+      type: object
+      additionalProperties: false
+      description: Optional frontend-safe Limitless beta bridge-back preview. It represents a user-signed LI.FI bridge from Base USDC to Solana USDC and never calls Limitless partner-managed withdrawal APIs.
+      properties:
+        provider: { type: string, enum: [LIFI] }
+        mode: { type: string, enum: [LIMITLESS_BRIDGE_BACK] }
+        sourceChain: { type: string }
+        sourceToken: { type: string }
+        destinationChain: { type: string }
+        destinationToken: { type: string }
+        destinationAddress: { type: string }
+        amount: { type: string }
+        estimatedFees: { type: string }
+        estimatedTimeSeconds:
+          type: integer
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+        partnerManagedWithdrawalCalled:
+          type: boolean
+          enum: [false]
+        completionPersisted:
+          type: boolean
+          enum: [false]
     WithdrawalIntentResponse:
       type: object
       additionalProperties: true
@@ -4265,6 +4291,8 @@ components:
           properties:
             polymarketBridge:
               $ref: "#/components/schemas/PolymarketBridgeWithdrawalPreview"
+            limitlessBridgeBack:
+              $ref: "#/components/schemas/LimitlessBridgeBackWithdrawalPreview"
             predictFunUserWallet:
               $ref: "#/components/schemas/PredictFunUserWalletWithdrawalPreview"
         totalEstimatedFees: { type: string }

@@ -1696,6 +1696,18 @@ Limitless is not treated as a Polymarket Bridge clone. Official Limitless docs a
 
 Limitless `POST /portfolio/withdraw` is represented separately as disabled `PARTNER_MANAGED_BACKEND`: partner-only, backend-initiated, HMAC-authenticated, withdrawal-scope gated, and withdrawing managed server-wallet sub-account funds to the partner address. `POST /portfolio/redeem` is also backend-initiated for redeeming winning positions after resolution. The SDK auth dry-run should be used only to validate HMAC portfolio reads through the official SDK. The manual dry-run may read portfolio history/status only. Neither command may call `POST /portfolio/withdraw`, `POST /portfolio/redeem`, sign, broadcast, move funds, call LI.FI execution, persist completion, or enable live venue withdrawal execution.
 
+Beta bridge-back path: when `LIMITLESS_FUNDING_WITHDRAWALS_ENABLED=true` and `LIMITLESS_WITHDRAWAL_BRIDGE_BACK_ENABLED=true`, a single-source `LIMITLESS` withdrawal to a Solana destination may quote a user-signed LI.FI bridge route from the user's active Turnkey EVM wallet on Base USDC to Solana USDC. This is the only user-facing Limitless beta withdrawal path. It still does not call `POST /portfolio/withdraw`, does not call `POST /portfolio/redeem`, does not backend-sign, and does not backend-broadcast. After the user submits the bridge transaction hash, the leg moves to destination-pending state; completion still requires exact destination evidence.
+
+Bridge-back envs:
+
+```env
+LIMITLESS_FUNDING_WITHDRAWALS_ENABLED=true
+LIMITLESS_WITHDRAWAL_BRIDGE_BACK_ENABLED=true
+LIMITLESS_WITHDRAWAL_BRIDGE_BACK_SOURCE_CHAIN=BASE
+LIMITLESS_WITHDRAWAL_BRIDGE_BACK_SOURCE_TOKEN_ADDRESS=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+LIMITLESS_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_ADDRESS=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+```
+
 Boundary decision: Limitless user mode is `AUTO_RESOLUTION_ONLY`, not `USER_AUTHORIZED_ACTION`. Partner-managed backend withdrawal must remain blocked from Lotus user endpoint wiring unless a future security/custody review explicitly approves Lotus-initiated server-wallet withdrawals or Limitless provides a documented user-authorized withdrawal flow.
 
 Partner-managed Limitless withdrawal is not approved by capability config or read-only HMAC diagnostics. The explicit approval gate is:
