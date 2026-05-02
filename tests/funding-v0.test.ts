@@ -2103,6 +2103,22 @@ describe("Funding v0 domain", () => {
     expect(toBaseUnitAmount("1.25", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")).toBe("1250000");
     expect(fromBaseUnitAmount("991788", "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")).toBe("0.991788");
     expect(fromBaseUnitAmount("1991998", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")).toBe("1.991998");
+    expect(normalizeLifiQuote({
+      action: {
+        toChainId: 1151111081099710,
+        toToken: { address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" }
+      },
+      estimate: { toAmount: "250000", feeCosts: [], gasCosts: [] }
+    }, {
+      fromChain: "BASE",
+      toChain: "SOLANA",
+      fromToken: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      toToken: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      fromAmount: "0.25",
+      fromAddress: "0x1111111111111111111111111111111111111111",
+      toAddress: "So11111111111111111111111111111111111111111",
+      targetVenue: "LIMITLESS"
+    }, 60).destinationChain).toBe("SOLANA");
     expect(() => normalizeLifiQuote({
       action: { toChainId: 10, toToken: { address: "0xwrong" } },
       estimate: {}

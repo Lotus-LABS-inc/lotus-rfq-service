@@ -124,7 +124,7 @@ export const normalizeLifiQuote = (
   const destinationChain = stringValue(action.toChainId) ?? input.toChain;
   const destinationToken = stringValue(action.toToken?.address) ?? input.toToken;
 
-  if (destinationChain !== input.toChain || destinationToken.toLowerCase() !== input.toToken.toLowerCase()) {
+  if (!lifiChainMatches(destinationChain, input.toChain) || destinationToken.toLowerCase() !== input.toToken.toLowerCase()) {
     throw new FundingError("ROUTE_DESTINATION_MISMATCH", "LI.FI quote destination does not match venue capability.", 502);
   }
 
@@ -152,6 +152,19 @@ export const toLifiChain = (chain: string): string => {
   if (normalized === "BASE") return "8453";
   if (normalized === "BSC" || normalized === "BNB" || normalized === "BNB_SMART_CHAIN") return "56";
   return chain;
+};
+
+const lifiChainMatches = (actual: string, expected: string): boolean => {
+  const normalizedActual = actual.trim().toUpperCase();
+  const normalizedExpected = expected.trim().toUpperCase();
+  const expectedLifiChain = toLifiChain(expected).toUpperCase();
+  if (normalizedActual === normalizedExpected || normalizedActual === expectedLifiChain) {
+    return true;
+  }
+  if (normalizedExpected === "SOLANA" && (normalizedActual === "SOL" || normalizedActual === "1151111081099710")) {
+    return true;
+  }
+  return false;
 };
 
 export const toBaseUnitAmount = (amount: string, token: string): string => {
