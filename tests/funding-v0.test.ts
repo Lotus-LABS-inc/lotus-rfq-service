@@ -932,6 +932,78 @@ describe("Funding v0 domain", () => {
     expect(submitted.intent.status).toBe("ROUTES_SUBMITTED");
   });
 
+  it("uses chain-specific venue deposit addresses for Myriad funding rails", async () => {
+    const bscDepositAddress = "0x965D130fc6e7dDE9456078524D575E1C1634b576";
+    const solanaDepositAddress = "9Nkk2kVGofWtxgnU9TdFxUNbabp8xhNKU5timiZVst2i";
+    const polygonDepositAddress = bscDepositAddress;
+    const service = new FundingService(new InMemoryFundingRepository(), new StubLifiProvider(), {
+      lifiQuotesEnabled: false,
+      liveSubmitEnabled: false,
+      env: {
+        ...env,
+        MYRIAD_FUNDING_DESTINATION_ADDRESS_BSC: bscDepositAddress,
+        MYRIAD_FUNDING_DESTINATION_ADDRESS_SOLANA: solanaDepositAddress,
+        MYRIAD_FUNDING_DESTINATION_ADDRESS_POLYGON: polygonDepositAddress,
+        MYRIAD_FUNDING_PREFERRED_CHAIN: "BSC",
+        MYRIAD_FUNDING_PREFERRED_CHAIN_ID: "56",
+        MYRIAD_FUNDING_PREFERRED_TOKEN: "USDT",
+        MYRIAD_USDT_TOKEN_ADDRESS: "0x55d398326f99059fF775485246999027B3197955"
+      } as NodeJS.ProcessEnv
+    });
+    const created = await service.createIntent("user-1", {
+      sourceChain: "BSC",
+      sourceToken: "USDT",
+      sourceAmount: "3",
+      sourceWalletAddress: "0xD1059eC5F635712f6dcEAd569a41dFD7970DAffa",
+      idempotencyKey: "myriad-bsc-direct-chain-specific",
+      targets: [{ targetVenue: "MYRIAD", targetAmount: "3" }]
+    });
+    const quoted = await service.quoteIntent("user-1", created.intent.fundingIntentId);
+    const data = quoted.routeLegs[0]!.routeQuote.transactionRequest?.data ?? "";
+    expect(data).toContain(bscDepositAddress.toLowerCase().replace(/^0x/, "").padStart(64, "0"));
+    expect(data).not.toContain(env.MYRIAD_FUNDING_DESTINATION_ADDRESS!.toLowerCase().replace(/^0x/, "").padStart(64, "0"));
+    expect(buildVenueCapabilityMatrix({
+      env: {
+        ...env,
+        MYRIAD_FUNDING_DESTINATION_ADDRESS_BSC: bscDepositAddress,
+        MYRIAD_FUNDING_DESTINATION_ADDRESS_SOLANA: solanaDepositAddress,
+        MYRIAD_FUNDING_DESTINATION_ADDRESS_POLYGON: polygonDepositAddress
+      } as NodeJS.ProcessEnv
+    }).MYRIAD.depositAddressConfigured).toBe(true);
+
+    const polygonRepository = new InMemoryFundingRepository();
+    const polygonService = new FundingService(polygonRepository, new StubLifiProvider(), {
+      lifiQuotesEnabled: false,
+      liveSubmitEnabled: false,
+      env: {
+        ...env,
+        MYRIAD_FUNDING_DESTINATION_ADDRESS_BSC: bscDepositAddress,
+        MYRIAD_FUNDING_DESTINATION_ADDRESS_POLYGON: polygonDepositAddress,
+        MYRIAD_FUNDING_PREFERRED_CHAIN: "POLYGON",
+        MYRIAD_FUNDING_PREFERRED_CHAIN_ID: "137",
+        MYRIAD_FUNDING_PREFERRED_TOKEN: "USDC",
+        MYRIAD_USDC_TOKEN_ADDRESS: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+      } as NodeJS.ProcessEnv
+    });
+    const polygonCreated = await polygonService.createIntent("user-1", {
+      sourceChain: "POLYGON",
+      sourceToken: "USDC",
+      sourceAmount: "3",
+      sourceWalletAddress: "0xD1059eC5F635712f6dcEAd569a41dFD7970DAffa",
+      idempotencyKey: "myriad-polygon-direct-chain-specific",
+      targets: [{ targetVenue: "MYRIAD", targetAmount: "3" }]
+    });
+    const polygonQuoted = await polygonService.quoteIntent("user-1", polygonCreated.intent.fundingIntentId);
+    expect(polygonQuoted.routeLegs[0]!.routeProvider).toBe("DIRECT_TRANSFER");
+    expect(polygonQuoted.routeLegs[0]!.routeQuote.transactionRequest).toMatchObject({
+      to: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+      chainId: 137
+    });
+    expect(polygonQuoted.routeLegs[0]!.routeQuote.transactionRequest?.data).toContain(
+      polygonDepositAddress.toLowerCase().replace(/^0x/, "").padStart(64, "0")
+    );
+  });
+
   it("creates split-capable withdrawal intents, quotes route legs, and records user-broadcast tx hashes", async () => {
     const repository = new InMemoryFundingRepository();
     repository.ready = true;

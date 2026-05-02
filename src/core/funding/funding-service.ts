@@ -29,7 +29,7 @@ import {
   type WithdrawalRouteQuote,
   type WithdrawalSource
 } from "./types.js";
-import { buildVenueCapabilityMatrix, getVenueDepositAddress, getVenueFundingDestinationMode } from "./venue-capabilities.js";
+import { buildVenueCapabilityMatrix, getVenueDepositAddress, getVenueDepositAddressForChain, getVenueFundingDestinationMode } from "./venue-capabilities.js";
 import type {
   VenueFundingReadinessChecker,
   VenueFundingReadinessResult
@@ -289,7 +289,7 @@ export class FundingService {
     for (const target of view.targets) {
       const capability = matrix[target.targetVenue];
       this.assertCapabilityReady(capability, view.intent);
-      const depositAddress = await this.resolveFundingDestinationAddress(userId, target.targetVenue);
+      const depositAddress = await this.resolveFundingDestinationAddress(userId, target.targetVenue, capability.preferredChain);
       if (!depositAddress) {
         throw new FundingError("TARGET_DESTINATION_NOT_CONFIGURED", `${target.targetVenue} funding destination is not configured.`, 409);
       }
@@ -1416,10 +1416,10 @@ export class FundingService {
     }
   }
 
-  private async resolveFundingDestinationAddress(userId: string, venue: FundingVenue): Promise<string | null> {
+  private async resolveFundingDestinationAddress(userId: string, venue: FundingVenue, destinationChain: string): Promise<string | null> {
     const mode = getVenueFundingDestinationMode(venue, this.config.env);
     if (mode === "VENUE_DEPOSIT_ENV") {
-      return getVenueDepositAddress(venue, this.config.env);
+      return getVenueDepositAddressForChain(venue, destinationChain, this.config.env) ?? getVenueDepositAddress(venue, this.config.env);
     }
     if (mode === "USER_VENUE_DEPOSIT_WALLET") {
       const wallet = await this.userWalletService?.resolveVenueTargetWallet(userId, venue);

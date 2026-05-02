@@ -472,7 +472,10 @@ Limitless production rule: do not expose normal user withdrawal through Limitles
 
 | Env | Example | Production expectation |
 |---|---|---|
-| `MYRIAD_FUNDING_DESTINATION_ADDRESS` | `0x1234...abcd` | Approved funding destination. |
+| `MYRIAD_FUNDING_DESTINATION_ADDRESS` | `0x1234...abcd` | Fallback approved funding destination. Prefer the chain-specific vars below when Myriad exposes multiple deposit rails. |
+| `MYRIAD_FUNDING_DESTINATION_ADDRESS_BSC` | `0x965D...b576` | Approved Myriad BSC deposit wallet for USDT. Must be copied from the Myriad account deposit UI/API. |
+| `MYRIAD_FUNDING_DESTINATION_ADDRESS_POLYGON` | `0x965D...b576` | Approved Myriad Polygon deposit wallet for USDC when Myriad confirms the same EVM wallet is valid on Polygon. |
+| `MYRIAD_FUNDING_DESTINATION_ADDRESS_SOLANA` | `9Nkk...t2i` | Approved Myriad Solana deposit wallet for USDC. |
 | `MYRIAD_FUNDING_DESTINATION_MODE` | `VENUE_DEPOSIT_ENV` | Current beta path uses operator-approved venue deposit wallet, not user Turnkey destination mode. |
 | `MYRIAD_FUNDING_PREFERRED_CHAIN` | `BSC` | Myriad beta direct-transfer funding rail. Myriad may also expose USDC/Solana and USDC/Polygon venue deposit options, but each rail requires explicit operator env alignment. |
 | `MYRIAD_FUNDING_PREFERRED_CHAIN_ID` | `56` | BNB Smart Chain id. |

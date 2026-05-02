@@ -11,13 +11,40 @@ const envValue = (env: NodeJS.ProcessEnv, key: string): string | null => {
   return value && value.trim().length > 0 ? value.trim() : null;
 };
 
+const venueDepositAddress = (env: NodeJS.ProcessEnv, venue: FundingVenue, chain?: string | null): string | null => {
+  const chainKeys = chain ? fundingDestinationChainKeys(chain) : [];
+  for (const chainKey of chainKeys) {
+    const chainSpecific = envValue(env, `${venue}_FUNDING_DESTINATION_ADDRESS_${chainKey}`);
+    if (chainSpecific) {
+      return chainSpecific;
+    }
+  }
+  return envValue(env, `${venue}_FUNDING_DESTINATION_ADDRESS`);
+};
+
+const configuredVenueDepositAddress = (
+  env: NodeJS.ProcessEnv,
+  venue: FundingVenue,
+  preferredChain?: string,
+  fallbackChains: string[] = []
+): string | null => {
+  const chains = [preferredChain, ...fallbackChains].filter((value): value is string => Boolean(value));
+  for (const chain of chains) {
+    const chainSpecific = venueDepositAddress(env, venue, chain);
+    if (chainSpecific) {
+      return chainSpecific;
+    }
+  }
+  return venueDepositAddress(env, venue);
+};
+
 export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): Record<FundingVenue, VenueCapability> => {
   const env = config.env ?? process.env;
-  const polymarketDepositAddress = envValue(env, "POLYMARKET_FUNDING_DESTINATION_ADDRESS");
-  const limitlessDepositAddress = envValue(env, "LIMITLESS_FUNDING_DESTINATION_ADDRESS");
-  const opinionDepositAddress = envValue(env, "OPINION_FUNDING_DESTINATION_ADDRESS");
-  const myriadDepositAddress = envValue(env, "MYRIAD_FUNDING_DESTINATION_ADDRESS");
-  const predictFunDepositAddress = envValue(env, "PREDICT_FUN_FUNDING_DESTINATION_ADDRESS");
+  const polymarketDepositAddress = configuredVenueDepositAddress(env, "POLYMARKET", "POLYGON", ["SOLANA"]);
+  const limitlessDepositAddress = configuredVenueDepositAddress(env, "LIMITLESS", "BASE", ["SOLANA"]);
+  const opinionDepositAddress = configuredVenueDepositAddress(env, "OPINION", "BSC", ["SOLANA", "POLYGON"]);
+  const myriadDepositAddress = configuredVenueDepositAddress(env, "MYRIAD", "BSC", ["SOLANA", "POLYGON"]);
+  const predictFunDepositAddress = configuredVenueDepositAddress(env, "PREDICT_FUN", "BSC", ["SOLANA", "POLYGON"]);
   const solanaUsdcAddress = envValue(env, "SOLANA_USDC_TOKEN_ADDRESS") ?? "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
   const solanaUsdtAddress = envValue(env, "SOLANA_USDT_TOKEN_ADDRESS") ?? "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY1p8ARw5ygP2Z7n";
   const polygonUsdcAddress = envValue(env, "POLYGON_USDC_TOKEN_ADDRESS") ?? "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
@@ -189,22 +216,15 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
 };
 
 export const getVenueDepositAddress = (venue: FundingVenue, env: NodeJS.ProcessEnv = process.env): string | null => {
-  if (venue === "POLYMARKET") {
-    return envValue(env, "POLYMARKET_FUNDING_DESTINATION_ADDRESS");
-  }
-  if (venue === "LIMITLESS") {
-    return envValue(env, "LIMITLESS_FUNDING_DESTINATION_ADDRESS");
-  }
-  if (venue === "OPINION") {
-    return envValue(env, "OPINION_FUNDING_DESTINATION_ADDRESS");
-  }
-  if (venue === "MYRIAD") {
-    return envValue(env, "MYRIAD_FUNDING_DESTINATION_ADDRESS");
-  }
-  if (venue === "PREDICT_FUN") {
-    return envValue(env, "PREDICT_FUN_FUNDING_DESTINATION_ADDRESS");
-  }
-  return null;
+  return venueDepositAddress(env, venue);
+};
+
+export const getVenueDepositAddressForChain = (
+  venue: FundingVenue,
+  chain: string,
+  env: NodeJS.ProcessEnv = process.env
+): string | null => {
+  return venueDepositAddress(env, venue, chain);
 };
 
 export const getVenueFundingDestinationMode = (
@@ -259,4 +279,21 @@ const normalizeChainKey = (value: string): string => {
     return "SOLANA";
   }
   return normalized;
+};
+
+const fundingDestinationChainKeys = (value: string): string[] => {
+  const normalized = normalizeChainKey(value);
+  if (normalized === "BNB") {
+    return ["BSC", "BNB", "56"];
+  }
+  if (normalized === "SOLANA") {
+    return ["SOLANA", "SOL"];
+  }
+  if (normalized === "POLYGON") {
+    return ["POLYGON", "137"];
+  }
+  if (normalized === "BASE") {
+    return ["BASE", "8453"];
+  }
+  return [normalized];
 };
