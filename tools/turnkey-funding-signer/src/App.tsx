@@ -1,8 +1,15 @@
 import { useMemo, useState } from "react";
 import { KeyFormat, useTurnkey } from "@turnkey/react-wallet-kit";
 import { serializeTransaction } from "viem";
-import { getFundingIntent, quoteFundingIntent, submitFundingTxHash } from "./api";
-import type { FundingIntentResponse, FundingRouteLegResponse, TurnkeyWalletAccountLike, TurnkeyWalletLike } from "./types";
+import {
+  getFundingIntent,
+  getWithdrawalIntent,
+  quoteFundingIntent,
+  quoteWithdrawalIntent,
+  submitFundingTxHash,
+  submitWithdrawalTxHash
+} from "./api";
+import type { FundingIntentResponse, FundingRouteLegResponse, LotusRouteMode, TurnkeyWalletAccountLike, TurnkeyWalletLike } from "./types";
 
 const DEFAULT_INTENT_ID = "";
 const DEFAULT_ROUTE_LEG_ID = "";
@@ -19,14 +26,6 @@ type SignTransaction = (params: {
   walletAccount: TurnkeyWalletAccountLike;
   unsignedTransaction: string;
   transactionType: string;
-  organizationId?: string;
-}) => Promise<string>;
-
-type SignAndSendTransaction = (params: {
-  walletAccount: TurnkeyWalletAccountLike;
-  unsignedTransaction: string;
-  transactionType: string;
-  rpcUrl?: string;
   organizationId?: string;
 }) => Promise<string>;
 
@@ -214,7 +213,7 @@ const routeSigningKind = (leg: FundingRouteLegResponse | null): RouteSigningKind
   if (!leg) {
     return "UNKNOWN";
   }
-  return leg.routeProvider === "DIRECT_TRANSFER" ? "EVM" : "SOLANA";
+  return leg.routeQuote.transactionRequest?.chainId || leg.routeProvider === "DIRECT_TRANSFER" ? "EVM" : "SOLANA";
 };
 
 const evmCaip2 = (chainId: number | undefined): string => `eip155:${chainId ?? 1}`;
@@ -284,6 +283,11 @@ const buildUnsignedEvmTransaction = async (input: {
   });
 };
 
+const broadcastSignedEvmTransaction = async (signedTransaction: string, rpcUrl: string): Promise<string> =>
+  await rpcCall<string>(rpcUrl, "eth_sendRawTransaction", [
+    signedTransaction.startsWith("0x") ? signedTransaction : `0x${signedTransaction}`
+  ]);
+
 export function App() {
   const {
     authState,
@@ -292,13 +296,13 @@ export function App() {
     wallets,
     createWallet,
     signTransaction,
-    signAndSendTransaction,
     handleExportWallet,
     handleExportWalletAccount,
     session
   } = useTurnkey();
 
   const [jwt, setJwt] = useState("");
+  const [routeMode, setRouteMode] = useState<LotusRouteMode>("FUNDING");
   const [fundingIntentId, setFundingIntentId] = useState(DEFAULT_INTENT_ID);
   const [routeLegId, setRouteLegId] = useState(DEFAULT_ROUTE_LEG_ID);
   const [intent, setIntent] = useState<FundingIntentResponse | null>(null);
@@ -356,7 +360,9 @@ export function App() {
     setSelectedLeg(null);
     setTxSignature("");
     try {
-      const response = await getFundingIntent(jwt.trim(), fundingIntentId.trim());
+      const response = routeMode === "WITHDRAWAL"
+        ? await getWithdrawalIntent(jwt.trim(), fundingIntentId.trim())
+        : await getFundingIntent(jwt.trim(), fundingIntentId.trim());
       const nextLeg = selectPreferredLeg(response, routeLegId);
       if (!nextLeg) {
         throw new Error("Route leg was not found on this funding intent.");
@@ -366,7 +372,7 @@ export function App() {
       }
       setIntent(response);
       setSelectedLeg(nextLeg);
-      setMessage("Funding route loaded.");
+      setMessage(`${routeMode === "WITHDRAWAL" ? "Withdrawal" : "Funding"} route loaded.`);
       setStep("ready");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Failed to fetch funding intent.");
@@ -481,7 +487,9 @@ export function App() {
     setMessage("Refreshing quote immediately before signing.");
     setTxSignature("");
     try {
-      const refreshed = await quoteFundingIntent(jwt.trim(), fundingIntentId.trim());
+      const refreshed = routeMode === "WITHDRAWAL"
+        ? await quoteWithdrawalIntent(jwt.trim(), fundingIntentId.trim())
+        : await quoteFundingIntent(jwt.trim(), fundingIntentId.trim());
       const freshLeg = selectPreferredLeg(refreshed, "");
       if (!freshLeg?.routeQuote.transactionRequest?.data) {
         throw new Error("Fresh quote did not include an unsigned transaction.");
@@ -505,7 +513,7 @@ export function App() {
         if (!sender) {
           throw new Error("Direct transfer route is missing the EVM sender address.");
         }
-        const signAndSendEvmTransaction = signAndSendTransaction as unknown as SignAndSendTransaction;
+        const signer = signTransaction as unknown as SignTransaction;
         setMessage("Preparing EVM direct transfer for Turnkey signing.");
         const unsignedTransaction = await buildUnsignedEvmTransaction({
           rpcUrl: evmRpcUrl.trim(),
@@ -515,14 +523,15 @@ export function App() {
           value: transactionRequest.value ?? "0",
           data: transactionRequest.data
         });
-        setMessage(`Signing and broadcasting EVM direct transfer on ${evmCaip2(transactionRequest.chainId)}.`);
-        txHash = await signAndSendEvmTransaction({
+        setMessage(`Signing EVM transaction on ${evmCaip2(transactionRequest.chainId)}.`);
+        const signedTransaction = await signer({
           organizationId: session?.organizationId,
           walletAccount: freshMatchingAccount,
           unsignedTransaction,
-          transactionType: ETHEREUM_TRANSACTION_TYPE,
-          rpcUrl: evmRpcUrl.trim()
+          transactionType: ETHEREUM_TRANSACTION_TYPE
         });
+        setMessage("Turnkey signature complete. Broadcasting through EVM RPC.");
+        txHash = await broadcastSignedEvmTransaction(signedTransaction, evmRpcUrl.trim());
       } else {
         const signer = signTransaction as unknown as SignTransaction;
         if (!transactionRequest?.data) {
@@ -540,9 +549,11 @@ export function App() {
       }
       setTxSignature(txHash);
       setMessage("Broadcast accepted. Submitting tx hash to Lotus.");
-      const submitted = await submitFundingTxHash(jwt.trim(), fundingIntentId.trim(), freshLeg.routeLegId, txHash);
+      const submitted = routeMode === "WITHDRAWAL"
+        ? await submitWithdrawalTxHash(jwt.trim(), fundingIntentId.trim(), freshLeg.routeLegId, txHash)
+        : await submitFundingTxHash(jwt.trim(), fundingIntentId.trim(), freshLeg.routeLegId, txHash);
       setIntent(submitted);
-      setMessage("Funding tx signature submitted to Lotus.");
+      setMessage(`${routeMode === "WITHDRAWAL" ? "Withdrawal" : "Funding"} tx signature submitted to Lotus.`);
       setStep("submitted");
     } catch (error) {
       console.error("Signing, broadcast, or Lotus submit failed", error);
@@ -571,6 +582,13 @@ export function App() {
         <form className="panel" onSubmit={(event) => { event.preventDefault(); void fetchIntent(); }}>
           <h2>Lotus route</h2>
           <label>
+            Route type
+            <select value={routeMode} onChange={(event) => setRouteMode(event.target.value as LotusRouteMode)}>
+              <option value="FUNDING">Funding intent</option>
+              <option value="WITHDRAWAL">Withdrawal intent</option>
+            </select>
+          </label>
+          <label>
             User JWT
             <textarea
               value={jwt}
@@ -581,7 +599,7 @@ export function App() {
             />
           </label>
           <label>
-            Funding intent id
+            {routeMode === "WITHDRAWAL" ? "Withdrawal intent id" : "Funding intent id"}
             <input
               value={fundingIntentId}
               onChange={(event) => setFundingIntentId(event.target.value)}
@@ -619,7 +637,7 @@ export function App() {
             </label>
           ) : null}
           <button type="submit" disabled={!canFetch || step === "loading"}>
-            {step === "loading" ? "Loading" : "Fetch route"}
+              {step === "loading" ? "Loading" : "Fetch route"}
           </button>
         </form>
 

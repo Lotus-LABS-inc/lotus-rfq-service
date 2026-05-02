@@ -10,6 +10,8 @@ export interface FundingIntentResponse {
   userSafeMessage: string;
 }
 
+export type LotusRouteMode = "FUNDING" | "WITHDRAWAL";
+
 export interface FundingRouteLegResponse {
   routeLegId: string;
   targetVenue: string;
@@ -48,4 +50,47 @@ export interface TurnkeyWalletLike {
   walletName?: string;
   source?: string;
   accounts?: TurnkeyWalletAccountLike[];
+}
+
+export interface WithdrawalIntentResponse {
+  withdrawalIntentId: string;
+  currentStatus: string;
+  token: string;
+  amount: string;
+  destinationChain: string;
+  destinationWalletAddress: string;
+  routeLegs: WithdrawalRouteLegResponse[];
+  userSafeMessage: string;
+}
+
+export interface WithdrawalRouteLegResponse {
+  withdrawalRouteLegId: string;
+  sourceVenue: string;
+  sourceToken: string;
+  sourceAmount: string;
+  destinationChain: string;
+  destinationWalletAddress: string;
+  destinationAmountEstimate: string;
+  routeProvider: string;
+  status: string;
+  providerStatus?: {
+    sourceWalletAddress?: string;
+    destinationToken?: string;
+    sourceChain?: string;
+    sourceToken?: string;
+    mode?: string;
+  };
+  routeQuote: {
+    provider: string;
+    providerRouteId: string | null;
+    expiresAt: string;
+    transactionRequest: {
+      data?: string;
+      from?: string;
+      to?: string;
+      chainId?: number;
+      value?: string;
+    } | null;
+    userSafeSummary: string;
+  };
 }
