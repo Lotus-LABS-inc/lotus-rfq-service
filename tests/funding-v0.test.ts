@@ -2215,6 +2215,99 @@ describe("Funding v0 domain", () => {
     })).rejects.toMatchObject({ code: "WITHDRAWAL_ROUTE_STALE" });
   });
 
+  it("prepares Myriad USD1 bridge-back from an external exported EVM source wallet", async () => {
+    const repository = new InMemoryFundingRepository();
+    repository.ready = true;
+    const lifi = new StubLifiProvider();
+    const externalMyriadWallet = "0x4EE6eF8959D5D769347D51e2130D57bEb07Fab3B";
+    const myriadEnv = {
+      ...withdrawalEnv,
+      MYRIAD_WITHDRAWAL_ADAPTER_ENABLED: "true",
+      MYRIAD_WITHDRAWAL_ADAPTER_MODE: "USER_WALLET_DRY_RUN",
+      MYRIAD_WITHDRAWAL_ADAPTER_DRY_RUN_ONLY: "true",
+      MYRIAD_WITHDRAWAL_BRIDGE_BACK_ENABLED: "true",
+      MYRIAD_WITHDRAWAL_BRIDGE_BACK_SOURCE_CHAIN: "BSC",
+      MYRIAD_WITHDRAWAL_BRIDGE_BACK_SOURCE_TOKEN_ADDRESS: "0x8d0D000Ee44948FC98c9B98A4FA4921476f08B0d",
+      MYRIAD_WITHDRAWAL_BRIDGE_BACK_SOURCE_WALLET_ADDRESS: externalMyriadWallet,
+      MYRIAD_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_SYMBOL: "USDC",
+      MYRIAD_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_ADDRESS: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      MYRIAD_WITHDRAWAL_INSTRUCTIONS_URL: "https://docs.myriad.markets/deposit-and-withdraw"
+    } as NodeJS.ProcessEnv;
+    let turnkeyWalletLookups = 0;
+    const service = new FundingService(
+      repository,
+      lifi,
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env: myriadEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      new MyriadWalletWithdrawalAdapter(getMyriadWithdrawalConfigFromEnv(myriadEnv)),
+      null,
+      {
+        resolveFundingSourceWallet: async () => null,
+        resolveUserTurnkeyEvmFundingWallet: async () => {
+          turnkeyWalletLookups += 1;
+          return null;
+        },
+        resolveVenueTargetWallet: async () => null
+      }
+    );
+
+    const created = await service.createWithdrawalIntent("user-1", {
+      token: "USD1",
+      amount: "3",
+      destinationChain: "SOLANA",
+      destinationWalletAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+      idempotencyKey: "withdraw-myriad-external-bridge-back",
+      sources: [{ sourceVenue: "MYRIAD", sourcePercentage: 100 }]
+    });
+    const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
+
+    expect(turnkeyWalletLookups).toBe(0);
+    expect(quoted.routeLegs).toHaveLength(2);
+    expect(quoted.routeLegs[0]).toMatchObject({
+      sourceVenue: "MYRIAD",
+      destinationChain: "BSC",
+      destinationWalletAddress: externalMyriadWallet,
+      providerStatus: {
+        bridgeBackPlanned: true,
+        finalDestinationChain: "SOLANA",
+        backendBroadcast: false
+      }
+    });
+    expect(quoted.routeLegs[1]).toMatchObject({
+      sourceVenue: "MYRIAD",
+      destinationChain: "SOLANA",
+      providerStatus: {
+        provider: "LIFI",
+        mode: "VENUE_EVM_BRIDGE_BACK",
+        sourceVenue: "MYRIAD",
+        sourceChain: "BSC",
+        sourceTokenSymbol: "USD1",
+        destinationTokenSymbol: "USDC",
+        sourceWalletAddress: externalMyriadWallet,
+        sourceWalletProvider: "EXTERNAL_EVM",
+        requiresPriorVenueRelease: true,
+        backendBroadcast: false
+      }
+    });
+    expect(lifi.quoteInputs[0]).toMatchObject({
+      fromChain: "BSC",
+      toChain: "SOLANA",
+      fromToken: "0x8d0D000Ee44948FC98c9B98A4FA4921476f08B0d",
+      fromAddress: externalMyriadWallet,
+      toAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+      targetVenue: "MYRIAD"
+    });
+  });
+
   it("does not silently use Opinion adapter for multi-source withdrawals", async () => {
     const repository = new InMemoryFundingRepository();
     repository.ready = true;

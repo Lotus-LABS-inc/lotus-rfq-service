@@ -532,7 +532,7 @@ Stored wallet metadata must be public receive metadata only. Never store private
 Beta withdrawal routing rule:
 
 - Limitless is treated separately from proxy venues. Because beta funding lands as Base USDC and is available in the Limitless account, the Lotus withdrawal intent should prepare bridge-back from the user's available Base USDC path to the user's Solana wallet after evidence confirms funds are available. Do not wire user-facing routes to `POST /portfolio/withdraw` unless the partner-managed approval gate and custody/security review explicitly pass.
-- Proxy/account venues must release funds from the venue proxy, Safe, embedded wallet, or venue-managed account to the user's EVM receive wallet first. When `<VENUE>_WITHDRAWAL_BRIDGE_BACK_ENABLED=true` and the user requests a Solana destination, Lotus prepares two legs: the venue release to the user's Turnkey EVM wallet, then a user-signed LI.FI bridge-back leg from that EVM wallet to the final Solana wallet. Lotus still does not sign, broadcast, custody, or move funds.
+- Proxy/account venues must release funds from the venue proxy, Safe, embedded wallet, or venue-managed account to the user's EVM receive wallet first. When `<VENUE>_WITHDRAWAL_BRIDGE_BACK_ENABLED=true` and the user requests a Solana destination, Lotus prepares two legs: the venue release to the configured EVM receive wallet, then a user-signed LI.FI bridge-back leg from that EVM wallet to the final Solana wallet. The source can be the user's Turnkey EVM wallet or, for venues such as Myriad that release to an exported venue wallet, an explicitly configured external EVM source wallet. Lotus still does not sign, broadcast, custody, or move funds.
 - No withdrawal flow may mark completion from a Solana destination request alone when funds are still inside a venue proxy/account.
 - The bridge-back leg may be shown before the venue release is complete, but frontend signing should wait until the first-hop EVM receipt is confirmed. LI.FI quote expiry remains enforced for bridge-back transaction submissions; stale manual venue-release references may still be recorded because they are evidence references, not executable bridge quotes.
 
@@ -543,6 +543,7 @@ Bridge-back env pattern for proxy/account venues:
 | `<VENUE>_WITHDRAWAL_BRIDGE_BACK_ENABLED` | `true` | Adds the automatic EVM-to-Solana bridge-back leg for Solana-destination withdrawals. |
 | `<VENUE>_WITHDRAWAL_BRIDGE_BACK_SOURCE_CHAIN` | `BSC` or `POLYGON` | Chain where the venue first releases funds to the user's EVM wallet. |
 | `<VENUE>_WITHDRAWAL_BRIDGE_BACK_SOURCE_TOKEN_ADDRESS` | `0x55d398...` | Token contract released by the venue on the source chain. |
+| `<VENUE>_WITHDRAWAL_BRIDGE_BACK_SOURCE_WALLET_ADDRESS` | `0x4EE6...ab3B` | Optional external/exported EVM source wallet for the bridge-back leg. If unset, Lotus uses the user's active Turnkey EVM wallet metadata. |
 | `<VENUE>_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_SYMBOL` | `USDT` or `USDC` | User-facing Solana token symbol for the bridge-back leg. |
 | `<VENUE>_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_ADDRESS` | `Es9v...` or `EPjF...` | Solana token mint used by LI.FI. |
 

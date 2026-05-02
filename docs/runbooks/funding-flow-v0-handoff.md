@@ -576,8 +576,9 @@ Implemented backend behavior:
 - Limitless remains a special case: Lotus prepares a user-signed Base USDC to Solana bridge-back route and does not call partner-managed withdrawal APIs.
 - Proxy/account venues such as Polymarket, Opinion, Myriad, and Predict.fun can opt into `<VENUE>_WITHDRAWAL_BRIDGE_BACK_ENABLED=true`.
 - When that flag is enabled and the user requests a Solana destination, `POST /funding/withdrawals/:id/quote` returns two legs for a single-source withdrawal:
-  - venue/proxy release leg to the user's active Turnkey EVM wallet
+  - venue/proxy release leg to the user's active Turnkey EVM wallet or an explicitly configured external EVM source wallet
   - LI.FI bridge-back leg from that EVM wallet to the requested Solana wallet
+- For Myriad USD1 on BNB Smart Chain, `MYRIAD_WITHDRAWAL_BRIDGE_BACK_SOURCE_WALLET_ADDRESS` may point at the exported Myriad EVM wallet that receives the venue withdrawal. The bridge-back leg remains user-signed through the local/browser wallet; Lotus never imports or exports that private key.
 - The frontend must show the legs as ordered. The second leg should not be signed until the venue-release transaction is confirmed at the user's EVM wallet.
 - The backend still does not sign, broadcast, export keys, custody funds, or mark completion from route creation alone.
 - Manual venue-release tx/reference submission can be accepted after the instruction quote expires because it is evidence, not an executable LI.FI transaction. LI.FI bridge-back submissions still fail closed when stale and must be re-quoted.

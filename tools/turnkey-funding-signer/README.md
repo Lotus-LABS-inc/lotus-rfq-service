@@ -8,7 +8,7 @@ Supported route types:
 
 - LI.FI Solana routes: signs the unsigned Solana transaction and broadcasts through the configured Solana RPC.
 - Direct same-chain EVM routes, including BNB/BSC USDT: builds a normal EVM transaction, signs it through Turnkey Wallet Kit, broadcasts through the configured EVM RPC, and records the returned transaction hash. This avoids Turnkey's optional `ethSendTransaction` feature.
-- Standalone LI.FI bridge-back routes for already-withdrawn funds, currently used for BSC USDT -> Solana USDC recovery/exit testing without creating fake Lotus withdrawal records.
+- Standalone LI.FI bridge-back routes for already-withdrawn funds, currently used for Myriad BSC USD1 -> Solana USDC recovery/exit testing without creating fake Lotus withdrawal records. If the source EVM wallet is external/exported and not visible in Turnkey Wallet Kit, the app uses the browser EVM wallet provider for approval and send.
 
 ## Setup
 
@@ -19,7 +19,7 @@ Supported route types:
    - `VITE_TURNKEY_REQUIRED_SUB_ORG_ID=94b3ca90-5489-4d0b-9a1f-e9e71ba20ffb`
    - `VITE_SOLANA_RPC_URL` for Solana routes only
    - `VITE_BSC_RPC_URL` for BNB/BSC direct-transfer and standalone bridge routes
-   - optional `VITE_STANDALONE_BRIDGE_SOURCE_AMOUNT`, `VITE_STANDALONE_BRIDGE_SOURCE_WALLET`, and `VITE_STANDALONE_BRIDGE_DESTINATION_WALLET`
+   - optional `VITE_STANDALONE_BRIDGE_SOURCE_TOKEN_ADDRESS`, `VITE_STANDALONE_BRIDGE_SOURCE_TOKEN_SYMBOL`, `VITE_STANDALONE_BRIDGE_SOURCE_DECIMALS`, `VITE_STANDALONE_BRIDGE_SOURCE_AMOUNT`, `VITE_STANDALONE_BRIDGE_SOURCE_WALLET`, and `VITE_STANDALONE_BRIDGE_DESTINATION_WALLET`
 3. Run:
 
 ```powershell
@@ -63,13 +63,13 @@ with the `routeLegId` and transaction hash/signature.
 
 ## Standalone Bridge-Back
 
-Use `Standalone bridge-back` only when funds have already exited a venue to the user's EVM wallet and should be bridged back to the approved Solana wallet. This mode fetches a LI.FI quote, signs and broadcasts from the user's Turnkey wallet, and does not submit anything to Lotus backend accounting.
+Use `Standalone bridge-back` only when funds have already exited a venue to the user's EVM wallet and should be bridged back to the approved Solana wallet. This mode fetches a LI.FI quote, signs and broadcasts from the user's Turnkey wallet when the source account is in Turnkey, or from the browser EVM wallet when the source is an external/exported wallet. It does not submit anything to Lotus backend accounting.
 
-LI.FI currently rejects Solana USDT for this route, so the default exit path is BSC USDT -> Solana USDC.
+LI.FI currently rejects Solana USDT for this route, so the default Myriad exit path is BSC USD1 -> Solana USDC.
 
 Current default bridge:
 
 ```text
-BSC USDT from 0xD1059eC5F635712f6dcEAd569a41dFD7970DAffa
+BSC USD1 from 0x4EE6eF8959D5D769347D51e2130D57bEb07Fab3B
 to Solana USDC at A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc
 ```

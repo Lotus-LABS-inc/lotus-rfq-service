@@ -19,10 +19,14 @@ const DEFAULT_SOLANA_RPC_URL = "https://solana-rpc.publicnode.com";
 const DEFAULT_BSC_RPC_URL = "https://bsc-dataseed.binance.org";
 const DEFAULT_BRIDGE_SOURCE_CHAIN = "BSC";
 const DEFAULT_BRIDGE_DESTINATION_CHAIN = "SOLANA";
-const DEFAULT_BRIDGE_SOURCE_TOKEN = "0x55d398326f99059fF775485246999027B3197955";
+const DEFAULT_BRIDGE_SOURCE_TOKEN = "0x8d0D000Ee44948FC98c9B98A4FA4921476f08B0d";
+const DEFAULT_BRIDGE_SOURCE_TOKEN_SYMBOL = "USD1";
+const DEFAULT_BRIDGE_SOURCE_DECIMALS = 18;
 const DEFAULT_BRIDGE_DESTINATION_TOKEN = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-const DEFAULT_BRIDGE_SOURCE_AMOUNT = "5.8";
-const DEFAULT_BRIDGE_SOURCE_WALLET = "0xD1059eC5F635712f6dcEAd569a41dFD7970DAffa";
+const DEFAULT_BRIDGE_DESTINATION_TOKEN_SYMBOL = "USDC";
+const DEFAULT_BRIDGE_DESTINATION_DECIMALS = 6;
+const DEFAULT_BRIDGE_SOURCE_AMOUNT = "3";
+const DEFAULT_BRIDGE_SOURCE_WALLET = "0x4EE6eF8959D5D769347D51e2130D57bEb07Fab3B";
 const DEFAULT_BRIDGE_DESTINATION_WALLET = "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc";
 const SOLANA_TRANSACTION_TYPE = "TRANSACTION_TYPE_SOLANA";
 const ETHEREUM_TRANSACTION_TYPE = "TRANSACTION_TYPE_ETHEREUM";
@@ -53,6 +57,20 @@ type ExportWalletAccount = (params: {
   keyFormat?: KeyFormat;
   organizationId?: string;
 }) => Promise<void>;
+
+type Eip1193Error = Error & { code?: number };
+
+type Eip1193Provider = {
+  request(args: { method: string; params?: unknown[] }): Promise<unknown>;
+};
+
+const BSC_CHAIN_PARAMS = {
+  chainId: "0x38",
+  chainName: "BNB Smart Chain",
+  nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
+  rpcUrls: [DEFAULT_BSC_RPC_URL],
+  blockExplorerUrls: ["https://bscscan.com"]
+};
 
 const isSolanaAccount = (account: TurnkeyWalletAccountLike): boolean => {
   const format = account.addressFormat?.toUpperCase() ?? "";
@@ -183,7 +201,7 @@ const findMatchingRouteAccount = (
   if (exactAddressMatch) {
     return exactAddressMatch;
   }
-  return accounts.find(isEthereumAccount) ?? null;
+  return null;
 };
 
 const findWalletForAccount = (
@@ -255,7 +273,14 @@ const buildErc20ApproveData = (spender: string, amount: bigint): string =>
 const sourceTokenDecimals = (leg: FundingRouteLegResponse): number => {
   const chain = leg.sourceChain.toUpperCase();
   const token = leg.sourceToken.toLowerCase();
-  if (chain === "BSC" && token === DEFAULT_BRIDGE_SOURCE_TOKEN.toLowerCase()) {
+  if (
+    chain === "BSC"
+    && (
+      token === DEFAULT_BRIDGE_SOURCE_TOKEN.toLowerCase()
+      || token === "0x55d398326f99059ff775485246999027b3197955"
+      || token === "0x8d0d000ee44948fc98c9b98a4fa4921476f08b0d"
+    )
+  ) {
     return 18;
   }
   return 6;
@@ -316,6 +341,72 @@ const broadcastSignedEvmTransaction = async (signedTransaction: string, rpcUrl: 
     signedTransaction.startsWith("0x") ? signedTransaction : `0x${signedTransaction}`
   ]);
 
+const browserEthereumProvider = (): Eip1193Provider | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return window.ethereum ?? null;
+};
+
+const evmChainHex = (chainId: number): string => `0x${chainId.toString(16)}`;
+
+const ensureBrowserWalletChain = async (provider: Eip1193Provider, chainId: number): Promise<void> => {
+  const chainIdHex = evmChainHex(chainId);
+  try {
+    await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: chainIdHex }] });
+  } catch (error) {
+    const maybeError = error as Eip1193Error;
+    if (maybeError.code !== 4902 || chainId !== 56) {
+      throw error;
+    }
+    await provider.request({ method: "wallet_addEthereumChain", params: [BSC_CHAIN_PARAMS] });
+    await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: chainIdHex }] });
+  }
+};
+
+const requestBrowserWalletAccount = async (
+  provider: Eip1193Provider,
+  expectedAddress: string
+): Promise<string> => {
+  const accounts = await provider.request({ method: "eth_requestAccounts" }) as unknown;
+  if (!Array.isArray(accounts) || typeof accounts[0] !== "string") {
+    throw new Error("External EVM wallet did not return an account.");
+  }
+  const selected = accounts[0];
+  if (normalizeComparableAddress(selected) !== normalizeComparableAddress(expectedAddress)) {
+    throw new Error(`External EVM wallet must be ${expectedAddress}. Selected account is ${selected}.`);
+  }
+  return selected;
+};
+
+const sendBrowserEvmTransaction = async (input: {
+  chainId: number;
+  from: string;
+  to: string;
+  value?: string;
+  data?: string;
+}): Promise<string> => {
+  const provider = browserEthereumProvider();
+  if (!provider) {
+    throw new Error("External EVM wallet provider missing. Open this page in a browser with MetaMask/Rabby.");
+  }
+  await ensureBrowserWalletChain(provider, input.chainId);
+  const selected = await requestBrowserWalletAccount(provider, input.from);
+  const txHash = await provider.request({
+    method: "eth_sendTransaction",
+    params: [{
+      from: selected,
+      to: input.to,
+      value: toRpcQuantity(input.value),
+      data: input.data ?? "0x"
+    }]
+  }) as unknown;
+  if (typeof txHash !== "string" || !txHash.startsWith("0x")) {
+    throw new Error("External EVM wallet did not return a transaction hash.");
+  }
+  return txHash;
+};
+
 const waitForEvmReceipt = async (rpcUrl: string, txHash: string): Promise<void> => {
   for (let attempt = 0; attempt < 30; attempt += 1) {
     const receipt = await rpcCall<Record<string, unknown> | null>(rpcUrl, "eth_getTransactionReceipt", [txHash]);
@@ -360,14 +451,21 @@ export function App() {
   const [bridgeSourceWallet, setBridgeSourceWallet] = useState(import.meta.env.VITE_STANDALONE_BRIDGE_SOURCE_WALLET || DEFAULT_BRIDGE_SOURCE_WALLET);
   const [bridgeDestinationWallet, setBridgeDestinationWallet] = useState(import.meta.env.VITE_STANDALONE_BRIDGE_DESTINATION_WALLET || DEFAULT_BRIDGE_DESTINATION_WALLET);
 
+  const bridgeSourceTokenAddress = import.meta.env.VITE_STANDALONE_BRIDGE_SOURCE_TOKEN_ADDRESS || DEFAULT_BRIDGE_SOURCE_TOKEN;
+  const bridgeSourceTokenSymbol = import.meta.env.VITE_STANDALONE_BRIDGE_SOURCE_TOKEN_SYMBOL || DEFAULT_BRIDGE_SOURCE_TOKEN_SYMBOL;
+  const bridgeSourceDecimals = Number.parseInt(import.meta.env.VITE_STANDALONE_BRIDGE_SOURCE_DECIMALS || `${DEFAULT_BRIDGE_SOURCE_DECIMALS}`, 10);
+  const bridgeDestinationTokenAddress = import.meta.env.VITE_STANDALONE_BRIDGE_DESTINATION_TOKEN_ADDRESS || DEFAULT_BRIDGE_DESTINATION_TOKEN;
+  const bridgeDestinationTokenSymbol = import.meta.env.VITE_STANDALONE_BRIDGE_DESTINATION_TOKEN_SYMBOL || DEFAULT_BRIDGE_DESTINATION_TOKEN_SYMBOL;
+  const bridgeDestinationDecimals = Number.parseInt(import.meta.env.VITE_STANDALONE_BRIDGE_DESTINATION_DECIMALS || `${DEFAULT_BRIDGE_DESTINATION_DECIMALS}`, 10);
   const requiredSubOrgId = import.meta.env.VITE_TURNKEY_REQUIRED_SUB_ORG_ID || DEFAULT_REQUIRED_SUB_ORG_ID;
   const sessionOrgMatches = session?.organizationId === requiredSubOrgId;
   const turnkeyConfigured = Boolean(import.meta.env.VITE_TURNKEY_ORGANIZATION_ID && import.meta.env.VITE_TURNKEY_AUTH_PROXY_CONFIG_ID);
   const signingKind = routeSigningKind(selectedLeg);
+  const routeSourceWalletAddress = selectedLeg?.routeQuote.transactionRequest?.from ?? intent?.sourceWalletAddress;
 
   const matchingAccount = useMemo(
-    () => findMatchingRouteAccount(wallets as TurnkeyWalletLike[], intent?.sourceWalletAddress, signingKind),
-    [wallets, intent?.sourceWalletAddress, signingKind]
+    () => findMatchingRouteAccount(wallets as TurnkeyWalletLike[], routeSourceWalletAddress, signingKind),
+    [wallets, routeSourceWalletAddress, signingKind]
   );
   const matchingWallet = useMemo(
     () => findWalletForAccount(wallets as TurnkeyWalletLike[], matchingAccount),
@@ -375,33 +473,38 @@ export function App() {
   );
 
   const standaloneBridgeMode = routeMode === "STANDALONE_BRIDGE";
+  const externalEvmSourceAvailable = signingKind === "EVM" && Boolean(routeSourceWalletAddress) && !matchingAccount && Boolean(browserEthereumProvider());
+  const turnkeySigningAvailable = Boolean(matchingAccount && session && sessionOrgMatches);
   const canFetch = standaloneBridgeMode
     ? bridgeSourceAmount.trim().length > 0 && bridgeSourceWallet.trim().length > 0 && bridgeDestinationWallet.trim().length > 0
     : jwt.trim().length > 0 && fundingIntentId.trim().length > 0;
   const canSign = Boolean(
     selectedLeg?.routeQuote.transactionRequest?.data
-    && matchingAccount
-    && session
-    && sessionOrgMatches
     && (standaloneBridgeMode || jwt.trim())
+    && (
+      (signingKind === "EVM" && (turnkeySigningAvailable || externalEvmSourceAvailable))
+      || (signingKind === "SOLANA" && turnkeySigningAvailable)
+    )
     && ((signingKind === "EVM" && evmRpcUrl.trim()) || (signingKind === "SOLANA" && rpcUrl.trim()))
   );
   const canApprove = Boolean(
     signingKind === "EVM"
     && selectedLeg?.routeQuote.transactionRequest?.to
     && selectedLeg?.sourceToken?.startsWith("0x")
-    && matchingAccount
-    && session
-    && sessionOrgMatches
+    && (turnkeySigningAvailable || externalEvmSourceAvailable)
     && evmRpcUrl.trim()
   );
   const canExport = Boolean(session && sessionOrgMatches && matchingAccount);
+  const needsTurnkeySession = signingKind === "SOLANA" || Boolean(matchingAccount);
   const signingBlockers = [
     !standaloneBridgeMode && !jwt.trim() ? "Lotus user JWT missing." : null,
     !selectedLeg?.routeQuote.transactionRequest?.data ? "Unsigned transaction missing. Fetch the quoted route first." : null,
-    !session ? "Turnkey browser session missing. Click Login." : null,
-    session && !sessionOrgMatches ? `Turnkey session org must be ${requiredSubOrgId}.` : null,
-    !matchingAccount ? "No Turnkey wallet account matches the funding source address." : null,
+    needsTurnkeySession && !session ? "Turnkey browser session missing. Click Login." : null,
+    needsTurnkeySession && session && !sessionOrgMatches ? `Turnkey session org must be ${requiredSubOrgId}.` : null,
+    signingKind === "SOLANA" && !matchingAccount ? "No Turnkey wallet account matches the funding source address." : null,
+    signingKind === "EVM" && !matchingAccount && !browserEthereumProvider()
+      ? "No matching Turnkey account found. For an external EVM source wallet, open this page with MetaMask/Rabby installed."
+      : null,
     signingKind === "SOLANA" && !rpcUrl.trim() ? "Solana RPC URL missing." : null,
     signingKind === "EVM" && !evmRpcUrl.trim() ? "EVM RPC URL missing." : null
   ].filter((value): value is string => value !== null);
@@ -446,13 +549,13 @@ export function App() {
         ? await quoteStandaloneBridge({
           sourceChain: DEFAULT_BRIDGE_SOURCE_CHAIN,
           destinationChain: DEFAULT_BRIDGE_DESTINATION_CHAIN,
-          sourceTokenAddress: DEFAULT_BRIDGE_SOURCE_TOKEN,
-          destinationTokenAddress: DEFAULT_BRIDGE_DESTINATION_TOKEN,
-          sourceTokenSymbol: "USDT",
-          destinationTokenSymbol: "USDC",
+          sourceTokenAddress: bridgeSourceTokenAddress,
+          destinationTokenAddress: bridgeDestinationTokenAddress,
+          sourceTokenSymbol: bridgeSourceTokenSymbol,
+          destinationTokenSymbol: bridgeDestinationTokenSymbol,
           sourceAmount: bridgeSourceAmount.trim(),
-          sourceDecimals: 18,
-          destinationDecimals: 6,
+          sourceDecimals: bridgeSourceDecimals,
+          destinationDecimals: bridgeDestinationDecimals,
           sourceWalletAddress: bridgeSourceWallet.trim(),
           destinationWalletAddress: bridgeDestinationWallet.trim()
         })
@@ -574,8 +677,8 @@ export function App() {
   };
 
   const signBroadcastAndSubmit = async () => {
-    if (!selectedLeg?.routeQuote.transactionRequest?.data || !matchingAccount) {
-      setMessage("Load the route and sign into the matching Turnkey wallet first.");
+    if (!selectedLeg?.routeQuote.transactionRequest?.data) {
+      setMessage("Load the route first.");
       setStep("error");
       return;
     }
@@ -587,62 +690,74 @@ export function App() {
         ? await quoteStandaloneBridge({
           sourceChain: DEFAULT_BRIDGE_SOURCE_CHAIN,
           destinationChain: DEFAULT_BRIDGE_DESTINATION_CHAIN,
-          sourceTokenAddress: DEFAULT_BRIDGE_SOURCE_TOKEN,
-          destinationTokenAddress: DEFAULT_BRIDGE_DESTINATION_TOKEN,
-          sourceTokenSymbol: "USDT",
-          destinationTokenSymbol: "USDC",
+          sourceTokenAddress: bridgeSourceTokenAddress,
+          destinationTokenAddress: bridgeDestinationTokenAddress,
+          sourceTokenSymbol: bridgeSourceTokenSymbol,
+          destinationTokenSymbol: bridgeDestinationTokenSymbol,
           sourceAmount: bridgeSourceAmount.trim(),
-          sourceDecimals: 18,
-          destinationDecimals: 6,
+          sourceDecimals: bridgeSourceDecimals,
+          destinationDecimals: bridgeDestinationDecimals,
           sourceWalletAddress: bridgeSourceWallet.trim(),
           destinationWalletAddress: bridgeDestinationWallet.trim()
         })
         : routeMode === "WITHDRAWAL"
           ? await quoteWithdrawalIntent(jwt.trim(), fundingIntentId.trim())
           : await quoteFundingIntent(jwt.trim(), fundingIntentId.trim());
-      const freshLeg = selectPreferredLeg(refreshed, "");
+      const freshLeg = selectPreferredLeg(refreshed, routeLegId.trim() || selectedLeg.routeLegId);
       if (!freshLeg?.routeQuote.transactionRequest?.data) {
         throw new Error("Fresh quote did not include an unsigned transaction.");
       }
       const freshSigningKind = routeSigningKind(freshLeg);
-      const freshMatchingAccount = findMatchingRouteAccount(wallets as TurnkeyWalletLike[], refreshed.sourceWalletAddress, freshSigningKind);
-      if (!freshMatchingAccount) {
-        throw new Error("No Turnkey wallet account matches the refreshed funding source address.");
-      }
+      const transactionRequest = freshLeg.routeQuote.transactionRequest;
+      const freshSourceWalletAddress = transactionRequest?.from ?? refreshed.sourceWalletAddress;
+      const freshMatchingAccount = findMatchingRouteAccount(wallets as TurnkeyWalletLike[], freshSourceWalletAddress, freshSigningKind);
       setIntent(refreshed);
       setSelectedLeg(freshLeg);
       setRouteLegId(freshLeg.routeLegId);
-      setMessage("Fresh quote loaded. Waiting for Turnkey signature.");
-      const transactionRequest = freshLeg.routeQuote.transactionRequest;
+      setMessage(freshMatchingAccount ? "Fresh quote loaded. Waiting for Turnkey signature." : "Fresh quote loaded. Waiting for external EVM wallet signature.");
       let txHash: string;
       if (freshSigningKind === "EVM") {
         if (!transactionRequest?.to || !transactionRequest.chainId) {
           throw new Error("Direct transfer route is missing EVM transaction fields.");
         }
-        const sender = transactionRequest.from ?? freshMatchingAccount.address;
+        const sender = transactionRequest.from ?? freshSourceWalletAddress;
         if (!sender) {
           throw new Error("Direct transfer route is missing the EVM sender address.");
         }
-        const signer = signTransaction as unknown as SignTransaction;
-        setMessage("Preparing EVM direct transfer for Turnkey signing.");
-        const unsignedTransaction = await buildUnsignedEvmTransaction({
-          rpcUrl: evmRpcUrl.trim(),
-          from: sender,
-          to: transactionRequest.to,
-          chainId: transactionRequest.chainId,
-          value: transactionRequest.value ?? "0",
-          data: transactionRequest.data
-        });
-        setMessage(`Signing EVM transaction on ${evmCaip2(transactionRequest.chainId)}.`);
-        const signedTransaction = await signer({
-          organizationId: session?.organizationId,
-          walletAccount: freshMatchingAccount,
-          unsignedTransaction,
-          transactionType: ETHEREUM_TRANSACTION_TYPE
-        });
-        setMessage("Turnkey signature complete. Broadcasting through EVM RPC.");
-        txHash = await broadcastSignedEvmTransaction(signedTransaction, evmRpcUrl.trim());
+        if (freshMatchingAccount) {
+          const signer = signTransaction as unknown as SignTransaction;
+          setMessage("Preparing EVM direct transfer for Turnkey signing.");
+          const unsignedTransaction = await buildUnsignedEvmTransaction({
+            rpcUrl: evmRpcUrl.trim(),
+            from: sender,
+            to: transactionRequest.to,
+            chainId: transactionRequest.chainId,
+            value: transactionRequest.value ?? "0",
+            data: transactionRequest.data
+          });
+          setMessage(`Signing EVM transaction on ${evmCaip2(transactionRequest.chainId)}.`);
+          const signedTransaction = await signer({
+            organizationId: session?.organizationId,
+            walletAccount: freshMatchingAccount,
+            unsignedTransaction,
+            transactionType: ETHEREUM_TRANSACTION_TYPE
+          });
+          setMessage("Turnkey signature complete. Broadcasting through EVM RPC.");
+          txHash = await broadcastSignedEvmTransaction(signedTransaction, evmRpcUrl.trim());
+        } else {
+          setMessage(`Sending EVM transaction from external wallet ${sender}.`);
+          txHash = await sendBrowserEvmTransaction({
+            chainId: transactionRequest.chainId,
+            from: sender,
+            to: transactionRequest.to,
+            value: transactionRequest.value ?? "0",
+            data: transactionRequest.data
+          });
+        }
       } else {
+        if (!freshMatchingAccount) {
+          throw new Error("No Turnkey wallet account matches the refreshed funding source address.");
+        }
         const signer = signTransaction as unknown as SignTransaction;
         if (!transactionRequest?.data) {
           throw new Error("Solana route is missing an unsigned transaction.");
@@ -678,8 +793,8 @@ export function App() {
   };
 
   const approveEvmTokenSpend = async () => {
-    if (!selectedLeg?.routeQuote.transactionRequest?.to || !selectedLeg.routeQuote.transactionRequest.chainId || !matchingAccount) {
-      setMessage("Load an EVM route and sign into the matching Turnkey wallet first.");
+    if (!selectedLeg?.routeQuote.transactionRequest?.to || !selectedLeg.routeQuote.transactionRequest.chainId) {
+      setMessage("Load an EVM route first.");
       setStep("error");
       return;
     }
@@ -688,7 +803,7 @@ export function App() {
       setStep("error");
       return;
     }
-    const sender = selectedLeg.routeQuote.transactionRequest.from ?? matchingAccount.address;
+    const sender = selectedLeg.routeQuote.transactionRequest.from ?? routeSourceWalletAddress ?? matchingAccount?.address;
     if (!sender) {
       setMessage("EVM approval route is missing the sender address.");
       setStep("error");
@@ -699,24 +814,36 @@ export function App() {
     try {
       const spender = selectedLeg.routeQuote.transactionRequest.to;
       const approveData = buildErc20ApproveData(spender, toErc20BaseUnits(selectedLeg.sourceAmount, sourceTokenDecimals(selectedLeg)));
-      const unsignedTransaction = await buildUnsignedEvmTransaction({
-        rpcUrl: evmRpcUrl.trim(),
-        from: sender,
-        to: selectedLeg.sourceToken,
-        chainId: selectedLeg.routeQuote.transactionRequest.chainId,
-        value: "0",
-        data: approveData
-      });
-      const signer = signTransaction as unknown as SignTransaction;
-      setMessage("Signing ERC20 approval with Turnkey.");
-      const signedTransaction = await signer({
-        organizationId: session?.organizationId,
-        walletAccount: matchingAccount,
-        unsignedTransaction,
-        transactionType: ETHEREUM_TRANSACTION_TYPE
-      });
-      setMessage("Broadcasting ERC20 approval on Base.");
-      const txHash = await broadcastSignedEvmTransaction(signedTransaction, evmRpcUrl.trim());
+      let txHash: string;
+      if (matchingAccount) {
+        const unsignedTransaction = await buildUnsignedEvmTransaction({
+          rpcUrl: evmRpcUrl.trim(),
+          from: sender,
+          to: selectedLeg.sourceToken,
+          chainId: selectedLeg.routeQuote.transactionRequest.chainId,
+          value: "0",
+          data: approveData
+        });
+        const signer = signTransaction as unknown as SignTransaction;
+        setMessage("Signing ERC20 approval with Turnkey.");
+        const signedTransaction = await signer({
+          organizationId: session?.organizationId,
+          walletAccount: matchingAccount,
+          unsignedTransaction,
+          transactionType: ETHEREUM_TRANSACTION_TYPE
+        });
+        setMessage("Broadcasting ERC20 approval through EVM RPC.");
+        txHash = await broadcastSignedEvmTransaction(signedTransaction, evmRpcUrl.trim());
+      } else {
+        setMessage(`Sending ERC20 approval from external wallet ${sender}.`);
+        txHash = await sendBrowserEvmTransaction({
+          chainId: selectedLeg.routeQuote.transactionRequest.chainId,
+          from: sender,
+          to: selectedLeg.sourceToken,
+          value: "0",
+          data: approveData
+        });
+      }
       setApprovalTxHash(txHash);
       setMessage("Waiting for approval confirmation.");
       await waitForEvmReceipt(evmRpcUrl.trim(), txHash);
@@ -766,6 +893,10 @@ export function App() {
                   autoComplete="off"
                   spellCheck={false}
                 />
+              </label>
+              <label>
+                Source token
+                <input value={`${bridgeSourceTokenSymbol} (${bridgeSourceTokenAddress})`} readOnly />
               </label>
               <label>
                 Source BSC wallet
@@ -886,7 +1017,7 @@ export function App() {
           </div>
           <div>
             <dt>Source wallet</dt>
-            <dd>{intent?.sourceWalletAddress ?? "route not loaded"}</dd>
+            <dd>{routeSourceWalletAddress ?? "route not loaded"}</dd>
           </div>
           <div>
             <dt>Matched account</dt>

@@ -1061,6 +1061,7 @@ export class FundingService {
         source,
         bridgeQuote: quote,
         sourceWalletAddress: bridgePlan.sourceWalletAddress,
+        sourceWalletProvider: bridgePlan.sourceWalletProvider,
         sourceChain: bridgePlan.sourceChain,
         sourceTokenSymbol: bridgePlan.sourceTokenSymbol,
         destinationTokenSymbol: bridgePlan.destinationTokenSymbol
@@ -1098,12 +1099,30 @@ export class FundingService {
     sourceTokenSymbol: string;
     sourceTokenAddress: string;
     sourceWalletAddress: string;
+    sourceWalletProvider: "TURNKEY" | "EXTERNAL_EVM";
     destinationTokenSymbol: string;
     destinationTokenAddress: string;
   }> {
-    const sourceWallet = await this.userWalletService?.resolveUserTurnkeyEvmFundingWallet(userId);
-    if (!sourceWallet || sourceWallet.chainFamily !== "EVM" || sourceWallet.status !== "ACTIVE") {
-      throw new FundingError("SOURCE_WALLET_UNAVAILABLE", `${source.sourceVenue} bridge-back requires an active user-controlled EVM wallet.`, 409);
+    const externalSourceWalletAddress = this.config.env?.[`${source.sourceVenue}_WITHDRAWAL_BRIDGE_BACK_SOURCE_WALLET_ADDRESS`]?.trim();
+    let sourceWalletAddress: string;
+    let sourceWalletProvider: "TURNKEY" | "EXTERNAL_EVM";
+    if (externalSourceWalletAddress) {
+      if (!isEvmAddress(externalSourceWalletAddress)) {
+        throw new FundingError(
+          "SOURCE_WALLET_UNAVAILABLE",
+          `${source.sourceVenue} bridge-back source wallet address must be an EVM address.`,
+          409
+        );
+      }
+      sourceWalletAddress = externalSourceWalletAddress;
+      sourceWalletProvider = "EXTERNAL_EVM";
+    } else {
+      const sourceWallet = await this.userWalletService?.resolveUserTurnkeyEvmFundingWallet(userId);
+      if (!sourceWallet || sourceWallet.chainFamily !== "EVM" || sourceWallet.status !== "ACTIVE") {
+        throw new FundingError("SOURCE_WALLET_UNAVAILABLE", `${source.sourceVenue} bridge-back requires an active user-controlled EVM wallet.`, 409);
+      }
+      sourceWalletAddress = sourceWallet.address;
+      sourceWalletProvider = "TURNKEY";
     }
     const sourceChain = this.config.env?.[`${source.sourceVenue}_WITHDRAWAL_BRIDGE_BACK_SOURCE_CHAIN`]
       ?? defaultWithdrawalBridgeBackSourceChain(source.sourceVenue);
@@ -1129,7 +1148,8 @@ export class FundingService {
       sourceChain,
       sourceTokenSymbol,
       sourceTokenAddress,
-      sourceWalletAddress: sourceWallet.address,
+      sourceWalletAddress,
+      sourceWalletProvider,
       destinationTokenSymbol,
       destinationTokenAddress
     };
@@ -1815,6 +1835,7 @@ const buildVenueEvmBridgeBackWithdrawalRouteLeg = (input: {
   source: WithdrawalSource;
   bridgeQuote: FundingRouteQuote;
   sourceWalletAddress: string;
+  sourceWalletProvider: "TURNKEY" | "EXTERNAL_EVM";
   sourceChain: string;
   sourceTokenSymbol: string;
   destinationTokenSymbol: string;
@@ -1859,6 +1880,7 @@ const buildVenueEvmBridgeBackWithdrawalRouteLeg = (input: {
       destinationToken: input.bridgeQuote.destinationToken,
       destinationTokenSymbol: input.destinationTokenSymbol,
       sourceWalletAddress: input.sourceWalletAddress,
+      sourceWalletProvider: input.sourceWalletProvider,
       requiresPriorVenueRelease: true,
       backendBroadcast: false,
       completionPersisted: false
