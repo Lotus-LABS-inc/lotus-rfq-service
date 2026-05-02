@@ -253,6 +253,15 @@ export class UserWalletService {
       purpose: "DEFAULT_FUNDING"
     });
   }
+
+  public async resolveVenueTargetWallet(userId: string, venue: FundingVenue): Promise<UserWallet | null> {
+    return this.repository.findActiveWallet({
+      userId,
+      chainFamily: "EVM",
+      purpose: "VENUE_TARGET",
+      venue
+    });
+  }
 }
 
 const isActiveDefault = (wallet: UserWallet, chainFamily: UserWalletChainFamily): boolean =>

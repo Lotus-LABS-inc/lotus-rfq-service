@@ -4,7 +4,7 @@ export interface VenueCapabilityConfig {
   env?: NodeJS.ProcessEnv | undefined;
 }
 
-export type VenueFundingDestinationMode = "VENUE_DEPOSIT_ENV" | "USER_TURNKEY_EVM_WALLET";
+export type VenueFundingDestinationMode = "VENUE_DEPOSIT_ENV" | "USER_TURNKEY_EVM_WALLET" | "USER_VENUE_DEPOSIT_WALLET";
 
 const envValue = (env: NodeJS.ProcessEnv, key: string): string | null => {
   const value = env[key];
@@ -168,7 +168,10 @@ export const getVenueFundingDestinationMode = (
   env: NodeJS.ProcessEnv = process.env
 ): VenueFundingDestinationMode => {
   const value = envValue(env, `${venue}_FUNDING_DESTINATION_MODE`);
-  return value === "USER_TURNKEY_EVM_WALLET" ? "USER_TURNKEY_EVM_WALLET" : "VENUE_DEPOSIT_ENV";
+  if (value === "USER_TURNKEY_EVM_WALLET" || value === "USER_VENUE_DEPOSIT_WALLET") {
+    return value;
+  }
+  return "VENUE_DEPOSIT_ENV";
 };
 
 const configurableCapability = (input: {

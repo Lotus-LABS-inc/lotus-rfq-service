@@ -540,6 +540,7 @@ Funding v0 is implemented fail-closed by default. Operators must configure these
 - `LIMITLESS_FUNDING_BALANCE_TOLERANCE=0.000001` allows only atomic-unit stablecoin rounding dust in readiness comparisons; it must not be used to cover material underfunding
 - `LIMITLESS_FUNDING_MIN_CONFIRMATIONS=0` unless a venue-specific finality policy requires more confirmations
 - `OPINION_FUNDING_DESTINATION_ADDRESS`, `MYRIAD_FUNDING_DESTINATION_ADDRESS`, and `PREDICT_FUN_FUNDING_DESTINATION_ADDRESS` are required before those venues can be used for funding quotes
+- Venues that assign per-user deposit wallets may use `<VENUE>_FUNDING_DESTINATION_MODE=USER_VENUE_DEPOSIT_WALLET`; the backend then resolves an active `user_wallets` row with `purpose=VENUE_TARGET` and matching `venue` instead of the global env address.
 - `OPINION_*`, `MYRIAD_*`, and `PREDICT_FUN_*` readiness envs follow the same disabled-by-default balance-read pattern: `*_FUNDING_READINESS_MODE=DISABLED`, `*_FUNDING_BALANCE_URL`, `*_FUNDING_READ_AUTH_MODE`, `*_FUNDING_READ_API_KEY`, `*_FUNDING_READ_TIMEOUT_MS`, `*_FUNDING_BALANCE_TOLERANCE`, and `*_FUNDING_MIN_CONFIRMATIONS`
 - `OPINION_FUNDING_PREFERRED_CHAIN`, `MYRIAD_FUNDING_PREFERRED_CHAIN`, and `PREDICT_FUN_FUNDING_PREFERRED_CHAIN` default to `POLYGON` until operator-approved venue capability data says otherwise
 - `SOLANA_USDC_TOKEN_ADDRESS` and `POLYGON_USDC_TOKEN_ADDRESS` may override default token addresses

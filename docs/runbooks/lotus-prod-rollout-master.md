@@ -285,6 +285,7 @@ Generic venue funding env pattern:
 | Env pattern | Required | Example | Secret | Production expectation |
 |---|---:|---|---:|---|
 | `<VENUE>_FUNDING_DESTINATION_ADDRESS` | Yes per venue | `0x1234...abcd` | No | Operator-approved venue deposit/credit address. |
+| `<VENUE>_FUNDING_DESTINATION_MODE` | Yes per venue | `VENUE_DEPOSIT_ENV` | No | Use `USER_VENUE_DEPOSIT_WALLET` only when Lotus has an active per-user `user_wallets` `VENUE_TARGET` row for the venue. |
 | `<VENUE>_FUNDING_READINESS_MODE` | Yes per venue | `LIVE_READ` | No | Must not be `DISABLED` for production readiness. |
 | `<VENUE>_FUNDING_READINESS_ENABLED` | Yes per venue | `true` | No | Enabled only for approved read service. |
 | `<VENUE>_FUNDING_BALANCE_URL` | Yes per venue | `https://ops.example.com/lotus/polymarket/balance` | No | Operator-approved read endpoint. |

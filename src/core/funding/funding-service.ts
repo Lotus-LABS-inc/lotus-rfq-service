@@ -194,7 +194,7 @@ export class FundingService {
     private readonly userWithdrawalWalletReader: UserWithdrawalWalletReader | null = null,
     private readonly myriadWithdrawalAdapter: MyriadWalletWithdrawalAdapter | null = null,
     private readonly opinionWithdrawalAdapter: OpinionSafeWithdrawalAdapter | null = null,
-    private readonly userWalletService: Pick<UserWalletService, "resolveFundingSourceWallet" | "resolveUserTurnkeyEvmFundingWallet"> | null = null
+    private readonly userWalletService: Pick<UserWalletService, "resolveFundingSourceWallet" | "resolveUserTurnkeyEvmFundingWallet" | "resolveVenueTargetWallet"> | null = null
   ) {}
 
   public listVenueCapabilities(): VenueCapability[] {
@@ -1110,6 +1110,13 @@ export class FundingService {
     const mode = getVenueFundingDestinationMode(venue, this.config.env);
     if (mode === "VENUE_DEPOSIT_ENV") {
       return getVenueDepositAddress(venue, this.config.env);
+    }
+    if (mode === "USER_VENUE_DEPOSIT_WALLET") {
+      const wallet = await this.userWalletService?.resolveVenueTargetWallet(userId, venue);
+      if (!wallet || wallet.chainFamily !== "EVM") {
+        throw new FundingError("TARGET_WALLET_NOT_CONFIGURED", `${venue} requires an active user-specific venue deposit wallet.`, 409);
+      }
+      return wallet.address;
     }
     const wallet = await this.userWalletService?.resolveUserTurnkeyEvmFundingWallet(userId);
     if (!wallet || wallet.provider !== "TURNKEY" || wallet.chainFamily !== "EVM" || !wallet.exportable) {

@@ -496,7 +496,10 @@ class StubFundingBalanceReadClient implements FundingBalanceReadClient {
 }
 
 class StubLifiProvider implements LifiRouteProvider {
+  public quoteInputs: Array<Parameters<LifiRouteProvider["quote"]>[0]> = [];
+
   public async quote(input: Parameters<LifiRouteProvider["quote"]>[0]): Promise<FundingRouteQuote> {
+    this.quoteInputs.push(input);
     return {
       provider: "LIFI",
       providerRouteId: "quote-1",
@@ -688,9 +691,10 @@ describe("Funding v0 domain", () => {
       chain: "SOLANA",
       address: "So11111111111111111111111111111111111111111"
     });
+    const lifi = new StubLifiProvider();
     const service = new FundingService(
       repository,
-      new StubLifiProvider(),
+      lifi,
       {
         lifiQuotesEnabled: true,
         liveSubmitEnabled: false,
@@ -706,7 +710,8 @@ describe("Funding v0 domain", () => {
       null,
       {
         resolveFundingSourceWallet: async (input) => input.userId === "user-1" ? solanaWallet : null,
-        resolveUserTurnkeyEvmFundingWallet: async () => null
+        resolveUserTurnkeyEvmFundingWallet: async () => null,
+        resolveVenueTargetWallet: async () => null
       }
     );
     const created = await service.createIntent("user-1", {
@@ -723,9 +728,10 @@ describe("Funding v0 domain", () => {
 
   it("rejects missing Turnkey EVM target wallets when a venue opts into user wallet destinations", async () => {
     const repository = new InMemoryFundingRepository();
+    const lifi = new StubLifiProvider();
     const service = new FundingService(
       repository,
-      new StubLifiProvider(),
+      lifi,
       {
         lifiQuotesEnabled: true,
         liveSubmitEnabled: false,
@@ -744,7 +750,8 @@ describe("Funding v0 domain", () => {
       null,
       {
         resolveFundingSourceWallet: async () => null,
-        resolveUserTurnkeyEvmFundingWallet: async () => null
+        resolveUserTurnkeyEvmFundingWallet: async () => null,
+        resolveVenueTargetWallet: async () => null
       }
     );
     const created = await service.createIntent("user-1", {
@@ -757,6 +764,70 @@ describe("Funding v0 domain", () => {
     });
     await expect(service.quoteIntent("user-1", created.intent.fundingIntentId))
       .rejects.toMatchObject({ code: "TARGET_WALLET_NOT_CONFIGURED" });
+  });
+
+  it("uses user-specific venue deposit wallets when a venue opts into venue target destinations", async () => {
+    const repository = new InMemoryFundingRepository();
+    const solanaWallet = userWallet({
+      walletId: "wallet-sol",
+      userId: "user-1",
+      chainFamily: "SOLANA",
+      chain: "SOLANA",
+      address: "So11111111111111111111111111111111111111111"
+    });
+    const opinionDepositWallet = userWallet({
+      walletId: "wallet-opinion",
+      userId: "user-1",
+      provider: "EXTERNAL",
+      providerSubOrgId: null,
+      providerWalletId: null,
+      providerWalletAccountId: null,
+      chainFamily: "EVM",
+      chain: "POLYGON",
+      address: "0xEc556c0AcfcF18A424c250B2a19f58b9b8641400",
+      purpose: "VENUE_TARGET",
+      venue: "OPINION"
+    });
+    const lifi = new StubLifiProvider();
+    const service = new FundingService(
+      repository,
+      lifi,
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env: {
+          ...env,
+          OPINION_FUNDING_DESTINATION_MODE: "USER_VENUE_DEPOSIT_WALLET"
+        } as NodeJS.ProcessEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {
+        resolveFundingSourceWallet: async () => solanaWallet,
+        resolveUserTurnkeyEvmFundingWallet: async () => null,
+        resolveVenueTargetWallet: async (_userId, venue) => venue === "OPINION" ? opinionDepositWallet : null
+      }
+    );
+    const created = await service.createIntent("user-1", {
+      sourceChain: "SOLANA",
+      sourceToken: "USDC",
+      sourceAmount: "100",
+      idempotencyKey: "opinion-user-target",
+      targets: [{ targetVenue: "OPINION", targetPercentage: 100 }]
+    });
+    const quoted = await service.quoteIntent("user-1", created.intent.fundingIntentId);
+    expect(quoted.routeLegs[0]!.routeQuote).toMatchObject({
+      provider: "LIFI",
+      destinationChain: "137"
+    });
+    expect(lifi.quoteInputs[0]?.toAddress).toBe(opinionDepositWallet.address);
+    expect(lifi.quoteInputs[0]?.toAddress).not.toBe(env.OPINION_FUNDING_DESTINATION_ADDRESS);
   });
 
   it("creates split-capable withdrawal intents, quotes route legs, and records user-broadcast tx hashes", async () => {

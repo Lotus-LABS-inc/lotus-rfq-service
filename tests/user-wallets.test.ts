@@ -30,11 +30,13 @@ class InMemoryUserWalletRepository implements UserWalletRepository {
     userId: string;
     chainFamily: UserWalletChainFamily;
     purpose: UserWalletPurpose;
+    venue?: string | null;
   }): Promise<UserWallet | null> {
     return [...this.wallets.values()].find((wallet) =>
       wallet.userId === input.userId
       && wallet.chainFamily === input.chainFamily
       && wallet.purpose === input.purpose
+      && (input.venue === undefined || wallet.venue === input.venue)
       && wallet.status === "ACTIVE"
     ) ?? null;
   }
@@ -161,6 +163,36 @@ describe("user wallet service", () => {
       userId: "user-1",
       sourceChain: "SOLANA"
     })).resolves.toMatchObject({ address: solana?.address });
+  });
+
+  it("resolves user-specific venue target wallets without exposing provider internals", async () => {
+    const repository = new InMemoryUserWalletRepository();
+    const service = new UserWalletService(repository, {
+      turnkeyEnabled: true,
+      defaultSolanaWalletEnabled: true,
+      defaultEvmWalletEnabled: true
+    }, new MockTurnkeyProvisioner());
+    const wallet = await repository.upsertWallet({
+      userId: "user-1",
+      provider: "EXTERNAL",
+      providerSubOrgId: null,
+      providerWalletId: null,
+      providerWalletAccountId: null,
+      chainFamily: "EVM",
+      chain: "POLYGON",
+      address: "0xEc556c0AcfcF18A424c250B2a19f58b9b8641400",
+      purpose: "VENUE_TARGET",
+      venue: "OPINION",
+      exportable: true,
+      status: "ACTIVE"
+    });
+
+    await expect(service.resolveVenueTargetWallet("user-1", "OPINION"))
+      .resolves.toMatchObject({ walletId: wallet.walletId, address: wallet.address, purpose: "VENUE_TARGET", venue: "OPINION" });
+    await expect(service.resolveVenueTargetWallet("user-1", "MYRIAD"))
+      .resolves.toBeNull();
+    expect(JSON.stringify(wallet)).not.toContain("privateKey");
+    expect(JSON.stringify(wallet)).not.toContain("seed");
   });
 
   it("converts provider provisioning failures into safe unavailable errors", async () => {
