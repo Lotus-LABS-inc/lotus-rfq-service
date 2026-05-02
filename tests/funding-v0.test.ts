@@ -618,6 +618,12 @@ describe("Funding v0 domain", () => {
     expect(predictFunBscUsdtMatrix.PREDICT_FUN.preferredChainId).toBe(56);
     expect(predictFunBscUsdtMatrix.PREDICT_FUN.preferredToken).toBe("USDT");
     expect(predictFunBscUsdtMatrix.PREDICT_FUN.supportedTokens).toEqual(["USDT"]);
+    expect(predictFunBscUsdtMatrix.PREDICT_FUN.supportedChains).toEqual(expect.arrayContaining(["SOLANA", "BNB", "BSC", "56"]));
+    expect(predictFunBscUsdtMatrix.PREDICT_FUN.sourceTokenAddressByChain).toMatchObject({
+      BNB: "0x55d398326f99059fF775485246999027B3197955",
+      BSC: "0x55d398326f99059fF775485246999027B3197955",
+      "56": "0x55d398326f99059fF775485246999027B3197955"
+    });
     const opinionBscUsdtMatrix = buildVenueCapabilityMatrix({
       env: {
         ...env,

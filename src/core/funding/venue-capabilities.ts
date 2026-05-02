@@ -54,10 +54,21 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
   const predictFunPreferredChain = envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_CHAIN") ?? "POLYGON";
   const predictFunPreferredChainId = Number.parseInt(envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_CHAIN_ID") ?? "137", 10);
   const predictFunPreferredToken = envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_TOKEN") ?? "USDC";
+  const predictFunPreferredChainKey = normalizeChainKey(predictFunPreferredChain);
   const predictFunPreferredTokenAddress = predictFunPreferredToken === "USDT"
     ? envValue(env, "PREDICT_FUN_USDT_TOKEN_ADDRESS") ?? bscUsdtAddress
     : envValue(env, "PREDICT_FUN_USDC_TOKEN_ADDRESS") ?? polygonUsdcAddress;
   const predictFunSourceTokenAddress = predictFunPreferredToken === "USDT" ? solanaUsdtAddress : solanaUsdcAddress;
+  const predictFunSourceTokenAddressByChain = {
+    SOLANA: predictFunSourceTokenAddress,
+    ...(predictFunPreferredToken === "USDT" && (predictFunPreferredChainKey === "BNB" || predictFunPreferredChainId === 56)
+      ? {
+        BNB: predictFunPreferredTokenAddress,
+        BSC: predictFunPreferredTokenAddress,
+        "56": predictFunPreferredTokenAddress
+      }
+      : {})
+  };
   const supportsWithdrawal = (venue: FundingVenue): boolean => envValue(env, `${venue}_FUNDING_WITHDRAWALS_ENABLED`) === "true";
 
   return {
@@ -147,9 +158,9 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       preferredChainId: predictFunPreferredChainId,
       preferredToken: predictFunPreferredToken,
       preferredTokenAddress: predictFunPreferredTokenAddress,
-      sourceTokenAddressByChain: { SOLANA: predictFunSourceTokenAddress },
+      sourceTokenAddressByChain: predictFunSourceTokenAddressByChain,
       supportsWithdrawal: supportsWithdrawal("PREDICT_FUN"),
-      configuredNote: `Predict.fun funding quote path is configured for Solana ${predictFunPreferredToken} to the operator-approved Predict.fun funding destination.`,
+      configuredNote: `Predict.fun funding quote path is configured for approved ${predictFunPreferredToken} source chains to the operator-approved Predict.fun funding destination.`,
       missingNote: "Set PREDICT_FUN_FUNDING_DESTINATION_ADDRESS before enabling Predict.fun funding quotes; do not confuse Predict.fun with PredictIt."
     })
   };
