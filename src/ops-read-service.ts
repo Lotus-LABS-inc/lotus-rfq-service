@@ -149,7 +149,11 @@ const readDotPath = (raw: unknown, path: string | undefined): unknown => {
     return undefined;
   }
   return parts.reduce<unknown>((current, part) => {
-    if (!current || typeof current !== "object" || Array.isArray(current)) {
+    if (Array.isArray(current)) {
+      const index = Number.parseInt(part, 10);
+      return Number.isInteger(index) && index >= 0 ? current[index] : undefined;
+    }
+    if (!current || typeof current !== "object") {
       return undefined;
     }
     return (current as Record<string, unknown>)[part];
@@ -272,7 +276,8 @@ const readDirectHttpFundingBalance = async (
     throw new OpsFundingBalanceNotConfiguredError(`${venue} direct funding balance base URL or path is not configured.`);
   }
 
-  const url = new URL(path, baseUrl);
+  const normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  const url = new URL(path, normalizedBaseUrl);
   url.searchParams.set("userId", input.userId);
   url.searchParams.set("fundingIntentId", input.fundingIntentId);
   url.searchParams.set("routeLegId", input.routeLegId);

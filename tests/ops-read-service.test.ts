@@ -162,6 +162,63 @@ describe("ops read service", () => {
     expectNoSecrets(response.body);
   });
 
+  it("normalizes Opinion spot balance responses with array response fields", async () => {
+    const fetchImpl: typeof fetch = vi.fn(async (input, init) => {
+      expect(String(input)).toContain("https://openapi.opinion.trade/openapi/user/balance?chain_id=56");
+      expect(String(input)).toContain("targetVenue=OPINION");
+      expect(init?.headers instanceof Headers ? init.headers.get("apikey") : null).toBe("opinion-openapi-token");
+      return new Response(JSON.stringify({
+        errno: 0,
+        errmsg: "",
+        result: {
+          chainId: "56",
+          multiSignAddress: "0x34254ac5feb9a4b8d27be8db71111952d420a894",
+          walletAddress: "0x42afff0c9366eb1862b42a5758437cf26c3b76b9",
+          balances: [
+            {
+              availableBalance: "3.079912",
+              frozenBalance: "0",
+              quoteToken: "0x55d398326f99059ff775485246999027b3197955",
+              tokenDecimals: 18,
+              totalBalance: "3.079912"
+            }
+          ]
+        }
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    });
+    const app = await buildOpsReadServer({
+      env: {
+        NODE_ENV: "production",
+        OPINION_FUNDING_READ_API_KEY: "read-token",
+        OPINION_OPS_FUNDING_BALANCE_MODE: "DIRECT_HTTP",
+        OPINION_OPS_FUNDING_BALANCE_BASE_URL: "https://openapi.opinion.trade/openapi",
+        OPINION_OPS_FUNDING_BALANCE_PATH: "user/balance?chain_id=56",
+        OPINION_OPS_FUNDING_BALANCE_AUTH_MODE: "API_KEY",
+        OPINION_OPS_FUNDING_BALANCE_API_KEY_HEADER: "apikey",
+        OPINION_OPS_FUNDING_BALANCE_API_KEY: "opinion-openapi-token",
+        OPINION_OPS_FUNDING_BALANCE_RESPONSE_FIELD: "result.balances.0.availableBalance"
+      } as NodeJS.ProcessEnv,
+      fetchImpl
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/lotus/opinion/funding-balance?userId=user-1&fundingIntentId=funding-1&routeLegId=leg-1",
+      headers: { authorization: "Bearer read-token" }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ usableBalance: "3.079912" });
+    expect(response.body).not.toContain("multiSignAddress");
+    expect(response.body).not.toContain("walletAddress");
+    expect(response.body).not.toContain("quoteToken");
+    expectNoSecrets(response.body);
+  });
+
   it("reads on-chain ERC20 balances for non-Polymarket funding balance routes", async () => {
     const fetchImpl: typeof fetch = vi.fn(async (_input, init) => {
       const body = JSON.parse(String(init?.body)) as {

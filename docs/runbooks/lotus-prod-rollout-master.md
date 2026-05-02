@@ -442,6 +442,15 @@ Limitless production rule: do not expose normal user withdrawal. EOA/user mode i
 | `OPINION_FUNDING_READINESS_MODE` | `LIVE_READ` | Live/operator read mode. |
 | `OPINION_FUNDING_BALANCE_URL` | `https://ops.example.com/lotus/opinion/balance` | Approved balance read service. |
 | `OPINION_FUNDING_READ_API_KEY` | `<secret>` | Secret manager only. |
+| `OPINION_FUNDING_PREFERRED_CHAIN` | `BNB` | Opinion beta funding rail. |
+| `OPINION_FUNDING_PREFERRED_CHAIN_ID` | `56` | BNB Chain id. |
+| `OPINION_FUNDING_PREFERRED_TOKEN` | `USDT` | Opinion spot account token. |
+| `OPINION_OPS_FUNDING_BALANCE_MODE` | `DIRECT_HTTP` | Reads Opinion internal spot balance. |
+| `OPINION_OPS_FUNDING_BALANCE_BASE_URL` | `https://openapi.opinion.trade/openapi` | Opinion OpenAPI host. |
+| `OPINION_OPS_FUNDING_BALANCE_PATH` | `user/balance?chain_id=56` | Required `chain_id` query; keep relative so `/openapi` remains in the base URL. |
+| `OPINION_OPS_FUNDING_BALANCE_AUTH_MODE` | `API_KEY` | Server-side OpenAPI key only. |
+| `OPINION_OPS_FUNDING_BALANCE_API_KEY_HEADER` | `apikey` | Opinion OpenAPI header. |
+| `OPINION_OPS_FUNDING_BALANCE_RESPONSE_FIELD` | `result.balances.0.availableBalance` | Internal available spot balance. |
 | `OPINION_FUNDING_WITHDRAWALS_ENABLED` | `true` | Only after user-action gate review. |
 | `OPINION_WITHDRAWAL_ADAPTER_ENABLED` | `true` | Only for approved dry-run/user-action flow. |
 | `OPINION_WITHDRAWAL_ADAPTER_MODE` | `USER_SAFE_DRY_RUN` | No backend Safe signing. |
