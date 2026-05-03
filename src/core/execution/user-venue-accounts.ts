@@ -3,7 +3,7 @@ import { UserWalletError, type UserWallet, type UserWalletService } from "../fun
 
 export type UserVenueAccountType = "SAFE" | "SMART_WALLET" | "OAUTH_ACCOUNT" | "EOA" | "PROXY_ACCOUNT";
 export type UserVenueAccountStatus = "PENDING" | "ACTIVE" | "DISABLED" | "REVOKED";
-export type UserVenueAccountVenue = Extract<FundingVenue, "OPINION" | "PREDICT_FUN" | "LIMITLESS" | "POLYMARKET">;
+export type UserVenueAccountVenue = Extract<FundingVenue, "OPINION" | "PREDICT_FUN" | "LIMITLESS" | "MYRIAD" | "POLYMARKET">;
 
 export interface UserVenueAccount {
   venueAccountBindingId: string;
@@ -50,6 +50,27 @@ export interface PredictFunAccountClient {
   getAuthMessage(): Promise<string>;
   getJwtWithSignature(input: { signer: string; signature: string; message: string }): Promise<string>;
   getConnectedAccount(jwt: string): Promise<{ name: string | null; address: string }>;
+}
+
+export interface UserVenueAccountSetupBatchItem {
+  venue: UserVenueAccountVenue;
+  account: UserVenueAccount;
+  readinessBlockers: string[];
+  setupInstructions: string[];
+  setupMode: "NO_USER_SETUP_REQUIRED" | "MANUAL_LINK_REQUIRED" | "SIGNATURE_REQUIRED";
+}
+
+export interface UserVenueAccountSignatureRequest {
+  venue: "PREDICT_FUN";
+  requestType: "PREDICT_FUN_AUTH_MESSAGE";
+  signer: string;
+  message: string;
+  venueAccount: UserVenueAccount;
+}
+
+export interface UserVenueAccountSetupBatch {
+  venueAccounts: UserVenueAccountSetupBatchItem[];
+  signatureRequests: UserVenueAccountSignatureRequest[];
 }
 
 export class UserVenueAccountError extends Error {
@@ -148,6 +169,95 @@ export class UserVenueAccountService {
       message,
       venueAccount: ensured.account
     };
+  }
+
+  public async prepareAccountSetupBatch(userId: string): Promise<UserVenueAccountSetupBatch> {
+    const venueAccounts: UserVenueAccountSetupBatchItem[] = [];
+    const signatureRequests: UserVenueAccountSignatureRequest[] = [];
+
+    for (const venue of batchSetupVenues) {
+      if (venue === "PREDICT_FUN") {
+        const ensured = await this.ensureAccount({ userId, venue: "PREDICT_FUN" });
+        if (ensured.account.status === "ACTIVE") {
+          venueAccounts.push({
+            venue,
+            account: ensured.account,
+            readinessBlockers: ensured.readinessBlockers,
+            setupInstructions: ensured.setupInstructions,
+            setupMode: "NO_USER_SETUP_REQUIRED"
+          });
+          continue;
+        }
+        if (this.predictFunAccountClient?.configured()) {
+          const wallet = await this.resolveRequiredTurnkeyEvmWallet(userId);
+          const message = await this.withPredictAccountFailureBoundary(() => this.predictFunAccountClient!.getAuthMessage());
+          await this.repository.appendAccountAuditEvent({
+            userId,
+            venueAccountBindingId: ensured.account.venueAccountBindingId,
+            eventType: "PREDICT_FUN_ACCOUNT_AUTH_MESSAGE_CREATED",
+            payload: {
+              venue: "PREDICT_FUN",
+              signer: wallet.address,
+              messageLength: message.length,
+              source: "BATCH_SETUP"
+            }
+          });
+          venueAccounts.push({
+            venue,
+            account: ensured.account,
+            readinessBlockers: ensured.readinessBlockers,
+            setupInstructions: ensured.setupInstructions,
+            setupMode: "SIGNATURE_REQUIRED"
+          });
+          signatureRequests.push({
+            venue,
+            requestType: "PREDICT_FUN_AUTH_MESSAGE",
+            signer: wallet.address,
+            message,
+            venueAccount: ensured.account
+          });
+          continue;
+        }
+        venueAccounts.push({
+          venue,
+          account: ensured.account,
+          readinessBlockers: ensured.readinessBlockers,
+          setupInstructions: ["Predict.fun account automation is not configured. Configure PREDICT_API_KEY before batch account linking."],
+          setupMode: "MANUAL_LINK_REQUIRED"
+        });
+        continue;
+      }
+
+      const ensured = await this.ensureAccount({ userId, venue });
+      venueAccounts.push({
+        venue,
+        account: ensured.account,
+        readinessBlockers: ensured.readinessBlockers,
+        setupInstructions: setupInstructionsForVenue(venue, ensured.account),
+        setupMode: setupModeForVenue(venue, ensured.account)
+      });
+    }
+
+    return { venueAccounts, signatureRequests };
+  }
+
+  public async completeAccountSetupBatch(input: {
+    userId: string;
+    predictFun?: {
+      signer: string;
+      signature: string;
+      message: string;
+    } | null;
+  }): Promise<UserVenueAccountSetupBatch> {
+    if (input.predictFun) {
+      await this.completePredictFunAccountAuth({
+        userId: input.userId,
+        signer: input.predictFun.signer,
+        signature: input.predictFun.signature,
+        message: input.predictFun.message
+      });
+    }
+    return this.prepareAccountSetupBatch(input.userId);
   }
 
   public async completePredictFunAccountAuth(input: {
@@ -305,7 +415,7 @@ export const toSafeVenueAccount = (
 
 export const normalizeVenue = (venue: string): UserVenueAccountVenue => {
   const normalized = venue.trim().toUpperCase();
-  if (normalized === "OPINION" || normalized === "PREDICT_FUN" || normalized === "LIMITLESS" || normalized === "POLYMARKET") {
+  if (normalized === "OPINION" || normalized === "PREDICT_FUN" || normalized === "LIMITLESS" || normalized === "MYRIAD" || normalized === "POLYMARKET") {
     return normalized;
   }
   throw new UserVenueAccountError("USER_VENUE_ACCOUNT_UNSUPPORTED", `Venue ${venue} does not support user venue account binding.`, 400);
@@ -345,8 +455,29 @@ const setupInstructionsForVenue = (venue: UserVenueAccountVenue, account: UserVe
   if (venue === "PREDICT_FUN") {
     return ["Sign the Predict.fun auth message with the displayed Turnkey EVM wallet so Lotus can link the returned Predict smart-wallet address."];
   }
+  if (venue === "MYRIAD") {
+    return ["Use the displayed Turnkey EVM wallet or operator-approved Myriad account wallet for Myriad user-signed actions. Automatic Myriad account creation is not available yet."];
+  }
+  if (venue === "LIMITLESS") {
+    return ["Limitless currently uses the reviewed backend-signer execution track. No user venue-account signature is required for this batch setup step."];
+  }
   return [`Link the ${venue} account created from the displayed Turnkey EVM wallet.`];
 };
+
+const setupModeForVenue = (
+  venue: UserVenueAccountVenue,
+  account: UserVenueAccount
+): UserVenueAccountSetupBatchItem["setupMode"] => {
+  if (account.status === "ACTIVE" || venue === "LIMITLESS") {
+    return "NO_USER_SETUP_REQUIRED";
+  }
+  if (venue === "PREDICT_FUN") {
+    return "SIGNATURE_REQUIRED";
+  }
+  return "MANUAL_LINK_REQUIRED";
+};
+
+const batchSetupVenues = ["OPINION", "PREDICT_FUN", "MYRIAD", "LIMITLESS"] as const satisfies readonly UserVenueAccountVenue[];
 
 const nonEmpty = (value: string | null | undefined): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value.trim() : null;

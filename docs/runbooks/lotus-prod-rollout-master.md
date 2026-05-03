@@ -278,6 +278,7 @@ Turnkey venue account rule for user-signed venues:
 - The user's active Turnkey EVM wallet is the canonical identity wallet for Opinion and Predict.fun account setup.
 - `POST /user/venue-accounts/{venue}/ensure` must be completed before any signed relay submit path is enabled for that venue.
 - Opinion account bindings store safe public metadata for the Opinion Safe/multisig account; Predict.fun bindings store safe OAuth/connected-wallet account metadata.
+- Batch setup uses `POST /user/venue-accounts/setup-batch` and `POST /user/venue-accounts/complete-batch`. The frontend may sign every returned setup request sequentially in one UX session, but each signature request must still name the venue, signer, request type, and exact message/payload.
 - Predict.fun account linking uses `POST /user/venue-accounts/predict_fun/auth-message`, frontend Turnkey signing, then `POST /user/venue-accounts/predict_fun/complete-auth`. Lotus may exchange the signature for a temporary Predict JWT server-side, but it must not store or return that JWT.
 - Signed relay submit must reject any payload whose signer/account does not match the user's active Turnkey EVM wallet and active `user_venue_accounts` binding.
 - Lotus must not backend-sign user orders, export keys, broadcast user transactions, store raw signatures as secrets, or mix Polymarket operator signer/proxy wallet state with user Turnkey venue-account bindings.

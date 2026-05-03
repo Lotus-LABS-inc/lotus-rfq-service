@@ -1079,6 +1079,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     listAccounts: (userId) => userVenueAccountService.listAccounts(userId),
     getAccount: (userId, venue) => userVenueAccountService.getAccount(userId, venue),
     ensureAccount: (input) => userVenueAccountService.ensureAccount(input),
+    prepareAccountSetupBatch: (userId) => userVenueAccountService.prepareAccountSetupBatch(userId),
+    completeAccountSetupBatch: (input) => userVenueAccountService.completeAccountSetupBatch(input),
     preparePredictFunAccountAuth: (userId) => userVenueAccountService.preparePredictFunAccountAuth(userId),
     completePredictFunAccountAuth: (input) => userVenueAccountService.completePredictFunAccountAuth(input)
   });

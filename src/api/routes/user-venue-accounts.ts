@@ -24,6 +24,10 @@ const predictCompleteAuthBodySchema = z.object({
   message: z.string().min(1)
 });
 
+const completeBatchBodySchema = z.object({
+  predictFun: predictCompleteAuthBodySchema.optional()
+}).default({});
+
 export interface UserVenueAccountRouteHandlers {
   listAccounts(userId: string): Promise<UserVenueAccount[]>;
   getAccount(userId: string, venue: string): Promise<UserVenueAccount | null>;
@@ -37,6 +41,22 @@ export interface UserVenueAccountRouteHandlers {
     message: string;
     venueAccount: UserVenueAccount;
   }>;
+  prepareAccountSetupBatch?(userId: string): Promise<{
+    venueAccounts: Array<{
+      venue: string;
+      account: UserVenueAccount;
+      readinessBlockers: string[];
+      setupInstructions: string[];
+      setupMode: string;
+    }>;
+    signatureRequests: Array<{
+      venue: string;
+      requestType: string;
+      signer: string;
+      message: string;
+      venueAccount: UserVenueAccount;
+    }>;
+  }>;
   completePredictFunAccountAuth?(input: {
     userId: string;
     signer: string;
@@ -46,6 +66,29 @@ export interface UserVenueAccountRouteHandlers {
     account: UserVenueAccount;
     readinessBlockers: string[];
     setupInstructions: string[];
+  }>;
+  completeAccountSetupBatch?(input: {
+    userId: string;
+    predictFun?: {
+      signer: string;
+      signature: string;
+      message: string;
+    } | null;
+  }): Promise<{
+    venueAccounts: Array<{
+      venue: string;
+      account: UserVenueAccount;
+      readinessBlockers: string[];
+      setupInstructions: string[];
+      setupMode: string;
+    }>;
+    signatureRequests: Array<{
+      venue: string;
+      requestType: string;
+      signer: string;
+      message: string;
+      venueAccount: UserVenueAccount;
+    }>;
   }>;
 }
 
@@ -107,6 +150,37 @@ export const registerUserVenueAccountRoutes = async (
     }
   });
 
+  app.post("/user/venue-accounts/setup-batch", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!handlers.prepareAccountSetupBatch) {
+      return reply.status(503).send({ code: "USER_VENUE_ACCOUNT_BATCH_NOT_CONFIGURED" });
+    }
+    try {
+      const batch = await handlers.prepareAccountSetupBatch(request.user.userId);
+      return reply.status(200).send(toSafeBatch(batch));
+    } catch (error) {
+      return handleVenueAccountError(error, reply);
+    }
+  });
+
+  app.post("/user/venue-accounts/complete-batch", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!handlers.completeAccountSetupBatch) {
+      return reply.status(503).send({ code: "USER_VENUE_ACCOUNT_BATCH_NOT_CONFIGURED" });
+    }
+    const parsed = completeBatchBodySchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: parsed.error.flatten() });
+    }
+    try {
+      const batch = await handlers.completeAccountSetupBatch({
+        userId: request.user.userId,
+        predictFun: parsed.data.predictFun ?? null
+      });
+      return reply.status(200).send(toSafeBatch(batch));
+    } catch (error) {
+      return handleVenueAccountError(error, reply);
+    }
+  });
+
   app.post("/user/venue-accounts/predict_fun/auth-message", { preHandler: authMiddleware }, async (request, reply) => {
     if (!handlers.preparePredictFunAccountAuth) {
       return reply.status(503).send({ code: "PREDICT_FUN_ACCOUNT_NOT_CONFIGURED" });
@@ -151,6 +225,36 @@ export const registerUserVenueAccountRoutes = async (
     }
   });
 };
+
+const toSafeBatch = (batch: {
+  venueAccounts: Array<{
+    venue: string;
+    account: UserVenueAccount;
+    readinessBlockers: string[];
+    setupInstructions: string[];
+    setupMode: string;
+  }>;
+  signatureRequests: Array<{
+    venue: string;
+    requestType: string;
+    signer: string;
+    message: string;
+    venueAccount: UserVenueAccount;
+  }>;
+}): Record<string, unknown> => ({
+  venueAccounts: batch.venueAccounts.map((item) => ({
+    venue: item.venue,
+    setupMode: item.setupMode,
+    venueAccount: toSafeVenueAccount(item.account, item.readinessBlockers, item.setupInstructions)
+  })),
+  signatureRequests: batch.signatureRequests.map((request) => ({
+    venue: request.venue,
+    requestType: request.requestType,
+    signer: request.signer,
+    message: request.message,
+    venueAccount: toSafeVenueAccount(request.venueAccount)
+  }))
+});
 
 const handleVenueAccountError = (error: unknown, reply: FastifyReply) => {
   if (error instanceof UserVenueAccountError) {

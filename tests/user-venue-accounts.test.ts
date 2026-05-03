@@ -185,6 +185,56 @@ describe("user venue account service", () => {
     });
     expect(JSON.stringify(repository.auditEvents)).not.toContain("predict-jwt-redacted");
   });
+
+  it("prepares and completes a batch setup without requiring signatures for unsupported venues", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    const service = new UserVenueAccountService(
+      repository,
+      {
+        async resolveUserTurnkeyEvmFundingWallet() {
+          return evmWallet();
+        }
+      },
+      predictAccountClient()
+    );
+
+    const prepared = await service.prepareAccountSetupBatch("user-1");
+    expect(prepared.venueAccounts.map((item) => item.venue)).toEqual([
+      "OPINION",
+      "PREDICT_FUN",
+      "MYRIAD",
+      "LIMITLESS"
+    ]);
+    expect(prepared.signatureRequests).toHaveLength(1);
+    expect(prepared.signatureRequests[0]).toMatchObject({
+      venue: "PREDICT_FUN",
+      requestType: "PREDICT_FUN_AUTH_MESSAGE",
+      signer: "0x1111111111111111111111111111111111111111"
+    });
+    expect(prepared.venueAccounts.find((item) => item.venue === "MYRIAD")).toMatchObject({
+      setupMode: "MANUAL_LINK_REQUIRED"
+    });
+    expect(prepared.venueAccounts.find((item) => item.venue === "LIMITLESS")).toMatchObject({
+      setupMode: "NO_USER_SETUP_REQUIRED"
+    });
+
+    const completed = await service.completeAccountSetupBatch({
+      userId: "user-1",
+      predictFun: {
+        signer: prepared.signatureRequests[0]!.signer,
+        signature: `0x${"c".repeat(130)}`,
+        message: prepared.signatureRequests[0]!.message
+      }
+    });
+    expect(completed.signatureRequests).toHaveLength(0);
+    expect(completed.venueAccounts.find((item) => item.venue === "PREDICT_FUN")).toMatchObject({
+      setupMode: "NO_USER_SETUP_REQUIRED",
+      account: {
+        status: "ACTIVE",
+        venueAccountAddress: "0x4444444444444444444444444444444444444444"
+      }
+    });
+  });
 });
 
 describe("user venue account routes", () => {
@@ -207,6 +257,8 @@ describe("user venue account routes", () => {
       listAccounts: (userId) => service.listAccounts(userId),
       getAccount: (userId, venue) => service.getAccount(userId, venue),
       ensureAccount: (input) => service.ensureAccount(input),
+      prepareAccountSetupBatch: (userId) => service.prepareAccountSetupBatch(userId),
+      completeAccountSetupBatch: (input) => service.completeAccountSetupBatch(input),
       preparePredictFunAccountAuth: (userId) => service.preparePredictFunAccountAuth(userId),
       completePredictFunAccountAuth: (input) => service.completePredictFunAccountAuth(input)
     });
@@ -274,6 +326,30 @@ describe("user venue account routes", () => {
       venueAccountType: "SMART_WALLET",
       status: "ACTIVE"
     });
+
+    const batchPrepared = await app.inject({
+      method: "POST",
+      url: "/user/venue-accounts/setup-batch",
+      headers: { authorization: `Bearer ${token}` }
+    });
+    expect(batchPrepared.statusCode).toBe(200);
+    expect(batchPrepared.json().venueAccounts.map((item: { venue: string }) => item.venue)).toEqual([
+      "OPINION",
+      "PREDICT_FUN",
+      "MYRIAD",
+      "LIMITLESS"
+    ]);
+    expect(batchPrepared.body).not.toContain("predict-jwt-redacted");
+    expect(batchPrepared.body).not.toContain("providerWalletAccountId");
+
+    const batchCompleted = await app.inject({
+      method: "POST",
+      url: "/user/venue-accounts/complete-batch",
+      headers: { authorization: `Bearer ${token}` },
+      payload: {}
+    });
+    expect(batchCompleted.statusCode).toBe(200);
+    expect(batchCompleted.body).not.toContain("predict-jwt-redacted");
     await app.close();
   });
 });

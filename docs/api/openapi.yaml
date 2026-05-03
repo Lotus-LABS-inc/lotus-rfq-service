@@ -2806,6 +2806,48 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /user/venue-accounts/setup-batch:
+    post:
+      tags: [User]
+      summary: Prepare batch venue-account setup.
+      description: Ensures frontend-safe account bindings for user-signed venues and returns any setup payloads that the frontend can sign with the active Turnkey EVM wallet. Currently Predict.fun can return a signable auth message; Opinion/Myriad return safe pending/manual setup state until their reviewed account automation is enabled; Limitless has no user account setup requirement.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: user-venue-account
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/UserVenueAccountSetupBatch" }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "502": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /user/venue-accounts/complete-batch:
+    post:
+      tags: [User]
+      summary: Complete batch venue-account setup.
+      description: Accepts signatures for setup requests returned by setup-batch and returns the refreshed safe batch state. Predict.fun signatures are exchanged server-side for temporary Predict auth only; provider tokens are never stored or returned.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: user-venue-account
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteUserVenueAccountSetupBatchRequest"
+      responses:
+        "200": { $ref: "#/components/responses/UserVenueAccountSetupBatch" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "502": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /user/venue-accounts/predict_fun/auth-message:
     post:
       tags: [User]
@@ -3368,6 +3410,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/UserVenueAccountListResponse"
+    UserVenueAccountSetupBatch:
+      description: Batch user venue account setup state and signable setup requests.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UserVenueAccountSetupBatchResponse"
     PredictFunAccountAuthMessage:
       description: Predict.fun account auth message for frontend Turnkey signing.
       content:
@@ -4290,6 +4338,54 @@ components:
         venueAccounts:
           type: array
           items: { $ref: "#/components/schemas/UserVenueAccount" }
+    UserVenueAccountSetupBatchResponse:
+      type: object
+      additionalProperties: false
+      required: [venueAccounts, signatureRequests]
+      properties:
+        venueAccounts:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [venue, setupMode, venueAccount]
+            properties:
+              venue:
+                $ref: "#/components/schemas/Venue"
+              setupMode:
+                type: string
+                enum: [NO_USER_SETUP_REQUIRED, MANUAL_LINK_REQUIRED, SIGNATURE_REQUIRED]
+              venueAccount:
+                $ref: "#/components/schemas/UserVenueAccount"
+        signatureRequests:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserVenueAccountSignatureRequest"
+    UserVenueAccountSignatureRequest:
+      type: object
+      additionalProperties: false
+      required: [venue, requestType, signer, message, venueAccount]
+      properties:
+        venue:
+          type: string
+          enum: [PREDICT_FUN]
+        requestType:
+          type: string
+          enum: [PREDICT_FUN_AUTH_MESSAGE]
+        signer:
+          type: string
+          pattern: "^0x[a-fA-F0-9]{40}$"
+        message:
+          type: string
+          description: Dynamic venue auth message for frontend Turnkey signing. This is not a token or secret.
+        venueAccount:
+          $ref: "#/components/schemas/UserVenueAccount"
+    CompleteUserVenueAccountSetupBatchRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        predictFun:
+          $ref: "#/components/schemas/PredictFunCompleteAccountAuthRequest"
     PredictFunAccountAuthMessageResponse:
       type: object
       additionalProperties: false
