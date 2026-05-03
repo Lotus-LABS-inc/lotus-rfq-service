@@ -3828,7 +3828,7 @@ components:
         venue: { $ref: "#/components/schemas/Venue" }
         adapter:
           type: string
-          enum: [PolymarketExecutionAdapterV2, LimitlessExecutionAdapter, NOT_IMPLEMENTED]
+          enum: [PolymarketExecutionAdapterV2, LimitlessExecutionAdapter, OpinionExecutionAdapter, PredictFunExecutionAdapter, NOT_IMPLEMENTED]
         executionSigningModel:
           type: string
           enum: [BACKEND_SIGNER, USER_SIGNED, USER_SIGNED_BACKEND_RELAY, DELEGATED_BACKEND_SIGNER, NOT_SUPPORTED]

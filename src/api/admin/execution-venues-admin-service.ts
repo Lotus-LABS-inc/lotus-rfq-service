@@ -2,10 +2,13 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   getLimitlessExecutionAdapterEnvStatus,
+  getOpinionExecutionAdapterEnvStatus,
+  getPredictFunExecutionAdapterEnvStatus,
   getPolymarketExecutionAdapterV2EnvStatus,
   type ExecutionSigningModel,
   type LimitlessExecutionAdapterEnvStatus,
-  type PolymarketExecutionAdapterV2EnvStatus
+  type PolymarketExecutionAdapterV2EnvStatus,
+  type UserSignedRelayExecutionAdapterEnvStatus
 } from "../../execution-system/index.js";
 
 export type ExecutionVenueOperationalStatus =
@@ -16,11 +19,12 @@ export type ExecutionVenueOperationalStatus =
 
 export interface ExecutionVenueReadinessSummary {
   venue: ExecutionVenue;
-  adapter: "PolymarketExecutionAdapterV2" | "LimitlessExecutionAdapter" | "NOT_IMPLEMENTED";
+  adapter: "PolymarketExecutionAdapterV2" | "LimitlessExecutionAdapter" | "OpinionExecutionAdapter" | "PredictFunExecutionAdapter" | "NOT_IMPLEMENTED";
   executionSigningModel: ExecutionSigningModel;
   structuralReadiness:
     | PolymarketExecutionAdapterV2EnvStatus["readinessState"]
     | LimitlessExecutionAdapterEnvStatus["readinessState"]
+    | UserSignedRelayExecutionAdapterEnvStatus["readinessState"]
     | "NOT_CONFIGURED";
   operationalStatus: ExecutionVenueOperationalStatus;
   marketRoutingCoverage: "COVERED_BY_MATCHING" | "UNKNOWN";
@@ -87,6 +91,12 @@ export class ExecutionVenuesAdminService {
     }
     if (venue === "LIMITLESS") {
       return this.getLimitlessVenue();
+    }
+    if (venue === "OPINION") {
+      return this.getUserSignedRelayVenue(getOpinionExecutionAdapterEnvStatus(this.env));
+    }
+    if (venue === "PREDICT_FUN") {
+      return this.getUserSignedRelayVenue(getPredictFunExecutionAdapterEnvStatus(this.env));
     }
     if (venue !== "POLYMARKET") {
       return this.getFailClosedVenue(venue);
@@ -186,6 +196,45 @@ export class ExecutionVenuesAdminService {
     };
   }
 
+  private getUserSignedRelayVenue(
+    adapterStatus: UserSignedRelayExecutionAdapterEnvStatus
+  ): ExecutionVenueReadinessSummary {
+    const operationalStatus = this.resolveUserSignedRelayOperationalStatus(adapterStatus);
+    const blockers = this.userSignedRelayBlockers(adapterStatus);
+    return {
+      venue: adapterStatus.venue,
+      adapter: adapterStatus.adapter,
+      executionSigningModel: adapterStatus.executionSigningModel,
+      structuralReadiness: adapterStatus.readinessState,
+      operationalStatus,
+      marketRoutingCoverage: "COVERED_BY_MATCHING",
+      liveSubmissionSupported: false,
+      liveExecutionEnabled: adapterStatus.liveExecutionEnabled,
+      featureFlagSelected: adapterStatus.featureFlagSelected,
+      host: adapterStatus.venue === "OPINION"
+        ? this.env.OPINION_CLOB_BASE_URL ?? null
+        : this.env.PREDICT_MAINNET_BASE_URL ?? null,
+      chainId: null,
+      requiredEnvPresent: adapterStatus.requiredEnvPresent,
+      missingEnv: adapterStatus.missingEnv,
+      dryRunRequiredEnvPresent: adapterStatus.dryRunRequiredEnvPresent,
+      missingDryRunEnv: adapterStatus.missingDryRunEnv,
+      credentialsServerSideOnly: true,
+      lastHarnessAttempt: {
+        artifactPresent: false,
+        generatedAt: null,
+        mode: null,
+        submitted: null,
+        errorCode: null,
+        errorStatus: null,
+        errorMessage: null,
+        blockers,
+        warnings: []
+      },
+      operatorMessage: this.userSignedRelayOperatorMessage(adapterStatus, operationalStatus)
+    };
+  }
+
   private resolveOperationalStatus(
     adapterStatus: PolymarketExecutionAdapterV2EnvStatus,
     lastErrorCode: string | null
@@ -259,6 +308,52 @@ export class ExecutionVenuesAdminService {
       return "Limitless dry-run path is configured, but live execution is disabled.";
     }
     return "Limitless backend-signer adapter is not fully configured.";
+  }
+
+  private resolveUserSignedRelayOperationalStatus(
+    adapterStatus: UserSignedRelayExecutionAdapterEnvStatus
+  ): ExecutionVenueOperationalStatus {
+    if (adapterStatus.readinessState === "LIVE_READY") {
+      return "STRUCTURALLY_READY";
+    }
+    if (adapterStatus.readinessState === "LIVE_DISABLED") {
+      return "LIVE_DISABLED";
+    }
+    return "NOT_CONFIGURED";
+  }
+
+  private userSignedRelayBlockers(adapterStatus: UserSignedRelayExecutionAdapterEnvStatus): string[] {
+    const blockers: string[] = [];
+    if (!adapterStatus.featureFlagSelected) {
+      blockers.push(`${adapterStatus.venue}_EXECUTION_MODE must be user_signed_backend_relay before relay instructions are selected.`);
+    }
+    if (!adapterStatus.dryRunRequiredEnvPresent) {
+      blockers.push(`Missing ${adapterStatus.venue} relay dry-run env: ${adapterStatus.missingDryRunEnv.join(", ")}.`);
+    }
+    if (!adapterStatus.liveExecutionEnabled) {
+      blockers.push(`${adapterStatus.venue}_LIVE_EXECUTION_ENABLED is false.`);
+    }
+    if (adapterStatus.liveExecutionEnabled && !adapterStatus.requiredEnvPresent) {
+      blockers.push(`Missing ${adapterStatus.venue} relay live env: ${adapterStatus.missingEnv.join(", ")}.`);
+    }
+    blockers.push("Signed-payload relay submit is prepare-only; cancel/fill/status and settlement evidence readers are not implemented yet.");
+    return blockers;
+  }
+
+  private userSignedRelayOperatorMessage(
+    adapterStatus: UserSignedRelayExecutionAdapterEnvStatus,
+    status: ExecutionVenueOperationalStatus
+  ): string {
+    if (!adapterStatus.featureFlagSelected) {
+      return `${adapterStatus.venue} user-signed backend relay adapter is scaffolded but not selected.`;
+    }
+    if (status === "STRUCTURALLY_READY") {
+      return `${adapterStatus.venue} user-signed relay env is structurally ready, but backend submit remains disabled until signed-payload relay, cancel/fill/status, and settlement evidence are reviewed.`;
+    }
+    if (status === "LIVE_DISABLED") {
+      return `${adapterStatus.venue} user-signed relay prepare path is configured, but live relay is disabled.`;
+    }
+    return `${adapterStatus.venue} user-signed relay adapter is not fully configured.`;
   }
 
   private userSignedVenueModel(

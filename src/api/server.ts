@@ -215,11 +215,15 @@ import {
   ExecutionVenueAdapterRegistry,
   FallbackPolicyService,
   LimitlessExecutionAdapter,
+  OpinionExecutionAdapter,
+  PredictFunExecutionAdapter,
   getMonetizationPolicyFromEnv,
   getPolymarketExecutionAdapterV2EnvStatus,
   GhostFillProtectionService,
   PolymarketExecutionAdapterV2,
   buildLimitlessExecutionAdapterConfigFromEnv,
+  buildOpinionExecutionAdapterConfigFromEnv,
+  buildPredictFunExecutionAdapterConfigFromEnv,
   buildPolymarketExecutionAdapterV2ConfigFromEnv,
   RepositoryExecutionAuditSink,
   ScopeAuthorityLaneResolver,
@@ -993,6 +997,16 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     if (process.env.LIMITLESS_EXECUTION_MODE === "backend_signer") {
       adapterRegistry.register(new LimitlessExecutionAdapter(
         buildLimitlessExecutionAdapterConfigFromEnv(process.env)
+      ));
+    }
+    if (process.env.OPINION_EXECUTION_MODE === "user_signed_backend_relay") {
+      adapterRegistry.register(new OpinionExecutionAdapter(
+        buildOpinionExecutionAdapterConfigFromEnv(process.env)
+      ));
+    }
+    if (process.env.PREDICT_FUN_EXECUTION_MODE === "user_signed_backend_relay") {
+      adapterRegistry.register(new PredictFunExecutionAdapter(
+        buildPredictFunExecutionAdapterConfigFromEnv(process.env)
       ));
     }
     const preflightDeps = alwaysHealthyPreflightDeps(laneGate);

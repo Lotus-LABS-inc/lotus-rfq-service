@@ -28,7 +28,11 @@ const liveReadyEnv: NodeJS.ProcessEnv = {
   LIMITLESS_LIVE_EXECUTION_ENABLED: "false",
   LIMITLESS_BASE_URL: "https://api.limitless.exchange",
   LIMITLESS_API_KEY: "server-side-limitless-key",
-  LIMITLESS_EXECUTION_PRIVATE_KEY: "0x59c6995e998f97a5a004497e5daae82f0e6d4d6e773f8f5a11a95d2218e14e4f"
+  LIMITLESS_EXECUTION_PRIVATE_KEY: "0x59c6995e998f97a5a004497e5daae82f0e6d4d6e773f8f5a11a95d2218e14e4f",
+  OPINION_CLOB_BASE_URL: "https://proxy.opinion.trade:8443/openapi",
+  OPINION_API_KEY: "server-side-opinion-key",
+  PREDICT_MAINNET_BASE_URL: "https://api.predict.fun/",
+  PREDICT_API_KEY: "server-side-predict-key"
 };
 
 const buildService = async (): Promise<ExecutionVenuesAdminService> => {
@@ -92,6 +96,8 @@ describe("admin execution venue readiness routes", () => {
     expect(serialized).not.toContain("server-side-secret");
     expect(serialized).not.toContain("server-side-passphrase");
     expect(serialized).not.toContain("server-side-limitless-key");
+    expect(serialized).not.toContain("server-side-opinion-key");
+    expect(serialized).not.toContain("server-side-predict-key");
     expect(serialized).not.toContain(liveReadyEnv.LIMITLESS_EXECUTION_PRIVATE_KEY);
     expect(serialized).not.toContain(liveReadyEnv.POLYMARKET_PRIVATE_KEY);
     expect(body.venues.find((venue: { venue: string }) => venue.venue === "LIMITLESS")).toMatchObject({
@@ -104,15 +110,22 @@ describe("admin execution venue readiness routes", () => {
       liveSubmissionSupported: true,
       liveExecutionEnabled: false
     });
-    for (const venue of ["OPINION", "PREDICT_FUN"]) {
-      expect(body.venues.find((entry: { venue: string }) => entry.venue === venue)).toMatchObject({
-        venue,
-        adapter: "NOT_IMPLEMENTED",
-        executionSigningModel: "USER_SIGNED_BACKEND_RELAY",
-        liveSubmissionSupported: false,
-        liveExecutionEnabled: false
-      });
-    }
+    expect(body.venues.find((entry: { venue: string }) => entry.venue === "OPINION")).toMatchObject({
+      venue: "OPINION",
+      adapter: "OpinionExecutionAdapter",
+      executionSigningModel: "USER_SIGNED_BACKEND_RELAY",
+      structuralReadiness: "NOT_CONFIGURED",
+      liveSubmissionSupported: false,
+      liveExecutionEnabled: false
+    });
+    expect(body.venues.find((entry: { venue: string }) => entry.venue === "PREDICT_FUN")).toMatchObject({
+      venue: "PREDICT_FUN",
+      adapter: "PredictFunExecutionAdapter",
+      executionSigningModel: "USER_SIGNED_BACKEND_RELAY",
+      structuralReadiness: "NOT_CONFIGURED",
+      liveSubmissionSupported: false,
+      liveExecutionEnabled: false
+    });
     expect(body.venues.find((entry: { venue: string }) => entry.venue === "MYRIAD")).toMatchObject({
       venue: "MYRIAD",
       adapter: "NOT_IMPLEMENTED",

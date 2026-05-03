@@ -150,6 +150,7 @@ Non-Polymarket interpretation:
 - `marketRoutingCoverage=COVERED_BY_MATCHING` means Lotus can surface venue market coverage for matching/routing review
 - `LIMITLESS` may report `liveSubmissionSupported=true` only for the backend-signer adapter scaffold; `LIMITLESS_LIVE_EXECUTION_ENABLED=false` remains the default
 - `OPINION` and `PREDICT_FUN` may use backend relay only for user-signed order payloads after route-specific implementation, auth, cancel/fill/status reads, and settlement evidence are reviewed
+- their current adapters are prepare-only scaffolds: `OpinionExecutionAdapter` and `PredictFunExecutionAdapter` can produce frontend-safe signing/relay instructions, but `submitOrder` intentionally fails closed
 - `MYRIAD` remains `USER_SIGNED`; Lotus may prepare frontend-safe signing instructions later, but backend live submission must fail closed
 - `operationalStatus=NOT_CONFIGURED` is expected until a venue-specific execution adapter, smoke harness, settlement proof, and operator signoff are implemented
 - do not treat funding readiness or market coverage as live execution readiness

@@ -16,4 +16,5 @@ export * from "./submission-handler.js";
 export * from "./state-machine.js";
 export * from "./status.js";
 export * from "./types.js";
+export * from "./user-signed-relay-execution-adapter.js";
 export * from "./venue-adapter.js";
