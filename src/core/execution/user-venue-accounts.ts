@@ -141,6 +141,9 @@ export class UserVenueAccountService {
     if (venue === "POLYMARKET" && !input.venueAccountId && !input.venueAccountAddress) {
       return this.ensurePolymarketDepositWalletAccount(input.userId, wallet, existing);
     }
+    if (venue === "MYRIAD" && !input.venueAccountId && !input.venueAccountAddress) {
+      return this.ensureWalletAddressVenueAccount(input.userId, venue, wallet, existing);
+    }
     const venueAccountType = input.venueAccountType ?? defaultAccountTypeForVenue(venue);
     const hasVenueAccount = Boolean(input.venueAccountId?.trim() || input.venueAccountAddress?.trim());
     const account = await this.repository.upsertAccount({
@@ -633,6 +636,47 @@ export class UserVenueAccountService {
     };
   }
 
+  private async ensureWalletAddressVenueAccount(
+    userId: string,
+    venue: UserVenueAccountVenue,
+    wallet: UserWallet,
+    existing: UserVenueAccount | null
+  ): Promise<{
+    account: UserVenueAccount;
+    readinessBlockers: string[];
+    setupInstructions: string[];
+  }> {
+    const account = await this.repository.upsertAccount({
+      ...(existing?.venueAccountBindingId ? { venueAccountBindingId: existing.venueAccountBindingId } : {}),
+      userId,
+      venue,
+      userWalletId: wallet.walletId,
+      walletAddress: wallet.address,
+      venueAccountId: wallet.address,
+      venueAccountAddress: wallet.address,
+      venueAccountType: defaultAccountTypeForVenue(venue),
+      status: "ACTIVE",
+      lastVerifiedAt: new Date().toISOString()
+    });
+    await this.repository.appendAccountAuditEvent({
+      userId,
+      venueAccountBindingId: account.venueAccountBindingId,
+      eventType: existing ? "USER_VENUE_ACCOUNT_UPDATED" : "USER_VENUE_ACCOUNT_ENSURED",
+      payload: {
+        venue,
+        accountType: account.venueAccountType,
+        status: account.status,
+        accountSource: "TURNKEY_EVM_WALLET_ADDRESS",
+        walletAddressMatches: equalsAddress(account.walletAddress, wallet.address)
+      }
+    });
+    return {
+      account,
+      readinessBlockers: readinessBlockersForAccount(account),
+      setupInstructions: setupInstructionsForVenue(venue, account)
+    };
+  }
+
   private async withPredictAccountFailureBoundary<T>(operation: () => Promise<T>): Promise<T> {
     try {
       return await operation();
@@ -743,7 +787,7 @@ const setupModeForVenue = (
   return "MANUAL_LINK_REQUIRED";
 };
 
-const batchSetupVenues = ["POLYMARKET", "OPINION", "PREDICT_FUN", "LIMITLESS"] as const satisfies readonly UserVenueAccountVenue[];
+const batchSetupVenues = ["POLYMARKET", "OPINION", "PREDICT_FUN", "LIMITLESS", "MYRIAD"] as const satisfies readonly UserVenueAccountVenue[];
 
 const nonEmpty = (value: string | null | undefined): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value.trim() : null;

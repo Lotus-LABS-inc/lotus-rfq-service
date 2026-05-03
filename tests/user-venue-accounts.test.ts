@@ -237,6 +237,38 @@ describe("user venue account service", () => {
     expect(JSON.stringify(repository.auditEvents)).not.toContain("signature");
   });
 
+  it("marks Myriad as an active wallet-address account without manual linking", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    const service = new UserVenueAccountService(repository, {
+      async resolveUserTurnkeyEvmFundingWallet() {
+        return evmWallet();
+      }
+    });
+
+    const first = await service.ensureAccount({ userId: "user-1", venue: "MYRIAD" });
+    const second = await service.ensureAccount({ userId: "user-1", venue: "MYRIAD" });
+
+    expect(first.account).toMatchObject({
+      venue: "MYRIAD",
+      walletAddress: "0x1111111111111111111111111111111111111111",
+      venueAccountId: "0x1111111111111111111111111111111111111111",
+      venueAccountAddress: "0x1111111111111111111111111111111111111111",
+      venueAccountType: "EOA",
+      status: "ACTIVE"
+    });
+    expect(second.account.venueAccountBindingId).toBe(first.account.venueAccountBindingId);
+    expect(first.readinessBlockers).toEqual([]);
+    expect(first.setupInstructions).toEqual([]);
+    await expect(service.verifyUserSignedRelayBinding({
+      userId: "user-1",
+      venue: "MYRIAD",
+      signerAddress: "0x1111111111111111111111111111111111111111",
+      venueAccountAddress: "0x1111111111111111111111111111111111111111"
+    })).resolves.toMatchObject({ venue: "MYRIAD" });
+    expect(JSON.stringify(repository.auditEvents)).not.toContain("privateKey");
+    expect(JSON.stringify(repository.auditEvents)).not.toContain("signature");
+  });
+
   it("prepares and completes a batch setup without requiring signatures for unsupported venues", async () => {
     const repository = new InMemoryVenueAccountRepository();
     const service = new UserVenueAccountService(
@@ -254,7 +286,8 @@ describe("user venue account service", () => {
       "POLYMARKET",
       "OPINION",
       "PREDICT_FUN",
-      "LIMITLESS"
+      "LIMITLESS",
+      "MYRIAD"
     ]);
     expect(prepared.signatureRequests).toHaveLength(1);
     expect(prepared.signatureRequests[0]).toMatchObject({
@@ -271,6 +304,15 @@ describe("user venue account service", () => {
       account: {
         venueAccountType: "DEPOSIT_WALLET",
         status: "PENDING"
+      }
+    });
+    expect(prepared.venueAccounts.find((item) => item.venue === "MYRIAD")).toMatchObject({
+      setupMode: "NO_USER_SETUP_REQUIRED",
+      readinessBlockers: [],
+      account: {
+        venueAccountType: "EOA",
+        venueAccountAddress: "0x1111111111111111111111111111111111111111",
+        status: "ACTIVE"
       }
     });
 
@@ -311,7 +353,8 @@ describe("user venue account service", () => {
       "POLYMARKET",
       "OPINION",
       "PREDICT_FUN",
-      "LIMITLESS"
+      "LIMITLESS",
+      "MYRIAD"
     ]);
     expect(prepared.signatureRequests.map((request) => request.requestType)).toEqual([
       "PREDICT_FUN_AUTH_MESSAGE",
@@ -453,7 +496,8 @@ describe("user venue account routes", () => {
       "POLYMARKET",
       "OPINION",
       "PREDICT_FUN",
-      "LIMITLESS"
+      "LIMITLESS",
+      "MYRIAD"
     ]);
     expect(batchPrepared.body).not.toContain("predict-jwt-redacted");
     expect(batchPrepared.body).not.toContain("providerWalletAccountId");
