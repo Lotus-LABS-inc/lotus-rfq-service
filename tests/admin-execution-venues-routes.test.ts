@@ -67,7 +67,7 @@ const buildServiceWithVenueAccounts = async (): Promise<ExecutionVenuesAdminServ
     env: liveReadyEnv,
     venueAccountRepository: {
       async countActiveAccountsByVenue() {
-        return { OPINION: 2 };
+        return { POLYMARKET: 1, OPINION: 2 };
       }
     }
   });
@@ -96,6 +96,8 @@ describe("admin execution venue readiness routes", () => {
       marketRoutingCoverage: "COVERED_BY_MATCHING",
       liveSubmissionSupported: true,
       liveExecutionEnabled: true,
+      venueAccountRequired: true,
+      venueAccountConfigured: false,
       requiredEnvPresent: true,
       lastHarnessAttempt: {
         artifactPresent: true,
@@ -184,6 +186,13 @@ describe("admin execution venue readiness routes", () => {
       url: "/admin/execution-venues"
     });
     expect(response.statusCode).toBe(200);
+    const polymarket = response.json().venues.find((entry: { venue: string }) => entry.venue === "POLYMARKET");
+    expect(polymarket).toMatchObject({
+      venueAccountRequired: true,
+      venueAccountConfigured: true,
+      activeLinkedAccounts: 1,
+      accountSetupBlockers: []
+    });
     const opinion = response.json().venues.find((entry: { venue: string }) => entry.venue === "OPINION");
     expect(opinion).toMatchObject({
       venueAccountRequired: true,

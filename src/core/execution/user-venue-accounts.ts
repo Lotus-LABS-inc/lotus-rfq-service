@@ -619,6 +619,9 @@ const setupInstructionsForVenue = (venue: UserVenueAccountVenue, account: UserVe
   if (venue === "MYRIAD") {
     return ["Myriad uses wallet-call user-signed actions. Lotus does not create or link a separate Myriad account in the venue-account setup batch."];
   }
+  if (venue === "POLYMARKET") {
+    return ["Create or link the Polymarket proxy/funder wallet from the displayed Turnkey EVM wallet, then submit the Polymarket wallet address to Lotus."];
+  }
   if (venue === "LIMITLESS") {
     return ["Limitless partner-account setup is optional and user-signed. If automation is configured, sign the Limitless ownership message with the displayed Turnkey EVM wallet."];
   }
@@ -638,7 +641,7 @@ const setupModeForVenue = (
   return "MANUAL_LINK_REQUIRED";
 };
 
-const batchSetupVenues = ["OPINION", "PREDICT_FUN", "LIMITLESS"] as const satisfies readonly UserVenueAccountVenue[];
+const batchSetupVenues = ["POLYMARKET", "OPINION", "PREDICT_FUN", "LIMITLESS"] as const satisfies readonly UserVenueAccountVenue[];
 
 const nonEmpty = (value: string | null | undefined): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value.trim() : null;

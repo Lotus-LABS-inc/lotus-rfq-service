@@ -210,6 +210,7 @@ describe("user venue account service", () => {
 
     const prepared = await service.prepareAccountSetupBatch("user-1");
     expect(prepared.venueAccounts.map((item) => item.venue)).toEqual([
+      "POLYMARKET",
       "OPINION",
       "PREDICT_FUN",
       "LIMITLESS"
@@ -223,6 +224,13 @@ describe("user venue account service", () => {
     expect(prepared.venueAccounts.find((item) => item.venue === "LIMITLESS")).toMatchObject({
       setupMode: "NO_USER_SETUP_REQUIRED",
       readinessBlockers: []
+    });
+    expect(prepared.venueAccounts.find((item) => item.venue === "POLYMARKET")).toMatchObject({
+      setupMode: "MANUAL_LINK_REQUIRED",
+      account: {
+        venueAccountType: "PROXY_ACCOUNT",
+        status: "PENDING"
+      }
     });
 
     const completed = await service.completeAccountSetupBatch({
@@ -258,6 +266,7 @@ describe("user venue account service", () => {
 
     const prepared = await service.prepareAccountSetupBatch("user-1");
     expect(prepared.venueAccounts.map((item) => item.venue)).toEqual([
+      "POLYMARKET",
       "OPINION",
       "PREDICT_FUN",
       "LIMITLESS"
@@ -391,6 +400,7 @@ describe("user venue account routes", () => {
     });
     expect(batchPrepared.statusCode).toBe(200);
     expect(batchPrepared.json().venueAccounts.map((item: { venue: string }) => item.venue)).toEqual([
+      "POLYMARKET",
       "OPINION",
       "PREDICT_FUN",
       "LIMITLESS"

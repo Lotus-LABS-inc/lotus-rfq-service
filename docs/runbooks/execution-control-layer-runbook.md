@@ -133,6 +133,7 @@ Readiness fields:
 - `requiredEnvPresent` / `missingEnv`: live-submit readiness gate
 - `dryRunRequiredEnvPresent` / `missingDryRunEnv`: dry-run readiness gate
 - `lastHarnessAttempt`: latest `artifacts/execution/polymarket-live-submit-checklist.json` result, if present
+- `venueAccountRequired` / `venueAccountConfigured`: whether user production flow has an active Turnkey EVM venue-account binding
 
 Operational statuses:
 - `NOT_CONFIGURED`: required V2 config is absent or the adapter is not selected
@@ -145,6 +146,10 @@ Current Polymarket interpretation:
 - `EXTERNALLY_BLOCKED` means the remaining blocker is outside Lotus local structure, typically API authorization or endpoint availability
 - this status does not authorize live submission by itself
 - approved-lane enforcement, execution-scope token validation, preflight, settlement verification, and ghost-fill protection still apply
+- user-production readiness also requires a `POLYMARKET` venue-account binding for the user's Turnkey EVM wallet
+- the binding stores only public metadata: signer wallet address plus Polymarket proxy/funder wallet address or id
+- the Polymarket operator signer/funder/API-key path must stay separate from user Turnkey venue-account bindings
+- if a user has not created/deployed a Polymarket proxy/funder wallet yet, `/user/venue-accounts/setup-batch` returns `MANUAL_LINK_REQUIRED` for `POLYMARKET`
 
 Non-Polymarket interpretation:
 - `marketRoutingCoverage=COVERED_BY_MATCHING` means Lotus can surface venue market coverage for matching/routing review

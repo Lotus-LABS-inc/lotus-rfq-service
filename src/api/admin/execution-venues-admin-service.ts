@@ -408,7 +408,7 @@ export class ExecutionVenuesAdminService {
     summary: ExecutionVenueReadinessSummary,
     accountCounts: Record<string, number>
   ): ExecutionVenueReadinessSummary {
-    const venueAccountRequired = summary.venue === "OPINION" || summary.venue === "PREDICT_FUN";
+    const venueAccountRequired = summary.venue === "POLYMARKET" || summary.venue === "OPINION" || summary.venue === "PREDICT_FUN";
     const activeLinkedAccounts = accountCounts[summary.venue] ?? 0;
     const venueAccountConfigured = !venueAccountRequired || activeLinkedAccounts > 0;
     return {
