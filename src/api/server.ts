@@ -99,6 +99,12 @@ import {
   InMemoryAdminAuthRateLimiter,
   RedisAdminAuthRateLimiter
 } from "./admin/admin-auth-rate-limiter.js";
+import {
+  FallbackRateLimiter,
+  InMemoryRateLimiter,
+  parseRateLimitRule,
+  RedisRateLimiter
+} from "./rate-limiter.js";
 import { buildAdminEmailDeliveryFromEnv } from "./admin/admin-email-delivery.js";
 import { registerAdminOpsRoutes } from "./admin/admin-ops.routes.js";
 import { registerAdminMonetizationRoutes } from "./admin/monetization.routes.js";
@@ -484,6 +490,43 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   app.addHook("onClose", async () => {
     fundingReadinessWatcher.stop();
   });
+  const fundingIntentCreateRateLimiter = new FallbackRateLimiter(
+    new RedisRateLimiter({
+      redis: dependencies.redisClient,
+      logger: dependencies.logger,
+      keyPrefix: "funding-intents",
+      keyPepper: dependencies.jwtSecret,
+      operationTimeoutMs: 250,
+      rules: {
+        funding_intent_create: parseRateLimitRule(process.env, "FUNDING_INTENT_CREATE_RATE_LIMIT", {
+          windowSeconds: 900,
+          maxPerUser: 10,
+          maxPerIp: 50
+        }),
+        withdrawal_intent_create: parseRateLimitRule(process.env, "WITHDRAWAL_INTENT_CREATE_RATE_LIMIT", {
+          windowSeconds: 900,
+          maxPerUser: 10,
+          maxPerIp: 50
+        })
+      }
+    }),
+    new InMemoryRateLimiter({
+      keyPrefix: "funding-intents",
+      keyPepper: dependencies.jwtSecret,
+      rules: {
+        funding_intent_create: parseRateLimitRule(process.env, "FUNDING_INTENT_CREATE_RATE_LIMIT", {
+          windowSeconds: 900,
+          maxPerUser: 10,
+          maxPerIp: 50
+        }),
+        withdrawal_intent_create: parseRateLimitRule(process.env, "WITHDRAWAL_INTENT_CREATE_RATE_LIMIT", {
+          windowSeconds: 900,
+          maxPerUser: 10,
+          maxPerIp: 50
+        })
+      }
+    })
+  );
   const polymarketFundingBalanceReadService = new PolymarketFundingBalanceReadService(
     buildPolymarketFundingBalanceReadConfigFromEnv(process.env)
   );
@@ -1092,6 +1135,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     submitWithdrawalRouteLeg: (userId, withdrawalIntentId, request) =>
       fundingService.submitWithdrawalRouteLeg(userId, withdrawalIntentId, request),
     refreshWithdrawalStatus: (userId, withdrawalIntentId) => fundingService.refreshWithdrawalStatus(userId, withdrawalIntentId)
+  }, {
+    intentCreateRateLimiter: fundingIntentCreateRateLimiter
   });
   await registerUserWalletRoutes(app, userAuthMiddleware, {
     listWallets: (userId) => userWalletService.listWallets(userId),

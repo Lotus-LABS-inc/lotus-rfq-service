@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { registerFundingRoutes } from "../src/api/routes/funding.js";
 import type { FundingIntentView, WithdrawalIntentView } from "../src/core/funding/types.js";
+import type { RateLimiter, RateLimitInput, RateLimitResult } from "../src/api/rate-limiter.js";
 
 const view = (userId = "user-1"): FundingIntentView => ({
   intent: {
@@ -51,7 +52,18 @@ const withdrawalView = (userId = "user-1"): WithdrawalIntentView => ({
   userSafeMessage: "Withdrawal intent created. Route preview is pending."
 });
 
-const buildApp = async () => {
+class FakeRateLimiter implements RateLimiter {
+  public readonly consumed: RateLimitInput[] = [];
+
+  public constructor(private readonly result: RateLimitResult = { allowed: true }) {}
+
+  public async consume(input: RateLimitInput): Promise<RateLimitResult> {
+    this.consumed.push(input);
+    return this.result;
+  }
+}
+
+const buildApp = async (options: { rateLimiter?: RateLimiter } = {}) => {
   const app = Fastify({ logger: false });
   await app.register(fastifyJwt, { secret: "test-secret" });
   const auth = async (request: any, reply: any) => {
@@ -146,6 +158,8 @@ const buildApp = async () => {
       ...withdrawalView(userId),
       intent: { ...withdrawalView(userId).intent, status: "WITHDRAWING" }
     })
+  }, {
+    intentCreateRateLimiter: options.rateLimiter
   });
   return app;
 };
@@ -181,6 +195,50 @@ describe("Funding routes", () => {
       userSafeMessage: "Funding intent created. Route quote is pending."
     });
     expect(response.body).not.toContain("LIFI_API_KEY");
+    await app.close();
+  });
+
+  it("rate limits funding and withdrawal intent creation without blocking reads", async () => {
+    const rateLimiter = new FakeRateLimiter({ allowed: false, reason: "USER_LIMIT" });
+    const app = await buildApp({ rateLimiter });
+    const token = app.jwt.sign({ userId: "user-1", role: "USER" });
+    const headers = { authorization: `Bearer ${token}` };
+
+    const funding = await app.inject({
+      method: "POST",
+      url: "/funding/intents",
+      headers,
+      payload: {
+        sourceChain: "SOLANA",
+        sourceToken: "USDC",
+        sourceAmount: "100",
+        sourceWalletAddress: "wallet",
+        idempotencyKey: "idem",
+        targets: [{ targetVenue: "POLYMARKET", targetPercentage: 100 }]
+      }
+    });
+    expect(funding.statusCode).toBe(429);
+    expect(funding.json()).toMatchObject({ code: "RATE_LIMITED" });
+    expect(rateLimiter.consumed[0]).toMatchObject({ scope: "funding_intent_create", userId: "user-1" });
+
+    const withdrawal = await app.inject({
+      method: "POST",
+      url: "/funding/withdrawals",
+      headers,
+      payload: {
+        token: "USDC",
+        amount: "100",
+        destinationChain: "POLYGON",
+        destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+        idempotencyKey: "withdraw-idem",
+        sources: [{ sourceVenue: "POLYMARKET", sourcePercentage: 100 }]
+      }
+    });
+    expect(withdrawal.statusCode).toBe(429);
+    expect(rateLimiter.consumed[1]).toMatchObject({ scope: "withdrawal_intent_create", userId: "user-1" });
+
+    const history = await app.inject({ method: "GET", url: "/funding/history", headers });
+    expect(history.statusCode).toBe(200);
     await app.close();
   });
 

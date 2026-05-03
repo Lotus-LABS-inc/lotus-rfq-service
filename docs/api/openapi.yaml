@@ -2621,6 +2621,7 @@ paths:
       responses:
         "201": { $ref: "#/components/responses/FundingIntent" }
         "400": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
   /funding/intents/{id}:
     parameters: [{ $ref: "#/components/parameters/Id" }]
     get:
@@ -2971,6 +2972,7 @@ paths:
         "201": { $ref: "#/components/responses/WithdrawalIntent" }
         "400": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
   /funding/withdrawals/{id}:
     parameters: [{ $ref: "#/components/parameters/Id" }]
     get:

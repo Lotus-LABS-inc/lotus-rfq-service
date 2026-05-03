@@ -9,6 +9,7 @@ import {
   type VenueBalanceView,
   type WithdrawalIntentView
 } from "../../core/funding/types.js";
+import type { RateLimiter } from "../rate-limiter.js";
 
 const submitFundingRouteLegSchema = z.object({
   routeLegId: z.string().min(1),
@@ -42,10 +43,15 @@ export interface FundingRouteHandlers {
   refreshWithdrawalStatus(userId: string, withdrawalIntentId: string): Promise<WithdrawalIntentView>;
 }
 
+export interface FundingRouteOptions {
+  intentCreateRateLimiter?: RateLimiter | undefined;
+}
+
 export const registerFundingRoutes = async (
   app: FastifyInstance,
   authMiddleware: preHandlerHookHandler,
-  handlers: FundingRouteHandlers
+  handlers: FundingRouteHandlers,
+  options: FundingRouteOptions = {}
 ): Promise<void> => {
   app.post("/funding/intents", { preHandler: authMiddleware }, async (request, reply) => {
     const parsed = CreateFundingIntentSchema.safeParse(request.body);
@@ -54,6 +60,17 @@ export const registerFundingRoutes = async (
         code: "INVALID_REQUEST",
         message: "Funding intent request validation failed.",
         details: parsed.error.flatten()
+      });
+    }
+    const rateLimit = await consumeIntentCreateRateLimit(options.intentCreateRateLimiter, {
+      scope: "funding_intent_create",
+      userId: request.user.userId,
+      ip: request.ip
+    });
+    if (!rateLimit.allowed) {
+      return reply.status(429).send({
+        code: "RATE_LIMITED",
+        message: "Too many funding intents created. Please reuse an existing intent or wait before creating another."
       });
     }
     try {
@@ -158,6 +175,17 @@ export const registerFundingRoutes = async (
         details: parsed.error.flatten()
       });
     }
+    const rateLimit = await consumeIntentCreateRateLimit(options.intentCreateRateLimiter, {
+      scope: "withdrawal_intent_create",
+      userId: request.user.userId,
+      ip: request.ip
+    });
+    if (!rateLimit.allowed) {
+      return reply.status(429).send({
+        code: "RATE_LIMITED",
+        message: "Too many withdrawal intents created. Please reuse an existing intent or wait before creating another."
+      });
+    }
     try {
       const result = await handlers.createWithdrawalIntent(request.user.userId, parsed.data);
       return reply.status(201).send(toWithdrawalResponse(result));
@@ -256,4 +284,14 @@ const handleFundingError = (error: unknown, reply: FastifyReply) => {
     });
   }
   throw error;
+};
+
+const consumeIntentCreateRateLimit = async (
+  rateLimiter: RateLimiter | undefined,
+  input: { scope: string; userId: string; ip: string }
+) => {
+  if (!rateLimiter) {
+    return { allowed: true };
+  }
+  return rateLimiter.consume(input);
 };
