@@ -4,6 +4,7 @@ export interface MarketCatalogFilter {
   category?: string;
   search?: string;
   limit?: number;
+  includeUnapproved?: boolean;
 }
 
 export interface MarketCatalogCategory {
@@ -60,6 +61,8 @@ interface MarketRow {
   expires_at: string | null;
   resolves_at: string | null;
   updated_at: string;
+  frontend_display_title: string | null;
+  frontend_sort_priority: number | null;
   canonical_market_ids: string[];
   venues: string[];
   venue_market_count: string;
@@ -96,6 +99,9 @@ export class MarketCatalogRepository {
     const result = await this.pool.query<CategoryRow>(
       `SELECT ce.canonical_category AS category, COUNT(DISTINCT ce.id)::text AS market_count
          FROM canonical_events ce
+         JOIN frontend_market_approvals fma
+           ON fma.canonical_event_id = ce.id
+          AND fma.status = 'APPROVED'
          LEFT JOIN canonical_executable_markets cem
            ON cem.canonical_event_id = ce.id
          LEFT JOIN venue_market_profiles vmp
@@ -114,6 +120,9 @@ export class MarketCatalogRepository {
     const limit = clampLimit(filter.limit);
     const conditions: string[] = [];
     const params: unknown[] = [];
+    if (!filter.includeUnapproved) {
+      conditions.push(`fma.status = 'APPROVED'`);
+    }
     if (filter.category?.trim()) {
       params.push(filter.category.trim().toUpperCase());
       conditions.push(`ce.canonical_category = $${params.length}`);
@@ -147,6 +156,8 @@ export class MarketCatalogRepository {
           ce.expires_at::text,
           ce.resolves_at::text,
           ce.updated_at::text,
+          MAX(fma.display_title) AS frontend_display_title,
+          MIN(fma.sort_priority) AS frontend_sort_priority,
           COALESCE(
             array_agg(DISTINCT cem.id) FILTER (WHERE cem.id IS NOT NULL),
             array_agg(DISTINCT ce.proposition_key) FILTER (WHERE ce.proposition_key IS NOT NULL),
@@ -155,6 +166,8 @@ export class MarketCatalogRepository {
           COALESCE(array_agg(DISTINCT vmp.venue) FILTER (WHERE vmp.venue IS NOT NULL), '{}') AS venues,
           COUNT(DISTINCT vmp.id)::text AS venue_market_count
          FROM canonical_events ce
+         LEFT JOIN frontend_market_approvals fma
+           ON fma.canonical_event_id = ce.id
          LEFT JOIN canonical_executable_markets cem
            ON cem.canonical_event_id = ce.id
          LEFT JOIN canonical_executable_market_members mem
@@ -164,7 +177,10 @@ export class MarketCatalogRepository {
          ${where}
           ${where ? "AND" : "WHERE"} (cem.id IS NOT NULL OR vmp.id IS NOT NULL)
         GROUP BY ce.id
-        ORDER BY ce.canonical_category ASC, COALESCE(ce.expires_at, ce.resolves_at, ce.updated_at) DESC, ce.title ASC
+        ORDER BY COALESCE(MIN(fma.sort_priority), 1000) ASC,
+                 ce.canonical_category ASC,
+                 COALESCE(ce.expires_at, ce.resolves_at, ce.updated_at) DESC,
+                 ce.title ASC
         LIMIT ${limitParam}`,
       params
     );
@@ -184,6 +200,8 @@ export class MarketCatalogRepository {
           ce.expires_at::text,
           ce.resolves_at::text,
           ce.updated_at::text,
+          MAX(fma.display_title) AS frontend_display_title,
+          MIN(fma.sort_priority) AS frontend_sort_priority,
           COALESCE(
             array_agg(DISTINCT cem.id) FILTER (WHERE cem.id IS NOT NULL),
             array_agg(DISTINCT ce.proposition_key) FILTER (WHERE ce.proposition_key IS NOT NULL),
@@ -192,6 +210,9 @@ export class MarketCatalogRepository {
           COALESCE(array_agg(DISTINCT vmp.venue) FILTER (WHERE vmp.venue IS NOT NULL), '{}') AS venues,
           COUNT(DISTINCT vmp.id)::text AS venue_market_count
          FROM canonical_events ce
+         JOIN frontend_market_approvals fma
+           ON fma.canonical_event_id = ce.id
+          AND fma.status = 'APPROVED'
          LEFT JOIN canonical_executable_markets cem
            ON cem.canonical_event_id = ce.id
          LEFT JOIN canonical_executable_market_members mem
@@ -255,7 +276,7 @@ const toMarket = (row: MarketRow, venueRows: VenueMarketRow[]): MarketCatalogMar
   return {
     canonicalEventId: row.canonical_event_id,
     canonicalMarketIds: normalizeStringArray(row.canonical_market_ids),
-    title: displayTitle(row.title, row.proposition_key),
+    title: row.frontend_display_title?.trim() || displayTitle(row.title, row.proposition_key),
     normalizedTitle: row.normalized_proposition_text,
     category: row.canonical_category,
     marketClass: row.market_class,

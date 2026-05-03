@@ -27,6 +27,7 @@
     "admin:api-smoke": "tsx scripts/admin/admin-api-smoke.ts",
     "admin:execution-venues-smoke": "tsx scripts/admin/admin-execution-venues-smoke.ts",
     "admin:cancel-abandoned-funding-intents": "tsx scripts/admin/cancel-abandoned-funding-intents.ts",
+    "admin:approve-frontend-markets": "tsx scripts/admin/approve-frontend-markets.ts",
     "execution:polymarket-live-submit-harness": "tsx scripts/execution/polymarket-live-submit-harness.ts",
     "execution:limitless-live-submit-harness": "tsx scripts/execution/limitless-live-submit-harness.ts",
     "metrics:check": "node scripts/dev/check-metrics.mjs",

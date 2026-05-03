@@ -144,6 +144,8 @@ describe("market catalog routes", () => {
               expires_at: "2028-05-10T00:00:00.000Z",
               resolves_at: "1970-01-01T00:00:00.000Z",
               updated_at: "2026-05-03T00:00:00.000Z",
+              frontend_display_title: null,
+              frontend_sort_priority: 1000,
               canonical_market_ids: ["opinion-market-active"],
               venues: ["OPINION"],
               venue_market_count: "1"
@@ -174,5 +176,23 @@ describe("market catalog routes", () => {
     const [activeMarket] = await repository.listMarkets({ limit: 1 });
 
     expect(activeMarket?.status).toBe("OPEN");
+  });
+
+  it("requires explicit frontend approval for public market list queries", async () => {
+    const queries: string[] = [];
+    const pool = {
+      query: async (sql: string) => {
+        queries.push(sql);
+        return { rows: [] };
+      }
+    };
+
+    const repository = new PgMarketCatalogRepository(pool as never);
+    await repository.listMarkets({ limit: 5 });
+    await repository.listCategories();
+
+    expect(queries[0]).toContain("fma.status = 'APPROVED'");
+    expect(queries[1]).toContain("JOIN frontend_market_approvals fma");
+    expect(queries[1]).toContain("fma.status = 'APPROVED'");
   });
 });
