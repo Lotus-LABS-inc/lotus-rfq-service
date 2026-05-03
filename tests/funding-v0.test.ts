@@ -176,6 +176,20 @@ class InMemoryFundingRepository implements FundingRepository {
     return this.reconciliations.get(fundingIntentId) ?? [];
   }
 
+  public async listFundingIntentsForReadinessWatch(input: {
+    limit: number;
+    staleAfterSeconds: number;
+  }): Promise<Array<{ fundingIntentId: string; userId: string }>> {
+    void input.staleAfterSeconds;
+    return [...this.intents.values()]
+      .filter((intent) => intent.status !== "READY_TO_TRADE" && intent.status !== "FAILED" && intent.status !== "CANCELLED")
+      .slice(0, input.limit)
+      .map((intent) => ({
+        fundingIntentId: intent.fundingIntentId,
+        userId: intent.userId
+      }));
+  }
+
   public async replaceRouteLegs(fundingIntentId: string, routeLegs: FundingRouteLeg[]): Promise<void> {
     this.legs.set(fundingIntentId, routeLegs);
   }

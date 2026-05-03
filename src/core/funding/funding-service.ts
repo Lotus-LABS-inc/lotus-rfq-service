@@ -67,6 +67,10 @@ export interface FundingRepository {
   listTargets(fundingIntentId: string): Promise<FundingTarget[]>;
   listRouteLegs(fundingIntentId: string): Promise<FundingRouteLeg[]>;
   listReconciliations(fundingIntentId: string): Promise<FundingIntentView["reconciliations"]>;
+  listFundingIntentsForReadinessWatch(input: {
+    limit: number;
+    staleAfterSeconds: number;
+  }): Promise<Array<{ fundingIntentId: string; userId: string }>>;
   replaceRouteLegs(fundingIntentId: string, routeLegs: FundingRouteLeg[]): Promise<void>;
   updateIntentStatus(fundingIntentId: string, status: FundingIntent["status"], patch?: Record<string, unknown>): Promise<void>;
   updateRouteLegSubmission(input: { routeLegId: string; txHash: string; status: FundingLegState }): Promise<void>;

@@ -326,6 +326,34 @@ export class FundingRepository implements FundingRepositoryContract {
     return result.rows.map(mapReconciliation);
   }
 
+  public async listFundingIntentsForReadinessWatch(input: {
+    limit: number;
+    staleAfterSeconds: number;
+  }): Promise<Array<{ fundingIntentId: string; userId: string }>> {
+    const result = await this.pool.query<{ funding_intent_id: string; user_id: string }>(
+      `SELECT DISTINCT fi.id::text AS funding_intent_id,
+              fi.user_id
+         FROM funding_intents fi
+         JOIN funding_route_legs fl ON fl.funding_intent_id = fi.id
+        WHERE fi.status NOT IN ('READY_TO_TRADE', 'FAILED', 'CANCELLED', 'REFUNDED_OR_RETRY_REQUIRED')
+          AND fl.status IN (
+            'LEG_SUBMITTED',
+            'LEG_BRIDGE_PENDING',
+            'LEG_DESTINATION_RECEIVED',
+            'LEG_VENUE_CREDIT_PENDING',
+            'LEG_RETRY_REQUIRED'
+          )
+          AND fl.updated_at <= now() - ($1::int * interval '1 second')
+        ORDER BY fi.id::text ASC
+        LIMIT $2`,
+      [Math.max(0, Math.trunc(input.staleAfterSeconds)), Math.max(1, Math.trunc(input.limit))]
+    );
+    return result.rows.map((row) => ({
+      fundingIntentId: row.funding_intent_id,
+      userId: row.user_id
+    }));
+  }
+
   public async replaceRouteLegs(fundingIntentId: string, routeLegs: FundingRouteLeg[]): Promise<void> {
     const client = await this.pool.connect();
     try {

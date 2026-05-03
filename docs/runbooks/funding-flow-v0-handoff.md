@@ -84,6 +84,15 @@ Controlled Turnkey production smoke:
 - Passing smoke means wallet defaults are idempotent, responses contain public metadata only, the funding intent binds `sourceWalletId`, and no `READY_TO_TRADE` shortcut is observed.
 - Passing smoke does not approve signing, broadcasting, custody, or `USER_TURNKEY_EVM_WALLET` destination mode.
 
+Automatic funding readiness watcher:
+
+- `FUNDING_READINESS_WATCHER_ENABLED=false` by default.
+- When enabled, the backend periodically finds stale non-terminal funding intents with pending/submitted route legs and calls the existing `refreshIntentStatus` path.
+- The watcher does not create a separate readiness rule. It reuses LI.FI status checks plus venue readiness checkers and only persists `READY_TO_TRADE` when destination, venue credit, and ready-to-trade evidence pass.
+- Configure with `FUNDING_READINESS_WATCHER_INTERVAL_MS`, `FUNDING_READINESS_WATCHER_BATCH_SIZE`, and `FUNDING_READINESS_WATCHER_STALE_AFTER_SECONDS`.
+- Keep `FUNDING_VENUE_READINESS_CHECKS_ENABLED=true` and venue-specific readiness envs configured before relying on automatic user-facing "available to trade" updates.
+- The watcher must never mark readiness from wallet existence, tx submission, or raw wallet balance alone.
+
 In plain terms:
 
 1. A user chooses a source wallet, source chain, source token, and amount.

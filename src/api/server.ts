@@ -278,6 +278,10 @@ import {
 } from "../integrations/polymarket/polymarket-deposit-wallet-client.js";
 import { UserWalletService } from "../core/funding/user-wallets.js";
 import { UserVenueAccountService } from "../core/execution/user-venue-accounts.js";
+import {
+  buildFundingReadinessWatcherConfigFromEnv,
+  FundingReadinessWatcher
+} from "../core/funding/funding-readiness-watcher.js";
 
 export interface ServerDependencies {
   logger: Logger;
@@ -470,6 +474,16 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     opinionWithdrawalAdapter,
     userWalletService
   );
+  const fundingReadinessWatcher = new FundingReadinessWatcher(
+    fundingRepository,
+    fundingService,
+    dependencies.logger,
+    buildFundingReadinessWatcherConfigFromEnv(process.env)
+  );
+  fundingReadinessWatcher.start();
+  app.addHook("onClose", async () => {
+    fundingReadinessWatcher.stop();
+  });
   const polymarketFundingBalanceReadService = new PolymarketFundingBalanceReadService(
     buildPolymarketFundingBalanceReadConfigFromEnv(process.env)
   );
