@@ -9,6 +9,7 @@ import {
   type VenueBalanceView,
   type WithdrawalIntentView
 } from "../../core/funding/types.js";
+import type { VenueBalanceActivationAction } from "../../core/funding/venue-activation.js";
 import type { RateLimiter } from "../rate-limiter.js";
 
 const submitFundingRouteLegSchema = z.object({
@@ -35,6 +36,7 @@ export interface FundingRouteHandlers {
   refreshIntentStatus(userId: string, fundingIntentId: string): Promise<FundingIntentView>;
   listVenueCapabilities(): Promise<unknown>;
   listVenueBalances(userId: string): Promise<VenueBalanceView[]>;
+  listVenueActivations(userId: string): Promise<VenueBalanceActivationAction[]>;
   listFundingHistory(userId: string, input?: { page?: number; pageSize?: number; limit?: number }): Promise<FundingHistoryPage>;
   createWithdrawalIntent(userId: string, request: z.infer<typeof CreateWithdrawalIntentSchema>): Promise<WithdrawalIntentView>;
   getWithdrawalIntent(userId: string, withdrawalIntentId: string): Promise<WithdrawalIntentView>;
@@ -137,6 +139,11 @@ export const registerFundingRoutes = async (
   app.get("/funding/venue-balances", { preHandler: authMiddleware }, async (request, reply) => {
     const balances = await handlers.listVenueBalances(request.user.userId);
     return reply.status(200).send({ balances });
+  });
+
+  app.get("/funding/venue-activations", { preHandler: authMiddleware }, async (request, reply) => {
+    const activations = await handlers.listVenueActivations(request.user.userId);
+    return reply.status(200).send({ activations });
   });
 
   app.get("/funding/history", { preHandler: authMiddleware }, async (request, reply) => {

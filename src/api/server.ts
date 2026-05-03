@@ -16,6 +16,7 @@ import { RFQExecutionRepository } from "../db/repositories/rfq-execution-reposit
 import { registerHealthRoute } from "./routes/health.js";
 import { registerMetricsRoute } from "./routes/metrics.js";
 import { registerFundingRoutes } from "./routes/funding.js";
+import { buildVenueBalanceActivationActions } from "../core/funding/venue-activation.js";
 import { registerUserWithdrawalWalletRoutes } from "./routes/user-withdrawal-wallets.js";
 import { registerUserWalletRoutes } from "./routes/user-wallets.js";
 import { registerUserVenueAccountRoutes } from "./routes/user-venue-accounts.js";
@@ -1141,6 +1142,11 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     refreshIntentStatus: (userId, fundingIntentId) => fundingService.refreshIntentStatus(userId, fundingIntentId),
     listVenueCapabilities: async () => fundingService.listVenueCapabilities(),
     listVenueBalances: (userId) => fundingService.listVenueBalances(userId),
+    listVenueActivations: async (userId) => buildVenueBalanceActivationActions({
+      balances: await fundingService.listVenueBalances(userId),
+      venueAccounts: await userVenueAccountService.listAccounts(userId),
+      env: process.env
+    }),
     listFundingHistory: (userId, input) => fundingService.listFundingHistory(userId, input),
     createWithdrawalIntent: (userId, request) => fundingService.createWithdrawalIntent(userId, request),
     getWithdrawalIntent: (userId, withdrawalIntentId) => fundingService.getWithdrawalIntent(userId, withdrawalIntentId),

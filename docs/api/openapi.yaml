@@ -2703,6 +2703,20 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/VenueBalances" }
         "401": { $ref: "#/components/responses/Error" }
+  /funding/venue-activations:
+    get:
+      tags: [Funding]
+      summary: Read frontend-safe venue balance activation requirements.
+      description: Returns safe metadata for venue collateral activation. Signable approval transactions are returned only when backend operator-approved token/spender config exists; the frontend must never provide spender addresses.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/VenueActivations" }
+        "401": { $ref: "#/components/responses/Error" }
   /funding/history:
     get:
       tags: [Funding]
@@ -3413,6 +3427,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/VenueBalanceListResponse"
+    VenueActivations:
+      description: Frontend-safe venue balance activation requirements.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/VenueActivationListResponse"
     FundingHistory:
       description: Frontend-safe funding and withdrawal history rows.
       content:
@@ -4266,6 +4286,74 @@ components:
         balances:
           type: array
           items: { $ref: "#/components/schemas/VenueBalance" }
+    VenueActivationTransactionRequest:
+      type: object
+      additionalProperties: false
+      required: [to, from, data, value, chainId]
+      properties:
+        to:
+          type: string
+          description: ERC20 token contract address, never a frontend-supplied spender.
+        from:
+          type: string
+          description: Public owner/signer address selected by backend venue-account metadata.
+        data:
+          type: string
+          description: Encoded approval calldata built by the backend.
+        value: { type: string }
+        chainId: { type: integer }
+    VenueActivation:
+      type: object
+      additionalProperties: false
+      required: [venue, activationRequired, mode, status, tokenSymbol, tokenAddress, chainId, ownerAddress, signerAddress, spenderAddress, amount, transactionRequest, instructions, blockers]
+      properties:
+        venue: { $ref: "#/components/schemas/Venue" }
+        activationRequired: { type: boolean }
+        mode:
+          type: string
+          enum: [NOT_REQUIRED, VENUE_UI_OR_RELAYER, ERC20_APPROVAL]
+        status:
+          type: string
+          enum: [NOT_REQUIRED, READY, CONFIG_REQUIRED, ACCOUNT_REQUIRED]
+        tokenSymbol:
+          type: string
+          nullable: true
+        tokenAddress:
+          type: string
+          nullable: true
+        chainId:
+          type: integer
+          nullable: true
+        ownerAddress:
+          type: string
+          nullable: true
+        signerAddress:
+          type: string
+          nullable: true
+        spenderAddress:
+          type: string
+          nullable: true
+          description: Backend-configured venue spender only; never accepted from frontend input.
+        amount:
+          type: string
+          nullable: true
+        transactionRequest:
+          nullable: true
+          $ref: "#/components/schemas/VenueActivationTransactionRequest"
+        instructions:
+          type: array
+          items: { type: string }
+        blockers:
+          type: array
+          items: { type: string }
+    VenueActivationListResponse:
+      type: object
+      additionalProperties: false
+      required: [activations]
+      properties:
+        activations:
+          type: array
+          items: { $ref: "#/components/schemas/VenueActivation" }
     FundingHistoryItem:
       type: object
       additionalProperties: false

@@ -48,6 +48,8 @@ Before enabling funding runtime beyond local/sandbox:
 - Before a new venue is used in funding enforcement, run its read-only smoke command and confirm the artifact is redacted, read-only, and either `COMPLETED` with expected mapping or fail-closed with a documented blocker.
 - Internal Polymarket balance reads require `POLYMARKET_INTERNAL_BALANCE_READ_ENABLED=true`, complete CLOB V2 read credentials, and bearer auth outside local loopback testing.
 - `/internal/polymarket/funding-balance` returns only `usableBalance`; it must not return raw CLOB responses, allowances, auth headers, API keys, or private keys.
+- Venue balance activation must be backend-declared. `/funding/venue-activations` may return a signable ERC20 approval only when the venue token, spender, chain id, owner source, and amount mode are configured by env. The frontend must never supply or override the spender address.
+- Polymarket pUSD activation defaults to `VENUE_UI_OR_RELAYER`; do not prepare a raw ERC20 approval unless the official spender/owner model has been reviewed and configured.
 - Polymarket V2 funding readiness must treat CLOB collateral as pUSD. API-only funding flows must account for USDC.e -> pUSD wrapping before marking capital execution-ready.
 - Sandbox funding enforcement is only allowed for approved routes where every required route venue has validated readiness coverage.
 - Do not enable funding preflight enforcement for pair, tri, or split routes if any route venue is manually seeded, stub-only, `NOT_CONFIGURED`, or missing a venue-specific readiness checker.

@@ -71,6 +71,15 @@ Turnkey backend implementation path:
 - Polymarket user-account binding is distinct from the current backend/operator V2 signer setup. The operator `POLYMARKET_PRIVATE_KEY`, CLOB API credentials, builder code, and funder address must never be reused as the user's Turnkey venue-account binding.
 - Polymarket deposit-wallet derivation uses only public owner and contract addresses. Lotus must not deploy the wallet, sign EIP-712 deposit-wallet batches, or broadcast user transactions from the backend unless a separate reviewed user-signing/relayer flow is approved.
 
+Venue balance activation:
+
+- `GET /funding/venue-activations` returns frontend-safe activation metadata for venues where funds may arrive before they are usable for trading.
+- Polymarket is treated as a pUSD activation venue. Deposits may arrive through USDC/USDC.e routes, but readiness must be based on pUSD/collateral usable balance, not raw source-token arrival alone.
+- Predict.fun defaults to `NOT_REQUIRED` because the current connected-wallet/smart-wallet flow does not require a separate Lotus-prepared ERC20 activation transaction.
+- The frontend may show an "Activate balance" button only when Lotus returns a `transactionRequest` from `/funding/venue-activations`.
+- Lotus must never let the frontend choose a spender. ERC20 activation transactions require operator-approved env config: `<VENUE>_BALANCE_ACTIVATION_MODE=ERC20_APPROVAL`, token address, spender address, chain id, token decimals, owner source, and amount mode.
+- If official venue relayer/UI activation is required, the backend returns `VENUE_UI_OR_RELAYER` with blockers/instructions and no signable transaction. This is intentional fail-closed behavior.
+
 Controlled Turnkey production smoke:
 
 - Rotate any exposed Turnkey API key before setting `TURNKEY_ENABLED=true` in Render.

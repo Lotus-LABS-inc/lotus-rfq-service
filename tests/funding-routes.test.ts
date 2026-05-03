@@ -102,6 +102,37 @@ const buildApp = async (options: { rateLimiter?: RateLimiter } = {}) => {
       availableAmount: "100",
       updatedAt: "2026-04-25T00:00:00.000Z"
     }]),
+    listVenueActivations: async () => ([{
+      venue: "POLYMARKET",
+      activationRequired: true,
+      mode: "VENUE_UI_OR_RELAYER",
+      status: "CONFIG_REQUIRED",
+      tokenSymbol: "pUSD",
+      tokenAddress: null,
+      chainId: null,
+      ownerAddress: "0x1111111111111111111111111111111111111111",
+      signerAddress: "0x2222222222222222222222222222222222222222",
+      spenderAddress: null,
+      amount: null,
+      transactionRequest: null,
+      instructions: ["Use the official venue activation flow."],
+      blockers: ["POLYMARKET activation transaction is not configured for backend-safe preparation."]
+    }, {
+      venue: "PREDICT_FUN",
+      activationRequired: false,
+      mode: "NOT_REQUIRED",
+      status: "NOT_REQUIRED",
+      tokenSymbol: "USDT",
+      tokenAddress: null,
+      chainId: null,
+      ownerAddress: "0x2222222222222222222222222222222222222222",
+      signerAddress: "0x2222222222222222222222222222222222222222",
+      spenderAddress: null,
+      amount: null,
+      transactionRequest: null,
+      instructions: ["Predict.fun does not require a separate balance activation step."],
+      blockers: []
+    }]),
     listFundingHistory: async (_userId, input) => ({
       items: [{
         id: "funding:funding-1:leg-1",
@@ -273,6 +304,16 @@ describe("Funding routes", () => {
     expect(balances.json()).toMatchObject({
       balances: [{ venue: "POLYMARKET", token: "USDC", availableAmount: "100" }]
     });
+    const activations = await app.inject({ method: "GET", url: "/funding/venue-activations", headers });
+    expect(activations.statusCode).toBe(200);
+    expect(activations.json()).toMatchObject({
+      activations: [
+        { venue: "POLYMARKET", activationRequired: true, mode: "VENUE_UI_OR_RELAYER" },
+        { venue: "PREDICT_FUN", activationRequired: false, mode: "NOT_REQUIRED" }
+      ]
+    });
+    expect(activations.body).not.toContain("privateKey");
+    expect(activations.body).not.toContain("secret");
     const history = await app.inject({ method: "GET", url: "/funding/history?page=1&pageSize=5", headers });
     expect(history.statusCode).toBe(200);
     expect(history.json()).toMatchObject({
