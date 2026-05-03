@@ -58,16 +58,20 @@ Turnkey backend implementation path:
 
 - `POST /user/wallets/ensure-defaults` creates or returns the user's default Turnkey Solana and EVM wallets.
 - `GET /user/wallets` returns frontend-safe wallet metadata only: provider, chain family, chain, public address, purpose, exportability, status, and timestamps.
+- `POST /user/venue-accounts/{venue}/ensure` creates or returns the frontend-safe venue account binding for a user's active Turnkey EVM wallet. Opinion uses this binding for its Safe/multisig account; Predict.fun uses it for OAuth/connected-wallet account metadata.
+- `GET /user/venue-accounts` and `GET /user/venue-accounts/{venue}` let the frontend see whether a venue account setup step is still needed before user-signed execution relay.
 - Funding intents may use `sourceWalletId`; when omitted for Solana funding, Lotus can use the user's active default Solana Turnkey wallet.
 - Venue targets continue to use `<VENUE>_FUNDING_DESTINATION_ADDRESS` by default. A venue can opt into `USER_TURNKEY_EVM_WALLET` with `<VENUE>_FUNDING_DESTINATION_MODE`, but that only changes the route destination address. It does not change readiness or custody rules.
 - The backend never exposes Turnkey sub-organization ids, wallet account ids, API keys, export bundles, or signing material in frontend responses.
+- Signed execution relay for Opinion and Predict.fun must validate the user, active Turnkey EVM wallet, and active `user_venue_accounts` binding before relaying any signed payload. Lotus still does not sign user orders or represent a venue account binding as trade readiness by itself.
 
 Controlled Turnkey production smoke:
 
 - Rotate any exposed Turnkey API key before setting `TURNKEY_ENABLED=true` in Render.
 - Keep every `<VENUE>_FUNDING_DESTINATION_MODE=VENUE_DEPOSIT_ENV` for the first smoke.
 - Use a dedicated production smoke user JWT, not an admin JWT.
-- For email-backed funding tests, use `polymarket-funding-test@uselotus.xyz` as the canonical test email unless the operator has confirmed a different email has an active Turnkey embedded Solana wallet and can sign through Wallet Kit. A Lotus JWT email only authorizes Lotus API access; the Turnkey login must resolve to the sub-organization that owns the funded wallet.
+- For email-backed funding and execution tests, use `polymarket-funding-test@uselotus.xyz` as the canonical test email unless the operator has confirmed a different email has an active Turnkey embedded wallet and can sign through Wallet Kit. A Lotus JWT email only authorizes Lotus API access; the Turnkey login must resolve to the sub-organization that owns the funded wallet.
+- Canonical live-test Turnkey sub-org: `94b3ca90-5489-4d0b-9a1f-e9e71ba20ffb`. Do not use any other sub-org for live venue execution tests unless an operator explicitly overrides this rule.
 - Run `npm run funding:turnkey-wallet-production-smoke` with `TURNKEY_SMOKE_BASE_URL`, `TURNKEY_SMOKE_USER_JWT`, `TURNKEY_SMOKE_TARGET_VENUE`, `TURNKEY_SMOKE_SOURCE_CHAIN`, `TURNKEY_SMOKE_SOURCE_TOKEN`, and `TURNKEY_SMOKE_SOURCE_AMOUNT`.
 - The smoke calls `POST /user/wallets/ensure-defaults`, `GET /user/wallets`, and `POST /funding/intents` without `sourceWalletAddress`.
 - The smoke writes redacted artifacts under `artifacts/funding/turnkey-wallet-production-smoke-*`.

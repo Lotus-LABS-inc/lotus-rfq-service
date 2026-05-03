@@ -10,6 +10,7 @@ import {
   type PolymarketExecutionAdapterV2EnvStatus,
   type UserSignedRelayExecutionAdapterEnvStatus
 } from "../../execution-system/index.js";
+import type { UserVenueAccountRepository } from "../../core/execution/user-venue-accounts.js";
 
 export type ExecutionVenueOperationalStatus =
   | "STRUCTURALLY_READY"
@@ -50,11 +51,16 @@ export interface ExecutionVenueReadinessSummary {
     warnings: readonly string[];
   };
   operatorMessage: string;
+  venueAccountRequired: boolean;
+  venueAccountConfigured: boolean;
+  activeLinkedAccounts: number;
+  accountSetupBlockers: readonly string[];
 }
 
 export interface ExecutionVenuesAdminServiceDeps {
   repoRoot?: string;
   env?: NodeJS.ProcessEnv;
+  venueAccountRepository?: Pick<UserVenueAccountRepository, "countActiveAccountsByVenue"> | undefined;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -75,36 +81,40 @@ const isExecutionVenue = (venue: string): venue is ExecutionVenue =>
 export class ExecutionVenuesAdminService {
   private readonly repoRoot: string;
   private readonly env: NodeJS.ProcessEnv;
+  private readonly venueAccountRepository?: Pick<UserVenueAccountRepository, "countActiveAccountsByVenue"> | undefined;
 
   public constructor(deps: ExecutionVenuesAdminServiceDeps = {}) {
     this.repoRoot = deps.repoRoot ?? process.cwd();
     this.env = deps.env ?? process.env;
+    this.venueAccountRepository = deps.venueAccountRepository;
   }
 
   public async listVenues(): Promise<ExecutionVenueReadinessSummary[]> {
-    return Promise.all(executionVenues.map((venue) => this.getVenue(venue)));
+    const accountCounts = await this.loadActiveVenueAccountCounts();
+    return Promise.all(executionVenues.map((venue) => this.getVenue(venue, accountCounts)));
   }
 
-  public async getVenue(venue: string): Promise<ExecutionVenueReadinessSummary> {
+  public async getVenue(venue: string, accountCounts?: Record<string, number>): Promise<ExecutionVenueReadinessSummary> {
     if (!isExecutionVenue(venue)) {
       throw new ExecutionVenueNotFoundError(venue);
     }
+    const counts = accountCounts ?? await this.loadActiveVenueAccountCounts();
     if (venue === "LIMITLESS") {
-      return this.getLimitlessVenue();
+      return this.withVenueAccountReadiness(this.getLimitlessVenue(), counts);
     }
     if (venue === "OPINION") {
-      return this.getUserSignedRelayVenue(getOpinionExecutionAdapterEnvStatus(this.env));
+      return this.withVenueAccountReadiness(this.getUserSignedRelayVenue(getOpinionExecutionAdapterEnvStatus(this.env)), counts);
     }
     if (venue === "PREDICT_FUN") {
-      return this.getUserSignedRelayVenue(getPredictFunExecutionAdapterEnvStatus(this.env));
+      return this.withVenueAccountReadiness(this.getUserSignedRelayVenue(getPredictFunExecutionAdapterEnvStatus(this.env)), counts);
     }
     if (venue !== "POLYMARKET") {
-      return this.getFailClosedVenue(venue);
+      return this.withVenueAccountReadiness(this.getFailClosedVenue(venue), counts);
     }
     const adapterStatus = getPolymarketExecutionAdapterV2EnvStatus(this.env);
     const lastHarnessAttempt = await this.readPolymarketHarnessArtifact();
     const operationalStatus = this.resolveOperationalStatus(adapterStatus, lastHarnessAttempt.errorCode);
-    return {
+    return this.withVenueAccountReadiness({
       venue: "POLYMARKET",
       adapter: "PolymarketExecutionAdapterV2",
       executionSigningModel: "BACKEND_SIGNER",
@@ -122,8 +132,12 @@ export class ExecutionVenuesAdminService {
       missingDryRunEnv: adapterStatus.missingDryRunEnv,
       credentialsServerSideOnly: true,
       lastHarnessAttempt,
-      operatorMessage: this.operatorMessage(operationalStatus, lastHarnessAttempt.errorCode)
-    };
+      operatorMessage: this.operatorMessage(operationalStatus, lastHarnessAttempt.errorCode),
+      venueAccountRequired: false,
+      venueAccountConfigured: false,
+      activeLinkedAccounts: 0,
+      accountSetupBlockers: []
+    }, counts);
   }
 
   private getLimitlessVenue(): ExecutionVenueReadinessSummary {
@@ -158,7 +172,11 @@ export class ExecutionVenuesAdminService {
         blockers,
         warnings: []
       },
-      operatorMessage: this.limitlessOperatorMessage(operationalStatus, adapterStatus)
+      operatorMessage: this.limitlessOperatorMessage(operationalStatus, adapterStatus),
+      venueAccountRequired: false,
+      venueAccountConfigured: false,
+      activeLinkedAccounts: 0,
+      accountSetupBlockers: []
     };
   }
 
@@ -192,7 +210,11 @@ export class ExecutionVenuesAdminService {
         blockers: [`${venue} backend live execution is not enabled for signing model ${executionSigningModel}.`],
         warnings: []
       },
-      operatorMessage: `${venue} has market/routing coverage, but requires a reviewed ${executionSigningModel} execution flow before live backend submission. Orders must fail closed instead of submitting to this venue.`
+      operatorMessage: `${venue} has market/routing coverage, but requires a reviewed ${executionSigningModel} execution flow before live backend submission. Orders must fail closed instead of submitting to this venue.`,
+      venueAccountRequired: false,
+      venueAccountConfigured: false,
+      activeLinkedAccounts: 0,
+      accountSetupBlockers: []
     };
   }
 
@@ -231,7 +253,11 @@ export class ExecutionVenuesAdminService {
         blockers,
         warnings: []
       },
-      operatorMessage: this.userSignedRelayOperatorMessage(adapterStatus, operationalStatus)
+      operatorMessage: this.userSignedRelayOperatorMessage(adapterStatus, operationalStatus),
+      venueAccountRequired: false,
+      venueAccountConfigured: false,
+      activeLinkedAccounts: 0,
+      accountSetupBlockers: []
     };
   }
 
@@ -366,6 +392,35 @@ export class ExecutionVenuesAdminService {
       return "USER_SIGNED";
     }
     return "NOT_SUPPORTED";
+  }
+
+  private async loadActiveVenueAccountCounts(): Promise<Record<string, number>> {
+    if (!this.venueAccountRepository) {
+      return {};
+    }
+    try {
+      return await this.venueAccountRepository.countActiveAccountsByVenue();
+    } catch {
+      return {};
+    }
+  }
+
+  private withVenueAccountReadiness(
+    summary: ExecutionVenueReadinessSummary,
+    accountCounts: Record<string, number>
+  ): ExecutionVenueReadinessSummary {
+    const venueAccountRequired = summary.venue === "OPINION" || summary.venue === "PREDICT_FUN";
+    const activeLinkedAccounts = accountCounts[summary.venue] ?? 0;
+    const venueAccountConfigured = !venueAccountRequired || activeLinkedAccounts > 0;
+    return {
+      ...summary,
+      venueAccountRequired,
+      venueAccountConfigured,
+      activeLinkedAccounts,
+      accountSetupBlockers: venueAccountRequired && activeLinkedAccounts === 0
+        ? [`${summary.venue} requires an active Turnkey EVM venue account binding before signed relay submit.`]
+        : []
+    };
   }
 
   private async readPolymarketHarnessArtifact(): Promise<ExecutionVenueReadinessSummary["lastHarnessAttempt"]> {

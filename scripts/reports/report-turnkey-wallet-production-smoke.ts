@@ -64,6 +64,13 @@ interface TurnkeyWalletProductionSmokeArtifact {
   };
   blockers: string[];
   warnings: string[];
+  testIdentity: {
+    expectedEmail: string;
+    jwtEmail: string | null;
+    emailMatched: boolean;
+    expectedSubOrgId: string;
+    subOrgOperatorVerified: boolean;
+  };
 }
 
 const artifactDir = join(process.cwd(), "artifacts", "funding");
@@ -74,6 +81,10 @@ const sourceChain = process.env.TURNKEY_SMOKE_SOURCE_CHAIN?.trim() || "SOLANA";
 const sourceToken = process.env.TURNKEY_SMOKE_SOURCE_TOKEN?.trim() || "USDC";
 const sourceAmount = process.env.TURNKEY_SMOKE_SOURCE_AMOUNT?.trim() || "1";
 const requestTimeoutMs = Number(process.env.TURNKEY_SMOKE_REQUEST_TIMEOUT_MS ?? "30000");
+const expectedEmail = process.env.TURNKEY_SMOKE_EXPECTED_EMAIL?.trim() || "polymarket-funding-test@uselotus.xyz";
+const expectedSubOrgId = process.env.TURNKEY_SMOKE_EXPECTED_SUB_ORG_ID?.trim() || "94b3ca90-5489-4d0b-9a1f-e9e71ba20ffb";
+const subOrgOperatorVerified = process.env.TURNKEY_SMOKE_EXPECTED_SUB_ORG_VERIFIED === "true";
+const jwtEmail = emailFromJwt(userJwt);
 
 const endpointResults: EndpointResult[] = [];
 const blockers: string[] = [];
@@ -149,6 +160,12 @@ if (unexpectedWalletKeys.length > 0) {
 if (process.env.TURNKEY_SMOKE_RENDER_ENVS_VERIFIED !== "true") {
   warnings.push("Operator has not set TURNKEY_SMOKE_RENDER_ENVS_VERIFIED=true for this smoke run.");
 }
+if (jwtEmail !== expectedEmail) {
+  blockers.push(`Smoke JWT email must be ${expectedEmail}.`);
+}
+if (!subOrgOperatorVerified) {
+  blockers.push(`Operator must verify Turnkey sub-org ${expectedSubOrgId} owns the test wallet and set TURNKEY_SMOKE_EXPECTED_SUB_ORG_VERIFIED=true.`);
+}
 
 const generatedAt = new Date().toISOString();
 const artifact: TurnkeyWalletProductionSmokeArtifact = {
@@ -190,7 +207,14 @@ const artifact: TurnkeyWalletProductionSmokeArtifact = {
     readyToTradeShortcutObserved
   },
   blockers,
-  warnings
+  warnings,
+  testIdentity: {
+    expectedEmail,
+    jwtEmail,
+    emailMatched: jwtEmail === expectedEmail,
+    expectedSubOrgId,
+    subOrgOperatorVerified
+  }
 };
 
 await mkdir(artifactDir, { recursive: true });
@@ -323,6 +347,9 @@ function renderMarkdown(artifact: TurnkeyWalletProductionSmokeArtifact): string 
     `Status: ${artifact.status}`,
     `Base URL: ${artifact.baseUrl}`,
     `Target venue: ${artifact.targetVenue}`,
+    `Expected test email: ${artifact.testIdentity.expectedEmail}`,
+    `JWT email matched: ${artifact.testIdentity.emailMatched}`,
+    `Expected Turnkey sub-org verified: ${artifact.testIdentity.subOrgOperatorVerified}`,
     "",
     "## Endpoint Results",
     "",
@@ -378,4 +405,19 @@ function stringOrNull(value: unknown): string | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function emailFromJwt(jwt: string): string | null {
+  const parts = jwt.split(".");
+  if (parts.length < 2 || !parts[1]) {
+    return null;
+  }
+  try {
+    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const payload = JSON.parse(Buffer.from(padded, "base64").toString("utf8")) as unknown;
+    return isRecord(payload) && typeof payload.email === "string" ? payload.email : null;
+  } catch {
+    return null;
+  }
 }

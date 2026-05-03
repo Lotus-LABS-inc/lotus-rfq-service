@@ -271,6 +271,14 @@ Execution go/no-go:
 | Execution tests | `npm run test:execution-system` | Pass. |
 | Execution system report | `npm run report:execution-system:v0` | No unresolved blocker for enabled lanes. |
 | Live submit harness | `npm run execution:polymarket-live-submit-harness` | Only run when live submit review explicitly approves. |
+
+Turnkey venue account rule for user-signed venues:
+
+- The user's active Turnkey EVM wallet is the canonical identity wallet for Opinion and Predict.fun account setup.
+- `POST /user/venue-accounts/{venue}/ensure` must be completed before any signed relay submit path is enabled for that venue.
+- Opinion account bindings store safe public metadata for the Opinion Safe/multisig account; Predict.fun bindings store safe OAuth/connected-wallet account metadata.
+- Signed relay submit must reject any payload whose signer/account does not match the user's active Turnkey EVM wallet and active `user_venue_accounts` binding.
+- Lotus must not backend-sign user orders, export keys, broadcast user transactions, store raw signatures as secrets, or mix Polymarket operator signer/proxy wallet state with user Turnkey venue-account bindings.
 | RFQ lifecycle | `npx vitest run test/integration/rfq-lifecycle.test.ts --maxWorkers=1` | Pass before production RFQ accept changes. |
 | Funding preflight | Funding route gates below | Required before enabling enforcement for any route. |
 

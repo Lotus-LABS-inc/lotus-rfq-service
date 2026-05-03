@@ -18,6 +18,7 @@ import { registerMetricsRoute } from "./routes/metrics.js";
 import { registerFundingRoutes } from "./routes/funding.js";
 import { registerUserWithdrawalWalletRoutes } from "./routes/user-withdrawal-wallets.js";
 import { registerUserWalletRoutes } from "./routes/user-wallets.js";
+import { registerUserVenueAccountRoutes } from "./routes/user-venue-accounts.js";
 import { registerInternalPolymarketFundingBalanceRoute } from "./routes/internal-polymarket-funding-balance.js";
 import { registerInternalLimitlessWithdrawalEvidenceRoute } from "./routes/internal-limitless-withdrawal-evidence.js";
 import { registerRFQRoute } from "./routes/rfq.js";
@@ -180,6 +181,7 @@ import { ExecutionRecordRepository } from "../repositories/execution-record.repo
 import { ExecutionControlRepository } from "../repositories/execution-control.repository.js";
 import { FundingRepository } from "../repositories/funding.repository.js";
 import { UserWalletRepository } from "../repositories/user-wallet.repository.js";
+import { UserVenueAccountRepository } from "../repositories/user-venue-account.repository.js";
 import { PairEdgeRepository } from "../repositories/pair-edge.repository.js";
 import { CompatibilityOverrideService } from "../canonical/compatibility-override-service.js";
 import { PairMatchReviewService } from "./admin/pair-match-review-service.js";
@@ -269,6 +271,7 @@ import {
   TurnkeyUserWalletProvisioner
 } from "../integrations/turnkey/turnkey-wallet-client.js";
 import { UserWalletService } from "../core/funding/user-wallets.js";
+import { UserVenueAccountService } from "../core/execution/user-venue-accounts.js";
 
 export interface ServerDependencies {
   logger: Logger;
@@ -401,6 +404,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const executionRecordRepository = new ExecutionRecordRepository(dependencies.pgPool);
   const fundingRepository = new FundingRepository(dependencies.pgPool);
   const userWalletRepository = new UserWalletRepository(dependencies.pgPool);
+  const userVenueAccountRepository = new UserVenueAccountRepository(dependencies.pgPool);
   const turnkeyWalletConfig = getTurnkeyWalletConfigFromEnv(process.env);
   const turnkeyWalletProvisioner = isTurnkeyWalletConfigReady(turnkeyWalletConfig)
     ? new TurnkeyUserWalletProvisioner(turnkeyWalletConfig)
@@ -410,6 +414,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     defaultSolanaWalletEnabled: turnkeyWalletConfig.defaultSolanaWalletEnabled,
     defaultEvmWalletEnabled: turnkeyWalletConfig.defaultEvmWalletEnabled
   }, turnkeyWalletProvisioner);
+  const userVenueAccountService = new UserVenueAccountService(userVenueAccountRepository, userWalletService);
   const polymarketBridgeWithdrawalConfig = getPolymarketBridgeWithdrawalConfigFromEnv(process.env);
   const polymarketBridgeWithdrawalAdapter = polymarketBridgeWithdrawalConfig.configured && polymarketBridgeWithdrawalConfig.apiBaseUrl
     ? new PolymarketBridgeWithdrawalAdapter(
@@ -1064,6 +1069,11 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   await registerUserWalletRoutes(app, userAuthMiddleware, {
     listWallets: (userId) => userWalletService.listWallets(userId),
     ensureDefaultWallets: (userId, email) => userWalletService.ensureDefaultWallets(userId, email)
+  });
+  await registerUserVenueAccountRoutes(app, userAuthMiddleware, {
+    listAccounts: (userId) => userVenueAccountService.listAccounts(userId),
+    getAccount: (userId, venue) => userVenueAccountService.getAccount(userId, venue),
+    ensureAccount: (input) => userVenueAccountService.ensureAccount(input)
   });
   await registerUserWithdrawalWalletRoutes(app, userAuthMiddleware, {
     listWallets: async (userId) => (await userWalletService.listWallets(userId))
@@ -1740,7 +1750,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   });
   const executionVenuesAdminService = new ExecutionVenuesAdminService({
     env: process.env,
-    repoRoot: process.cwd()
+    repoRoot: process.cwd(),
+    venueAccountRepository: userVenueAccountRepository
   });
   const fundingReadinessAdminService = new FundingReadinessAdminService({
     repository: fundingRepository,

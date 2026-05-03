@@ -2745,6 +2745,67 @@ paths:
         "200": { $ref: "#/components/responses/UserWallets" }
         "401": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
+  /user/venue-accounts:
+    get:
+      tags: [User]
+      summary: Read user venue account bindings.
+      description: Returns frontend-safe venue account metadata linked to the user's Turnkey EVM wallet. It never returns Turnkey provider internals, private keys, auth tokens, signatures, export bundles, or raw venue auth material.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: none
+      x-lotus-danger: low
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/UserVenueAccounts" }
+        "401": { $ref: "#/components/responses/Error" }
+  /user/venue-accounts/{venue}:
+    get:
+      tags: [User]
+      summary: Read one user venue account binding.
+      description: Returns the frontend-safe account binding for one venue.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: none
+      x-lotus-danger: low
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: venue
+          required: true
+          schema: { $ref: "#/components/schemas/Venue" }
+      responses:
+        "200": { $ref: "#/components/responses/UserVenueAccount" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /user/venue-accounts/{venue}/ensure:
+    post:
+      tags: [User]
+      summary: Ensure a user venue account binding.
+      description: Requires an active user-controlled Turnkey EVM wallet and creates or updates safe metadata for the venue account. Lotus does not sign, broadcast, export keys, or store user signatures.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: user-venue-account
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: venue
+          required: true
+          schema: { $ref: "#/components/schemas/Venue" }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnsureUserVenueAccountRequest"
+      responses:
+        "200": { $ref: "#/components/responses/UserVenueAccount" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /user/withdrawal-wallets/evm:
     put:
       tags: [User]
@@ -3249,6 +3310,22 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/UserWalletListResponse"
+    UserVenueAccount:
+      description: User venue account binding.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [venueAccount]
+            properties:
+              venueAccount:
+                $ref: "#/components/schemas/UserVenueAccount"
+    UserVenueAccounts:
+      description: User venue account binding list.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UserVenueAccountListResponse"
     WithdrawalIntent:
       description: Frontend-safe withdrawal intent response.
       content:
@@ -3858,6 +3935,14 @@ components:
         lastHarnessAttempt:
           type: object
           additionalProperties: true
+        venueAccountRequired: { type: boolean }
+        venueAccountConfigured: { type: boolean }
+        activeLinkedAccounts:
+          type: integer
+          minimum: 0
+        accountSetupBlockers:
+          type: array
+          items: { type: string }
         operatorMessage: { type: string }
         notes:
           type: array
@@ -4111,6 +4196,65 @@ components:
         wallets:
           type: array
           items: { $ref: "#/components/schemas/UserWallet" }
+    UserVenueAccount:
+      type: object
+      additionalProperties: false
+      required: [venue, walletAddress, venueAccountType, status, readinessBlockers, setupInstructions, createdAt, updatedAt]
+      properties:
+        venue:
+          $ref: "#/components/schemas/Venue"
+        walletAddress:
+          type: string
+          description: Public Turnkey EVM wallet address used to create or link the venue account.
+        venueAccountId:
+          type: string
+          nullable: true
+        venueAccountAddress:
+          type: string
+          nullable: true
+        venueAccountType:
+          type: string
+          enum: [SAFE, SMART_WALLET, OAUTH_ACCOUNT, EOA, PROXY_ACCOUNT]
+        status:
+          type: string
+          enum: [PENDING, ACTIVE, DISABLED, REVOKED]
+        readinessBlockers:
+          type: array
+          items: { type: string }
+        setupInstructions:
+          type: array
+          items: { type: string }
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        lastVerifiedAt:
+          type: string
+          nullable: true
+          format: date-time
+    UserVenueAccountListResponse:
+      type: object
+      additionalProperties: false
+      required: [venueAccounts]
+      properties:
+        venueAccounts:
+          type: array
+          items: { $ref: "#/components/schemas/UserVenueAccount" }
+    EnsureUserVenueAccountRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        venueAccountId:
+          type: string
+          description: Public venue account id returned by the venue after account setup.
+        venueAccountAddress:
+          type: string
+          description: Public Safe, smart-wallet, OAuth wallet, EOA, or proxy address associated with the venue account.
+        venueAccountType:
+          type: string
+          enum: [SAFE, SMART_WALLET, OAUTH_ACCOUNT, EOA, PROXY_ACCOUNT]
     UpsertEvmWithdrawalWalletRequest:
       type: object
       additionalProperties: false

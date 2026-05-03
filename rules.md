@@ -82,6 +82,13 @@ These rules preserve the current Lotus architecture. Cleanup work MUST clarify t
 4. No broad heuristics that hide ambiguity.
 5. If a future pass wants to change these boundaries, it must be treated as an explicit architecture decision, not folded into incidental cleanup.
 
+### Live Test Identity Rules
+
+1. Any live execution, funding, withdrawal, or Turnkey smoke test that requires an email-backed user identity must use `polymarket-funding-test@uselotus.xyz` unless an operator explicitly approves a different test identity in writing.
+2. The canonical Turnkey test sub-organization for that identity is `94b3ca90-5489-4d0b-9a1f-e9e71ba20ffb`; no other sub-organization may be used for live execution tests without explicit operator approval.
+3. A Lotus user JWT only authorizes backend API access. It does not prove the browser Turnkey session owns the funded wallet. Before signing or funding tests, the Turnkey session, wallet address, and Lotus JWT user must all be checked for the same intended test identity.
+4. Never use admin emails, personal wallets, or unrelated external wallets for live venue execution tests.
+
 # Code Organization and File Creation Rules
 
 Lotus must optimize for code clarity, compactness, and future-engineer readability.

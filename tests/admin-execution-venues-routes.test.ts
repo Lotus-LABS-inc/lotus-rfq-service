@@ -60,6 +60,19 @@ const buildService = async (): Promise<ExecutionVenuesAdminService> => {
   return new ExecutionVenuesAdminService({ repoRoot, env: liveReadyEnv });
 };
 
+const buildServiceWithVenueAccounts = async (): Promise<ExecutionVenuesAdminService> => {
+  const repoRoot = await mkdtemp(join(tmpdir(), "lotus-execution-venues-"));
+  return new ExecutionVenuesAdminService({
+    repoRoot,
+    env: liveReadyEnv,
+    venueAccountRepository: {
+      async countActiveAccountsByVenue() {
+        return { OPINION: 2 };
+      }
+    }
+  });
+};
+
 describe("admin execution venue readiness routes", () => {
   it("lists Polymarket as structurally ready but externally blocked by venue auth without exposing secrets", async () => {
     const app = Fastify({ logger: false });
@@ -116,7 +129,10 @@ describe("admin execution venue readiness routes", () => {
       executionSigningModel: "USER_SIGNED_BACKEND_RELAY",
       structuralReadiness: "NOT_CONFIGURED",
       liveSubmissionSupported: false,
-      liveExecutionEnabled: false
+      liveExecutionEnabled: false,
+      venueAccountRequired: true,
+      venueAccountConfigured: false,
+      activeLinkedAccounts: 0
     });
     expect(body.venues.find((entry: { venue: string }) => entry.venue === "PREDICT_FUN")).toMatchObject({
       venue: "PREDICT_FUN",
@@ -154,6 +170,30 @@ describe("admin execution venue readiness routes", () => {
     });
     expect(missingResponse.statusCode).toBe(404);
 
+    await app.close();
+  });
+
+  it("reports active linked venue accounts without exposing account internals", async () => {
+    const app = Fastify({ logger: false });
+    await registerAdminExecutionVenuesRoutes(app, adminMiddleware, {
+      executionVenuesAdminService: await buildServiceWithVenueAccounts()
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/admin/execution-venues"
+    });
+    expect(response.statusCode).toBe(200);
+    const opinion = response.json().venues.find((entry: { venue: string }) => entry.venue === "OPINION");
+    expect(opinion).toMatchObject({
+      venueAccountRequired: true,
+      venueAccountConfigured: true,
+      activeLinkedAccounts: 2,
+      accountSetupBlockers: []
+    });
+    expect(response.body).not.toContain("providerSubOrgId");
+    expect(response.body).not.toContain("providerWalletAccountId");
+    expect(response.body).not.toContain("privateKey");
     await app.close();
   });
 });

@@ -1,0 +1,245 @@
+import type { FundingVenue } from "../funding/types.js";
+import { UserWalletError, type UserWallet, type UserWalletService } from "../funding/user-wallets.js";
+
+export type UserVenueAccountType = "SAFE" | "SMART_WALLET" | "OAUTH_ACCOUNT" | "EOA" | "PROXY_ACCOUNT";
+export type UserVenueAccountStatus = "PENDING" | "ACTIVE" | "DISABLED" | "REVOKED";
+export type UserVenueAccountVenue = Extract<FundingVenue, "OPINION" | "PREDICT_FUN" | "LIMITLESS" | "POLYMARKET">;
+
+export interface UserVenueAccount {
+  venueAccountBindingId: string;
+  userId: string;
+  venue: UserVenueAccountVenue;
+  userWalletId: string;
+  walletAddress: string;
+  venueAccountId: string | null;
+  venueAccountAddress: string | null;
+  venueAccountType: UserVenueAccountType;
+  status: UserVenueAccountStatus;
+  createdAt: string;
+  updatedAt: string;
+  lastVerifiedAt: string | null;
+}
+
+export interface EnsureUserVenueAccountInput {
+  userId: string;
+  venue: UserVenueAccountVenue;
+  venueAccountId?: string | null;
+  venueAccountAddress?: string | null;
+  venueAccountType?: UserVenueAccountType | null;
+}
+
+export interface UserVenueAccountRepository {
+  listAccounts(userId: string): Promise<UserVenueAccount[]>;
+  findAccount(input: { userId: string; venue: UserVenueAccountVenue }): Promise<UserVenueAccount | null>;
+  upsertAccount(input: Omit<UserVenueAccount, "venueAccountBindingId" | "createdAt" | "updatedAt" | "lastVerifiedAt"> & {
+    venueAccountBindingId?: string;
+    lastVerifiedAt?: string | null;
+  }): Promise<UserVenueAccount>;
+  disableAccount(input: { userId: string; venue: UserVenueAccountVenue; reason: string }): Promise<UserVenueAccount | null>;
+  countActiveAccountsByVenue(): Promise<Record<string, number>>;
+  appendAccountAuditEvent(input: {
+    userId: string;
+    venueAccountBindingId?: string | null;
+    eventType: string;
+    payload: Record<string, unknown>;
+  }): Promise<string>;
+}
+
+export class UserVenueAccountError extends Error {
+  public constructor(
+    public readonly code:
+      | "USER_VENUE_ACCOUNT_UNSUPPORTED"
+      | "USER_VENUE_ACCOUNT_WALLET_REQUIRED"
+      | "USER_VENUE_ACCOUNT_MISMATCH"
+      | "USER_VENUE_ACCOUNT_INACTIVE",
+    message: string,
+    public readonly statusCode = 409
+  ) {
+    super(message);
+    this.name = "UserVenueAccountError";
+  }
+}
+
+export class UserVenueAccountService {
+  public constructor(
+    private readonly repository: UserVenueAccountRepository,
+    private readonly userWalletService: Pick<UserWalletService, "resolveUserTurnkeyEvmFundingWallet">
+  ) {}
+
+  public async listAccounts(userId: string): Promise<UserVenueAccount[]> {
+    return this.repository.listAccounts(userId);
+  }
+
+  public async getAccount(userId: string, venue: string): Promise<UserVenueAccount | null> {
+    return this.repository.findAccount({ userId, venue: normalizeVenue(venue) });
+  }
+
+  public async ensureAccount(input: EnsureUserVenueAccountInput): Promise<{
+    account: UserVenueAccount;
+    readinessBlockers: string[];
+    setupInstructions: string[];
+  }> {
+    const venue = normalizeVenue(input.venue);
+    const wallet = await this.resolveRequiredTurnkeyEvmWallet(input.userId);
+    const existing = await this.repository.findAccount({ userId: input.userId, venue });
+    const venueAccountType = input.venueAccountType ?? defaultAccountTypeForVenue(venue);
+    const hasVenueAccount = Boolean(input.venueAccountId?.trim() || input.venueAccountAddress?.trim());
+    const account = await this.repository.upsertAccount({
+      ...(existing?.venueAccountBindingId ? { venueAccountBindingId: existing.venueAccountBindingId } : {}),
+      userId: input.userId,
+      venue,
+      userWalletId: wallet.walletId,
+      walletAddress: wallet.address,
+      venueAccountId: nonEmpty(input.venueAccountId) ?? existing?.venueAccountId ?? null,
+      venueAccountAddress: nonEmpty(input.venueAccountAddress) ?? existing?.venueAccountAddress ?? null,
+      venueAccountType,
+      status: hasVenueAccount || existing?.status === "ACTIVE" ? "ACTIVE" : "PENDING",
+      lastVerifiedAt: hasVenueAccount ? new Date().toISOString() : existing?.lastVerifiedAt ?? null
+    });
+    await this.repository.appendAccountAuditEvent({
+      userId: input.userId,
+      venueAccountBindingId: account.venueAccountBindingId,
+      eventType: existing ? "USER_VENUE_ACCOUNT_UPDATED" : "USER_VENUE_ACCOUNT_ENSURED",
+      payload: {
+        venue,
+        accountType: account.venueAccountType,
+        status: account.status,
+        walletAddressMatches: equalsAddress(account.walletAddress, wallet.address)
+      }
+    });
+    return {
+      account,
+      readinessBlockers: readinessBlockersForAccount(account),
+      setupInstructions: setupInstructionsForVenue(venue, account)
+    };
+  }
+
+  public async verifyUserSignedRelayBinding(input: {
+    userId: string;
+    venue: UserVenueAccountVenue;
+    signerAddress?: string | null;
+    venueAccountId?: string | null;
+    venueAccountAddress?: string | null;
+  }): Promise<UserVenueAccount> {
+    const venue = normalizeVenue(input.venue);
+    const wallet = await this.resolveRequiredTurnkeyEvmWallet(input.userId);
+    const account = await this.repository.findAccount({ userId: input.userId, venue });
+    if (!account || account.status !== "ACTIVE") {
+      throw new UserVenueAccountError(
+        "USER_VENUE_ACCOUNT_INACTIVE",
+        `${venue} account is not active for this user.`,
+        409
+      );
+    }
+    if (account.userWalletId !== wallet.walletId || !equalsAddress(account.walletAddress, wallet.address)) {
+      throw new UserVenueAccountError(
+        "USER_VENUE_ACCOUNT_MISMATCH",
+        `${venue} account does not match the user's active Turnkey EVM wallet.`,
+        403
+      );
+    }
+    if (input.signerAddress && !equalsAddress(input.signerAddress, wallet.address)) {
+      throw new UserVenueAccountError("USER_VENUE_ACCOUNT_MISMATCH", "Signed order signer does not match the user's Turnkey EVM wallet.", 403);
+    }
+    if (input.venueAccountId && account.venueAccountId && input.venueAccountId !== account.venueAccountId) {
+      throw new UserVenueAccountError("USER_VENUE_ACCOUNT_MISMATCH", "Signed order venue account id does not match the linked account.", 403);
+    }
+    if (input.venueAccountAddress && account.venueAccountAddress && !equalsAddress(input.venueAccountAddress, account.venueAccountAddress)) {
+      throw new UserVenueAccountError("USER_VENUE_ACCOUNT_MISMATCH", "Signed order venue account address does not match the linked account.", 403);
+    }
+    return account;
+  }
+
+  private async resolveRequiredTurnkeyEvmWallet(userId: string): Promise<UserWallet> {
+    try {
+      const wallet = await this.userWalletService.resolveUserTurnkeyEvmFundingWallet(userId);
+      if (!wallet || wallet.provider !== "TURNKEY" || wallet.chainFamily !== "EVM" || wallet.status !== "ACTIVE") {
+        throw new UserVenueAccountError(
+          "USER_VENUE_ACCOUNT_WALLET_REQUIRED",
+          "An active Turnkey EVM wallet is required before linking venue accounts.",
+          409
+        );
+      }
+      return wallet;
+    } catch (error) {
+      if (error instanceof UserVenueAccountError) {
+        throw error;
+      }
+      if (error instanceof UserWalletError) {
+        throw new UserVenueAccountError("USER_VENUE_ACCOUNT_WALLET_REQUIRED", error.message, error.statusCode);
+      }
+      throw error;
+    }
+  }
+}
+
+export const toSafeVenueAccount = (
+  account: UserVenueAccount,
+  readinessBlockers = readinessBlockersForAccount(account),
+  setupInstructions = setupInstructionsForVenue(account.venue, account)
+): Record<string, unknown> => ({
+  venue: account.venue,
+  walletAddress: account.walletAddress,
+  venueAccountId: account.venueAccountId,
+  venueAccountAddress: account.venueAccountAddress,
+  venueAccountType: account.venueAccountType,
+  status: account.status,
+  readinessBlockers,
+  setupInstructions,
+  createdAt: account.createdAt,
+  updatedAt: account.updatedAt,
+  lastVerifiedAt: account.lastVerifiedAt
+});
+
+export const normalizeVenue = (venue: string): UserVenueAccountVenue => {
+  const normalized = venue.trim().toUpperCase();
+  if (normalized === "OPINION" || normalized === "PREDICT_FUN" || normalized === "LIMITLESS" || normalized === "POLYMARKET") {
+    return normalized;
+  }
+  throw new UserVenueAccountError("USER_VENUE_ACCOUNT_UNSUPPORTED", `Venue ${venue} does not support user venue account binding.`, 400);
+};
+
+const defaultAccountTypeForVenue = (venue: UserVenueAccountVenue): UserVenueAccountType => {
+  if (venue === "OPINION") {
+    return "SAFE";
+  }
+  if (venue === "PREDICT_FUN") {
+    return "OAUTH_ACCOUNT";
+  }
+  if (venue === "POLYMARKET") {
+    return "PROXY_ACCOUNT";
+  }
+  return "EOA";
+};
+
+const readinessBlockersForAccount = (account: UserVenueAccount): string[] => {
+  const blockers: string[] = [];
+  if (account.status !== "ACTIVE") {
+    blockers.push(`${account.venue} account is not active yet.`);
+  }
+  if (!account.venueAccountId && !account.venueAccountAddress) {
+    blockers.push(`${account.venue} venue account id/address is not linked yet.`);
+  }
+  return blockers;
+};
+
+const setupInstructionsForVenue = (venue: UserVenueAccountVenue, account: UserVenueAccount): string[] => {
+  if (account.status === "ACTIVE") {
+    return [];
+  }
+  if (venue === "OPINION") {
+    return ["Create or link the Opinion Safe using the displayed Turnkey EVM wallet, then submit the Safe address to Lotus."];
+  }
+  if (venue === "PREDICT_FUN") {
+    return ["Complete Predict.fun OAuth/connected-wallet setup with the displayed Turnkey EVM wallet, then submit the venue account id/address to Lotus."];
+  }
+  return [`Link the ${venue} account created from the displayed Turnkey EVM wallet.`];
+};
+
+const nonEmpty = (value: string | null | undefined): string | null =>
+  typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+
+const equalsAddress = (left: string | null | undefined, right: string | null | undefined): boolean =>
+  typeof left === "string" &&
+  typeof right === "string" &&
+  left.toLowerCase() === right.toLowerCase();
