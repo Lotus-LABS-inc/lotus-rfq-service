@@ -215,7 +215,8 @@ describe("user venue account service", () => {
       setupMode: "MANUAL_LINK_REQUIRED"
     });
     expect(prepared.venueAccounts.find((item) => item.venue === "LIMITLESS")).toMatchObject({
-      setupMode: "NO_USER_SETUP_REQUIRED"
+      setupMode: "NO_USER_SETUP_REQUIRED",
+      readinessBlockers: []
     });
 
     const completed = await service.completeAccountSetupBatch({

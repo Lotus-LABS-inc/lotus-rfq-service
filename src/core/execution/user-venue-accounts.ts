@@ -229,6 +229,16 @@ export class UserVenueAccountService {
       }
 
       const ensured = await this.ensureAccount({ userId, venue });
+      if (venue === "LIMITLESS") {
+        venueAccounts.push({
+          venue,
+          account: ensured.account,
+          readinessBlockers: [],
+          setupInstructions: setupInstructionsForVenue(venue, ensured.account),
+          setupMode: "NO_USER_SETUP_REQUIRED"
+        });
+        continue;
+      }
       venueAccounts.push({
         venue,
         account: ensured.account,
