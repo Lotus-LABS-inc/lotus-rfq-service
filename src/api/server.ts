@@ -17,6 +17,7 @@ import { registerHealthRoute } from "./routes/health.js";
 import { registerMetricsRoute } from "./routes/metrics.js";
 import { registerFundingRoutes } from "./routes/funding.js";
 import { registerExecutionRoutes } from "./routes/execution.js";
+import { registerMarketCatalogRoutes } from "./routes/markets.js";
 import { buildVenueBalanceActivationActions } from "../core/funding/venue-activation.js";
 import { registerUserWithdrawalWalletRoutes } from "./routes/user-withdrawal-wallets.js";
 import { registerUserWalletRoutes } from "./routes/user-wallets.js";
@@ -295,6 +296,7 @@ import {
   PgExecutionQuoteRepository,
   PgVerifiedPositionRepository
 } from "../repositories/execution-routing.repository.js";
+import { MarketCatalogRepository } from "../repositories/market-catalog.repository.js";
 import {
   buildFundingReadinessWatcherConfigFromEnv,
   FundingReadinessWatcher
@@ -438,6 +440,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const userVenueAccountRepository = new UserVenueAccountRepository(dependencies.pgPool);
   const executionQuoteRepository = new PgExecutionQuoteRepository(dependencies.pgPool);
   const verifiedPositionRepository = new PgVerifiedPositionRepository(dependencies.pgPool);
+  const marketCatalogRepository = new MarketCatalogRepository(dependencies.pgPool);
   const executionVenuesAdminService = new ExecutionVenuesAdminService({
     env: process.env,
     repoRoot: process.cwd(),
@@ -1186,6 +1189,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   await registerExecutionRoutes(app, userAuthMiddleware, {
     executableRouteService,
     sellQuoteService
+  });
+  await registerMarketCatalogRoutes(app, {
+    marketCatalogRepository
   });
   await registerUserWalletRoutes(app, userAuthMiddleware, {
     listWallets: (userId) => userWalletService.listWallets(userId),
