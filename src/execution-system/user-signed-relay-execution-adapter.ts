@@ -1,4 +1,9 @@
 import type { ExecutionLegV0 } from "./types.js";
+import {
+  buildPredictOauthOrderClientFromEnv,
+  type PredictOauthCreateOrderPayload,
+  type PredictOauthOrderStatus
+} from "../integrations/predict/predict-oauth-order-client.js";
 import type {
   ExecutionVenueAdapter,
   NormalizedVenueError,
@@ -24,6 +29,14 @@ export interface UserSignedRelayExecutionAdapterConfig {
   liveExecutionEnabled: boolean;
   orderCreatePath: string;
   docsUrl: string;
+  now?: (() => Date) | undefined;
+  predictOauthOrderClient?: PredictOauthOrderRelayClient | undefined;
+}
+
+export interface PredictOauthOrderRelayClient {
+  configured(): boolean;
+  createOauthOrder(payload: PredictOauthCreateOrderPayload): Promise<{ orderId: string; orderHash: string }>;
+  getOrderByHash(orderHash: string): Promise<PredictOauthOrderStatus>;
 }
 
 export interface UserSignedRelayExecutionAdapterEnvStatus {
@@ -39,7 +52,7 @@ export interface UserSignedRelayExecutionAdapterEnvStatus {
   missingDryRunEnv: readonly string[];
   credentialsServerSideOnly: true;
   liveSubmissionStatus: "NOT_CONFIGURED" | "LIVE_DISABLED" | "LIVE_READY";
-  relayImplementationStatus: "PREPARE_ONLY";
+  relayImplementationStatus: "PREPARE_ONLY" | "SIGNED_RELAY_IMPLEMENTED";
 }
 
 export class UserSignedRelayExecutionNotConfiguredError extends Error {
@@ -47,6 +60,18 @@ export class UserSignedRelayExecutionNotConfiguredError extends Error {
     super(message);
     this.name = "UserSignedRelayExecutionNotConfiguredError";
   }
+}
+
+export interface UserSignedRelayPreparedBinding {
+  userId: string;
+  signerAddress: string;
+  venueAccountId?: string | null | undefined;
+  venueAccountAddress: string;
+}
+
+export interface UserSignedRelaySubmitPayload {
+  expectedBinding: UserSignedRelayPreparedBinding;
+  signedPayload: PredictOauthCreateOrderPayload;
 }
 
 const nonEmpty = (value: string | undefined): value is string =>
@@ -87,6 +112,11 @@ const readinessFromEnv = (input: {
   }
   return input.missingEnv.length === 0 ? "LIVE_READY" : "NOT_CONFIGURED";
 };
+
+const relayImplementationStatusForVenue = (
+  venue: UserSignedRelayVenue
+): UserSignedRelayExecutionAdapterEnvStatus["relayImplementationStatus"] =>
+  venue === "PREDICT_FUN" ? "SIGNED_RELAY_IMPLEMENTED" : "PREPARE_ONLY";
 
 const statusFromConfig = (config: {
   adapter: UserSignedRelayAdapterName;
@@ -129,7 +159,7 @@ const statusFromConfig = (config: {
       : !config.liveExecutionEnabled
         ? "LIVE_DISABLED"
         : "NOT_CONFIGURED",
-    relayImplementationStatus: "PREPARE_ONLY"
+    relayImplementationStatus: relayImplementationStatusForVenue(config.venue)
   };
 };
 
@@ -192,14 +222,20 @@ export const buildPredictFunExecutionAdapterConfigFromEnv = (
   apiKeyEnvKey: "PREDICT_API_KEY",
   liveExecutionEnabled: env.PREDICT_FUN_LIVE_EXECUTION_ENABLED === "true",
   orderCreatePath: env.PREDICT_FUN_EXECUTION_ORDER_CREATE_PATH ?? "/v1/oauth/orders/create",
-  docsUrl: "https://dev.predict.fun/create-an-order-for-a-oauth-connection-25326914e0"
+  docsUrl: "https://dev.predict.fun/create-an-order-for-a-oauth-connection-25326914e0",
+  predictOauthOrderClient: buildPredictOauthOrderClientFromEnv(env)
 });
 
 export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
   public readonly venue: UserSignedRelayVenue;
+  private readonly now: () => Date;
+  private readonly predictOauthOrderClient: PredictOauthOrderRelayClient | undefined;
+  private lastOrderStatus: PredictOauthOrderStatus | null = null;
 
   public constructor(private readonly config: UserSignedRelayExecutionAdapterConfig) {
     this.venue = config.venue;
+    this.now = config.now ?? (() => new Date());
+    this.predictOauthOrderClient = config.predictOauthOrderClient;
   }
 
   public status(): UserSignedRelayExecutionAdapterEnvStatus {
@@ -216,6 +252,8 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
     }
     const size = parseSize(leg.size);
     const price = parsePrice(leg.price);
+    const preparedAt = this.now();
+    const expiresAt = new Date(preparedAt.getTime() + 5 * 60_000);
     return {
       venue: this.venue,
       clientOrderId: leg.executionLegId,
@@ -228,6 +266,15 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
         side: leg.side,
         size,
         price,
+        preparedAt: preparedAt.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        expectedOrder: {
+          venueMarketId: leg.venueMarketId,
+          venueOutcomeId: leg.venueOutcomeId,
+          side: leg.side,
+          size,
+          price
+        },
         orderCreatePath: this.config.orderCreatePath,
         signingRequired: true,
         backendMayRelaySignedPayload: true,
@@ -242,14 +289,31 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
     };
   }
 
-  public async submitOrder(): Promise<VenueSubmitResult> {
+  public async submitOrder(order: PreparedVenueOrder): Promise<VenueSubmitResult> {
+    if (this.venue === "PREDICT_FUN") {
+      return this.submitPredictFunSignedOrder(order);
+    }
     throw new UserSignedRelayExecutionNotConfiguredError(
       "USER_SIGNED_RELAY_SUBMIT_NOT_IMPLEMENTED",
       `${this.venue} backend relay submit is not implemented. User-signed payload relay must stay fail-closed until cancel/fill/status and settlement evidence are reviewed.`
     );
   }
 
-  public async fetchFillState(): Promise<VenueFillState> {
+  public async fetchFillState(venueOrderId: string): Promise<VenueFillState> {
+    if (this.venue === "PREDICT_FUN" && this.predictOauthOrderClient?.configured()) {
+      try {
+        const status = await this.predictOauthOrderClient.getOrderByHash(venueOrderId);
+        this.lastOrderStatus = status;
+        return mapPredictOrderStatusToFillState(status);
+      } catch {
+        return {
+          status: "OPEN",
+          filledSize: "0",
+          averagePrice: 0,
+          offchainFilled: false
+        };
+      }
+    }
     return {
       status: "OPEN",
       filledSize: "0",
@@ -264,7 +328,13 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
       evidence: {
         source: `${this.venue.toLowerCase()}_user_signed_relay_adapter`,
         fillOrOrderId,
-        settlementEvidenceSupported: false
+        settlementEvidenceSupported: false,
+        ...(this.lastOrderStatus && this.lastOrderStatus.orderHash === fillOrOrderId
+          ? {
+              orderStatus: this.lastOrderStatus.status,
+              remainingSize: this.lastOrderStatus.remainingSize
+            }
+          : {})
       }
     };
   }
@@ -283,6 +353,39 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
       retryable: false
     };
   }
+
+  private async submitPredictFunSignedOrder(order: PreparedVenueOrder): Promise<VenueSubmitResult> {
+    const status = this.status();
+    if (!status.liveExecutionEnabled) {
+      throw new UserSignedRelayExecutionNotConfiguredError(
+        "USER_SIGNED_RELAY_LIVE_DISABLED",
+        "PREDICT_FUN_LIVE_EXECUTION_ENABLED is false; signed Predict.fun relay submit is disabled."
+      );
+    }
+    if (status.readinessState !== "LIVE_READY") {
+      throw new UserSignedRelayExecutionNotConfiguredError(
+        "USER_SIGNED_RELAY_ENV_INCOMPLETE",
+        `Predict.fun signed relay env is incomplete: ${status.missingEnv.join(", ")}.`
+      );
+    }
+    if (!this.predictOauthOrderClient?.configured()) {
+      throw new UserSignedRelayExecutionNotConfiguredError(
+        "PREDICT_FUN_RELAY_CLIENT_NOT_CONFIGURED",
+        "Predict.fun OAuth order client is not configured."
+      );
+    }
+    const relayPayload = parseRelaySubmitPayload(order.payload);
+    validatePreparedOrderExpiry(order.payload, this.now());
+    validatePredictSignedPayloadMatchesPreparedOrder(order.payload, relayPayload);
+    const result = await this.predictOauthOrderClient.createOauthOrder(relayPayload.signedPayload);
+    return {
+      venueOrderId: result.orderHash,
+      fillId: result.orderId,
+      status: "SUBMITTED",
+      filledSize: "0",
+      averagePrice: numberPayloadField(order.payload, "price") ?? 0
+    };
+  }
 }
 
 export class OpinionExecutionAdapter extends UserSignedRelayExecutionAdapter {
@@ -296,3 +399,138 @@ export class PredictFunExecutionAdapter extends UserSignedRelayExecutionAdapter 
     super({ ...config, venue: "PREDICT_FUN", adapter: "PredictFunExecutionAdapter" });
   }
 }
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const isEvmAddress = (value: unknown): value is string =>
+  typeof value === "string" && /^0x[a-fA-F0-9]{40}$/.test(value);
+
+const isEvmSignature = (value: unknown): value is string =>
+  typeof value === "string" && /^0x[a-fA-F0-9]{130}$/.test(value);
+
+const equalsAddress = (left: string | null | undefined, right: string | null | undefined): boolean =>
+  typeof left === "string" &&
+  typeof right === "string" &&
+  left.toLowerCase() === right.toLowerCase();
+
+const stringPayloadField = (payload: Record<string, unknown>, key: string): string | null => {
+  const value = payload[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+};
+
+const numberPayloadField = (payload: Record<string, unknown>, key: string): number | null => {
+  const value = payload[key];
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const parseRelaySubmitPayload = (payload: Record<string, unknown>): UserSignedRelaySubmitPayload => {
+  const expectedBinding = payload.expectedBinding;
+  const signedPayload = payload.signedPayload;
+  if (!isRecord(expectedBinding) || !isRecord(signedPayload)) {
+    throw new UserSignedRelayExecutionNotConfiguredError(
+      "USER_SIGNED_RELAY_SIGNED_PAYLOAD_REQUIRED",
+      "Predict.fun signed relay submit requires expectedBinding and signedPayload."
+    );
+  }
+  const userId = stringPayloadField(expectedBinding, "userId");
+  const signerAddress = stringPayloadField(expectedBinding, "signerAddress");
+  const venueAccountAddress = stringPayloadField(expectedBinding, "venueAccountAddress");
+  const venueAccountId = stringPayloadField(expectedBinding, "venueAccountId");
+  if (!userId || !isEvmAddress(signerAddress) || !isEvmAddress(venueAccountAddress)) {
+    throw new UserSignedRelayExecutionNotConfiguredError(
+      "USER_SIGNED_RELAY_BINDING_INVALID",
+      "Predict.fun expected binding must include userId, signerAddress, and venueAccountAddress."
+    );
+  }
+  if (!isEvmAddress(signedPayload.signer) || !isEvmAddress(signedPayload.account) || !isEvmSignature(signedPayload.signature) || !isRecord(signedPayload.data)) {
+    throw new UserSignedRelayExecutionNotConfiguredError(
+      "USER_SIGNED_RELAY_SIGNED_PAYLOAD_INVALID",
+      "Predict.fun signed payload must include signer, account, signature, and data."
+    );
+  }
+  return {
+    expectedBinding: {
+      userId,
+      signerAddress,
+      ...(venueAccountId ? { venueAccountId } : {}),
+      venueAccountAddress
+    },
+    signedPayload: {
+      signer: signedPayload.signer,
+      account: signedPayload.account,
+      signature: signedPayload.signature,
+      data: signedPayload.data
+    }
+  };
+};
+
+const validatePreparedOrderExpiry = (payload: Record<string, unknown>, now: Date): void => {
+  const expiresAt = stringPayloadField(payload, "expiresAt");
+  if (!expiresAt || Number.isNaN(Date.parse(expiresAt)) || Date.parse(expiresAt) <= now.getTime()) {
+    throw new UserSignedRelayExecutionNotConfiguredError(
+      "USER_SIGNED_RELAY_PREPARED_ORDER_EXPIRED",
+      "Predict.fun prepared order is expired or missing expiresAt."
+    );
+  }
+};
+
+const validatePredictSignedPayloadMatchesPreparedOrder = (
+  payload: Record<string, unknown>,
+  relay: UserSignedRelaySubmitPayload
+): void => {
+  if (!equalsAddress(relay.signedPayload.signer, relay.expectedBinding.signerAddress)) {
+    throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_SIGNER_MISMATCH", "Predict.fun signer does not match the active Turnkey EVM wallet.");
+  }
+  if (!equalsAddress(relay.signedPayload.account, relay.expectedBinding.venueAccountAddress)) {
+    throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_ACCOUNT_MISMATCH", "Predict.fun account does not match the active venue account binding.");
+  }
+  const order = isRecord(relay.signedPayload.data.order) ? relay.signedPayload.data.order : null;
+  if (!order) {
+    throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_ORDER_MISSING", "Predict.fun signed payload is missing data.order.");
+  }
+  if (!equalsAddress(stringPayloadField(order, "maker"), relay.expectedBinding.venueAccountAddress) ||
+      !equalsAddress(stringPayloadField(order, "signer"), relay.expectedBinding.venueAccountAddress)) {
+    throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_ORDER_ACCOUNT_MISMATCH", "Predict.fun signed order maker/signer must match the linked Predict account.");
+  }
+  const expectedOutcomeId = stringPayloadField(payload, "venueOutcomeId");
+  const signedTokenId = stringPayloadField(order, "tokenId");
+  if (expectedOutcomeId && signedTokenId && expectedOutcomeId !== signedTokenId) {
+    throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_OUTCOME_MISMATCH", "Predict.fun signed order tokenId does not match the prepared outcome.");
+  }
+  const expectedSide = stringPayloadField(payload, "side");
+  const signedSide = numberPayloadField(order, "side");
+  if (expectedSide && signedSide !== null && ((expectedSide === "buy" && signedSide !== 0) || (expectedSide === "sell" && signedSide !== 1))) {
+    throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_SIDE_MISMATCH", "Predict.fun signed order side does not match the prepared side.");
+  }
+};
+
+const mapPredictOrderStatusToFillState = (status: PredictOauthOrderStatus): VenueFillState => {
+  const normalized = `${status.status ?? ""}`.trim().toUpperCase();
+  const size = status.size ?? "0";
+  const remainingSize = Number(status.remainingSize ?? "0");
+  const filledSize = Number.isFinite(remainingSize) && Number.isFinite(Number(size))
+    ? String(Math.max(Number(size) - remainingSize, 0))
+    : "0";
+  const averagePrice = Number(status.price ?? 0);
+  if (["FILLED", "MATCHED", "SETTLED", "COMPLETED"].includes(normalized)) {
+    return { status: "FILLED", filledSize: size, averagePrice: Number.isFinite(averagePrice) ? averagePrice : 0, offchainFilled: true };
+  }
+  if (["PARTIAL", "PARTIALLY_FILLED", "PARTIAL_FILL"].includes(normalized)) {
+    return { status: "PARTIAL_FILL", filledSize, averagePrice: Number.isFinite(averagePrice) ? averagePrice : 0, offchainFilled: true };
+  }
+  if (["CANCELLED", "CANCELED"].includes(normalized)) {
+    return { status: "CANCELLED", filledSize, averagePrice: Number.isFinite(averagePrice) ? averagePrice : 0, offchainFilled: false };
+  }
+  if (["FAILED", "REJECTED"].includes(normalized)) {
+    return { status: "FAILED", filledSize, averagePrice: Number.isFinite(averagePrice) ? averagePrice : 0, offchainFilled: false };
+  }
+  return { status: "OPEN", filledSize: "0", averagePrice: Number.isFinite(averagePrice) ? averagePrice : 0, offchainFilled: false };
+};

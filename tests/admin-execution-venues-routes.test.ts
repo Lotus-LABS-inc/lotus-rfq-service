@@ -139,7 +139,7 @@ describe("admin execution venue readiness routes", () => {
       adapter: "PredictFunExecutionAdapter",
       executionSigningModel: "USER_SIGNED_BACKEND_RELAY",
       structuralReadiness: "NOT_CONFIGURED",
-      liveSubmissionSupported: false,
+      liveSubmissionSupported: true,
       liveExecutionEnabled: false
     });
     expect(body.venues.find((entry: { venue: string }) => entry.venue === "MYRIAD")).toMatchObject({

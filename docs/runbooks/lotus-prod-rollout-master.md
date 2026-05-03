@@ -252,8 +252,10 @@ Execution readiness is separate from funding and withdrawal readiness.
 | `OPINION_EXECUTION_MODE` | Yes | `disabled` | No | Set to `user_signed_backend_relay` only for prepare-only relay instructions until submit/status/settlement are reviewed. |
 | `OPINION_LIVE_EXECUTION_ENABLED` | Yes | `false` | No | Private beta backend submission remains disabled; user-signed backend relay only after builder-mode relay is implemented and reviewed. |
 | `MYRIAD_LIVE_EXECUTION_ENABLED` | Yes | `false` | No | Private beta backend submission remains disabled; user-signed flow only. |
-| `PREDICT_FUN_EXECUTION_MODE` | Yes | `disabled` | No | Set to `user_signed_backend_relay` only for prepare-only OAuth relay instructions until submit/status/settlement are reviewed. |
-| `PREDICT_FUN_LIVE_EXECUTION_ENABLED` | Yes | `false` | No | Private beta backend submission remains disabled until OAuth signed-order relay, cancel/fill/status, and settlement semantics are implemented and reviewed. |
+| `PREDICT_FUN_EXECUTION_MODE` | Yes | `disabled` | No | Set to `user_signed_backend_relay` only after the user has an active Predict.fun venue-account binding. |
+| `PREDICT_FUN_LIVE_EXECUTION_ENABLED` | Yes | `false` | No | Private beta backend relay remains disabled until signed OAuth relay, status/fill evidence, and settlement semantics are reviewed. |
+| `PREDICT_FUN_EXECUTION_ORDER_CREATE_PATH` | Optional | `/v1/oauth/orders/create` | No | Predict.fun OAuth signed-order relay endpoint. |
+| `PREDICT_FUN_EXECUTION_TIMEOUT_MS` | Optional | `15000` | No | Bounded timeout for Predict.fun OAuth order relay/status calls. |
 
 Polymarket V2 migration notes:
 

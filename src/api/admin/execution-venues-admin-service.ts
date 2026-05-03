@@ -100,7 +100,7 @@ export class ExecutionVenuesAdminService {
     }
     const counts = accountCounts ?? await this.loadActiveVenueAccountCounts();
     if (venue === "LIMITLESS") {
-      return this.withVenueAccountReadiness(this.getLimitlessVenue(), counts);
+      return this.withVenueAccountReadiness(await this.getLimitlessVenue(), counts);
     }
     if (venue === "OPINION") {
       return this.withVenueAccountReadiness(this.getUserSignedRelayVenue(getOpinionExecutionAdapterEnvStatus(this.env)), counts);
@@ -140,10 +140,11 @@ export class ExecutionVenuesAdminService {
     }, counts);
   }
 
-  private getLimitlessVenue(): ExecutionVenueReadinessSummary {
+  private async getLimitlessVenue(): Promise<ExecutionVenueReadinessSummary> {
     const adapterStatus = getLimitlessExecutionAdapterEnvStatus(this.env);
     const operationalStatus = this.resolveLimitlessOperationalStatus(adapterStatus);
     const blockers = this.limitlessBlockers(adapterStatus);
+    const lastHarnessAttempt = await this.readLimitlessHarnessArtifact(blockers);
     return {
       venue: "LIMITLESS",
       adapter: "LimitlessExecutionAdapter",
@@ -161,17 +162,7 @@ export class ExecutionVenuesAdminService {
       dryRunRequiredEnvPresent: adapterStatus.dryRunRequiredEnvPresent,
       missingDryRunEnv: adapterStatus.missingDryRunEnv,
       credentialsServerSideOnly: true,
-      lastHarnessAttempt: {
-        artifactPresent: false,
-        generatedAt: null,
-        mode: null,
-        submitted: null,
-        errorCode: null,
-        errorStatus: null,
-        errorMessage: null,
-        blockers,
-        warnings: []
-      },
+      lastHarnessAttempt,
       operatorMessage: this.limitlessOperatorMessage(operationalStatus, adapterStatus),
       venueAccountRequired: false,
       venueAccountConfigured: false,
@@ -230,7 +221,8 @@ export class ExecutionVenuesAdminService {
       structuralReadiness: adapterStatus.readinessState,
       operationalStatus,
       marketRoutingCoverage: "COVERED_BY_MATCHING",
-      liveSubmissionSupported: false,
+      liveSubmissionSupported: adapterStatus.venue === "PREDICT_FUN" &&
+        adapterStatus.relayImplementationStatus === "SIGNED_RELAY_IMPLEMENTED",
       liveExecutionEnabled: adapterStatus.liveExecutionEnabled,
       featureFlagSelected: adapterStatus.featureFlagSelected,
       host: adapterStatus.venue === "OPINION"
@@ -362,7 +354,11 @@ export class ExecutionVenuesAdminService {
     if (adapterStatus.liveExecutionEnabled && !adapterStatus.requiredEnvPresent) {
       blockers.push(`Missing ${adapterStatus.venue} relay live env: ${adapterStatus.missingEnv.join(", ")}.`);
     }
-    blockers.push("Signed-payload relay submit is prepare-only; cancel/fill/status and settlement evidence readers are not implemented yet.");
+    if (adapterStatus.relayImplementationStatus === "PREPARE_ONLY") {
+      blockers.push("Signed-payload relay submit is prepare-only; cancel/fill/status and settlement evidence readers are not implemented yet.");
+    } else {
+      blockers.push("Signed-payload relay submit is implemented but settlement evidence remains pending; do not mark settlement verified without venue evidence.");
+    }
     return blockers;
   }
 
@@ -372,6 +368,9 @@ export class ExecutionVenuesAdminService {
   ): string {
     if (!adapterStatus.featureFlagSelected) {
       return `${adapterStatus.venue} user-signed backend relay adapter is scaffolded but not selected.`;
+    }
+    if (status === "STRUCTURALLY_READY" && adapterStatus.relayImplementationStatus === "SIGNED_RELAY_IMPLEMENTED") {
+      return `${adapterStatus.venue} user-signed relay env is structurally ready; signed-payload relay is implemented, but live relay remains operator-gated and settlement evidence must be reviewed before production enablement.`;
     }
     if (status === "STRUCTURALLY_READY") {
       return `${adapterStatus.venue} user-signed relay env is structurally ready, but backend submit remains disabled until signed-payload relay, cancel/fill/status, and settlement evidence are reviewed.`;
@@ -453,6 +452,43 @@ export class ExecutionVenuesAdminService {
         errorStatus: null,
         errorMessage: null,
         blockers: [],
+        warnings: []
+      };
+    }
+  }
+
+  private async readLimitlessHarnessArtifact(
+    fallbackBlockers: readonly string[]
+  ): Promise<ExecutionVenueReadinessSummary["lastHarnessAttempt"]> {
+    const artifactPath = join(this.repoRoot, "artifacts", "execution", "limitless-live-submit-checklist.json");
+    try {
+      const parsed: unknown = JSON.parse(await readFile(artifactPath, "utf8"));
+      if (!isRecord(parsed)) {
+        throw new Error("invalid artifact");
+      }
+      const plan = isRecord(parsed.plan) ? parsed.plan : {};
+      const error = isRecord(parsed.error) ? parsed.error : {};
+      return {
+        artifactPresent: true,
+        generatedAt: asString(parsed.generatedAt),
+        mode: asString(plan.mode),
+        submitted: typeof parsed.submitted === "boolean" ? parsed.submitted : null,
+        errorCode: asString(error.code),
+        errorStatus: typeof error.status === "number" ? error.status : null,
+        errorMessage: asString(error.message),
+        blockers: asStringArray(plan.blockers),
+        warnings: asStringArray(plan.warnings)
+      };
+    } catch {
+      return {
+        artifactPresent: false,
+        generatedAt: null,
+        mode: null,
+        submitted: null,
+        errorCode: null,
+        errorStatus: null,
+        errorMessage: null,
+        blockers: [...fallbackBlockers],
         warnings: []
       };
     }

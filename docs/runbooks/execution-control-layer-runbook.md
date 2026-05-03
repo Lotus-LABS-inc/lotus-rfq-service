@@ -149,8 +149,10 @@ Current Polymarket interpretation:
 Non-Polymarket interpretation:
 - `marketRoutingCoverage=COVERED_BY_MATCHING` means Lotus can surface venue market coverage for matching/routing review
 - `LIMITLESS` may report `liveSubmissionSupported=true` only for the backend-signer adapter scaffold; `LIMITLESS_LIVE_EXECUTION_ENABLED=false` remains the default
-- `OPINION` and `PREDICT_FUN` may use backend relay only for user-signed order payloads after route-specific implementation, auth, cancel/fill/status reads, and settlement evidence are reviewed
-- their current adapters are prepare-only scaffolds: `OpinionExecutionAdapter` and `PredictFunExecutionAdapter` can produce frontend-safe signing/relay instructions, but `submitOrder` intentionally fails closed
+- `OPINION` remains a prepare-only/manual Safe-link scaffold until builder-mode account linking and settlement evidence are reviewed
+- `PREDICT_FUN` has a guarded user-signed OAuth relay path: Lotus prepares frontend-safe order instructions, the user signs with the linked Turnkey EVM wallet, and backend relay submit remains disabled unless `PREDICT_FUN_LIVE_EXECUTION_ENABLED=true`
+- Predict.fun signed relay validates the signer, linked Predict account, token/outcome, side, expiry, and prepared payload before calling `/v1/oauth/orders/create`
+- Predict.fun settlement remains unverified until venue status/fill evidence is reviewed; do not treat an accepted relay response as final settlement
 - `MYRIAD` remains `USER_SIGNED`; Lotus may prepare frontend-safe signing instructions later, but backend live submission must fail closed
 - `operationalStatus=NOT_CONFIGURED` is expected until a venue-specific execution adapter, smoke harness, settlement proof, and operator signoff are implemented
 - do not treat funding readiness or market coverage as live execution readiness
@@ -160,7 +162,13 @@ Limitless backend-signer boundary:
 - `LIMITLESS_LIVE_EXECUTION_ENABLED=true` is required before submit attempts
 - `LIMITLESS_BASE_URL`, `LIMITLESS_API_KEY`, and `LIMITLESS_EXECUTION_PRIVATE_KEY` are server-only live-submit inputs
 - `npm run execution:limitless-live-submit-harness` writes a redacted operator checklist artifact and remains blocked unless `LIMITLESS_LIVE_SUBMIT_HARNESS_ENABLED=true`, the operator confirmation string, and tiny order envs are configured
+- `/admin/execution-venues/LIMITLESS` reads `artifacts/execution/limitless-live-submit-checklist.json` when present so operators can see the latest harness mode, blockers, warnings, and submit result without secrets
 - current Limitless settlement evidence is intentionally not auto-verified by the adapter; production enablement still needs a reviewed fill/status/settlement reader and live-submit harness
+
+Production execution-venues smoke:
+- run `npm run admin:execution-venues-smoke` with `ADMIN_EXECUTION_VENUES_SMOKE_BASE_URL` and `ADMIN_EXECUTION_VENUES_SMOKE_JWT`
+- the smoke checks `/admin/execution-venues`, `/admin/execution-venues/POLYMARKET`, `/admin/execution-venues/PREDICT_FUN`, and `/admin/execution-venues/LIMITLESS`
+- artifacts are written under `artifacts/execution/` and store only summarized status, response timing, blockers, and secret-scan findings
 
 Polymarket V2 dry-run boundary:
 - the `clobV2DryRun` metadata and dry-run signing fixture are Lotus-internal validation artifacts
