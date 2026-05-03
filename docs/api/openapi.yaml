@@ -2810,7 +2810,7 @@ paths:
     post:
       tags: [User]
       summary: Prepare batch venue-account setup.
-      description: Ensures frontend-safe account bindings for user-signed venues and returns any setup payloads that the frontend can sign with the active Turnkey EVM wallet. Currently Predict.fun can return a signable auth message; Opinion/Myriad return safe pending/manual setup state until their reviewed account automation is enabled; Limitless has no user account setup requirement.
+      description: Ensures frontend-safe account bindings for user-signed venues and returns any setup payloads that the frontend can sign with the active Turnkey EVM wallet. Predict.fun can return a signable auth message. Limitless can return a partner-account ownership message when partner-account automation is configured. Opinion remains manual Safe linking for now. Myriad is intentionally not part of account-linking; it remains a wallet-call/user-signed venue.
       x-lotus-status: implemented
       x-lotus-callable: true
       x-lotus-auth: user
@@ -2827,7 +2827,7 @@ paths:
     post:
       tags: [User]
       summary: Complete batch venue-account setup.
-      description: Accepts signatures for setup requests returned by setup-batch and returns the refreshed safe batch state. Predict.fun signatures are exchanged server-side for temporary Predict auth only; provider tokens are never stored or returned.
+      description: Accepts signatures for setup requests returned by setup-batch and returns the refreshed safe batch state. Predict.fun signatures are exchanged server-side for temporary Predict auth only. Limitless signatures are used server-side only to create a partner account. Provider tokens, raw signatures, and auth material are never stored or returned.
       x-lotus-status: implemented
       x-lotus-callable: true
       x-lotus-auth: user
@@ -4368,10 +4368,10 @@ components:
       properties:
         venue:
           type: string
-          enum: [PREDICT_FUN]
+          enum: [PREDICT_FUN, LIMITLESS]
         requestType:
           type: string
-          enum: [PREDICT_FUN_AUTH_MESSAGE]
+          enum: [PREDICT_FUN_AUTH_MESSAGE, LIMITLESS_PARTNER_ACCOUNT_OWNERSHIP_MESSAGE]
         signer:
           type: string
           pattern: "^0x[a-fA-F0-9]{40}$"
@@ -4386,6 +4386,8 @@ components:
       properties:
         predictFun:
           $ref: "#/components/schemas/PredictFunCompleteAccountAuthRequest"
+        limitless:
+          $ref: "#/components/schemas/LimitlessCompletePartnerAccountAuthRequest"
     PredictFunAccountAuthMessageResponse:
       type: object
       additionalProperties: false
@@ -4418,6 +4420,21 @@ components:
         message:
           type: string
           description: Exact Predict.fun auth message returned by the auth-message endpoint.
+    LimitlessCompletePartnerAccountAuthRequest:
+      type: object
+      additionalProperties: false
+      required: [signer, signature, message]
+      properties:
+        signer:
+          type: string
+          pattern: "^0x[a-fA-F0-9]{40}$"
+        signature:
+          type: string
+          pattern: "^0x[a-fA-F0-9]{130}$"
+          description: Signature produced by the user's Turnkey EVM wallet over the Limitless partner-account ownership message.
+        message:
+          type: string
+          description: Exact Limitless ownership message returned by setup-batch.
     EnsureUserVenueAccountRequest:
       type: object
       additionalProperties: false

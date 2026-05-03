@@ -18,14 +18,15 @@ const ensureBodySchema = z.object({
   venueAccountType: z.enum(["SAFE", "SMART_WALLET", "OAUTH_ACCOUNT", "EOA", "PROXY_ACCOUNT"]).optional()
 }).default({});
 
-const predictCompleteAuthBodySchema = z.object({
+const signedVenueMessageBodySchema = z.object({
   signer: z.string().min(1),
   signature: z.string().min(1),
   message: z.string().min(1)
 });
 
 const completeBatchBodySchema = z.object({
-  predictFun: predictCompleteAuthBodySchema.optional()
+  predictFun: signedVenueMessageBodySchema.optional(),
+  limitless: signedVenueMessageBodySchema.optional()
 }).default({});
 
 export interface UserVenueAccountRouteHandlers {
@@ -70,6 +71,11 @@ export interface UserVenueAccountRouteHandlers {
   completeAccountSetupBatch?(input: {
     userId: string;
     predictFun?: {
+      signer: string;
+      signature: string;
+      message: string;
+    } | null;
+    limitless?: {
       signer: string;
       signature: string;
       message: string;
@@ -173,7 +179,8 @@ export const registerUserVenueAccountRoutes = async (
     try {
       const batch = await handlers.completeAccountSetupBatch({
         userId: request.user.userId,
-        predictFun: parsed.data.predictFun ?? null
+        predictFun: parsed.data.predictFun ?? null,
+        limitless: parsed.data.limitless ?? null
       });
       return reply.status(200).send(toSafeBatch(batch));
     } catch (error) {
@@ -202,7 +209,7 @@ export const registerUserVenueAccountRoutes = async (
     if (!handlers.completePredictFunAccountAuth) {
       return reply.status(503).send({ code: "PREDICT_FUN_ACCOUNT_NOT_CONFIGURED" });
     }
-    const parsed = predictCompleteAuthBodySchema.safeParse(request.body ?? {});
+    const parsed = signedVenueMessageBodySchema.safeParse(request.body ?? {});
     if (!parsed.success) {
       return reply.status(400).send({ code: "INVALID_REQUEST", details: parsed.error.flatten() });
     }

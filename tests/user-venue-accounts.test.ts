@@ -5,6 +5,7 @@ import { registerUserVenueAccountRoutes } from "../src/api/routes/user-venue-acc
 import {
   UserVenueAccountService,
   type UserVenueAccount,
+  type LimitlessPartnerAccountClient,
   type PredictFunAccountClient,
   type UserVenueAccountRepository,
   type UserVenueAccountVenue
@@ -98,6 +99,15 @@ const predictAccountClient = (): PredictFunAccountClient => ({
   getConnectedAccount: async () => ({
     name: "predict-test-account",
     address: "0x4444444444444444444444444444444444444444"
+  })
+});
+
+const limitlessPartnerAccountClient = (): LimitlessPartnerAccountClient => ({
+  configured: () => true,
+  getSigningMessage: async () => "Please sign this Limitless ownership message",
+  createEoaPartnerAccount: async (input) => ({
+    profileId: "limitless-profile-123",
+    account: input.account
   })
 });
 
@@ -202,7 +212,6 @@ describe("user venue account service", () => {
     expect(prepared.venueAccounts.map((item) => item.venue)).toEqual([
       "OPINION",
       "PREDICT_FUN",
-      "MYRIAD",
       "LIMITLESS"
     ]);
     expect(prepared.signatureRequests).toHaveLength(1);
@@ -210,9 +219,6 @@ describe("user venue account service", () => {
       venue: "PREDICT_FUN",
       requestType: "PREDICT_FUN_AUTH_MESSAGE",
       signer: "0x1111111111111111111111111111111111111111"
-    });
-    expect(prepared.venueAccounts.find((item) => item.venue === "MYRIAD")).toMatchObject({
-      setupMode: "MANUAL_LINK_REQUIRED"
     });
     expect(prepared.venueAccounts.find((item) => item.venue === "LIMITLESS")).toMatchObject({
       setupMode: "NO_USER_SETUP_REQUIRED",
@@ -235,6 +241,56 @@ describe("user venue account service", () => {
         venueAccountAddress: "0x4444444444444444444444444444444444444444"
       }
     });
+  });
+
+  it("prepares and completes Limitless partner account registration when configured", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    const service = new UserVenueAccountService(
+      repository,
+      {
+        async resolveUserTurnkeyEvmFundingWallet() {
+          return evmWallet();
+        }
+      },
+      predictAccountClient(),
+      limitlessPartnerAccountClient()
+    );
+
+    const prepared = await service.prepareAccountSetupBatch("user-1");
+    expect(prepared.venueAccounts.map((item) => item.venue)).toEqual([
+      "OPINION",
+      "PREDICT_FUN",
+      "LIMITLESS"
+    ]);
+    expect(prepared.signatureRequests.map((request) => request.requestType)).toEqual([
+      "PREDICT_FUN_AUTH_MESSAGE",
+      "LIMITLESS_PARTNER_ACCOUNT_OWNERSHIP_MESSAGE"
+    ]);
+    const limitlessRequest = prepared.signatureRequests.find((request) => request.venue === "LIMITLESS")!;
+    expect(limitlessRequest).toMatchObject({
+      venue: "LIMITLESS",
+      signer: "0x1111111111111111111111111111111111111111",
+      message: "Please sign this Limitless ownership message"
+    });
+
+    const completed = await service.completeAccountSetupBatch({
+      userId: "user-1",
+      limitless: {
+        signer: limitlessRequest.signer,
+        signature: `0x${"d".repeat(130)}`,
+        message: limitlessRequest.message
+      }
+    });
+    expect(completed.venueAccounts.find((item) => item.venue === "LIMITLESS")).toMatchObject({
+      setupMode: "NO_USER_SETUP_REQUIRED",
+      account: {
+        status: "ACTIVE",
+        venueAccountId: "limitless-profile-123",
+        venueAccountAddress: "0x1111111111111111111111111111111111111111",
+        venueAccountType: "EOA"
+      }
+    });
+    expect(JSON.stringify(repository.auditEvents)).not.toContain("signature");
   });
 });
 
@@ -337,7 +393,6 @@ describe("user venue account routes", () => {
     expect(batchPrepared.json().venueAccounts.map((item: { venue: string }) => item.venue)).toEqual([
       "OPINION",
       "PREDICT_FUN",
-      "MYRIAD",
       "LIMITLESS"
     ]);
     expect(batchPrepared.body).not.toContain("predict-jwt-redacted");

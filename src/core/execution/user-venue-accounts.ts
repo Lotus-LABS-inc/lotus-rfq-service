@@ -52,6 +52,17 @@ export interface PredictFunAccountClient {
   getConnectedAccount(jwt: string): Promise<{ name: string | null; address: string }>;
 }
 
+export interface LimitlessPartnerAccountClient {
+  configured(): boolean;
+  getSigningMessage(): Promise<string>;
+  createEoaPartnerAccount(input: {
+    account: string;
+    signingMessage: string;
+    signature: string;
+    displayName?: string | null;
+  }): Promise<{ profileId: string; account: string }>;
+}
+
 export interface UserVenueAccountSetupBatchItem {
   venue: UserVenueAccountVenue;
   account: UserVenueAccount;
@@ -61,8 +72,8 @@ export interface UserVenueAccountSetupBatchItem {
 }
 
 export interface UserVenueAccountSignatureRequest {
-  venue: "PREDICT_FUN";
-  requestType: "PREDICT_FUN_AUTH_MESSAGE";
+  venue: "PREDICT_FUN" | "LIMITLESS";
+  requestType: "PREDICT_FUN_AUTH_MESSAGE" | "LIMITLESS_PARTNER_ACCOUNT_OWNERSHIP_MESSAGE";
   signer: string;
   message: string;
   venueAccount: UserVenueAccount;
@@ -81,7 +92,9 @@ export class UserVenueAccountError extends Error {
       | "USER_VENUE_ACCOUNT_MISMATCH"
       | "USER_VENUE_ACCOUNT_INACTIVE"
       | "PREDICT_FUN_ACCOUNT_NOT_CONFIGURED"
-      | "PREDICT_FUN_ACCOUNT_AUTH_FAILED",
+      | "PREDICT_FUN_ACCOUNT_AUTH_FAILED"
+      | "LIMITLESS_PARTNER_ACCOUNT_NOT_CONFIGURED"
+      | "LIMITLESS_PARTNER_ACCOUNT_AUTH_FAILED",
     message: string,
     public readonly statusCode = 409
   ) {
@@ -94,7 +107,8 @@ export class UserVenueAccountService {
   public constructor(
     private readonly repository: UserVenueAccountRepository,
     private readonly userWalletService: Pick<UserWalletService, "resolveUserTurnkeyEvmFundingWallet">,
-    private readonly predictFunAccountClient?: PredictFunAccountClient
+    private readonly predictFunAccountClient?: PredictFunAccountClient,
+    private readonly limitlessPartnerAccountClient?: LimitlessPartnerAccountClient
   ) {}
 
   public async listAccounts(userId: string): Promise<UserVenueAccount[]> {
@@ -228,8 +242,48 @@ export class UserVenueAccountService {
         continue;
       }
 
-      const ensured = await this.ensureAccount({ userId, venue });
       if (venue === "LIMITLESS") {
+        const ensured = await this.ensureAccount({ userId, venue: "LIMITLESS" });
+        if (ensured.account.status === "ACTIVE") {
+          venueAccounts.push({
+            venue,
+            account: ensured.account,
+            readinessBlockers: [],
+            setupInstructions: [],
+            setupMode: "NO_USER_SETUP_REQUIRED"
+          });
+          continue;
+        }
+        if (this.limitlessPartnerAccountClient?.configured()) {
+          const wallet = await this.resolveRequiredTurnkeyEvmWallet(userId);
+          const message = await this.withLimitlessPartnerAccountFailureBoundary(() => this.limitlessPartnerAccountClient!.getSigningMessage());
+          await this.repository.appendAccountAuditEvent({
+            userId,
+            venueAccountBindingId: ensured.account.venueAccountBindingId,
+            eventType: "LIMITLESS_PARTNER_ACCOUNT_SIGNING_MESSAGE_CREATED",
+            payload: {
+              venue: "LIMITLESS",
+              signer: wallet.address,
+              messageLength: message.length,
+              source: "BATCH_SETUP"
+            }
+          });
+          venueAccounts.push({
+            venue,
+            account: ensured.account,
+            readinessBlockers: ensured.readinessBlockers,
+            setupInstructions: ["Sign the Limitless ownership message with the displayed Turnkey EVM wallet so Lotus can register the partner account."],
+            setupMode: "SIGNATURE_REQUIRED"
+          });
+          signatureRequests.push({
+            venue,
+            requestType: "LIMITLESS_PARTNER_ACCOUNT_OWNERSHIP_MESSAGE",
+            signer: wallet.address,
+            message,
+            venueAccount: ensured.account
+          });
+          continue;
+        }
         venueAccounts.push({
           venue,
           account: ensured.account,
@@ -239,6 +293,7 @@ export class UserVenueAccountService {
         });
         continue;
       }
+      const ensured = await this.ensureAccount({ userId, venue });
       venueAccounts.push({
         venue,
         account: ensured.account,
@@ -258,6 +313,11 @@ export class UserVenueAccountService {
       signature: string;
       message: string;
     } | null;
+    limitless?: {
+      signer: string;
+      signature: string;
+      message: string;
+    } | null;
   }): Promise<UserVenueAccountSetupBatch> {
     if (input.predictFun) {
       await this.completePredictFunAccountAuth({
@@ -265,6 +325,14 @@ export class UserVenueAccountService {
         signer: input.predictFun.signer,
         signature: input.predictFun.signature,
         message: input.predictFun.message
+      });
+    }
+    if (input.limitless) {
+      await this.completeLimitlessPartnerAccountAuth({
+        userId: input.userId,
+        signer: input.limitless.signer,
+        signature: input.limitless.signature,
+        message: input.limitless.message
       });
     }
     return this.prepareAccountSetupBatch(input.userId);
@@ -318,6 +386,66 @@ export class UserVenueAccountService {
         signer: wallet.address,
         venueAccountAddress: connectedAccount.address,
         venueAccountIdPresent: connectedAccount.name !== null
+      }
+    });
+    return ensured;
+  }
+
+  public async completeLimitlessPartnerAccountAuth(input: {
+    userId: string;
+    signer: string;
+    signature: string;
+    message: string;
+  }): Promise<{
+    account: UserVenueAccount;
+    readinessBlockers: string[];
+    setupInstructions: string[];
+  }> {
+    const client = this.requireLimitlessPartnerAccountClient();
+    const wallet = await this.resolveRequiredTurnkeyEvmWallet(input.userId);
+    if (!equalsAddress(input.signer, wallet.address)) {
+      throw new UserVenueAccountError(
+        "USER_VENUE_ACCOUNT_MISMATCH",
+        "Limitless partner account signer does not match the user's Turnkey EVM wallet.",
+        403
+      );
+    }
+    if (!isEvmSignature(input.signature)) {
+      throw new UserVenueAccountError(
+        "LIMITLESS_PARTNER_ACCOUNT_AUTH_FAILED",
+        "Limitless partner account signature is invalid.",
+        400
+      );
+    }
+    const linked = await this.withLimitlessPartnerAccountFailureBoundary(() => client.createEoaPartnerAccount({
+      account: wallet.address,
+      signingMessage: input.message,
+      signature: input.signature,
+      displayName: `Lotus ${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`
+    }));
+    if (!equalsAddress(linked.account, wallet.address)) {
+      throw new UserVenueAccountError(
+        "USER_VENUE_ACCOUNT_MISMATCH",
+        "Limitless partner account response does not match the user's Turnkey EVM wallet.",
+        403
+      );
+    }
+    const ensured = await this.ensureAccount({
+      userId: input.userId,
+      venue: "LIMITLESS",
+      venueAccountId: linked.profileId,
+      venueAccountAddress: linked.account,
+      venueAccountType: "EOA"
+    });
+    await this.repository.appendAccountAuditEvent({
+      userId: input.userId,
+      venueAccountBindingId: ensured.account.venueAccountBindingId,
+      eventType: "LIMITLESS_PARTNER_ACCOUNT_LINKED",
+      payload: {
+        venue: "LIMITLESS",
+        signer: wallet.address,
+        venueAccountAddress: linked.account,
+        venueAccountIdPresent: linked.profileId.length > 0
       }
     });
     return ensured;
@@ -392,6 +520,17 @@ export class UserVenueAccountService {
     return this.predictFunAccountClient;
   }
 
+  private requireLimitlessPartnerAccountClient(): LimitlessPartnerAccountClient {
+    if (!this.limitlessPartnerAccountClient?.configured()) {
+      throw new UserVenueAccountError(
+        "LIMITLESS_PARTNER_ACCOUNT_NOT_CONFIGURED",
+        "Limitless partner account automation is not configured.",
+        503
+      );
+    }
+    return this.limitlessPartnerAccountClient;
+  }
+
   private async withPredictAccountFailureBoundary<T>(operation: () => Promise<T>): Promise<T> {
     try {
       return await operation();
@@ -399,6 +538,18 @@ export class UserVenueAccountService {
       throw new UserVenueAccountError(
         "PREDICT_FUN_ACCOUNT_AUTH_FAILED",
         "Predict.fun account auth request failed.",
+        502
+      );
+    }
+  }
+
+  private async withLimitlessPartnerAccountFailureBoundary<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch {
+      throw new UserVenueAccountError(
+        "LIMITLESS_PARTNER_ACCOUNT_AUTH_FAILED",
+        "Limitless partner account request failed.",
         502
       );
     }
@@ -466,10 +617,10 @@ const setupInstructionsForVenue = (venue: UserVenueAccountVenue, account: UserVe
     return ["Sign the Predict.fun auth message with the displayed Turnkey EVM wallet so Lotus can link the returned Predict smart-wallet address."];
   }
   if (venue === "MYRIAD") {
-    return ["Use the displayed Turnkey EVM wallet or operator-approved Myriad account wallet for Myriad user-signed actions. Automatic Myriad account creation is not available yet."];
+    return ["Myriad uses wallet-call user-signed actions. Lotus does not create or link a separate Myriad account in the venue-account setup batch."];
   }
   if (venue === "LIMITLESS") {
-    return ["Limitless currently uses the reviewed backend-signer execution track. No user venue-account signature is required for this batch setup step."];
+    return ["Limitless partner-account setup is optional and user-signed. If automation is configured, sign the Limitless ownership message with the displayed Turnkey EVM wallet."];
   }
   return [`Link the ${venue} account created from the displayed Turnkey EVM wallet.`];
 };
@@ -487,7 +638,7 @@ const setupModeForVenue = (
   return "MANUAL_LINK_REQUIRED";
 };
 
-const batchSetupVenues = ["OPINION", "PREDICT_FUN", "MYRIAD", "LIMITLESS"] as const satisfies readonly UserVenueAccountVenue[];
+const batchSetupVenues = ["OPINION", "PREDICT_FUN", "LIMITLESS"] as const satisfies readonly UserVenueAccountVenue[];
 
 const nonEmpty = (value: string | null | undefined): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
