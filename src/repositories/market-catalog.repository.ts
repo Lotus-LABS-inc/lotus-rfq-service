@@ -96,8 +96,11 @@ export class MarketCatalogRepository {
     const result = await this.pool.query<CategoryRow>(
       `SELECT ce.canonical_category AS category, COUNT(DISTINCT ce.id)::text AS market_count
          FROM canonical_events ce
-         JOIN canonical_executable_markets cem
+         LEFT JOIN canonical_executable_markets cem
            ON cem.canonical_event_id = ce.id
+         LEFT JOIN venue_market_profiles vmp
+           ON vmp.canonical_event_id = ce.id
+        WHERE cem.id IS NOT NULL OR vmp.id IS NOT NULL
         GROUP BY ce.canonical_category
         ORDER BY ce.canonical_category`
     );
@@ -123,12 +126,8 @@ export class MarketCatalogRepository {
         OR lower(ce.proposition_key) LIKE $${params.length}
         OR EXISTS (
           SELECT 1
-            FROM canonical_executable_markets cem_search
-            JOIN canonical_executable_market_members mem_search
-              ON mem_search.canonical_executable_market_id = cem_search.id
-            JOIN venue_market_profiles vmp_search
-              ON vmp_search.id = mem_search.venue_market_profile_id
-           WHERE cem_search.canonical_event_id = ce.id
+            FROM venue_market_profiles vmp_search
+           WHERE vmp_search.canonical_event_id = ce.id
              AND lower(vmp_search.title) LIKE $${params.length}
         )
       )`);
@@ -148,17 +147,22 @@ export class MarketCatalogRepository {
           ce.expires_at::text,
           ce.resolves_at::text,
           ce.updated_at::text,
-          COALESCE(array_agg(DISTINCT cem.id) FILTER (WHERE cem.id IS NOT NULL), '{}') AS canonical_market_ids,
+          COALESCE(
+            array_agg(DISTINCT cem.id) FILTER (WHERE cem.id IS NOT NULL),
+            array_agg(DISTINCT ce.proposition_key) FILTER (WHERE ce.proposition_key IS NOT NULL),
+            '{}'
+          ) AS canonical_market_ids,
           COALESCE(array_agg(DISTINCT vmp.venue) FILTER (WHERE vmp.venue IS NOT NULL), '{}') AS venues,
           COUNT(DISTINCT vmp.id)::text AS venue_market_count
          FROM canonical_events ce
-         JOIN canonical_executable_markets cem
+         LEFT JOIN canonical_executable_markets cem
            ON cem.canonical_event_id = ce.id
          LEFT JOIN canonical_executable_market_members mem
            ON mem.canonical_executable_market_id = cem.id
          LEFT JOIN venue_market_profiles vmp
-           ON vmp.id = mem.venue_market_profile_id
+           ON vmp.id = mem.venue_market_profile_id OR vmp.canonical_event_id = ce.id
          ${where}
+          ${where ? "AND" : "WHERE"} (cem.id IS NOT NULL OR vmp.id IS NOT NULL)
         GROUP BY ce.id
         ORDER BY ce.canonical_category ASC, COALESCE(ce.expires_at, ce.resolves_at, ce.updated_at) DESC, ce.title ASC
         LIMIT ${limitParam}`,
@@ -180,16 +184,20 @@ export class MarketCatalogRepository {
           ce.expires_at::text,
           ce.resolves_at::text,
           ce.updated_at::text,
-          COALESCE(array_agg(DISTINCT cem.id) FILTER (WHERE cem.id IS NOT NULL), '{}') AS canonical_market_ids,
+          COALESCE(
+            array_agg(DISTINCT cem.id) FILTER (WHERE cem.id IS NOT NULL),
+            array_agg(DISTINCT ce.proposition_key) FILTER (WHERE ce.proposition_key IS NOT NULL),
+            '{}'
+          ) AS canonical_market_ids,
           COALESCE(array_agg(DISTINCT vmp.venue) FILTER (WHERE vmp.venue IS NOT NULL), '{}') AS venues,
           COUNT(DISTINCT vmp.id)::text AS venue_market_count
          FROM canonical_events ce
-         JOIN canonical_executable_markets cem
+         LEFT JOIN canonical_executable_markets cem
            ON cem.canonical_event_id = ce.id
          LEFT JOIN canonical_executable_market_members mem
            ON mem.canonical_executable_market_id = cem.id
          LEFT JOIN venue_market_profiles vmp
-           ON vmp.id = mem.venue_market_profile_id
+           ON vmp.id = mem.venue_market_profile_id OR vmp.canonical_event_id = ce.id
         WHERE ce.id::text = $1 OR cem.id = $1 OR ce.proposition_key = $1
         GROUP BY ce.id
         LIMIT 1`,
@@ -206,9 +214,9 @@ export class MarketCatalogRepository {
     const eventIds = rows.map((row) => row.canonical_event_id);
     const venueRows = await this.pool.query<VenueMarketRow>(
       `SELECT
-          cem.canonical_event_id::text AS canonical_event_id,
-          cem.id AS canonical_market_id,
-          cem.display_name AS canonical_market_title,
+          ce.id::text AS canonical_event_id,
+          COALESCE(cem.id, ce.proposition_key) AS canonical_market_id,
+          COALESCE(cem.display_name, ce.title) AS canonical_market_title,
           vmp.id AS venue_market_profile_id,
           vmp.venue,
           vmp.venue_market_id,
@@ -219,13 +227,15 @@ export class MarketCatalogRepository {
           vmp.chain,
           vmp.expires_at::text,
           vmp.resolves_at::text
-         FROM canonical_executable_markets cem
-         JOIN canonical_executable_market_members mem
-           ON mem.canonical_executable_market_id = cem.id
+         FROM canonical_events ce
          JOIN venue_market_profiles vmp
-           ON vmp.id = mem.venue_market_profile_id
-        WHERE cem.canonical_event_id = ANY($1::uuid[])
-        ORDER BY cem.id, vmp.venue, vmp.title`,
+           ON vmp.canonical_event_id = ce.id
+         LEFT JOIN canonical_executable_market_members mem
+           ON mem.venue_market_profile_id = vmp.id
+         LEFT JOIN canonical_executable_markets cem
+           ON cem.id = mem.canonical_executable_market_id
+        WHERE ce.id = ANY($1::uuid[])
+        ORDER BY COALESCE(cem.id, ce.proposition_key), vmp.venue, vmp.title`,
       [eventIds]
     );
     const byEvent = new Map<string, VenueMarketRow[]>();
