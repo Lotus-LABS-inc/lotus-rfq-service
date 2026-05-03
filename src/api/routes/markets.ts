@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { MarketCatalogRepository } from "../../repositories/market-catalog.repository.js";
 
@@ -9,7 +9,7 @@ const listQuerySchema = z.object({
 });
 
 export interface MarketCatalogRouteDeps {
-  marketCatalogRepository: Pick<MarketCatalogRepository, "listCategories" | "listMarkets" | "getMarket">;
+  marketCatalogRepository: Pick<MarketCatalogRepository, "listCategories" | "listMarkets" | "listEvents" | "getMarket" | "getEvent">;
 }
 
 export const registerMarketCatalogRoutes = async (
@@ -42,6 +42,67 @@ export const registerMarketCatalogRoutes = async (
       count: markets.length
     });
   });
+
+  const listEventsHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+    const parsed = listQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_MARKET_EVENT_FILTER",
+        message: "Market event filter validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    const events = await deps.marketCatalogRepository.listEvents({
+      ...(parsed.data.category !== undefined ? { category: parsed.data.category } : {}),
+      ...(parsed.data.search !== undefined ? { search: parsed.data.search } : {}),
+      ...(parsed.data.limit !== undefined ? { limit: parsed.data.limit } : {})
+    });
+    return reply.send({
+      events,
+      count: events.length
+    });
+  };
+
+  app.get("/events", listEventsHandler);
+  app.get("/event", listEventsHandler);
+  app.get("/market-events", listEventsHandler);
+
+  const getEventHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { eventId } = request.params as { eventId: string };
+    const event = await deps.marketCatalogRepository.getEvent(eventId);
+    if (!event) {
+      return reply.status(404).send({
+        code: "MARKET_EVENT_NOT_FOUND",
+        message: "Market event was not found."
+      });
+    }
+    return reply.send({ event });
+  };
+
+  app.get("/events/:eventId", getEventHandler);
+  app.get("/event/:eventId", getEventHandler);
+  app.get("/market-events/:eventId", getEventHandler);
+
+  const getEventMarketsHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { eventId } = request.params as { eventId: string };
+    const event = await deps.marketCatalogRepository.getEvent(eventId);
+    if (!event) {
+      return reply.status(404).send({
+        code: "MARKET_EVENT_NOT_FOUND",
+        message: "Market event was not found."
+      });
+    }
+    return reply.send({
+      eventId: event.eventId,
+      title: event.title,
+      markets: event.markets,
+      count: event.markets.length
+    });
+  };
+
+  app.get("/events/:eventId/markets", getEventMarketsHandler);
+  app.get("/event/:eventId/markets", getEventMarketsHandler);
+  app.get("/market-events/:eventId/markets", getEventMarketsHandler);
 
   app.get("/markets/:marketId", async (request, reply) => {
     const { marketId } = request.params as { marketId: string };

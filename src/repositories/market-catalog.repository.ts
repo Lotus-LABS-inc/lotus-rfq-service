@@ -10,6 +10,7 @@ export interface MarketCatalogFilter {
 export interface MarketCatalogCategory {
   category: string;
   marketCount: number;
+  eventCount?: number;
 }
 
 export interface MarketCatalogVenueMarket {
@@ -28,6 +29,8 @@ export interface MarketCatalogVenueMarket {
 }
 
 export interface MarketCatalogMarket {
+  eventId?: string;
+  eventTitle?: string;
   canonicalEventId: string;
   canonicalMarketIds: string[];
   title: string;
@@ -50,6 +53,23 @@ export interface MarketCatalogMarket {
   updatedAt: string;
 }
 
+export interface MarketCatalogEvent {
+  eventId: string;
+  title: string;
+  normalizedTitle: string;
+  category: string;
+  status: MarketCatalogMarket["status"];
+  marketCount: number;
+  featuredMarkets: MarketCatalogMarket[];
+  markets: MarketCatalogMarket[];
+  venues: string[];
+  venueCount: number;
+  venueMarketCount: number;
+  outcomeCount: number;
+  routeability: MarketCatalogMarket["routeability"];
+  updatedAt: string;
+}
+
 interface MarketRow {
   canonical_event_id: string;
   proposition_key: string;
@@ -61,6 +81,7 @@ interface MarketRow {
   expires_at: string | null;
   resolves_at: string | null;
   updated_at: string;
+  event_metadata: unknown;
   frontend_display_title: string | null;
   frontend_sort_priority: number | null;
   canonical_market_ids: string[];
@@ -96,6 +117,21 @@ export class MarketCatalogRepository {
   public constructor(private readonly pool: Pool) {}
 
   public async listCategories(): Promise<MarketCatalogCategory[]> {
+    const events = await this.listEvents({ limit: MAX_LIMIT });
+    const byCategory = new Map<string, number>();
+    for (const event of events) {
+      byCategory.set(event.category, (byCategory.get(event.category) ?? 0) + 1);
+    }
+    if (byCategory.size > 0) {
+      return [...byCategory.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([category, count]) => ({
+          category,
+          marketCount: count,
+          eventCount: count
+        }));
+    }
+
     const result = await this.pool.query<CategoryRow>(
       `SELECT ce.canonical_category AS category, COUNT(DISTINCT ce.id)::text AS market_count
          FROM canonical_events ce
@@ -156,6 +192,7 @@ export class MarketCatalogRepository {
           ce.expires_at::text,
           ce.resolves_at::text,
           ce.updated_at::text,
+          ce.metadata AS event_metadata,
           MAX(fma.display_title) AS frontend_display_title,
           MIN(fma.sort_priority) AS frontend_sort_priority,
           COALESCE(
@@ -187,6 +224,21 @@ export class MarketCatalogRepository {
     return this.hydrateMarkets(result.rows);
   }
 
+  public async listEvents(filter: MarketCatalogFilter = {}): Promise<MarketCatalogEvent[]> {
+    const directLimit = Math.min(MAX_LIMIT, Math.max(DEFAULT_LIMIT, clampLimit(filter.limit) * 10));
+    const markets = await this.listMarkets({
+      ...filter,
+      limit: directLimit
+    });
+    const events = groupMarketsIntoEvents(markets);
+    return events.slice(0, clampLimit(filter.limit));
+  }
+
+  public async getEvent(eventId: string): Promise<MarketCatalogEvent | null> {
+    const events = await this.listEvents({ limit: MAX_LIMIT });
+    return events.find((event) => event.eventId === eventId) ?? null;
+  }
+
   public async getMarket(marketId: string): Promise<MarketCatalogMarket | null> {
     const result = await this.pool.query<MarketRow>(
       `SELECT
@@ -200,6 +252,7 @@ export class MarketCatalogRepository {
           ce.expires_at::text,
           ce.resolves_at::text,
           ce.updated_at::text,
+          ce.metadata AS event_metadata,
           MAX(fma.display_title) AS frontend_display_title,
           MIN(fma.sort_priority) AS frontend_sort_priority,
           COALESCE(
@@ -273,7 +326,10 @@ const toMarket = (row: MarketRow, venueRows: VenueMarketRow[]): MarketCatalogMar
   const venues = normalizeStringArray(row.venues);
   const venueMarkets = venueRows.map(toVenueMarket);
   const outcomeLabels = new Set(venueMarkets.flatMap((market) => market.outcomes.map((outcome) => outcome.label)));
+  const eventGroup = deriveEventGroup(row);
   return {
+    eventId: eventGroup.eventId,
+    eventTitle: eventGroup.title,
     canonicalEventId: row.canonical_event_id,
     canonicalMarketIds: normalizeStringArray(row.canonical_market_ids),
     title: row.frontend_display_title?.trim() || displayTitle(row.title, row.proposition_key),
@@ -295,6 +351,121 @@ const toMarket = (row: MarketRow, venueRows: VenueMarketRow[]): MarketCatalogMar
     venueMarkets,
     updatedAt: row.updated_at
   };
+};
+
+const groupMarketsIntoEvents = (markets: MarketCatalogMarket[]): MarketCatalogEvent[] => {
+  const groups = new Map<string, MarketCatalogMarket[]>();
+  for (const market of markets) {
+    const eventId = market.eventId ?? market.canonicalEventId;
+    const group = groups.get(eventId) ?? [];
+    group.push(market);
+    groups.set(eventId, group);
+  }
+  return [...groups.entries()].map(([eventId, groupedMarkets]) => {
+    const [firstMarket] = groupedMarkets;
+    const venues = normalizeStringArray(groupedMarkets.flatMap((market) => market.venues));
+    const outcomeCount = groupedMarkets.reduce((total, market) => total + market.outcomeCount, 0);
+    const venueMarketCount = groupedMarkets.reduce((total, market) => total + market.venueMarketCount, 0);
+    const latestUpdatedAt = groupedMarkets
+      .map((market) => market.updatedAt)
+      .sort((left, right) => right.localeCompare(left))[0] ?? firstMarket!.updatedAt;
+    return {
+      eventId,
+      title: firstMarket!.eventTitle ?? firstMarket!.title,
+      normalizedTitle: firstMarket!.normalizedTitle,
+      category: firstMarket!.category,
+      status: aggregateStatus(groupedMarkets),
+      marketCount: groupedMarkets.length,
+      featuredMarkets: groupedMarkets.slice(0, 4),
+      markets: groupedMarkets,
+      venues,
+      venueCount: venues.length,
+      venueMarketCount,
+      outcomeCount,
+      routeability: {
+        hasSingleVenue: groupedMarkets.some((market) => market.routeability.hasSingleVenue),
+        hasCrossVenue: groupedMarkets.some((market) => market.routeability.hasCrossVenue)
+      },
+      updatedAt: latestUpdatedAt
+    };
+  });
+};
+
+const aggregateStatus = (markets: MarketCatalogMarket[]): MarketCatalogMarket["status"] => {
+  if (markets.some((market) => market.status === "OPEN")) {
+    return "OPEN";
+  }
+  if (markets.some((market) => market.status === "RESOLVING")) {
+    return "RESOLVING";
+  }
+  return "RESOLVED_OR_EXPIRED";
+};
+
+const deriveEventGroup = (row: MarketRow): { eventId: string; title: string } => {
+  const metadata = isRecord(row.event_metadata) ? row.event_metadata : {};
+  const curatedKey = typeof metadata["curatedKey"] === "string" ? metadata["curatedKey"] : row.proposition_key;
+  const curatedGroup = deriveCuratedEventGroup(curatedKey);
+  if (curatedGroup) {
+    return curatedGroup;
+  }
+  const heuristicGroup = deriveTitleEventGroup(row.title);
+  if (heuristicGroup) {
+    return heuristicGroup;
+  }
+  return {
+    eventId: `event:${row.canonical_event_id}`,
+    title: row.frontend_display_title?.trim() || displayTitle(row.title, row.proposition_key)
+  };
+};
+
+const deriveCuratedEventGroup = (key: string): { eventId: string; title: string } | null => {
+  const parts = key.split("|").filter(Boolean);
+  if (parts[0] === "NOMINEE" && parts[1] === "US_PRESIDENT" && parts[2] && parts[3]) {
+    const eventKey = parts.slice(0, 4).join("|");
+    return {
+      eventId: `event:${eventKey}`,
+      title: `${toTitleCase(parts[3])} Presidential Nominee ${parts[2]}`
+    };
+  }
+  if (parts[0] === "OFFICE_WINNER" && parts[1] === "USA" && parts[2] === "US_PRESIDENT" && parts[3]) {
+    const eventKey = parts.slice(0, 4).join("|");
+    return {
+      eventId: `event:${eventKey}`,
+      title: `US Presidential Winner ${parts[3]}`
+    };
+  }
+  if ((parts[0] === "SPORTS" || parts[0] === "ESPORTS") && parts[1] && parts[2] && parts[3]) {
+    const eventKey = parts.slice(0, 4).join("|");
+    return {
+      eventId: `event:${eventKey}`,
+      title: `${toTitleCase(parts.slice(2, 4).join(" "))} Winner`
+    };
+  }
+  if (parts[0] === "CRYPTO" && parts[1] === "ATH_BY_DATE" && parts[2]) {
+    const eventKey = parts.slice(0, 3).join("|");
+    return {
+      eventId: `event:${eventKey}`,
+      title: `${toTitleCase(parts[2])} All-Time High By Date`
+    };
+  }
+  return null;
+};
+
+const deriveTitleEventGroup = (title: string): { eventId: string; title: string } | null => {
+  const normalized = title.trim();
+  const republican = normalized.match(/Republican presidential nomination/i);
+  if (republican) {
+    return { eventId: "event:NOMINEE|US_PRESIDENT|2028|REPUBLICAN", title: "Republican Presidential Nominee 2028" };
+  }
+  const democratic = normalized.match(/Democratic presidential nomination/i);
+  if (democratic) {
+    return { eventId: "event:NOMINEE|US_PRESIDENT|2028|DEMOCRATIC", title: "Democratic Presidential Nominee 2028" };
+  }
+  const lck = normalized.match(/win the LCK 2026 season playoffs/i);
+  if (lck) {
+    return { eventId: "event:ESPORTS|LEAGUE_WINNER|LCK|2026", title: "LCK 2026 Season Winner" };
+  }
+  return null;
 };
 
 const toVenueMarket = (row: VenueMarketRow): MarketCatalogVenueMarket => ({
@@ -338,6 +509,9 @@ const normalizeStringArray = (value: unknown): string[] => {
   }
   return [...new Set(value.filter((entry): entry is string => typeof entry === "string").map((entry) => entry === "PREDICT" ? "PREDICT_FUN" : entry))].sort();
 };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
 
 const clampLimit = (value: number | undefined): number => {
   if (!Number.isFinite(value ?? NaN)) {
