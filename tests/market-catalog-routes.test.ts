@@ -7,6 +7,7 @@ import type {
   MarketCatalogMarket,
   MarketCatalogRepository
 } from "../src/repositories/market-catalog.repository.js";
+import { MarketCatalogRepository as PgMarketCatalogRepository } from "../src/repositories/market-catalog.repository.js";
 
 const market: MarketCatalogMarket = {
   canonicalEventId: "11111111-1111-5111-8111-111111111111",
@@ -123,5 +124,55 @@ describe("market catalog routes", () => {
     expect(response.json()).toEqual({ categories: [{ category: "POLITICS", marketCount: 1 }] });
 
     await app.close();
+  });
+
+  it("treats epoch venue resolution timestamps as unset placeholders", async () => {
+    const queries: unknown[] = [];
+    const pool = {
+      query: async (_sql: string, _params?: unknown[]) => {
+        queries.push({ sql: _sql, params: _params });
+        if (queries.length === 1) {
+          return {
+            rows: [{
+              canonical_event_id: "11111111-1111-5111-8111-111111111112",
+              proposition_key: "opinion-market-active",
+              title: "Active Opinion Market",
+              normalized_proposition_text: "active opinion market",
+              canonical_category: "CRYPTO",
+              market_class: "BINARY",
+              starts_at: "2026-05-03T00:00:00.000Z",
+              expires_at: "2028-05-10T00:00:00.000Z",
+              resolves_at: "1970-01-01T00:00:00.000Z",
+              updated_at: "2026-05-03T00:00:00.000Z",
+              canonical_market_ids: ["opinion-market-active"],
+              venues: ["OPINION"],
+              venue_market_count: "1"
+            }]
+          };
+        }
+        return {
+          rows: [{
+            canonical_event_id: "11111111-1111-5111-8111-111111111112",
+            canonical_market_id: "opinion-market-active",
+            canonical_market_title: "Active Opinion Market",
+            venue_market_profile_id: "vmp_opinion",
+            venue: "OPINION",
+            venue_market_id: "15525",
+            venue_title: "Active Opinion Market",
+            market_class: "BINARY",
+            outcomes: [{ id: "YES", label: "Yes" }, { id: "NO", label: "No" }],
+            network: "BNB_MAINNET",
+            chain: "BNB",
+            expires_at: "2028-05-10T00:00:00.000Z",
+            resolves_at: "1970-01-01T00:00:00.000Z"
+          }]
+        };
+      }
+    };
+
+    const repository = new PgMarketCatalogRepository(pool as never);
+    const [activeMarket] = await repository.listMarkets({ limit: 1 });
+
+    expect(activeMarket?.status).toBe("OPEN");
   });
 });

@@ -327,13 +327,27 @@ const clampLimit = (value: number | undefined): number => {
 
 const marketStatus = (expiresAt: string | null, resolvesAt: string | null): MarketCatalogMarket["status"] => {
   const now = Date.now();
-  if (resolvesAt && Date.parse(resolvesAt) <= now) {
+  const resolvedAtMs = parseRealTimestamp(resolvesAt);
+  if (resolvedAtMs !== null && resolvedAtMs <= now) {
     return "RESOLVED_OR_EXPIRED";
   }
-  if (expiresAt && Date.parse(expiresAt) <= now) {
+  const expiresAtMs = parseRealTimestamp(expiresAt);
+  if (expiresAtMs !== null && expiresAtMs <= now) {
     return "RESOLVING";
   }
   return "OPEN";
+};
+
+const parseRealTimestamp = (value: string | null): number | null => {
+  if (!value) {
+    return null;
+  }
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  // Some venue APIs use Unix epoch-ish timestamps as "not set" placeholders.
+  return parsed <= Date.UTC(2001, 0, 1) ? null : parsed;
 };
 
 const displayTitle = (title: string, fallbackKey: string): string => {
