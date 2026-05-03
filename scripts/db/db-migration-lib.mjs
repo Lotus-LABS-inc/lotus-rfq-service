@@ -33,7 +33,9 @@ const migrationOrderOverrides = new Map([
   ["2026_03_02_create_combo_tables.sql", -20],
   ["2026_03_02_combine_exec_plans.sql", -19],
   ["2026_03_10_create_combo_netting_tables.sql", -18],
-  ["2026_03_10_create_combo_netting_attempts.sql", -17]
+  ["2026_03_10_create_combo_netting_attempts.sql", -17],
+  ["2026_04_29_admin_auth_tables.sql", 0],
+  ["2026_04_29_admin_auth_fk_indexes.sql", 1]
 ]);
 
 const migrationPriority = (filename) => {
