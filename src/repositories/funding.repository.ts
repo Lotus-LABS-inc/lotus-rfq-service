@@ -1,4 +1,8 @@
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
+import type {
+  FundingIntentCleanupInput,
+  FundingIntentCleanupResult
+} from "../core/funding/funding-intent-cleanup.js";
 import type {
   FundingAggregateState,
   FundingAuditEventType,
@@ -255,6 +259,115 @@ export interface FundingAdminReadinessRecord {
 
 export class FundingRepository implements FundingRepositoryContract {
   public constructor(private readonly pool: Pool) {}
+
+  public async cleanupStaleIntents(input: FundingIntentCleanupInput): Promise<FundingIntentCleanupResult> {
+    const batchSize = Math.max(1, Math.trunc(input.batchSize));
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const deletedUnusedFunding = await client.query<{ id: string }>(
+        `WITH candidates AS (
+           SELECT fi.id
+             FROM funding_intents fi
+            WHERE fi.status = 'INTENT_CREATED'
+              AND fi.updated_at <= now() - ($2::int * interval '1 second')
+              AND NOT EXISTS (
+                SELECT 1 FROM funding_route_legs fl WHERE fl.funding_intent_id = fi.id
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM funding_reconciliation_records fr WHERE fr.funding_intent_id = fi.id
+              )
+            ORDER BY fi.updated_at ASC
+            LIMIT $1
+         )
+         DELETE FROM funding_intents fi
+          USING candidates
+          WHERE fi.id = candidates.id
+          RETURNING fi.id::text`,
+        [batchSize, input.deleteUnusedFundingAfterSeconds]
+      );
+
+      const fundingCancelCandidates = await client.query<{ id: string }>(
+        `SELECT fi.id::text
+           FROM funding_intents fi
+          WHERE fi.status IN ('ROUTES_QUOTED', 'USER_SIGNATURE_REQUIRED')
+            AND fi.updated_at <= now() - ($2::int * interval '1 second')
+            AND NOT EXISTS (
+              SELECT 1
+                FROM funding_route_legs fl
+               WHERE fl.funding_intent_id = fi.id
+                 AND jsonb_array_length(fl.tx_hashes) > 0
+            )
+            AND NOT EXISTS (
+              SELECT 1
+                FROM funding_reconciliation_records fr
+               WHERE fr.funding_intent_id = fi.id
+            )
+          ORDER BY fi.updated_at ASC
+          LIMIT $1`,
+        [batchSize, input.cancelUnsubmittedFundingAfterSeconds]
+      );
+      await cancelFundingIntents(client, fundingCancelCandidates.rows.map((row) => row.id), input.reason);
+
+      const deletedUnusedWithdrawals = await client.query<{ id: string }>(
+        `WITH candidates AS (
+           SELECT fwi.id
+             FROM funding_withdrawal_intents fwi
+            WHERE fwi.status = 'WITHDRAWAL_CREATED'
+              AND fwi.updated_at <= now() - ($2::int * interval '1 second')
+              AND NOT EXISTS (
+                SELECT 1 FROM funding_withdrawal_route_legs fwrl WHERE fwrl.withdrawal_intent_id = fwi.id
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM funding_withdrawal_reconciliation_records fwrr WHERE fwrr.withdrawal_intent_id = fwi.id
+              )
+            ORDER BY fwi.updated_at ASC
+            LIMIT $1
+         )
+         DELETE FROM funding_withdrawal_intents fwi
+          USING candidates
+          WHERE fwi.id = candidates.id
+          RETURNING fwi.id::text`,
+        [batchSize, input.deleteUnusedWithdrawalAfterSeconds]
+      );
+
+      const withdrawalCancelCandidates = await client.query<{ id: string }>(
+        `SELECT fwi.id::text
+           FROM funding_withdrawal_intents fwi
+          WHERE fwi.status IN ('WITHDRAWAL_QUOTED', 'USER_SIGNATURE_REQUIRED')
+            AND fwi.updated_at <= now() - ($2::int * interval '1 second')
+            AND NOT EXISTS (
+              SELECT 1
+                FROM funding_withdrawal_route_legs fwrl
+               WHERE fwrl.withdrawal_intent_id = fwi.id
+                 AND jsonb_array_length(fwrl.tx_hashes) > 0
+            )
+            AND NOT EXISTS (
+              SELECT 1
+                FROM funding_withdrawal_reconciliation_records fwrr
+               WHERE fwrr.withdrawal_intent_id = fwi.id
+            )
+          ORDER BY fwi.updated_at ASC
+          LIMIT $1`,
+        [batchSize, input.cancelUnsubmittedWithdrawalAfterSeconds]
+      );
+      await cancelWithdrawalIntents(client, withdrawalCancelCandidates.rows.map((row) => row.id), input.reason);
+
+      await client.query("COMMIT");
+      return {
+        deletedUnusedFundingIntents: deletedUnusedFunding.rowCount ?? 0,
+        cancelledUnsubmittedFundingIntents: fundingCancelCandidates.rowCount ?? 0,
+        deletedUnusedWithdrawalIntents: deletedUnusedWithdrawals.rowCount ?? 0,
+        cancelledUnsubmittedWithdrawalIntents: withdrawalCancelCandidates.rowCount ?? 0
+      };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 
   public async findIntentById(id: string): Promise<FundingIntent | null> {
     const result = await this.pool.query<FundingIntentRow>("SELECT * FROM funding_intents WHERE id = $1::uuid", [id]);
@@ -724,7 +837,10 @@ export class FundingRepository implements FundingRepositoryContract {
                 ft.target_amount AS amount,
                 fi.source_chain,
                 fl.destination_chain,
-                COALESCE(fl.status::text, ft.status::text, fi.status::text) AS status,
+                CASE WHEN fi.status = 'CANCELLED'
+                  THEN fi.status::text
+                  ELSE COALESCE(fl.status::text, ft.status::text, fi.status::text)
+                END AS status,
                 fi.status::text AS aggregate_status,
                 fl.status::text AS leg_status,
                 fl.tx_hashes,
@@ -751,7 +867,10 @@ export class FundingRepository implements FundingRepositoryContract {
                 fws.source_amount AS amount,
                 NULL::text AS source_chain,
                 fwi.destination_chain,
-                COALESCE(fwrl.status::text, fws.status::text, fwi.status::text) AS status,
+                CASE WHEN fwi.status = 'CANCELLED'
+                  THEN fwi.status::text
+                  ELSE COALESCE(fwrl.status::text, fws.status::text, fwi.status::text)
+                END AS status,
                 fwi.status::text AS aggregate_status,
                 fwrl.status::text AS leg_status,
                 fwrl.tx_hashes,
@@ -1114,6 +1233,96 @@ const mapIntent = (row: FundingIntentRow): FundingIntent => ({
   createdAt: row.created_at.toISOString(),
   updatedAt: row.updated_at.toISOString()
 });
+
+const cancelFundingIntents = async (client: PoolClient, fundingIntentIds: string[], reason: string): Promise<void> => {
+  if (fundingIntentIds.length === 0) {
+    return;
+  }
+  await client.query(
+    `UPDATE funding_route_legs
+        SET status = 'LEG_CANCELLED',
+            error_reason = COALESCE(error_reason, $2),
+            updated_at = now()
+      WHERE funding_intent_id = ANY($1::uuid[])
+        AND status NOT IN ('LEG_READY_TO_TRADE', 'LEG_FAILED', 'LEG_CANCELLED')
+        AND jsonb_array_length(tx_hashes) = 0`,
+    [fundingIntentIds, reason]
+  );
+  await client.query(
+    `UPDATE funding_targets
+        SET status = 'LEG_CANCELLED',
+            updated_at = now()
+      WHERE funding_intent_id = ANY($1::uuid[])
+        AND status NOT IN ('LEG_READY_TO_TRADE', 'LEG_FAILED', 'LEG_CANCELLED')`,
+    [fundingIntentIds]
+  );
+  await client.query(
+    `UPDATE funding_intents
+        SET status = 'CANCELLED',
+            updated_at = now()
+      WHERE id = ANY($1::uuid[])
+        AND status <> 'CANCELLED'`,
+    [fundingIntentIds]
+  );
+  for (const fundingIntentId of fundingIntentIds) {
+    const auditResult = await client.query<{ id: string }>(
+      `INSERT INTO funding_audit_events (funding_intent_id, route_leg_id, event_type, payload)
+       VALUES ($1::uuid, NULL, 'FUNDING_CANCELLED', $2::jsonb)
+       RETURNING id::text`,
+      [
+        fundingIntentId,
+        JSON.stringify({
+          reason,
+          source: "automatic_stale_intent_cleanup",
+          cancelledAt: new Date().toISOString()
+        })
+      ]
+    );
+    await client.query(
+      `UPDATE funding_intents
+          SET audit_event_ids = audit_event_ids || jsonb_build_array($2::text),
+              updated_at = now()
+        WHERE id = $1::uuid`,
+      [fundingIntentId, auditResult.rows[0]!.id]
+    );
+  }
+};
+
+const cancelWithdrawalIntents = async (client: PoolClient, withdrawalIntentIds: string[], reason: string): Promise<void> => {
+  if (withdrawalIntentIds.length === 0) {
+    return;
+  }
+  await client.query(
+    `UPDATE funding_withdrawal_intents
+        SET status = 'CANCELLED',
+            updated_at = now()
+      WHERE id = ANY($1::uuid[])
+        AND status <> 'CANCELLED'`,
+    [withdrawalIntentIds]
+  );
+  for (const withdrawalIntentId of withdrawalIntentIds) {
+    const auditResult = await client.query<{ id: string }>(
+      `INSERT INTO funding_withdrawal_audit_events (withdrawal_intent_id, withdrawal_route_leg_id, event_type, payload)
+       VALUES ($1::uuid, NULL, 'WITHDRAWAL_CANCELLED', $2::jsonb)
+       RETURNING id::text`,
+      [
+        withdrawalIntentId,
+        JSON.stringify({
+          reason,
+          source: "automatic_stale_intent_cleanup",
+          cancelledAt: new Date().toISOString()
+        })
+      ]
+    );
+    await client.query(
+      `UPDATE funding_withdrawal_intents
+          SET audit_event_ids = audit_event_ids || jsonb_build_array($2::text),
+              updated_at = now()
+        WHERE id = $1::uuid`,
+      [withdrawalIntentId, auditResult.rows[0]!.id]
+    );
+  }
+};
 
 const mapTarget = (row: FundingTargetRow): FundingTarget => ({
   fundingTargetId: row.id,

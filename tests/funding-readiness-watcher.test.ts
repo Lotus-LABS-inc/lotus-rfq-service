@@ -5,11 +5,86 @@ import {
   type FundingReadinessWatcherLogger,
   type FundingReadinessWatcherRepository
 } from "../src/core/funding/funding-readiness-watcher.js";
+import {
+  buildFundingIntentCleanupConfigFromEnv,
+  FundingIntentCleanupWatcher,
+  type FundingIntentCleanupInput,
+  type FundingIntentCleanupRepository
+} from "../src/core/funding/funding-intent-cleanup.js";
 
 const logger = (): FundingReadinessWatcherLogger => ({
   info: () => undefined,
   warn: () => undefined,
   error: () => undefined
+});
+
+describe("funding intent cleanup watcher", () => {
+  it("defaults disabled and uses bounded cleanup config values", () => {
+    expect(buildFundingIntentCleanupConfigFromEnv({})).toEqual({
+      enabled: false,
+      intervalMs: 300_000,
+      batchSize: 100,
+      deleteUnusedFundingAfterSeconds: 1_800,
+      cancelUnsubmittedFundingAfterSeconds: 7_200,
+      deleteUnusedWithdrawalAfterSeconds: 1_800,
+      cancelUnsubmittedWithdrawalAfterSeconds: 7_200
+    });
+    expect(buildFundingIntentCleanupConfigFromEnv({
+      FUNDING_INTENT_CLEANUP_ENABLED: "true",
+      FUNDING_INTENT_CLEANUP_INTERVAL_MS: "1",
+      FUNDING_INTENT_CLEANUP_BATCH_SIZE: "0",
+      FUNDING_UNUSED_INTENT_DELETE_AFTER_SECONDS: "1",
+      FUNDING_UNSUBMITTED_INTENT_CANCEL_AFTER_SECONDS: "1",
+      WITHDRAWAL_UNUSED_INTENT_DELETE_AFTER_SECONDS: "1",
+      WITHDRAWAL_UNSUBMITTED_INTENT_CANCEL_AFTER_SECONDS: "1"
+    })).toEqual({
+      enabled: true,
+      intervalMs: 30_000,
+      batchSize: 1,
+      deleteUnusedFundingAfterSeconds: 60,
+      cancelUnsubmittedFundingAfterSeconds: 300,
+      deleteUnusedWithdrawalAfterSeconds: 60,
+      cancelUnsubmittedWithdrawalAfterSeconds: 300
+    });
+  });
+
+  it("calls stale intent cleanup with the configured safety TTLs", async () => {
+    let cleanupInput: FundingIntentCleanupInput | null = null;
+    const repository: FundingIntentCleanupRepository = {
+      async cleanupStaleIntents(input) {
+        cleanupInput = input;
+        return {
+          deletedUnusedFundingIntents: 2,
+          cancelledUnsubmittedFundingIntents: 1,
+          deletedUnusedWithdrawalIntents: 3,
+          cancelledUnsubmittedWithdrawalIntents: 4
+        };
+      }
+    };
+    const watcher = new FundingIntentCleanupWatcher(repository, logger(), {
+      enabled: true,
+      intervalMs: 60_000,
+      batchSize: 50,
+      deleteUnusedFundingAfterSeconds: 600,
+      cancelUnsubmittedFundingAfterSeconds: 3_600,
+      deleteUnusedWithdrawalAfterSeconds: 900,
+      cancelUnsubmittedWithdrawalAfterSeconds: 7_200
+    });
+
+    await expect(watcher.runOnce()).resolves.toEqual({
+      deletedUnusedFundingIntents: 2,
+      cancelledUnsubmittedFundingIntents: 1,
+      deletedUnusedWithdrawalIntents: 3,
+      cancelledUnsubmittedWithdrawalIntents: 4
+    });
+    expect(cleanupInput).toMatchObject({
+      batchSize: 50,
+      deleteUnusedFundingAfterSeconds: 600,
+      cancelUnsubmittedFundingAfterSeconds: 3_600,
+      deleteUnusedWithdrawalAfterSeconds: 900,
+      cancelUnsubmittedWithdrawalAfterSeconds: 7_200
+    });
+  });
 });
 
 describe("funding readiness watcher", () => {

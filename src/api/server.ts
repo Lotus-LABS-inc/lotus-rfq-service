@@ -288,6 +288,10 @@ import {
   buildFundingReadinessWatcherConfigFromEnv,
   FundingReadinessWatcher
 } from "../core/funding/funding-readiness-watcher.js";
+import {
+  buildFundingIntentCleanupConfigFromEnv,
+  FundingIntentCleanupWatcher
+} from "../core/funding/funding-intent-cleanup.js";
 
 export interface ServerDependencies {
   logger: Logger;
@@ -490,6 +494,15 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   app.addHook("onClose", async () => {
     fundingReadinessWatcher.stop();
   });
+  const fundingIntentCleanupWatcher = new FundingIntentCleanupWatcher(
+    fundingRepository,
+    dependencies.logger,
+    buildFundingIntentCleanupConfigFromEnv(process.env)
+  );
+  fundingIntentCleanupWatcher.start();
+  app.addHook("onClose", async () => {
+    fundingIntentCleanupWatcher.stop();
+  });
   const fundingIntentCreateRateLimiter = new FallbackRateLimiter(
     new RedisRateLimiter({
       redis: dependencies.redisClient,
@@ -499,14 +512,14 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       operationTimeoutMs: 250,
       rules: {
         funding_intent_create: parseRateLimitRule(process.env, "FUNDING_INTENT_CREATE_RATE_LIMIT", {
-          windowSeconds: 900,
-          maxPerUser: 10,
-          maxPerIp: 50
+          windowSeconds: 300,
+          maxPerUser: 4,
+          maxPerIp: 20
         }),
         withdrawal_intent_create: parseRateLimitRule(process.env, "WITHDRAWAL_INTENT_CREATE_RATE_LIMIT", {
-          windowSeconds: 900,
-          maxPerUser: 10,
-          maxPerIp: 50
+          windowSeconds: 300,
+          maxPerUser: 4,
+          maxPerIp: 20
         })
       }
     }),
@@ -515,14 +528,14 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       keyPepper: dependencies.jwtSecret,
       rules: {
         funding_intent_create: parseRateLimitRule(process.env, "FUNDING_INTENT_CREATE_RATE_LIMIT", {
-          windowSeconds: 900,
-          maxPerUser: 10,
-          maxPerIp: 50
+          windowSeconds: 300,
+          maxPerUser: 4,
+          maxPerIp: 20
         }),
         withdrawal_intent_create: parseRateLimitRule(process.env, "WITHDRAWAL_INTENT_CREATE_RATE_LIMIT", {
-          windowSeconds: 900,
-          maxPerUser: 10,
-          maxPerIp: 50
+          windowSeconds: 300,
+          maxPerUser: 4,
+          maxPerIp: 20
         })
       }
     })

@@ -93,6 +93,17 @@ Automatic funding readiness watcher:
 - Keep `FUNDING_VENUE_READINESS_CHECKS_ENABLED=true` and venue-specific readiness envs configured before relying on automatic user-facing "available to trade" updates.
 - The watcher must never mark readiness from wallet existence, tx submission, or raw wallet balance alone.
 
+Automatic stale intent cleanup:
+
+- `FUNDING_INTENT_CLEANUP_ENABLED=false` by default.
+- When enabled, the backend periodically removes or cancels stale intent records that were never used.
+- Funding intents still in `INTENT_CREATED` with no route legs or reconciliation evidence are hard-deleted after `FUNDING_UNUSED_INTENT_DELETE_AFTER_SECONDS`.
+- Withdrawal intents still in `WITHDRAWAL_CREATED` with no route legs or reconciliation evidence are hard-deleted after `WITHDRAWAL_UNUSED_INTENT_DELETE_AFTER_SECONDS`.
+- Quoted but unsubmitted funding intents are marked `CANCELLED` after `FUNDING_UNSUBMITTED_INTENT_CANCEL_AFTER_SECONDS`, but only if no route leg has a tx hash and no reconciliation evidence exists.
+- Quoted but unsubmitted withdrawal intents are marked `CANCELLED` after `WITHDRAWAL_UNSUBMITTED_INTENT_CANCEL_AFTER_SECONDS`, but only if no route leg has a tx hash and no reconciliation evidence exists.
+- Cleanup never deletes or cancels submitted, bridged, venue-credited, ready-to-trade, completed, or evidence-bearing rows.
+- Configure with `FUNDING_INTENT_CLEANUP_INTERVAL_MS` and `FUNDING_INTENT_CLEANUP_BATCH_SIZE`.
+
 In plain terms:
 
 1. A user chooses a source wallet, source chain, source token, and amount.
