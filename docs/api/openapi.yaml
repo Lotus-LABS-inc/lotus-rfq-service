@@ -2806,6 +2806,48 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /user/venue-accounts/predict_fun/auth-message:
+    post:
+      tags: [User]
+      summary: Prepare Predict.fun account auth message.
+      description: Fetches Predict.fun's dynamic auth message for the user's active Turnkey EVM wallet. The frontend signs this message with Turnkey; Lotus does not sign, store signatures, return provider JWTs, or expose Predict API keys.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: user-venue-account
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/PredictFunAccountAuthMessage" }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "502": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /user/venue-accounts/predict_fun/complete-auth:
+    post:
+      tags: [User]
+      summary: Complete Predict.fun account linking.
+      description: Accepts a Turnkey-signed Predict.fun auth message, exchanges it server-side for a temporary Predict token, reads the connected account, and persists only safe public venue-account metadata. The Predict token is never returned or stored.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: user-venue-account
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PredictFunCompleteAccountAuthRequest"
+      responses:
+        "200": { $ref: "#/components/responses/UserVenueAccount" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "502": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /user/withdrawal-wallets/evm:
     put:
       tags: [User]
@@ -3326,6 +3368,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/UserVenueAccountListResponse"
+    PredictFunAccountAuthMessage:
+      description: Predict.fun account auth message for frontend Turnkey signing.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PredictFunAccountAuthMessageResponse"
     WithdrawalIntent:
       description: Frontend-safe withdrawal intent response.
       content:
@@ -4242,6 +4290,38 @@ components:
         venueAccounts:
           type: array
           items: { $ref: "#/components/schemas/UserVenueAccount" }
+    PredictFunAccountAuthMessageResponse:
+      type: object
+      additionalProperties: false
+      required: [venue, signer, message, venueAccount]
+      properties:
+        venue:
+          type: string
+          enum: [PREDICT_FUN]
+        signer:
+          type: string
+          pattern: "^0x[a-fA-F0-9]{40}$"
+          description: Public Turnkey EVM wallet address that must sign the Predict.fun auth message.
+        message:
+          type: string
+          description: Dynamic Predict.fun auth message to sign. This is not a token or secret.
+        venueAccount:
+          $ref: "#/components/schemas/UserVenueAccount"
+    PredictFunCompleteAccountAuthRequest:
+      type: object
+      additionalProperties: false
+      required: [signer, signature, message]
+      properties:
+        signer:
+          type: string
+          pattern: "^0x[a-fA-F0-9]{40}$"
+        signature:
+          type: string
+          pattern: "^0x[a-fA-F0-9]{130}$"
+          description: Signature produced by the user's Turnkey EVM wallet over the Predict.fun auth message.
+        message:
+          type: string
+          description: Exact Predict.fun auth message returned by the auth-message endpoint.
     EnsureUserVenueAccountRequest:
       type: object
       additionalProperties: false

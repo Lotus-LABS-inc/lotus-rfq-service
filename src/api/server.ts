@@ -270,6 +270,7 @@ import {
   isTurnkeyWalletConfigReady,
   TurnkeyUserWalletProvisioner
 } from "../integrations/turnkey/turnkey-wallet-client.js";
+import { buildPredictAccountClientFromEnv } from "../integrations/predict/predict-account-client.js";
 import { UserWalletService } from "../core/funding/user-wallets.js";
 import { UserVenueAccountService } from "../core/execution/user-venue-accounts.js";
 
@@ -414,7 +415,11 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     defaultSolanaWalletEnabled: turnkeyWalletConfig.defaultSolanaWalletEnabled,
     defaultEvmWalletEnabled: turnkeyWalletConfig.defaultEvmWalletEnabled
   }, turnkeyWalletProvisioner);
-  const userVenueAccountService = new UserVenueAccountService(userVenueAccountRepository, userWalletService);
+  const userVenueAccountService = new UserVenueAccountService(
+    userVenueAccountRepository,
+    userWalletService,
+    buildPredictAccountClientFromEnv(process.env)
+  );
   const polymarketBridgeWithdrawalConfig = getPolymarketBridgeWithdrawalConfigFromEnv(process.env);
   const polymarketBridgeWithdrawalAdapter = polymarketBridgeWithdrawalConfig.configured && polymarketBridgeWithdrawalConfig.apiBaseUrl
     ? new PolymarketBridgeWithdrawalAdapter(
@@ -1073,7 +1078,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   await registerUserVenueAccountRoutes(app, userAuthMiddleware, {
     listAccounts: (userId) => userVenueAccountService.listAccounts(userId),
     getAccount: (userId, venue) => userVenueAccountService.getAccount(userId, venue),
-    ensureAccount: (input) => userVenueAccountService.ensureAccount(input)
+    ensureAccount: (input) => userVenueAccountService.ensureAccount(input),
+    preparePredictFunAccountAuth: (userId) => userVenueAccountService.preparePredictFunAccountAuth(userId),
+    completePredictFunAccountAuth: (input) => userVenueAccountService.completePredictFunAccountAuth(input)
   });
   await registerUserWithdrawalWalletRoutes(app, userAuthMiddleware, {
     listWallets: async (userId) => (await userWalletService.listWallets(userId))

@@ -5,6 +5,7 @@ import { registerUserVenueAccountRoutes } from "../src/api/routes/user-venue-acc
 import {
   UserVenueAccountService,
   type UserVenueAccount,
+  type PredictFunAccountClient,
   type UserVenueAccountRepository,
   type UserVenueAccountVenue
 } from "../src/core/execution/user-venue-accounts.js";
@@ -90,6 +91,16 @@ const evmWallet = (overrides: Partial<UserWallet> = {}): UserWallet => ({
   ...overrides
 });
 
+const predictAccountClient = (): PredictFunAccountClient => ({
+  configured: () => true,
+  getAuthMessage: async () => "Please sign this Predict auth message",
+  getJwtWithSignature: async () => "predict-jwt-redacted",
+  getConnectedAccount: async () => ({
+    name: "predict-test-account",
+    address: "0x4444444444444444444444444444444444444444"
+  })
+});
+
 describe("user venue account service", () => {
   it("requires an active Turnkey EVM wallet before linking venue accounts", async () => {
     const service = new UserVenueAccountService(new InMemoryVenueAccountRepository(), {
@@ -139,6 +150,41 @@ describe("user venue account service", () => {
     })).rejects.toMatchObject({ code: "USER_VENUE_ACCOUNT_MISMATCH" });
     expect(JSON.stringify(repository.auditEvents)).not.toContain("turnkey-account");
   });
+
+  it("links Predict.fun connected account after Turnkey wallet auth signature", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    const service = new UserVenueAccountService(
+      repository,
+      {
+        async resolveUserTurnkeyEvmFundingWallet() {
+          return evmWallet();
+        }
+      },
+      predictAccountClient()
+    );
+
+    const prepared = await service.preparePredictFunAccountAuth("user-1");
+    const completed = await service.completePredictFunAccountAuth({
+      userId: "user-1",
+      signer: prepared.signer,
+      signature: `0x${"a".repeat(130)}`,
+      message: prepared.message
+    });
+
+    expect(prepared).toMatchObject({
+      signer: "0x1111111111111111111111111111111111111111",
+      message: "Please sign this Predict auth message"
+    });
+    expect(completed.account).toMatchObject({
+      venue: "PREDICT_FUN",
+      walletAddress: "0x1111111111111111111111111111111111111111",
+      venueAccountId: "predict-test-account",
+      venueAccountAddress: "0x4444444444444444444444444444444444444444",
+      venueAccountType: "SMART_WALLET",
+      status: "ACTIVE"
+    });
+    expect(JSON.stringify(repository.auditEvents)).not.toContain("predict-jwt-redacted");
+  });
 });
 
 describe("user venue account routes", () => {
@@ -149,7 +195,7 @@ describe("user venue account routes", () => {
       async resolveUserTurnkeyEvmFundingWallet() {
         return evmWallet();
       }
-    });
+    }, predictAccountClient());
     const auth = async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         await request.jwtVerify();
@@ -160,7 +206,9 @@ describe("user venue account routes", () => {
     await registerUserVenueAccountRoutes(app, auth, {
       listAccounts: (userId) => service.listAccounts(userId),
       getAccount: (userId, venue) => service.getAccount(userId, venue),
-      ensureAccount: (input) => service.ensureAccount(input)
+      ensureAccount: (input) => service.ensureAccount(input),
+      preparePredictFunAccountAuth: (userId) => service.preparePredictFunAccountAuth(userId),
+      completePredictFunAccountAuth: (input) => service.completePredictFunAccountAuth(input)
     });
     const token = app.jwt.sign({ userId: "user-1", role: "USER", email: "polymarket-funding-test@uselotus.xyz" });
 
@@ -195,6 +243,37 @@ describe("user venue account routes", () => {
       headers: { authorization: `Bearer ${token}` }
     });
     expect(listed.json().venueAccounts).toHaveLength(1);
+
+    const predictPrepared = await app.inject({
+      method: "POST",
+      url: "/user/venue-accounts/predict_fun/auth-message",
+      headers: { authorization: `Bearer ${token}` }
+    });
+    expect(predictPrepared.statusCode).toBe(200);
+    expect(predictPrepared.json()).toMatchObject({
+      venue: "PREDICT_FUN",
+      signer: "0x1111111111111111111111111111111111111111",
+      message: "Please sign this Predict auth message"
+    });
+
+    const predictCompleted = await app.inject({
+      method: "POST",
+      url: "/user/venue-accounts/predict_fun/complete-auth",
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        signer: "0x1111111111111111111111111111111111111111",
+        signature: `0x${"b".repeat(130)}`,
+        message: "Please sign this Predict auth message"
+      }
+    });
+    expect(predictCompleted.statusCode).toBe(200);
+    expect(predictCompleted.body).not.toContain("predict-jwt-redacted");
+    expect(predictCompleted.json().venueAccount).toMatchObject({
+      venue: "PREDICT_FUN",
+      venueAccountAddress: "0x4444444444444444444444444444444444444444",
+      venueAccountType: "SMART_WALLET",
+      status: "ACTIVE"
+    });
     await app.close();
   });
 });

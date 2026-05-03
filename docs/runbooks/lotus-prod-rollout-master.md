@@ -216,6 +216,7 @@ Market data envs:
 | `PREDICT_MAINNET_BASE_URL` | If Predict.fun used | `https://api.predict.fun/` | No | Mainnet Predict.fun API host. |
 | `PREDICT_TESTNET_BASE_URL` | If testnet rehearsals used | `https://api-testnet.predict.fun/` | No | Testnet only; not production runtime target. |
 | `PREDICT_API_KEY` | If Predict.fun requires auth | `<server-side key>` | Yes | Secret manager only. |
+| `PREDICT_ACCOUNT_AUTH_TIMEOUT_MS` | Optional | `15000` | No | Timeout for Predict.fun auth-message/JWT/account-linking calls. |
 | `PREDICT_WS_MAINNET_URL` | If Predict.fun WS used | `wss://ws.predict.fun/` | No | Mainnet WS host. |
 | `LIMITLESS_BASE_URL` | If Limitless used | `https://api.limitless.exchange` | No | Official Limitless API host. |
 | `LIMITLESS_API_KEY` | If Limitless read APIs require auth | `<server-side key>` | Yes | Secret manager only. |
@@ -277,6 +278,7 @@ Turnkey venue account rule for user-signed venues:
 - The user's active Turnkey EVM wallet is the canonical identity wallet for Opinion and Predict.fun account setup.
 - `POST /user/venue-accounts/{venue}/ensure` must be completed before any signed relay submit path is enabled for that venue.
 - Opinion account bindings store safe public metadata for the Opinion Safe/multisig account; Predict.fun bindings store safe OAuth/connected-wallet account metadata.
+- Predict.fun account linking uses `POST /user/venue-accounts/predict_fun/auth-message`, frontend Turnkey signing, then `POST /user/venue-accounts/predict_fun/complete-auth`. Lotus may exchange the signature for a temporary Predict JWT server-side, but it must not store or return that JWT.
 - Signed relay submit must reject any payload whose signer/account does not match the user's active Turnkey EVM wallet and active `user_venue_accounts` binding.
 - Lotus must not backend-sign user orders, export keys, broadcast user transactions, store raw signatures as secrets, or mix Polymarket operator signer/proxy wallet state with user Turnkey venue-account bindings.
 | RFQ lifecycle | `npx vitest run test/integration/rfq-lifecycle.test.ts --maxWorkers=1` | Pass before production RFQ accept changes. |

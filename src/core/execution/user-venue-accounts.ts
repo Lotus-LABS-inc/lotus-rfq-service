@@ -45,13 +45,22 @@ export interface UserVenueAccountRepository {
   }): Promise<string>;
 }
 
+export interface PredictFunAccountClient {
+  configured(): boolean;
+  getAuthMessage(): Promise<string>;
+  getJwtWithSignature(input: { signer: string; signature: string; message: string }): Promise<string>;
+  getConnectedAccount(jwt: string): Promise<{ name: string | null; address: string }>;
+}
+
 export class UserVenueAccountError extends Error {
   public constructor(
     public readonly code:
       | "USER_VENUE_ACCOUNT_UNSUPPORTED"
       | "USER_VENUE_ACCOUNT_WALLET_REQUIRED"
       | "USER_VENUE_ACCOUNT_MISMATCH"
-      | "USER_VENUE_ACCOUNT_INACTIVE",
+      | "USER_VENUE_ACCOUNT_INACTIVE"
+      | "PREDICT_FUN_ACCOUNT_NOT_CONFIGURED"
+      | "PREDICT_FUN_ACCOUNT_AUTH_FAILED",
     message: string,
     public readonly statusCode = 409
   ) {
@@ -63,7 +72,8 @@ export class UserVenueAccountError extends Error {
 export class UserVenueAccountService {
   public constructor(
     private readonly repository: UserVenueAccountRepository,
-    private readonly userWalletService: Pick<UserWalletService, "resolveUserTurnkeyEvmFundingWallet">
+    private readonly userWalletService: Pick<UserWalletService, "resolveUserTurnkeyEvmFundingWallet">,
+    private readonly predictFunAccountClient?: PredictFunAccountClient
   ) {}
 
   public async listAccounts(userId: string): Promise<UserVenueAccount[]> {
@@ -112,6 +122,85 @@ export class UserVenueAccountService {
       readinessBlockers: readinessBlockersForAccount(account),
       setupInstructions: setupInstructionsForVenue(venue, account)
     };
+  }
+
+  public async preparePredictFunAccountAuth(userId: string): Promise<{
+    signer: string;
+    message: string;
+    venueAccount: UserVenueAccount;
+  }> {
+    const client = this.requirePredictFunAccountClient();
+    const wallet = await this.resolveRequiredTurnkeyEvmWallet(userId);
+    const ensured = await this.ensureAccount({ userId, venue: "PREDICT_FUN" });
+    const message = await this.withPredictAccountFailureBoundary(() => client.getAuthMessage());
+    await this.repository.appendAccountAuditEvent({
+      userId,
+      venueAccountBindingId: ensured.account.venueAccountBindingId,
+      eventType: "PREDICT_FUN_ACCOUNT_AUTH_MESSAGE_CREATED",
+      payload: {
+        venue: "PREDICT_FUN",
+        signer: wallet.address,
+        messageLength: message.length
+      }
+    });
+    return {
+      signer: wallet.address,
+      message,
+      venueAccount: ensured.account
+    };
+  }
+
+  public async completePredictFunAccountAuth(input: {
+    userId: string;
+    signer: string;
+    signature: string;
+    message: string;
+  }): Promise<{
+    account: UserVenueAccount;
+    readinessBlockers: string[];
+    setupInstructions: string[];
+  }> {
+    const client = this.requirePredictFunAccountClient();
+    const wallet = await this.resolveRequiredTurnkeyEvmWallet(input.userId);
+    if (!equalsAddress(input.signer, wallet.address)) {
+      throw new UserVenueAccountError(
+        "USER_VENUE_ACCOUNT_MISMATCH",
+        "Predict.fun auth signer does not match the user's Turnkey EVM wallet.",
+        403
+      );
+    }
+    if (!isEvmSignature(input.signature)) {
+      throw new UserVenueAccountError(
+        "PREDICT_FUN_ACCOUNT_AUTH_FAILED",
+        "Predict.fun auth signature is invalid.",
+        400
+      );
+    }
+    const jwt = await this.withPredictAccountFailureBoundary(() => client.getJwtWithSignature({
+      signer: wallet.address,
+      signature: input.signature,
+      message: input.message
+    }));
+    const connectedAccount = await this.withPredictAccountFailureBoundary(() => client.getConnectedAccount(jwt));
+    const ensured = await this.ensureAccount({
+      userId: input.userId,
+      venue: "PREDICT_FUN",
+      venueAccountId: connectedAccount.name,
+      venueAccountAddress: connectedAccount.address,
+      venueAccountType: "SMART_WALLET"
+    });
+    await this.repository.appendAccountAuditEvent({
+      userId: input.userId,
+      venueAccountBindingId: ensured.account.venueAccountBindingId,
+      eventType: "PREDICT_FUN_ACCOUNT_LINKED",
+      payload: {
+        venue: "PREDICT_FUN",
+        signer: wallet.address,
+        venueAccountAddress: connectedAccount.address,
+        venueAccountIdPresent: connectedAccount.name !== null
+      }
+    });
+    return ensured;
   }
 
   public async verifyUserSignedRelayBinding(input: {
@@ -169,6 +258,29 @@ export class UserVenueAccountService {
         throw new UserVenueAccountError("USER_VENUE_ACCOUNT_WALLET_REQUIRED", error.message, error.statusCode);
       }
       throw error;
+    }
+  }
+
+  private requirePredictFunAccountClient(): PredictFunAccountClient {
+    if (!this.predictFunAccountClient?.configured()) {
+      throw new UserVenueAccountError(
+        "PREDICT_FUN_ACCOUNT_NOT_CONFIGURED",
+        "Predict.fun account automation is not configured.",
+        503
+      );
+    }
+    return this.predictFunAccountClient;
+  }
+
+  private async withPredictAccountFailureBoundary<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch {
+      throw new UserVenueAccountError(
+        "PREDICT_FUN_ACCOUNT_AUTH_FAILED",
+        "Predict.fun account auth request failed.",
+        502
+      );
     }
   }
 }
@@ -231,7 +343,7 @@ const setupInstructionsForVenue = (venue: UserVenueAccountVenue, account: UserVe
     return ["Create or link the Opinion Safe using the displayed Turnkey EVM wallet, then submit the Safe address to Lotus."];
   }
   if (venue === "PREDICT_FUN") {
-    return ["Complete Predict.fun OAuth/connected-wallet setup with the displayed Turnkey EVM wallet, then submit the venue account id/address to Lotus."];
+    return ["Sign the Predict.fun auth message with the displayed Turnkey EVM wallet so Lotus can link the returned Predict smart-wallet address."];
   }
   return [`Link the ${venue} account created from the displayed Turnkey EVM wallet.`];
 };
@@ -243,3 +355,6 @@ const equalsAddress = (left: string | null | undefined, right: string | null | u
   typeof left === "string" &&
   typeof right === "string" &&
   left.toLowerCase() === right.toLowerCase();
+
+const isEvmSignature = (value: string): boolean =>
+  /^0x[a-fA-F0-9]{130}$/.test(value.trim());

@@ -59,6 +59,8 @@ Turnkey backend implementation path:
 - `POST /user/wallets/ensure-defaults` creates or returns the user's default Turnkey Solana and EVM wallets.
 - `GET /user/wallets` returns frontend-safe wallet metadata only: provider, chain family, chain, public address, purpose, exportability, status, and timestamps.
 - `POST /user/venue-accounts/{venue}/ensure` creates or returns the frontend-safe venue account binding for a user's active Turnkey EVM wallet. Opinion uses this binding for its Safe/multisig account; Predict.fun uses it for OAuth/connected-wallet account metadata.
+- `POST /user/venue-accounts/predict_fun/auth-message` fetches Predict.fun's dynamic auth message for the active Turnkey EVM wallet. The frontend signs that message through Turnkey; Lotus does not sign it.
+- `POST /user/venue-accounts/predict_fun/complete-auth` exchanges the Turnkey signature with Predict.fun server-side, reads the connected Predict account, and persists only public account metadata. Lotus must not store or return Predict JWTs, OAuth tokens, raw signatures, or Predict API keys.
 - `GET /user/venue-accounts` and `GET /user/venue-accounts/{venue}` let the frontend see whether a venue account setup step is still needed before user-signed execution relay.
 - Funding intents may use `sourceWalletId`; when omitted for Solana funding, Lotus can use the user's active default Solana Turnkey wallet.
 - Venue targets continue to use `<VENUE>_FUNDING_DESTINATION_ADDRESS` by default. A venue can opt into `USER_TURNKEY_EVM_WALLET` with `<VENUE>_FUNDING_DESTINATION_MODE`, but that only changes the route destination address. It does not change readiness or custody rules.
