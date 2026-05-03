@@ -10,7 +10,7 @@ import {
   type CreateFundingIntentInput,
   type CreateWithdrawalIntentInput,
   type FundingAuditEventType,
-  type FundingHistoryItem,
+  type FundingHistoryPage,
   type FundingIntent,
   type FundingIntentView,
   type FundingLegState,
@@ -107,7 +107,7 @@ export interface FundingRepository {
     amount: string;
   }): Promise<boolean>;
   listVenueBalances(userId: string): Promise<VenueBalanceView[]>;
-  listFundingHistory(userId: string, input?: { limit?: number }): Promise<FundingHistoryItem[]>;
+  listFundingHistory(userId: string, input: { page: number; pageSize: number; offset: number }): Promise<FundingHistoryPage>;
   findWithdrawalIntentById(id: string): Promise<WithdrawalIntent | null>;
   findWithdrawalIntentByUserAndIdempotencyKey(userId: string, idempotencyKey: string): Promise<WithdrawalIntent | null>;
   createWithdrawalIntent(input: WithdrawalIntent, sources: WithdrawalSource[]): Promise<WithdrawalIntent>;
@@ -223,9 +223,13 @@ export class FundingService {
     return this.repository.listVenueBalances(userId);
   }
 
-  public async listFundingHistory(userId: string, input: { limit?: number } = {}): Promise<FundingHistoryItem[]> {
+  public async listFundingHistory(userId: string, input: { page?: number; pageSize?: number; limit?: number } = {}): Promise<FundingHistoryPage> {
+    const page = normalizeHistoryPage(input.page);
+    const pageSize = normalizeHistoryPageSize(input.pageSize ?? input.limit);
     return this.repository.listFundingHistory(userId, {
-      limit: normalizeHistoryLimit(input.limit)
+      page,
+      pageSize,
+      offset: (page - 1) * pageSize
     });
   }
 
@@ -2468,9 +2472,16 @@ const isLifiBridgeBackWithdrawalLeg = (leg: WithdrawalRouteLeg): boolean =>
 const allowsStaleWithdrawalSubmission = (leg: WithdrawalRouteLeg): boolean =>
   leg.routeQuote.transactionRequest === null && !isLifiBridgeBackWithdrawalLeg(leg);
 
-const normalizeHistoryLimit = (value: number | undefined): number => {
+const normalizeHistoryPage = (value: number | undefined): number => {
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    return 50;
+    return 1;
+  }
+  return Math.max(Math.trunc(value), 1);
+};
+
+const normalizeHistoryPageSize = (value: number | undefined): number => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 5;
   }
   return Math.min(Math.max(Math.trunc(value), 1), 200);
 };

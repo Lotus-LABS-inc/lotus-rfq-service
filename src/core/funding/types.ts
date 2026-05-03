@@ -328,6 +328,16 @@ export interface FundingHistoryItem {
   updatedAt: string;
 }
 
+export interface FundingHistoryPage {
+  items: FundingHistoryItem[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+}
+
 export interface WithdrawalIntent {
   withdrawalIntentId: string;
   userId: string;

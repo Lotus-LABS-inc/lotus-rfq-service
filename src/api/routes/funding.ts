@@ -4,7 +4,7 @@ import {
   CreateWithdrawalIntentSchema,
   CreateFundingIntentSchema,
   FundingError,
-  type FundingHistoryItem,
+  type FundingHistoryPage,
   type FundingIntentView,
   type VenueBalanceView,
   type WithdrawalIntentView
@@ -21,6 +21,8 @@ const submitWithdrawalRouteLegSchema = z.object({
 });
 
 const fundingHistoryQuerySchema = z.object({
+  page: z.coerce.number().int().positive().optional(),
+  pageSize: z.coerce.number().int().positive().max(200).optional(),
   limit: z.coerce.number().int().positive().max(200).optional()
 });
 
@@ -32,7 +34,7 @@ export interface FundingRouteHandlers {
   refreshIntentStatus(userId: string, fundingIntentId: string): Promise<FundingIntentView>;
   listVenueCapabilities(): Promise<unknown>;
   listVenueBalances(userId: string): Promise<VenueBalanceView[]>;
-  listFundingHistory(userId: string, input?: { limit?: number }): Promise<FundingHistoryItem[]>;
+  listFundingHistory(userId: string, input?: { page?: number; pageSize?: number; limit?: number }): Promise<FundingHistoryPage>;
   createWithdrawalIntent(userId: string, request: z.infer<typeof CreateWithdrawalIntentSchema>): Promise<WithdrawalIntentView>;
   getWithdrawalIntent(userId: string, withdrawalIntentId: string): Promise<WithdrawalIntentView>;
   quoteWithdrawalIntent(userId: string, withdrawalIntentId: string): Promise<WithdrawalIntentView>;
@@ -129,14 +131,21 @@ export const registerFundingRoutes = async (
         details: parsed.error.flatten()
       });
     }
-    const items = await handlers.listFundingHistory(
-      request.user.userId,
-      typeof parsed.data.limit === "number" ? { limit: parsed.data.limit } : {}
-    );
+    const historyInput: { page?: number; pageSize?: number; limit?: number } = {};
+    if (typeof parsed.data.page === "number") {
+      historyInput.page = parsed.data.page;
+    }
+    if (typeof parsed.data.pageSize === "number") {
+      historyInput.pageSize = parsed.data.pageSize;
+    }
+    if (typeof parsed.data.limit === "number") {
+      historyInput.limit = parsed.data.limit;
+    }
+    const history = await handlers.listFundingHistory(request.user.userId, historyInput);
     return reply.status(200).send({
       asOf: new Date().toISOString(),
       refreshAfterSeconds: 10,
-      items
+      ...history
     });
   });
 

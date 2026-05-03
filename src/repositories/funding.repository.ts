@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import type {
   FundingAggregateState,
   FundingAuditEventType,
+  FundingHistoryPage,
   FundingHistoryItem,
   FundingIntent,
   FundingLegState,
@@ -151,6 +152,7 @@ interface FundingHistoryRow {
   checked_at: Date | null;
   created_at: Date;
   updated_at: Date;
+  total_count: string;
 }
 
 interface WithdrawalIntentRow {
@@ -690,7 +692,7 @@ export class FundingRepository implements FundingRepositoryContract {
     return result.rows.map(mapVenueBalance);
   }
 
-  public async listFundingHistory(userId: string, input: { limit: number }): Promise<FundingHistoryItem[]> {
+  public async listFundingHistory(userId: string, input: { page: number; pageSize: number; offset: number }): Promise<FundingHistoryPage> {
     const result = await this.pool.query<FundingHistoryRow>(
       `WITH latest_funding_reconciliation AS (
          SELECT DISTINCT ON (route_leg_id)
@@ -766,17 +768,28 @@ export class FundingRepository implements FundingRepositoryContract {
            LEFT JOIN latest_withdrawal_reconciliation lwr ON lwr.withdrawal_route_leg_id = fwrl.id
           WHERE fwi.user_id = $1
        )
-       SELECT *
+       SELECT *,
+              COUNT(*) OVER()::text AS total_count
          FROM (
            SELECT * FROM funding_items
            UNION ALL
            SELECT * FROM withdrawal_items
          ) combined
         ORDER BY updated_at DESC, created_at DESC
-        LIMIT $2`,
-      [userId, input.limit]
+        LIMIT $2
+       OFFSET $3`,
+      [userId, input.pageSize, input.offset]
     );
-    return result.rows.map(mapFundingHistoryItem);
+    const totalItems = Number(result.rows[0]?.total_count ?? "0");
+    return {
+      items: result.rows.map(mapFundingHistoryItem),
+      page: input.page,
+      pageSize: input.pageSize,
+      totalItems,
+      totalPages: totalItems === 0 ? 0 : Math.ceil(totalItems / input.pageSize),
+      hasNextPage: input.offset + result.rows.length < totalItems,
+      hasPreviousPage: input.page > 1
+    };
   }
 
   public async hasReadyVenueBalance(input: { userId: string; venue: string; token: string; amount: string }): Promise<boolean> {

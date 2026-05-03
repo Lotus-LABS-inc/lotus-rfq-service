@@ -7,7 +7,7 @@ import {
   validateCreateWithdrawalIntentInput,
   validateCreateFundingIntentInput,
   type FundingIntent,
-  type FundingHistoryItem,
+  type FundingHistoryPage,
   type FundingReconciliationRecord,
   type FundingRouteLeg,
   type FundingRouteQuote,
@@ -337,8 +337,16 @@ class InMemoryFundingRepository implements FundingRepository {
       : [];
   }
 
-  public async listFundingHistory(): Promise<FundingHistoryItem[]> {
-    return [];
+  public async listFundingHistory(): Promise<FundingHistoryPage> {
+    return {
+      items: [],
+      page: 1,
+      pageSize: 5,
+      totalItems: 0,
+      totalPages: 0,
+      hasNextPage: false,
+      hasPreviousPage: false
+    };
   }
 
   public async findWithdrawalIntentById(id: string): Promise<WithdrawalIntent | null> {

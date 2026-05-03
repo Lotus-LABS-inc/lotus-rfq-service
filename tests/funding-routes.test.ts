@@ -90,28 +90,36 @@ const buildApp = async () => {
       availableAmount: "100",
       updatedAt: "2026-04-25T00:00:00.000Z"
     }]),
-    listFundingHistory: async () => ([{
-      id: "funding:funding-1:leg-1",
-      direction: "FUNDING",
-      intentId: "funding-1",
-      routeLegId: "leg-1",
-      venue: "POLYMARKET",
-      token: "USDC",
-      amount: "100",
-      sourceChain: "SOLANA",
-      destinationChain: "POLYGON",
-      status: "LEG_READY_TO_TRADE",
-      aggregateStatus: "READY_TO_TRADE",
-      legStatus: "LEG_READY_TO_TRADE",
-      txHashes: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
-      readyToTrade: true,
-      completed: null,
-      destinationReceived: true,
-      venueConfirmed: true,
-      checkedAt: "2026-04-25T00:05:00.000Z",
-      createdAt: "2026-04-25T00:00:00.000Z",
-      updatedAt: "2026-04-25T00:05:00.000Z"
-    }]),
+    listFundingHistory: async (_userId, input) => ({
+      items: [{
+        id: "funding:funding-1:leg-1",
+        direction: "FUNDING",
+        intentId: "funding-1",
+        routeLegId: "leg-1",
+        venue: "POLYMARKET",
+        token: "USDC",
+        amount: "100",
+        sourceChain: "SOLANA",
+        destinationChain: "POLYGON",
+        status: "LEG_READY_TO_TRADE",
+        aggregateStatus: "READY_TO_TRADE",
+        legStatus: "LEG_READY_TO_TRADE",
+        txHashes: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+        readyToTrade: true,
+        completed: null,
+        destinationReceived: true,
+        venueConfirmed: true,
+        checkedAt: "2026-04-25T00:05:00.000Z",
+        createdAt: "2026-04-25T00:00:00.000Z",
+        updatedAt: "2026-04-25T00:05:00.000Z"
+      }],
+      page: input?.page ?? 1,
+      pageSize: input?.pageSize ?? input?.limit ?? 5,
+      totalItems: 12,
+      totalPages: 3,
+      hasNextPage: true,
+      hasPreviousPage: false
+    }),
     createWithdrawalIntent: async (userId) => withdrawalView(userId),
     getWithdrawalIntent: async (userId) => withdrawalView(userId),
     quoteWithdrawalIntent: async (userId) => ({
@@ -207,10 +215,15 @@ describe("Funding routes", () => {
     expect(balances.json()).toMatchObject({
       balances: [{ venue: "POLYMARKET", token: "USDC", availableAmount: "100" }]
     });
-    const history = await app.inject({ method: "GET", url: "/funding/history", headers });
+    const history = await app.inject({ method: "GET", url: "/funding/history?page=1&pageSize=5", headers });
     expect(history.statusCode).toBe(200);
     expect(history.json()).toMatchObject({
       refreshAfterSeconds: 10,
+      page: 1,
+      pageSize: 5,
+      totalItems: 12,
+      totalPages: 3,
+      hasNextPage: true,
       items: [{
         direction: "FUNDING",
         intentId: "funding-1",
