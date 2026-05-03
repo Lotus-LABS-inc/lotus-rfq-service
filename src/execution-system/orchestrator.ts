@@ -25,6 +25,7 @@ import type {
 import { validateExecutionRequest, zeroFees } from "./types.js";
 import { ExecutionVenueAdapterRegistry } from "./venue-adapter.js";
 import type { MonetizationRepository } from "../repositories/monetization.repository.js";
+import type { VerifiedPositionRepository } from "./executable-routing.js";
 
 export interface ExecutionSystemOrchestratorDeps {
   preflight: ExecutionPreflightService;
@@ -39,6 +40,7 @@ export interface ExecutionSystemOrchestratorDeps {
     repository: Pick<MonetizationRepository, "createLedgerEntry" | "upsertPolicy">;
     polymarketBuilderCodeConfigured?: boolean;
   };
+  positions?: Pick<VerifiedPositionRepository, "applySettlementDelta">;
   audit: ExecutionAuditSink;
   now?: () => Date;
 }
@@ -333,6 +335,25 @@ export class ExecutionSystemOrchestrator {
       legs,
       fees: feeSummary
     });
+    if (this.deps.positions?.applySettlementDelta) {
+      for (const leg of legs.filter((entry) => entry.settlementStatus === "SETTLEMENT_VERIFIED")) {
+        await this.deps.positions.applySettlementDelta({
+          userId: request.userId,
+          venue: leg.venue,
+          marketId: request.canonicalTopicKey,
+          outcomeId: leg.venueOutcomeId,
+          venueAccountAddress: stringMetadata(request.metadata, `${leg.venue.toLowerCase()}VenueAccountAddress`),
+          side: request.side,
+          size: leg.size,
+          averagePrice: leg.price,
+          settlementEvidenceId: leg.fillId ?? leg.venueOrderId ?? null,
+          metadata: {
+            executionId: request.executionId,
+            executionLegId: leg.executionLegId
+          }
+        });
+      }
+    }
     await writeAudit("ACCOUNTING_UPDATED");
     stateMachine.transitionTo("COMPLETED");
     await writeAudit("USER_RECEIPT_EMITTED");

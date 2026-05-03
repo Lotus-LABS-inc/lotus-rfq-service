@@ -16,6 +16,7 @@ import { RFQExecutionRepository } from "../db/repositories/rfq-execution-reposit
 import { registerHealthRoute } from "./routes/health.js";
 import { registerMetricsRoute } from "./routes/metrics.js";
 import { registerFundingRoutes } from "./routes/funding.js";
+import { registerExecutionRoutes } from "./routes/execution.js";
 import { buildVenueBalanceActivationActions } from "../core/funding/venue-activation.js";
 import { registerUserWithdrawalWalletRoutes } from "./routes/user-withdrawal-wallets.js";
 import { registerUserWalletRoutes } from "./routes/user-wallets.js";
@@ -90,6 +91,7 @@ import { registerAdminCryptoRoutes } from "./admin/crypto.routes.js";
 import { CryptoAdminService } from "./admin/crypto-admin-service.js";
 import { registerAdminExecutionVenuesRoutes } from "./admin/execution-venues.routes.js";
 import { ExecutionVenuesAdminService } from "./admin/execution-venues-admin-service.js";
+import { registerAdminTradeReadinessRoutes } from "./admin/trade-readiness.routes.js";
 import { registerAdminFundingReadinessRoutes } from "./admin/funding-readiness.routes.js";
 import { FundingReadinessAdminService } from "./admin/funding-readiness-admin-service.js";
 import { registerAdminAuthRoutes } from "./admin/admin-auth.routes.js";
@@ -286,6 +288,14 @@ import {
 import { UserWalletService } from "../core/funding/user-wallets.js";
 import { UserVenueAccountService } from "../core/execution/user-venue-accounts.js";
 import {
+  ExecutableRouteService,
+  SellQuoteService
+} from "../execution-system/executable-routing.js";
+import {
+  PgExecutionQuoteRepository,
+  PgVerifiedPositionRepository
+} from "../repositories/execution-routing.repository.js";
+import {
   buildFundingReadinessWatcherConfigFromEnv,
   FundingReadinessWatcher
 } from "../core/funding/funding-readiness-watcher.js";
@@ -426,6 +436,21 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const fundingRepository = new FundingRepository(dependencies.pgPool);
   const userWalletRepository = new UserWalletRepository(dependencies.pgPool);
   const userVenueAccountRepository = new UserVenueAccountRepository(dependencies.pgPool);
+  const executionQuoteRepository = new PgExecutionQuoteRepository(dependencies.pgPool);
+  const verifiedPositionRepository = new PgVerifiedPositionRepository(dependencies.pgPool);
+  const executionVenuesAdminService = new ExecutionVenuesAdminService({
+    env: process.env,
+    repoRoot: process.cwd(),
+    venueAccountRepository: userVenueAccountRepository
+  });
+  const executableRouteService = new ExecutableRouteService(
+    executionVenuesAdminService,
+    executionQuoteRepository
+  );
+  const sellQuoteService = new SellQuoteService(
+    verifiedPositionRepository,
+    executableRouteService
+  );
   const turnkeyWalletConfig = getTurnkeyWalletConfigFromEnv(process.env);
   const turnkeyWalletProvisioner = isTurnkeyWalletConfigReady(turnkeyWalletConfig)
     ? new TurnkeyUserWalletProvisioner(turnkeyWalletConfig)
@@ -1115,6 +1140,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       fallback: new FallbackPolicyService(laneGate),
       accounting: new AccountingUpdateService(),
       fees: new ExecutionFeeService({ policy: monetizationPolicy, futureSettlementFee: 0 }),
+      positions: verifiedPositionRepository,
       ...(monetizationPolicy.captureMode !== "DISABLED"
         ? {
             monetization: {
@@ -1156,6 +1182,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     refreshWithdrawalStatus: (userId, withdrawalIntentId) => fundingService.refreshWithdrawalStatus(userId, withdrawalIntentId)
   }, {
     intentCreateRateLimiter: fundingIntentCreateRateLimiter
+  });
+  await registerExecutionRoutes(app, userAuthMiddleware, {
+    executableRouteService,
+    sellQuoteService
   });
   await registerUserWalletRoutes(app, userAuthMiddleware, {
     listWallets: (userId) => userWalletService.listWallets(userId),
@@ -1843,11 +1873,6 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const simulationPreviewAdminMiddleware = createAdminSimulationPreviewMiddleware({
     enabled: dependencies.devSimulationPreviewEnabled ?? false
   });
-  const executionVenuesAdminService = new ExecutionVenuesAdminService({
-    env: process.env,
-    repoRoot: process.cwd(),
-    venueAccountRepository: userVenueAccountRepository
-  });
   const fundingReadinessAdminService = new FundingReadinessAdminService({
     repository: fundingRepository,
     env: process.env
@@ -1863,6 +1888,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     executionRecordRepository,
     executionControlRepository,
     fundingReadinessAdminService,
+    executionVenuesAdminService
+  });
+  await registerAdminTradeReadinessRoutes(app, adminAuthMiddleware, {
     executionVenuesAdminService
   });
   await registerAdminMonetizationRoutes(app, adminAuthMiddleware, {

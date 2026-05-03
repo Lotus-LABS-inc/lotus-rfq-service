@@ -2,6 +2,7 @@ export * from "./accounting.js";
 export * from "./audit.js";
 export * from "./fallback.js";
 export * from "./fees.js";
+export * from "./executable-routing.js";
 export * from "./ghost-fill.js";
 export * from "./lane-authority.js";
 export * from "./limitless-execution-adapter.js";
