@@ -4310,7 +4310,7 @@ components:
           nullable: true
         venueAccountType:
           type: string
-          enum: [SAFE, SMART_WALLET, OAUTH_ACCOUNT, EOA, PROXY_ACCOUNT]
+          enum: [SAFE, SMART_WALLET, OAUTH_ACCOUNT, EOA, PROXY_ACCOUNT, DEPOSIT_WALLET]
         status:
           type: string
           enum: [PENDING, ACTIVE, DISABLED, REVOKED]
@@ -4447,7 +4447,7 @@ components:
           description: Public Safe, smart-wallet, OAuth wallet, EOA, or proxy address associated with the venue account.
         venueAccountType:
           type: string
-          enum: [SAFE, SMART_WALLET, OAUTH_ACCOUNT, EOA, PROXY_ACCOUNT]
+          enum: [SAFE, SMART_WALLET, OAUTH_ACCOUNT, EOA, PROXY_ACCOUNT, DEPOSIT_WALLET]
     UpsertEvmWithdrawalWalletRequest:
       type: object
       additionalProperties: false

@@ -6,6 +6,7 @@ import {
   UserVenueAccountService,
   type UserVenueAccount,
   type LimitlessPartnerAccountClient,
+  type PolymarketDepositWalletClient,
   type PredictFunAccountClient,
   type UserVenueAccountRepository,
   type UserVenueAccountVenue
@@ -111,6 +112,14 @@ const limitlessPartnerAccountClient = (): LimitlessPartnerAccountClient => ({
   })
 });
 
+const polymarketDepositWalletClient = (): PolymarketDepositWalletClient => ({
+  configured: () => true,
+  deriveOrCreateDepositWallet: async () => ({
+    walletAddress: "0x5555555555555555555555555555555555555555",
+    deploymentStatus: "DERIVED_NOT_DEPLOYED"
+  })
+});
+
 describe("user venue account service", () => {
   it("requires an active Turnkey EVM wallet before linking venue accounts", async () => {
     const service = new UserVenueAccountService(new InMemoryVenueAccountRepository(), {
@@ -196,6 +205,38 @@ describe("user venue account service", () => {
     expect(JSON.stringify(repository.auditEvents)).not.toContain("predict-jwt-redacted");
   });
 
+  it("derives and links Polymarket deposit wallet without requiring user signature", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    const service = new UserVenueAccountService(
+      repository,
+      {
+        async resolveUserTurnkeyEvmFundingWallet() {
+          return evmWallet();
+        }
+      },
+      undefined,
+      undefined,
+      polymarketDepositWalletClient()
+    );
+
+    const first = await service.ensureAccount({ userId: "user-1", venue: "POLYMARKET" });
+    const second = await service.ensureAccount({ userId: "user-1", venue: "POLYMARKET" });
+
+    expect(first.account).toMatchObject({
+      venue: "POLYMARKET",
+      walletAddress: "0x1111111111111111111111111111111111111111",
+      venueAccountId: "0x5555555555555555555555555555555555555555",
+      venueAccountAddress: "0x5555555555555555555555555555555555555555",
+      venueAccountType: "DEPOSIT_WALLET",
+      status: "ACTIVE"
+    });
+    expect(second.account.venueAccountBindingId).toBe(first.account.venueAccountBindingId);
+    expect(first.readinessBlockers).toEqual([]);
+    expect(first.setupInstructions).toEqual([]);
+    expect(JSON.stringify(repository.auditEvents)).not.toContain("privateKey");
+    expect(JSON.stringify(repository.auditEvents)).not.toContain("signature");
+  });
+
   it("prepares and completes a batch setup without requiring signatures for unsupported venues", async () => {
     const repository = new InMemoryVenueAccountRepository();
     const service = new UserVenueAccountService(
@@ -228,7 +269,7 @@ describe("user venue account service", () => {
     expect(prepared.venueAccounts.find((item) => item.venue === "POLYMARKET")).toMatchObject({
       setupMode: "MANUAL_LINK_REQUIRED",
       account: {
-        venueAccountType: "PROXY_ACCOUNT",
+        venueAccountType: "DEPOSIT_WALLET",
         status: "PENDING"
       }
     });
@@ -261,7 +302,8 @@ describe("user venue account service", () => {
         }
       },
       predictAccountClient(),
-      limitlessPartnerAccountClient()
+      limitlessPartnerAccountClient(),
+      polymarketDepositWalletClient()
     );
 
     const prepared = await service.prepareAccountSetupBatch("user-1");
@@ -275,6 +317,14 @@ describe("user venue account service", () => {
       "PREDICT_FUN_AUTH_MESSAGE",
       "LIMITLESS_PARTNER_ACCOUNT_OWNERSHIP_MESSAGE"
     ]);
+    expect(prepared.venueAccounts.find((item) => item.venue === "POLYMARKET")).toMatchObject({
+      setupMode: "NO_USER_SETUP_REQUIRED",
+      account: {
+        status: "ACTIVE",
+        venueAccountType: "DEPOSIT_WALLET",
+        venueAccountAddress: "0x5555555555555555555555555555555555555555"
+      }
+    });
     const limitlessRequest = prepared.signatureRequests.find((request) => request.venue === "LIMITLESS")!;
     expect(limitlessRequest).toMatchObject({
       venue: "LIMITLESS",

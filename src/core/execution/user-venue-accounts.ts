@@ -1,7 +1,7 @@
 import type { FundingVenue } from "../funding/types.js";
 import { UserWalletError, type UserWallet, type UserWalletService } from "../funding/user-wallets.js";
 
-export type UserVenueAccountType = "SAFE" | "SMART_WALLET" | "OAUTH_ACCOUNT" | "EOA" | "PROXY_ACCOUNT";
+export type UserVenueAccountType = "SAFE" | "SMART_WALLET" | "OAUTH_ACCOUNT" | "EOA" | "PROXY_ACCOUNT" | "DEPOSIT_WALLET";
 export type UserVenueAccountStatus = "PENDING" | "ACTIVE" | "DISABLED" | "REVOKED";
 export type UserVenueAccountVenue = Extract<FundingVenue, "OPINION" | "PREDICT_FUN" | "LIMITLESS" | "MYRIAD" | "POLYMARKET">;
 
@@ -63,6 +63,14 @@ export interface LimitlessPartnerAccountClient {
   }): Promise<{ profileId: string; account: string }>;
 }
 
+export interface PolymarketDepositWalletClient {
+  configured(): boolean;
+  deriveOrCreateDepositWallet(input: { ownerAddress: string }): Promise<{
+    walletAddress: string;
+    deploymentStatus: "DERIVED_NOT_DEPLOYED";
+  }>;
+}
+
 export interface UserVenueAccountSetupBatchItem {
   venue: UserVenueAccountVenue;
   account: UserVenueAccount;
@@ -94,7 +102,9 @@ export class UserVenueAccountError extends Error {
       | "PREDICT_FUN_ACCOUNT_NOT_CONFIGURED"
       | "PREDICT_FUN_ACCOUNT_AUTH_FAILED"
       | "LIMITLESS_PARTNER_ACCOUNT_NOT_CONFIGURED"
-      | "LIMITLESS_PARTNER_ACCOUNT_AUTH_FAILED",
+      | "LIMITLESS_PARTNER_ACCOUNT_AUTH_FAILED"
+      | "POLYMARKET_DEPOSIT_WALLET_NOT_CONFIGURED"
+      | "POLYMARKET_DEPOSIT_WALLET_FAILED",
     message: string,
     public readonly statusCode = 409
   ) {
@@ -108,7 +118,8 @@ export class UserVenueAccountService {
     private readonly repository: UserVenueAccountRepository,
     private readonly userWalletService: Pick<UserWalletService, "resolveUserTurnkeyEvmFundingWallet">,
     private readonly predictFunAccountClient?: PredictFunAccountClient,
-    private readonly limitlessPartnerAccountClient?: LimitlessPartnerAccountClient
+    private readonly limitlessPartnerAccountClient?: LimitlessPartnerAccountClient,
+    private readonly polymarketDepositWalletClient?: PolymarketDepositWalletClient
   ) {}
 
   public async listAccounts(userId: string): Promise<UserVenueAccount[]> {
@@ -127,6 +138,9 @@ export class UserVenueAccountService {
     const venue = normalizeVenue(input.venue);
     const wallet = await this.resolveRequiredTurnkeyEvmWallet(input.userId);
     const existing = await this.repository.findAccount({ userId: input.userId, venue });
+    if (venue === "POLYMARKET" && !input.venueAccountId && !input.venueAccountAddress) {
+      return this.ensurePolymarketDepositWalletAccount(input.userId, wallet, existing);
+    }
     const venueAccountType = input.venueAccountType ?? defaultAccountTypeForVenue(venue);
     const hasVenueAccount = Boolean(input.venueAccountId?.trim() || input.venueAccountAddress?.trim());
     const account = await this.repository.upsertAccount({
@@ -531,6 +545,94 @@ export class UserVenueAccountService {
     return this.limitlessPartnerAccountClient;
   }
 
+  private async ensurePolymarketDepositWalletAccount(
+    userId: string,
+    wallet: UserWallet,
+    existing: UserVenueAccount | null
+  ): Promise<{
+    account: UserVenueAccount;
+    readinessBlockers: string[];
+    setupInstructions: string[];
+  }> {
+    if (existing?.status === "ACTIVE" && existing.venueAccountAddress) {
+      return {
+        account: existing,
+        readinessBlockers: readinessBlockersForAccount(existing),
+        setupInstructions: setupInstructionsForVenue("POLYMARKET", existing)
+      };
+    }
+    if (!this.polymarketDepositWalletClient?.configured()) {
+      const pending = await this.repository.upsertAccount({
+        ...(existing?.venueAccountBindingId ? { venueAccountBindingId: existing.venueAccountBindingId } : {}),
+        userId,
+        venue: "POLYMARKET",
+        userWalletId: wallet.walletId,
+        walletAddress: wallet.address,
+        venueAccountId: existing?.venueAccountId ?? null,
+        venueAccountAddress: existing?.venueAccountAddress ?? null,
+        venueAccountType: "DEPOSIT_WALLET",
+        status: existing?.status === "ACTIVE" ? "ACTIVE" : "PENDING",
+        lastVerifiedAt: existing?.lastVerifiedAt ?? null
+      });
+      await this.repository.appendAccountAuditEvent({
+        userId,
+        venueAccountBindingId: pending.venueAccountBindingId,
+        eventType: existing ? "POLYMARKET_DEPOSIT_WALLET_ENSURE_SKIPPED" : "USER_VENUE_ACCOUNT_ENSURED",
+        payload: {
+          venue: "POLYMARKET",
+          accountType: pending.venueAccountType,
+          status: pending.status,
+          automationConfigured: false,
+          walletAddressMatches: equalsAddress(pending.walletAddress, wallet.address)
+        }
+      });
+      return {
+        account: pending,
+        readinessBlockers: readinessBlockersForAccount(pending),
+        setupInstructions: setupInstructionsForVenue("POLYMARKET", pending)
+      };
+    }
+    let derived: Awaited<ReturnType<PolymarketDepositWalletClient["deriveOrCreateDepositWallet"]>>;
+    try {
+      derived = await this.polymarketDepositWalletClient.deriveOrCreateDepositWallet({ ownerAddress: wallet.address });
+    } catch {
+      throw new UserVenueAccountError(
+        "POLYMARKET_DEPOSIT_WALLET_FAILED",
+        "Polymarket deposit-wallet derivation failed.",
+        502
+      );
+    }
+    const account = await this.repository.upsertAccount({
+      ...(existing?.venueAccountBindingId ? { venueAccountBindingId: existing.venueAccountBindingId } : {}),
+      userId,
+      venue: "POLYMARKET",
+      userWalletId: wallet.walletId,
+      walletAddress: wallet.address,
+      venueAccountId: derived.walletAddress,
+      venueAccountAddress: derived.walletAddress,
+      venueAccountType: "DEPOSIT_WALLET",
+      status: "ACTIVE",
+      lastVerifiedAt: new Date().toISOString()
+    });
+    await this.repository.appendAccountAuditEvent({
+      userId,
+      venueAccountBindingId: account.venueAccountBindingId,
+      eventType: "POLYMARKET_DEPOSIT_WALLET_DERIVED",
+      payload: {
+        venue: "POLYMARKET",
+        accountType: account.venueAccountType,
+        status: account.status,
+        deploymentStatus: derived.deploymentStatus,
+        walletAddressMatches: equalsAddress(account.walletAddress, wallet.address)
+      }
+    });
+    return {
+      account,
+      readinessBlockers: readinessBlockersForAccount(account),
+      setupInstructions: setupInstructionsForVenue("POLYMARKET", account)
+    };
+  }
+
   private async withPredictAccountFailureBoundary<T>(operation: () => Promise<T>): Promise<T> {
     try {
       return await operation();
@@ -590,7 +692,7 @@ const defaultAccountTypeForVenue = (venue: UserVenueAccountVenue): UserVenueAcco
     return "OAUTH_ACCOUNT";
   }
   if (venue === "POLYMARKET") {
-    return "PROXY_ACCOUNT";
+    return "DEPOSIT_WALLET";
   }
   return "EOA";
 };
@@ -620,7 +722,7 @@ const setupInstructionsForVenue = (venue: UserVenueAccountVenue, account: UserVe
     return ["Myriad uses wallet-call user-signed actions. Lotus does not create or link a separate Myriad account in the venue-account setup batch."];
   }
   if (venue === "POLYMARKET") {
-    return ["Create or link the Polymarket proxy/funder wallet from the displayed Turnkey EVM wallet, then submit the Polymarket wallet address to Lotus."];
+    return ["Polymarket deposit-wallet automation is not configured. Configure the Polymarket deposit-wallet factory and implementation addresses so Lotus can derive the user's deposit wallet from their Turnkey EVM wallet."];
   }
   if (venue === "LIMITLESS") {
     return ["Limitless partner-account setup is optional and user-signed. If automation is configured, sign the Limitless ownership message with the displayed Turnkey EVM wallet."];
