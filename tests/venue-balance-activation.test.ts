@@ -84,6 +84,32 @@ describe("venue balance activation actions", () => {
     expect(predict?.transactionRequest?.data).toContain("095ea7b3");
   });
 
+  it("does not return an EOA approval when the activation owner is a venue account", () => {
+    const activations = buildVenueBalanceActivationActions({
+      balances: [balance("POLYMARKET", "pUSD")],
+      venueAccounts: [account("POLYMARKET")],
+      env: {
+        POLYMARKET_BALANCE_ACTIVATION_MODE: "ERC20_APPROVAL",
+        POLYMARKET_BALANCE_ACTIVATION_TOKEN_ADDRESS: "0x3333333333333333333333333333333333333333",
+        POLYMARKET_BALANCE_ACTIVATION_SPENDER_ADDRESS: "0x4444444444444444444444444444444444444444",
+        POLYMARKET_BALANCE_ACTIVATION_CHAIN_ID: "137",
+        POLYMARKET_BALANCE_ACTIVATION_TOKEN_SYMBOL: "pUSD",
+        POLYMARKET_BALANCE_ACTIVATION_OWNER_SOURCE: "VENUE_ACCOUNT"
+      }
+    });
+
+    const polymarket = activations.find((activation) => activation.venue === "POLYMARKET");
+    expect(polymarket).toMatchObject({
+      activationRequired: true,
+      mode: "ERC20_APPROVAL",
+      status: "CONFIG_REQUIRED",
+      ownerAddress: "0x1111111111111111111111111111111111111111",
+      signerAddress: "0x2222222222222222222222222222222222222222",
+      transactionRequest: null
+    });
+    expect(polymarket?.blockers.join(" ")).toContain("use the official venue relayer/UI activation path");
+  });
+
   it("fails closed when ERC20 approval mode is enabled without spender config", () => {
     const activations = buildVenueBalanceActivationActions({
       balances: [balance("POLYMARKET", "pUSD")],

@@ -125,12 +125,16 @@ const buildErc20ApprovalAction = (
     ? account?.venueAccountAddress ?? account?.walletAddress ?? null
     : account?.walletAddress ?? null;
   const signerAddress = account?.walletAddress ?? null;
+  const ownerRequiresRelayer = isHexAddress(ownerAddress) &&
+    isHexAddress(signerAddress) &&
+    ownerAddress.toLowerCase() !== signerAddress.toLowerCase();
   const blockers = [
     !account ? `${venue} active venue account is required.` : null,
     !isHexAddress(tokenAddress) ? `${venue}_BALANCE_ACTIVATION_TOKEN_ADDRESS is not configured.` : null,
     !isHexAddress(spenderAddress) ? `${venue}_BALANCE_ACTIVATION_SPENDER_ADDRESS is not configured.` : null,
     !chainId ? `${venue}_BALANCE_ACTIVATION_CHAIN_ID is not configured.` : null,
-    !isHexAddress(ownerAddress) ? `${venue} activation owner address is unavailable.` : null
+    !isHexAddress(ownerAddress) ? `${venue} activation owner address is unavailable.` : null,
+    ownerRequiresRelayer ? `${venue} activation owner is a venue account, not the Turnkey EVM signer; use the official venue relayer/UI activation path.` : null
   ].filter((value): value is string => value !== null);
 
   if (blockers.length > 0 || !tokenAddress || !spenderAddress || !chainId || !ownerAddress) {
