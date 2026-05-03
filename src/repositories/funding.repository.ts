@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import type {
   FundingAggregateState,
   FundingAuditEventType,
+  FundingHistoryItem,
   FundingIntent,
   FundingLegState,
   FundingReconciliationRecord,
@@ -127,6 +128,29 @@ interface VenueBalanceRow {
   ready_amount: string;
   pending_withdrawal_amount: string;
   updated_at: Date | null;
+}
+
+interface FundingHistoryRow {
+  id: string;
+  direction: "FUNDING" | "WITHDRAWAL";
+  intent_id: string;
+  route_leg_id: string | null;
+  venue: FundingVenue;
+  token: string;
+  amount: string;
+  source_chain: string | null;
+  destination_chain: string | null;
+  status: FundingHistoryItem["status"];
+  aggregate_status: FundingHistoryItem["aggregateStatus"];
+  leg_status: FundingHistoryItem["legStatus"];
+  tx_hashes: string[] | null;
+  ready_to_trade: boolean | null;
+  completed: boolean | null;
+  destination_received: boolean | null;
+  venue_confirmed: boolean | null;
+  checked_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
 }
 
 interface WithdrawalIntentRow {
@@ -666,6 +690,95 @@ export class FundingRepository implements FundingRepositoryContract {
     return result.rows.map(mapVenueBalance);
   }
 
+  public async listFundingHistory(userId: string, input: { limit: number }): Promise<FundingHistoryItem[]> {
+    const result = await this.pool.query<FundingHistoryRow>(
+      `WITH latest_funding_reconciliation AS (
+         SELECT DISTINCT ON (route_leg_id)
+                route_leg_id,
+                destination_received,
+                venue_credit_confirmed,
+                ready_to_trade,
+                checked_at
+           FROM funding_reconciliation_records
+          ORDER BY route_leg_id, checked_at DESC
+       ),
+       latest_withdrawal_reconciliation AS (
+         SELECT DISTINCT ON (withdrawal_route_leg_id)
+                withdrawal_route_leg_id,
+                venue_released,
+                destination_received,
+                completed,
+                checked_at
+           FROM funding_withdrawal_reconciliation_records
+          ORDER BY withdrawal_route_leg_id, checked_at DESC
+       ),
+       funding_items AS (
+         SELECT CONCAT('funding:', fi.id::text, ':', COALESCE(fl.id::text, ft.id::text)) AS id,
+                'FUNDING'::text AS direction,
+                fi.id::text AS intent_id,
+                fl.id::text AS route_leg_id,
+                ft.target_venue AS venue,
+                ft.target_token AS token,
+                ft.target_amount AS amount,
+                fi.source_chain,
+                fl.destination_chain,
+                COALESCE(fl.status::text, ft.status::text, fi.status::text) AS status,
+                fi.status::text AS aggregate_status,
+                fl.status::text AS leg_status,
+                fl.tx_hashes,
+                lfr.ready_to_trade,
+                NULL::boolean AS completed,
+                lfr.destination_received,
+                lfr.venue_credit_confirmed AS venue_confirmed,
+                lfr.checked_at,
+                fi.created_at,
+                GREATEST(fi.updated_at, ft.updated_at, COALESCE(fl.updated_at, fi.updated_at), COALESCE(lfr.checked_at, fi.updated_at)) AS updated_at
+           FROM funding_intents fi
+           JOIN funding_targets ft ON ft.funding_intent_id = fi.id
+           LEFT JOIN funding_route_legs fl ON fl.funding_target_id = ft.id
+           LEFT JOIN latest_funding_reconciliation lfr ON lfr.route_leg_id = fl.id
+          WHERE fi.user_id = $1
+       ),
+       withdrawal_items AS (
+         SELECT CONCAT('withdrawal:', fwi.id::text, ':', COALESCE(fwrl.id::text, fws.id::text)) AS id,
+                'WITHDRAWAL'::text AS direction,
+                fwi.id::text AS intent_id,
+                fwrl.id::text AS route_leg_id,
+                fws.source_venue AS venue,
+                fws.source_token AS token,
+                fws.source_amount AS amount,
+                NULL::text AS source_chain,
+                fwi.destination_chain,
+                COALESCE(fwrl.status::text, fws.status::text, fwi.status::text) AS status,
+                fwi.status::text AS aggregate_status,
+                fwrl.status::text AS leg_status,
+                fwrl.tx_hashes,
+                NULL::boolean AS ready_to_trade,
+                lwr.completed,
+                lwr.destination_received,
+                lwr.venue_released AS venue_confirmed,
+                lwr.checked_at,
+                fwi.created_at,
+                GREATEST(fwi.updated_at, fws.updated_at, COALESCE(fwrl.updated_at, fwi.updated_at), COALESCE(lwr.checked_at, fwi.updated_at)) AS updated_at
+           FROM funding_withdrawal_intents fwi
+           JOIN funding_withdrawal_sources fws ON fws.withdrawal_intent_id = fwi.id
+           LEFT JOIN funding_withdrawal_route_legs fwrl ON fwrl.withdrawal_source_id = fws.id
+           LEFT JOIN latest_withdrawal_reconciliation lwr ON lwr.withdrawal_route_leg_id = fwrl.id
+          WHERE fwi.user_id = $1
+       )
+       SELECT *
+         FROM (
+           SELECT * FROM funding_items
+           UNION ALL
+           SELECT * FROM withdrawal_items
+         ) combined
+        ORDER BY updated_at DESC, created_at DESC
+        LIMIT $2`,
+      [userId, input.limit]
+    );
+    return result.rows.map(mapFundingHistoryItem);
+  }
+
   public async hasReadyVenueBalance(input: { userId: string; venue: string; token: string; amount: string }): Promise<boolean> {
     const result = await this.pool.query<{ ready_amount: string }>(
       `SELECT COALESCE(SUM((ft.target_amount)::numeric), 0)::text AS ready_amount
@@ -1085,6 +1198,29 @@ const mapVenueBalance = (row: VenueBalanceRow): VenueBalanceView => {
     updatedAt: row.updated_at ? row.updated_at.toISOString() : null
   };
 };
+
+const mapFundingHistoryItem = (row: FundingHistoryRow): FundingHistoryItem => ({
+  id: row.id,
+  direction: row.direction,
+  intentId: row.intent_id,
+  routeLegId: row.route_leg_id,
+  venue: row.venue,
+  token: row.token,
+  amount: row.amount,
+  sourceChain: row.source_chain,
+  destinationChain: row.destination_chain,
+  status: row.status,
+  aggregateStatus: row.aggregate_status,
+  legStatus: row.leg_status,
+  txHashes: row.tx_hashes ?? [],
+  readyToTrade: row.ready_to_trade,
+  completed: row.completed,
+  destinationReceived: row.destination_received,
+  venueConfirmed: row.venue_confirmed,
+  checkedAt: row.checked_at ? row.checked_at.toISOString() : null,
+  createdAt: row.created_at.toISOString(),
+  updatedAt: row.updated_at.toISOString()
+});
 
 const venueAccountingTokenSql = (venueExpression: string, tokenExpression: string): string =>
   `CASE

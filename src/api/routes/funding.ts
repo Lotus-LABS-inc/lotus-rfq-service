@@ -4,6 +4,7 @@ import {
   CreateWithdrawalIntentSchema,
   CreateFundingIntentSchema,
   FundingError,
+  type FundingHistoryItem,
   type FundingIntentView,
   type VenueBalanceView,
   type WithdrawalIntentView
@@ -19,6 +20,10 @@ const submitWithdrawalRouteLegSchema = z.object({
   txHash: z.string().min(1)
 });
 
+const fundingHistoryQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(200).optional()
+});
+
 export interface FundingRouteHandlers {
   createIntent(userId: string, request: z.infer<typeof CreateFundingIntentSchema>): Promise<FundingIntentView>;
   getIntent(userId: string, fundingIntentId: string): Promise<FundingIntentView>;
@@ -27,6 +32,7 @@ export interface FundingRouteHandlers {
   refreshIntentStatus(userId: string, fundingIntentId: string): Promise<FundingIntentView>;
   listVenueCapabilities(): Promise<unknown>;
   listVenueBalances(userId: string): Promise<VenueBalanceView[]>;
+  listFundingHistory(userId: string, input?: { limit?: number }): Promise<FundingHistoryItem[]>;
   createWithdrawalIntent(userId: string, request: z.infer<typeof CreateWithdrawalIntentSchema>): Promise<WithdrawalIntentView>;
   getWithdrawalIntent(userId: string, withdrawalIntentId: string): Promise<WithdrawalIntentView>;
   quoteWithdrawalIntent(userId: string, withdrawalIntentId: string): Promise<WithdrawalIntentView>;
@@ -112,6 +118,26 @@ export const registerFundingRoutes = async (
   app.get("/funding/venue-balances", { preHandler: authMiddleware }, async (request, reply) => {
     const balances = await handlers.listVenueBalances(request.user.userId);
     return reply.status(200).send({ balances });
+  });
+
+  app.get("/funding/history", { preHandler: authMiddleware }, async (request, reply) => {
+    const parsed = fundingHistoryQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "Funding history query validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    const items = await handlers.listFundingHistory(
+      request.user.userId,
+      typeof parsed.data.limit === "number" ? { limit: parsed.data.limit } : {}
+    );
+    return reply.status(200).send({
+      asOf: new Date().toISOString(),
+      refreshAfterSeconds: 10,
+      items
+    });
   });
 
   app.post("/funding/withdrawals", { preHandler: authMiddleware }, async (request, reply) => {

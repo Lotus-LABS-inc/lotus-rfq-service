@@ -305,6 +305,29 @@ export interface VenueBalanceView {
   updatedAt: string | null;
 }
 
+export interface FundingHistoryItem {
+  id: string;
+  direction: "FUNDING" | "WITHDRAWAL";
+  intentId: string;
+  routeLegId: string | null;
+  venue: FundingVenue;
+  token: string;
+  amount: string;
+  sourceChain: string | null;
+  destinationChain: string | null;
+  status: FundingAggregateState | FundingLegState | WithdrawalAggregateState | WithdrawalLegState;
+  aggregateStatus: FundingAggregateState | WithdrawalAggregateState;
+  legStatus: FundingLegState | WithdrawalLegState | null;
+  txHashes: string[];
+  readyToTrade: boolean | null;
+  completed: boolean | null;
+  destinationReceived: boolean | null;
+  venueConfirmed: boolean | null;
+  checkedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface WithdrawalIntent {
   withdrawalIntentId: string;
   userId: string;

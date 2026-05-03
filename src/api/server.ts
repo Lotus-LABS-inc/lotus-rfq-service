@@ -1085,6 +1085,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     refreshIntentStatus: (userId, fundingIntentId) => fundingService.refreshIntentStatus(userId, fundingIntentId),
     listVenueCapabilities: async () => fundingService.listVenueCapabilities(),
     listVenueBalances: (userId) => fundingService.listVenueBalances(userId),
+    listFundingHistory: (userId, input) => fundingService.listFundingHistory(userId, input),
     createWithdrawalIntent: (userId, request) => fundingService.createWithdrawalIntent(userId, request),
     getWithdrawalIntent: (userId, withdrawalIntentId) => fundingService.getWithdrawalIntent(userId, withdrawalIntentId),
     quoteWithdrawalIntent: (userId, withdrawalIntentId) => fundingService.quoteWithdrawalIntent(userId, withdrawalIntentId),

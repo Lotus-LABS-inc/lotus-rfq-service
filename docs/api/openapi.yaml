@@ -2702,6 +2702,29 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/VenueBalances" }
         "401": { $ref: "#/components/responses/Error" }
+  /funding/history:
+    get:
+      tags: [Funding]
+      summary: Read realtime-friendly funding and withdrawal history for the authenticated user.
+      description: Returns sanitized funding and withdrawal timeline rows derived from persisted intents, route legs, latest reconciliation evidence, and tx hashes. It does not expose provider auth, raw venue payloads, private keys, or signer material.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: none
+      x-lotus-danger: low
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        "200": { $ref: "#/components/responses/FundingHistory" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
   /user/withdrawal-wallets:
     get:
       tags: [User]
@@ -3372,6 +3395,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/VenueBalanceListResponse"
+    FundingHistory:
+      description: Frontend-safe funding and withdrawal history rows.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FundingHistoryListResponse"
     UserWithdrawalWallets:
       description: User withdrawal destination wallet list.
       content:
@@ -4219,6 +4248,73 @@ components:
         balances:
           type: array
           items: { $ref: "#/components/schemas/VenueBalance" }
+    FundingHistoryItem:
+      type: object
+      additionalProperties: false
+      required: [id, direction, intentId, routeLegId, venue, token, amount, sourceChain, destinationChain, status, aggregateStatus, legStatus, txHashes, readyToTrade, completed, destinationReceived, venueConfirmed, checkedAt, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        direction:
+          type: string
+          enum: [FUNDING, WITHDRAWAL]
+        intentId: { type: string }
+        routeLegId:
+          type: string
+          nullable: true
+        venue: { $ref: "#/components/schemas/Venue" }
+        token: { type: string }
+        amount: { type: string }
+        sourceChain:
+          type: string
+          nullable: true
+        destinationChain:
+          type: string
+          nullable: true
+        status: { type: string }
+        aggregateStatus: { type: string }
+        legStatus:
+          type: string
+          nullable: true
+        txHashes:
+          type: array
+          description: User-broadcast public transaction hashes only.
+          items: { type: string }
+        readyToTrade:
+          type: boolean
+          nullable: true
+        completed:
+          type: boolean
+          nullable: true
+        destinationReceived:
+          type: boolean
+          nullable: true
+        venueConfirmed:
+          type: boolean
+          nullable: true
+        checkedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    FundingHistoryListResponse:
+      type: object
+      additionalProperties: false
+      required: [asOf, refreshAfterSeconds, items]
+      properties:
+        asOf:
+          type: string
+          format: date-time
+        refreshAfterSeconds:
+          type: integer
+          minimum: 1
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/FundingHistoryItem" }
     UserWithdrawalWallet:
       type: object
       additionalProperties: false

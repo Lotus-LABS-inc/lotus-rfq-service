@@ -10,6 +10,7 @@ import {
   type CreateFundingIntentInput,
   type CreateWithdrawalIntentInput,
   type FundingAuditEventType,
+  type FundingHistoryItem,
   type FundingIntent,
   type FundingIntentView,
   type FundingLegState,
@@ -106,6 +107,7 @@ export interface FundingRepository {
     amount: string;
   }): Promise<boolean>;
   listVenueBalances(userId: string): Promise<VenueBalanceView[]>;
+  listFundingHistory(userId: string, input?: { limit?: number }): Promise<FundingHistoryItem[]>;
   findWithdrawalIntentById(id: string): Promise<WithdrawalIntent | null>;
   findWithdrawalIntentByUserAndIdempotencyKey(userId: string, idempotencyKey: string): Promise<WithdrawalIntent | null>;
   createWithdrawalIntent(input: WithdrawalIntent, sources: WithdrawalSource[]): Promise<WithdrawalIntent>;
@@ -219,6 +221,12 @@ export class FundingService {
 
   public async listVenueBalances(userId: string): Promise<VenueBalanceView[]> {
     return this.repository.listVenueBalances(userId);
+  }
+
+  public async listFundingHistory(userId: string, input: { limit?: number } = {}): Promise<FundingHistoryItem[]> {
+    return this.repository.listFundingHistory(userId, {
+      limit: normalizeHistoryLimit(input.limit)
+    });
   }
 
   public async createIntent(userId: string, input: CreateFundingIntentInput): Promise<FundingIntentView> {
@@ -2459,6 +2467,13 @@ const isLifiBridgeBackWithdrawalLeg = (leg: WithdrawalRouteLeg): boolean =>
 
 const allowsStaleWithdrawalSubmission = (leg: WithdrawalRouteLeg): boolean =>
   leg.routeQuote.transactionRequest === null && !isLifiBridgeBackWithdrawalLeg(leg);
+
+const normalizeHistoryLimit = (value: number | undefined): number => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 50;
+  }
+  return Math.min(Math.max(Math.trunc(value), 1), 200);
+};
 
 const expectedWithdrawalResultToken = (leg: WithdrawalRouteLeg): string => {
   const destinationTokenSymbol = leg.providerStatus.destinationTokenSymbol;
