@@ -110,6 +110,40 @@ describe("Polymarket internal funding balance read service", () => {
     });
   });
 
+  it("falls back to on-chain pUSD balance for active deposit wallets when CLOB usable balance is zero", async () => {
+    const rpcCalls: unknown[] = [];
+    const service = new PolymarketFundingBalanceReadService(
+      {
+        ...completeConfig,
+        polygonRpcUrl: "https://polygon-rpc.example",
+        pusdTokenAddress: "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB"
+      },
+      () => new StubBalanceAllowanceClient({ balance: "0", allowance: "0" }),
+      {
+        findAccount: async () => ({
+          status: "ACTIVE",
+          venueAccountAddress: "0x6867bD6B5fd147af7B7AFc7b4aee0bABb140e0cB"
+        })
+      },
+      (async (_url, init) => {
+        rpcCalls.push(JSON.parse(`${init?.body ?? "{}"}`));
+        return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x2901f2" }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }) as typeof fetch
+    );
+
+    await expect(service.readUsableBalance({
+      userId: "user-1",
+      fundingIntentId: "intent-1",
+      routeLegId: "leg-1"
+    })).resolves.toEqual({ usableBalance: "2.687474" });
+
+    expect(rpcCalls).toHaveLength(1);
+    expect(JSON.stringify(rpcCalls[0])).toContain("70a08231");
+  });
+
   it("fails closed when user-scoped balance reads do not have an active deposit wallet", async () => {
     const service = new PolymarketFundingBalanceReadService(
       completeConfig,

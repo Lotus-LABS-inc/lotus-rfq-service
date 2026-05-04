@@ -39,6 +39,9 @@ export interface PolymarketFundingBalanceReadServiceConfig {
   privateKey?: string | undefined;
   signatureType?: string | undefined;
   funderAddress?: string | undefined;
+  onchainFallbackEnabled?: boolean | undefined;
+  polygonRpcUrl?: string | undefined;
+  pusdTokenAddress?: string | undefined;
 }
 
 export interface PolymarketBalanceAllowanceClient {
@@ -154,6 +157,8 @@ const collateralAllowanceAtomicUnits = (response: BalanceAllowanceResponse): str
 const decimalToPlainString = (value: ReturnType<typeof toDecimal>): string =>
   value.toDecimalPlaces(COLLATERAL_TOKEN_DECIMALS, Decimal.ROUND_DOWN).toFixed();
 
+const defaultPusdTokenAddress = "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB";
+
 export const buildPolymarketFundingBalanceReadConfigFromEnv = (
   env: NodeJS.ProcessEnv = process.env
 ): PolymarketFundingBalanceReadServiceConfig => ({
@@ -165,7 +170,10 @@ export const buildPolymarketFundingBalanceReadConfigFromEnv = (
   apiPassphrase: readPolymarketEnv(env, "POLYMARKET_API_PASSPHRASE"),
   privateKey: readPolymarketEnv(env, "POLYMARKET_PRIVATE_KEY"),
   signatureType: env.POLYMARKET_SIGNATURE_TYPE ?? env.POLY_SIGNATURE_TYPE,
-  funderAddress: env.POLYMARKET_FUNDER_ADDRESS ?? env.POLY_FUNDER_ADDRESS
+  funderAddress: env.POLYMARKET_FUNDER_ADDRESS ?? env.POLY_FUNDER_ADDRESS,
+  onchainFallbackEnabled: env.POLYMARKET_FUNDING_READ_ONCHAIN_FALLBACK_ENABLED !== "false",
+  polygonRpcUrl: env.POLYMARKET_POLYGON_RPC_URL ?? env.POLYGON_RPC_URL ?? "https://polygon-bor-rpc.publicnode.com",
+  pusdTokenAddress: env.POLYMARKET_BALANCE_ACTIVATION_TOKEN_ADDRESS ?? defaultPusdTokenAddress
 });
 
 export const getPolymarketFundingBalanceReadStatus = (
@@ -221,7 +229,8 @@ export class PolymarketFundingBalanceReadService {
   public constructor(
     private readonly config: PolymarketFundingBalanceReadServiceConfig,
     private readonly clientFactory: PolymarketBalanceAllowanceClientFactory = createPolymarketBalanceAllowanceClient,
-    private readonly venueAccountReader?: PolymarketFundingVenueAccountReader
+    private readonly venueAccountReader?: PolymarketFundingVenueAccountReader,
+    private readonly fetchImpl: typeof fetch = fetch
   ) {}
 
   public getStatus(): PolymarketFundingBalanceReadStatus {
@@ -239,7 +248,11 @@ export class PolymarketFundingBalanceReadService {
     const response = await client.getBalanceAllowance({ asset_type: AssetType.COLLATERAL });
     const balance = collateralAtomicUnitsToUsdc(response.balance);
     const allowance = collateralAtomicUnitsToUsdc(collateralAllowanceAtomicUnits(response));
-    const usableBalance = Decimal.min(balance, allowance);
+    let usableBalance = Decimal.min(balance, allowance);
+    if (funderAddress && this.config.onchainFallbackEnabled !== false && usableBalance.isZero()) {
+      const onchainBalance = await this.readOnchainPusdBalance(funderAddress);
+      usableBalance = Decimal.max(usableBalance, onchainBalance);
+    }
     return { usableBalance: decimalToPlainString(usableBalance) };
   }
 
@@ -258,4 +271,35 @@ export class PolymarketFundingBalanceReadService {
       "Active Polymarket deposit wallet account is required for user-scoped funding readiness."
     );
   }
+
+  private async readOnchainPusdBalance(ownerAddress: string): Promise<ReturnType<typeof toDecimal>> {
+    const rpcUrl = this.config.polygonRpcUrl;
+    const tokenAddress = this.config.pusdTokenAddress ?? defaultPusdTokenAddress;
+    if (!nonEmpty(rpcUrl) || !isHexAddress(ownerAddress) || !isHexAddress(tokenAddress)) {
+      return new Decimal(0);
+    }
+    const data = `0x70a08231${ownerAddress.toLowerCase().replace(/^0x/, "").padStart(64, "0")}`;
+    const response = await this.fetchImpl(rpcUrl!, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_call",
+        params: [{ to: tokenAddress, data }, "latest"]
+      })
+    });
+    if (!response.ok) {
+      return new Decimal(0);
+    }
+    const raw = await response.json() as { result?: unknown };
+    if (typeof raw.result !== "string" || !/^0x[a-fA-F0-9]+$/.test(raw.result)) {
+      return new Decimal(0);
+    }
+    const atomic = BigInt(raw.result);
+    return new Decimal(atomic.toString()).div(new Decimal(10).pow(COLLATERAL_TOKEN_DECIMALS));
+  }
 }
+
+const isHexAddress = (value: string | undefined): value is string =>
+  typeof value === "string" && /^0x[a-fA-F0-9]{40}$/.test(value.trim());

@@ -572,6 +572,8 @@ Funding v0 is implemented fail-closed by default. Operators must configure these
 - `POLYMARKET_FUNDING_BALANCE_TOLERANCE=0.000001` allows only atomic-unit stablecoin rounding dust in readiness comparisons; it must not be used to cover material underfunding
 - `POLYMARKET_FUNDING_MIN_CONFIRMATIONS=0` unless a venue-specific finality policy requires more confirmations
 - `POLYMARKET_INTERNAL_BALANCE_READ_ENABLED=false` by default; set to `true` only when the internal read-only CLOB balance service should serve `/internal/polymarket/funding-balance`
+- `POLYMARKET_FUNDING_READ_ONCHAIN_FALLBACK_ENABLED=true` lets deposit-wallet readiness use the wallet's on-chain pUSD balance when CLOB usable balance reads return zero
+- `POLYMARKET_POLYGON_RPC_URL=https://polygon-bor-rpc.publicnode.com` may be overridden with an operator-approved Polygon RPC for the on-chain pUSD fallback
 - `LIMITLESS_FUNDING_DESTINATION_ADDRESS` required before Limitless funding quotes can be enabled
 - `LIMITLESS_FUNDING_PREFERRED_CHAIN=BASE` and `LIMITLESS_FUNDING_PREFERRED_CHAIN_ID=8453` by default
 - `LIMITLESS_USDC_TOKEN_ADDRESS` may override the default Base USDC token address
