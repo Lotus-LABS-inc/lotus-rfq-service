@@ -635,6 +635,9 @@ export class UserVenueAccountService {
         deploymentStatus: derived.deploymentStatus,
         relayerTransactionPresent: Boolean(derived.relayerTransactionId),
         transactionHashPresent: Boolean(derived.transactionHash),
+        relayerTransactionId: derived.relayerTransactionId ?? null,
+        relayerState: derived.relayerState ?? null,
+        transactionHash: derived.transactionHash ?? null,
         walletAddressMatches: equalsAddress(account.walletAddress, wallet.address)
       }
     });

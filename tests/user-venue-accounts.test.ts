@@ -257,7 +257,10 @@ describe("user venue account service", () => {
           calls.push({ allowDeploy: input.allowDeploy });
           return {
             walletAddress: "0x5555555555555555555555555555555555555555",
-            deploymentStatus: input.allowDeploy === false ? "DERIVED_NOT_DEPLOYED" : "DEPLOY_SUBMITTED"
+            deploymentStatus: input.allowDeploy === false ? "DERIVED_NOT_DEPLOYED" : "DEPLOY_SUBMITTED",
+            relayerTransactionId: input.allowDeploy === false ? undefined : "relayer-tx-123",
+            relayerState: input.allowDeploy === false ? undefined : "STATE_NEW",
+            transactionHash: input.allowDeploy === false ? undefined : "0xabc123"
           };
         }
       }
@@ -278,7 +281,19 @@ describe("user venue account service", () => {
     expect(repository.auditEvents.at(-1)).toMatchObject({
       eventType: "POLYMARKET_DEPOSIT_WALLET_PENDING",
       payload: {
-        deploymentStatus: "DERIVED_NOT_DEPLOYED"
+        deploymentStatus: "DERIVED_NOT_DEPLOYED",
+        relayerTransactionId: null,
+        relayerState: null,
+        transactionHash: null
+      }
+    });
+    expect(repository.auditEvents.at(-2)).toMatchObject({
+      eventType: "POLYMARKET_DEPOSIT_WALLET_PENDING",
+      payload: {
+        deploymentStatus: "DEPLOY_SUBMITTED",
+        relayerTransactionId: "relayer-tx-123",
+        relayerState: "STATE_NEW",
+        transactionHash: "0xabc123"
       }
     });
     expect(retried.account.status).toBe("PENDING");

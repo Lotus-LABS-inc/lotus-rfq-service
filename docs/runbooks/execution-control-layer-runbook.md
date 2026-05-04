@@ -152,6 +152,7 @@ Current Polymarket interpretation:
 - when `POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED=true`, `/user/venue-accounts/setup-batch` derives the user's deterministic Polymarket deposit-wallet address from their Turnkey EVM owner address
 - when `POLYMARKET_RELAYER_URL` and Polymarket builder API credentials are configured, Lotus submits the relayer `WALLET-CREATE` request without a user signature; the binding becomes `ACTIVE` only after the relayer/deployed check confirms the deposit wallet
 - derived-only or submitted-but-unconfirmed deposit wallets remain `PENDING`; retrying account setup checks deployment status but must not submit another `WALLET-CREATE` while the same deposit-wallet address is already recorded
+- deposit-wallet audit events may store the public relayer transaction id, relayer state, and transaction hash for operator support; never store builder credentials, request signatures, private keys, or raw auth headers
 - if deposit-wallet automation is not configured, `/user/venue-accounts/setup-batch` returns a `PENDING` Polymarket deposit-wallet binding with no user signing step
 
 Non-Polymarket interpretation:
