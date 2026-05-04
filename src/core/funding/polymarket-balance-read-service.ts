@@ -94,6 +94,9 @@ const legacyEnvAliases = {
 const nonEmpty = (value: string | undefined): boolean =>
   typeof value === "string" && value.trim().length > 0;
 
+const firstNonEmpty = (...values: Array<string | undefined>): string | undefined =>
+  values.find((value) => nonEmpty(value))?.trim();
+
 const readPolymarketEnv = (
   env: NodeJS.ProcessEnv,
   key: (typeof requiredEnvKeys)[number]
@@ -170,10 +173,10 @@ export const buildPolymarketFundingBalanceReadConfigFromEnv = (
   apiPassphrase: readPolymarketEnv(env, "POLYMARKET_API_PASSPHRASE"),
   privateKey: readPolymarketEnv(env, "POLYMARKET_PRIVATE_KEY"),
   signatureType: env.POLYMARKET_SIGNATURE_TYPE ?? env.POLY_SIGNATURE_TYPE,
-  funderAddress: env.POLYMARKET_FUNDER_ADDRESS ?? env.POLY_FUNDER_ADDRESS,
+  funderAddress: firstNonEmpty(env.POLYMARKET_FUNDER_ADDRESS, env.POLY_FUNDER_ADDRESS),
   onchainFallbackEnabled: env.POLYMARKET_FUNDING_READ_ONCHAIN_FALLBACK_ENABLED !== "false",
-  polygonRpcUrl: env.POLYMARKET_POLYGON_RPC_URL ?? env.POLYGON_RPC_URL ?? "https://polygon-bor-rpc.publicnode.com",
-  pusdTokenAddress: env.POLYMARKET_BALANCE_ACTIVATION_TOKEN_ADDRESS ?? defaultPusdTokenAddress
+  polygonRpcUrl: firstNonEmpty(env.POLYMARKET_POLYGON_RPC_URL, env.POLYGON_RPC_URL) ?? "https://polygon-bor-rpc.publicnode.com",
+  pusdTokenAddress: firstNonEmpty(env.POLYMARKET_BALANCE_ACTIVATION_TOKEN_ADDRESS) ?? defaultPusdTokenAddress
 });
 
 export const getPolymarketFundingBalanceReadStatus = (

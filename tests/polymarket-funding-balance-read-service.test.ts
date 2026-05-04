@@ -83,6 +83,17 @@ describe("Polymarket internal funding balance read service", () => {
     });
   });
 
+  it("falls back to default pUSD token and Polygon RPC when optional envs are blank", () => {
+    expect(buildPolymarketFundingBalanceReadConfigFromEnv({
+      POLYMARKET_BALANCE_ACTIVATION_TOKEN_ADDRESS: "",
+      POLYMARKET_POLYGON_RPC_URL: "",
+      POLYGON_RPC_URL: ""
+    } as NodeJS.ProcessEnv)).toMatchObject({
+      polygonRpcUrl: "https://polygon-bor-rpc.publicnode.com",
+      pusdTokenAddress: "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB"
+    });
+  });
+
   it("uses the active user Polymarket deposit wallet as the CLOB funder address", async () => {
     const capturedConfigs: PolymarketFundingBalanceReadServiceConfig[] = [];
     const service = new PolymarketFundingBalanceReadService(
