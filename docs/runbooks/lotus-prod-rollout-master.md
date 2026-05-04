@@ -250,6 +250,7 @@ Execution readiness is separate from funding and withdrawal readiness.
 | `POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED` | Yes | `false` | No | Enables deterministic user deposit-wallet account setup. |
 | `POLYMARKET_DEPOSIT_WALLET_DEPLOY_ENABLED` | Yes | `true` | No | Allows relayer `WALLET-CREATE`; derived-only wallets remain pending when false. |
 | `POLYMARKET_RELAYER_URL` | If deposit-wallet deployment enabled | `<relayer-url>` | No | Relayer used for `WALLET-CREATE`. |
+| `POLYMARKET_DEPOSIT_WALLET_RPC_URL` | Recommended | `https://polygon.drpc.org` | No | Polygon RPC used to verify deployed bytecode when the relayer deployed check is stale. |
 | `POLYMARKET_DEPOSIT_WALLET_FACTORY_ADDRESS` | Optional | SDK default | No | Override only if Polymarket changes the active factory. |
 | `POLYMARKET_DEPOSIT_WALLET_IMPLEMENTATION_ADDRESS` | Optional | SDK default | No | Override only if Polymarket changes the active implementation. |
 | `POLYMARKET_TICK_SIZE` | Optional | `0.01` | No | Must match market tick size when used. |

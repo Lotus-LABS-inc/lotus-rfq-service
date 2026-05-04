@@ -17,6 +17,7 @@ export interface PolymarketDepositWalletClientConfig {
   builderApiSecret: string | null;
   builderApiPassphrase: string | null;
   deployEnabled: boolean;
+  rpcUrl: string | null;
 }
 
 export interface PolymarketDerivedDepositWallet {
@@ -38,7 +39,11 @@ export const buildPolymarketDepositWalletClientConfigFromEnv = (
   builderApiKey: nonEmpty(env.POLYMARKET_BUILDER_API_KEY) ?? nonEmpty(env.BUILDER_API_KEY),
   builderApiSecret: nonEmpty(env.POLYMARKET_BUILDER_API_SECRET) ?? nonEmpty(env.BUILDER_SECRET),
   builderApiPassphrase: nonEmpty(env.POLYMARKET_BUILDER_API_PASSPHRASE) ?? nonEmpty(env.BUILDER_PASS_PHRASE),
-  deployEnabled: env.POLYMARKET_DEPOSIT_WALLET_DEPLOY_ENABLED !== "false"
+  deployEnabled: env.POLYMARKET_DEPOSIT_WALLET_DEPLOY_ENABLED !== "false",
+  rpcUrl: nonEmpty(env.POLYMARKET_DEPOSIT_WALLET_RPC_URL) ??
+    nonEmpty(env.POLYMARKET_INTERNAL_WITHDRAWAL_EVIDENCE_POLYGON_RPC_URL) ??
+    nonEmpty(env.POLYGON_RPC_URL) ??
+    "https://polygon.drpc.org"
 });
 
 export class PolymarketDepositWalletClient {
@@ -74,7 +79,7 @@ export class PolymarketDepositWalletClient {
     }
     const relayer = this.buildRelayerClient();
     const deployed = await relayer.getDeployed(walletAddress, TransactionType.WALLET_CREATE);
-    if (deployed) {
+    if (deployed || await hasContractCode(this.config.rpcUrl, walletAddress)) {
       return {
         walletAddress,
         deploymentStatus: "ALREADY_DEPLOYED"
@@ -151,6 +156,31 @@ const isConfirmedRelayerState = (state: string | undefined): boolean =>
   state === "STATE_CONFIRMED" ||
   state === "STATE_MINED" ||
   state === "STATE_EXECUTED";
+
+const hasContractCode = async (rpcUrl: string | null, address: string): Promise<boolean> => {
+  if (!nonEmpty(rpcUrl ?? undefined)) {
+    return false;
+  }
+  try {
+    const response = await fetch(rpcUrl!, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_getCode",
+        params: [address, "latest"]
+      })
+    });
+    if (!response.ok) {
+      return false;
+    }
+    const payload = await response.json() as { result?: unknown };
+    return typeof payload.result === "string" && payload.result !== "0x" && payload.result.length > 2;
+  } catch {
+    return false;
+  }
+};
 
 const parseChainId = (value: string | undefined): number => {
   const parsed = Number(value ?? "137");
