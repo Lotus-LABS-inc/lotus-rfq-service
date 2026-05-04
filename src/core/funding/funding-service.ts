@@ -193,6 +193,15 @@ export interface UserWithdrawalWalletReader {
   hasEvmWithdrawalWallet(userId: string, address?: string | null): Promise<boolean>;
 }
 
+export interface UserVenueFundingAccountReader {
+  findAccount(input: { userId: string; venue: FundingVenue }): Promise<{
+    venue: FundingVenue;
+    venueAccountAddress: string | null;
+    venueAccountType: string;
+    status: string;
+  } | null>;
+}
+
 export class FundingService {
   public constructor(
     private readonly repository: FundingRepository,
@@ -206,7 +215,8 @@ export class FundingService {
     private readonly userWithdrawalWalletReader: UserWithdrawalWalletReader | null = null,
     private readonly myriadWithdrawalAdapter: MyriadWalletWithdrawalAdapter | null = null,
     private readonly opinionWithdrawalAdapter: OpinionSafeWithdrawalAdapter | null = null,
-    private readonly userWalletService: Pick<UserWalletService, "resolveFundingSourceWallet" | "resolveUserTurnkeyEvmFundingWallet" | "resolveVenueTargetWallet"> | null = null
+    private readonly userWalletService: Pick<UserWalletService, "resolveFundingSourceWallet" | "resolveUserTurnkeyEvmFundingWallet" | "resolveVenueTargetWallet"> | null = null,
+    private readonly userVenueAccountReader: UserVenueFundingAccountReader | null = null
   ) {}
 
   public listVenueCapabilities(): VenueCapability[] {
@@ -1576,6 +1586,15 @@ export class FundingService {
 
   private async resolveFundingDestinationAddress(userId: string, venue: FundingVenue, destinationChain: string): Promise<string | null> {
     const mode = getVenueFundingDestinationMode(venue, this.config.env);
+    if (mode === "USER_VENUE_DEPOSIT_WALLET") {
+      const userVenueDepositAddress = await this.resolveUserVenueDepositAddress(userId, venue);
+      if (userVenueDepositAddress) {
+        return userVenueDepositAddress;
+      }
+      if (venue === "POLYMARKET") {
+        throw new FundingError("TARGET_WALLET_NOT_CONFIGURED", "POLYMARKET requires an active user-specific deposit wallet before funding can be quoted.", 409);
+      }
+    }
     if (mode === "VENUE_DEPOSIT_ENV") {
       return getVenueDepositAddressForChain(venue, destinationChain, this.config.env) ?? getVenueDepositAddress(venue, this.config.env);
     }
@@ -1591,6 +1610,23 @@ export class FundingService {
       throw new FundingError("TARGET_WALLET_NOT_CONFIGURED", `${venue} requires an active exportable Turnkey EVM wallet.`, 409);
     }
     return wallet.address;
+  }
+
+  private async resolveUserVenueDepositAddress(userId: string, venue: FundingVenue): Promise<string | null> {
+    if (!this.userVenueAccountReader) {
+      return null;
+    }
+    const account = await this.userVenueAccountReader.findAccount({ userId, venue });
+    if (!account || account.status !== "ACTIVE" || !account.venueAccountAddress) {
+      return null;
+    }
+    if (venue === "POLYMARKET" && account.venueAccountType !== "DEPOSIT_WALLET") {
+      throw new FundingError("TARGET_WALLET_NOT_CONFIGURED", "POLYMARKET funding requires an active deposit-wallet venue account.", 409);
+    }
+    if (!isEvmAddress(account.venueAccountAddress)) {
+      throw new FundingError("TARGET_WALLET_NOT_CONFIGURED", `${venue} venue account address is not a valid EVM destination.`, 409);
+    }
+    return account.venueAccountAddress;
   }
 }
 

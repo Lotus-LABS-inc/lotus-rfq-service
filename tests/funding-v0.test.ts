@@ -957,6 +957,83 @@ describe("Funding v0 domain", () => {
     expect(lifi.quoteInputs[0]?.toAddress).not.toBe(env.OPINION_FUNDING_DESTINATION_ADDRESS);
   });
 
+  it("routes Polymarket funding to the active user deposit wallet instead of the static destination", async () => {
+    const repository = new InMemoryFundingRepository();
+    const lifi = new StubLifiProvider();
+    const depositWalletAddress = "0x6867bD6B5fd147af7B7AFc7b4aee0bABb140e0cB";
+    const service = new FundingService(
+      repository,
+      lifi,
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env: {
+          ...env,
+          POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED: "true",
+          POLYMARKET_FUNDING_DESTINATION_ADDRESS: "0x31C5BB55B032Fe6Fc54F3A7b7b32FcA569170EaD"
+        } as NodeJS.ProcessEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {
+        findAccount: async ({ userId, venue }) => userId === "user-1" && venue === "POLYMARKET"
+          ? {
+            venue: "POLYMARKET",
+            venueAccountAddress: depositWalletAddress,
+            venueAccountType: "DEPOSIT_WALLET",
+            status: "ACTIVE"
+          }
+          : null
+      }
+    );
+    const created = await service.createIntent("user-1", {
+      sourceChain: "SOLANA",
+      sourceToken: "USDC",
+      sourceAmount: "4",
+      sourceWalletAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+      idempotencyKey: "polymarket-deposit-wallet-target",
+      targets: [{ targetVenue: "POLYMARKET", targetPercentage: 100 }]
+    });
+    await service.quoteIntent("user-1", created.intent.fundingIntentId);
+
+    expect(lifi.quoteInputs[0]?.toAddress).toBe(depositWalletAddress);
+    expect(lifi.quoteInputs[0]?.toAddress).not.toBe("0x31C5BB55B032Fe6Fc54F3A7b7b32FcA569170EaD");
+  });
+
+  it("fails closed for Polymarket funding when deposit-wallet automation has no active deposit wallet", async () => {
+    const repository = new InMemoryFundingRepository();
+    const service = new FundingService(repository, new StubLifiProvider(), {
+      lifiQuotesEnabled: true,
+      liveSubmitEnabled: false,
+      env: {
+        ...env,
+        POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED: "true",
+        POLYMARKET_FUNDING_DESTINATION_ADDRESS: "0x31C5BB55B032Fe6Fc54F3A7b7b32FcA569170EaD"
+      } as NodeJS.ProcessEnv
+    });
+    const created = await service.createIntent("user-1", {
+      sourceChain: "SOLANA",
+      sourceToken: "USDC",
+      sourceAmount: "4",
+      sourceWalletAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+      idempotencyKey: "polymarket-no-deposit-wallet",
+      targets: [{ targetVenue: "POLYMARKET", targetPercentage: 100 }]
+    });
+
+    await expect(service.quoteIntent("user-1", created.intent.fundingIntentId))
+      .rejects.toMatchObject({
+        code: "TARGET_WALLET_NOT_CONFIGURED",
+        message: "POLYMARKET requires an active user-specific deposit wallet before funding can be quoted."
+      });
+  });
+
   it("builds same-chain EVM direct transfer quotes without LI.FI", async () => {
     const repository = new InMemoryFundingRepository();
     const lifi = new StubLifiProvider();

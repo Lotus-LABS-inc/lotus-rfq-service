@@ -41,6 +41,8 @@ const configuredVenueDepositAddress = (
 export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): Record<FundingVenue, VenueCapability> => {
   const env = config.env ?? process.env;
   const polymarketDepositAddress = configuredVenueDepositAddress(env, "POLYMARKET", "POLYGON", ["SOLANA"]);
+  const polymarketUserDepositWalletEnabled = envValue(env, "POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED") === "true"
+    || envValue(env, "POLYMARKET_FUNDING_DESTINATION_MODE") === "USER_VENUE_DEPOSIT_WALLET";
   const limitlessDepositAddress = configuredVenueDepositAddress(env, "LIMITLESS", "BASE", ["SOLANA"]);
   const opinionDepositAddress = configuredVenueDepositAddress(env, "OPINION", "BSC", ["SOLANA", "POLYGON"]);
   const myriadDepositAddress = configuredVenueDepositAddress(env, "MYRIAD", "BSC", ["SOLANA", "POLYGON"]);
@@ -137,11 +139,13 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       withdrawalMode: "USER_SIGNED",
       userSignedWithdrawalSupported: true,
       partnerManagedWithdrawal: null,
-      readinessStatus: polymarketDepositAddress ? "READY" : "DISABLED",
-      depositAddressConfigured: Boolean(polymarketDepositAddress),
-      notes: polymarketDepositAddress
-        ? "Polymarket funding quote path is configured for Solana USDC to Polygon USDC."
-        : "Set POLYMARKET_FUNDING_DESTINATION_ADDRESS before enabling Polymarket funding quotes."
+      readinessStatus: polymarketDepositAddress || polymarketUserDepositWalletEnabled ? "READY" : "DISABLED",
+      depositAddressConfigured: Boolean(polymarketDepositAddress || polymarketUserDepositWalletEnabled),
+      notes: polymarketUserDepositWalletEnabled
+        ? "Polymarket funding quote path is configured for user-specific deposit wallets."
+        : polymarketDepositAddress
+          ? "Polymarket funding quote path is configured for Solana USDC to Polygon USDC."
+          : "Set POLYMARKET_FUNDING_DESTINATION_ADDRESS or enable Polymarket deposit-wallet automation before enabling Polymarket funding quotes."
     },
     LIMITLESS: {
       venue: "LIMITLESS",
@@ -234,6 +238,9 @@ export const getVenueFundingDestinationMode = (
   const value = envValue(env, `${venue}_FUNDING_DESTINATION_MODE`);
   if (value === "USER_TURNKEY_EVM_WALLET" || value === "USER_VENUE_DEPOSIT_WALLET") {
     return value;
+  }
+  if (venue === "POLYMARKET" && envValue(env, "POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED") === "true") {
+    return "USER_VENUE_DEPOSIT_WALLET";
   }
   return "VENUE_DEPOSIT_ENV";
 };

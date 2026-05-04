@@ -511,7 +511,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     userWalletService,
     myriadWithdrawalAdapter,
     opinionWithdrawalAdapter,
-    userWalletService
+    userWalletService,
+    userVenueAccountRepository
   );
   const fundingReadinessWatcher = new FundingReadinessWatcher(
     fundingRepository,
