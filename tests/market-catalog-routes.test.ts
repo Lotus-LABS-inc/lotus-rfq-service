@@ -350,6 +350,8 @@ describe("market catalog routes", () => {
     await repository.listCategories();
 
     expect(queries[0]).toContain("fma.status = 'APPROVED'");
+    expect(queries[0]).toContain("fma.metadata->>'source' = 'frontend-curated-catalog'");
     expect(queries[1]).toContain("fma.status = 'APPROVED'");
+    expect(queries[1]).toContain("fma.metadata->>'source' = 'frontend-curated-catalog'");
   });
 });

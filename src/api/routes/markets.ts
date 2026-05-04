@@ -5,7 +5,7 @@ import type { MarketCatalogRepository } from "../../repositories/market-catalog.
 const listQuerySchema = z.object({
   category: z.string().min(1).optional(),
   search: z.string().min(1).optional(),
-  limit: z.coerce.number().int().positive().max(100).optional()
+  limit: z.coerce.number().int().positive().max(1000).optional()
 });
 
 export interface MarketCatalogRouteDeps {

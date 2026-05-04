@@ -113,6 +113,7 @@ interface CategoryRow {
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 1000;
 const MAX_EVENT_SOURCE_LIMIT = 1000;
+const FRONTEND_SHARED_CORE_APPROVAL_SOURCE = "frontend-curated-catalog";
 
 export class MarketCatalogRepository {
   public constructor(private readonly pool: Pool) {}
@@ -139,6 +140,7 @@ export class MarketCatalogRepository {
          JOIN frontend_market_approvals fma
            ON fma.canonical_event_id = ce.id
           AND fma.status = 'APPROVED'
+          AND fma.metadata->>'source' = '${FRONTEND_SHARED_CORE_APPROVAL_SOURCE}'
          LEFT JOIN canonical_executable_markets cem
            ON cem.canonical_event_id = ce.id
          LEFT JOIN venue_market_profiles vmp
@@ -159,6 +161,7 @@ export class MarketCatalogRepository {
     const params: unknown[] = [];
     if (!filter.includeUnapproved) {
       conditions.push(`fma.status = 'APPROVED'`);
+      conditions.push(`fma.metadata->>'source' = '${FRONTEND_SHARED_CORE_APPROVAL_SOURCE}'`);
     }
     if (filter.category?.trim()) {
       params.push(filter.category.trim().toUpperCase());
@@ -267,6 +270,7 @@ export class MarketCatalogRepository {
          JOIN frontend_market_approvals fma
            ON fma.canonical_event_id = ce.id
           AND fma.status = 'APPROVED'
+          AND fma.metadata->>'source' = '${FRONTEND_SHARED_CORE_APPROVAL_SOURCE}'
          LEFT JOIN canonical_executable_markets cem
            ON cem.canonical_event_id = ce.id
          LEFT JOIN canonical_executable_market_members mem
