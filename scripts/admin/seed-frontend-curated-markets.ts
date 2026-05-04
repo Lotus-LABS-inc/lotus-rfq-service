@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { Pool } from "pg";
@@ -35,7 +35,7 @@ interface CuratedFrontendMarket {
   evidence: CuratedVenueEvidence[];
 }
 
-const curatedMarkets: readonly CuratedFrontendMarket[] = [
+const manualCuratedMarkets: readonly CuratedFrontendMarket[] = [
   {
     category: "CRYPTO",
     key: "CRYPTO|ATH_BY_DATE|ETH|2026-06-30",
@@ -199,7 +199,241 @@ const curatedMarkets: readonly CuratedFrontendMarket[] = [
 ] as const;
 
 const dryRun = process.argv.includes("--dry-run");
+const approvalsOnly = process.argv.includes("--approvals-only");
 const metadataVersion = "frontend-curated-catalog-v1";
+
+interface ArtifactLaneEvidence {
+  venue?: string;
+  venueMarketId?: string;
+  rawOutcomeLabel?: string;
+  rawTitle?: string;
+}
+
+interface ArtifactLane {
+  topicKey?: string;
+  canonicalTopicKey?: string;
+  canonicalTopic?: string;
+  routeabilityDecision?: string;
+  rulesDecision?: string;
+  matcherReady?: boolean;
+  candidateIdentityKey?: string;
+  normalizedCandidateName?: string;
+  candidate?: string;
+  outcome?: string;
+  club?: string;
+  driver?: string;
+  exactDateKey?: string;
+  exactLaunchDate?: string;
+  exactThresholdLabel?: string;
+  exactFdvThresholdLabel?: string;
+  evidence?: ArtifactLaneEvidence[];
+}
+
+const collectArtifactCuratedMarkets = (artifactRoot: string): CuratedFrontendMarket[] => {
+  if (!existsSync(artifactRoot)) {
+    return [];
+  }
+  const files = listJsonFiles(artifactRoot)
+    .filter((file) => /(?:pair|tri|strict-all|all-venue).*lanes\.json$/i.test(path.basename(file)));
+  const markets: CuratedFrontendMarket[] = [];
+  for (const file of files) {
+    const parsed = readJson(file);
+    const lanes = Array.isArray(parsed?.matcherLanes) ? parsed.matcherLanes
+      : Array.isArray(parsed?.lanes) ? parsed.lanes
+        : [];
+    for (const lane of lanes.filter(isArtifactLane)) {
+      const market = laneToCuratedMarket(file, lane);
+      if (market) {
+        markets.push(market);
+      }
+    }
+  }
+  return markets;
+};
+
+const listJsonFiles = (root: string): string[] => {
+  const files: string[] = [];
+  for (const entry of readdirSync(root)) {
+    const fullPath = path.join(root, entry);
+    const stats = statSync(fullPath);
+    if (stats.isDirectory()) {
+      files.push(...listJsonFiles(fullPath));
+    } else if (entry.endsWith(".json")) {
+      files.push(fullPath);
+    }
+  }
+  return files;
+};
+
+const readJson = (file: string): Record<string, unknown> | null => {
+  try {
+    return JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+};
+
+const isArtifactLane = (value: unknown): value is ArtifactLane =>
+  value !== null && typeof value === "object";
+
+const laneToCuratedMarket = (file: string, lane: ArtifactLane): CuratedFrontendMarket | null => {
+  const topic = lane.topicKey ?? lane.canonicalTopicKey ?? lane.canonicalTopic;
+  if (!topic || !isApprovedLane(lane)) {
+    return null;
+  }
+  const evidence = normalizeLaneEvidence(lane.evidence);
+  if (evidence.length < 2) {
+    return null;
+  }
+  const category = categoryFromTopic(topic, file);
+  const outcomeKey = lane.candidateIdentityKey
+    ?? slug(lane.normalizedCandidateName)
+    ?? slug(lane.candidate)
+    ?? slug(lane.outcome)
+    ?? slug(lane.club)
+    ?? slug(lane.driver)
+    ?? slug(lane.exactDateKey)
+    ?? slug(lane.exactLaunchDate)
+    ?? slug(lane.exactThresholdLabel)
+    ?? slug(lane.exactFdvThresholdLabel)
+    ?? "YES";
+  const key = `${topic}|${outcomeKey.toUpperCase()}`;
+  const label = displayLaneLabel(lane, topic);
+  const title = `${eventTitleFromTopic(topic)}: ${label}`;
+  return {
+    category,
+    key,
+    title,
+    normalizedTitle: title,
+    artifact: path.relative(process.cwd(), file).replace(/\\/g, "/"),
+    evidence
+  };
+};
+
+const isApprovedLane = (lane: ArtifactLane): boolean => {
+  const routeability = lane.routeabilityDecision ?? "";
+  const rules = lane.rulesDecision ?? "";
+  return lane.matcherReady === true
+    || /ROUTEABLE|READY/i.test(routeability)
+    || /COMPATIBLE/i.test(rules);
+};
+
+const normalizeLaneEvidence = (evidence: ArtifactLaneEvidence[] | undefined): CuratedVenueEvidence[] => {
+  if (!Array.isArray(evidence)) {
+    return [];
+  }
+  return evidence
+    .map((entry): CuratedVenueEvidence | null => {
+      const venue = normalizeVenue(entry.venue);
+      const venueMarketId = entry.venueMarketId?.trim();
+      if (!venue || !venueMarketId) {
+        return null;
+      }
+      return {
+        venue,
+        venueMarketId,
+        rawLabel: entry.rawOutcomeLabel ?? entry.rawTitle ?? undefined
+      };
+    })
+    .filter((entry): entry is CuratedVenueEvidence => entry !== null);
+};
+
+const normalizeVenue = (venue: string | undefined): CanonicalVenue | null => {
+  const normalized = venue?.trim().toUpperCase();
+  if (normalized === "PREDICT_FUN") {
+    return "PREDICT";
+  }
+  return normalized === "POLYMARKET" || normalized === "LIMITLESS" || normalized === "OPINION" || normalized === "MYRIAD" || normalized === "PREDICT"
+    ? normalized
+    : null;
+};
+
+const categoryFromTopic = (topic: string, file: string): Category => {
+  if (topic.startsWith("CRYPTO|")) {
+    return "CRYPTO";
+  }
+  if (topic.startsWith("SPORTS|")) {
+    return topic.includes("|LCK|") || topic.includes("|LPL|") ? "ESPORTS" : "SPORTS";
+  }
+  if (topic.includes("NOMINEE|") || topic.includes("OFFICE_") || topic.includes("PARTY_CONTROL|") || topic.includes("GEOPOLITICAL_")) {
+    return "POLITICS";
+  }
+  return "SPORTS";
+};
+
+const displayLaneLabel = (lane: ArtifactLane, topic: string): string =>
+  toTitleCase(
+    lane.normalizedCandidateName
+    ?? lane.candidate
+    ?? lane.outcome
+    ?? lane.club
+    ?? lane.driver
+    ?? lane.exactDateKey
+    ?? lane.exactLaunchDate
+    ?? lane.exactThresholdLabel
+    ?? lane.exactFdvThresholdLabel
+    ?? topic.split("|").at(-1)
+    ?? "Yes"
+  );
+
+const eventTitleFromTopic = (topic: string): string => {
+  const parts = topic.split("|").filter(Boolean);
+  if (parts[0] === "NOMINEE" && parts[1] === "US_PRESIDENT" && parts[2] && parts[3]) {
+    return `${toTitleCase(parts[3])} Presidential Nominee ${parts[2]}`;
+  }
+  if (parts[0] === "OFFICE_WINNER") {
+    return `${toTitleCase(parts.slice(1).join(" "))} Winner`;
+  }
+  if (parts[0] === "PARTY_CONTROL") {
+    return `${parts[3] ?? ""} ${toTitleCase(parts.slice(4).join(" "))}`.trim();
+  }
+  if (parts[0] === "GEOPOLITICAL_EVENT_BY_DATE") {
+    return toTitleCase(parts.slice(1).join(" "));
+  }
+  if (parts[0] === "CRYPTO") {
+    return toTitleCase(parts.slice(1, Math.min(parts.length, 4)).join(" "));
+  }
+  if (parts[0] === "SPORTS") {
+    return `${toTitleCase(parts.slice(2).join(" "))} Winner`;
+  }
+  return toTitleCase(topic);
+};
+
+const slug = (value: string | undefined): string | null => {
+  const normalized = value?.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return normalized || null;
+};
+
+const toTitleCase = (value: string): string =>
+  value
+    .replace(/[_|]+/g, " ")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => {
+      if (word === "us" || word === "usa" || word === "fdv" || word === "nba" || word === "nhl" || word === "epl" || word === "lck" || word === "lpl") {
+        return word.toUpperCase();
+      }
+      return `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`;
+    })
+    .join(" ");
+
+const mergeCuratedMarkets = (markets: CuratedFrontendMarket[]): CuratedFrontendMarket[] => {
+  const byKey = new Map<string, CuratedFrontendMarket>();
+  for (const market of markets) {
+    const existing = byKey.get(market.key);
+    if (!existing || market.evidence.length > existing.evidence.length) {
+      byKey.set(market.key, market);
+    }
+  }
+  return [...byKey.values()].sort((left, right) =>
+    left.category.localeCompare(right.category)
+    || left.key.localeCompare(right.key)
+  );
+};
+
+const artifactCuratedMarkets = collectArtifactCuratedMarkets(path.resolve(process.cwd(), "artifacts"));
+const curatedMarkets = mergeCuratedMarkets([...manualCuratedMarkets, ...artifactCuratedMarkets]);
 
 const toSeed = (market: CuratedFrontendMarket, evidence: CuratedVenueEvidence): CuratedCanonicalGraphSeed => ({
   canonicalEventId: buildStableUuid(`frontend-curated-event:${market.key}`),
@@ -271,12 +505,15 @@ const main = async (): Promise<void> => {
   const pool = new Pool({
     connectionString: databaseUrl,
     ssl: { rejectUnauthorized: false },
-    application_name: "seed-frontend-curated-markets"
+    application_name: "seed-frontend-curated-markets",
+    statement_timeout: 0,
+    query_timeout: 0
   });
 
   try {
+    await pool.query("SET statement_timeout = 0");
     const seeds = curatedMarkets.flatMap((market) => market.evidence.map((evidence) => toSeed(market, evidence)));
-    if (!dryRun) {
+    if (!dryRun && !approvalsOnly) {
       const projector = new CanonicalGraphProjector(
         new CanonicalGraphRepository(pool),
         new CanonicalCompatibilityProjector(
@@ -285,7 +522,9 @@ const main = async (): Promise<void> => {
         )
       );
       await projector.persistAndProject(new CuratedCanonicalGraphSnapshotBuilder().build(seeds));
+    }
 
+    if (!dryRun) {
       let sortPriority = 100;
       for (const market of curatedMarkets) {
         await pool.query(
@@ -334,6 +573,7 @@ const main = async (): Promise<void> => {
     const target = new URL(databaseUrl);
     console.log(JSON.stringify({
       dryRun,
+      approvalsOnly,
       database: { host: target.hostname, database: target.pathname.replace(/^\//, "") },
       curatedMarketCount: curatedMarkets.length,
       venueProfileSeedCount: seeds.length,

@@ -111,7 +111,8 @@ interface CategoryRow {
 }
 
 const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 100;
+const MAX_LIMIT = 1000;
+const MAX_EVENT_SOURCE_LIMIT = 1000;
 
 export class MarketCatalogRepository {
   public constructor(private readonly pool: Pool) {}
@@ -225,7 +226,7 @@ export class MarketCatalogRepository {
   }
 
   public async listEvents(filter: MarketCatalogFilter = {}): Promise<MarketCatalogEvent[]> {
-    const directLimit = Math.min(MAX_LIMIT, Math.max(DEFAULT_LIMIT, clampLimit(filter.limit) * 10));
+    const directLimit = Math.min(MAX_EVENT_SOURCE_LIMIT, Math.max(DEFAULT_LIMIT, clampLimit(filter.limit) * 10));
     const markets = await this.listMarkets({
       ...filter,
       limit: directLimit
@@ -435,10 +436,31 @@ const deriveCuratedEventGroup = (key: string): { eventId: string; title: string 
     };
   }
   if ((parts[0] === "SPORTS" || parts[0] === "ESPORTS") && parts[1] && parts[2] && parts[3]) {
-    const eventKey = parts.slice(0, 4).join("|");
+    const eventKey = `${parts[2] === "LCK" || parts[2] === "LPL" ? "ESPORTS" : parts[0]}|${parts.slice(1, 4).join("|")}`;
     return {
       eventId: `event:${eventKey}`,
       title: `${toTitleCase(parts.slice(2, 4).join(" "))} Winner`
+    };
+  }
+  if (parts[0] === "OFFICE_WINNER" && parts[1] && parts[2] && parts[3]) {
+    const eventKey = parts.slice(0, 4).join("|");
+    return {
+      eventId: `event:${eventKey}`,
+      title: `${toTitleCase(parts.slice(1, 4).join(" "))} Winner`
+    };
+  }
+  if (parts[0] === "PARTY_CONTROL" && parts.length >= 5) {
+    const eventKey = parts.slice(0, 5).join("|");
+    return {
+      eventId: `event:${eventKey}`,
+      title: `${parts[3]} ${toTitleCase(parts.slice(4, 5).join(" "))}`.trim()
+    };
+  }
+  if ((parts[0] === "GEOPOLITICAL_EVENT_BY_DATE" || parts[0] === "OFFICE_EXIT_BY_DATE") && parts.length >= 4) {
+    const eventKey = parts.slice(0, -1).join("|");
+    return {
+      eventId: `event:${eventKey}`,
+      title: toTitleCase(parts.slice(1, -1).join(" "))
     };
   }
   if (parts[0] === "CRYPTO" && parts[1] === "ATH_BY_DATE" && parts[2]) {
@@ -446,6 +468,34 @@ const deriveCuratedEventGroup = (key: string): { eventId: string; title: string 
     return {
       eventId: `event:${eventKey}`,
       title: `${toTitleCase(parts[2])} All-Time High By Date`
+    };
+  }
+  if (parts[0] === "CRYPTO" && parts[1] === "THRESHOLD_BY_DATE" && parts[2] && parts[3]) {
+    const eventKey = parts.slice(0, 4).join("|");
+    return {
+      eventId: `event:${eventKey}`,
+      title: `${toTitleCase(parts[2])} Threshold By ${parts[3]}`
+    };
+  }
+  if (parts[0] === "CRYPTO" && parts[1] === "FDV_THRESHOLD_AFTER_LAUNCH" && parts[2]) {
+    const eventKey = parts.slice(0, 4).join("|");
+    return {
+      eventId: `event:${eventKey}`,
+      title: `${toTitleCase(parts[2])} FDV One Day After Launch`
+    };
+  }
+  if (parts[0] === "CRYPTO" && parts[1] === "TOKEN_LAUNCH_BY_DATE" && parts[2]) {
+    const eventKey = parts.slice(0, 3).join("|");
+    return {
+      eventId: `event:${eventKey}`,
+      title: `${toTitleCase(parts[2])} Token Launch By Date`
+    };
+  }
+  if (parts[0] === "CRYPTO" && parts[1] === "FIRST_TO_THRESHOLD_BY_DATE" && parts[2]) {
+    const eventKey = parts.slice(0, 3).join("|");
+    return {
+      eventId: `event:${eventKey}`,
+      title: `${toTitleCase(parts[2])} First To Threshold By Date`
     };
   }
   return null;
@@ -578,6 +628,9 @@ const toTitleCase = (value: string): string =>
     .filter(Boolean)
     .map((word) => {
       if (word === "us" || word === "usa") {
+        return word.toUpperCase();
+      }
+      if (["btc", "eth", "sol", "xrp", "fdv", "nba", "nhl", "epl", "lck", "lpl", "fifa", "f1", "uefa"].includes(word)) {
         return word.toUpperCase();
       }
       return `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`;
