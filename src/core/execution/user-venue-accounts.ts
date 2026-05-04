@@ -65,7 +65,7 @@ export interface LimitlessPartnerAccountClient {
 
 export interface PolymarketDepositWalletClient {
   configured(): boolean;
-  deriveOrCreateDepositWallet(input: { ownerAddress: string }): Promise<{
+  deriveOrCreateDepositWallet(input: { ownerAddress: string; allowDeploy?: boolean }): Promise<{
     walletAddress: string;
     deploymentStatus: "DERIVED_NOT_DEPLOYED" | "DEPLOY_SUBMITTED" | "DEPLOY_CONFIRMED" | "ALREADY_DEPLOYED";
     relayerTransactionId?: string | undefined;
@@ -600,7 +600,10 @@ export class UserVenueAccountService {
     }
     let derived: Awaited<ReturnType<PolymarketDepositWalletClient["deriveOrCreateDepositWallet"]>>;
     try {
-      derived = await this.polymarketDepositWalletClient.deriveOrCreateDepositWallet({ ownerAddress: wallet.address });
+      derived = await this.polymarketDepositWalletClient.deriveOrCreateDepositWallet({
+        ownerAddress: wallet.address,
+        allowDeploy: !existing?.venueAccountAddress
+      });
     } catch {
       throw new UserVenueAccountError(
         "POLYMARKET_DEPOSIT_WALLET_FAILED",

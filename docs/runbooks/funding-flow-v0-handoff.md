@@ -70,6 +70,7 @@ Turnkey backend implementation path:
 - Signed execution relay for Polymarket user-account flow, Opinion, Predict.fun, and any future user-signed Limitless/Myriad surface must validate the user, active Turnkey EVM wallet, and active public binding or wallet-call source before relaying any signed payload. Lotus still does not sign user orders or represent a venue account binding as trade readiness by itself.
 - Polymarket user-account binding is distinct from the current backend/operator V2 signer setup. The operator `POLYMARKET_PRIVATE_KEY`, CLOB API credentials, builder code, and funder address must never be reused as the user's Turnkey venue-account binding.
 - Polymarket deposit-wallet creation uses a relayer `WALLET-CREATE` request with no user signature. Lotus may submit this deployment request with builder auth, but it must not sign EIP-712 deposit-wallet batches, approvals, transfers, withdrawals, or CLOB orders for the user. Funding/trading stays blocked until the deposit-wallet binding is confirmed active.
+- If a Polymarket deposit-wallet binding is already pending with an address, follow-up ensure/setup calls only re-check deployment status. They must not submit duplicate `WALLET-CREATE` requests for the same recorded address.
 
 Venue balance activation:
 

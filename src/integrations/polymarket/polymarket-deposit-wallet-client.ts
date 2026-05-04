@@ -48,7 +48,10 @@ export class PolymarketDepositWalletClient {
     return this.config.enabled && isEvmAddress(this.config.factoryAddress) && isEvmAddress(this.config.implementationAddress);
   }
 
-  public async deriveOrCreateDepositWallet(input: { ownerAddress: string }): Promise<PolymarketDerivedDepositWallet> {
+  public async deriveOrCreateDepositWallet(input: {
+    ownerAddress: string;
+    allowDeploy?: boolean;
+  }): Promise<PolymarketDerivedDepositWallet> {
     if (!this.configured()) {
       throw new Error("Polymarket deposit-wallet automation is not configured.");
     }
@@ -77,7 +80,7 @@ export class PolymarketDepositWalletClient {
         deploymentStatus: "ALREADY_DEPLOYED"
       };
     }
-    if (!this.config.deployEnabled) {
+    if (!this.config.deployEnabled || input.allowDeploy === false) {
       return {
         walletAddress,
         deploymentStatus: "DERIVED_NOT_DEPLOYED"

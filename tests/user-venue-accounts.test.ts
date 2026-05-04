@@ -241,6 +241,7 @@ describe("user venue account service", () => {
 
   it("does not mark a Polymarket deposit wallet active until deployment is confirmed", async () => {
     const repository = new InMemoryVenueAccountRepository();
+    const calls: Array<{ allowDeploy?: boolean }> = [];
     const service = new UserVenueAccountService(
       repository,
       {
@@ -250,10 +251,20 @@ describe("user venue account service", () => {
       },
       undefined,
       undefined,
-      polymarketDepositWalletClient("DEPLOY_SUBMITTED")
+      {
+        configured: () => true,
+        deriveOrCreateDepositWallet: async (input) => {
+          calls.push({ allowDeploy: input.allowDeploy });
+          return {
+            walletAddress: "0x5555555555555555555555555555555555555555",
+            deploymentStatus: input.allowDeploy === false ? "DERIVED_NOT_DEPLOYED" : "DEPLOY_SUBMITTED"
+          };
+        }
+      }
     );
 
     const ensured = await service.ensureAccount({ userId: "user-1", venue: "POLYMARKET" });
+    const retried = await service.ensureAccount({ userId: "user-1", venue: "POLYMARKET" });
 
     expect(ensured.account).toMatchObject({
       venue: "POLYMARKET",
@@ -267,9 +278,11 @@ describe("user venue account service", () => {
     expect(repository.auditEvents.at(-1)).toMatchObject({
       eventType: "POLYMARKET_DEPOSIT_WALLET_PENDING",
       payload: {
-        deploymentStatus: "DEPLOY_SUBMITTED"
+        deploymentStatus: "DERIVED_NOT_DEPLOYED"
       }
     });
+    expect(retried.account.status).toBe("PENDING");
+    expect(calls).toEqual([{ allowDeploy: true }, { allowDeploy: false }]);
   });
 
   it("marks Myriad as an active wallet-address account without manual linking", async () => {
