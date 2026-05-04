@@ -48,6 +48,9 @@ const parseMode = (
   env: NodeJS.ProcessEnv
 ): VenueBalanceActivationMode => {
   const raw = envValue(env, `${venue}_BALANCE_ACTIVATION_MODE`)?.toUpperCase();
+  if (venue === "POLYMARKET" && envValue(env, "POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED") === "true") {
+    return "VENUE_UI_OR_RELAYER";
+  }
   if (raw === "ERC20_APPROVAL" || raw === "VENUE_UI_OR_RELAYER" || raw === "NOT_REQUIRED") {
     return raw;
   }
@@ -185,28 +188,39 @@ const buildErc20ApprovalAction = (
 const buildRelayerAction = (
   venue: FundingVenue,
   account: UserVenueAccount | null,
-  balance: VenueBalanceView | null
-): VenueBalanceActivationAction => ({
-  venue,
-  activationRequired: true,
-  mode: "VENUE_UI_OR_RELAYER",
-  status: account ? "CONFIG_REQUIRED" : "ACCOUNT_REQUIRED",
-  tokenSymbol: balance?.token ?? (venue === "POLYMARKET" ? "pUSD" : null),
-  tokenAddress: null,
-  chainId: null,
-  ownerAddress: account?.venueAccountAddress ?? account?.walletAddress ?? null,
-  signerAddress: account?.walletAddress ?? null,
-  spenderAddress: null,
-  amount: null,
-  transactionRequest: null,
-  instructions: [
-    `${venue} activation requires the official venue relayer/UI path or an operator-reviewed activation endpoint.`,
-    "Lotus will not guess or accept arbitrary spender addresses from the frontend."
-  ],
-  blockers: account
-    ? [`${venue} activation transaction is not configured for backend-safe preparation.`]
-    : [`${venue} active venue account is required before activation.`]
-});
+  balance: VenueBalanceView | null,
+  env: NodeJS.ProcessEnv
+): VenueBalanceActivationAction => {
+  const polymarketReady = venue === "POLYMARKET" &&
+    envValue(env, "POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED") === "true" &&
+    envValue(env, "POLYMARKET_RELAYER_URL") !== null &&
+    envValue(env, "POLYMARKET_BUILDER_API_KEY") !== null &&
+    envValue(env, "POLYMARKET_BUILDER_API_SECRET") !== null &&
+    envValue(env, "POLYMARKET_BUILDER_API_PASSPHRASE") !== null;
+  return {
+    venue,
+    activationRequired: true,
+    mode: "VENUE_UI_OR_RELAYER",
+    status: account && polymarketReady ? "READY" : account ? "CONFIG_REQUIRED" : "ACCOUNT_REQUIRED",
+    tokenSymbol: venue === "POLYMARKET" ? "pUSD" : balance?.token ?? null,
+    tokenAddress: envValue(env, `${venue}_BALANCE_ACTIVATION_TOKEN_ADDRESS`),
+    chainId: parsePositiveInt(envValue(env, `${venue}_BALANCE_ACTIVATION_CHAIN_ID`)),
+    ownerAddress: account?.venueAccountAddress ?? account?.walletAddress ?? null,
+    signerAddress: account?.walletAddress ?? null,
+    spenderAddress: envValue(env, `${venue}_BALANCE_ACTIVATION_SPENDER_ADDRESS`),
+    amount: null,
+    transactionRequest: null,
+    instructions: polymarketReady
+      ? ["Use the Polymarket activation button. Lotus will prepare a safe deposit-wallet relayer batch for your Turnkey wallet to sign."]
+      : [
+          `${venue} activation requires the official venue relayer/UI path or an operator-reviewed activation endpoint.`,
+          "Lotus will not guess or accept arbitrary spender addresses from the frontend."
+        ],
+    blockers: account
+      ? polymarketReady ? [] : [`${venue} activation transaction is not configured for backend-safe preparation.`]
+      : [`${venue} active venue account is required before activation.`]
+  };
+};
 
 const buildNotRequiredAction = (
   venue: FundingVenue,
@@ -241,7 +255,7 @@ export const buildVenueBalanceActivationActions = (
       return buildErc20ApprovalAction(venue, input, account, balance);
     }
     if (mode === "VENUE_UI_OR_RELAYER") {
-      return buildRelayerAction(venue, account, balance);
+      return buildRelayerAction(venue, account, balance, env);
     }
     return buildNotRequiredAction(venue, account, balance);
   });

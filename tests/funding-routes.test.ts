@@ -133,6 +133,59 @@ const buildApp = async (options: { rateLimiter?: RateLimiter } = {}) => {
       instructions: ["Predict.fun does not require a separate balance activation step."],
       blockers: []
     }]),
+    preparePolymarketActivation: async () => ({
+      ownerAddress: "0x2222222222222222222222222222222222222222",
+      depositWalletAddress: "0x1111111111111111111111111111111111111111",
+      chainId: 137,
+      nonce: "1",
+      deadline: "1770000000",
+      calls: [{
+        target: "0x3333333333333333333333333333333333333333",
+        value: "0",
+        data: "0x095ea7b3"
+      }],
+      typedData: {
+        domain: {
+          name: "DepositWallet",
+          version: "1",
+          chainId: 137,
+          verifyingContract: "0x1111111111111111111111111111111111111111"
+        },
+        types: {
+          Call: [
+            { name: "target", type: "address" },
+            { name: "value", type: "uint256" },
+            { name: "data", type: "bytes" }
+          ],
+          Batch: [
+            { name: "wallet", type: "address" },
+            { name: "nonce", type: "uint256" },
+            { name: "deadline", type: "uint256" },
+            { name: "calls", type: "Call[]" }
+          ]
+        },
+        primaryType: "Batch",
+        message: {
+          wallet: "0x1111111111111111111111111111111111111111",
+          nonce: "1",
+          deadline: "1770000000",
+          calls: [{
+            target: "0x3333333333333333333333333333333333333333",
+            value: "0",
+            data: "0x095ea7b3"
+          }]
+        }
+      },
+      wrapsUsdc: false,
+      usdcBalance: "0",
+      approvalSpenders: ["0x3333333333333333333333333333333333333333"],
+      instructions: ["Sign once."]
+    }),
+    submitPolymarketActivation: async () => ({
+      relayerTransactionId: "relay-1",
+      relayerState: "STATE_NEW",
+      transactionHash: null
+    }),
     listFundingHistory: async (_userId, input) => ({
       items: [{
         id: "funding:funding-1:leg-1",
@@ -314,6 +367,49 @@ describe("Funding routes", () => {
     });
     expect(activations.body).not.toContain("privateKey");
     expect(activations.body).not.toContain("secret");
+
+    const preparedActivation = await app.inject({
+      method: "POST",
+      url: "/funding/venue-activations/polymarket/prepare",
+      headers,
+      payload: {}
+    });
+    expect(preparedActivation.statusCode).toBe(200);
+    expect(preparedActivation.json()).toMatchObject({
+      activation: {
+        ownerAddress: "0x2222222222222222222222222222222222222222",
+        depositWalletAddress: "0x1111111111111111111111111111111111111111",
+        typedData: { primaryType: "Batch" }
+      }
+    });
+    expect(preparedActivation.body).not.toContain("secret");
+
+    const submittedActivation = await app.inject({
+      method: "POST",
+      url: "/funding/venue-activations/polymarket/submit",
+      headers,
+      payload: {
+        ownerAddress: "0x2222222222222222222222222222222222222222",
+        depositWalletAddress: "0x1111111111111111111111111111111111111111",
+        nonce: "1",
+        deadline: "1770000000",
+        calls: [{
+          target: "0x3333333333333333333333333333333333333333",
+          value: "0",
+          data: "0x095ea7b3"
+        }],
+        signature: `0x${"1".repeat(130)}`
+      }
+    });
+    expect(submittedActivation.statusCode).toBe(202);
+    expect(submittedActivation.json()).toMatchObject({
+      activation: {
+        relayerTransactionId: "relay-1",
+        relayerState: "STATE_NEW"
+      }
+    });
+    expect(submittedActivation.body).not.toContain("signature");
+
     const history = await app.inject({ method: "GET", url: "/funding/history?page=1&pageSize=5", headers });
     expect(history.statusCode).toBe(200);
     expect(history.json()).toMatchObject({

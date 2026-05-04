@@ -245,6 +245,7 @@ import {
 } from "../execution-system/index.js";
 import { MonetizationRepository } from "../repositories/monetization.repository.js";
 import { FundingReadinessChecker, FundingService } from "../core/funding/funding-service.js";
+import { FundingError } from "../core/funding/types.js";
 import {
   PolymarketFundingBalanceReadService,
   buildPolymarketFundingBalanceReadConfigFromEnv
@@ -463,12 +464,15 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     defaultSolanaWalletEnabled: turnkeyWalletConfig.defaultSolanaWalletEnabled,
     defaultEvmWalletEnabled: turnkeyWalletConfig.defaultEvmWalletEnabled
   }, turnkeyWalletProvisioner);
+  const polymarketDepositWalletClient = new PolymarketDepositWalletClient(
+    buildPolymarketDepositWalletClientConfigFromEnv(process.env)
+  );
   const userVenueAccountService = new UserVenueAccountService(
     userVenueAccountRepository,
     userWalletService,
     buildPredictAccountClientFromEnv(process.env),
     buildLimitlessPartnerAccountClientFromEnv(process.env),
-    new PolymarketDepositWalletClient(buildPolymarketDepositWalletClientConfigFromEnv(process.env))
+    polymarketDepositWalletClient
   );
   const polymarketBridgeWithdrawalConfig = getPolymarketBridgeWithdrawalConfigFromEnv(process.env);
   const polymarketBridgeWithdrawalAdapter = polymarketBridgeWithdrawalConfig.configured && polymarketBridgeWithdrawalConfig.apiBaseUrl
@@ -1177,6 +1181,29 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       venueAccounts: await userVenueAccountService.listAccounts(userId),
       env: process.env
     }),
+    preparePolymarketActivation: async (userId) => {
+      const account = await userVenueAccountService.getAccount(userId, "POLYMARKET");
+      if (account?.status !== "ACTIVE" || !account.venueAccountAddress) {
+        throw new FundingError("BALANCE_ACTIVATION_UNAVAILABLE", "An active Polymarket deposit wallet is required before activation.", 409);
+      }
+      return polymarketDepositWalletClient.prepareActivation({
+        ownerAddress: account.walletAddress,
+        depositWalletAddress: account.venueAccountAddress
+      });
+    },
+    submitPolymarketActivation: async (userId, request) => {
+      const account = await userVenueAccountService.getAccount(userId, "POLYMARKET");
+      if (account?.status !== "ACTIVE" || !account.venueAccountAddress) {
+        throw new FundingError("BALANCE_ACTIVATION_UNAVAILABLE", "An active Polymarket deposit wallet is required before activation.", 409);
+      }
+      if (
+        account.walletAddress.toLowerCase() !== request.ownerAddress.toLowerCase() ||
+        account.venueAccountAddress.toLowerCase() !== request.depositWalletAddress.toLowerCase()
+      ) {
+        throw new FundingError("BALANCE_ACTIVATION_UNAVAILABLE", "Polymarket activation request does not match the user's active deposit wallet.", 403);
+      }
+      return polymarketDepositWalletClient.submitActivation(request);
+    },
     listFundingHistory: (userId, input) => fundingService.listFundingHistory(userId, input),
     createWithdrawalIntent: (userId, request) => fundingService.createWithdrawalIntent(userId, request),
     getWithdrawalIntent: (userId, withdrawalIntentId) => fundingService.getWithdrawalIntent(userId, withdrawalIntentId),

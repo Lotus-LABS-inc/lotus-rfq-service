@@ -28,6 +28,21 @@ const fundingHistoryQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(200).optional()
 });
 
+const depositWalletCallSchema = z.object({
+  target: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  value: z.string().regex(/^\d+$/),
+  data: z.string().regex(/^0x[a-fA-F0-9]*$/)
+});
+
+const submitPolymarketActivationSchema = z.object({
+  ownerAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  depositWalletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  nonce: z.string().regex(/^\d+$/),
+  deadline: z.string().regex(/^\d+$/),
+  calls: z.array(depositWalletCallSchema).min(1).max(4),
+  signature: z.string().regex(/^0x[a-fA-F0-9]{130}$/)
+});
+
 export interface FundingRouteHandlers {
   createIntent(userId: string, request: z.infer<typeof CreateFundingIntentSchema>): Promise<FundingIntentView>;
   getIntent(userId: string, fundingIntentId: string): Promise<FundingIntentView>;
@@ -37,6 +52,8 @@ export interface FundingRouteHandlers {
   listVenueCapabilities(): Promise<unknown>;
   listVenueBalances(userId: string): Promise<VenueBalanceView[]>;
   listVenueActivations(userId: string): Promise<VenueBalanceActivationAction[]>;
+  preparePolymarketActivation?(userId: string): Promise<unknown>;
+  submitPolymarketActivation?(userId: string, request: z.infer<typeof submitPolymarketActivationSchema>): Promise<unknown>;
   listFundingHistory(userId: string, input?: { page?: number; pageSize?: number; limit?: number }): Promise<FundingHistoryPage>;
   createWithdrawalIntent(userId: string, request: z.infer<typeof CreateWithdrawalIntentSchema>): Promise<WithdrawalIntentView>;
   getWithdrawalIntent(userId: string, withdrawalIntentId: string): Promise<WithdrawalIntentView>;
@@ -144,6 +161,44 @@ export const registerFundingRoutes = async (
   app.get("/funding/venue-activations", { preHandler: authMiddleware }, async (request, reply) => {
     const activations = await handlers.listVenueActivations(request.user.userId);
     return reply.status(200).send({ activations });
+  });
+
+  app.post("/funding/venue-activations/polymarket/prepare", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!handlers.preparePolymarketActivation) {
+      return reply.status(503).send({
+        code: "ACTIVATION_UNAVAILABLE",
+        message: "Polymarket deposit-wallet activation is not available."
+      });
+    }
+    try {
+      const activation = await handlers.preparePolymarketActivation(request.user.userId);
+      return reply.status(200).send({ activation });
+    } catch (error) {
+      return handleFundingError(error, reply);
+    }
+  });
+
+  app.post("/funding/venue-activations/polymarket/submit", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!handlers.submitPolymarketActivation) {
+      return reply.status(503).send({
+        code: "ACTIVATION_UNAVAILABLE",
+        message: "Polymarket deposit-wallet activation is not available."
+      });
+    }
+    const parsed = submitPolymarketActivationSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "Polymarket activation submission validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    try {
+      const activation = await handlers.submitPolymarketActivation(request.user.userId, parsed.data);
+      return reply.status(202).send({ activation });
+    } catch (error) {
+      return handleFundingError(error, reply);
+    }
   });
 
   app.get("/funding/history", { preHandler: authMiddleware }, async (request, reply) => {
