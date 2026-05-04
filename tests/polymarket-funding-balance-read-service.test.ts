@@ -174,6 +174,19 @@ describe("Polymarket internal funding balance read service", () => {
     })).rejects.toThrow("Active Polymarket deposit wallet account is required");
   });
 
+  it("fails closed when deposit-wallet mode is enabled but the account reader is unavailable", async () => {
+    const service = new PolymarketFundingBalanceReadService(
+      { ...completeConfig, requireUserDepositWallet: true },
+      () => new StubBalanceAllowanceClient({ balance: "100000000", allowance: "100000000" })
+    );
+
+    await expect(service.readUsableBalance({
+      userId: "user-1",
+      fundingIntentId: "intent-1",
+      routeLegId: "leg-1"
+    })).rejects.toThrow("Active Polymarket deposit wallet account is required");
+  });
+
   it("serves only the safe usableBalance response over a local internal route", async () => {
     const app = Fastify();
     const service = new PolymarketFundingBalanceReadService(

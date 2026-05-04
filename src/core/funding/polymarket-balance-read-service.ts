@@ -42,6 +42,7 @@ export interface PolymarketFundingBalanceReadServiceConfig {
   onchainFallbackEnabled?: boolean | undefined;
   polygonRpcUrl?: string | undefined;
   pusdTokenAddress?: string | undefined;
+  requireUserDepositWallet?: boolean | undefined;
 }
 
 export interface PolymarketBalanceAllowanceClient {
@@ -176,7 +177,9 @@ export const buildPolymarketFundingBalanceReadConfigFromEnv = (
   funderAddress: firstNonEmpty(env.POLYMARKET_FUNDER_ADDRESS, env.POLY_FUNDER_ADDRESS),
   onchainFallbackEnabled: env.POLYMARKET_FUNDING_READ_ONCHAIN_FALLBACK_ENABLED !== "false",
   polygonRpcUrl: firstNonEmpty(env.POLYMARKET_POLYGON_RPC_URL, env.POLYGON_RPC_URL) ?? "https://polygon-bor-rpc.publicnode.com",
-  pusdTokenAddress: firstNonEmpty(env.POLYMARKET_BALANCE_ACTIVATION_TOKEN_ADDRESS) ?? defaultPusdTokenAddress
+  pusdTokenAddress: firstNonEmpty(env.POLYMARKET_BALANCE_ACTIVATION_TOKEN_ADDRESS) ?? defaultPusdTokenAddress,
+  requireUserDepositWallet: env.POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED === "true" ||
+    env.POLYMARKET_FUNDING_DESTINATION_MODE === "USER_VENUE_DEPOSIT_WALLET"
 });
 
 export const getPolymarketFundingBalanceReadStatus = (
@@ -261,6 +264,11 @@ export class PolymarketFundingBalanceReadService {
 
   private async resolveUserDepositWalletAddress(input: PolymarketFundingBalanceReadInput): Promise<string | null> {
     if (!this.venueAccountReader) {
+      if (this.config.requireUserDepositWallet) {
+        throw new PolymarketFundingBalanceReadAccountUnavailableError(
+          "Active Polymarket deposit wallet account is required for user-scoped funding readiness."
+        );
+      }
       return null;
     }
     const account = await this.venueAccountReader.findAccount({
