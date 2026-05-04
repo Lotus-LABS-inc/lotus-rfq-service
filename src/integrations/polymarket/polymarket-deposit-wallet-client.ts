@@ -173,7 +173,7 @@ export class PolymarketDepositWalletClient {
     const relayer = this.buildRelayerClient();
     const noncePayload = await relayer.getNonce(input.ownerAddress, TransactionType.WALLET);
     const nonce = `${noncePayload.nonce}`;
-    const deadline = `${Math.floor(Date.now() / 1000) + (input.deadlineSeconds ?? 240)}`;
+    const deadline = `${Math.floor(Date.now() / 1000) + (input.deadlineSeconds ?? 1800)}`;
     const usdcBalance = await readErc20Balance(this.config.rpcUrl, this.config.usdcAddress!, input.depositWalletAddress);
     const calls = buildActivationCalls({
       depositWalletAddress: input.depositWalletAddress,
