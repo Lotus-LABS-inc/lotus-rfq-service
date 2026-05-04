@@ -654,6 +654,7 @@ Activation rules:
 - Builder attribution uses `POLYMARKET_BUILDER_CODE` / `builderCode`; old `POLY_BUILDER_*` HMAC builder headers are not used.
 - If `POLYMARKET_FUNDING_READ_API_KEY` is configured, callers must use `Authorization: Bearer <token>`.
 - If no bearer token is configured, local development allows loopback-only access; production must configure bearer auth.
+- Production balance reads are user-scoped. The internal reader resolves the user's active `POLYMARKET` `DEPOSIT_WALLET` binding and passes that deposit wallet as the CLOB funder address. If the user does not have an active deposit wallet binding, the read fails closed instead of falling back to an operator/global balance.
 - This service does not mark funding `READY_TO_TRADE`; it only supplies the balance read used by the existing readiness checker.
 
 ### Generic Venue Readiness Smoke Tests

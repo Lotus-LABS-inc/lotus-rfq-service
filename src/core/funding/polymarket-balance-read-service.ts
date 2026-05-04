@@ -49,10 +49,24 @@ export type PolymarketBalanceAllowanceClientFactory = (
   config: PolymarketFundingBalanceReadServiceConfig
 ) => PolymarketBalanceAllowanceClient;
 
+export interface PolymarketFundingVenueAccountReader {
+  findAccount(input: { userId: string; venue: "POLYMARKET" }): Promise<{
+    status: string;
+    venueAccountAddress: string | null;
+  } | null>;
+}
+
 export class PolymarketFundingBalanceReadNotConfiguredError extends Error {
   public constructor(message: string) {
     super(message);
     this.name = "PolymarketFundingBalanceReadNotConfiguredError";
+  }
+}
+
+export class PolymarketFundingBalanceReadAccountUnavailableError extends Error {
+  public constructor(message: string) {
+    super(message);
+    this.name = "PolymarketFundingBalanceReadAccountUnavailableError";
   }
 }
 
@@ -206,24 +220,42 @@ export const createPolymarketBalanceAllowanceClient: PolymarketBalanceAllowanceC
 export class PolymarketFundingBalanceReadService {
   public constructor(
     private readonly config: PolymarketFundingBalanceReadServiceConfig,
-    private readonly clientFactory: PolymarketBalanceAllowanceClientFactory = createPolymarketBalanceAllowanceClient
+    private readonly clientFactory: PolymarketBalanceAllowanceClientFactory = createPolymarketBalanceAllowanceClient,
+    private readonly venueAccountReader?: PolymarketFundingVenueAccountReader
   ) {}
 
   public getStatus(): PolymarketFundingBalanceReadStatus {
     return getPolymarketFundingBalanceReadStatus(this.config);
   }
 
-  public async readUsableBalance(_input: PolymarketFundingBalanceReadInput): Promise<PolymarketFundingBalanceReadOutput> {
+  public async readUsableBalance(input: PolymarketFundingBalanceReadInput): Promise<PolymarketFundingBalanceReadOutput> {
     const status = this.getStatus();
     if (!status.configured) {
       throw new PolymarketFundingBalanceReadNotConfiguredError("Polymarket balance read is disabled or incomplete.");
     }
 
-    const client = this.clientFactory(this.config);
+    const funderAddress = await this.resolveUserDepositWalletAddress(input);
+    const client = this.clientFactory(funderAddress ? { ...this.config, funderAddress } : this.config);
     const response = await client.getBalanceAllowance({ asset_type: AssetType.COLLATERAL });
     const balance = collateralAtomicUnitsToUsdc(response.balance);
     const allowance = collateralAtomicUnitsToUsdc(collateralAllowanceAtomicUnits(response));
     const usableBalance = Decimal.min(balance, allowance);
     return { usableBalance: decimalToPlainString(usableBalance) };
+  }
+
+  private async resolveUserDepositWalletAddress(input: PolymarketFundingBalanceReadInput): Promise<string | null> {
+    if (!this.venueAccountReader) {
+      return null;
+    }
+    const account = await this.venueAccountReader.findAccount({
+      userId: input.userId,
+      venue: "POLYMARKET"
+    });
+    if (account?.status === "ACTIVE" && nonEmpty(account.venueAccountAddress ?? undefined)) {
+      return account.venueAccountAddress!;
+    }
+    throw new PolymarketFundingBalanceReadAccountUnavailableError(
+      "Active Polymarket deposit wallet account is required for user-scoped funding readiness."
+    );
   }
 }

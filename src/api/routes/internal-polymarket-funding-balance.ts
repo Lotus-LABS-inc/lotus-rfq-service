@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
+  PolymarketFundingBalanceReadAccountUnavailableError,
   PolymarketFundingBalanceReadNotConfiguredError,
   type PolymarketFundingBalanceReadService
 } from "../../core/funding/polymarket-balance-read-service.js";
@@ -78,6 +79,12 @@ const handlePolymarketFundingBalanceReadError = (error: unknown, reply: FastifyR
     return reply.status(503).send({
       code: "POLYMARKET_BALANCE_READ_NOT_CONFIGURED",
       message: "Polymarket funding balance read is disabled or incomplete."
+    });
+  }
+  if (error instanceof PolymarketFundingBalanceReadAccountUnavailableError) {
+    return reply.status(409).send({
+      code: "POLYMARKET_BALANCE_READ_ACCOUNT_UNAVAILABLE",
+      message: "Polymarket deposit wallet account is not ready for funding balance reads."
     });
   }
 

@@ -5,7 +5,8 @@ import { registerInternalPolymarketFundingBalanceRoute } from "../src/api/routes
 import {
   PolymarketFundingBalanceReadService,
   buildPolymarketFundingBalanceReadConfigFromEnv,
-  type PolymarketBalanceAllowanceClient
+  type PolymarketBalanceAllowanceClient,
+  type PolymarketFundingBalanceReadServiceConfig
 } from "../src/core/funding/polymarket-balance-read-service.js";
 
 class StubBalanceAllowanceClient implements PolymarketBalanceAllowanceClient {
@@ -80,6 +81,52 @@ describe("Polymarket internal funding balance read service", () => {
       enabled: false,
       clobHost: undefined
     });
+  });
+
+  it("uses the active user Polymarket deposit wallet as the CLOB funder address", async () => {
+    const capturedConfigs: PolymarketFundingBalanceReadServiceConfig[] = [];
+    const service = new PolymarketFundingBalanceReadService(
+      completeConfig,
+      (config) => {
+        capturedConfigs.push(config);
+        return new StubBalanceAllowanceClient({ balance: "100000000", allowance: "100000000" });
+      },
+      {
+        findAccount: async () => ({
+          status: "ACTIVE",
+          venueAccountAddress: "0x6867bD6B5fd147af7B7AFc7b4aee0bABb140e0cB"
+        })
+      }
+    );
+
+    await expect(service.readUsableBalance({
+      userId: "user-1",
+      fundingIntentId: "intent-1",
+      routeLegId: "leg-1"
+    })).resolves.toEqual({ usableBalance: "100" });
+
+    expect(capturedConfigs[0]).toMatchObject({
+      funderAddress: "0x6867bD6B5fd147af7B7AFc7b4aee0bABb140e0cB"
+    });
+  });
+
+  it("fails closed when user-scoped balance reads do not have an active deposit wallet", async () => {
+    const service = new PolymarketFundingBalanceReadService(
+      completeConfig,
+      () => new StubBalanceAllowanceClient({ balance: "100000000", allowance: "100000000" }),
+      {
+        findAccount: async () => ({
+          status: "PENDING",
+          venueAccountAddress: "0x6867bD6B5fd147af7B7AFc7b4aee0bABb140e0cB"
+        })
+      }
+    );
+
+    await expect(service.readUsableBalance({
+      userId: "user-1",
+      fundingIntentId: "intent-1",
+      routeLegId: "leg-1"
+    })).rejects.toThrow("Active Polymarket deposit wallet account is required");
   });
 
   it("serves only the safe usableBalance response over a local internal route", async () => {

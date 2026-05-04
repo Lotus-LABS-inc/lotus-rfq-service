@@ -575,7 +575,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     })
   );
   const polymarketFundingBalanceReadService = new PolymarketFundingBalanceReadService(
-    buildPolymarketFundingBalanceReadConfigFromEnv(process.env)
+    buildPolymarketFundingBalanceReadConfigFromEnv(process.env),
+    undefined,
+    userVenueAccountRepository
   );
   const internalWithdrawalEvidenceReadService = new InternalWithdrawalEvidenceReadService({ env: process.env });
   const failureRecoveryManager = new FailureRecoveryManager(dependencies.pgPool);
