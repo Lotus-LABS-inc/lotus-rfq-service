@@ -112,11 +112,13 @@ const limitlessPartnerAccountClient = (): LimitlessPartnerAccountClient => ({
   })
 });
 
-const polymarketDepositWalletClient = (): PolymarketDepositWalletClient => ({
+const polymarketDepositWalletClient = (
+  deploymentStatus: Awaited<ReturnType<PolymarketDepositWalletClient["deriveOrCreateDepositWallet"]>>["deploymentStatus"] = "ALREADY_DEPLOYED"
+): PolymarketDepositWalletClient => ({
   configured: () => true,
   deriveOrCreateDepositWallet: async () => ({
     walletAddress: "0x5555555555555555555555555555555555555555",
-    deploymentStatus: "DERIVED_NOT_DEPLOYED"
+    deploymentStatus
   })
 });
 
@@ -237,6 +239,39 @@ describe("user venue account service", () => {
     expect(JSON.stringify(repository.auditEvents)).not.toContain("signature");
   });
 
+  it("does not mark a Polymarket deposit wallet active until deployment is confirmed", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    const service = new UserVenueAccountService(
+      repository,
+      {
+        async resolveUserTurnkeyEvmFundingWallet() {
+          return evmWallet();
+        }
+      },
+      undefined,
+      undefined,
+      polymarketDepositWalletClient("DEPLOY_SUBMITTED")
+    );
+
+    const ensured = await service.ensureAccount({ userId: "user-1", venue: "POLYMARKET" });
+
+    expect(ensured.account).toMatchObject({
+      venue: "POLYMARKET",
+      venueAccountAddress: "0x5555555555555555555555555555555555555555",
+      venueAccountType: "DEPOSIT_WALLET",
+      status: "PENDING",
+      lastVerifiedAt: null
+    });
+    expect(ensured.readinessBlockers).toContain("POLYMARKET account is not active yet.");
+    expect(ensured.setupInstructions[0]).toContain("not confirmed active yet");
+    expect(repository.auditEvents.at(-1)).toMatchObject({
+      eventType: "POLYMARKET_DEPOSIT_WALLET_PENDING",
+      payload: {
+        deploymentStatus: "DEPLOY_SUBMITTED"
+      }
+    });
+  });
+
   it("marks Myriad as an active wallet-address account without manual linking", async () => {
     const repository = new InMemoryVenueAccountRepository();
     const service = new UserVenueAccountService(repository, {
@@ -300,7 +335,7 @@ describe("user venue account service", () => {
       readinessBlockers: []
     });
     expect(prepared.venueAccounts.find((item) => item.venue === "POLYMARKET")).toMatchObject({
-      setupMode: "MANUAL_LINK_REQUIRED",
+      setupMode: "NO_USER_SETUP_REQUIRED",
       account: {
         venueAccountType: "DEPOSIT_WALLET",
         status: "PENDING"

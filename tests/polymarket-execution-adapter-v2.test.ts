@@ -132,7 +132,7 @@ const buildOrchestrator = (input: {
 };
 
 describe("PolymarketExecutionAdapterV2", () => {
-  it("uses the Polymarket V2 SDK and excludes legacy CLOB/builder signing packages", () => {
+  it("uses the Polymarket V2 SDK, deposit-wallet builder signing SDK, and excludes legacy CLOB package", () => {
     const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
@@ -145,10 +145,10 @@ describe("PolymarketExecutionAdapterV2", () => {
 
     expect(allDeps["@polymarket/clob-client-v2"]).toBeDefined();
     expect(allDeps["@polymarket/clob-client"]).toBeUndefined();
-    expect(allDeps["@polymarket/builder-signing-sdk"]).toBeUndefined();
+    expect(allDeps["@polymarket/builder-signing-sdk"]).toBeDefined();
     expect(lockfile).toContain('"node_modules/@polymarket/clob-client-v2"');
     expect(lockfile).not.toContain('"node_modules/@polymarket/clob-client"');
-    expect(lockfile).not.toContain('"node_modules/@polymarket/builder-signing-sdk"');
+    expect(lockfile).toContain('"node_modules/@polymarket/builder-signing-sdk"');
   });
 
   it("reports disabled mode and fails closed without preparing an order", async () => {

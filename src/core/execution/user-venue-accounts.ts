@@ -67,7 +67,10 @@ export interface PolymarketDepositWalletClient {
   configured(): boolean;
   deriveOrCreateDepositWallet(input: { ownerAddress: string }): Promise<{
     walletAddress: string;
-    deploymentStatus: "DERIVED_NOT_DEPLOYED";
+    deploymentStatus: "DERIVED_NOT_DEPLOYED" | "DEPLOY_SUBMITTED" | "DEPLOY_CONFIRMED" | "ALREADY_DEPLOYED";
+    relayerTransactionId?: string | undefined;
+    relayerState?: string | undefined;
+    transactionHash?: string | null | undefined;
   }>;
 }
 
@@ -557,7 +560,7 @@ export class UserVenueAccountService {
     readinessBlockers: string[];
     setupInstructions: string[];
   }> {
-    if (existing?.status === "ACTIVE" && existing.venueAccountAddress) {
+    if (existing?.status === "ACTIVE" && existing.venueAccountAddress && !this.polymarketDepositWalletClient?.configured()) {
       return {
         account: existing,
         readinessBlockers: readinessBlockersForAccount(existing),
@@ -605,6 +608,7 @@ export class UserVenueAccountService {
         502
       );
     }
+    const deploymentReady = isPolymarketDepositWalletDeploymentReady(derived.deploymentStatus);
     const account = await this.repository.upsertAccount({
       ...(existing?.venueAccountBindingId ? { venueAccountBindingId: existing.venueAccountBindingId } : {}),
       userId,
@@ -614,18 +618,20 @@ export class UserVenueAccountService {
       venueAccountId: derived.walletAddress,
       venueAccountAddress: derived.walletAddress,
       venueAccountType: "DEPOSIT_WALLET",
-      status: "ACTIVE",
-      lastVerifiedAt: new Date().toISOString()
+      status: deploymentReady ? "ACTIVE" : "PENDING",
+      lastVerifiedAt: deploymentReady ? new Date().toISOString() : null
     });
     await this.repository.appendAccountAuditEvent({
       userId,
       venueAccountBindingId: account.venueAccountBindingId,
-      eventType: "POLYMARKET_DEPOSIT_WALLET_DERIVED",
+      eventType: deploymentReady ? "POLYMARKET_DEPOSIT_WALLET_READY" : "POLYMARKET_DEPOSIT_WALLET_PENDING",
       payload: {
         venue: "POLYMARKET",
         accountType: account.venueAccountType,
         status: account.status,
         deploymentStatus: derived.deploymentStatus,
+        relayerTransactionPresent: Boolean(derived.relayerTransactionId),
+        transactionHashPresent: Boolean(derived.transactionHash),
         walletAddressMatches: equalsAddress(account.walletAddress, wallet.address)
       }
     });
@@ -766,7 +772,10 @@ const setupInstructionsForVenue = (venue: UserVenueAccountVenue, account: UserVe
     return ["Myriad uses wallet-call user-signed actions. Lotus does not create or link a separate Myriad account in the venue-account setup batch."];
   }
   if (venue === "POLYMARKET") {
-    return ["Polymarket deposit-wallet automation is not configured. Configure the Polymarket deposit-wallet factory and implementation addresses so Lotus can derive the user's deposit wallet from their Turnkey EVM wallet."];
+    if (account.venueAccountAddress) {
+      return ["Polymarket deposit-wallet deployment has been requested or derived, but it is not confirmed active yet. Retry account setup after relayer confirmation before funding or trading."];
+    }
+    return ["Polymarket deposit-wallet automation is not configured. Configure the Polymarket relayer, builder credentials, factory, and implementation addresses so Lotus can deploy the user's deposit wallet from their Turnkey EVM owner address."];
   }
   if (venue === "LIMITLESS") {
     return ["Limitless partner-account setup is optional and user-signed. If automation is configured, sign the Limitless ownership message with the displayed Turnkey EVM wallet."];
@@ -778,7 +787,7 @@ const setupModeForVenue = (
   venue: UserVenueAccountVenue,
   account: UserVenueAccount
 ): UserVenueAccountSetupBatchItem["setupMode"] => {
-  if (account.status === "ACTIVE" || venue === "LIMITLESS") {
+  if (account.status === "ACTIVE" || venue === "LIMITLESS" || venue === "POLYMARKET") {
     return "NO_USER_SETUP_REQUIRED";
   }
   if (venue === "PREDICT_FUN") {
@@ -799,3 +808,7 @@ const equalsAddress = (left: string | null | undefined, right: string | null | u
 
 const isEvmSignature = (value: string): boolean =>
   /^0x[a-fA-F0-9]{130}$/.test(value.trim());
+
+const isPolymarketDepositWalletDeploymentReady = (
+  status: Awaited<ReturnType<PolymarketDepositWalletClient["deriveOrCreateDepositWallet"]>>["deploymentStatus"]
+): boolean => status === "ALREADY_DEPLOYED" || status === "DEPLOY_CONFIRMED";

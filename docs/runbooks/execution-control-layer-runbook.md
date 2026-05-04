@@ -149,8 +149,10 @@ Current Polymarket interpretation:
 - user-production readiness also requires a `POLYMARKET` venue-account binding for the user's Turnkey EVM wallet
 - the binding stores only public metadata: signer wallet address plus the derived Polymarket deposit-wallet address/id
 - the Polymarket operator signer/funder/API-key path must stay separate from user Turnkey venue-account bindings
-- when `POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED=true` and the deposit-wallet factory/implementation addresses are configured, `/user/venue-accounts/setup-batch` derives the user's Polymarket deposit-wallet address from their Turnkey EVM wallet and marks the binding active without backend signing
-- if deposit-wallet automation is not configured, `/user/venue-accounts/setup-batch` returns `MANUAL_LINK_REQUIRED` for `POLYMARKET`
+- when `POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED=true`, `/user/venue-accounts/setup-batch` derives the user's deterministic Polymarket deposit-wallet address from their Turnkey EVM owner address
+- when `POLYMARKET_RELAYER_URL` and Polymarket builder API credentials are configured, Lotus submits the relayer `WALLET-CREATE` request without a user signature; the binding becomes `ACTIVE` only after the relayer/deployed check confirms the deposit wallet
+- derived-only or submitted-but-unconfirmed deposit wallets remain `PENDING`; do not fund, activate, or trade from them until a later ensure call confirms deployment
+- if deposit-wallet automation is not configured, `/user/venue-accounts/setup-batch` returns a `PENDING` Polymarket deposit-wallet binding with no user signing step
 
 Non-Polymarket interpretation:
 - `marketRoutingCoverage=COVERED_BY_MATCHING` means Lotus can surface venue market coverage for matching/routing review
