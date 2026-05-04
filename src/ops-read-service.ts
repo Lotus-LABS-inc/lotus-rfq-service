@@ -4,9 +4,11 @@ import { config as loadDotenvFile } from "dotenv";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
+  PolymarketFundingBalanceReadAccountUnavailableError,
   PolymarketFundingBalanceReadNotConfiguredError,
   PolymarketFundingBalanceReadService,
   buildPolymarketFundingBalanceReadConfigFromEnv,
+  type PolymarketFundingVenueAccountReader,
   type PolymarketFundingBalanceReadInput,
   type PolymarketFundingBalanceReadOutput
 } from "./core/funding/polymarket-balance-read-service.js";
@@ -20,6 +22,8 @@ import {
 } from "./core/funding/limitless-withdrawal-evidence-read-service.js";
 import type { FundingVenue } from "./core/funding/types.js";
 import { isWithdrawalEvidenceVenueSupported } from "./core/funding/withdrawal-evidence.js";
+import { createPgPool, closePgPool } from "./db/postgres.js";
+import { UserVenueAccountRepository } from "./repositories/user-venue-account.repository.js";
 import { createLogger } from "./utils/logger.js";
 
 const fundingVenues = ["POLYMARKET", "LIMITLESS", "OPINION", "MYRIAD", "PREDICT_FUN"] as const;
@@ -58,6 +62,7 @@ export interface OpsReadServerDeps {
   env?: NodeJS.ProcessEnv | undefined;
   fetchImpl?: typeof fetch | undefined;
   polymarketFundingBalanceReader?: FundingBalanceReader | undefined;
+  polymarketVenueAccountReader?: PolymarketFundingVenueAccountReader | undefined;
   withdrawalEvidenceReader?: WithdrawalEvidenceReader | undefined;
 }
 
@@ -438,6 +443,12 @@ const handleFundingBalanceError = (venue: FundingVenue, error: unknown, reply: F
       message: `${venue} funding balance read is disabled or incomplete.`
     });
   }
+  if (error instanceof PolymarketFundingBalanceReadAccountUnavailableError) {
+    return reply.status(409).send({
+      code: `${venue}_FUNDING_BALANCE_READ_ACCOUNT_UNAVAILABLE`,
+      message: `${venue} deposit wallet account is not ready for funding balance reads.`
+    });
+  }
   if (error instanceof OpsFundingBalanceMalformedError) {
     return reply.status(502).send({
       code: `${venue}_FUNDING_BALANCE_READ_MALFORMED`,
@@ -480,7 +491,11 @@ export const buildOpsReadServer = async (deps: OpsReadServerDeps = {}): Promise<
   const fetchImpl = deps.fetchImpl ?? fetch;
   const app = Fastify({ logger: false });
   const polymarketFundingBalanceReader = deps.polymarketFundingBalanceReader ??
-    new PolymarketFundingBalanceReadService(buildPolymarketFundingBalanceReadConfigFromEnv(env));
+    new PolymarketFundingBalanceReadService(
+      buildPolymarketFundingBalanceReadConfigFromEnv(env),
+      undefined,
+      deps.polymarketVenueAccountReader
+    );
   const withdrawalEvidenceReader = deps.withdrawalEvidenceReader ??
     new InternalWithdrawalEvidenceReadService({ env, fetchImpl });
 
@@ -536,6 +551,39 @@ export const buildOpsReadServer = async (deps: OpsReadServerDeps = {}): Promise<
     }
   });
 
+  app.get("/internal/polymarket/funding-balance", async (request, reply) => {
+    const venue = "POLYMARKET";
+    if (!authorizeOpsRead(request, env.POLYMARKET_FUNDING_READ_API_KEY, env.NODE_ENV)) {
+      return reply.status(401).send({
+        code: "UNAUTHORIZED",
+        message: "POLYMARKET funding balance read is not authorized."
+      });
+    }
+
+    const parsed = balanceQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "POLYMARKET funding balance request validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+
+    if (parsed.data.targetVenue && normalizeVenuePathSegment(parsed.data.targetVenue) !== venue) {
+      return reply.status(400).send({
+        code: "FUNDING_BALANCE_VENUE_MISMATCH",
+        message: "Funding balance path venue and target venue must match."
+      });
+    }
+
+    try {
+      const result = await polymarketFundingBalanceReader.readUsableBalance(parsed.data);
+      return reply.status(200).send({ usableBalance: result.usableBalance });
+    } catch (error) {
+      return handleFundingBalanceError(venue, error, reply);
+    }
+  });
+
   app.get("/lotus/:venue/withdrawal-evidence", async (request, reply) => {
     const venue = normalizeVenuePathSegment((request.params as { venue?: string }).venue);
     if (!venue || !isWithdrawalEvidenceVenueSupported(venue)) {
@@ -585,7 +633,13 @@ export const buildOpsReadServer = async (deps: OpsReadServerDeps = {}): Promise<
 export const startOpsReadService = async (): Promise<OpsReadRuntime> => {
   loadDotenvFile();
   const logger = createLogger((process.env.LOG_LEVEL as "debug" | "info" | "warn" | "error" | "silent") ?? "info");
-  const app = await buildOpsReadServer();
+  const databaseUrl = process.env.DATABASE_URL ?? process.env.SUPABASE_DB_URL;
+  const pgPool = databaseUrl
+    ? createPgPool({ databaseUrl, logger })
+    : null;
+  const app = await buildOpsReadServer({
+    polymarketVenueAccountReader: pgPool ? new UserVenueAccountRepository(pgPool) : undefined
+  });
   const host = process.env.HOST ?? "0.0.0.0";
   const port = parsePositiveInt(process.env.PORT, 10_000);
   await app.listen({ host, port });
@@ -598,6 +652,9 @@ export const startOpsReadService = async (): Promise<OpsReadRuntime> => {
     shuttingDown = true;
     logger.info("Ops read service shutdown started.");
     await app.close();
+    if (pgPool) {
+      await closePgPool(pgPool);
+    }
     logger.info("Ops read service shutdown completed.");
   };
 
