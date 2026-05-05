@@ -127,6 +127,20 @@ const limitlessServerWalletPartnerAccountClient = (): LimitlessPartnerAccountCli
   }
 });
 
+const failingLimitlessServerWalletPartnerAccountClient = (): LimitlessPartnerAccountClient => ({
+  configured: () => true,
+  serverWalletDelegationEnabled: () => true,
+  getSigningMessage: async () => {
+    throw new Error("server wallet mode does not need a user signing message");
+  },
+  createServerWalletPartnerAccount: async () => {
+    throw new Error("Limitless HMAC auth failed");
+  },
+  createEoaPartnerAccount: async () => {
+    throw new Error("server wallet mode must not create EOA partner accounts");
+  }
+});
+
 const polymarketDepositWalletClient = (
   deploymentStatus: Awaited<ReturnType<PolymarketDepositWalletClient["deriveOrCreateDepositWallet"]>>["deploymentStatus"] = "ALREADY_DEPLOYED"
 ): PolymarketDepositWalletClient => ({
@@ -603,6 +617,48 @@ describe("user venue account service", () => {
     expect(serialized).not.toContain("signature");
     expect(serialized).not.toContain("hmac");
     expect(serialized).not.toContain("providerWalletAccountId");
+  });
+
+  it("keeps setup batch fail-closed when Limitless server-wallet creation fails", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    const service = new UserVenueAccountService(
+      repository,
+      {
+        async resolveUserTurnkeyEvmFundingWallet() {
+          return evmWallet();
+        }
+      },
+      predictAccountClient(),
+      failingLimitlessServerWalletPartnerAccountClient(),
+      polymarketDepositWalletClient()
+    );
+
+    const batch = await service.prepareAccountSetupBatch("user-1");
+    const limitless = batch.venueAccounts.find((item) => item.venue === "LIMITLESS");
+
+    expect(limitless).toMatchObject({
+      setupMode: "NO_USER_SETUP_REQUIRED",
+      account: {
+        venue: "LIMITLESS",
+        walletAddress: "0x1111111111111111111111111111111111111111",
+        venueAccountId: null,
+        venueAccountAddress: null,
+        venueAccountType: "SERVER_WALLET",
+        status: "PENDING"
+      }
+    });
+    expect(limitless?.readinessBlockers).toEqual([
+      "LIMITLESS account is not active yet.",
+      "LIMITLESS venue account id/address is not linked yet.",
+      "Limitless delegated server-wallet account request failed. Check partner HMAC scopes and retry account setup."
+    ]);
+    expect(batch.signatureRequests.map((request) => request.venue)).toEqual(["PREDICT_FUN"]);
+    const serialized = JSON.stringify(repository.auditEvents);
+    expect(serialized).toContain("LIMITLESS_SERVER_WALLET_ENSURE_FAILED");
+    expect(serialized).not.toContain("Limitless HMAC auth failed");
+    expect(serialized).not.toContain("secret");
+    expect(serialized).not.toContain("signature");
+    expect(serialized).not.toContain("hmac");
   });
 });
 
