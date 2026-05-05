@@ -131,7 +131,19 @@ import {
 import { ExternalOnlyBaselineBuilder } from "../core/qualification/baselines/external-only-baseline.js";
 import { NoInternalizationBaselineBuilder } from "../core/qualification/baselines/no-internalization-baseline.js";
 import { NoResolutionRiskBaselineBuilder } from "../core/qualification/baselines/no-resolution-risk-baseline.js";
-import { CostModel, OrderRouter, PlanComposer, PlanRunner, RouteScout, Splitter, type SORAcceptancePolicy, type CanonicalRFQInput } from "../core/sor/index.js";
+import {
+  CompositeVenueQuoteSource,
+  CostModel,
+  EnvVenueQuoteMappingResolver,
+  OrderRouter,
+  PlanComposer,
+  PlanRunner,
+  QuoteSnapshotCache,
+  RouteScout,
+  Splitter,
+  type SORAcceptancePolicy,
+  type CanonicalRFQInput
+} from "../core/sor/index.js";
 import {
   compareShadowDecisions,
   isCanarySampled,
@@ -149,6 +161,9 @@ import {
   sorShadowTotal
 } from "../observability/metrics.js";
 import { withSpan } from "../observability/tracing.js";
+import { LimitlessQuoteReader, LimitlessRestOrderbookClient } from "../integrations/limitless/limitless-quote-reader.js";
+import { LimitlessProfileFeeReader } from "../integrations/limitless/limitless-fee-reader.js";
+import { PolymarketQuoteReader, PolymarketRestOrderbookClient } from "../integrations/polymarket/polymarket-quote-reader.js";
 import { InternalCrossingEngine } from "../core/internal-engine/engine.js";
 import { OrderBook } from "../core/internal-engine/order-book.js";
 import { OrderLocker } from "../core/internal-engine/locker.js";
@@ -762,6 +777,33 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     logger: dependencies.logger
   });
 
+  const polymarketQuoteCache = new QuoteSnapshotCache();
+  const limitlessQuoteCache = new QuoteSnapshotCache();
+  const limitlessBaseUrl = process.env.LIMITLESS_BASE_URL ?? "https://api.limitless.exchange";
+  const venueQuoteSource = new CompositeVenueQuoteSource([
+    new PolymarketQuoteReader({
+      client: new PolymarketRestOrderbookClient({
+        clobHost: process.env.POLYMARKET_CLOB_HOST ?? process.env.POLY_CLOB_HOST ?? "https://clob.polymarket.com"
+      }),
+      streamCache: polymarketQuoteCache,
+      feeBps: parseOptionalNumber(process.env.POLYMARKET_QUOTE_FEE_BPS)
+    }),
+    new LimitlessQuoteReader({
+      client: new LimitlessRestOrderbookClient({
+        baseUrl: limitlessBaseUrl
+      }),
+      streamCache: limitlessQuoteCache,
+      feeBps: parseOptionalNumber(process.env.LIMITLESS_QUOTE_FEE_BPS),
+      feeReader: new LimitlessProfileFeeReader({
+        baseUrl: limitlessBaseUrl,
+        apiKey: process.env.LIMITLESS_API_KEY,
+        hmacTokenId: process.env.LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID ?? process.env.LIMITLESS_WITHDRAWAL_ADAPTER_API_KEY,
+        hmacSecret: process.env.LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET ?? process.env.LIMITLESS_WITHDRAWAL_ADAPTER_HMAC_SECRET,
+        account: process.env.LIMITLESS_QUOTE_FEE_PROFILE_ACCOUNT ?? process.env.LIMITLESS_WITHDRAWAL_ADAPTER_PROFILE_WALLET_ADDRESS
+      })
+    })
+  ], new EnvVenueQuoteMappingResolver(process.env.EXECUTION_QUOTE_VENUE_MARKET_MAP_JSON));
+
   const sorRouteScout = new RouteScout({
     redis: dependencies.redisClient,
     lpSource: {
@@ -790,7 +832,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       }
     },
     canonicalClient: {
-      getOrderbookSnapshot: async () => null
+      getOrderbookSnapshot: async () => null,
+      getOrderbookSnapshots: async (input) => venueQuoteSource.getCalculatedSnapshots(input)
     }
   });
   const internalOrderBook = new OrderBook(dependencies.redisClient);
@@ -2274,4 +2317,12 @@ const findResolutionProfileByVenueMarket = async (
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at)
   };
+};
+
+const parseOptionalNumber = (value: string | undefined): number | undefined => {
+  if (value === undefined || value.trim().length === 0) {
+    return undefined;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 };

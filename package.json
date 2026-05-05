@@ -26,6 +26,7 @@
     "admin:bootstrap-owner": "tsx scripts/admin/bootstrap-owner.ts",
     "admin:api-smoke": "tsx scripts/admin/admin-api-smoke.ts",
     "admin:execution-venues-smoke": "tsx scripts/admin/admin-execution-venues-smoke.ts",
+    "admin:quote-source-smoke": "tsx scripts/admin/admin-quote-source-smoke.ts",
     "admin:cancel-abandoned-funding-intents": "tsx scripts/admin/cancel-abandoned-funding-intents.ts",
     "admin:approve-frontend-markets": "tsx scripts/admin/approve-frontend-markets.ts",
     "admin:seed-frontend-curated-markets": "tsx scripts/admin/seed-frontend-curated-markets.ts",

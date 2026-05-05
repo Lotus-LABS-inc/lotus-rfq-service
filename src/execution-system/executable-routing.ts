@@ -32,6 +32,16 @@ export interface TradeRouteCandidate {
   activationRequired?: boolean | undefined;
   settlementEvidenceSupported?: boolean | undefined;
   recoveryRequired?: boolean | undefined;
+  feeBps?: number | undefined;
+  fixedFee?: number | undefined;
+  spreadBps?: number | undefined;
+  slippageBps?: number | undefined;
+  liquidityScore?: number | undefined;
+  quoteQuality?: string | undefined;
+  freshnessMs?: number | undefined;
+  confidencePenaltyBps?: number | undefined;
+  quoteBlockers?: readonly string[] | undefined;
+  missingFactors?: readonly string[] | undefined;
 }
 
 export interface TradeQuoteRequest {
@@ -68,6 +78,9 @@ export interface ExecutableTradeQuote {
   executableAmount: string;
   skippedAmount: string;
   expectedPrice: number;
+  effectivePrice?: number | undefined;
+  estimatedSavings?: number | undefined;
+  routeDecisionReason?: string | undefined;
   requiredUserSignatureSteps: string[];
   expiresAt: string;
   legs: ExecutableRouteLeg[];
@@ -78,6 +91,24 @@ export interface TradeQuoteSelection {
   userMessage?: string;
   rejectedCandidates: RejectedRouteCandidate[];
   internalCandidateCount: number;
+  routeDiagnostics?: RouteDecisionDiagnostics | undefined;
+}
+
+export interface RouteDecisionDiagnostics {
+  bestSingleRouteScore: number | null;
+  bestMultiRouteScore: number | null;
+  selectedRouteReason: string;
+  improvementThreshold: number;
+  skippedDustVenues: string[];
+}
+
+interface ScoredRoute {
+  routeType: TradeRouteType;
+  legs: ExecutableRouteLeg[];
+  rawNotional: number;
+  effectiveNotional: number;
+  score: number;
+  skippedDustVenues: string[];
 }
 
 export interface VerifiedExecutionPosition {
@@ -188,8 +219,7 @@ export class ExecutableRouteService {
     }));
     const executable = evaluated
       .filter((entry) => entry.evaluation.executable)
-      .map((entry) => entry.candidate)
-      .sort((left, right) => input.side === "buy" ? left.price - right.price : right.price - left.price);
+      .map((entry) => entry.candidate);
     const rejectedCandidates = evaluated
       .filter((entry) => !entry.evaluation.executable)
       .map((entry) => ({
@@ -199,22 +229,23 @@ export class ExecutableRouteService {
         adminReason: entry.evaluation.adminReason
       }));
 
-    const crossVenue = this.buildCrossVenueQuote(input, executable, amount);
-    const singleVenue = crossVenue ?? this.buildSingleVenueQuote(input, executable, amount);
-    if (!singleVenue) {
+    const selected = this.selectBestRoute(input, executable, amount);
+    if (!selected.route) {
       return {
         quote: null,
         userMessage: "No executable route available right now.",
         rejectedCandidates,
-        internalCandidateCount: input.candidates.length
+        internalCandidateCount: input.candidates.length,
+        routeDiagnostics: selected.diagnostics
       };
     }
 
-    await this.quoteRepository?.saveQuote({ quote: singleVenue, rejectedCandidates });
+    await this.quoteRepository?.saveQuote({ quote: selected.route, rejectedCandidates });
     return {
-      quote: singleVenue,
+      quote: selected.route,
       rejectedCandidates,
-      internalCandidateCount: input.candidates.length
+      internalCandidateCount: input.candidates.length,
+      routeDiagnostics: selected.diagnostics
     };
   }
 
@@ -222,18 +253,65 @@ export class ExecutableRouteService {
     return this.quoteRepository?.findQuote({ userId, quoteId }) ?? null;
   }
 
-  private buildCrossVenueQuote(
+  private selectBestRoute(
     input: TradeQuoteRequest,
     executable: readonly TradeRouteCandidate[],
     amount: number
-  ): ExecutableTradeQuote | null {
+  ): { route: ExecutableTradeQuote | null; diagnostics: RouteDecisionDiagnostics } {
+    const singleRoute = this.buildSingleVenueRoute(input, executable, amount);
+    const multiRoute = this.buildMultiVenueRoute(input, executable, amount);
+    const threshold = multiRoute && singleRoute ? routeImprovementThreshold(input.side, amount, singleRoute, multiRoute) : 0;
+    const selected = chooseRoute(input.side, singleRoute, multiRoute, threshold);
+    const diagnostics: RouteDecisionDiagnostics = {
+      bestSingleRouteScore: singleRoute?.score ?? null,
+      bestMultiRouteScore: multiRoute?.score ?? null,
+      selectedRouteReason: selected.reason,
+      improvementThreshold: roundPrice(threshold),
+      skippedDustVenues: multiRoute?.skippedDustVenues ?? []
+    };
+    if (!selected.route) {
+      return { route: null, diagnostics };
+    }
+    const alternative = selected.route.routeType === "SINGLE_VENUE" ? multiRoute : singleRoute;
+    return {
+      route: this.buildQuote(input, selected.route, alternative, selected.reason),
+      diagnostics
+    };
+  }
+
+  private buildMultiVenueRoute(
+    input: TradeQuoteRequest,
+    executable: readonly TradeRouteCandidate[],
+    amount: number
+  ): ScoredRoute | null {
     if (executable.length < 2) {
       return null;
     }
     let remaining = amount;
     const legs: ExecutableRouteLeg[] = [];
-    for (const candidate of executable) {
+    const skippedDust: TradeRouteCandidate[] = [];
+    const skippedDustVenues: string[] = [];
+    const sorted = [...executable].sort((left, right) => compareCandidatesByEffectivePrice(input.side, left, right));
+    const minimumLegSize = Math.max(0.01, amount * 0.05);
+    for (const candidate of sorted) {
       if (remaining <= 0) {
+        break;
+      }
+      const available = parseNonNegativeNumber(candidate.availableSize, "availableSize");
+      if (available > 0 && available < minimumLegSize && remaining > minimumLegSize) {
+        skippedDust.push(candidate);
+        skippedDustVenues.push(candidate.venue.toUpperCase());
+        continue;
+      }
+      const size = Math.min(available, remaining);
+      if (size <= 0) {
+        continue;
+      }
+      legs.push(toLeg(candidate, size));
+      remaining -= size;
+    }
+    for (const candidate of skippedDust) {
+      if (remaining <= routeDustTolerance) {
         break;
       }
       const available = parseNonNegativeNumber(candidate.availableSize, "availableSize");
@@ -241,45 +319,40 @@ export class ExecutableRouteService {
       if (size <= 0) {
         continue;
       }
-      legs.push({
-        venue: candidate.venue.toUpperCase(),
-        size: decimal(size),
-        price: candidate.price,
-        requiresUserSignature: candidate.requiresUserSignature === true
-      });
+      legs.push(toLeg(candidate, size));
       remaining -= size;
     }
-    if (remaining > routeDustTolerance || legs.length < 2) {
+    if (remaining > routeDustTolerance || legs.length < 2 || new Set(legs.map((leg) => leg.venue)).size < 2) {
       return null;
     }
-    return this.buildQuote(input, "CROSS_VENUE", legs);
+    return scoreRoute(input.side, "CROSS_VENUE", legs, executable, skippedDustVenues);
   }
 
-  private buildSingleVenueQuote(
+  private buildSingleVenueRoute(
     input: TradeQuoteRequest,
     executable: readonly TradeRouteCandidate[],
     amount: number
-  ): ExecutableTradeQuote | null {
-    const candidate = executable.find((entry) => parseNonNegativeNumber(entry.availableSize, "availableSize") >= amount);
-    if (!candidate) {
-      return null;
-    }
-    return this.buildQuote(input, "SINGLE_VENUE", [{
-      venue: candidate.venue.toUpperCase(),
-      size: decimal(amount),
-      price: candidate.price,
-      requiresUserSignature: candidate.requiresUserSignature === true
-    }]);
+  ): ScoredRoute | null {
+    const routes = executable
+      .filter((entry) => parseNonNegativeNumber(entry.availableSize, "availableSize") >= amount)
+      .map((candidate) => scoreRoute(input.side, "SINGLE_VENUE", [toLeg(candidate, amount)], [candidate], []))
+      .sort((left, right) => input.side === "buy" ? left.score - right.score : right.score - left.score);
+    return routes[0] ?? null;
   }
 
   private buildQuote(
     input: TradeQuoteRequest,
-    routeType: TradeRouteType,
-    legs: readonly ExecutableRouteLeg[]
+    selectedRoute: ScoredRoute,
+    alternativeRoute: ScoredRoute | null,
+    routeDecisionReason: string
   ): ExecutableTradeQuote {
+    const { routeType, legs } = selectedRoute;
     const totalSize = legs.reduce((sum, leg) => sum + Number(leg.size), 0);
     const notional = legs.reduce((sum, leg) => sum + Number(leg.size) * leg.price, 0);
     const expiresAt = new Date(this.now().getTime() + 60_000).toISOString();
+    const estimatedSavings = alternativeRoute
+      ? Math.max(0, routeSavings(input.side, selectedRoute, alternativeRoute))
+      : 0;
     return {
       quoteId: `exec_quote_${randomUUID()}`,
       userId: input.userId,
@@ -291,6 +364,9 @@ export class ExecutableRouteService {
       executableAmount: decimal(totalSize),
       skippedAmount: "0",
       expectedPrice: totalSize > 0 ? roundPrice(notional / totalSize) : 0,
+      effectivePrice: totalSize > 0 ? roundPrice(selectedRoute.effectiveNotional / totalSize) : 0,
+      estimatedSavings: roundPrice(estimatedSavings),
+      routeDecisionReason,
       requiredUserSignatureSteps: legs
         .filter((leg) => leg.requiresUserSignature)
         .map((leg) => `${leg.venue} user signature required`),
@@ -405,6 +481,14 @@ const evaluateCandidate = (
       adminReason: `${candidate.venue} is not present in execution readiness.`
     };
   }
+  if ((candidate.quoteBlockers?.length ?? 0) > 0) {
+    return {
+      executable: false,
+      status: "BLOCKED",
+      blockerCategory: "QUOTE_EVIDENCE_BLOCKED",
+      adminReason: `${candidate.venue} quote evidence blocked: ${candidate.quoteBlockers!.join("; ")}`
+    };
+  }
   if (candidate.recoveryRequired) {
     return { executable: false, status: "RECOVERY_REQUIRED", blockerCategory: "RECOVERY_REQUIRED", adminReason: `${candidate.venue} has unresolved recovery state.` };
   }
@@ -493,6 +577,127 @@ const requireVenue = (venue: string | undefined): string => {
   return venue.trim().toUpperCase();
 };
 
+const chooseRoute = (
+  side: TradeSide,
+  singleRoute: ScoredRoute | null,
+  multiRoute: ScoredRoute | null,
+  threshold: number
+): { route: ScoredRoute | null; reason: string } => {
+  if (!singleRoute && !multiRoute) {
+    return { route: null, reason: "no_executable_route" };
+  }
+  if (!singleRoute && multiRoute) {
+    return { route: multiRoute, reason: "multi_venue_selected_no_single_venue_can_fill" };
+  }
+  if (singleRoute && !multiRoute) {
+    return { route: singleRoute, reason: "single_venue_selected_no_multi_venue_improvement" };
+  }
+  const single = singleRoute!;
+  const multi = multiRoute!;
+  const improvement = routeSavings(side, multi, single);
+  if (improvement >= threshold) {
+    return { route: multi, reason: "multi_venue_selected_best_net_execution" };
+  }
+  return { route: single, reason: "single_venue_selected_multi_venue_improvement_below_threshold" };
+};
+
+const routeSavings = (side: TradeSide, selected: ScoredRoute, alternative: ScoredRoute): number =>
+  side === "buy"
+    ? alternative.effectiveNotional - selected.effectiveNotional
+    : selected.effectiveNotional - alternative.effectiveNotional;
+
+const routeImprovementThreshold = (
+  side: TradeSide,
+  amount: number,
+  singleRoute: ScoredRoute,
+  multiRoute: ScoredRoute
+): number => {
+  const referenceNotional = Math.max(singleRoute.effectiveNotional, multiRoute.effectiveNotional, 0);
+  const base = amount * 0.001;
+  const bps = referenceNotional * 5 / 10_000;
+  const extraFixedFees = Math.max(0, multiRoute.legs.length - singleRoute.legs.length) * 0.0001;
+  const routeFriction = Math.abs(routeFrictionNotional(side, multiRoute.legs) - routeFrictionNotional(side, singleRoute.legs));
+  return Math.max(base, bps, extraFixedFees + routeFriction);
+};
+
+const compareCandidatesByEffectivePrice = (
+  side: TradeSide,
+  left: TradeRouteCandidate,
+  right: TradeRouteCandidate
+): number => {
+  const leftPrice = effectiveCandidatePrice(side, left);
+  const rightPrice = effectiveCandidatePrice(side, right);
+  return side === "buy" ? leftPrice - rightPrice : rightPrice - leftPrice;
+};
+
+const toLeg = (candidate: TradeRouteCandidate, size: number): ExecutableRouteLeg => ({
+  venue: candidate.venue.toUpperCase(),
+  size: decimal(size),
+  price: candidate.price,
+  requiresUserSignature: candidate.requiresUserSignature === true
+});
+
+const scoreRoute = (
+  side: TradeSide,
+  routeType: TradeRouteType,
+  legs: readonly ExecutableRouteLeg[],
+  sourceCandidates: readonly TradeRouteCandidate[],
+  skippedDustVenues: readonly string[]
+): ScoredRoute => {
+  const candidateByVenue = new Map(sourceCandidates.map((candidate) => [candidate.venue.toUpperCase(), candidate]));
+  const rawNotional = legs.reduce((sum, leg) => sum + Number(leg.size) * leg.price, 0);
+  const candidateAdjustedNotional = legs.reduce((sum, leg) => {
+    const candidate = candidateByVenue.get(leg.venue);
+    const effectivePrice = candidate ? effectiveCandidatePrice(side, candidate, Number(leg.size)) : leg.price;
+    return sum + Number(leg.size) * effectivePrice;
+  }, 0);
+  const effectiveNotional = candidateAdjustedNotional + routeFrictionNotional(side, legs);
+  return {
+    routeType,
+    legs: legs.map((leg) => ({ ...leg })),
+    rawNotional,
+    effectiveNotional,
+    score: effectiveNotional,
+    skippedDustVenues: [...new Set(skippedDustVenues.map((venue) => venue.toUpperCase()))]
+  };
+};
+
+const effectiveCandidatePrice = (
+  side: TradeSide,
+  candidate: TradeRouteCandidate,
+  size = parseNonNegativeNumber(candidate.availableSize, "availableSize")
+): number => {
+  const basis = Math.max(candidate.price, 0);
+  const variableBps = nonNegative(candidate.feeBps) + nonNegative(candidate.spreadBps) + nonNegative(candidate.slippageBps);
+  const fixedFeeImpact = size > 0 ? nonNegative(candidate.fixedFee) / size : 0;
+  const liquidityPenaltyBps = liquidityPenalty(candidate.liquidityScore);
+  const signaturePenaltyBps = candidate.requiresUserSignature ? userSignaturePenaltyBps : 0;
+  const confidencePenaltyBps = nonNegative(candidate.confidencePenaltyBps);
+  const adjustment = basis * ((variableBps + liquidityPenaltyBps + signaturePenaltyBps + confidencePenaltyBps) / 10_000) + fixedFeeImpact;
+  return side === "buy" ? basis + adjustment : basis - adjustment;
+};
+
+const routeFrictionNotional = (side: TradeSide, legs: readonly ExecutableRouteLeg[]): number => {
+  const extraVenueCount = Math.max(0, legs.length - 1);
+  if (extraVenueCount === 0) {
+    return 0;
+  }
+  const rawNotional = legs.reduce((sum, leg) => sum + Number(leg.size) * leg.price, 0);
+  const friction = rawNotional * (extraVenueCount * extraVenuePenaltyBps) / 10_000;
+  return side === "buy" ? friction : -friction;
+};
+
+const liquidityPenalty = (score: number | undefined): number => {
+  if (score === undefined) {
+    return 0;
+  }
+  const normalized = Math.max(0, Math.min(1, score));
+  return (1 - normalized) * liquidityPenaltyBps;
+};
+
+const nonNegative = (value: number | undefined): number =>
+  Number.isFinite(value) && value !== undefined && value > 0 ? value : 0;
+
 const parsePositiveNumber = (value: string, label: string): number => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -509,6 +714,9 @@ const parseNonNegativeNumber = (value: string, label: string): number => {
   return parsed;
 };
 
+const extraVenuePenaltyBps = 2;
+const userSignaturePenaltyBps = 5;
+const liquidityPenaltyBps = 1;
 const routeDustTolerance = 1e-8;
 
 const decimal = (value: number): string => {

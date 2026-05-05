@@ -72,6 +72,7 @@ interface InternalCrossingHint {
 
 interface CanonicalOrderbookSnapshot {
   snapshotId?: string;
+  venue?: string;
   availableSize: number;
   quotedPrice: number;
   fees?: Readonly<Record<string, number>>;
@@ -104,6 +105,12 @@ interface RouteScoutCanonicalClient {
     side: "buy" | "sell";
     quantity: number;
   }): Promise<CanonicalOrderbookSnapshot | null>;
+  getOrderbookSnapshots?(input: {
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string;
+    side: "buy" | "sell";
+    quantity: number;
+  }): Promise<readonly CanonicalOrderbookSnapshot[]>;
 }
 
 interface RouteScoutInternalCrossingSource {
@@ -170,12 +177,17 @@ export class RouteScout implements IRouteScout {
         const result: RouteCandidate[] = [];
         for (const leg of legs) {
           const perLegQuotes = await this.deps.lpSource.getPerLegQuotes(parsed.rfq, leg.leg_id);
-          const orderbookSnapshot = await this.deps.canonicalClient.getOrderbookSnapshot({
+          const orderbookInput = {
             canonicalMarketId: leg.canonical_market_id,
             ...(leg.canonical_outcome_id ? { canonicalOutcomeId: leg.canonical_outcome_id } : {}),
             side: leg.side,
             quantity: leg.quantity
-          });
+          };
+          const orderbookSnapshots = this.deps.canonicalClient.getOrderbookSnapshots
+            ? await this.deps.canonicalClient.getOrderbookSnapshots(orderbookInput)
+            : [
+                await this.deps.canonicalClient.getOrderbookSnapshot(orderbookInput)
+              ].filter((snapshot): snapshot is CanonicalOrderbookSnapshot => snapshot !== null);
 
           const internalHints = this.deps.internalCrossingSource
             ? await this.deps.internalCrossingSource.getCrossingHints({
@@ -228,19 +240,20 @@ export class RouteScout implements IRouteScout {
             result.push(this.normalizeCandidate(leg.leg_id, perLegInput));
           }
 
-          if (orderbookSnapshot) {
+          for (const orderbookSnapshot of orderbookSnapshots) {
             const orderbookInputBase = {
               providerType: "VENUE" as const,
-              providerId: "canonical-orderbook",
+              providerId: orderbookSnapshot.venue ?? "canonical-orderbook",
               availableSize: orderbookSnapshot.availableSize,
               quotedPrice: orderbookSnapshot.quotedPrice,
               metadata: {
                 source: "canonical_orderbook",
+                ...(orderbookSnapshot.venue ? { venue: orderbookSnapshot.venue } : {}),
                 ...(orderbookSnapshot.snapshotId ? { snapshotId: orderbookSnapshot.snapshotId } : {}),
                 ...(orderbookSnapshot.metadata ?? {})
               }
             };
-            const orderbookInput = {
+            const normalizedOrderbookInput = {
               ...orderbookInputBase,
               ...(orderbookSnapshot.fees ? { fees: orderbookSnapshot.fees } : {}),
               ...(typeof orderbookSnapshot.latencyMs === "number"
@@ -250,7 +263,7 @@ export class RouteScout implements IRouteScout {
                 ? { fillProb: orderbookSnapshot.fillProb }
                 : {})
             };
-            result.push(this.normalizeCandidate(leg.leg_id, orderbookInput));
+            result.push(this.normalizeCandidate(leg.leg_id, normalizedOrderbookInput));
           }
 
           for (const hint of internalHints) {

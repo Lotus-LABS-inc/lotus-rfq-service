@@ -33,6 +33,9 @@ const readyVenue = (venue: string, overrides: Partial<ExecutionVenueReadinessSum
     generatedAt: "2026-05-03T00:00:00.000Z",
     mode: "LIVE_READY",
     submitted: true,
+    fillStatus: "FILLED",
+    settlementStatus: "SETTLEMENT_VERIFIED",
+    settlementVerified: true,
     errorCode: null,
     errorStatus: null,
     errorMessage: null,
@@ -229,6 +232,180 @@ describe("executable route selection", () => {
       routeType: "CROSS_VENUE",
       venuePath: ["POLYMARKET", "LIMITLESS", "PREDICT_FUN"],
       executableAmount: "1"
+    });
+  });
+
+  it("selects multi-venue route when net execution beats the best single venue by threshold", async () => {
+    const service = new ExecutableRouteService({
+      async listVenues() {
+        return [readyVenue("POLYMARKET"), readyVenue("LIMITLESS")];
+      }
+    });
+
+    const result = await service.quote({
+      userId: "user-1",
+      side: "buy",
+      marketId: "market-1",
+      outcomeId: "yes",
+      amount: "10",
+      candidates: [
+        { venue: "POLYMARKET", price: 0.52, availableSize: "10" },
+        { venue: "LIMITLESS", price: 0.5, availableSize: "6" },
+        { venue: "POLYMARKET", price: 0.52, availableSize: "4" }
+      ]
+    });
+
+    expect(result.quote).toMatchObject({
+      routeType: "CROSS_VENUE",
+      venuePath: ["LIMITLESS", "POLYMARKET"],
+      executableAmount: "10",
+      routeDecisionReason: "multi_venue_selected_best_net_execution"
+    });
+    expect(result.quote?.effectivePrice).toBeLessThan(0.52);
+  });
+
+  it("keeps a single venue when multi-venue improvement is too small", async () => {
+    const service = new ExecutableRouteService({
+      async listVenues() {
+        return [readyVenue("POLYMARKET"), readyVenue("LIMITLESS")];
+      }
+    });
+
+    const result = await service.quote({
+      userId: "user-1",
+      side: "buy",
+      marketId: "market-1",
+      outcomeId: "yes",
+      amount: "10",
+      candidates: [
+        { venue: "POLYMARKET", price: 0.5, availableSize: "10" },
+        { venue: "LIMITLESS", price: 0.49995, availableSize: "5" },
+        { venue: "POLYMARKET", price: 0.5, availableSize: "5" }
+      ]
+    });
+
+    expect(result.quote).toMatchObject({
+      routeType: "SINGLE_VENUE",
+      venuePath: ["POLYMARKET"],
+      routeDecisionReason: "single_venue_selected_multi_venue_improvement_below_threshold"
+    });
+  });
+
+  it("uses multi-venue when no single venue can fill but combined venues can", async () => {
+    const service = new ExecutableRouteService({
+      async listVenues() {
+        return [readyVenue("POLYMARKET"), readyVenue("LIMITLESS")];
+      }
+    });
+
+    const result = await service.quote({
+      userId: "user-1",
+      side: "buy",
+      marketId: "market-1",
+      outcomeId: "yes",
+      amount: "10",
+      candidates: [
+        { venue: "POLYMARKET", price: 0.51, availableSize: "5" },
+        { venue: "LIMITLESS", price: 0.52, availableSize: "5" }
+      ]
+    });
+
+    expect(result.quote).toMatchObject({
+      routeType: "CROSS_VENUE",
+      executableAmount: "10",
+      routeDecisionReason: "multi_venue_selected_no_single_venue_can_fill"
+    });
+  });
+
+  it("avoids tiny dust legs when a full route can be built without them", async () => {
+    const service = new ExecutableRouteService({
+      async listVenues() {
+        return [readyVenue("POLYMARKET"), readyVenue("LIMITLESS"), readyVenue("PREDICT_FUN")];
+      }
+    });
+
+    const result = await service.quote({
+      userId: "user-1",
+      side: "buy",
+      marketId: "market-1",
+      outcomeId: "yes",
+      amount: "10",
+      candidates: [
+        { venue: "PREDICT_FUN", price: 0.49, availableSize: "0.001" },
+        { venue: "LIMITLESS", price: 0.5, availableSize: "6" },
+        { venue: "POLYMARKET", price: 0.51, availableSize: "4" }
+      ]
+    });
+
+    expect(result.quote).toMatchObject({
+      routeType: "CROSS_VENUE",
+      venuePath: ["LIMITLESS", "POLYMARKET"],
+      executableAmount: "10"
+    });
+    expect(result.routeDiagnostics?.skippedDustVenues).toEqual(["PREDICT_FUN"]);
+  });
+
+  it("maximizes sell proceeds after spread and slippage", async () => {
+    const service = new ExecutableRouteService({
+      async listVenues() {
+        return [readyVenue("POLYMARKET"), readyVenue("LIMITLESS")];
+      }
+    });
+
+    const result = await service.quote({
+      userId: "user-1",
+      side: "sell",
+      marketId: "market-1",
+      outcomeId: "yes",
+      amount: "2",
+      candidates: [
+        { venue: "POLYMARKET", price: 0.6, availableSize: "2", spreadBps: 100 },
+        { venue: "LIMITLESS", price: 0.595, availableSize: "2" }
+      ]
+    });
+
+    expect(result.quote).toMatchObject({
+      routeType: "SINGLE_VENUE",
+      venuePath: ["LIMITLESS"],
+      executableAmount: "2"
+    });
+  });
+
+  it("applies confidence penalty to incomplete but otherwise usable quote evidence", async () => {
+    const service = new ExecutableRouteService({
+      async listVenues() {
+        return [readyVenue("POLYMARKET"), readyVenue("LIMITLESS")];
+      }
+    });
+
+    const result = await service.quote({
+      userId: "user-1",
+      side: "buy",
+      marketId: "market-1",
+      outcomeId: "yes",
+      amount: "10",
+      candidates: [
+        {
+          venue: "POLYMARKET",
+          price: 0.5,
+          availableSize: "10",
+          quoteQuality: "FULL_DEPTH_STREAM",
+          confidencePenaltyBps: 0
+        },
+        {
+          venue: "LIMITLESS",
+          price: 0.4999,
+          availableSize: "10",
+          quoteQuality: "TOP_OF_BOOK_REST",
+          confidencePenaltyBps: 20,
+          missingFactors: ["FEE_DISCOVERY"]
+        }
+      ]
+    });
+
+    expect(result.quote).toMatchObject({
+      routeType: "SINGLE_VENUE",
+      venuePath: ["POLYMARKET"]
     });
   });
 });

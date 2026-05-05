@@ -14,7 +14,17 @@ const candidateSchema = z.object({
   requiresUserSignature: z.boolean().optional(),
   activationRequired: z.boolean().optional(),
   settlementEvidenceSupported: z.boolean().optional(),
-  recoveryRequired: z.boolean().optional()
+  recoveryRequired: z.boolean().optional(),
+  feeBps: z.number().nonnegative().optional(),
+  fixedFee: z.number().nonnegative().optional(),
+  spreadBps: z.number().nonnegative().optional(),
+  slippageBps: z.number().nonnegative().optional(),
+  liquidityScore: z.number().min(0).max(1).optional(),
+  quoteQuality: z.string().optional(),
+  freshnessMs: z.number().nonnegative().optional(),
+  confidencePenaltyBps: z.number().nonnegative().optional(),
+  quoteBlockers: z.array(z.string()).optional(),
+  missingFactors: z.array(z.string()).optional()
 });
 
 const quoteRequestSchema = z.object({
@@ -169,6 +179,9 @@ const toUserQuote = (quote: ExecutableTradeQuote): Record<string, unknown> => ({
   executableAmount: quote.executableAmount,
   skippedAmount: quote.skippedAmount,
   expectedPrice: quote.expectedPrice,
+  effectivePrice: quote.effectivePrice,
+  estimatedSavings: quote.estimatedSavings,
+  routeDecisionReason: quote.routeDecisionReason,
   expectedFees: {},
   requiredUserSignatureSteps: quote.requiredUserSignatureSteps,
   expiresAt: quote.expiresAt,

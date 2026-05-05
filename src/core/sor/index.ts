@@ -6,3 +6,4 @@ export { Splitter } from "./splitter.js";
 export { PlanComposer } from "./plan-composer.js";
 export { PlanRunner } from "./plan-runner.js";
 export * from "./canary-shadow.js";
+export * from "./quote-snapshot.js";
