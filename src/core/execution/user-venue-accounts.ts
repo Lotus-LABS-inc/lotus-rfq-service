@@ -105,6 +105,7 @@ export class UserVenueAccountError extends Error {
       | "USER_VENUE_ACCOUNT_UNSUPPORTED"
       | "USER_VENUE_ACCOUNT_WALLET_REQUIRED"
       | "USER_VENUE_ACCOUNT_MISMATCH"
+      | "USER_VENUE_ACCOUNT_INVALID_ADDRESS"
       | "USER_VENUE_ACCOUNT_INACTIVE"
       | "PREDICT_FUN_ACCOUNT_NOT_CONFIGURED"
       | "PREDICT_FUN_ACCOUNT_AUTH_FAILED"
@@ -154,6 +155,14 @@ export class UserVenueAccountService {
     if (venue === "MYRIAD" && !input.venueAccountId && !input.venueAccountAddress) {
       return this.ensureWalletAddressVenueAccount(input.userId, venue, wallet, existing);
     }
+    if (venue === "OPINION") {
+      return this.ensureOpinionSafeAccount(input.userId, wallet, existing, {
+        venueAccountId: input.venueAccountId ?? null,
+        venueAccountAddress: input.venueAccountAddress ?? null,
+        venueAccountType: input.venueAccountType ?? null,
+        eventType: existing ? "USER_VENUE_ACCOUNT_UPDATED" : "USER_VENUE_ACCOUNT_ENSURED"
+      });
+    }
     const venueAccountType = input.venueAccountType ?? existing?.venueAccountType ?? defaultAccountTypeForVenue(venue);
     const hasVenueAccount = Boolean(input.venueAccountId?.trim() || input.venueAccountAddress?.trim());
     const account = await this.repository.upsertAccount({
@@ -184,6 +193,25 @@ export class UserVenueAccountService {
       readinessBlockers: readinessBlockersForAccount(account),
       setupInstructions: setupInstructionsForVenue(venue, account)
     };
+  }
+
+  public async completeOpinionAccountLink(input: {
+    userId: string;
+    venueAccountAddress: string;
+    venueAccountId?: string | null;
+  }): Promise<{
+    account: UserVenueAccount;
+    readinessBlockers: string[];
+    setupInstructions: string[];
+  }> {
+    const wallet = await this.resolveRequiredTurnkeyEvmWallet(input.userId);
+    const existing = await this.repository.findAccount({ userId: input.userId, venue: "OPINION" });
+    return this.ensureOpinionSafeAccount(input.userId, wallet, existing, {
+      venueAccountId: input.venueAccountId ?? null,
+      venueAccountAddress: input.venueAccountAddress,
+      venueAccountType: "SAFE",
+      eventType: "OPINION_ACCOUNT_LINKED"
+    });
   }
 
   public async preparePredictFunAccountAuth(userId: string): Promise<{
@@ -568,6 +596,71 @@ export class UserVenueAccountService {
     return this.limitlessPartnerAccountClient;
   }
 
+  private async ensureOpinionSafeAccount(
+    userId: string,
+    wallet: UserWallet,
+    existing: UserVenueAccount | null,
+    input: {
+      venueAccountId?: string | null;
+      venueAccountAddress?: string | null;
+      venueAccountType?: UserVenueAccountType | null;
+      eventType: string;
+    }
+  ): Promise<{
+    account: UserVenueAccount;
+    readinessBlockers: string[];
+    setupInstructions: string[];
+  }> {
+    if (input.venueAccountType && input.venueAccountType !== "SAFE") {
+      throw new UserVenueAccountError(
+        "USER_VENUE_ACCOUNT_MISMATCH",
+        "Opinion account links must use an Opinion Safe account.",
+        400
+      );
+    }
+    const providedAddress = nonEmpty(input.venueAccountAddress);
+    if (providedAddress && !isEvmAddress(providedAddress)) {
+      throw new UserVenueAccountError(
+        "USER_VENUE_ACCOUNT_INVALID_ADDRESS",
+        "Opinion Safe address must be a valid EVM address.",
+        400
+      );
+    }
+    const venueAccountAddress = providedAddress ?? existing?.venueAccountAddress ?? null;
+    const venueAccountId = nonEmpty(input.venueAccountId) ?? existing?.venueAccountId ?? null;
+    const hasValidSafeAddress = Boolean(venueAccountAddress && isEvmAddress(venueAccountAddress));
+    const account = await this.repository.upsertAccount({
+      ...(existing?.venueAccountBindingId ? { venueAccountBindingId: existing.venueAccountBindingId } : {}),
+      userId,
+      venue: "OPINION",
+      userWalletId: wallet.walletId,
+      walletAddress: wallet.address,
+      venueAccountId,
+      venueAccountAddress,
+      venueAccountType: "SAFE",
+      status: hasValidSafeAddress ? "ACTIVE" : "PENDING",
+      lastVerifiedAt: hasValidSafeAddress ? new Date().toISOString() : existing?.lastVerifiedAt ?? null
+    });
+    await this.repository.appendAccountAuditEvent({
+      userId,
+      venueAccountBindingId: account.venueAccountBindingId,
+      eventType: input.eventType,
+      payload: {
+        venue: "OPINION",
+        accountType: "SAFE",
+        status: account.status,
+        venueAccountAddress: account.venueAccountAddress,
+        venueAccountIdPresent: Boolean(account.venueAccountId),
+        walletAddressMatches: equalsAddress(account.walletAddress, wallet.address)
+      }
+    });
+    return {
+      account,
+      readinessBlockers: readinessBlockersForAccount(account),
+      setupInstructions: setupInstructionsForVenue("OPINION", account)
+    };
+  }
+
   private async ensurePolymarketDepositWalletAccount(
     userId: string,
     wallet: UserWallet,
@@ -915,6 +1008,9 @@ const equalsAddress = (left: string | null | undefined, right: string | null | u
 
 const isEvmSignature = (value: string): boolean =>
   /^0x[a-fA-F0-9]{130}$/.test(value.trim());
+
+const isEvmAddress = (value: string): boolean =>
+  /^0x[a-fA-F0-9]{40}$/.test(value.trim());
 
 const isPolymarketDepositWalletDeploymentReady = (
   status: Awaited<ReturnType<PolymarketDepositWalletClient["deriveOrCreateDepositWallet"]>>["deploymentStatus"]
