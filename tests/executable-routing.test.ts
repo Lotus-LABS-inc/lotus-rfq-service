@@ -204,6 +204,33 @@ describe("executable route selection", () => {
       executableAmount: "1"
     });
   });
+
+  it("accepts cross-venue routes with harmless decimal split dust", async () => {
+    const service = new ExecutableRouteService({
+      async listVenues() {
+        return [readyVenue("POLYMARKET"), readyVenue("LIMITLESS"), readyVenue("PREDICT_FUN")];
+      }
+    });
+
+    const result = await service.quote({
+      userId: "user-1",
+      side: "buy",
+      marketId: "market-1",
+      outcomeId: "yes",
+      amount: "1",
+      candidates: [
+        { venue: "POLYMARKET", price: 0.5, availableSize: "0.3333333333333333" },
+        { venue: "LIMITLESS", price: 0.5, availableSize: "0.3333333333333333" },
+        { venue: "PREDICT_FUN", price: 0.5, availableSize: "0.3333333333333333" }
+      ]
+    });
+
+    expect(result.quote).toMatchObject({
+      routeType: "CROSS_VENUE",
+      venuePath: ["POLYMARKET", "LIMITLESS", "PREDICT_FUN"],
+      executableAmount: "1"
+    });
+  });
 });
 
 describe("sell quote sizing", () => {

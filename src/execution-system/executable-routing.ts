@@ -249,7 +249,7 @@ export class ExecutableRouteService {
       });
       remaining -= size;
     }
-    if (remaining > 0 || legs.length < 2) {
+    if (remaining > routeDustTolerance || legs.length < 2) {
       return null;
     }
     return this.buildQuote(input, "CROSS_VENUE", legs);
@@ -509,8 +509,15 @@ const parseNonNegativeNumber = (value: string, label: string): number => {
   return parsed;
 };
 
-const decimal = (value: number): string =>
-  Number.isInteger(value) ? String(value) : value.toFixed(8).replace(/0+$/, "").replace(/\.$/, "");
+const routeDustTolerance = 1e-8;
+
+const decimal = (value: number): string => {
+  const roundedInteger = Math.round(value);
+  if (Number.isInteger(value) || Math.abs(value - roundedInteger) <= routeDustTolerance) {
+    return String(roundedInteger);
+  }
+  return value.toFixed(12).replace(/0+$/, "").replace(/\.$/, "");
+};
 
 const roundPrice = (value: number): number =>
   Math.round(value * 1_000_000) / 1_000_000;
