@@ -1,13 +1,20 @@
 import { z } from "zod";
 
-const canonicalMarketSchema = z.object({
+const canonicalMarketPayloadSchema = z.object({
   id: z.string(),
+  marketId: z.string().optional(),
+  canonicalMarketIds: z.array(z.string()).optional(),
   status: z.string().optional(),
   active: z.boolean().optional(),
   isActive: z.boolean().optional(),
   canonicalEventId: z.string().uuid().optional(),
   canonical_event_id: z.string().uuid().optional()
 });
+
+const canonicalMarketResponseSchema = z.union([
+  canonicalMarketPayloadSchema,
+  z.object({ market: canonicalMarketPayloadSchema.omit({ id: true }).extend({ id: z.string().optional() }) })
+]);
 
 export interface CanonicalMarket {
   id: string;
@@ -37,7 +44,7 @@ const isMarketStatusActive = (status: string | undefined): boolean => {
     return false;
   }
 
-  return status.toUpperCase() === "ACTIVE";
+  return status.toUpperCase() === "ACTIVE" || status.toUpperCase() === "OPEN";
 };
 
 export const createCanonicalMarketClient = (
@@ -60,12 +67,14 @@ export const createCanonicalMarketClient = (
         );
       }
 
-      const parsed = canonicalMarketSchema.parse(await response.json());
+      const parsedResponse = canonicalMarketResponseSchema.parse(await response.json());
+      const parsed = "market" in parsedResponse ? parsedResponse.market : parsedResponse;
       const isActive = parsed.isActive ?? parsed.active ?? isMarketStatusActive(parsed.status);
       const canonicalEventId = parsed.canonicalEventId ?? parsed.canonical_event_id;
+      const id = parsed.id ?? parsed.marketId ?? parsed.canonicalMarketIds?.[0] ?? marketId;
 
       const market: CanonicalMarket = {
-        id: parsed.id,
+        id,
         ...(parsed.status ? { status: parsed.status } : {}),
         isActive
       };
