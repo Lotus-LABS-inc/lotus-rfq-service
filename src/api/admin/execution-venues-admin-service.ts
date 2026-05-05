@@ -320,7 +320,7 @@ export class ExecutionVenuesAdminService {
     if (adapterStatus.liveExecutionEnabled && !adapterStatus.requiredEnvPresent) {
       blockers.push(`Missing Limitless live env: ${adapterStatus.missingEnv.join(", ")}.`);
     }
-    blockers.push("Settlement evidence reader is not implemented yet; live fills must remain operator-reviewed.");
+    blockers.push("Limitless settlement evidence reader is implemented, but live fills must remain operator-reviewed until the tiny harness proves fill/status/finality behavior.");
     return blockers;
   }
 
