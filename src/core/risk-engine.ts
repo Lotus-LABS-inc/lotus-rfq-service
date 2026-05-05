@@ -86,7 +86,7 @@ export class RiskEngine implements IRiskEngine {
                 }
 
                 const marketRes = await client.query(
-                    "SELECT SUM(gross_notional) as total_gross FROM exposure WHERE canonical_market_id = $1",
+                    "SELECT SUM(gross_notional) as total_gross FROM exposure WHERE canonical_market_id::text = $1",
                     [rfq.canonical_market_id]
                 );
                 const authMarketExposure = Number.parseFloat(marketRes.rows[0].total_gross || "0");
