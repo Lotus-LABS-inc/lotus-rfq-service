@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { calculateVenueQuote, QuoteSnapshotCache } from "../src/core/sor/quote-snapshot.js";
 import { normalizeMyriadQuote } from "../src/integrations/myriad/myriad-quote-reader.js";
-import { normalizeOpinionOrderbook } from "../src/integrations/opinion/opinion-quote-reader.js";
+import { normalizeOpinionOrderbook, OpinionQuoteReader, parseOpinionTopicRate } from "../src/integrations/opinion/opinion-quote-reader.js";
 import { normalizePredictOrderbook, PredictQuoteReader } from "../src/integrations/predict/predict-quote-reader.js";
 
 const now = new Date("2026-05-05T22:30:00.000Z");
@@ -74,6 +74,41 @@ describe("extended venue quote readers", () => {
     expect(calculated.ok).toBe(true);
     expect(calculated.feeQuote?.feeModel).toBe("OPINION_TAKER_CURVE");
     expect(calculated.missingFactors).not.toContain("FEE_DISCOVERY");
+  });
+
+  it("parses Opinion topic rate from nested API payload variants", () => {
+    expect(parseOpinionTopicRate({ result: { market: { topic_rate: "0.04" } } })).toBe(0.04);
+    expect(parseOpinionTopicRate({ data: { feeConfig: { topicRate: 0.03 } } })).toBe(0.03);
+    expect(parseOpinionTopicRate({ result: { orderbook: { bids: [] } } })).toBeNull();
+  });
+
+  it("Opinion reader uses API topic rate when config fallback is absent", async () => {
+    const reader = new OpinionQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      now: () => now,
+      client: {
+        async getTokenOrderbook() {
+          return {
+            result: {
+              feeConfig: { topic_rate: "0.04" },
+              bids: [{ price: "0.49", size: "10" }],
+              asks: [{ price: "0.51", size: "10" }]
+            }
+          };
+        }
+      }
+    });
+
+    const snapshot = await reader.getQuoteSnapshot({
+      canonicalMarketId: "canonical-1",
+      venueMarketId: "opinion-market-1",
+      venueOutcomeId: "token-yes",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(snapshot?.opinionTopicRate).toBe(0.04);
+    expect(snapshot?.missingFactors).toEqual([]);
   });
 
   it("normalizes Myriad quote responses as indicative executable depth with exact fee", () => {

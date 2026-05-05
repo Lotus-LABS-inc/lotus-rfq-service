@@ -35,12 +35,13 @@ export class OpinionQuoteReader implements VenueQuoteSnapshotReader {
     }
 
     const payload = await this.config.client.getTokenOrderbook({ tokenId });
+    const apiTopicRate = parseOpinionTopicRate(payload);
     return normalizeOpinionOrderbook({
       payload,
       venueMarketId: input.venueMarketId,
       venueOutcomeId: tokenId,
       receivedAt: this.now(),
-      topicRate: this.config.topicRate,
+      topicRate: this.config.topicRate ?? apiTopicRate ?? undefined,
       feeBps: this.config.feeBps
     });
   }
@@ -75,9 +76,22 @@ export const normalizeOpinionOrderbook = (input: {
     streamResynced: true,
     metadata: {
       venueMarketId: input.venueMarketId,
-      venueOutcomeId: input.venueOutcomeId ?? null
+      venueOutcomeId: input.venueOutcomeId ?? null,
+      topicRate: input.topicRate ?? null,
+      topicRateSource: input.topicRate !== undefined ? "api_or_config" : null
     }
   };
+};
+
+export const parseOpinionTopicRate = (payload: unknown): number | null => {
+  const candidates = collectTopicRateCandidates(payload);
+  for (const candidate of candidates) {
+    const parsed = parseNonNegativeNumber(candidate);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+  return null;
 };
 
 const unwrapRecord = (payload: unknown): Record<string, unknown> => {
@@ -87,6 +101,28 @@ const unwrapRecord = (payload: unknown): Record<string, unknown> => {
   if (Object.keys(result).length > 0) return result;
   if (Object.keys(data).length > 0) return data;
   return record;
+};
+
+const collectTopicRateCandidates = (value: unknown): unknown[] => {
+  if (Array.isArray(value)) {
+    return value.flatMap(collectTopicRateCandidates);
+  }
+  const record = asRecord(value);
+  if (Object.keys(record).length === 0) {
+    return [];
+  }
+  const candidates: unknown[] = [
+    record.topic_rate,
+    record.topicRate,
+    record.topicFeeRate,
+    record.topic_fee_rate,
+    record.feeTopicRate,
+    record.fee_topic_rate
+  ];
+  for (const key of ["result", "data", "market", "token", "orderbook", "fee", "fees", "feeConfig", "fee_config"]) {
+    candidates.push(...collectTopicRateCandidates(record[key]));
+  }
+  return candidates;
 };
 
 const normalizeLevels = (value: unknown): readonly NormalizedQuoteLevel[] => {
@@ -114,6 +150,17 @@ const asRecord = (value: unknown): Record<string, unknown> =>
 
 const isNumericLike = (value: unknown): value is string | number =>
   typeof value === "string" || typeof value === "number";
+
+const parseNonNegativeNumber = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  }
+  return null;
+};
 
 const asDate = (value: unknown): Date | null => {
   if (typeof value === "number") return new Date(value >= 1_000_000_000_000 ? value : value * 1_000);
