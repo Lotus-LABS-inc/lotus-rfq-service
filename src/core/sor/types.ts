@@ -130,6 +130,7 @@ export interface CostBreakdown {
   providerFee: number;
   protocolFee: number;
   gasCost: number;
+  feeTotal?: number | undefined;
   latencyPenalty: number;
   failurePenalty: number;
   resolutionRiskPenalty: number;

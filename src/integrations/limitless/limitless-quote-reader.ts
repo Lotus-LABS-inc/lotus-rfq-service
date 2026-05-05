@@ -101,13 +101,20 @@ export const normalizeLimitlessOrderbook = (input: {
     bids,
     asks,
     ...(input.feeBps !== undefined ? { feeBps: input.feeBps } : {}),
+    limitlessMarketType: inferLimitlessMarketType(record),
     staticFeeApproved: input.feeBps !== undefined,
     settlementEvidenceSupported: true,
-    missingFactors: input.feeBps === undefined ? ["FEE_DISCOVERY"] : [],
+    missingFactors: [],
     blockers: [],
     streamResynced: true,
     metadata: { venueMarketId: input.venueMarketId, venueOutcomeId: input.venueOutcomeId ?? null }
   };
+};
+
+const inferLimitlessMarketType = (record: Record<string, unknown>): "amm" | "clob" => {
+  const tradeType = typeof record.tradeType === "string" ? record.tradeType.toLowerCase() : "";
+  const marketType = typeof record.marketType === "string" ? record.marketType.toLowerCase() : "";
+  return tradeType === "amm" || marketType === "amm" ? "amm" : "clob";
 };
 
 const unwrapOrderbookRecord = (payload: unknown): Record<string, unknown> => {

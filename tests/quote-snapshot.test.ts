@@ -29,6 +29,7 @@ const snapshot = (overrides: Partial<NormalizedVenueQuoteSnapshot> = {}): Normal
     { price: "0.52", size: "100" }
   ],
   feeBps: 4,
+  staticFeeApproved: true,
   settlementEvidenceSupported: true,
   blockers: [],
   missingFactors: [],
@@ -51,6 +52,8 @@ describe("quote snapshot calculator", () => {
     expect(result.spreadBps).toBeCloseTo(400);
     expect(result.slippageBps).toBeGreaterThan(0);
     expect(result.liquidityScore).toBeGreaterThan(0);
+    expect(result.feeAmount).toBeCloseTo(0.0308);
+    expect(result.effectiveFeeBps).toBe(4);
   });
 
   it("derives sell weighted price by walking bids", () => {
@@ -235,5 +238,6 @@ describe("venue quote readers", () => {
 
     expect(results.map((result) => result.venue)).toEqual(["POLYMARKET", "LIMITLESS"]);
     expect(results.every((result) => result.metadata.quoteQuality === "FULL_DEPTH_REST")).toBe(true);
+    expect(results.every((result) => result.fees.provider_fee !== undefined)).toBe(true);
   });
 });

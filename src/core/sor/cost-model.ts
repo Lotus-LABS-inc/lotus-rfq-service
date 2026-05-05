@@ -103,6 +103,10 @@ export class CostModel implements ICostModel {
             const scored = this.scoreCandidate(candidate, selectedQuote.quantity);
             const size = Math.max(selectedQuote.quantity, 1e-9);
             const effectiveUnitCost = scored.total_score.div(size);
+            const feeTotal = Object.values(candidate.fees).reduce(
+              (acc, current) => acc.plus(new Decimal(current)),
+              new Decimal(0)
+            );
 
             return {
               candidateId: candidate.id,
@@ -115,6 +119,7 @@ export class CostModel implements ICostModel {
                 providerFee: candidate.fees.provider_fee ?? 0,
                 protocolFee: candidate.fees.protocol_fee ?? 0,
                 gasCost: candidate.fees.gas_cost ?? 0,
+                feeTotal: feeTotal.toNumber(),
                 latencyPenalty: scored.latency_penalty.toNumber(),
                 failurePenalty: scored.failure_cost.toNumber(),
                 resolutionRiskPenalty: scored.resolution_risk_penalty.toNumber()

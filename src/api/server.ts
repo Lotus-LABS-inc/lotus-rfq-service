@@ -163,6 +163,7 @@ import {
 import { withSpan } from "../observability/tracing.js";
 import { LimitlessQuoteReader, LimitlessRestOrderbookClient } from "../integrations/limitless/limitless-quote-reader.js";
 import { LimitlessProfileFeeReader } from "../integrations/limitless/limitless-fee-reader.js";
+import { PolymarketClobFeeReader } from "../integrations/polymarket/polymarket-fee-reader.js";
 import { PolymarketQuoteReader, PolymarketRestOrderbookClient } from "../integrations/polymarket/polymarket-quote-reader.js";
 import { InternalCrossingEngine } from "../core/internal-engine/engine.js";
 import { OrderBook } from "../core/internal-engine/order-book.js";
@@ -779,14 +780,16 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
 
   const polymarketQuoteCache = new QuoteSnapshotCache();
   const limitlessQuoteCache = new QuoteSnapshotCache();
+  const polymarketClobHost = process.env.POLYMARKET_CLOB_HOST ?? process.env.POLY_CLOB_HOST ?? "https://clob.polymarket.com";
   const limitlessBaseUrl = process.env.LIMITLESS_BASE_URL ?? "https://api.limitless.exchange";
   const venueQuoteSource = new CompositeVenueQuoteSource([
     new PolymarketQuoteReader({
       client: new PolymarketRestOrderbookClient({
-        clobHost: process.env.POLYMARKET_CLOB_HOST ?? process.env.POLY_CLOB_HOST ?? "https://clob.polymarket.com"
+        clobHost: polymarketClobHost
       }),
       streamCache: polymarketQuoteCache,
-      feeBps: parseOptionalNumber(process.env.POLYMARKET_QUOTE_FEE_BPS)
+      feeBps: parseOptionalNumber(process.env.POLYMARKET_QUOTE_FEE_BPS),
+      feeReader: new PolymarketClobFeeReader({ clobHost: polymarketClobHost })
     }),
     new LimitlessQuoteReader({
       client: new LimitlessRestOrderbookClient({

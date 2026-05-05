@@ -5,6 +5,7 @@ import type {
   VenueQuoteSnapshotReaderInput,
   QuoteSnapshotCache
 } from "../../core/sor/quote-snapshot.js";
+import type { PolymarketFeeReader } from "./polymarket-fee-reader.js";
 
 export interface PolymarketOrderbookClient {
   getOrderbook(input: {
@@ -18,6 +19,7 @@ export interface PolymarketQuoteReaderConfig {
   streamCache: QuoteSnapshotCache;
   now?: () => Date;
   feeBps?: number | undefined;
+  feeReader?: PolymarketFeeReader | undefined;
 }
 
 export class PolymarketQuoteReader implements VenueQuoteSnapshotReader {
@@ -42,12 +44,17 @@ export class PolymarketQuoteReader implements VenueQuoteSnapshotReader {
       marketId: input.venueMarketId,
       tokenId: input.venueOutcomeId ?? input.venueMarketId
     });
+    const feeRate = this.config.feeBps === undefined
+      ? await this.config.feeReader?.getFeeRate({ conditionId: input.venueMarketId })
+      : null;
     return normalizePolymarketOrderbook({
       payload,
       venueMarketId: input.venueMarketId,
       venueOutcomeId: input.venueOutcomeId,
       receivedAt: this.now(),
-      feeBps: this.config.feeBps
+      feeBps: this.config.feeBps,
+      polymarketFeeRate: feeRate ?? undefined,
+      polymarketCategory: inferPolymarketCategory(input.canonicalMarketId)
     });
   }
 }
@@ -79,6 +86,8 @@ export const normalizePolymarketOrderbook = (input: {
   venueOutcomeId?: string | undefined;
   receivedAt: Date;
   feeBps?: number | undefined;
+  polymarketFeeRate?: number | undefined;
+  polymarketCategory?: string | undefined;
 }): NormalizedVenueQuoteSnapshot => {
   const record = asRecord(input.payload);
   const bids = normalizeLevels(record.bids);
@@ -94,13 +103,20 @@ export const normalizePolymarketOrderbook = (input: {
     bids,
     asks,
     ...(input.feeBps !== undefined ? { feeBps: input.feeBps } : {}),
+    ...(input.polymarketFeeRate !== undefined ? { polymarketFeeRate: input.polymarketFeeRate } : {}),
+    ...(input.polymarketCategory ? { polymarketCategory: input.polymarketCategory } : {}),
     staticFeeApproved: input.feeBps !== undefined,
     settlementEvidenceSupported: true,
-    missingFactors: input.feeBps === undefined ? ["FEE_DISCOVERY"] : [],
+    missingFactors: [],
     blockers: [],
     streamResynced: true,
     metadata: { venueMarketId: input.venueMarketId, venueOutcomeId: input.venueOutcomeId ?? null }
   };
+};
+
+const inferPolymarketCategory = (canonicalMarketId: string): string | undefined => {
+  const firstSegment = canonicalMarketId.split("|", 1)[0]?.split(":", 2).pop();
+  return firstSegment && firstSegment.length > 0 ? firstSegment.toUpperCase() : undefined;
 };
 
 const normalizeLevels = (value: unknown): readonly NormalizedQuoteLevel[] => {

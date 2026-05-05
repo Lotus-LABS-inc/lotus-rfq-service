@@ -19,6 +19,7 @@ import {
   LimitlessRestOrderbookClient
 } from "../../src/integrations/limitless/limitless-quote-reader.js";
 import { LimitlessProfileFeeReader } from "../../src/integrations/limitless/limitless-fee-reader.js";
+import { PolymarketClobFeeReader } from "../../src/integrations/polymarket/polymarket-fee-reader.js";
 
 loadDotenv();
 
@@ -40,6 +41,11 @@ interface QuoteSourceSmokeVenueRow {
   liquidityScore: number | null;
   confidencePenaltyBps: number | null;
   feeBpsPresent: boolean;
+  feeAmount: number | null;
+  effectiveFeeBps: number | null;
+  feeModel: string | null;
+  feeSource: string | null;
+  feeConfidence: string | null;
   fixedFeePresent: boolean;
   settlementEvidenceSupported: boolean | null;
   missingFactors: string[];
@@ -222,12 +228,14 @@ async function validateVenue(mapping: VenueQuoteMapping): Promise<QuoteSourceSmo
 function readerForVenue(venue: string): VenueQuoteSnapshotReader | null {
   const normalizedVenue = venue.toUpperCase();
   if (normalizedVenue === "POLYMARKET") {
+    const clobHost = process.env.POLYMARKET_CLOB_HOST ?? "https://clob.polymarket.com";
     return new PolymarketQuoteReader({
       streamCache: new QuoteSnapshotCache(),
       client: new PolymarketRestOrderbookClient({
-        clobHost: process.env.POLYMARKET_CLOB_HOST ?? "https://clob.polymarket.com"
+        clobHost
       }),
-      feeBps: parseOptionalNumber(process.env.POLYMARKET_QUOTE_FEE_BPS)
+      feeBps: parseOptionalNumber(process.env.POLYMARKET_QUOTE_FEE_BPS),
+      feeReader: new PolymarketClobFeeReader({ clobHost })
     });
   }
   if (normalizedVenue === "LIMITLESS") {
@@ -265,7 +273,12 @@ function rowFromCalculation(mapping: VenueQuoteMapping, calculated: QuoteCalcula
     slippageBps: calculated.slippageBps,
     liquidityScore: calculated.liquidityScore,
     confidencePenaltyBps: calculated.confidencePenaltyBps,
-    feeBpsPresent: calculated.feeBps !== undefined,
+    feeBpsPresent: calculated.effectiveFeeBps !== undefined,
+    feeAmount: calculated.feeAmount ?? null,
+    effectiveFeeBps: calculated.effectiveFeeBps ?? null,
+    feeModel: calculated.feeQuote?.feeModel ?? null,
+    feeSource: calculated.feeQuote?.feeSource ?? null,
+    feeConfidence: calculated.feeQuote?.confidence ?? null,
     fixedFeePresent: calculated.fixedFee !== undefined,
     settlementEvidenceSupported: calculated.settlementEvidenceSupported ?? null,
     missingFactors: [...calculated.missingFactors],
@@ -295,6 +308,11 @@ function emptyVenueRow(
     liquidityScore: null,
     confidencePenaltyBps: null,
     feeBpsPresent: false,
+    feeAmount: null,
+    effectiveFeeBps: null,
+    feeModel: null,
+    feeSource: null,
+    feeConfidence: null,
     fixedFeePresent: false,
     settlementEvidenceSupported: null,
     missingFactors: [],
@@ -338,8 +356,8 @@ function renderMarkdown(artifact: QuoteSourceSmokeArtifact): string {
     `Canonical Outcome: ${artifact.canonicalInput.canonicalOutcomeId ?? "n/a"}`,
     `Side/Amount: ${artifact.canonicalInput.side} ${artifact.canonicalInput.amount}`,
     "",
-    "| Venue | Mapping | Outcome Id | Quality | Source | Freshness ms | Price | Depth | Spread bps | Slippage bps | Liquidity | Penalty bps | Missing | Blockers | Error |",
-    "|---|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|",
+    "| Venue | Mapping | Outcome Id | Quality | Source | Freshness ms | Price | Depth | Spread bps | Slippage bps | Fee | Fee bps | Fee model | Fee source | Liquidity | Penalty bps | Missing | Blockers | Error |",
+    "|---|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---|---|---|",
     ...artifact.venues.map((row) => [
       row.venue,
       row.mappingPresent,
@@ -351,6 +369,10 @@ function renderMarkdown(artifact: QuoteSourceSmokeArtifact): string {
       row.availableSize ?? "n/a",
       row.spreadBps ?? "n/a",
       row.slippageBps ?? "n/a",
+      row.feeAmount ?? "n/a",
+      row.effectiveFeeBps ?? "n/a",
+      row.feeModel ?? "n/a",
+      row.feeSource ?? "n/a",
       row.liquidityScore ?? "n/a",
       row.confidencePenaltyBps ?? "n/a",
       row.missingFactors.length > 0 ? row.missingFactors.join("; ") : "none",

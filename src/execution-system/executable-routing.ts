@@ -33,6 +33,11 @@ export interface TradeRouteCandidate {
   settlementEvidenceSupported?: boolean | undefined;
   recoveryRequired?: boolean | undefined;
   feeBps?: number | undefined;
+  feeAmount?: number | undefined;
+  effectiveFeeBps?: number | undefined;
+  feeModel?: string | undefined;
+  feeSource?: string | undefined;
+  feeConfidence?: string | undefined;
   fixedFee?: number | undefined;
   spreadBps?: number | undefined;
   slippageBps?: number | undefined;
@@ -57,7 +62,19 @@ export interface ExecutableRouteLeg {
   venue: string;
   size: string;
   price: number;
+  feeAmount?: number | undefined;
+  effectiveFeeBps?: number | undefined;
+  feeConfidence?: string | undefined;
   requiresUserSignature: boolean;
+}
+
+export interface SavingsBreakdown {
+  priceSavings: number;
+  feeSavings: number;
+  slippageSavings: number;
+  totalSavings: number;
+  displayAllowed: boolean;
+  displayBlockedReason?: string | undefined;
 }
 
 export interface RejectedRouteCandidate {
@@ -80,6 +97,7 @@ export interface ExecutableTradeQuote {
   expectedPrice: number;
   effectivePrice?: number | undefined;
   estimatedSavings?: number | undefined;
+  savingsBreakdown?: SavingsBreakdown | undefined;
   routeDecisionReason?: string | undefined;
   requiredUserSignatureSteps: string[];
   expiresAt: string;
@@ -106,6 +124,9 @@ interface ScoredRoute {
   routeType: TradeRouteType;
   legs: ExecutableRouteLeg[];
   rawNotional: number;
+  feeNotional: number;
+  slippageNotional: number;
+  feeEvidenceComplete: boolean;
   effectiveNotional: number;
   score: number;
   skippedDustVenues: string[];
@@ -353,6 +374,7 @@ export class ExecutableRouteService {
     const estimatedSavings = alternativeRoute
       ? Math.max(0, routeSavings(input.side, selectedRoute, alternativeRoute))
       : 0;
+    const savingsBreakdown = buildSavingsBreakdown(input.side, selectedRoute, alternativeRoute);
     return {
       quoteId: `exec_quote_${randomUUID()}`,
       userId: input.userId,
@@ -366,6 +388,7 @@ export class ExecutableRouteService {
       expectedPrice: totalSize > 0 ? roundPrice(notional / totalSize) : 0,
       effectivePrice: totalSize > 0 ? roundPrice(selectedRoute.effectiveNotional / totalSize) : 0,
       estimatedSavings: roundPrice(estimatedSavings),
+      savingsBreakdown,
       routeDecisionReason,
       requiredUserSignatureSteps: legs
         .filter((leg) => leg.requiresUserSignature)
@@ -634,6 +657,9 @@ const toLeg = (candidate: TradeRouteCandidate, size: number): ExecutableRouteLeg
   venue: candidate.venue.toUpperCase(),
   size: decimal(size),
   price: candidate.price,
+  ...(candidate.feeAmount !== undefined ? { feeAmount: prorateFee(candidate, size) } : {}),
+  ...(candidate.effectiveFeeBps !== undefined ? { effectiveFeeBps: candidate.effectiveFeeBps } : {}),
+  ...(candidate.feeConfidence ? { feeConfidence: candidate.feeConfidence } : {}),
   requiresUserSignature: candidate.requiresUserSignature === true
 });
 
@@ -646,6 +672,22 @@ const scoreRoute = (
 ): ScoredRoute => {
   const candidateByVenue = new Map(sourceCandidates.map((candidate) => [candidate.venue.toUpperCase(), candidate]));
   const rawNotional = legs.reduce((sum, leg) => sum + Number(leg.size) * leg.price, 0);
+  const feeNotional = legs.reduce((sum, leg) => {
+    const candidate = candidateByVenue.get(leg.venue);
+    return sum + (candidate ? prorateFee(candidate, Number(leg.size)) : 0);
+  }, 0);
+  const slippageNotional = legs.reduce((sum, leg) => {
+    const candidate = candidateByVenue.get(leg.venue);
+    const slippageBps = nonNegative(candidate?.slippageBps);
+    return sum + Number(leg.size) * leg.price * slippageBps / 10_000;
+  }, 0);
+  const feeEvidenceComplete = legs.every((leg) => {
+    const candidate = candidateByVenue.get(leg.venue);
+    return Boolean(candidate) &&
+      !(candidate?.missingFactors ?? []).includes("FEE_DISCOVERY") &&
+      (candidate?.feeAmount !== undefined || candidate?.effectiveFeeBps !== undefined || candidate?.feeBps !== undefined) &&
+      candidate?.feeConfidence !== "LOW";
+  });
   const candidateAdjustedNotional = legs.reduce((sum, leg) => {
     const candidate = candidateByVenue.get(leg.venue);
     const effectivePrice = candidate ? effectiveCandidatePrice(side, candidate, Number(leg.size)) : leg.price;
@@ -656,6 +698,9 @@ const scoreRoute = (
     routeType,
     legs: legs.map((leg) => ({ ...leg })),
     rawNotional,
+    feeNotional,
+    slippageNotional,
+    feeEvidenceComplete,
     effectiveNotional,
     score: effectiveNotional,
     skippedDustVenues: [...new Set(skippedDustVenues.map((venue) => venue.toUpperCase()))]
@@ -668,13 +713,56 @@ const effectiveCandidatePrice = (
   size = parseNonNegativeNumber(candidate.availableSize, "availableSize")
 ): number => {
   const basis = Math.max(candidate.price, 0);
-  const variableBps = nonNegative(candidate.feeBps) + nonNegative(candidate.spreadBps) + nonNegative(candidate.slippageBps);
+  const feeBps = candidate.effectiveFeeBps ?? candidate.feeBps;
+  const variableBps = nonNegative(feeBps) + nonNegative(candidate.spreadBps) + nonNegative(candidate.slippageBps);
   const fixedFeeImpact = size > 0 ? nonNegative(candidate.fixedFee) / size : 0;
   const liquidityPenaltyBps = liquidityPenalty(candidate.liquidityScore);
   const signaturePenaltyBps = candidate.requiresUserSignature ? userSignaturePenaltyBps : 0;
   const confidencePenaltyBps = nonNegative(candidate.confidencePenaltyBps);
   const adjustment = basis * ((variableBps + liquidityPenaltyBps + signaturePenaltyBps + confidencePenaltyBps) / 10_000) + fixedFeeImpact;
   return side === "buy" ? basis + adjustment : basis - adjustment;
+};
+
+const buildSavingsBreakdown = (
+  side: TradeSide,
+  selected: ScoredRoute,
+  alternative: ScoredRoute | null
+): SavingsBreakdown => {
+  if (!alternative) {
+    return {
+      priceSavings: 0,
+      feeSavings: 0,
+      slippageSavings: 0,
+      totalSavings: 0,
+      displayAllowed: false,
+      displayBlockedReason: "NO_BASELINE_ROUTE"
+    };
+  }
+  const direction = side === "buy" ? 1 : -1;
+  const priceSavings = Math.max(0, direction * (alternative.rawNotional - selected.rawNotional));
+  const feeSavings = Math.max(0, alternative.feeNotional - selected.feeNotional);
+  const slippageSavings = Math.max(0, alternative.slippageNotional - selected.slippageNotional);
+  const totalSavings = Math.max(0, routeSavings(side, selected, alternative));
+  const displayAllowed = totalSavings > 0 && selected.feeEvidenceComplete && alternative.feeEvidenceComplete;
+  return {
+    priceSavings: roundPrice(priceSavings),
+    feeSavings: roundPrice(feeSavings),
+    slippageSavings: roundPrice(slippageSavings),
+    totalSavings: roundPrice(totalSavings),
+    displayAllowed,
+    ...(displayAllowed
+      ? {}
+      : { displayBlockedReason: totalSavings > 0 ? "FEE_EVIDENCE_INCOMPLETE" : "NO_POSITIVE_SAVINGS" })
+  };
+};
+
+const prorateFee = (candidate: TradeRouteCandidate, size: number): number => {
+  if (candidate.feeAmount !== undefined) {
+    const available = parseNonNegativeNumber(candidate.availableSize, "availableSize");
+    return available > 0 ? nonNegative(candidate.feeAmount) * (size / available) : nonNegative(candidate.feeAmount);
+  }
+  const feeBps = candidate.effectiveFeeBps ?? candidate.feeBps;
+  return candidate.price * size * nonNegative(feeBps) / 10_000;
 };
 
 const routeFrictionNotional = (side: TradeSide, legs: readonly ExecutableRouteLeg[]): number => {

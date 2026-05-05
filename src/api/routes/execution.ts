@@ -16,6 +16,11 @@ const candidateSchema = z.object({
   settlementEvidenceSupported: z.boolean().optional(),
   recoveryRequired: z.boolean().optional(),
   feeBps: z.number().nonnegative().optional(),
+  feeAmount: z.number().nonnegative().optional(),
+  effectiveFeeBps: z.number().nonnegative().optional(),
+  feeModel: z.string().optional(),
+  feeSource: z.string().optional(),
+  feeConfidence: z.string().optional(),
   fixedFee: z.number().nonnegative().optional(),
   spreadBps: z.number().nonnegative().optional(),
   slippageBps: z.number().nonnegative().optional(),
@@ -181,14 +186,21 @@ const toUserQuote = (quote: ExecutableTradeQuote): Record<string, unknown> => ({
   expectedPrice: quote.expectedPrice,
   effectivePrice: quote.effectivePrice,
   estimatedSavings: quote.estimatedSavings,
+  savingsBreakdown: quote.savingsBreakdown,
   routeDecisionReason: quote.routeDecisionReason,
-  expectedFees: {},
+  expectedFees: {
+    total: quote.legs.reduce((sum, leg) => sum + (leg.feeAmount ?? 0), 0),
+    effectiveBpsByVenue: Object.fromEntries(quote.legs.map((leg) => [leg.venue, leg.effectiveFeeBps ?? null]))
+  },
   requiredUserSignatureSteps: quote.requiredUserSignatureSteps,
   expiresAt: quote.expiresAt,
   legs: quote.legs.map((leg) => ({
     venue: leg.venue,
     size: leg.size,
     price: leg.price,
+    feeAmount: leg.feeAmount,
+    effectiveFeeBps: leg.effectiveFeeBps,
+    feeConfidence: leg.feeConfidence,
     requiresUserSignature: leg.requiresUserSignature
   }))
 });

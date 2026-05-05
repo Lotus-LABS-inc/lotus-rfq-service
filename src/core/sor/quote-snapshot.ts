@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+import { calculateVenueFeeQuote, type VenueFeeQuote } from "./venue-fees.js";
 
 export type QuoteQuality =
   | "FULL_DEPTH_STREAM"
@@ -26,6 +27,9 @@ export interface NormalizedVenueQuoteSnapshot {
   asks: readonly NormalizedQuoteLevel[];
   feeBps?: number | undefined;
   fixedFee?: number | undefined;
+  polymarketFeeRate?: number | undefined;
+  polymarketCategory?: string | undefined;
+  limitlessMarketType?: "amm" | "clob" | undefined;
   staticFeeApproved?: boolean | undefined;
   settlementEvidenceSupported?: boolean | undefined;
   missingFactors?: readonly string[] | undefined;
@@ -57,6 +61,9 @@ export interface QuoteCalculationResult {
   confidencePenaltyBps: number;
   feeBps?: number | undefined;
   fixedFee?: number | undefined;
+  feeAmount?: number | undefined;
+  effectiveFeeBps?: number | undefined;
+  feeQuote?: VenueFeeQuote | undefined;
   settlementEvidenceSupported?: boolean | undefined;
   missingFactors: readonly string[];
   blockers: readonly string[];
@@ -160,7 +167,7 @@ export class CompositeVenueQuoteSource {
         availableSize: calculated.availableSize,
         quotedPrice: calculated.price,
         fees: {
-          ...(calculated.feeBps !== undefined ? { provider_fee_bps: calculated.feeBps } : {}),
+          ...(calculated.feeAmount !== undefined ? { provider_fee: calculated.feeAmount } : {}),
           ...(calculated.fixedFee !== undefined ? { fixed_fee: calculated.fixedFee } : {})
         },
         latencyMs: calculated.freshnessMs,
@@ -175,6 +182,9 @@ export class CompositeVenueQuoteSource {
           slippageBps: calculated.slippageBps,
           liquidityScore: calculated.liquidityScore,
           confidencePenaltyBps: calculated.confidencePenaltyBps,
+          feeAmount: calculated.feeAmount,
+          effectiveFeeBps: calculated.effectiveFeeBps,
+          feeQuote: calculated.feeQuote,
           missingFactors: calculated.missingFactors,
           blockers: calculated.blockers,
           settlementEvidenceSupported: calculated.settlementEvidenceSupported,
@@ -262,7 +272,18 @@ export const calculateVenueQuote = (input: QuoteCalculationInput): QuoteCalculat
     : input.side === "buy"
       ? bps(weightedPrice.minus(topPrice), topPrice)
       : bps(new Decimal(topPrice).minus(weightedPrice), topPrice);
-  if (input.snapshot.feeBps === undefined && !input.snapshot.staticFeeApproved) {
+  const feeQuote = calculateVenueFeeQuote({
+    venue: input.snapshot.venue,
+    side: input.side,
+    quantity: fill.filledSize,
+    price: weightedPrice,
+    ...(input.snapshot.staticFeeApproved && input.snapshot.feeBps !== undefined ? { staticFeeBps: input.snapshot.feeBps } : {}),
+    ...(input.snapshot.polymarketFeeRate !== undefined ? { polymarketFeeRate: input.snapshot.polymarketFeeRate } : {}),
+    ...(input.snapshot.polymarketCategory ? { polymarketCategory: input.snapshot.polymarketCategory } : {}),
+    ...(input.snapshot.limitlessMarketType ? { limitlessMarketType: input.snapshot.limitlessMarketType } : {})
+  });
+
+  if (!feeQuote) {
     missingFactors.push("FEE_DISCOVERY");
   }
 
@@ -289,6 +310,11 @@ export const calculateVenueQuote = (input: QuoteCalculationInput): QuoteCalculat
     confidencePenaltyBps,
     ...(input.snapshot.feeBps !== undefined ? { feeBps: input.snapshot.feeBps } : {}),
     ...(input.snapshot.fixedFee !== undefined ? { fixedFee: input.snapshot.fixedFee } : {}),
+    ...(feeQuote ? {
+      feeAmount: roundNumber(new Decimal(feeQuote.feeAmount)),
+      effectiveFeeBps: feeQuote.effectiveFeeBps,
+      feeQuote
+    } : {}),
     settlementEvidenceSupported: input.snapshot.settlementEvidenceSupported,
     missingFactors: [...new Set(missingFactors)],
     blockers: [...new Set(blockers)],
