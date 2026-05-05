@@ -28,7 +28,7 @@ const balance = (venue: VenueBalanceView["venue"], token = "USDC"): VenueBalance
 });
 
 describe("venue balance activation actions", () => {
-  it("defaults Polymarket to a safe relayer activation and Predict.fun to not required", () => {
+  it("does not require Polymarket activation once ready balance is available", () => {
     const activations = buildVenueBalanceActivationActions({
       balances: [balance("POLYMARKET", "pUSD"), balance("PREDICT_FUN", "USDT")],
       venueAccounts: [account("POLYMARKET"), account("PREDICT_FUN")],
@@ -38,8 +38,8 @@ describe("venue balance activation actions", () => {
     expect(activations).toMatchObject([
       {
         venue: "POLYMARKET",
-        activationRequired: true,
-        mode: "VENUE_UI_OR_RELAYER",
+        activationRequired: false,
+        mode: "NOT_REQUIRED",
         transactionRequest: null
       },
       {
@@ -49,6 +49,21 @@ describe("venue balance activation actions", () => {
         transactionRequest: null
       }
     ]);
+  });
+
+  it("defaults Polymarket to a safe relayer activation before ready balance is available", () => {
+    const activations = buildVenueBalanceActivationActions({
+      balances: [balance("PREDICT_FUN", "USDT")],
+      venueAccounts: [account("POLYMARKET"), account("PREDICT_FUN")],
+      env: {}
+    });
+
+    expect(activations[0]).toMatchObject({
+      venue: "POLYMARKET",
+      activationRequired: true,
+      mode: "VENUE_UI_OR_RELAYER",
+      transactionRequest: null
+    });
   });
 
   it("builds an ERC20 approval only when operator-approved spender config is present", () => {

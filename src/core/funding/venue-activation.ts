@@ -111,6 +111,14 @@ const configuredAmount = (
   return envValue(env, `${venue}_BALANCE_ACTIVATION_AMOUNT`) ?? maxUint256;
 };
 
+const hasAvailableReadyBalance = (balance: VenueBalanceView | null): boolean => {
+  if (!balance) {
+    return false;
+  }
+  const parsed = Number(balance.availableAmount);
+  return Number.isFinite(parsed) && parsed > 0;
+};
+
 const buildErc20ApprovalAction = (
   venue: FundingVenue,
   input: VenueBalanceActivationInput,
@@ -191,6 +199,10 @@ const buildRelayerAction = (
   balance: VenueBalanceView | null,
   env: NodeJS.ProcessEnv
 ): VenueBalanceActivationAction => {
+  if (venue === "POLYMARKET" && hasAvailableReadyBalance(balance)) {
+    return buildNotRequiredAction(venue, account, balance);
+  }
+
   const polymarketReady = venue === "POLYMARKET" &&
     envValue(env, "POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED") === "true" &&
     envValue(env, "POLYMARKET_RELAYER_URL") !== null &&
