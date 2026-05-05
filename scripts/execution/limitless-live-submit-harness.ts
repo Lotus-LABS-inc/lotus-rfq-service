@@ -34,6 +34,9 @@ const safeArtifact = {
   },
   preparedOrder: result.preparedOrder ?? null,
   submitResult: result.submitResult ?? null,
+  fillState: result.fillState ?? null,
+  settlementState: result.settlementState ?? null,
+  settlementVerified: result.settlementVerified ?? false,
   error: result.error ?? null
 };
 
@@ -64,6 +67,7 @@ await writeFile(
     "",
     `- Mode: ${result.plan.mode}`,
     `- Submitted: ${result.submitted}`,
+    `- Settlement verified: ${result.settlementVerified ?? false}`,
     `- Error: ${result.error ? `${result.error.code}: ${result.error.message}` : "none"}`,
     `- Blockers: ${result.plan.blockers.length > 0 ? result.plan.blockers.join("; ") : "none"}`,
     `- Warnings: ${result.plan.warnings.length > 0 ? result.plan.warnings.join("; ") : "none"}`,

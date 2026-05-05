@@ -4,6 +4,8 @@ import {
   getLimitlessExecutionAdapterEnvStatus,
   LimitlessExecutionAdapter,
   LimitlessExecutionNotConfiguredError,
+  mapLimitlessOrderStatusToFillState,
+  mapLimitlessOrderStatusToSettlementState,
   type LimitlessOrderClient
 } from "../src/execution-system/limitless-execution-adapter.js";
 import {
@@ -63,6 +65,66 @@ const mockOrderResponse = (): OrderResponse => ({
     orderType: "GTC",
     price: 0.42,
     marketId: 100
+  }
+});
+
+const minedOrderStatus = () => ({
+  status: "found",
+  data: {
+    order: {
+      order: {
+        id: "limitless-order-1",
+        price: 0.42
+      }
+    },
+    makerMatches: [{ id: "match-1", matchedSize: "1000000", orderId: "limitless-order-1" }],
+    execution: {
+      matched: true,
+      settlementStatus: "MINED",
+      tradeEventId: "trade-event-1",
+      txHash: "0xabc",
+      totalsRaw: {
+        contractsNet: "1000000"
+      }
+    }
+  }
+});
+
+const unmatchedOrderStatus = () => ({
+  status: "found",
+  data: {
+    order: {
+      order: {
+        id: "limitless-order-1",
+        price: 0.42
+      }
+    },
+    makerMatches: [],
+    execution: {
+      matched: false,
+      settlementStatus: "UNMATCHED",
+      totalsRaw: {
+        contractsNet: "0"
+      }
+    }
+  }
+});
+
+const failedOrderStatus = () => ({
+  status: "found",
+  data: {
+    order: {
+      order: {
+        id: "limitless-order-1",
+        price: 0.42
+      },
+      execution: {
+        matched: true,
+        settlementStatus: "REVERTED",
+        txHash: "0xfailed"
+      }
+    },
+    makerMatches: [{ id: "match-1", matchedSize: "1000000", orderId: "limitless-order-1" }]
   }
 });
 
@@ -241,6 +303,96 @@ describe("LimitlessExecutionAdapter", () => {
     await expect(adapter.fetchSettlementState("limitless-order-1")).resolves.toMatchObject({
       status: "SETTLEMENT_PENDING",
       evidence: { delegatedProfileScoped: true }
+    });
+  });
+
+  it("maps Limitless order-status evidence to a verified settlement only when fill and finality are present", () => {
+    expect(mapLimitlessOrderStatusToFillState(minedOrderStatus())).toMatchObject({
+      status: "FILLED",
+      filledSize: "1",
+      averagePrice: 0.42
+    });
+
+    expect(mapLimitlessOrderStatusToSettlementState(minedOrderStatus(), {
+      orderId: "limitless-order-1",
+      delegatedProfileId: 12345
+    })).toMatchObject({
+      status: "SETTLEMENT_VERIFIED",
+      evidence: {
+        source: "limitless_order_status_batch",
+        delegatedProfileScoped: true,
+        settlementStatus: "MINED",
+        makerMatchesCount: 1,
+        fillEvidenceVerified: true,
+        settlementEvidenceVerified: true
+      }
+    });
+  });
+
+  it("keeps unmatched Limitless order-status evidence pending instead of marking settlement verified", () => {
+    expect(mapLimitlessOrderStatusToFillState(unmatchedOrderStatus())).toMatchObject({
+      status: "OPEN",
+      filledSize: "0"
+    });
+
+    expect(mapLimitlessOrderStatusToSettlementState(unmatchedOrderStatus(), {
+      orderId: "limitless-order-1",
+      delegatedProfileId: 12345
+    })).toMatchObject({
+      status: "SETTLEMENT_PENDING",
+      evidence: {
+        settlementStatus: "UNMATCHED",
+        fillEvidenceVerified: false,
+        settlementEvidenceVerified: false
+      }
+    });
+  });
+
+  it("never verifies settlement when Limitless reports failed or reverted finality", () => {
+    expect(mapLimitlessOrderStatusToFillState(failedOrderStatus())).toMatchObject({
+      status: "FAILED",
+      filledSize: "0"
+    });
+
+    expect(mapLimitlessOrderStatusToSettlementState(failedOrderStatus(), {
+      orderId: "limitless-order-1",
+      delegatedProfileId: 12345
+    })).toMatchObject({
+      status: "SETTLEMENT_UNKNOWN",
+      evidence: {
+        settlementStatus: "REVERTED",
+        fillEvidenceVerified: true,
+        settlementEvidenceVerified: false
+      }
+    });
+  });
+
+  it("uses profile-scoped delegated order status when explicit fill/settlement readers are not injected", async () => {
+    const client: LimitlessOrderClient = {
+      async createOrder() {
+        return mockOrderResponse();
+      },
+      async cancel() {
+        return { message: "cancelled" };
+      },
+      async getOrderStatus(orderId, onBehalfOf) {
+        expect(orderId).toBe("limitless-order-1");
+        expect(onBehalfOf).toBe(12345);
+        return minedOrderStatus();
+      }
+    };
+    const adapter = new LimitlessExecutionAdapter(delegatedLiveConfig, client);
+
+    await expect(adapter.fetchFillState("limitless-order-1")).resolves.toMatchObject({
+      status: "FILLED",
+      filledSize: "1"
+    });
+    await expect(adapter.fetchSettlementState("limitless-order-1")).resolves.toMatchObject({
+      status: "SETTLEMENT_VERIFIED",
+      evidence: {
+        delegatedProfileScoped: true,
+        settlementEvidenceVerified: true
+      }
     });
   });
 

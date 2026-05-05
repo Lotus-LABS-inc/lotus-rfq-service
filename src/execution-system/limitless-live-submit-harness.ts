@@ -163,6 +163,9 @@ export const runLimitlessLiveSubmitHarness = async (
   submitted: boolean;
   preparedOrder?: unknown;
   submitResult?: unknown;
+  fillState?: unknown;
+  settlementState?: unknown;
+  settlementVerified?: boolean;
   error?: { code: string; message: string };
 }> => {
   const config = buildLimitlessExecutionAdapterConfigFromEnv(env);
@@ -194,10 +197,32 @@ export const runLimitlessLiveSubmitHarness = async (
       error: submitResult.error
     };
   }
+  const submittedRecord = typeof submitResult === "object" && submitResult !== null ? submitResult as { venueOrderId?: unknown } : {};
+  const venueOrderId = typeof submittedRecord.venueOrderId === "string" ? submittedRecord.venueOrderId : null;
+  const fillState = venueOrderId
+    ? await adapter.fetchFillState(venueOrderId).catch((error: unknown) => ({
+        __failed: true,
+        error: adapter.normalizeVenueError(error)
+      }))
+    : null;
+  const settlementState = venueOrderId
+    ? await adapter.fetchSettlementState(venueOrderId).catch((error: unknown) => ({
+        __failed: true,
+        error: adapter.normalizeVenueError(error)
+      }))
+    : null;
   return {
     plan,
     submitted: true,
     preparedOrder: safePreparedOrder,
-    submitResult
+    submitResult,
+    fillState,
+    settlementState,
+    settlementVerified: Boolean(
+      typeof settlementState === "object"
+      && settlementState !== null
+      && "status" in settlementState
+      && settlementState.status === "SETTLEMENT_VERIFIED"
+    )
   };
 };
