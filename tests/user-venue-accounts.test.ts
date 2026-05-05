@@ -112,6 +112,21 @@ const limitlessPartnerAccountClient = (): LimitlessPartnerAccountClient => ({
   })
 });
 
+const limitlessServerWalletPartnerAccountClient = (): LimitlessPartnerAccountClient => ({
+  configured: () => true,
+  serverWalletDelegationEnabled: () => true,
+  getSigningMessage: async () => {
+    throw new Error("server wallet mode does not need a user signing message");
+  },
+  createServerWalletPartnerAccount: async () => ({
+    profileId: "12345",
+    account: "0x6666666666666666666666666666666666666666"
+  }),
+  createEoaPartnerAccount: async () => {
+    throw new Error("server wallet mode must not create EOA partner accounts");
+  }
+});
+
 const polymarketDepositWalletClient = (
   deploymentStatus: Awaited<ReturnType<PolymarketDepositWalletClient["deriveOrCreateDepositWallet"]>>["deploymentStatus"] = "ALREADY_DEPLOYED"
 ): PolymarketDepositWalletClient => ({
@@ -456,6 +471,47 @@ describe("user venue account service", () => {
       }
     });
     expect(JSON.stringify(repository.auditEvents)).not.toContain("signature");
+  });
+
+  it("automatically creates a Limitless delegated server-wallet account with safe metadata only", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    const service = new UserVenueAccountService(
+      repository,
+      {
+        async resolveUserTurnkeyEvmFundingWallet() {
+          return evmWallet();
+        }
+      },
+      predictAccountClient(),
+      limitlessServerWalletPartnerAccountClient(),
+      polymarketDepositWalletClient()
+    );
+
+    const first = await service.ensureAccount({ userId: "user-1", venue: "LIMITLESS" });
+    const second = await service.ensureAccount({ userId: "user-1", venue: "LIMITLESS" });
+    const batch = await service.prepareAccountSetupBatch("user-1");
+
+    expect(first.account).toMatchObject({
+      venue: "LIMITLESS",
+      walletAddress: "0x1111111111111111111111111111111111111111",
+      venueAccountId: "12345",
+      venueAccountAddress: "0x6666666666666666666666666666666666666666",
+      venueAccountType: "SERVER_WALLET",
+      status: "ACTIVE"
+    });
+    expect(second.account.venueAccountBindingId).toBe(first.account.venueAccountBindingId);
+    expect(batch.signatureRequests.map((request) => request.venue)).toEqual(["PREDICT_FUN"]);
+    expect(batch.venueAccounts.find((item) => item.venue === "LIMITLESS")).toMatchObject({
+      setupMode: "NO_USER_SETUP_REQUIRED",
+      readinessBlockers: [],
+      setupInstructions: []
+    });
+    const serialized = JSON.stringify(repository.auditEvents);
+    expect(serialized).toContain("LIMITLESS_SERVER_WALLET_LINKED");
+    expect(serialized).not.toContain("privateKey");
+    expect(serialized).not.toContain("signature");
+    expect(serialized).not.toContain("hmac");
+    expect(serialized).not.toContain("providerWalletAccountId");
   });
 });
 

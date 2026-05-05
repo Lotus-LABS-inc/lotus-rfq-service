@@ -33,6 +33,16 @@ const liveConfig = {
   liveExecutionEnabled: true
 };
 
+const delegatedLiveConfig = {
+  executionMode: "delegated_partner_server_wallet" as const,
+  baseUrl: "https://api.limitless.exchange",
+  hmacTokenId: "partner-token-id",
+  hmacSecret: "partner-hmac-secret",
+  partnerAccountEnabled: true,
+  delegatedProfileId: "12345",
+  liveExecutionEnabled: true
+};
+
 const mockOrderResponse = (): OrderResponse => ({
   order: {
     id: "limitless-order-1",
@@ -68,6 +78,43 @@ describe("LimitlessExecutionAdapter", () => {
       featureFlagSelected: false,
       liveExecutionEnabled: false,
       readinessState: "NOT_CONFIGURED"
+    });
+  });
+
+  it("supports delegated partner server-wallet mode without requiring an execution private key", () => {
+    const status = getLimitlessExecutionAdapterEnvStatus({
+      LIMITLESS_EXECUTION_MODE: "delegated_partner_server_wallet",
+      LIMITLESS_BASE_URL: "https://api.limitless.exchange",
+      LIMITLESS_PARTNER_ACCOUNT_ENABLED: "true",
+      LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID: "partner-token-id",
+      LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET: "partner-secret",
+      LIMITLESS_LIVE_EXECUTION_ENABLED: "true"
+    });
+
+    expect(status).toMatchObject({
+      executionMode: "delegated_partner_server_wallet",
+      executionSigningModel: "DELEGATED_BACKEND_SIGNER",
+      featureFlagSelected: true,
+      liveExecutionEnabled: true,
+      readinessState: "LIVE_READY",
+      requiredEnvPresent: true,
+      missingEnv: []
+    });
+  });
+
+  it("still requires the execution private key in legacy backend signer mode", () => {
+    const status = getLimitlessExecutionAdapterEnvStatus({
+      LIMITLESS_EXECUTION_MODE: "backend_signer",
+      LIMITLESS_BASE_URL: "https://api.limitless.exchange",
+      LIMITLESS_API_KEY: "server-side-api-key",
+      LIMITLESS_LIVE_EXECUTION_ENABLED: "true"
+    });
+
+    expect(status).toMatchObject({
+      executionMode: "backend_signer",
+      executionSigningModel: "BACKEND_SIGNER",
+      readinessState: "NOT_CONFIGURED",
+      missingEnv: ["LIMITLESS_EXECUTION_PRIVATE_KEY"]
     });
   });
 
@@ -148,6 +195,73 @@ describe("LimitlessExecutionAdapter", () => {
     });
   });
 
+  it("submits delegated orders on behalf of the linked profile id", async () => {
+    const client: LimitlessOrderClient = {
+      async createOrder(input) {
+        expect(input).toMatchObject({
+          marketSlug: "limitless-market-slug",
+          tokenId: "limitless-token-id",
+          side: Side.BUY,
+          price: 0.42,
+          size: 1,
+          orderType: OrderType.GTC,
+          onBehalfOf: 12345
+        });
+        return mockOrderResponse();
+      },
+      async cancel(orderId, onBehalfOf) {
+        expect(orderId).toBe("limitless-order-1");
+        expect(onBehalfOf).toBe(12345);
+        return { message: "cancelled" };
+      },
+      async getFillState(orderId, onBehalfOf) {
+        expect(orderId).toBe("limitless-order-1");
+        expect(onBehalfOf).toBe(12345);
+        return { status: "OPEN", filledSize: "0", averagePrice: 0, offchainFilled: false };
+      },
+      async getSettlementState(orderId, onBehalfOf) {
+        expect(orderId).toBe("limitless-order-1");
+        expect(onBehalfOf).toBe(12345);
+        return { status: "SETTLEMENT_PENDING", evidence: { delegatedProfileScoped: true } };
+      }
+    };
+    const adapter = new LimitlessExecutionAdapter(delegatedLiveConfig, client);
+    const prepared = await adapter.prepareOrder(leg());
+    const submitted = await adapter.submitOrder(prepared);
+
+    expect(prepared.payload).toMatchObject({
+      delegatedProfileId: "12345",
+      metadata: {
+        executionSigningModel: "DELEGATED_BACKEND_SIGNER"
+      }
+    });
+    expect(submitted.status).toBe("SUBMITTED");
+    await expect(adapter.cancelOrder("limitless-order-1")).resolves.toEqual({ cancelled: true });
+    await expect(adapter.fetchFillState("limitless-order-1")).resolves.toMatchObject({ status: "OPEN" });
+    await expect(adapter.fetchSettlementState("limitless-order-1")).resolves.toMatchObject({
+      status: "SETTLEMENT_PENDING",
+      evidence: { delegatedProfileScoped: true }
+    });
+  });
+
+  it("fails closed for delegated submit when no linked profile id is present", async () => {
+    const adapter = new LimitlessExecutionAdapter({
+      ...delegatedLiveConfig,
+      delegatedProfileId: undefined
+    }, {
+      async createOrder() {
+        throw new Error("should not submit");
+      },
+      async cancel() {
+        return { message: "cancelled" };
+      }
+    });
+
+    await expect(adapter.submitOrder(await adapter.prepareOrder(leg()))).rejects.toMatchObject({
+      reasonCode: "LIMITLESS_DELEGATED_PROFILE_REQUIRED"
+    });
+  });
+
   it("does not claim settlement verification without a reviewed settlement evidence reader", async () => {
     const adapter = new LimitlessExecutionAdapter({
       executionMode: "backend_signer",
@@ -208,5 +322,37 @@ describe("LimitlessExecutionAdapter", () => {
 
     expect(plan.allowed).toBe(true);
     expect(plan.mode).toBe("LIVE_SUBMIT_READY");
+  });
+
+  it("allows the delegated live-submit harness only with an explicit profile id", () => {
+    const env: NodeJS.ProcessEnv = {
+      LIMITLESS_EXECUTION_MODE: "delegated_partner_server_wallet",
+      LIMITLESS_LIVE_EXECUTION_ENABLED: "true",
+      LIMITLESS_BASE_URL: "https://api.limitless.exchange",
+      LIMITLESS_PARTNER_ACCOUNT_ENABLED: "true",
+      LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID: "partner-token-id",
+      LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET: "partner-hmac-secret",
+      LIMITLESS_LIVE_SUBMIT_PROFILE_ID: "12345",
+      LIMITLESS_LIVE_SUBMIT_HARNESS_ENABLED: "true",
+      LIMITLESS_LIVE_SUBMIT_OPERATOR_CONFIRM: limitlessLiveSubmitOperatorConfirmation,
+      LIMITLESS_LIVE_SUBMIT_VENUE_MARKET_ID: "limitless-market-slug",
+      LIMITLESS_LIVE_SUBMIT_VENUE_OUTCOME_ID: "limitless-token-id",
+      LIMITLESS_LIVE_SUBMIT_SIDE: "buy",
+      LIMITLESS_LIVE_SUBMIT_SIZE: "0.01",
+      LIMITLESS_LIVE_SUBMIT_PRICE: "0.5",
+      LIMITLESS_LIVE_SUBMIT_MAX_SIZE: "0.05"
+    };
+
+    const plan = evaluateLimitlessLiveSubmitHarness({
+      env,
+      adapterStatus: getLimitlessExecutionAdapterEnvStatus(env)
+    });
+
+    expect(plan.allowed).toBe(true);
+    expect(plan.safeConfig).toMatchObject({
+      executionMode: "delegated_partner_server_wallet",
+      delegatedProfileIdConfigured: true
+    });
+    expect(JSON.stringify(plan)).not.toContain("partner-hmac-secret");
   });
 });

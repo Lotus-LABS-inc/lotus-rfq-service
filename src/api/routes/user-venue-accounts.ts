@@ -15,7 +15,7 @@ const paramsSchema = z.object({
 const ensureBodySchema = z.object({
   venueAccountId: z.string().min(1).optional(),
   venueAccountAddress: z.string().min(1).optional(),
-  venueAccountType: z.enum(["SAFE", "SMART_WALLET", "OAUTH_ACCOUNT", "EOA", "PROXY_ACCOUNT", "DEPOSIT_WALLET"]).optional()
+  venueAccountType: z.enum(["SAFE", "SMART_WALLET", "OAUTH_ACCOUNT", "EOA", "PROXY_ACCOUNT", "DEPOSIT_WALLET", "SERVER_WALLET"]).optional()
 }).default({});
 
 const signedVenueMessageBodySchema = z.object({

@@ -35,6 +35,16 @@ const liveReadyEnv: NodeJS.ProcessEnv = {
   PREDICT_API_KEY: "server-side-predict-key"
 };
 
+const delegatedLimitlessEnv: NodeJS.ProcessEnv = {
+  ...liveReadyEnv,
+  LIMITLESS_EXECUTION_MODE: "delegated_partner_server_wallet",
+  LIMITLESS_API_KEY: "",
+  LIMITLESS_EXECUTION_PRIVATE_KEY: "",
+  LIMITLESS_PARTNER_ACCOUNT_ENABLED: "true",
+  LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID: "server-side-limitless-hmac-token",
+  LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET: "server-side-limitless-hmac-secret"
+};
+
 const buildService = async (): Promise<ExecutionVenuesAdminService> => {
   const repoRoot = await mkdtemp(join(tmpdir(), "lotus-execution-venues-"));
   const artifactDir = join(repoRoot, "artifacts", "execution");
@@ -68,6 +78,19 @@ const buildServiceWithVenueAccounts = async (): Promise<ExecutionVenuesAdminServ
     venueAccountRepository: {
       async countActiveAccountsByVenue() {
         return { POLYMARKET: 1, OPINION: 2 };
+      }
+    }
+  });
+};
+
+const buildDelegatedLimitlessService = async (): Promise<ExecutionVenuesAdminService> => {
+  const repoRoot = await mkdtemp(join(tmpdir(), "lotus-execution-venues-"));
+  return new ExecutionVenuesAdminService({
+    repoRoot,
+    env: delegatedLimitlessEnv,
+    venueAccountRepository: {
+      async countActiveAccountsByVenue() {
+        return { LIMITLESS: 1 };
       }
     }
   });
@@ -203,6 +226,42 @@ describe("admin execution venue readiness routes", () => {
     expect(response.body).not.toContain("providerSubOrgId");
     expect(response.body).not.toContain("providerWalletAccountId");
     expect(response.body).not.toContain("privateKey");
+    await app.close();
+  });
+
+  it("reports delegated Limitless readiness without requiring the legacy private key", async () => {
+    const app = Fastify({ logger: false });
+    await registerAdminExecutionVenuesRoutes(app, adminMiddleware, {
+      executionVenuesAdminService: await buildDelegatedLimitlessService()
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/admin/execution-venues/limitless"
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.venue).toMatchObject({
+      venue: "LIMITLESS",
+      adapter: "LimitlessExecutionAdapter",
+      executionSigningModel: "DELEGATED_BACKEND_SIGNER",
+      structuralReadiness: "LIVE_DISABLED",
+      operationalStatus: "LIVE_DISABLED",
+      liveSubmissionSupported: true,
+      liveExecutionEnabled: false,
+      requiredEnvPresent: true,
+      missingEnv: [],
+      venueAccountRequired: true,
+      venueAccountConfigured: true,
+      activeLinkedAccounts: 1,
+      accountSetupBlockers: []
+    });
+    expect(body.venue.operatorMessage).toContain("delegated partner server-wallet");
+    expect(response.body).not.toContain("LIMITLESS_EXECUTION_PRIVATE_KEY");
+    expect(response.body).not.toContain("server-side-limitless-hmac-token");
+    expect(response.body).not.toContain("server-side-limitless-hmac-secret");
+    expect(response.body).not.toContain("privateKey");
+    expect(response.body).not.toContain("auth");
     await app.close();
   });
 });

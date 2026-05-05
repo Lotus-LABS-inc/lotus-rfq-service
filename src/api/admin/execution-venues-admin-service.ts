@@ -297,7 +297,7 @@ export class ExecutionVenuesAdminService {
   private limitlessBlockers(adapterStatus: LimitlessExecutionAdapterEnvStatus): string[] {
     const blockers: string[] = [];
     if (!adapterStatus.featureFlagSelected) {
-      blockers.push("LIMITLESS_EXECUTION_MODE must be backend_signer before this adapter is selected.");
+      blockers.push("LIMITLESS_EXECUTION_MODE must be backend_signer or delegated_partner_server_wallet before this adapter is selected.");
     }
     if (!adapterStatus.dryRunRequiredEnvPresent) {
       blockers.push(`Missing Limitless dry-run env: ${adapterStatus.missingDryRunEnv.join(", ")}.`);
@@ -317,7 +317,16 @@ export class ExecutionVenuesAdminService {
     adapterStatus: LimitlessExecutionAdapterEnvStatus
   ): string {
     if (!adapterStatus.featureFlagSelected) {
-      return "Limitless backend-signer adapter is scaffolded but not selected. Set LIMITLESS_EXECUTION_MODE=backend_signer only after SDK signing and settlement evidence are reviewed.";
+      return "Limitless adapter is scaffolded but not selected. Set LIMITLESS_EXECUTION_MODE=delegated_partner_server_wallet for the partner server-wallet flow, or backend_signer only for the legacy reviewed key flow.";
+    }
+    if (adapterStatus.executionMode === "delegated_partner_server_wallet") {
+      if (status === "STRUCTURALLY_READY") {
+        return "Limitless delegated partner server-wallet adapter is structurally ready, but live fills still require reviewed settlement evidence before production enablement.";
+      }
+      if (status === "LIVE_DISABLED") {
+        return "Limitless delegated partner server-wallet dry-run path is configured, but live execution is disabled.";
+      }
+      return "Limitless delegated partner server-wallet adapter is not fully configured.";
     }
     if (status === "STRUCTURALLY_READY") {
       return "Limitless backend-signer adapter is structurally ready, but live fills still require reviewed settlement evidence before production enablement.";
@@ -408,7 +417,10 @@ export class ExecutionVenuesAdminService {
     summary: ExecutionVenueReadinessSummary,
     accountCounts: Record<string, number>
   ): ExecutionVenueReadinessSummary {
-    const venueAccountRequired = summary.venue === "POLYMARKET" || summary.venue === "OPINION" || summary.venue === "PREDICT_FUN";
+    const venueAccountRequired = summary.venue === "POLYMARKET" ||
+      summary.venue === "OPINION" ||
+      summary.venue === "PREDICT_FUN" ||
+      (summary.venue === "LIMITLESS" && summary.executionSigningModel === "DELEGATED_BACKEND_SIGNER");
     const activeLinkedAccounts = accountCounts[summary.venue] ?? 0;
     const venueAccountConfigured = !venueAccountRequired || activeLinkedAccounts > 0;
     return {

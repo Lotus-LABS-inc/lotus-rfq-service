@@ -1,7 +1,7 @@
 import type { FundingVenue } from "../funding/types.js";
 import { UserWalletError, type UserWallet, type UserWalletService } from "../funding/user-wallets.js";
 
-export type UserVenueAccountType = "SAFE" | "SMART_WALLET" | "OAUTH_ACCOUNT" | "EOA" | "PROXY_ACCOUNT" | "DEPOSIT_WALLET";
+export type UserVenueAccountType = "SAFE" | "SMART_WALLET" | "OAUTH_ACCOUNT" | "EOA" | "PROXY_ACCOUNT" | "DEPOSIT_WALLET" | "SERVER_WALLET";
 export type UserVenueAccountStatus = "PENDING" | "ACTIVE" | "DISABLED" | "REVOKED";
 export type UserVenueAccountVenue = Extract<FundingVenue, "OPINION" | "PREDICT_FUN" | "LIMITLESS" | "MYRIAD" | "POLYMARKET">;
 
@@ -54,7 +54,11 @@ export interface PredictFunAccountClient {
 
 export interface LimitlessPartnerAccountClient {
   configured(): boolean;
+  serverWalletDelegationEnabled?(): boolean;
   getSigningMessage(): Promise<string>;
+  createServerWalletPartnerAccount?(input?: {
+    displayName?: string | null;
+  }): Promise<{ profileId: string; account: string }>;
   createEoaPartnerAccount(input: {
     account: string;
     signingMessage: string;
@@ -144,10 +148,13 @@ export class UserVenueAccountService {
     if (venue === "POLYMARKET" && !input.venueAccountId && !input.venueAccountAddress) {
       return this.ensurePolymarketDepositWalletAccount(input.userId, wallet, existing);
     }
+    if (venue === "LIMITLESS" && !input.venueAccountId && !input.venueAccountAddress && this.limitlessPartnerAccountClient?.serverWalletDelegationEnabled?.() === true) {
+      return this.ensureLimitlessServerWalletAccount(input.userId, wallet, existing);
+    }
     if (venue === "MYRIAD" && !input.venueAccountId && !input.venueAccountAddress) {
       return this.ensureWalletAddressVenueAccount(input.userId, venue, wallet, existing);
     }
-    const venueAccountType = input.venueAccountType ?? defaultAccountTypeForVenue(venue);
+    const venueAccountType = input.venueAccountType ?? existing?.venueAccountType ?? defaultAccountTypeForVenue(venue);
     const hasVenueAccount = Boolean(input.venueAccountId?.trim() || input.venueAccountAddress?.trim());
     const account = await this.repository.upsertAccount({
       ...(existing?.venueAccountBindingId ? { venueAccountBindingId: existing.venueAccountBindingId } : {}),
@@ -270,6 +277,16 @@ export class UserVenueAccountService {
             account: ensured.account,
             readinessBlockers: [],
             setupInstructions: [],
+            setupMode: "NO_USER_SETUP_REQUIRED"
+          });
+          continue;
+        }
+        if (this.limitlessPartnerAccountClient?.serverWalletDelegationEnabled?.() === true) {
+          venueAccounts.push({
+            venue,
+            account: ensured.account,
+            readinessBlockers: ensured.readinessBlockers,
+            setupInstructions: ensured.setupInstructions,
             setupMode: "NO_USER_SETUP_REQUIRED"
           });
           continue;
@@ -648,6 +665,87 @@ export class UserVenueAccountService {
     };
   }
 
+  private async ensureLimitlessServerWalletAccount(
+    userId: string,
+    wallet: UserWallet,
+    existing: UserVenueAccount | null
+  ): Promise<{
+    account: UserVenueAccount;
+    readinessBlockers: string[];
+    setupInstructions: string[];
+  }> {
+    if (existing?.status === "ACTIVE" && existing.venueAccountType === "SERVER_WALLET" && existing.venueAccountId && existing.venueAccountAddress) {
+      return {
+        account: existing,
+        readinessBlockers: [],
+        setupInstructions: []
+      };
+    }
+    if (!this.limitlessPartnerAccountClient?.configured() || !this.limitlessPartnerAccountClient.createServerWalletPartnerAccount) {
+      const pending = await this.repository.upsertAccount({
+        ...(existing?.venueAccountBindingId ? { venueAccountBindingId: existing.venueAccountBindingId } : {}),
+        userId,
+        venue: "LIMITLESS",
+        userWalletId: wallet.walletId,
+        walletAddress: wallet.address,
+        venueAccountId: existing?.venueAccountId ?? null,
+        venueAccountAddress: existing?.venueAccountAddress ?? null,
+        venueAccountType: "SERVER_WALLET",
+        status: existing?.status === "ACTIVE" ? "ACTIVE" : "PENDING",
+        lastVerifiedAt: existing?.lastVerifiedAt ?? null
+      });
+      await this.repository.appendAccountAuditEvent({
+        userId,
+        venueAccountBindingId: pending.venueAccountBindingId,
+        eventType: "LIMITLESS_SERVER_WALLET_ENSURE_SKIPPED",
+        payload: {
+          venue: "LIMITLESS",
+          accountType: pending.venueAccountType,
+          status: pending.status,
+          automationConfigured: false,
+          walletAddressMatches: equalsAddress(pending.walletAddress, wallet.address)
+        }
+      });
+      return {
+        account: pending,
+        readinessBlockers: readinessBlockersForAccount(pending),
+        setupInstructions: setupInstructionsForVenue("LIMITLESS", pending)
+      };
+    }
+    let linked: { profileId: string; account: string };
+    try {
+      linked = await this.limitlessPartnerAccountClient.createServerWalletPartnerAccount({
+        displayName: `Lotus ${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`
+      });
+    } catch {
+      throw new UserVenueAccountError(
+        "LIMITLESS_PARTNER_ACCOUNT_AUTH_FAILED",
+        "Limitless delegated server-wallet account request failed.",
+        502
+      );
+    }
+    const ensured = await this.ensureAccount({
+      userId,
+      venue: "LIMITLESS",
+      venueAccountId: linked.profileId,
+      venueAccountAddress: linked.account,
+      venueAccountType: "SERVER_WALLET"
+    });
+    await this.repository.appendAccountAuditEvent({
+      userId,
+      venueAccountBindingId: ensured.account.venueAccountBindingId,
+      eventType: "LIMITLESS_SERVER_WALLET_LINKED",
+      payload: {
+        venue: "LIMITLESS",
+        accountType: "SERVER_WALLET",
+        venueAccountAddress: linked.account,
+        venueAccountIdPresent: linked.profileId.length > 0,
+        ownerWalletAddress: wallet.address
+      }
+    });
+    return ensured;
+  }
+
   private async ensureWalletAddressVenueAccount(
     userId: string,
     venue: UserVenueAccountVenue,
@@ -750,6 +848,9 @@ const defaultAccountTypeForVenue = (venue: UserVenueAccountVenue): UserVenueAcco
   if (venue === "POLYMARKET") {
     return "DEPOSIT_WALLET";
   }
+  if (venue === "LIMITLESS") {
+    return "SERVER_WALLET";
+  }
   return "EOA";
 };
 
@@ -784,7 +885,7 @@ const setupInstructionsForVenue = (venue: UserVenueAccountVenue, account: UserVe
     return ["Polymarket deposit-wallet automation is not configured. Configure the Polymarket relayer, builder credentials, factory, and implementation addresses so Lotus can deploy the user's deposit wallet from their Turnkey EVM owner address."];
   }
   if (venue === "LIMITLESS") {
-    return ["Limitless partner-account setup is optional and user-signed. If automation is configured, sign the Limitless ownership message with the displayed Turnkey EVM wallet."];
+    return ["Limitless delegated server-wallet automation is not configured or has not completed. Configure the partner HMAC account-creation/delegated-signing credentials, then retry account setup."];
   }
   return [`Link the ${venue} account created from the displayed Turnkey EVM wallet.`];
 };

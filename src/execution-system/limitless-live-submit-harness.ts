@@ -22,9 +22,11 @@ export interface LimitlessLiveSubmitHarnessPlan {
   warnings: string[];
   safeConfig: {
     baseUrl: string | null;
+    executionMode: string;
     side: "buy" | "sell" | null;
     size: string | null;
     price: number | null;
+    delegatedProfileIdConfigured: boolean;
     venueMarketIdConfigured: boolean;
     venueOutcomeIdConfigured: boolean;
     maxSize: string;
@@ -60,7 +62,7 @@ export const evaluateLimitlessLiveSubmitHarness = (
   const price = parsePositiveNumber(env.LIMITLESS_LIVE_SUBMIT_PRICE);
 
   if (!enabled) blockers.push("LIMITLESS_LIVE_SUBMIT_HARNESS_ENABLED must be true");
-  if (!adapterStatus.featureFlagSelected) blockers.push("LIMITLESS_EXECUTION_MODE must be backend_signer");
+  if (!adapterStatus.featureFlagSelected) blockers.push("LIMITLESS_EXECUTION_MODE must be backend_signer or delegated_partner_server_wallet");
   if (!adapterStatus.liveExecutionEnabled) blockers.push("LIMITLESS_LIVE_EXECUTION_ENABLED must be true");
   if (adapterStatus.readinessState !== "LIVE_READY") {
     blockers.push(`Limitless adapter must be LIVE_READY; current state is ${adapterStatus.readinessState}`);
@@ -73,6 +75,9 @@ export const evaluateLimitlessLiveSubmitHarness = (
   }
   if (!nonEmpty(env.LIMITLESS_LIVE_SUBMIT_VENUE_OUTCOME_ID)) {
     blockers.push("LIMITLESS_LIVE_SUBMIT_VENUE_OUTCOME_ID is required");
+  }
+  if (adapterStatus.executionMode === "delegated_partner_server_wallet" && !nonEmpty(env.LIMITLESS_LIVE_SUBMIT_PROFILE_ID) && !nonEmpty(env.LIMITLESS_DELEGATED_PROFILE_ID)) {
+    blockers.push("LIMITLESS_LIVE_SUBMIT_PROFILE_ID or LIMITLESS_DELEGATED_PROFILE_ID is required for delegated Limitless live submit");
   }
   if (!side) blockers.push("LIMITLESS_LIVE_SUBMIT_SIDE must be buy or sell");
   if (!size) blockers.push("LIMITLESS_LIVE_SUBMIT_SIZE must be a positive number");
@@ -96,9 +101,11 @@ export const evaluateLimitlessLiveSubmitHarness = (
     warnings,
     safeConfig: {
       baseUrl: env.LIMITLESS_BASE_URL ?? null,
+      executionMode: adapterStatus.executionMode,
       side,
       size: size === null ? null : String(size),
       price,
+      delegatedProfileIdConfigured: nonEmpty(env.LIMITLESS_LIVE_SUBMIT_PROFILE_ID) || nonEmpty(env.LIMITLESS_DELEGATED_PROFILE_ID),
       venueMarketIdConfigured: nonEmpty(env.LIMITLESS_LIVE_SUBMIT_VENUE_MARKET_ID),
       venueOutcomeIdConfigured: nonEmpty(env.LIMITLESS_LIVE_SUBMIT_VENUE_OUTCOME_ID),
       maxSize: String(maxSize)
@@ -125,7 +132,11 @@ const sensitiveArtifactKeys = [
   /^private[-_]?key$/i,
   /^auth[-_]?header$/i,
   /^authorization$/i,
-  /^signature$/i
+  /^signature$/i,
+  /^hmac[-_]?token[-_]?id$/i,
+  /^hmac[-_]?secret$/i,
+  /^token[-_]?id$/i,
+  /^secret$/i
 ];
 
 export const redactSensitiveLimitlessHarnessArtifactValue = (value: unknown): unknown => {

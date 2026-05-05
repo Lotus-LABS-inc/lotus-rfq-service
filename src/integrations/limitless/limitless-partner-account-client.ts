@@ -1,7 +1,9 @@
 import { createHmac } from "node:crypto";
+import { Client } from "@limitless-exchange/sdk";
 
 export interface LimitlessPartnerAccountClientConfig {
   enabled?: boolean | undefined;
+  serverWalletDelegationEnabled?: boolean | undefined;
   baseUrl?: string | undefined;
   hmacTokenId?: string | undefined;
   hmacSecret?: string | undefined;
@@ -39,6 +41,10 @@ export class LimitlessPartnerAccountClient {
       this.config.hmacTokenId?.trim() &&
       this.config.hmacSecret?.trim()
     );
+  }
+
+  public serverWalletDelegationEnabled(): boolean {
+    return this.config.serverWalletDelegationEnabled === true;
   }
 
   public async getSigningMessage(): Promise<string> {
@@ -99,15 +105,41 @@ export class LimitlessPartnerAccountClient {
         response.status === 409 ? "LIMITLESS_PARTNER_ACCOUNT_CONFLICT" : "LIMITLESS_PARTNER_ACCOUNT_CREATE_FAILED"
       );
     }
-    const profileId = payload.profileId;
-    const account = payload.account;
-    if ((typeof profileId !== "number" && typeof profileId !== "string") || typeof account !== "string" || !isEvmAddress(account)) {
-      throw new LimitlessPartnerAccountClientError("Limitless partner account response did not include profileId and account.", 502);
+    return parsePartnerAccountResponse(payload);
+  }
+
+  public async createServerWalletPartnerAccount(input: {
+    displayName?: string | null;
+  } = {}): Promise<LimitlessPartnerAccount> {
+    const tokenId = this.config.hmacTokenId?.trim();
+    const secret = this.config.hmacSecret?.trim();
+    if (!tokenId || !secret) {
+      throw new LimitlessPartnerAccountClientError("Limitless partner HMAC credentials are not configured.", 503, "LIMITLESS_PARTNER_ACCOUNT_HMAC_MISSING");
     }
-    return {
-      profileId: String(profileId),
-      account
-    };
+    try {
+      const client = new Client({
+        baseURL: this.baseUrl,
+        timeout: this.timeoutMs,
+        hmacCredentials: {
+          tokenId,
+          secret
+        }
+      });
+      const response = await client.partnerAccounts.createAccount({
+        ...(input.displayName?.trim() ? { displayName: input.displayName.trim().slice(0, 44) } : {}),
+        createServerWallet: true
+      });
+      return parsePartnerAccountResponse(response as unknown as Record<string, unknown>);
+    } catch (error) {
+      if (error instanceof LimitlessPartnerAccountClientError) {
+        throw error;
+      }
+      throw new LimitlessPartnerAccountClientError(
+        safeLimitlessSdkErrorMessage(error),
+        502,
+        "LIMITLESS_PARTNER_ACCOUNT_CREATE_FAILED"
+      );
+    }
   }
 
   private async fetchWithTimeout(path: string, init: RequestInit): Promise<Response> {
@@ -149,6 +181,7 @@ export const buildLimitlessPartnerAccountClientFromEnv = (
 ): LimitlessPartnerAccountClient =>
   new LimitlessPartnerAccountClient({
     enabled: env.LIMITLESS_PARTNER_ACCOUNT_ENABLED === "true",
+    serverWalletDelegationEnabled: env.LIMITLESS_EXECUTION_MODE === "delegated_partner_server_wallet",
     baseUrl: env.LIMITLESS_PARTNER_ACCOUNT_BASE_URL ?? env.LIMITLESS_BASE_URL,
     hmacTokenId: env.LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID ?? env.LIMITLESS_WITHDRAWAL_ADAPTER_API_KEY,
     hmacSecret: env.LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET ?? env.LIMITLESS_WITHDRAWAL_ADAPTER_HMAC_SECRET,
@@ -173,11 +206,30 @@ const hexEncodeUtf8 = (value: string): `0x${string}` =>
 const isEvmAddress = (value: string): boolean =>
   /^0x[a-fA-F0-9]{40}$/.test(value);
 
+const parsePartnerAccountResponse = (payload: Record<string, unknown>): LimitlessPartnerAccount => {
+  const profileId = payload.profileId;
+  const account = payload.account;
+  if ((typeof profileId !== "number" && typeof profileId !== "string") || typeof account !== "string" || !isEvmAddress(account)) {
+    throw new LimitlessPartnerAccountClientError("Limitless partner account response did not include profileId and account.", 502);
+  }
+  return {
+    profileId: String(profileId),
+    account
+  };
+};
+
 const safeLimitlessPartnerAccountErrorMessage = (payload: Record<string, unknown>, status: number): string => {
   const message = typeof payload.message === "string" && payload.message.length > 0
     ? payload.message
     : typeof payload.error === "string" && payload.error.length > 0
       ? payload.error
       : `Limitless partner account request failed with status ${status}.`;
+  return message.slice(0, 240);
+};
+
+const safeLimitlessSdkErrorMessage = (error: unknown): string => {
+  const message = error instanceof Error && error.message.length > 0
+    ? error.message
+    : "Limitless server-wallet partner account request failed.";
   return message.slice(0, 240);
 };
