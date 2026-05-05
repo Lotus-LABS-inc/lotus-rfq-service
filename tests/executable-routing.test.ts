@@ -101,7 +101,7 @@ describe("executable route selection", () => {
         return [
           readyVenue("POLYMARKET"),
           readyVenue("LIMITLESS"),
-          readyVenue("OPINION", { liveExecutionEnabled: false, operationalStatus: "LIVE_DISABLED" })
+          readyVenue("OPINION", { liveSubmissionSupported: false, liveExecutionEnabled: false, operationalStatus: "NOT_CONFIGURED" })
         ];
       }
     }, repository, () => new Date("2026-05-03T00:00:00.000Z"));
@@ -138,7 +138,7 @@ describe("executable route selection", () => {
       async listVenues() {
         return [
           readyVenue("POLYMARKET"),
-          readyVenue("LIMITLESS", { liveExecutionEnabled: false, operationalStatus: "LIVE_DISABLED" })
+          readyVenue("LIMITLESS", { liveSubmissionSupported: false, liveExecutionEnabled: false, operationalStatus: "NOT_CONFIGURED" })
         ];
       }
     });
@@ -165,7 +165,7 @@ describe("executable route selection", () => {
   it("returns no user quote when no executable route exists", async () => {
     const service = new ExecutableRouteService({
       async listVenues() {
-        return [readyVenue("PREDICT_FUN", { liveExecutionEnabled: false, operationalStatus: "LIVE_DISABLED" })];
+        return [readyVenue("PREDICT_FUN", { liveSubmissionSupported: false, liveExecutionEnabled: false, operationalStatus: "NOT_CONFIGURED" })];
       }
     });
 
@@ -180,6 +180,29 @@ describe("executable route selection", () => {
 
     expect(result.quote).toBeNull();
     expect(result.userMessage).toBe("No executable route available right now.");
+  });
+
+  it("allows quote preparation when live submit is disabled but venue path is configured", async () => {
+    const service = new ExecutableRouteService({
+      async listVenues() {
+        return [readyVenue("POLYMARKET", { liveExecutionEnabled: false, operationalStatus: "LIVE_DISABLED" })];
+      }
+    });
+
+    const result = await service.quote({
+      userId: "user-1",
+      side: "buy",
+      marketId: "market-1",
+      outcomeId: "yes",
+      amount: "1",
+      candidates: [{ venue: "POLYMARKET", price: 0.5, availableSize: "1" }]
+    });
+
+    expect(result.quote).toMatchObject({
+      routeType: "SINGLE_VENUE",
+      venuePath: ["POLYMARKET"],
+      executableAmount: "1"
+    });
   });
 });
 
