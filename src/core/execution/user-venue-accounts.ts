@@ -811,11 +811,38 @@ export class UserVenueAccountService {
         displayName: `Lotus ${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`
       });
     } catch {
-      throw new UserVenueAccountError(
-        "LIMITLESS_PARTNER_ACCOUNT_AUTH_FAILED",
-        "Limitless delegated server-wallet account request failed.",
-        502
-      );
+      const pending = await this.repository.upsertAccount({
+        ...(existing?.venueAccountBindingId ? { venueAccountBindingId: existing.venueAccountBindingId } : {}),
+        userId,
+        venue: "LIMITLESS",
+        userWalletId: wallet.walletId,
+        walletAddress: wallet.address,
+        venueAccountId: existing?.venueAccountId ?? null,
+        venueAccountAddress: existing?.venueAccountAddress ?? null,
+        venueAccountType: "SERVER_WALLET",
+        status: "PENDING",
+        lastVerifiedAt: existing?.lastVerifiedAt ?? null
+      });
+      await this.repository.appendAccountAuditEvent({
+        userId,
+        venueAccountBindingId: pending.venueAccountBindingId,
+        eventType: "LIMITLESS_SERVER_WALLET_ENSURE_FAILED",
+        payload: {
+          venue: "LIMITLESS",
+          accountType: "SERVER_WALLET",
+          status: pending.status,
+          automationConfigured: true,
+          walletAddressMatches: equalsAddress(pending.walletAddress, wallet.address)
+        }
+      });
+      return {
+        account: pending,
+        readinessBlockers: [
+          ...readinessBlockersForAccount(pending),
+          "Limitless delegated server-wallet account request failed. Check partner HMAC scopes and retry account setup."
+        ],
+        setupInstructions: setupInstructionsForVenue("LIMITLESS", pending)
+      };
     }
     const ensured = await this.ensureAccount({
       userId,
