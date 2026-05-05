@@ -4,6 +4,9 @@ export type VenueFeeModel =
   | "POLYMARKET_PROTOCOL"
   | "LIMITLESS_CLOB_CURVE"
   | "LIMITLESS_AMM_FLAT"
+  | "OPINION_TAKER_CURVE"
+  | "PREDICT_MARKET_STATS"
+  | "MYRIAD_QUOTE_API"
   | "STATIC_APPROVED";
 
 export type VenueFeeSource = "VENUE_API" | "DOC_RULESET" | "OPERATOR_STATIC";
@@ -26,8 +29,11 @@ export interface FeeCalculationInput {
   quantity: number | string | InstanceType<typeof Decimal>;
   price: number | string | InstanceType<typeof Decimal>;
   staticFeeBps?: number | undefined;
+  venueFeeBps?: number | undefined;
+  venueFeeModel?: VenueFeeModel | undefined;
   polymarketFeeRate?: number | undefined;
   polymarketCategory?: string | undefined;
+  opinionTopicRate?: number | undefined;
   limitlessMarketType?: "amm" | "clob" | undefined;
 }
 
@@ -47,6 +53,17 @@ export const calculateVenueFeeQuote = (input: FeeCalculationInput): VenueFeeQuot
       model: "STATIC_APPROVED",
       source: "OPERATOR_STATIC",
       confidence: "MEDIUM",
+      paidIn: "ECONOMIC_EQUIVALENT_USDC"
+    });
+  }
+
+  if (input.venueFeeBps !== undefined && input.venueFeeModel !== undefined) {
+    return quoteFromBps({
+      feeBps: input.venueFeeBps,
+      notional,
+      model: input.venueFeeModel,
+      source: "VENUE_API",
+      confidence: "HIGH",
       paidIn: "ECONOMIC_EQUIVALENT_USDC"
     });
   }
@@ -95,6 +112,25 @@ export const calculateVenueFeeQuote = (input: FeeCalculationInput): VenueFeeQuot
       confidence: "MEDIUM",
       paidIn: input.side === "buy" ? "OUTCOME_TOKENS" : "USDC"
     });
+  }
+
+  if (venue === "OPINION" && input.opinionTopicRate !== undefined) {
+    const curveRate = new Decimal(input.opinionTopicRate).times(price).times(new Decimal(1).minus(price));
+    const curveFee = notional.times(curveRate);
+    const feeAmount = Decimal.max(curveFee, 0.25);
+    return {
+      feeModel: "OPINION_TAKER_CURVE",
+      feeSource: "DOC_RULESET",
+      feeAmount: roundDecimal(feeAmount),
+      effectiveFeeBps: roundNumber(feeAmount.div(notional).times(10_000)),
+      confidence: "MEDIUM",
+      appliesTo: "taker",
+      paidIn: "USDC",
+      metadata: {
+        topicRate: input.opinionTopicRate,
+        formula: "max(notional * topic_rate * price * (1 - price), 0.25)"
+      }
+    };
   }
 
   return null;

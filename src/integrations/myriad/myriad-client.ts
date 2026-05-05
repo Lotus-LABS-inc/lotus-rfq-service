@@ -102,7 +102,8 @@ export const MYRIAD_ENDPOINTS = Object.freeze({
   questionDetail: (id: string | number) => `/questions/${encodeURIComponent(String(id))}`,
   markets: "/markets",
   marketDetail: (idOrSlug: string | number) => `/markets/${encodeURIComponent(String(idOrSlug))}`,
-  marketEvents: (idOrSlug: string | number) => `/markets/${encodeURIComponent(String(idOrSlug))}/events`
+  marketEvents: (idOrSlug: string | number) => `/markets/${encodeURIComponent(String(idOrSlug))}/events`,
+  marketQuote: "/markets/quote"
 })
 
 const defaultRetryConfig = Object.freeze({
@@ -182,6 +183,10 @@ export class MyriadClient {
     return this.request("getMarketEvents", MYRIAD_ENDPOINTS.marketEvents(idOrSlug), rest, parseMyriadMarketEventsResponse)
   }
 
+  public async getMarketQuote(input: Record<string, unknown>): Promise<unknown> {
+    return this.requestRaw("quoteMarket", "POST", MYRIAD_ENDPOINTS.marketQuote, undefined, input)
+  }
+
   private async request<T>(
     operation: string,
     path: string,
@@ -257,5 +262,29 @@ export class MyriadClient {
     }
 
     throw new MyriadClientError("Myriad request exhausted retries.", path)
+  }
+
+  private async requestRaw(
+    operation: string,
+    method: "GET" | "POST",
+    path: string,
+    query: QueryParams | undefined,
+    body: unknown
+  ): Promise<unknown> {
+    const url = buildUrl(this.config.baseUrl, path, query)
+    const response = await this.fetchImpl(url, {
+      method,
+      headers: {
+        Accept: "application/json",
+        ...(body !== undefined ? { "content-type": "application/json" } : {}),
+        ...(this.config.apiKey ? { "x-api-key": this.config.apiKey } : {})
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {})
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new MyriadClientError(`Myriad ${operation} failed with status ${response.status}.`, path, response.status)
+    }
+    return payload
   }
 }

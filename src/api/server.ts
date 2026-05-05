@@ -165,6 +165,12 @@ import { LimitlessQuoteReader, LimitlessRestOrderbookClient } from "../integrati
 import { LimitlessProfileFeeReader } from "../integrations/limitless/limitless-fee-reader.js";
 import { PolymarketClobFeeReader } from "../integrations/polymarket/polymarket-fee-reader.js";
 import { PolymarketQuoteReader, PolymarketRestOrderbookClient } from "../integrations/polymarket/polymarket-quote-reader.js";
+import { PredictClient } from "../integrations/predict/predict-client.js";
+import { PredictQuoteReader } from "../integrations/predict/predict-quote-reader.js";
+import { OpinionClient } from "../integrations/opinion/opinion-client.js";
+import { OpinionQuoteReader } from "../integrations/opinion/opinion-quote-reader.js";
+import { MyriadClient } from "../integrations/myriad/myriad-client.js";
+import { MyriadQuoteReader } from "../integrations/myriad/myriad-quote-reader.js";
 import { InternalCrossingEngine } from "../core/internal-engine/engine.js";
 import { OrderBook } from "../core/internal-engine/order-book.js";
 import { OrderLocker } from "../core/internal-engine/locker.js";
@@ -780,6 +786,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
 
   const polymarketQuoteCache = new QuoteSnapshotCache();
   const limitlessQuoteCache = new QuoteSnapshotCache();
+  const predictQuoteCache = new QuoteSnapshotCache();
+  const opinionQuoteCache = new QuoteSnapshotCache();
+  const myriadQuoteCache = new QuoteSnapshotCache();
   const polymarketClobHost = process.env.POLYMARKET_CLOB_HOST ?? process.env.POLY_CLOB_HOST ?? "https://clob.polymarket.com";
   const limitlessBaseUrl = process.env.LIMITLESS_BASE_URL ?? "https://api.limitless.exchange";
   const venueQuoteSource = new CompositeVenueQuoteSource([
@@ -804,6 +813,34 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         hmacSecret: process.env.LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET ?? process.env.LIMITLESS_WITHDRAWAL_ADAPTER_HMAC_SECRET,
         account: process.env.LIMITLESS_QUOTE_FEE_PROFILE_ACCOUNT ?? process.env.LIMITLESS_WITHDRAWAL_ADAPTER_PROFILE_WALLET_ADDRESS
       })
+    }),
+    new PredictQuoteReader({
+      client: new PredictClient({
+        environment: process.env.PREDICT_ENVIRONMENT === "testnet" ? "testnet" : "mainnet",
+        ...(process.env.PREDICT_MAINNET_BASE_URL ? { baseUrl: process.env.PREDICT_MAINNET_BASE_URL } : {}),
+        ...(process.env.PREDICT_API_KEY ? { apiKey: process.env.PREDICT_API_KEY } : {}),
+        logger: dependencies.logger
+      }),
+      streamCache: predictQuoteCache,
+      environment: process.env.PREDICT_ENVIRONMENT === "testnet" ? "testnet" : "mainnet",
+      feeBps: parseOptionalNumber(process.env.PREDICT_QUOTE_FEE_BPS)
+    }),
+    new OpinionQuoteReader({
+      client: new OpinionClient({
+        baseUrl: process.env.OPINION_CLOB_BASE_URL ?? process.env.OPINION_OPENAPI_BASE_URL ?? "https://proxy.opinion.trade:8443/openapi",
+        apiKey: process.env.OPINION_API_KEY ?? ""
+      }),
+      streamCache: opinionQuoteCache,
+      topicRate: parseOptionalNumber(process.env.OPINION_QUOTE_TOPIC_RATE),
+      feeBps: parseOptionalNumber(process.env.OPINION_QUOTE_FEE_BPS)
+    }),
+    new MyriadQuoteReader({
+      client: new MyriadClient({
+        baseUrl: process.env.MYRIAD_BASE_URL ?? "https://api-v2.myriadprotocol.com/",
+        ...(process.env.MYRIAD_API_KEY ? { apiKey: process.env.MYRIAD_API_KEY } : {}),
+        logger: dependencies.logger
+      }),
+      streamCache: myriadQuoteCache
     })
   ], new EnvVenueQuoteMappingResolver(process.env.EXECUTION_QUOTE_VENUE_MARKET_MAP_JSON));
 

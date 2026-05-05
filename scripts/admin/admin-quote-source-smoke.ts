@@ -20,6 +20,12 @@ import {
 } from "../../src/integrations/limitless/limitless-quote-reader.js";
 import { LimitlessProfileFeeReader } from "../../src/integrations/limitless/limitless-fee-reader.js";
 import { PolymarketClobFeeReader } from "../../src/integrations/polymarket/polymarket-fee-reader.js";
+import { PredictClient } from "../../src/integrations/predict/predict-client.js";
+import { PredictQuoteReader } from "../../src/integrations/predict/predict-quote-reader.js";
+import { OpinionClient } from "../../src/integrations/opinion/opinion-client.js";
+import { OpinionQuoteReader } from "../../src/integrations/opinion/opinion-quote-reader.js";
+import { MyriadClient } from "../../src/integrations/myriad/myriad-client.js";
+import { MyriadQuoteReader } from "../../src/integrations/myriad/myriad-quote-reader.js";
 
 loadDotenv();
 
@@ -64,7 +70,7 @@ interface QuoteSourceSmokeArtifact {
     side: "buy" | "sell";
     amount: number;
   };
-  requiredVenues: ["POLYMARKET", "LIMITLESS"];
+  requiredVenues: string[];
   mappingSummary: {
     sourceEnvPresent: boolean;
     selectedKey: string | null;
@@ -82,7 +88,7 @@ interface QuoteSourceSmokeArtifact {
   nextActions: string[];
 }
 
-const requiredVenues = ["POLYMARKET", "LIMITLESS"] as const;
+const requiredVenues = parseRequiredVenues(process.env.QUOTE_SOURCE_SMOKE_REQUIRED_VENUES);
 const artifactDir = join(process.cwd(), "artifacts", "execution");
 const sensitiveKeyPatterns = [
   /api[-_]?key/i,
@@ -150,7 +156,7 @@ const secretFindings = findSensitiveValues(rows);
 const requiredVenueSet = new Set(requiredVenues);
 const passed = rows.length === requiredVenues.length &&
   rows.every((row) =>
-    requiredVenueSet.has(row.venue as typeof requiredVenues[number]) &&
+    requiredVenueSet.has(row.venue) &&
     row.mappingPresent &&
     row.error === null &&
     row.blockers.length === 0
@@ -168,7 +174,7 @@ const artifact: QuoteSourceSmokeArtifact = {
     side,
     amount
   },
-  requiredVenues: ["POLYMARKET", "LIMITLESS"],
+  requiredVenues,
   mappingSummary: {
     sourceEnvPresent: Boolean(rawMappingJson && rawMappingJson.trim().length > 0),
     selectedKey: mappingSelection.selectedKey,
@@ -252,6 +258,42 @@ function readerForVenue(venue: string): VenueQuoteSnapshotReader | null {
         hmacTokenId: process.env.LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID ?? process.env.LIMITLESS_WITHDRAWAL_ADAPTER_API_KEY,
         hmacSecret: process.env.LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET ?? process.env.LIMITLESS_WITHDRAWAL_ADAPTER_HMAC_SECRET,
         account: process.env.LIMITLESS_QUOTE_FEE_PROFILE_ACCOUNT ?? process.env.LIMITLESS_WITHDRAWAL_ADAPTER_PROFILE_WALLET_ADDRESS
+      })
+    });
+  }
+  if (normalizedVenue === "PREDICT" || normalizedVenue === "PREDICT_FUN") {
+    const environment = process.env.PREDICT_ENVIRONMENT === "testnet" ? "testnet" : "mainnet";
+    return new PredictQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      environment,
+      client: new PredictClient({
+        environment,
+        baseUrl: environment === "testnet" ? process.env.PREDICT_TESTNET_BASE_URL : process.env.PREDICT_MAINNET_BASE_URL,
+        apiKey: process.env.PREDICT_API_KEY
+      }),
+      feeBps: parseOptionalNumber(process.env.PREDICT_QUOTE_FEE_BPS)
+    });
+  }
+  if (normalizedVenue === "OPINION") {
+    if (!process.env.OPINION_API_KEY) {
+      return null;
+    }
+    return new OpinionQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      client: new OpinionClient({
+        baseUrl: process.env.OPINION_CLOB_BASE_URL ?? process.env.OPINION_OPENAPI_BASE_URL ?? "https://proxy.opinion.trade:8443/openapi",
+        apiKey: process.env.OPINION_API_KEY
+      }),
+      topicRate: parseOptionalNumber(process.env.OPINION_QUOTE_TOPIC_RATE),
+      feeBps: parseOptionalNumber(process.env.OPINION_QUOTE_FEE_BPS)
+    });
+  }
+  if (normalizedVenue === "MYRIAD") {
+    return new MyriadQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      client: new MyriadClient({
+        baseUrl: process.env.MYRIAD_BASE_URL ?? "https://api-v2.myriadprotocol.com/",
+        apiKey: process.env.MYRIAD_API_KEY
       })
     });
   }
@@ -419,6 +461,14 @@ function isSensitiveKey(key: string): boolean {
 
 function parseMode(value: string | undefined): SmokeMode {
   return value?.toUpperCase() === "DISCOVER" ? "DISCOVER" : "VALIDATE";
+}
+
+function parseRequiredVenues(value: string | undefined): string[] {
+  const venues = (value ?? "POLYMARKET,LIMITLESS")
+    .split(",")
+    .map((venue) => venue.trim().toUpperCase())
+    .filter((venue) => venue.length > 0);
+  return [...new Set(venues)];
 }
 
 function parseSide(value: string | undefined): "buy" | "sell" {

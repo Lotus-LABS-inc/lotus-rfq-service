@@ -27,8 +27,12 @@ export interface NormalizedVenueQuoteSnapshot {
   asks: readonly NormalizedQuoteLevel[];
   feeBps?: number | undefined;
   fixedFee?: number | undefined;
+  feeQuote?: VenueFeeQuote | undefined;
+  venueFeeBps?: number | undefined;
+  venueFeeModel?: VenueFeeQuote["feeModel"] | undefined;
   polymarketFeeRate?: number | undefined;
   polymarketCategory?: string | undefined;
+  opinionTopicRate?: number | undefined;
   limitlessMarketType?: "amm" | "clob" | undefined;
   staticFeeApproved?: boolean | undefined;
   settlementEvidenceSupported?: boolean | undefined;
@@ -272,14 +276,17 @@ export const calculateVenueQuote = (input: QuoteCalculationInput): QuoteCalculat
     : input.side === "buy"
       ? bps(weightedPrice.minus(topPrice), topPrice)
       : bps(new Decimal(topPrice).minus(weightedPrice), topPrice);
-  const feeQuote = calculateVenueFeeQuote({
+  const feeQuote = input.snapshot.feeQuote ?? calculateVenueFeeQuote({
     venue: input.snapshot.venue,
     side: input.side,
     quantity: fill.filledSize,
     price: weightedPrice,
     ...(input.snapshot.staticFeeApproved && input.snapshot.feeBps !== undefined ? { staticFeeBps: input.snapshot.feeBps } : {}),
+    ...(input.snapshot.venueFeeBps !== undefined ? { venueFeeBps: input.snapshot.venueFeeBps } : {}),
+    ...(input.snapshot.venueFeeModel ? { venueFeeModel: input.snapshot.venueFeeModel } : {}),
     ...(input.snapshot.polymarketFeeRate !== undefined ? { polymarketFeeRate: input.snapshot.polymarketFeeRate } : {}),
     ...(input.snapshot.polymarketCategory ? { polymarketCategory: input.snapshot.polymarketCategory } : {}),
+    ...(input.snapshot.opinionTopicRate !== undefined ? { opinionTopicRate: input.snapshot.opinionTopicRate } : {}),
     ...(input.snapshot.limitlessMarketType ? { limitlessMarketType: input.snapshot.limitlessMarketType } : {})
   });
 

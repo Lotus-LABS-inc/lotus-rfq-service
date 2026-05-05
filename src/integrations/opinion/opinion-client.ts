@@ -38,4 +38,23 @@ export class OpinionClient {
 
     return parseOpinionMarketList(payload);
   }
+
+  public async getTokenOrderbook(input: { tokenId: string }): Promise<unknown> {
+    const normalizedBaseUrl = this.config.baseUrl.endsWith("/") ? this.config.baseUrl : `${this.config.baseUrl}/`;
+    const url = new URL("token/orderbook", normalizedBaseUrl);
+    url.searchParams.set("token_id", input.tokenId);
+
+    const response = await fetch(url, {
+      headers: {
+        apikey: this.config.apiKey
+      }
+    });
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new OpinionClientError(`Opinion /token/orderbook failed with HTTP ${response.status}.`, response.status, payload);
+    }
+
+    return payload;
+  }
 }
