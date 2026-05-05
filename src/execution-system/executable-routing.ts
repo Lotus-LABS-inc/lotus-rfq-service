@@ -414,7 +414,7 @@ const evaluateCandidate = (
   if (candidate.settlementEvidenceSupported === false) {
     return { executable: false, status: "SETTLEMENT_EVIDENCE_MISSING", blockerCategory: "SETTLEMENT_EVIDENCE_MISSING", adminReason: `${candidate.venue} settlement evidence is not supported.` };
   }
-  if (!readiness.liveSubmissionSupported || !readiness.liveExecutionEnabled || readiness.operationalStatus !== "STRUCTURALLY_READY") {
+  if (!readiness.liveSubmissionSupported || (readiness.operationalStatus !== "STRUCTURALLY_READY" && readiness.operationalStatus !== "LIVE_DISABLED")) {
     return {
       executable: false,
       status: "QUOTE_ONLY",
