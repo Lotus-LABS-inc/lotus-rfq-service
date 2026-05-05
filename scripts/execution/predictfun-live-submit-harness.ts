@@ -2,17 +2,17 @@ import "dotenv/config";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  getLimitlessExecutionAdapterEnvStatus,
-  limitlessLiveSubmitOperatorConfirmation,
-  runLimitlessLiveSubmitHarness
+  getPredictFunExecutionAdapterEnvStatus,
+  predictFunLiveSubmitOperatorConfirmation,
+  runPredictFunLiveSubmitHarness
 } from "../../src/execution-system/index.js";
 
 const artifactDir = join(process.cwd(), "artifacts", "execution");
-const checklistPath = join(artifactDir, "limitless-live-submit-checklist.json");
-const markdownPath = join(artifactDir, "limitless-live-submit-checklist.md");
+const checklistPath = join(artifactDir, "predictfun-live-submit-checklist.json");
+const markdownPath = join(artifactDir, "predictfun-live-submit-checklist.md");
 
-const result = await runLimitlessLiveSubmitHarness(process.env);
-const status = getLimitlessExecutionAdapterEnvStatus(process.env);
+const result = await runPredictFunLiveSubmitHarness(process.env);
+const status = getPredictFunExecutionAdapterEnvStatus(process.env);
 
 const safeArtifact = {
   generatedAt: new Date().toISOString(),
@@ -30,7 +30,8 @@ const safeArtifact = {
     dryRunRequiredEnvPresent: status.dryRunRequiredEnvPresent,
     missingDryRunEnv: status.missingDryRunEnv,
     credentialsServerSideOnly: status.credentialsServerSideOnly,
-    liveSubmissionStatus: status.liveSubmissionStatus
+    liveSubmissionStatus: status.liveSubmissionStatus,
+    relayImplementationStatus: status.relayImplementationStatus
   },
   preparedOrder: result.preparedOrder ?? null,
   submitResult: result.submitResult ?? null,
@@ -45,23 +46,25 @@ await writeFile(checklistPath, `${JSON.stringify(safeArtifact, null, 2)}\n`, "ut
 await writeFile(
   markdownPath,
   [
-    "# Limitless Live Submit Harness Checklist",
+    "# Predict.fun Live Submit Harness Checklist",
     "",
     "This harness is operator-controlled and is not part of normal CI or startup flow.",
     "",
     "## Required Operator Env",
     "",
-    "- `LIMITLESS_EXECUTION_MODE=delegated_partner_server_wallet` or reviewed legacy `backend_signer`",
-    "- delegated mode only: `LIMITLESS_PARTNER_ACCOUNT_ENABLED=true`, `LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID`, `LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET`, and `LIMITLESS_LIVE_SUBMIT_PROFILE_ID` or `LIMITLESS_DELEGATED_PROFILE_ID`",
-    "- `LIMITLESS_LIVE_EXECUTION_ENABLED=true`",
-    "- `LIMITLESS_LIVE_SUBMIT_HARNESS_ENABLED=true`",
-    `- \`LIMITLESS_LIVE_SUBMIT_OPERATOR_CONFIRM=${limitlessLiveSubmitOperatorConfirmation}\``,
-    "- `LIMITLESS_LIVE_SUBMIT_VENUE_MARKET_ID=<market-slug>`",
-    "- `LIMITLESS_LIVE_SUBMIT_VENUE_OUTCOME_ID=<token-id>`",
-    "- `LIMITLESS_LIVE_SUBMIT_SIDE=buy|sell`",
-    "- `LIMITLESS_LIVE_SUBMIT_SIZE=<small-positive-size>`",
-    "- `LIMITLESS_LIVE_SUBMIT_PRICE=<0-to-1-limit-price>`",
-    "- `LIMITLESS_LIVE_SUBMIT_MAX_SIZE=<safety-cap>`",
+    "- `PREDICT_FUN_EXECUTION_MODE=user_signed_backend_relay`",
+    "- `PREDICT_FUN_LIVE_EXECUTION_ENABLED=true`",
+    "- `PREDICT_FUN_LIVE_SUBMIT_HARNESS_ENABLED=true`",
+    `- \`PREDICT_FUN_LIVE_SUBMIT_OPERATOR_CONFIRM=${predictFunLiveSubmitOperatorConfirmation}\``,
+    "- `PREDICT_FUN_LIVE_SUBMIT_VENUE_MARKET_ID=<market-id>`",
+    "- `PREDICT_FUN_LIVE_SUBMIT_VENUE_OUTCOME_ID=<token-or-outcome-id>`",
+    "- `PREDICT_FUN_LIVE_SUBMIT_SIDE=buy|sell`",
+    "- `PREDICT_FUN_LIVE_SUBMIT_SIZE=<small-positive-size>`",
+    "- `PREDICT_FUN_LIVE_SUBMIT_PRICE=<0-to-1-limit-price>`",
+    "- `PREDICT_FUN_LIVE_SUBMIT_MAX_SIZE=<safety-cap>`",
+    "- `PREDICT_FUN_LIVE_SUBMIT_SIGNER_ADDRESS=<active Turnkey EVM wallet>`",
+    "- `PREDICT_FUN_LIVE_SUBMIT_VENUE_ACCOUNT_ADDRESS=<active Predict.fun account>`",
+    "- `PREDICT_FUN_LIVE_SUBMIT_SIGNED_PAYLOAD_JSON=<frontend Turnkey-signed Predict.fun create-order payload>`",
     "",
     "## Current Result",
     "",
@@ -72,16 +75,16 @@ await writeFile(
     `- Blockers: ${result.plan.blockers.length > 0 ? result.plan.blockers.join("; ") : "none"}`,
     `- Warnings: ${result.plan.warnings.length > 0 ? result.plan.warnings.join("; ") : "none"}`,
     "",
-    "Secrets are intentionally omitted from this artifact.",
+    "Secrets, signatures, and signed payloads are intentionally omitted from this artifact.",
     ""
   ].join("\n"),
   "utf8"
 );
 
-console.log(`Limitless live-submit harness artifact written to ${checklistPath}`);
+console.log(`Predict.fun live-submit harness artifact written to ${checklistPath}`);
 if (!result.plan.allowed) {
   console.log(`Harness blocked: ${result.plan.blockers.join("; ")}`);
 }
 if (result.submitted) {
-  console.log("Harness submitted one operator-confirmed Limitless order.");
+  console.log("Harness relayed one operator-confirmed Predict.fun user-signed order.");
 }

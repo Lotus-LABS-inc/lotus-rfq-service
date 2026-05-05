@@ -49,6 +49,21 @@ const signedPayload = (overrides: Partial<PredictOauthCreateOrderPayload> = {}):
   ...overrides
 });
 
+const signedPayloadWithOrderOverrides = (orderOverrides: Record<string, unknown>): PredictOauthCreateOrderPayload => ({
+  ...signedPayload(),
+  data: {
+    order: {
+      maker: predictAccountAddress,
+      signer: predictAccountAddress,
+      tokenId: "venue-outcome-id",
+      side: 0,
+      price: "0.45",
+      size: "1",
+      ...orderOverrides
+    }
+  }
+});
+
 const attachPredictRelayPayload = (
   prepared: Awaited<ReturnType<PredictFunExecutionAdapter["prepareOrder"]>>,
   overrides: Partial<PredictOauthCreateOrderPayload> = {}
@@ -122,7 +137,7 @@ describe("user-signed backend relay execution adapters", () => {
     expect(prepared.payload).toMatchObject({
       relayMode: "USER_SIGNED_BACKEND_RELAY",
       adapter: "OpinionExecutionAdapter",
-      backendMayRelaySignedPayload: true,
+      backendMayRelaySignedPayload: false,
       backendMaySign: false,
       signingRequired: true,
       venueMarketId: "venue-market-id",
@@ -221,19 +236,145 @@ describe("user-signed backend relay execution adapters", () => {
     await expect(adapter.fetchSettlementState("predict-order-hash-1")).resolves.toMatchObject({
       status: "SETTLEMENT_PENDING",
       evidence: {
-        settlementEvidenceSupported: false,
-        orderStatus: "FILLED"
+        settlementEvidenceSupported: true,
+        orderStatus: "FILLED",
+        reason: "fill_seen_waiting_for_final_settlement_status"
       }
     });
   });
 
+  it("rejects Predict.fun relay submit when signed price or size differs from the prepared order", async () => {
+    const adapter = new PredictFunExecutionAdapter({
+      ...buildPredictFunExecutionAdapterConfigFromEnv({
+        PREDICT_FUN_EXECUTION_MODE: "user_signed_backend_relay",
+        PREDICT_MAINNET_BASE_URL: "https://api.predict.fun/",
+        PREDICT_API_KEY: "server-side-predict-key",
+        PREDICT_FUN_LIVE_EXECUTION_ENABLED: "true"
+      }),
+      predictOauthOrderClient: mockPredictOrderClient()
+    });
+    const prepared = await adapter.prepareOrder(leg("PREDICT_FUN"));
+
+    await expect(adapter.submitOrder(attachPredictRelayPayload(prepared, signedPayloadWithOrderOverrides({
+      price: "0.46"
+    })))).rejects.toMatchObject({
+      reasonCode: "USER_SIGNED_RELAY_PRICE_MISMATCH"
+    });
+    await expect(adapter.submitOrder(attachPredictRelayPayload(prepared, signedPayloadWithOrderOverrides({
+      size: "2"
+    })))).rejects.toMatchObject({
+      reasonCode: "USER_SIGNED_RELAY_SIZE_MISMATCH"
+    });
+  });
+
+  it("maps Predict.fun status and settlement evidence conservatively", async () => {
+    const adapter = new PredictFunExecutionAdapter({
+      ...buildPredictFunExecutionAdapterConfigFromEnv({
+        PREDICT_FUN_EXECUTION_MODE: "user_signed_backend_relay",
+        PREDICT_MAINNET_BASE_URL: "https://api.predict.fun/",
+        PREDICT_API_KEY: "server-side-predict-key",
+        PREDICT_FUN_LIVE_EXECUTION_ENABLED: "true"
+      }),
+      predictOauthOrderClient: mockPredictOrderClient({
+        status: "SETTLED",
+        raw: { account: predictAccountAddress }
+      })
+    });
+    const prepared = await adapter.prepareOrder(leg("PREDICT_FUN"));
+    await adapter.submitOrder(attachPredictRelayPayload(prepared));
+
+    await expect(adapter.fetchFillState("predict-order-hash-1")).resolves.toMatchObject({
+      status: "FILLED",
+      filledSize: "1"
+    });
+    await expect(adapter.fetchSettlementState("predict-order-hash-1")).resolves.toMatchObject({
+      status: "SETTLEMENT_VERIFIED",
+      evidence: {
+        settlementEvidenceSupported: true,
+        orderStatus: "SETTLED",
+        accountEvidenceMatched: true,
+        finalityEvidence: "predict_final_status_zero_remaining_matching_account"
+      }
+    });
+  });
+
+  it("does not verify Predict.fun settlement when final status lacks matching account evidence", async () => {
+    const adapter = new PredictFunExecutionAdapter({
+      ...buildPredictFunExecutionAdapterConfigFromEnv({
+        PREDICT_FUN_EXECUTION_MODE: "user_signed_backend_relay",
+        PREDICT_MAINNET_BASE_URL: "https://api.predict.fun/",
+        PREDICT_API_KEY: "server-side-predict-key",
+        PREDICT_FUN_LIVE_EXECUTION_ENABLED: "true"
+      }),
+      predictOauthOrderClient: mockPredictOrderClient({
+        status: "COMPLETED",
+        raw: {}
+      })
+    });
+    const prepared = await adapter.prepareOrder(leg("PREDICT_FUN"));
+    await adapter.submitOrder(attachPredictRelayPayload(prepared));
+
+    await expect(adapter.fetchSettlementState("predict-order-hash-1")).resolves.toMatchObject({
+      status: "SETTLEMENT_PENDING",
+      evidence: {
+        orderStatus: "COMPLETED",
+        accountEvidenceMatched: false,
+        reason: "account_evidence_missing_or_mismatched"
+      }
+    });
+  });
+
+  it("maps Predict.fun open, partial, cancelled, and failed fill statuses without settlement credit", async () => {
+    for (const [providerStatus, expectedFillStatus] of [
+      ["OPEN", "OPEN"],
+      ["PARTIALLY_FILLED", "PARTIAL_FILL"],
+      ["CANCELLED", "CANCELLED"],
+      ["REJECTED", "FAILED"]
+    ] as const) {
+      const adapter = new PredictFunExecutionAdapter({
+        ...buildPredictFunExecutionAdapterConfigFromEnv({
+          PREDICT_FUN_EXECUTION_MODE: "user_signed_backend_relay",
+          PREDICT_MAINNET_BASE_URL: "https://api.predict.fun/",
+          PREDICT_API_KEY: "server-side-predict-key",
+          PREDICT_FUN_LIVE_EXECUTION_ENABLED: "true"
+        }),
+        predictOauthOrderClient: mockPredictOrderClient({
+          status: providerStatus,
+          size: "4",
+          remainingSize: providerStatus === "PARTIALLY_FILLED" ? "1" : "4",
+          raw: { account: predictAccountAddress }
+        })
+      });
+      const prepared = await adapter.prepareOrder(leg("PREDICT_FUN"));
+      await adapter.submitOrder(attachPredictRelayPayload(prepared));
+
+      await expect(adapter.fetchFillState("predict-order-hash-1")).resolves.toMatchObject({
+        status: expectedFillStatus
+      });
+      await expect(adapter.fetchSettlementState("predict-order-hash-1")).resolves.not.toMatchObject({
+        status: "SETTLEMENT_VERIFIED"
+      });
+    }
+  });
+
   it("does not claim settlement verification for relay venues", async () => {
-    const adapter = new PredictFunExecutionAdapter(buildPredictFunExecutionAdapterConfigFromEnv({
-      PREDICT_FUN_EXECUTION_MODE: "user_signed_backend_relay",
-      PREDICT_MAINNET_BASE_URL: "https://api.predict.fun/",
-      PREDICT_API_KEY: "server-side-predict-key",
-      PREDICT_FUN_LIVE_EXECUTION_ENABLED: "false"
-    }));
+    const adapter = new PredictFunExecutionAdapter({
+      ...buildPredictFunExecutionAdapterConfigFromEnv({
+        PREDICT_FUN_EXECUTION_MODE: "user_signed_backend_relay",
+        PREDICT_MAINNET_BASE_URL: "https://api.predict.fun/",
+        PREDICT_API_KEY: "server-side-predict-key",
+        PREDICT_FUN_LIVE_EXECUTION_ENABLED: "false"
+      }),
+      predictOauthOrderClient: {
+        configured: () => false,
+        async createOauthOrder() {
+          throw new Error("not configured");
+        },
+        async getOrderByHash() {
+          throw new Error("not configured");
+        }
+      }
+    });
 
     await expect(adapter.fetchSettlementState("predict-order-1")).resolves.toMatchObject({
       status: "SETTLEMENT_PENDING",

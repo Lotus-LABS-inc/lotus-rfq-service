@@ -24,6 +24,11 @@ const signedVenueMessageBodySchema = z.object({
   message: z.string().min(1)
 });
 
+const opinionCompleteLinkBodySchema = z.object({
+  venueAccountAddress: z.string().min(1),
+  venueAccountId: z.string().min(1).optional()
+});
+
 const completeBatchBodySchema = z.object({
   predictFun: signedVenueMessageBodySchema.optional(),
   limitless: signedVenueMessageBodySchema.optional()
@@ -63,6 +68,15 @@ export interface UserVenueAccountRouteHandlers {
     signer: string;
     signature: string;
     message: string;
+  }): Promise<{
+    account: UserVenueAccount;
+    readinessBlockers: string[];
+    setupInstructions: string[];
+  }>;
+  completeOpinionAccountLink?(input: {
+    userId: string;
+    venueAccountAddress: string;
+    venueAccountId?: string | null;
   }): Promise<{
     account: UserVenueAccount;
     readinessBlockers: string[];
@@ -143,6 +157,32 @@ export const registerUserVenueAccountRoutes = async (
         venueAccountId: parsedBody.data.venueAccountId ?? null,
         venueAccountAddress: parsedBody.data.venueAccountAddress ?? null,
         venueAccountType: parsedBody.data.venueAccountType ?? null
+      });
+      return reply.status(200).send({
+        venueAccount: toSafeVenueAccount(
+          ensured.account,
+          ensured.readinessBlockers,
+          ensured.setupInstructions
+        )
+      });
+    } catch (error) {
+      return handleVenueAccountError(error, reply);
+    }
+  });
+
+  app.post("/user/venue-accounts/opinion/complete-link", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!handlers.completeOpinionAccountLink) {
+      return reply.status(503).send({ code: "OPINION_ACCOUNT_LINK_NOT_CONFIGURED" });
+    }
+    const parsed = opinionCompleteLinkBodySchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: parsed.error.flatten() });
+    }
+    try {
+      const ensured = await handlers.completeOpinionAccountLink({
+        userId: request.user.userId,
+        venueAccountAddress: parsed.data.venueAccountAddress,
+        venueAccountId: parsed.data.venueAccountId ?? null
       });
       return reply.status(200).send({
         venueAccount: toSafeVenueAccount(

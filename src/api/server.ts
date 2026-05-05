@@ -1234,7 +1234,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     prepareAccountSetupBatch: (userId) => userVenueAccountService.prepareAccountSetupBatch(userId),
     completeAccountSetupBatch: (input) => userVenueAccountService.completeAccountSetupBatch(input),
     preparePredictFunAccountAuth: (userId) => userVenueAccountService.preparePredictFunAccountAuth(userId),
-    completePredictFunAccountAuth: (input) => userVenueAccountService.completePredictFunAccountAuth(input)
+    completePredictFunAccountAuth: (input) => userVenueAccountService.completePredictFunAccountAuth(input),
+    completeOpinionAccountLink: (input) => userVenueAccountService.completeOpinionAccountLink(input)
   });
   await registerUserWithdrawalWalletRoutes(app, userAuthMiddleware, {
     listWallets: async (userId) => (await userWalletService.listWallets(userId))

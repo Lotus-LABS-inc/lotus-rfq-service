@@ -1,5 +1,6 @@
 import {
   Client,
+  HttpClient,
   OrderType,
   Side,
   type OrderResponse
@@ -82,6 +83,7 @@ export interface LimitlessOrderClient {
     onBehalfOf?: number | undefined;
   }): Promise<OrderResponse>;
   cancel(orderId: string, onBehalfOf?: number | undefined): Promise<unknown>;
+  getOrderStatus?(orderId: string, onBehalfOf?: number | undefined): Promise<unknown>;
   getFillState?(orderId: string, onBehalfOf?: number | undefined): Promise<VenueFillState>;
   getSettlementState?(orderId: string, onBehalfOf?: number | undefined): Promise<VenueSettlementState>;
 }
@@ -188,7 +190,16 @@ const createLimitlessOrderClient = (config: LimitlessExecutionAdapterConfig): Li
           price: input.price
         }
       }),
-      cancel: (orderId, onBehalfOf) => client.delegatedOrders.cancelOnBehalfOf(orderId, requireDelegatedProfileId(onBehalfOf))
+      cancel: (orderId, onBehalfOf) => client.delegatedOrders.cancelOnBehalfOf(orderId, requireDelegatedProfileId(onBehalfOf)),
+      getOrderStatus: (orderId, onBehalfOf) => fetchLimitlessOrderStatusBatch(
+        createLimitlessHttpClient({
+          baseUrl,
+          hmacTokenId: tokenId,
+          hmacSecret: secret,
+          onBehalfOf: requireDelegatedProfileId(onBehalfOf)
+        }),
+        orderId
+      )
     };
   }
   const apiKey = config.apiKey;
@@ -203,10 +214,15 @@ const createLimitlessOrderClient = (config: LimitlessExecutionAdapterConfig): Li
     baseURL: baseUrl,
     apiKey
   });
+  const statusHttpClient = createLimitlessHttpClient({
+    baseUrl,
+    apiKey
+  });
   const orderClient = client.newOrderClient(privateKey);
   return {
     createOrder: (input) => orderClient.createOrder(input),
-    cancel: (orderId) => orderClient.cancel(orderId)
+    cancel: (orderId) => orderClient.cancel(orderId),
+    getOrderStatus: (orderId) => fetchLimitlessOrderStatusBatch(statusHttpClient, orderId)
   };
 };
 
@@ -256,6 +272,216 @@ const payloadString = (
     );
   }
   return value;
+};
+
+const createLimitlessHttpClient = (input: {
+  baseUrl: string;
+  apiKey?: string | undefined;
+  hmacTokenId?: string | undefined;
+  hmacSecret?: string | undefined;
+  onBehalfOf?: number | undefined;
+}): HttpClient => new HttpClient({
+  baseURL: input.baseUrl,
+  ...(input.hmacTokenId && input.hmacSecret
+    ? {
+        hmacCredentials: {
+          tokenId: input.hmacTokenId,
+          secret: input.hmacSecret
+        }
+      }
+    : {}),
+  ...(input.apiKey ? { apiKey: input.apiKey } : {}),
+  ...(input.onBehalfOf ? { additionalHeaders: { "x-on-behalf-of": String(input.onBehalfOf) } } : {})
+});
+
+const fetchLimitlessOrderStatusBatch = async (
+  httpClient: HttpClient,
+  orderId: string
+): Promise<unknown> => {
+  const response = await httpClient.post("/orders/status/batch", {
+    items: [{ orderId }]
+  });
+  const results = Array.isArray(asRecord(response).results) ? asRecord(response).results as unknown[] : [];
+  return results[0] ?? {
+    status: "not_found",
+    orderId,
+    error: "Limitless order status batch response did not include a result."
+  };
+};
+
+const asArray = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
+
+const stringOrNull = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const booleanValue = (value: unknown): boolean | null =>
+  typeof value === "boolean" ? value : null;
+
+const nestedRecord = (root: Record<string, unknown>, ...path: string[]): Record<string, unknown> => {
+  let current: Record<string, unknown> = root;
+  for (const key of path) {
+    current = asRecord(current[key]);
+  }
+  return current;
+};
+
+const selectLimitlessOrderStatusData = (payload: unknown): {
+  result: Record<string, unknown>;
+  data: Record<string, unknown>;
+  execution: Record<string, unknown>;
+  makerMatches: unknown[];
+} => {
+  const result = asRecord(payload);
+  const data = asRecord(result.data);
+  const nestedOrder = asRecord(data.order);
+  const execution = Object.keys(asRecord(nestedOrder.execution)).length > 0
+    ? asRecord(nestedOrder.execution)
+    : asRecord(data.execution);
+  const makerMatches = asArray(data.makerMatches).length > 0
+    ? asArray(data.makerMatches)
+    : asArray(nestedOrder.makerMatches);
+  return { result, data, execution, makerMatches };
+};
+
+const settlementStatusFromLimitless = (value: unknown): string =>
+  `${value ?? ""}`.trim().toUpperCase();
+
+const finalSettlementStatuses = new Set([
+  "MINED",
+  "SETTLED",
+  "SETTLEMENT_VERIFIED",
+  "COMPLETED",
+  "CONFIRMED",
+  "FINALIZED"
+]);
+
+const failedSettlementStatuses = new Set([
+  "FAILED",
+  "REJECTED",
+  "REVERTED",
+  "ERROR"
+]);
+
+const cancelledOrderStatuses = new Set([
+  "CANCELLED",
+  "CANCELED"
+]);
+
+const decimalFromSixDecimals = (value: unknown): string | null => {
+  const raw = stringOrNull(value) ?? (typeof value === "number" && Number.isFinite(value) ? String(value) : null);
+  if (!raw) {
+    return null;
+  }
+  if (raw.includes(".")) {
+    return raw;
+  }
+  if (!/^\d+$/.test(raw)) {
+    return null;
+  }
+  const padded = raw.padStart(7, "0");
+  const whole = padded.slice(0, -6).replace(/^0+(?=\d)/, "") || "0";
+  const fraction = padded.slice(-6).replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : whole;
+};
+
+const sumMatchedSize = (matches: unknown[]): string | null => {
+  const total = matches.reduce<number>((sum, match) => {
+    const record = asRecord(match);
+    const normalized = decimalFromSixDecimals(record.matchedSize ?? record.size ?? record.amount);
+    return normalized ? sum + Number(normalized) : sum;
+  }, 0);
+  return total > 0 ? String(total) : null;
+};
+
+const filledSizeFromLimitlessStatus = (payload: unknown): string => {
+  const { execution, makerMatches } = selectLimitlessOrderStatusData(payload);
+  return sumMatchedSize(makerMatches)
+    ?? decimalFromSixDecimals(nestedRecord(execution, "totalsRaw").contractsNet)
+    ?? decimalFromSixDecimals(nestedRecord(execution, "totalsRaw").contractsGross)
+    ?? decimalFromSixDecimals(execution.matchedSize)
+    ?? "0";
+};
+
+const priceFromLimitlessStatus = (payload: unknown): number => {
+  const { data, execution } = selectLimitlessOrderStatusData(payload);
+  const order = nestedRecord(data, "order", "order");
+  const value = execution.price ?? order.price ?? data.price;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+};
+
+const hasLimitlessFillEvidence = (payload: unknown): boolean => {
+  const { execution, makerMatches } = selectLimitlessOrderStatusData(payload);
+  const matched = booleanValue(execution.matched) === true;
+  return matched && (
+    makerMatches.length > 0
+    || stringOrNull(execution.tradeEventId) !== null
+    || stringOrNull(execution.txHash) !== null
+    || Number(filledSizeFromLimitlessStatus(payload)) > 0
+  );
+};
+
+export const mapLimitlessOrderStatusToFillState = (payload: unknown): VenueFillState => {
+  const { result, execution } = selectLimitlessOrderStatusData(payload);
+  const resultStatus = settlementStatusFromLimitless(result.status);
+  const executionStatus = settlementStatusFromLimitless(execution.settlementStatus ?? execution.status);
+  if (cancelledOrderStatuses.has(resultStatus) || cancelledOrderStatuses.has(executionStatus)) {
+    return { status: "CANCELLED", filledSize: "0", averagePrice: 0, offchainFilled: false };
+  }
+  if (failedSettlementStatuses.has(resultStatus) || failedSettlementStatuses.has(executionStatus)) {
+    return { status: "FAILED", filledSize: "0", averagePrice: 0, offchainFilled: false };
+  }
+  if (hasLimitlessFillEvidence(payload)) {
+    return {
+      status: "FILLED",
+      filledSize: filledSizeFromLimitlessStatus(payload),
+      averagePrice: priceFromLimitlessStatus(payload),
+      offchainFilled: false
+    };
+  }
+  return {
+    status: "OPEN",
+    filledSize: "0",
+    averagePrice: 0,
+    offchainFilled: false
+  };
+};
+
+export const mapLimitlessOrderStatusToSettlementState = (
+  payload: unknown,
+  input: { orderId: string; delegatedProfileId?: number | undefined }
+): VenueSettlementState => {
+  const { result, execution, makerMatches } = selectLimitlessOrderStatusData(payload);
+  const resultStatus = settlementStatusFromLimitless(result.status);
+  const settlementStatus = settlementStatusFromLimitless(execution.settlementStatus ?? execution.status);
+  const fillEvidenceVerified = hasLimitlessFillEvidence(payload);
+  const settlementEvidenceVerified = fillEvidenceVerified && finalSettlementStatuses.has(settlementStatus);
+  const evidence = {
+    source: "limitless_order_status_batch",
+    orderId: input.orderId,
+    delegatedProfileScoped: input.delegatedProfileId !== undefined,
+    delegatedProfileIdConfigured: input.delegatedProfileId !== undefined,
+    resultStatus: resultStatus || null,
+    executionMatched: booleanValue(execution.matched),
+    settlementStatus: settlementStatus || null,
+    tradeEventId: stringOrNull(execution.tradeEventId),
+    txHash: stringOrNull(execution.txHash),
+    makerMatchesCount: makerMatches.length,
+    fillEvidenceVerified,
+    settlementEvidenceVerified
+  };
+  if (settlementEvidenceVerified) {
+    return { status: "SETTLEMENT_VERIFIED", evidence };
+  }
+  if (failedSettlementStatuses.has(resultStatus) || failedSettlementStatuses.has(settlementStatus)) {
+    return { status: "SETTLEMENT_UNKNOWN", evidence };
+  }
+  return { status: "SETTLEMENT_PENDING", evidence };
 };
 
 const parseDelegatedProfileId = (value: unknown): number | undefined => {
@@ -381,6 +607,10 @@ export class LimitlessExecutionAdapter implements ExecutionVenueAdapter {
     if (clientFillState) {
       return clientFillState;
     }
+    const orderStatus = await this.client?.getOrderStatus?.(venueOrderId, profileId);
+    if (orderStatus) {
+      return mapLimitlessOrderStatusToFillState(orderStatus);
+    }
     return {
       status: this.config.fillStateOverride ?? "OPEN",
       filledSize: "0",
@@ -402,6 +632,13 @@ export class LimitlessExecutionAdapter implements ExecutionVenueAdapter {
     const clientSettlementState = await this.client?.getSettlementState?.(fillOrOrderId, profileId);
     if (clientSettlementState) {
       return clientSettlementState;
+    }
+    const orderStatus = await this.client?.getOrderStatus?.(fillOrOrderId, profileId);
+    if (orderStatus) {
+      return mapLimitlessOrderStatusToSettlementState(orderStatus, {
+        orderId: fillOrOrderId,
+        delegatedProfileId: profileId
+      });
     }
     return {
       status: this.config.settlementStateOverride ?? "SETTLEMENT_PENDING",

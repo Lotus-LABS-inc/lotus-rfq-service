@@ -67,6 +67,33 @@ const buildService = async (): Promise<ExecutionVenuesAdminService> => {
     })}\n`,
     "utf8"
   );
+  await writeFile(
+    join(artifactDir, "predictfun-live-submit-checklist.json"),
+    `${JSON.stringify({
+      generatedAt: "2026-05-05T00:00:00.000Z",
+      submitted: true,
+      plan: {
+        mode: "LIVE_SUBMIT_READY",
+        blockers: [],
+        warnings: ["Backend never signs Predict.fun orders."]
+      },
+      fillState: {
+        status: "FILLED"
+      },
+      settlementState: {
+        status: "SETTLEMENT_PENDING"
+      },
+      settlementVerified: false,
+      preparedOrder: {
+        payload: {
+          signedPayload: {
+            signature: "0xshould-not-be-returned"
+          }
+        }
+      }
+    })}\n`,
+    "utf8"
+  );
   return new ExecutionVenuesAdminService({ repoRoot, env: liveReadyEnv });
 };
 
@@ -136,6 +163,7 @@ describe("admin execution venue readiness routes", () => {
     expect(serialized).not.toContain("server-side-limitless-key");
     expect(serialized).not.toContain("server-side-opinion-key");
     expect(serialized).not.toContain("server-side-predict-key");
+    expect(serialized).not.toContain("0xshould-not-be-returned");
     expect(serialized).not.toContain(liveReadyEnv.LIMITLESS_EXECUTION_PRIVATE_KEY);
     expect(serialized).not.toContain(liveReadyEnv.POLYMARKET_PRIVATE_KEY);
     expect(body.venues.find((venue: { venue: string }) => venue.venue === "LIMITLESS")).toMatchObject({
@@ -165,7 +193,14 @@ describe("admin execution venue readiness routes", () => {
       executionSigningModel: "USER_SIGNED_BACKEND_RELAY",
       structuralReadiness: "NOT_CONFIGURED",
       liveSubmissionSupported: true,
-      liveExecutionEnabled: false
+      liveExecutionEnabled: false,
+      lastHarnessAttempt: {
+        artifactPresent: true,
+        submitted: true,
+        fillStatus: "FILLED",
+        settlementStatus: "SETTLEMENT_PENDING",
+        settlementVerified: false
+      }
     });
     expect(body.venues.find((entry: { venue: string }) => entry.venue === "MYRIAD")).toMatchObject({
       venue: "MYRIAD",

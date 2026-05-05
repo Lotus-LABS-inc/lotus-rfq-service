@@ -187,6 +187,74 @@ describe("user venue account service", () => {
     expect(JSON.stringify(repository.auditEvents)).not.toContain("turnkey-account");
   });
 
+  it("keeps Opinion pending without a valid Safe address and links it explicitly", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    const service = new UserVenueAccountService(repository, {
+      async resolveUserTurnkeyEvmFundingWallet() {
+        return evmWallet();
+      }
+    });
+
+    const pending = await service.ensureAccount({
+      userId: "user-1",
+      venue: "OPINION",
+      venueAccountId: "opinion-safe-id"
+    });
+    await expect(service.ensureAccount({
+      userId: "user-1",
+      venue: "OPINION",
+      venueAccountAddress: "not-an-address",
+      venueAccountType: "SAFE"
+    })).rejects.toMatchObject({ code: "USER_VENUE_ACCOUNT_INVALID_ADDRESS" });
+    await expect(service.ensureAccount({
+      userId: "user-1",
+      venue: "OPINION",
+      venueAccountAddress: "0x2222222222222222222222222222222222222222",
+      venueAccountType: "EOA"
+    })).rejects.toMatchObject({ code: "USER_VENUE_ACCOUNT_MISMATCH" });
+
+    const linked = await service.completeOpinionAccountLink({
+      userId: "user-1",
+      venueAccountId: "opinion-safe-id",
+      venueAccountAddress: "0x2222222222222222222222222222222222222222"
+    });
+    const relinked = await service.completeOpinionAccountLink({
+      userId: "user-1",
+      venueAccountAddress: "0x2222222222222222222222222222222222222222"
+    });
+
+    expect(pending.account).toMatchObject({
+      venue: "OPINION",
+      venueAccountId: "opinion-safe-id",
+      venueAccountAddress: null,
+      venueAccountType: "SAFE",
+      status: "PENDING"
+    });
+    expect(pending.readinessBlockers).toContain("OPINION account is not active yet.");
+    expect(linked.account).toMatchObject({
+      venue: "OPINION",
+      venueAccountId: "opinion-safe-id",
+      venueAccountAddress: "0x2222222222222222222222222222222222222222",
+      venueAccountType: "SAFE",
+      status: "ACTIVE"
+    });
+    expect(relinked.account.venueAccountBindingId).toBe(linked.account.venueAccountBindingId);
+    expect(repository.auditEvents.at(-1)).toMatchObject({
+      eventType: "OPINION_ACCOUNT_LINKED",
+      payload: {
+        venue: "OPINION",
+        accountType: "SAFE",
+        status: "ACTIVE",
+        venueAccountAddress: "0x2222222222222222222222222222222222222222",
+        venueAccountIdPresent: true
+      }
+    });
+    const serialized = JSON.stringify(repository.auditEvents);
+    expect(serialized).not.toContain("signature");
+    expect(serialized).not.toContain("apiKey");
+    expect(serialized).not.toContain("providerWalletAccountId");
+  });
+
   it("links Predict.fun connected account after Turnkey wallet auth signature", async () => {
     const repository = new InMemoryVenueAccountRepository();
     const service = new UserVenueAccountService(
@@ -384,6 +452,13 @@ describe("user venue account service", () => {
         status: "PENDING"
       }
     });
+    expect(prepared.venueAccounts.find((item) => item.venue === "OPINION")).toMatchObject({
+      setupMode: "MANUAL_LINK_REQUIRED",
+      readinessBlockers: [
+        "OPINION account is not active yet.",
+        "OPINION venue account id/address is not linked yet."
+      ]
+    });
     expect(prepared.venueAccounts.find((item) => item.venue === "MYRIAD")).toMatchObject({
       setupMode: "NO_USER_SETUP_REQUIRED",
       readinessBlockers: [],
@@ -408,6 +483,22 @@ describe("user venue account service", () => {
       account: {
         status: "ACTIVE",
         venueAccountAddress: "0x4444444444444444444444444444444444444444"
+      }
+    });
+
+    await service.completeOpinionAccountLink({
+      userId: "user-1",
+      venueAccountAddress: "0x2222222222222222222222222222222222222222"
+    });
+    const afterOpinionLink = await service.prepareAccountSetupBatch("user-1");
+    expect(afterOpinionLink.venueAccounts.find((item) => item.venue === "OPINION")).toMatchObject({
+      setupMode: "NO_USER_SETUP_REQUIRED",
+      readinessBlockers: [],
+      setupInstructions: [],
+      account: {
+        status: "ACTIVE",
+        venueAccountType: "SAFE",
+        venueAccountAddress: "0x2222222222222222222222222222222222222222"
       }
     });
   });
@@ -538,12 +629,18 @@ describe("user venue account routes", () => {
       prepareAccountSetupBatch: (userId) => service.prepareAccountSetupBatch(userId),
       completeAccountSetupBatch: (input) => service.completeAccountSetupBatch(input),
       preparePredictFunAccountAuth: (userId) => service.preparePredictFunAccountAuth(userId),
-      completePredictFunAccountAuth: (input) => service.completePredictFunAccountAuth(input)
+      completePredictFunAccountAuth: (input) => service.completePredictFunAccountAuth(input),
+      completeOpinionAccountLink: (input) => service.completeOpinionAccountLink(input)
     });
     const token = app.jwt.sign({ userId: "user-1", role: "USER", email: "polymarket-funding-test@uselotus.xyz" });
 
     await expect(app.inject({ method: "GET", url: "/user/venue-accounts" }))
       .resolves.toMatchObject({ statusCode: 401 });
+    await expect(app.inject({
+      method: "POST",
+      url: "/user/venue-accounts/opinion/complete-link",
+      payload: { venueAccountAddress: "0x2222222222222222222222222222222222222222" }
+    })).resolves.toMatchObject({ statusCode: 401 });
     const ensured = await app.inject({
       method: "POST",
       url: "/user/venue-accounts/opinion/ensure",
@@ -566,6 +663,39 @@ describe("user venue account routes", () => {
     expect(ensured.body).not.toContain("providerWalletAccountId");
     expect(ensured.body).not.toContain("turnkey-account");
     expect(ensured.body).not.toContain("privateKey");
+
+    const invalidOpinionLink = await app.inject({
+      method: "POST",
+      url: "/user/venue-accounts/opinion/complete-link",
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        venueAccountAddress: "not-an-address"
+      }
+    });
+    expect(invalidOpinionLink.statusCode).toBe(400);
+    expect(invalidOpinionLink.json()).toMatchObject({ code: "USER_VENUE_ACCOUNT_INVALID_ADDRESS" });
+
+    const linkedOpinion = await app.inject({
+      method: "POST",
+      url: "/user/venue-accounts/opinion/complete-link",
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        venueAccountAddress: "0x2222222222222222222222222222222222222222",
+        venueAccountId: "opinion-safe-id"
+      }
+    });
+    expect(linkedOpinion.statusCode).toBe(200);
+    expect(linkedOpinion.json().venueAccount).toMatchObject({
+      venue: "OPINION",
+      venueAccountId: "opinion-safe-id",
+      venueAccountAddress: "0x2222222222222222222222222222222222222222",
+      venueAccountType: "SAFE",
+      status: "ACTIVE",
+      readinessBlockers: [],
+      setupInstructions: []
+    });
+    expect(linkedOpinion.body).not.toContain("signature");
+    expect(linkedOpinion.body).not.toContain("apiKey");
 
     const listed = await app.inject({
       method: "GET",

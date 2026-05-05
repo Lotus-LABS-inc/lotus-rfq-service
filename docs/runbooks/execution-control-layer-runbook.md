@@ -132,7 +132,7 @@ Readiness fields:
 - `featureFlagSelected`: whether `POLYMARKET_EXECUTION_MODE=v2` is selected
 - `requiredEnvPresent` / `missingEnv`: live-submit readiness gate
 - `dryRunRequiredEnvPresent` / `missingDryRunEnv`: dry-run readiness gate
-- `lastHarnessAttempt`: latest `artifacts/execution/polymarket-live-submit-checklist.json` result, if present
+- `lastHarnessAttempt`: latest venue harness artifact result, if present, including fill/settlement fields for venues that expose them
 - `venueAccountRequired` / `venueAccountConfigured`: whether user production flow has an active Turnkey EVM venue-account binding
 
 Operational statuses:
@@ -160,9 +160,11 @@ Non-Polymarket interpretation:
 - `marketRoutingCoverage=COVERED_BY_MATCHING` means Lotus can surface venue market coverage for matching/routing review
 - `LIMITLESS` may report `liveSubmissionSupported=true` for the delegated partner server-wallet adapter or the legacy backend-signer adapter; `LIMITLESS_LIVE_EXECUTION_ENABLED=false` remains the default
 - `OPINION` remains a prepare-only/manual Safe-link scaffold until builder-mode account linking and settlement evidence are reviewed
+- `POST /user/venue-accounts/opinion/complete-link` is the private-beta manual link path: it requires a user JWT, accepts only a valid Opinion Safe EVM address, forces `venueAccountType=SAFE`, and stores safe public metadata only
+- the current Opinion blocker is API scope/endpoint availability for builder account creation; the existing Opinion API key has not been confirmed to grant the required builder account creation path
 - `PREDICT_FUN` has a guarded user-signed OAuth relay path: Lotus prepares frontend-safe order instructions, the user signs with the linked Turnkey EVM wallet, and backend relay submit remains disabled unless `PREDICT_FUN_LIVE_EXECUTION_ENABLED=true`
-- Predict.fun signed relay validates the signer, linked Predict account, token/outcome, side, expiry, and prepared payload before calling `/v1/oauth/orders/create`
-- Predict.fun settlement remains unverified until venue status/fill evidence is reviewed; do not treat an accepted relay response as final settlement
+- Predict.fun signed relay validates the signer, linked Predict account, token/outcome, side, price, size, expiry, and prepared payload before calling `/v1/oauth/orders/create`
+- Predict.fun settlement is verified only from venue status evidence: `FILLED`/`MATCHED` are fill evidence only, while final statuses such as `SETTLED`/`COMPLETED` require zero remaining size and matching linked-account evidence before Lotus may map the leg to `SETTLEMENT_VERIFIED`
 - `MYRIAD` remains `USER_SIGNED`; Lotus may prepare frontend-safe signing instructions later, but backend live submission must fail closed
 - `operationalStatus=NOT_CONFIGURED` is expected until a venue-specific execution adapter, smoke harness, settlement proof, and operator signoff are implemented
 - do not treat funding readiness or market coverage as live execution readiness
@@ -176,7 +178,19 @@ Limitless delegated/server-wallet boundary:
 - `LIMITLESS_BASE_URL` plus the mode-specific credentials are server-only live-submit inputs
 - `npm run execution:limitless-live-submit-harness` writes a redacted operator checklist artifact and remains blocked unless `LIMITLESS_LIVE_SUBMIT_HARNESS_ENABLED=true`, the operator confirmation string, and tiny order envs are configured
 - `/admin/execution-venues/LIMITLESS` reads `artifacts/execution/limitless-live-submit-checklist.json` when present so operators can see the latest harness mode, blockers, warnings, and submit result without secrets
-- current Limitless settlement evidence is intentionally not auto-verified by the adapter; production enablement still needs a reviewed fill/status/settlement reader and live-submit harness
+- Limitless settlement evidence is read through `POST /orders/status/batch`; delegated reads must be scoped to the active server-wallet profile with `x-on-behalf-of`
+- submit success is not settlement: only matched order evidence plus maker-match/trade/tx evidence plus finality such as `MINED`/settled/finalized may map to `SETTLEMENT_VERIFIED`
+- submitted-but-unmatched, missing, stale, ambiguous, or unrecognized Limitless status evidence must remain `SETTLEMENT_PENDING` or `SETTLEMENT_UNKNOWN`
+- the live-submit harness artifact includes submit result, fill state, settlement state, and `settlementVerified`; broader live route testing must wait until a tiny operator-approved harness run proves this evidence path
+
+Predict.fun user-signed relay boundary:
+- `PREDICT_FUN_EXECUTION_MODE=user_signed_backend_relay` selects the guarded OAuth relay adapter
+- `PREDICT_MAINNET_BASE_URL` and `PREDICT_API_KEY` are server-only relay/status inputs
+- `PREDICT_FUN_LIVE_EXECUTION_ENABLED=true` is required before any signed payload can be relayed
+- `npm run execution:predictfun-live-submit-harness` writes a redacted operator checklist artifact and remains blocked unless `PREDICT_FUN_LIVE_SUBMIT_HARNESS_ENABLED=true`, the operator confirmation string, tiny order envs, active signer/account addresses, and a frontend Turnkey-signed `PREDICT_FUN_LIVE_SUBMIT_SIGNED_PAYLOAD_JSON` are configured
+- `/admin/execution-venues/PREDICT_FUN` reads `artifacts/execution/predictfun-live-submit-checklist.json` when present so operators can see the latest harness mode, blockers, warnings, submit result, fill status, settlement status, and `settlementVerified` without secrets or signatures
+- backend never signs Predict.fun orders; it only validates and relays a signed payload that matches the prepared quote and active venue account binding
+- accepted relay response is not settlement and must not create sellable position credit until the status evidence rule above verifies settlement
 
 Production execution-venues smoke:
 - run `npm run admin:execution-venues-smoke` with `ADMIN_EXECUTION_VENUES_SMOKE_BASE_URL` and `ADMIN_EXECUTION_VENUES_SMOKE_JWT`
@@ -199,6 +213,7 @@ Security rules:
 Operator rule:
 - treat `/admin/execution-venues` as an inspection surface only
 - do not enable live submission until the harness checklist, adapter tests, settlement/finality behavior, and operator signoff are complete
+- never treat accepted venue responses, pending fills, or funding readiness as sellable position or completed execution evidence
 
 ## Operator Actions
 Use `reconcile` when:

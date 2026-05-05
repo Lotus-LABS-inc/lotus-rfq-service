@@ -47,6 +47,9 @@ export interface ExecutionVenueReadinessSummary {
     errorCode: string | null;
     errorStatus: number | null;
     errorMessage: string | null;
+    fillStatus: string | null;
+    settlementStatus: string | null;
+    settlementVerified: boolean | null;
     blockers: readonly string[];
     warnings: readonly string[];
   };
@@ -103,10 +106,10 @@ export class ExecutionVenuesAdminService {
       return this.withVenueAccountReadiness(await this.getLimitlessVenue(), counts);
     }
     if (venue === "OPINION") {
-      return this.withVenueAccountReadiness(this.getUserSignedRelayVenue(getOpinionExecutionAdapterEnvStatus(this.env)), counts);
+      return this.withVenueAccountReadiness(await this.getUserSignedRelayVenue(getOpinionExecutionAdapterEnvStatus(this.env)), counts);
     }
     if (venue === "PREDICT_FUN") {
-      return this.withVenueAccountReadiness(this.getUserSignedRelayVenue(getPredictFunExecutionAdapterEnvStatus(this.env)), counts);
+      return this.withVenueAccountReadiness(await this.getUserSignedRelayVenue(getPredictFunExecutionAdapterEnvStatus(this.env)), counts);
     }
     if (venue !== "POLYMARKET") {
       return this.withVenueAccountReadiness(this.getFailClosedVenue(venue), counts);
@@ -198,6 +201,9 @@ export class ExecutionVenuesAdminService {
         errorCode: null,
         errorStatus: null,
         errorMessage: null,
+        fillStatus: null,
+        settlementStatus: null,
+        settlementVerified: null,
         blockers: [`${venue} backend live execution is not enabled for signing model ${executionSigningModel}.`],
         warnings: []
       },
@@ -209,11 +215,27 @@ export class ExecutionVenuesAdminService {
     };
   }
 
-  private getUserSignedRelayVenue(
+  private async getUserSignedRelayVenue(
     adapterStatus: UserSignedRelayExecutionAdapterEnvStatus
-  ): ExecutionVenueReadinessSummary {
+  ): Promise<ExecutionVenueReadinessSummary> {
     const operationalStatus = this.resolveUserSignedRelayOperationalStatus(adapterStatus);
     const blockers = this.userSignedRelayBlockers(adapterStatus);
+    const lastHarnessAttempt = adapterStatus.venue === "PREDICT_FUN"
+      ? await this.readPredictFunHarnessArtifact(blockers)
+      : {
+          artifactPresent: false,
+          generatedAt: null,
+          mode: null,
+          submitted: null,
+          errorCode: null,
+          errorStatus: null,
+          errorMessage: null,
+          fillStatus: null,
+          settlementStatus: null,
+          settlementVerified: null,
+          blockers,
+          warnings: []
+        };
     return {
       venue: adapterStatus.venue,
       adapter: adapterStatus.adapter,
@@ -234,17 +256,7 @@ export class ExecutionVenuesAdminService {
       dryRunRequiredEnvPresent: adapterStatus.dryRunRequiredEnvPresent,
       missingDryRunEnv: adapterStatus.missingDryRunEnv,
       credentialsServerSideOnly: true,
-      lastHarnessAttempt: {
-        artifactPresent: false,
-        generatedAt: null,
-        mode: null,
-        submitted: null,
-        errorCode: null,
-        errorStatus: null,
-        errorMessage: null,
-        blockers,
-        warnings: []
-      },
+      lastHarnessAttempt,
       operatorMessage: this.userSignedRelayOperatorMessage(adapterStatus, operationalStatus),
       venueAccountRequired: false,
       venueAccountConfigured: false,
@@ -308,7 +320,7 @@ export class ExecutionVenuesAdminService {
     if (adapterStatus.liveExecutionEnabled && !adapterStatus.requiredEnvPresent) {
       blockers.push(`Missing Limitless live env: ${adapterStatus.missingEnv.join(", ")}.`);
     }
-    blockers.push("Settlement evidence reader is not implemented yet; live fills must remain operator-reviewed.");
+    blockers.push("Limitless settlement evidence reader is implemented, but live fills must remain operator-reviewed until the tiny harness proves fill/status/finality behavior.");
     return blockers;
   }
 
@@ -364,7 +376,11 @@ export class ExecutionVenuesAdminService {
       blockers.push(`Missing ${adapterStatus.venue} relay live env: ${adapterStatus.missingEnv.join(", ")}.`);
     }
     if (adapterStatus.relayImplementationStatus === "PREPARE_ONLY") {
-      blockers.push("Signed-payload relay submit is prepare-only; cancel/fill/status and settlement evidence readers are not implemented yet.");
+      if (adapterStatus.venue === "OPINION") {
+        blockers.push("Opinion builder account creation and signed-payload relay submit are not confirmed for this API key; cancel/fill/status and settlement evidence readers are not implemented yet.");
+      } else {
+        blockers.push("Signed-payload relay submit is prepare-only; cancel/fill/status and settlement evidence readers are not implemented yet.");
+      }
     } else {
       blockers.push("Signed-payload relay submit is implemented but settlement evidence remains pending; do not mark settlement verified without venue evidence.");
     }
@@ -382,6 +398,9 @@ export class ExecutionVenuesAdminService {
       return `${adapterStatus.venue} user-signed relay env is structurally ready; signed-payload relay is implemented, but live relay remains operator-gated and settlement evidence must be reviewed before production enablement.`;
     }
     if (status === "STRUCTURALLY_READY") {
+      if (adapterStatus.venue === "OPINION") {
+        return "OPINION user-signed relay prepare path is configured, but backend submit remains disabled until builder account creation, signed-payload relay, cancel/fill/status, and settlement evidence are confirmed.";
+      }
       return `${adapterStatus.venue} user-signed relay env is structurally ready, but backend submit remains disabled until signed-payload relay, cancel/fill/status, and settlement evidence are reviewed.`;
     }
     if (status === "LIVE_DISABLED") {
@@ -451,6 +470,9 @@ export class ExecutionVenuesAdminService {
         errorCode: asString(error.code),
         errorStatus: typeof error.status === "number" ? error.status : null,
         errorMessage: asString(error.message),
+        fillStatus: null,
+        settlementStatus: null,
+        settlementVerified: null,
         blockers: asStringArray(plan.blockers),
         warnings: asStringArray(plan.warnings)
       };
@@ -463,6 +485,9 @@ export class ExecutionVenuesAdminService {
         errorCode: null,
         errorStatus: null,
         errorMessage: null,
+        fillStatus: null,
+        settlementStatus: null,
+        settlementVerified: null,
         blockers: [],
         warnings: []
       };
@@ -480,6 +505,8 @@ export class ExecutionVenuesAdminService {
       }
       const plan = isRecord(parsed.plan) ? parsed.plan : {};
       const error = isRecord(parsed.error) ? parsed.error : {};
+      const fillState = isRecord(parsed.fillState) ? parsed.fillState : {};
+      const settlementState = isRecord(parsed.settlementState) ? parsed.settlementState : {};
       return {
         artifactPresent: true,
         generatedAt: asString(parsed.generatedAt),
@@ -488,6 +515,9 @@ export class ExecutionVenuesAdminService {
         errorCode: asString(error.code),
         errorStatus: typeof error.status === "number" ? error.status : null,
         errorMessage: asString(error.message),
+        fillStatus: asString(fillState.status),
+        settlementStatus: asString(settlementState.status),
+        settlementVerified: typeof parsed.settlementVerified === "boolean" ? parsed.settlementVerified : null,
         blockers: asStringArray(plan.blockers),
         warnings: asStringArray(plan.warnings)
       };
@@ -500,6 +530,54 @@ export class ExecutionVenuesAdminService {
         errorCode: null,
         errorStatus: null,
         errorMessage: null,
+        fillStatus: null,
+        settlementStatus: null,
+        settlementVerified: null,
+        blockers: [...fallbackBlockers],
+        warnings: []
+      };
+    }
+  }
+
+  private async readPredictFunHarnessArtifact(
+    fallbackBlockers: readonly string[]
+  ): Promise<ExecutionVenueReadinessSummary["lastHarnessAttempt"]> {
+    const artifactPath = join(this.repoRoot, "artifacts", "execution", "predictfun-live-submit-checklist.json");
+    try {
+      const parsed: unknown = JSON.parse(await readFile(artifactPath, "utf8"));
+      if (!isRecord(parsed)) {
+        throw new Error("invalid artifact");
+      }
+      const plan = isRecord(parsed.plan) ? parsed.plan : {};
+      const error = isRecord(parsed.error) ? parsed.error : {};
+      const fillState = isRecord(parsed.fillState) ? parsed.fillState : {};
+      const settlementState = isRecord(parsed.settlementState) ? parsed.settlementState : {};
+      return {
+        artifactPresent: true,
+        generatedAt: asString(parsed.generatedAt),
+        mode: asString(plan.mode),
+        submitted: typeof parsed.submitted === "boolean" ? parsed.submitted : null,
+        errorCode: asString(error.code),
+        errorStatus: typeof error.status === "number" ? error.status : null,
+        errorMessage: asString(error.message),
+        fillStatus: asString(fillState.status),
+        settlementStatus: asString(settlementState.status),
+        settlementVerified: typeof parsed.settlementVerified === "boolean" ? parsed.settlementVerified : null,
+        blockers: asStringArray(plan.blockers),
+        warnings: asStringArray(plan.warnings)
+      };
+    } catch {
+      return {
+        artifactPresent: false,
+        generatedAt: null,
+        mode: null,
+        submitted: null,
+        errorCode: null,
+        errorStatus: null,
+        errorMessage: null,
+        fillStatus: null,
+        settlementStatus: null,
+        settlementVerified: null,
         blockers: [...fallbackBlockers],
         warnings: []
       };
