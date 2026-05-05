@@ -231,6 +231,7 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
   private readonly now: () => Date;
   private readonly predictOauthOrderClient: PredictOauthOrderRelayClient | undefined;
   private lastOrderStatus: PredictOauthOrderStatus | null = null;
+  private readonly expectedBindingByOrderHash = new Map<string, UserSignedRelayPreparedBinding>();
 
   public constructor(private readonly config: UserSignedRelayExecutionAdapterConfig) {
     this.venue = config.venue;
@@ -254,6 +255,8 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
     const price = parsePrice(leg.price);
     const preparedAt = this.now();
     const expiresAt = new Date(preparedAt.getTime() + 5 * 60_000);
+    const backendMayRelaySignedPayload = this.venue === "PREDICT_FUN" &&
+      status.relayImplementationStatus === "SIGNED_RELAY_IMPLEMENTED";
     return {
       venue: this.venue,
       clientOrderId: leg.executionLegId,
@@ -277,7 +280,7 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
         },
         orderCreatePath: this.config.orderCreatePath,
         signingRequired: true,
-        backendMayRelaySignedPayload: true,
+        backendMayRelaySignedPayload,
         backendMaySign: false,
         docsUrl: this.config.docsUrl,
         metadata: {
@@ -323,6 +326,23 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
   }
 
   public async fetchSettlementState(fillOrOrderId: string): Promise<VenueSettlementState> {
+    if (this.venue === "PREDICT_FUN" && this.predictOauthOrderClient?.configured()) {
+      try {
+        const status = await this.predictOauthOrderClient.getOrderByHash(fillOrOrderId);
+        this.lastOrderStatus = status;
+        return mapPredictOrderStatusToSettlementState(status, this.expectedBindingByOrderHash.get(fillOrOrderId));
+      } catch {
+        return {
+          status: "SETTLEMENT_UNKNOWN",
+          evidence: {
+            source: "predict_fun_user_signed_relay_adapter",
+            fillOrOrderId,
+            settlementEvidenceSupported: true,
+            reason: "predict_status_read_failed"
+          }
+        };
+      }
+    }
     return {
       status: "SETTLEMENT_PENDING",
       evidence: {
@@ -378,6 +398,7 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
     validatePreparedOrderExpiry(order.payload, this.now());
     validatePredictSignedPayloadMatchesPreparedOrder(order.payload, relayPayload);
     const result = await this.predictOauthOrderClient.createOauthOrder(relayPayload.signedPayload);
+    this.expectedBindingByOrderHash.set(result.orderHash, relayPayload.expectedBinding);
     return {
       venueOrderId: result.orderHash,
       fillId: result.orderId,
@@ -502,13 +523,23 @@ const validatePredictSignedPayloadMatchesPreparedOrder = (
   }
   const expectedOutcomeId = stringPayloadField(payload, "venueOutcomeId");
   const signedTokenId = stringPayloadField(order, "tokenId");
-  if (expectedOutcomeId && signedTokenId && expectedOutcomeId !== signedTokenId) {
+  if (!expectedOutcomeId || signedTokenId !== expectedOutcomeId) {
     throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_OUTCOME_MISMATCH", "Predict.fun signed order tokenId does not match the prepared outcome.");
   }
   const expectedSide = stringPayloadField(payload, "side");
   const signedSide = numberPayloadField(order, "side");
-  if (expectedSide && signedSide !== null && ((expectedSide === "buy" && signedSide !== 0) || (expectedSide === "sell" && signedSide !== 1))) {
+  if (!expectedSide || signedSide === null || ((expectedSide === "buy" && signedSide !== 0) || (expectedSide === "sell" && signedSide !== 1))) {
     throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_SIDE_MISMATCH", "Predict.fun signed order side does not match the prepared side.");
+  }
+  const expectedPrice = numberPayloadField(payload, "price");
+  const signedPrice = numberPayloadField(order, "price");
+  if (expectedPrice === null || signedPrice === null || Math.abs(expectedPrice - signedPrice) > 1e-9) {
+    throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_PRICE_MISMATCH", "Predict.fun signed order price does not match the prepared price.");
+  }
+  const expectedSize = numberPayloadField(payload, "size");
+  const signedSize = numberPayloadField(order, "size");
+  if (expectedSize === null || signedSize === null || Math.abs(expectedSize - signedSize) > 1e-9) {
+    throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_SIZE_MISMATCH", "Predict.fun signed order size does not match the prepared size.");
   }
 };
 
@@ -533,4 +564,83 @@ const mapPredictOrderStatusToFillState = (status: PredictOauthOrderStatus): Venu
     return { status: "FAILED", filledSize, averagePrice: Number.isFinite(averagePrice) ? averagePrice : 0, offchainFilled: false };
   }
   return { status: "OPEN", filledSize: "0", averagePrice: Number.isFinite(averagePrice) ? averagePrice : 0, offchainFilled: false };
+};
+
+export const mapPredictOrderStatusToSettlementState = (
+  status: PredictOauthOrderStatus,
+  expectedBinding?: UserSignedRelayPreparedBinding | undefined
+): VenueSettlementState => {
+  const normalized = `${status.status ?? ""}`.trim().toUpperCase();
+  const remainingSize = Number(status.remainingSize ?? Number.NaN);
+  const accountMatches = expectedBinding
+    ? predictStatusAccountMatches(status.raw, expectedBinding.venueAccountAddress)
+    : false;
+  const baseEvidence = {
+    source: "predict_fun_user_signed_relay_adapter",
+    fillOrOrderId: status.orderHash,
+    settlementEvidenceSupported: true,
+    orderStatus: status.status,
+    remainingSize: status.remainingSize,
+    accountEvidenceMatched: accountMatches,
+    expectedBindingPresent: Boolean(expectedBinding)
+  };
+
+  if (["FAILED", "REJECTED", "CANCELLED", "CANCELED"].includes(normalized)) {
+    return {
+      status: "SETTLEMENT_UNKNOWN",
+      evidence: {
+        ...baseEvidence,
+        reason: "predict_order_failed_or_cancelled"
+      }
+    };
+  }
+
+  if (["SETTLED", "COMPLETED"].includes(normalized)) {
+    if (Number.isFinite(remainingSize) && remainingSize === 0 && accountMatches) {
+      return {
+        status: "SETTLEMENT_VERIFIED",
+        evidence: {
+          ...baseEvidence,
+          finalityEvidence: "predict_final_status_zero_remaining_matching_account"
+        }
+      };
+    }
+    return {
+      status: "SETTLEMENT_PENDING",
+      evidence: {
+        ...baseEvidence,
+        reason: !expectedBinding
+          ? "missing_expected_binding"
+          : !accountMatches
+            ? "account_evidence_missing_or_mismatched"
+            : "remaining_size_not_zero"
+      }
+    };
+  }
+
+  return {
+    status: "SETTLEMENT_PENDING",
+    evidence: {
+      ...baseEvidence,
+      reason: ["FILLED", "MATCHED"].includes(normalized)
+        ? "fill_seen_waiting_for_final_settlement_status"
+        : "predict_order_not_final"
+    }
+  };
+};
+
+const predictStatusAccountMatches = (raw: Record<string, unknown>, expectedAccount: string): boolean =>
+  collectPredictStatusAccountCandidates(raw).some((candidate) => equalsAddress(candidate, expectedAccount));
+
+const collectPredictStatusAccountCandidates = (value: unknown): string[] => {
+  if (!isRecord(value)) {
+    return [];
+  }
+  const directKeys = ["account", "maker", "signer", "owner", "wallet", "walletAddress", "venueAccountAddress"];
+  const direct = directKeys
+    .map((key) => stringPayloadField(value, key))
+    .filter((entry): entry is string => Boolean(entry));
+  const nested = ["order", "data", "payload"]
+    .flatMap((key) => collectPredictStatusAccountCandidates(value[key]));
+  return [...direct, ...nested];
 };
