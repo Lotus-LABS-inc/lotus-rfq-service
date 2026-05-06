@@ -12,6 +12,7 @@ export interface LimitlessOrderbookClient {
     marketId: string;
     outcomeId?: string | undefined;
   }): Promise<unknown>;
+  getMarketDetail?(marketId: string): Promise<unknown>;
 }
 
 export interface LimitlessQuoteReaderConfig {
@@ -40,9 +41,11 @@ export class LimitlessQuoteReader implements VenueQuoteSnapshotReader {
       return cached;
     }
 
+    const marketDetail = await this.config.client.getMarketDetail?.(input.venueMarketId).catch(() => null);
+    const outcomeResolution = resolveLimitlessOutcome(input.venueOutcomeId, input.canonicalOutcomeId, marketDetail);
     const payload = await this.config.client.getOrderbook({
       marketId: input.venueMarketId,
-      ...(input.venueOutcomeId ? { outcomeId: input.venueOutcomeId } : {})
+      ...(outcomeResolution.venueOutcomeId ? { outcomeId: outcomeResolution.venueOutcomeId } : {})
     });
     const resolvedFeeBps = this.config.feeBps ?? await this.config.feeReader?.getFeeBps({
       marketSlug: input.venueMarketId
@@ -50,7 +53,8 @@ export class LimitlessQuoteReader implements VenueQuoteSnapshotReader {
     return normalizeLimitlessOrderbook({
       payload,
       venueMarketId: input.venueMarketId,
-      venueOutcomeId: input.venueOutcomeId,
+      venueOutcomeId: outcomeResolution.venueOutcomeId,
+      outcomeSide: outcomeResolution.outcomeSide,
       receivedAt: this.now(),
       feeBps: resolvedFeeBps ?? undefined
     });
@@ -78,18 +82,30 @@ export class LimitlessRestOrderbookClient implements LimitlessOrderbookClient {
     }
     return response.json();
   }
+
+  public async getMarketDetail(marketId: string): Promise<unknown> {
+    const url = new URL(`/markets/${encodeURIComponent(marketId)}`, this.config.baseUrl);
+    const response = await this.fetchImpl(url, { method: "GET", headers: { Accept: "application/json" } });
+    if (!response.ok) {
+      throw new Error(`Limitless market detail request failed with status ${response.status}.`);
+    }
+    return response.json();
+  }
 }
 
 export const normalizeLimitlessOrderbook = (input: {
   payload: unknown;
   venueMarketId: string;
   venueOutcomeId?: string | undefined;
+  outcomeSide?: "YES" | "NO" | undefined;
   receivedAt: Date;
   feeBps?: number | undefined;
 }): NormalizedVenueQuoteSnapshot => {
   const record = unwrapOrderbookRecord(input.payload);
-  const bids = normalizeLevels(record.bids ?? record.buy);
-  const asks = normalizeLevels(record.asks ?? record.sell);
+  const rawBids = normalizeLevels(record.bids ?? record.buy);
+  const rawAsks = normalizeLevels(record.asks ?? record.sell);
+  const bids = input.outcomeSide === "NO" ? invertBinaryLevels(rawAsks, "desc") : rawBids;
+  const asks = input.outcomeSide === "NO" ? invertBinaryLevels(rawBids, "asc") : rawAsks;
   return {
     venue: "LIMITLESS",
     venueMarketId: input.venueMarketId,
@@ -107,7 +123,11 @@ export const normalizeLimitlessOrderbook = (input: {
     missingFactors: [],
     blockers: [],
     streamResynced: true,
-    metadata: { venueMarketId: input.venueMarketId, venueOutcomeId: input.venueOutcomeId ?? null }
+    metadata: {
+      venueMarketId: input.venueMarketId,
+      venueOutcomeId: input.venueOutcomeId ?? null,
+      ...(input.outcomeSide ? { outcomeSide: input.outcomeSide } : {})
+    }
   };
 };
 
@@ -148,6 +168,56 @@ const normalizeLevel = (price: unknown, size: unknown): NormalizedQuoteLevel[] =
     return [];
   }
   return [{ price: String(price), size: String(size) }];
+};
+
+const invertBinaryLevels = (
+  levels: readonly NormalizedQuoteLevel[],
+  sort: "asc" | "desc"
+): readonly NormalizedQuoteLevel[] =>
+  levels
+    .map((level) => ({
+      price: Number((1 - Number(level.price)).toFixed(12)),
+      size: level.size
+    }))
+    .filter((level) => Number.isFinite(level.price) && level.price > 0 && level.price < 1)
+    .sort((left, right) => sort === "asc" ? left.price - right.price : right.price - left.price)
+    .map((level) => ({ price: String(level.price), size: level.size }));
+
+const resolveLimitlessOutcome = (
+  configuredOutcomeId: string | undefined,
+  canonicalOutcomeId: string | undefined,
+  marketDetail: unknown
+): { venueOutcomeId?: string | undefined; outcomeSide?: "YES" | "NO" | undefined } => {
+  const tokens = asRecord(asRecord(marketDetail).tokens);
+  const yes = firstString(tokens.yes, tokens.YES, tokens.Yes);
+  const no = firstString(tokens.no, tokens.NO, tokens.No);
+  const normalizedCanonical = canonicalOutcomeId?.trim().toUpperCase();
+  if (configuredOutcomeId) {
+    return {
+      venueOutcomeId: configuredOutcomeId,
+      ...(yes && configuredOutcomeId === yes ? { outcomeSide: "YES" as const } : {}),
+      ...(no && configuredOutcomeId === no ? { outcomeSide: "NO" as const } : {})
+    };
+  }
+  if (normalizedCanonical === "YES" && yes) {
+    return { venueOutcomeId: yes, outcomeSide: "YES" };
+  }
+  if (normalizedCanonical === "NO" && no) {
+    return { venueOutcomeId: no, outcomeSide: "NO" };
+  }
+  return {};
+};
+
+const firstString = (...values: readonly unknown[]): string | undefined => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+  return undefined;
 };
 
 const asRecord = (value: unknown): Record<string, unknown> =>

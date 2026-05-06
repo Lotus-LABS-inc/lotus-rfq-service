@@ -3,6 +3,7 @@ import { calculateVenueQuote, QuoteSnapshotCache } from "../src/core/sor/quote-s
 import { normalizeMyriadQuote } from "../src/integrations/myriad/myriad-quote-reader.js";
 import { normalizeOpinionOrderbook, OpinionQuoteReader, parseOpinionTopicRate } from "../src/integrations/opinion/opinion-quote-reader.js";
 import { normalizePredictOrderbook, PredictQuoteReader } from "../src/integrations/predict/predict-quote-reader.js";
+import { LimitlessQuoteReader } from "../src/integrations/limitless/limitless-quote-reader.js";
 
 const now = new Date("2026-05-05T22:30:00.000Z");
 
@@ -52,6 +53,42 @@ describe("extended venue quote readers", () => {
 
     expect(snapshot?.venueFeeBps).toBe(35);
     expect(snapshot?.venueFeeModel).toBe("PREDICT_MARKET_STATS");
+  });
+
+  it("Limitless reader fetches full market tokens and inverts YES book for NO outcome", async () => {
+    const reader = new LimitlessQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      now: () => now,
+      client: {
+        async getMarketDetail() {
+          return {
+            tokens: {
+              yes: "yes-token",
+              no: "no-token"
+            }
+          };
+        },
+        async getOrderbook() {
+          return {
+            bids: [{ price: 0.48, size: "10" }],
+            asks: [{ price: 0.51, size: "10" }]
+          };
+        }
+      }
+    });
+
+    const snapshot = await reader.getQuoteSnapshot({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "NO",
+      venueMarketId: "limitless-market-1",
+      side: "buy",
+      quantity: 1
+    });
+    const calculated = calculateVenueQuote({ snapshot: snapshot!, side: "buy", amount: 1, now });
+
+    expect(snapshot?.venueOutcomeId).toBe("no-token");
+    expect(snapshot?.metadata).toMatchObject({ outcomeSide: "NO" });
+    expect(calculated.price).toBe(0.52);
   });
 
   it("normalizes Opinion orderbooks with documented topic-rate fee curve", () => {
