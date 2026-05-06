@@ -262,6 +262,7 @@ import {
   RepositoryExecutionAuditSink,
   ScopeAuthorityLaneResolver,
   SettlementVerificationService,
+  SignedTradeBundleService,
   TestExecutionAdapter,
   alwaysHealthyPreflightDeps
 } from "../execution-system/index.js";
@@ -1189,6 +1190,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     ...defaultExecutionScopeAuthorities,
     ...(dependencies.executionScopeAuthorities ?? {})
   };
+  let signedTradeBundleService: SignedTradeBundleService | undefined;
   if (dependencies.executionSystemSandboxEnabled) {
     const laneGate = new ApprovedLaneExecutionGate(new ScopeAuthorityLaneResolver(executionScopeAuthorities));
     const adapterRegistry = new ExecutionVenueAdapterRegistry();
@@ -1219,6 +1221,11 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         buildPredictFunExecutionAdapterConfigFromEnv(process.env)
       ));
     }
+    signedTradeBundleService = new SignedTradeBundleService(
+      executableRouteService,
+      adapterRegistry,
+      userVenueAccountService
+    );
     const preflightDeps = alwaysHealthyPreflightDeps(laneGate);
     preflightDeps.funding = new FundingReadinessChecker(
       fundingService,
@@ -1305,7 +1312,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   });
   await registerExecutionRoutes(app, userAuthMiddleware, {
     executableRouteService,
-    sellQuoteService
+    sellQuoteService,
+    signedTradeBundleService
   });
   await registerMarketCatalogRoutes(app, {
     marketCatalogRepository

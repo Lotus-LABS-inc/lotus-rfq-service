@@ -14,6 +14,7 @@ export * from "./polymarket-live-submit-harness.js";
 export * from "./predictfun-live-submit-harness.js";
 export * from "./preflight.js";
 export * from "./settlement.js";
+export * from "./signed-trade-bundle.js";
 export * from "./submission-handler.js";
 export * from "./state-machine.js";
 export * from "./status.js";

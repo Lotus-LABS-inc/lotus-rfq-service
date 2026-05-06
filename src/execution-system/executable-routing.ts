@@ -25,6 +25,8 @@ export type AutomatedRecoveryAction =
 
 export interface TradeRouteCandidate {
   venue: string;
+  venueMarketId?: string | undefined;
+  venueOutcomeId?: string | undefined;
   price: number;
   availableSize: string;
   routeType?: TradeRouteType | undefined;
@@ -60,6 +62,8 @@ export interface TradeQuoteRequest {
 
 export interface ExecutableRouteLeg {
   venue: string;
+  venueMarketId?: string | undefined;
+  venueOutcomeId?: string | undefined;
   size: string;
   price: number;
   feeAmount?: number | undefined;
@@ -655,6 +659,8 @@ const compareCandidatesByEffectivePrice = (
 
 const toLeg = (candidate: TradeRouteCandidate, size: number): ExecutableRouteLeg => ({
   venue: candidate.venue.toUpperCase(),
+  ...(candidate.venueMarketId ? { venueMarketId: candidate.venueMarketId } : {}),
+  ...(candidate.venueOutcomeId ? { venueOutcomeId: candidate.venueOutcomeId } : {}),
   size: decimal(size),
   price: candidate.price,
   ...(candidate.feeAmount !== undefined ? { feeAmount: prorateFee(candidate, size) } : {}),

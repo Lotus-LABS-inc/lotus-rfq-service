@@ -16,7 +16,7 @@
     "test:watch": "vitest",
     "test:unit": "vitest run tests test/unit --maxWorkers=1",
     "test:integration": "vitest run test/integration --maxWorkers=1",
-    "test:execution-system": "vitest run tests/execution-system-v0.test.ts tests/execution-system-rfq-persistence.test.ts tests/execution-scope-token.test.ts tests/polymarket-execution-adapter-v2.test.ts tests/polymarket-clob-v2-signing-fixture.test.ts tests/polymarket-live-submit-harness.test.ts tests/limitless-execution-adapter.test.ts tests/predictfun-live-submit-harness.test.ts tests/user-signed-relay-execution-adapter.test.ts tests/admin-execution-venues-routes.test.ts --maxWorkers=1",
+    "test:execution-system": "vitest run tests/execution-system-v0.test.ts tests/execution-system-rfq-persistence.test.ts tests/execution-scope-token.test.ts tests/polymarket-execution-adapter-v2.test.ts tests/polymarket-clob-v2-signing-fixture.test.ts tests/polymarket-live-submit-harness.test.ts tests/limitless-execution-adapter.test.ts tests/predictfun-live-submit-harness.test.ts tests/user-signed-relay-execution-adapter.test.ts tests/signed-trade-bundle.test.ts tests/execution-signed-bundle-routes.test.ts tests/admin-execution-venues-routes.test.ts --maxWorkers=1",
     "test:funding-flow": "vitest run tests/funding-v0.test.ts tests/funding-routes.test.ts tests/admin-funding-readiness-routes.test.ts --maxWorkers=1",
     "test:funding-flow:db": "vitest run test/integration/funding-flow-v0.integration.test.ts --maxWorkers=1",
     "typecheck": "tsc --noEmit",

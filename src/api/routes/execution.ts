@@ -5,9 +5,15 @@ import type {
   ExecutableTradeQuote,
   SellQuoteService
 } from "../../execution-system/executable-routing.js";
+import {
+  SignedTradeBundleError,
+  type SignedTradeBundleService
+} from "../../execution-system/signed-trade-bundle.js";
 
 const candidateSchema = z.object({
   venue: z.string().min(1),
+  venueMarketId: z.string().min(1).optional(),
+  venueOutcomeId: z.string().min(1).optional(),
   price: z.number().gt(0),
   availableSize: z.string().regex(/^\d+(\.\d+)?$/),
   routeType: z.enum(["CROSS_VENUE", "SINGLE_VENUE"]).optional(),
@@ -44,6 +50,15 @@ const submitRequestSchema = z.object({
   quoteId: z.string().min(1)
 });
 
+const signedBundleSubmitSchema = z.object({
+  signedLegs: z.array(z.object({
+    legIndex: z.number().int().nonnegative(),
+    venue: z.string().min(1),
+    signedPayload: z.record(z.string(), z.unknown())
+  })),
+  dryRun: z.boolean().optional()
+});
+
 const exitRequestSchema = z.object({
   sellMode: z.enum(["SINGLE_VENUE_SELL", "SELL_ALL"]),
   venue: z.string().min(1).optional(),
@@ -58,6 +73,7 @@ const exitRequestSchema = z.object({
 export interface ExecutionRouteDeps {
   executableRouteService: ExecutableRouteService;
   sellQuoteService: SellQuoteService;
+  signedTradeBundleService?: SignedTradeBundleService | undefined;
 }
 
 export const registerExecutionRoutes = async (
@@ -113,6 +129,60 @@ export const registerExecutionRoutes = async (
         ? "User signature is required before this route can be submitted."
         : "Quote is executable. Live submit remains controlled by venue adapter flags."
     });
+  });
+
+  app.post("/execution/:executionId/prepare-signatures", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!deps.signedTradeBundleService) {
+      return reply.status(501).send({
+        code: "SIGNED_TRADE_BUNDLE_NOT_CONFIGURED",
+        message: "Signed trade bundle preparation is not configured on this backend."
+      });
+    }
+    const { executionId } = request.params as { executionId: string };
+    try {
+      const bundle = await deps.signedTradeBundleService.prepare({
+        userId: request.user.userId,
+        quoteId: executionId
+      });
+      return reply.send(bundle);
+    } catch (error) {
+      if (error instanceof SignedTradeBundleError) {
+        return reply.status(error.statusCode).send({ code: error.code, message: error.message });
+      }
+      throw error;
+    }
+  });
+
+  app.post("/execution/:executionId/submit-signed-bundle", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!deps.signedTradeBundleService) {
+      return reply.status(501).send({
+        code: "SIGNED_TRADE_BUNDLE_NOT_CONFIGURED",
+        message: "Signed trade bundle submission is not configured on this backend."
+      });
+    }
+    const parsed = signedBundleSubmitSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "Signed trade bundle request validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    const { executionId } = request.params as { executionId: string };
+    try {
+      const result = await deps.signedTradeBundleService.submit({
+        userId: request.user.userId,
+        quoteId: executionId,
+        signedLegs: parsed.data.signedLegs,
+        dryRun: parsed.data.dryRun
+      });
+      return reply.status(parsed.data.dryRun === true ? 200 : 202).send(result);
+    } catch (error) {
+      if (error instanceof SignedTradeBundleError) {
+        return reply.status(error.statusCode).send({ code: error.code, message: error.message });
+      }
+      throw error;
+    }
   });
 
   app.get("/execution/:executionId/status", { preHandler: authMiddleware }, async (request, reply) => {
@@ -196,6 +266,8 @@ const toUserQuote = (quote: ExecutableTradeQuote): Record<string, unknown> => ({
   expiresAt: quote.expiresAt,
   legs: quote.legs.map((leg) => ({
     venue: leg.venue,
+    venueMarketId: leg.venueMarketId,
+    venueOutcomeId: leg.venueOutcomeId,
     size: leg.size,
     price: leg.price,
     feeAmount: leg.feeAmount,
