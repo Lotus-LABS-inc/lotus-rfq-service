@@ -5,6 +5,7 @@ import {
   Side,
   type OrderResponse
 } from "@limitless-exchange/sdk";
+import { verifyTypedData } from "@ethersproject/wallet";
 import type { ExecutionLegV0, SettlementStatusV0 } from "./types.js";
 import type {
   ExecutionVenueAdapter,
@@ -35,7 +36,11 @@ export const limitlessExecutionDryRunRequiredEnvKeys = [
 export type LimitlessExecutionRequiredEnvKey = (typeof limitlessExecutionRequiredEnvKeys)[number];
 export type LimitlessDelegatedExecutionRequiredEnvKey = (typeof limitlessDelegatedExecutionRequiredEnvKeys)[number];
 export type LimitlessExecutionDryRunRequiredEnvKey = (typeof limitlessExecutionDryRunRequiredEnvKeys)[number];
-export type LimitlessExecutionMode = "disabled" | "backend_signer" | "delegated_partner_server_wallet";
+export type LimitlessExecutionMode =
+  | "disabled"
+  | "backend_signer"
+  | "delegated_partner_server_wallet"
+  | "user_signed_backend_relay";
 
 export type LimitlessExecutionReadiness =
   | "NOT_CONFIGURED"
@@ -60,7 +65,7 @@ export interface LimitlessExecutionAdapterEnvStatus {
   adapter: "LimitlessExecutionAdapter";
   venue: "LIMITLESS";
   executionMode: LimitlessExecutionMode;
-  executionSigningModel: "BACKEND_SIGNER" | "DELEGATED_BACKEND_SIGNER";
+  executionSigningModel: "BACKEND_SIGNER" | "DELEGATED_BACKEND_SIGNER" | "USER_SIGNED_BACKEND_RELAY";
   liveExecutionEnabled: boolean;
   featureFlagSelected: boolean;
   readinessState: LimitlessExecutionReadiness;
@@ -88,6 +93,14 @@ export interface LimitlessOrderClient {
   getSettlementState?(orderId: string, onBehalfOf?: number | undefined): Promise<VenueSettlementState>;
 }
 
+export interface LimitlessUserSignedRelayClient {
+  submitSignedOrder(input: {
+    onBehalfOf: number;
+    ownerId: number;
+    signedPayload: Record<string, unknown>;
+  }): Promise<unknown>;
+}
+
 export class LimitlessExecutionNotConfiguredError extends Error {
   public constructor(public readonly reasonCode: string, message: string) {
     super(message);
@@ -102,13 +115,16 @@ export const getLimitlessExecutionAdapterEnvStatus = (
   env: NodeJS.ProcessEnv = process.env
 ): LimitlessExecutionAdapterEnvStatus => {
   const executionMode = parseExecutionMode(env.LIMITLESS_EXECUTION_MODE);
-  const missingEnv = executionMode === "delegated_partner_server_wallet"
+  const partnerMode = executionMode === "delegated_partner_server_wallet" || executionMode === "user_signed_backend_relay";
+  const missingEnv = partnerMode
     ? limitlessDelegatedExecutionRequiredEnvKeys.filter((key) => key === "LIMITLESS_PARTNER_ACCOUNT_ENABLED"
       ? env[key] !== "true"
       : !nonEmpty(env[key]))
     : limitlessExecutionRequiredEnvKeys.filter((key) => !nonEmpty(env[key]));
   const missingDryRunEnv = limitlessExecutionDryRunRequiredEnvKeys.filter((key) => !nonEmpty(env[key]));
-  const featureFlagSelected = executionMode === "backend_signer" || executionMode === "delegated_partner_server_wallet";
+  const featureFlagSelected = executionMode === "backend_signer" ||
+    executionMode === "delegated_partner_server_wallet" ||
+    executionMode === "user_signed_backend_relay";
   const liveExecutionEnabled = env.LIMITLESS_LIVE_EXECUTION_ENABLED === "true";
   const requiredEnvPresent = missingEnv.length === 0;
   const dryRunRequiredEnvPresent = missingDryRunEnv.length === 0;
@@ -123,7 +139,11 @@ export const getLimitlessExecutionAdapterEnvStatus = (
     adapter: "LimitlessExecutionAdapter",
     venue: "LIMITLESS",
     executionMode,
-    executionSigningModel: executionMode === "delegated_partner_server_wallet" ? "DELEGATED_BACKEND_SIGNER" : "BACKEND_SIGNER",
+    executionSigningModel: executionMode === "user_signed_backend_relay"
+      ? "USER_SIGNED_BACKEND_RELAY"
+      : executionMode === "delegated_partner_server_wallet"
+        ? "DELEGATED_BACKEND_SIGNER"
+        : "BACKEND_SIGNER",
     liveExecutionEnabled,
     featureFlagSelected,
     readinessState,
@@ -226,8 +246,34 @@ const createLimitlessOrderClient = (config: LimitlessExecutionAdapterConfig): Li
   };
 };
 
+const createLimitlessUserSignedRelayClient = (config: LimitlessExecutionAdapterConfig): LimitlessUserSignedRelayClient => {
+  const baseUrl = config.baseUrl;
+  const tokenId = config.hmacTokenId;
+  const secret = config.hmacSecret;
+  if (!nonEmpty(baseUrl) || config.partnerAccountEnabled !== true || !nonEmpty(tokenId) || !nonEmpty(secret)) {
+    throw new LimitlessExecutionNotConfiguredError(
+      "LIMITLESS_ENV_INCOMPLETE",
+      "Limitless user-signed relay requires LIMITLESS_BASE_URL, LIMITLESS_PARTNER_ACCOUNT_ENABLED=true, LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID, and LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET."
+    );
+  }
+  const httpClient = createLimitlessHttpClient({
+    baseUrl,
+    hmacTokenId: tokenId,
+    hmacSecret: secret
+  });
+  return {
+    submitSignedOrder: (input) => httpClient.post("/orders", {
+      ...input.signedPayload,
+      onBehalfOf: input.onBehalfOf,
+      ownerId: input.ownerId
+    })
+  };
+};
+
 const parseExecutionMode = (value: string | undefined): LimitlessExecutionMode =>
-  value === "backend_signer" || value === "delegated_partner_server_wallet" ? value : "disabled";
+  value === "backend_signer" || value === "delegated_partner_server_wallet" || value === "user_signed_backend_relay"
+    ? value
+    : "disabled";
 
 const requireDelegatedProfileId = (value: number | undefined): number => {
   if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
@@ -495,15 +541,186 @@ const parseDelegatedProfileId = (value: unknown): number | undefined => {
   return undefined;
 };
 
+const normalizeAddress = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return /^0x[a-fA-F0-9]{40}$/.test(trimmed) ? trimmed.toLowerCase() : null;
+};
+
+const normalizeSignature = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return /^0x[a-fA-F0-9]{130}$/.test(trimmed) ? trimmed : null;
+};
+
+const verifyLimitlessTypedSignature = (
+  signedPayload: Record<string, unknown>,
+  signature: string,
+  expectedSigner: string
+): void => {
+  const typedData = asRecord(firstPresent(signedPayload.typedData, signedPayload.eip712, signedPayload.eip712TypedData));
+  const domain = asRecord(typedData.domain);
+  const types = asRecord(typedData.types);
+  const message = asRecord(firstPresent(typedData.message, typedData.value));
+  if (Object.keys(domain).length === 0 || Object.keys(types).length === 0 || Object.keys(message).length === 0) {
+    throw new LimitlessExecutionNotConfiguredError(
+      "LIMITLESS_RELAY_TYPED_DATA_REQUIRED",
+      "Limitless user-signed relay requires the EIP-712 typed data used for the user signature."
+    );
+  }
+  const { EIP712Domain: _ignored, ...primaryTypes } = types;
+  try {
+    const recovered = verifyTypedData(domain, primaryTypes as never, message, signature).toLowerCase();
+    if (recovered !== expectedSigner) {
+      throw new LimitlessExecutionNotConfiguredError(
+        "LIMITLESS_RELAY_SIGNATURE_SIGNER_MISMATCH",
+        "Limitless EIP-712 signature does not recover to the linked Turnkey wallet."
+      );
+    }
+  } catch (error) {
+    if (error instanceof LimitlessExecutionNotConfiguredError) {
+      throw error;
+    }
+    throw new LimitlessExecutionNotConfiguredError(
+      "LIMITLESS_RELAY_SIGNATURE_INVALID",
+      "Limitless EIP-712 signature could not be verified."
+    );
+  }
+};
+
+const normalizeOrderSide = (value: unknown): Side =>
+  String(value).toLowerCase().includes("sell") || value === Side.SELL || value === 1 ? Side.SELL : Side.BUY;
+
+const nestedValue = (root: Record<string, unknown>, ...path: string[]): unknown =>
+  path.reduce<unknown>((current, key) => asRecord(current)[key], root);
+
+const firstPresent = (...values: unknown[]): unknown =>
+  values.find((value) => value !== undefined && value !== null);
+
+const assertEqualString = (left: unknown, right: unknown, reasonCode: string, message: string): void => {
+  if (String(left) !== String(right)) {
+    throw new LimitlessExecutionNotConfiguredError(reasonCode, message);
+  }
+};
+
+const assertEqualNumber = (left: unknown, right: unknown, reasonCode: string, message: string): void => {
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  if (!Number.isFinite(leftNumber) || !Number.isFinite(rightNumber) || Math.abs(leftNumber - rightNumber) > 0.00000001) {
+    throw new LimitlessExecutionNotConfiguredError(reasonCode, message);
+  }
+};
+
+const parsePreparedExpiry = (payload: Record<string, unknown>): number => {
+  const value = payload.expiresAt;
+  const parsed = typeof value === "string" ? Date.parse(value) : Number(value);
+  if (!Number.isFinite(parsed) || parsed <= Date.now()) {
+    throw new LimitlessExecutionNotConfiguredError(
+      "LIMITLESS_PREPARED_ORDER_EXPIRED",
+      "Limitless prepared user-signed relay order is expired."
+    );
+  }
+  return parsed;
+};
+
+const validateLimitlessUserSignedRelayPayload = (
+  preparedPayload: Record<string, unknown>
+): {
+  onBehalfOf: number;
+  ownerId: number;
+  signedPayload: Record<string, unknown>;
+} => {
+  parsePreparedExpiry(preparedPayload);
+  const relayPayload = asRecord(preparedPayload.relayPayload);
+  const expectedBinding = asRecord(relayPayload.expectedBinding);
+  const signedPayload = asRecord(relayPayload.signedPayload);
+  const signedOrder = asRecord(firstPresent(signedPayload.order, signedPayload.data, signedPayload.args, signedPayload));
+  const signer = normalizeAddress(firstPresent(signedPayload.signer, signedPayload.signerAddress, signedPayload.account, signedPayload.owner, signedOrder.signer, signedOrder.maker));
+  const expectedSigner = normalizeAddress(firstPresent(expectedBinding.signerAddress, expectedBinding.walletAddress, expectedBinding.venueAccountAddress));
+  const expectedAccount = normalizeAddress(firstPresent(expectedBinding.venueAccountAddress, expectedBinding.walletAddress, expectedBinding.account));
+  const signedAccount = normalizeAddress(firstPresent(signedPayload.account, signedPayload.owner, signedPayload.maker, signedOrder.owner, signedOrder.maker, signedOrder.signer));
+  const profileId = parseDelegatedProfileId(firstPresent(expectedBinding.venueAccountId, expectedBinding.profileId, expectedBinding.ownerId));
+
+  if (!expectedSigner || !expectedAccount || profileId === undefined) {
+    throw new LimitlessExecutionNotConfiguredError(
+      "LIMITLESS_RELAY_BINDING_REQUIRED",
+      "Limitless user-signed relay requires expected signer address, account address, and profile id."
+    );
+  }
+  if (!signer || signer !== expectedSigner) {
+    throw new LimitlessExecutionNotConfiguredError(
+      "LIMITLESS_RELAY_SIGNER_MISMATCH",
+      "Limitless signed order signer does not match the linked Turnkey wallet."
+    );
+  }
+  if (!signedAccount || signedAccount !== expectedAccount) {
+    throw new LimitlessExecutionNotConfiguredError(
+      "LIMITLESS_RELAY_ACCOUNT_MISMATCH",
+      "Limitless signed order account does not match the linked Limitless account."
+    );
+  }
+  const signature = normalizeSignature(firstPresent(signedPayload.signature, signedOrder.signature));
+  if (!signature) {
+    throw new LimitlessExecutionNotConfiguredError(
+      "LIMITLESS_RELAY_SIGNATURE_REQUIRED",
+      "Limitless signed order relay requires a valid EVM signature."
+    );
+  }
+  verifyLimitlessTypedSignature(signedPayload, signature, expectedSigner);
+
+  assertEqualString(
+    firstPresent(signedPayload.marketSlug, signedPayload.market, signedOrder.marketSlug, signedOrder.market),
+    preparedPayload.marketSlug,
+    "LIMITLESS_RELAY_MARKET_MISMATCH",
+    "Limitless signed order market does not match the prepared route leg."
+  );
+  assertEqualString(
+    firstPresent(signedPayload.tokenId, signedOrder.tokenId, nestedValue(signedOrder, "args", "tokenId")),
+    preparedPayload.tokenId,
+    "LIMITLESS_RELAY_TOKEN_MISMATCH",
+    "Limitless signed order token does not match the prepared route leg."
+  );
+  if (normalizeOrderSide(firstPresent(signedPayload.side, signedOrder.side, nestedValue(signedOrder, "args", "side"))) !== normalizeOrderSide(preparedPayload.side)) {
+    throw new LimitlessExecutionNotConfiguredError(
+      "LIMITLESS_RELAY_SIDE_MISMATCH",
+      "Limitless signed order side does not match the prepared route leg."
+    );
+  }
+  assertEqualNumber(
+    firstPresent(signedPayload.price, signedOrder.price, nestedValue(signedOrder, "args", "price")),
+    preparedPayload.price,
+    "LIMITLESS_RELAY_PRICE_MISMATCH",
+    "Limitless signed order price does not match the prepared route leg."
+  );
+  assertEqualNumber(
+    firstPresent(signedPayload.size, signedOrder.size, nestedValue(signedOrder, "args", "size")),
+    preparedPayload.size,
+    "LIMITLESS_RELAY_SIZE_MISMATCH",
+    "Limitless signed order size does not match the prepared route leg."
+  );
+  return {
+    onBehalfOf: profileId,
+    ownerId: profileId,
+    signedPayload
+  };
+};
+
 export class LimitlessExecutionAdapter implements ExecutionVenueAdapter {
   public readonly venue = "LIMITLESS";
   private client: LimitlessOrderClient | undefined;
+  private relayClient: LimitlessUserSignedRelayClient | undefined;
 
   public constructor(
     private readonly config: LimitlessExecutionAdapterConfig,
-    client?: LimitlessOrderClient
+    client?: LimitlessOrderClient,
+    relayClient?: LimitlessUserSignedRelayClient
   ) {
     this.client = client;
+    this.relayClient = relayClient;
   }
 
   public status(): LimitlessExecutionAdapterEnvStatus {
@@ -524,6 +741,11 @@ export class LimitlessExecutionAdapter implements ExecutionVenueAdapter {
     return this.client;
   }
 
+  private getRelayClient(): LimitlessUserSignedRelayClient {
+    this.relayClient ??= createLimitlessUserSignedRelayClient(this.config);
+    return this.relayClient;
+  }
+
   public async prepareOrder(leg: ExecutionLegV0): Promise<PreparedVenueOrder> {
     const status = this.status();
     if (!status.dryRunRequiredEnvPresent) {
@@ -534,10 +756,23 @@ export class LimitlessExecutionAdapter implements ExecutionVenueAdapter {
     }
     const size = parseSize(leg.size);
     const price = parsePrice(leg.price);
+    const preparedAt = new Date();
+    const expiresAt = new Date(preparedAt.getTime() + 5 * 60 * 1000);
     return {
       venue: this.venue,
       clientOrderId: leg.executionLegId,
       payload: {
+        ...(status.executionMode === "user_signed_backend_relay"
+          ? {
+              relayMode: "USER_SIGNED_BACKEND_RELAY",
+              signingRequired: true,
+              backendMayRelaySignedPayload: true,
+              backendMaySign: false,
+              orderCreatePath: "/orders",
+              preparedAt: preparedAt.toISOString(),
+              expiresAt: expiresAt.toISOString()
+            }
+          : {}),
         marketSlug: leg.venueMarketId,
         tokenId: leg.venueOutcomeId,
         side: mapSide(leg.side),
@@ -574,6 +809,19 @@ export class LimitlessExecutionAdapter implements ExecutionVenueAdapter {
     const payload = asRecord(order.payload);
     const size = parseSize(String(payload.size ?? ""));
     const price = parsePrice(Number(payload.price));
+    if (status.executionMode === "user_signed_backend_relay") {
+      const relayInput = validateLimitlessUserSignedRelayPayload(payload);
+      const response = await this.getRelayClient().submitSignedOrder(relayInput);
+      const responseRecord = asRecord(response);
+      const orderRecord = asRecord(firstPresent(responseRecord.order, responseRecord.data, responseRecord));
+      const venueOrderId = firstPresent(orderRecord.id, orderRecord.orderId, responseRecord.orderId);
+      return {
+        venueOrderId: String(venueOrderId ?? order.clientOrderId),
+        status: "SUBMITTED",
+        filledSize: "0",
+        averagePrice: Number(firstPresent(orderRecord.price, payload.price, 0))
+      };
+    }
     const onBehalfOf = status.executionMode === "delegated_partner_server_wallet"
       ? parseDelegatedProfileId(payload.delegatedProfileId ?? this.config.delegatedProfileId)
       : undefined;

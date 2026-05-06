@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { OrderType, Side, type OrderResponse } from "@limitless-exchange/sdk";
+import { Wallet } from "@ethersproject/wallet";
 import {
   getLimitlessExecutionAdapterEnvStatus,
   LimitlessExecutionAdapter,
   LimitlessExecutionNotConfiguredError,
   mapLimitlessOrderStatusToFillState,
   mapLimitlessOrderStatusToSettlementState,
-  type LimitlessOrderClient
+  type LimitlessOrderClient,
+  type LimitlessUserSignedRelayClient
 } from "../src/execution-system/limitless-execution-adapter.js";
 import {
   evaluateLimitlessLiveSubmitHarness,
@@ -43,6 +45,72 @@ const delegatedLiveConfig = {
   partnerAccountEnabled: true,
   delegatedProfileId: "12345",
   liveExecutionEnabled: true
+};
+
+const userSignedRelayLiveConfig = {
+  executionMode: "user_signed_backend_relay" as const,
+  baseUrl: "https://api.limitless.exchange",
+  hmacTokenId: "partner-token-id",
+  hmacSecret: "partner-hmac-secret",
+  partnerAccountEnabled: true,
+  liveExecutionEnabled: true
+};
+
+const signerWallet = new Wallet("0x59c6995e998f97a5a004497e5daae82f0e6d4d6e773f8f5a11a95d2218e14e4f");
+const evmAddress = signerWallet.address;
+const typedDataForLimitlessOrder = (overrides: Record<string, unknown> = {}) => ({
+  domain: {
+    name: "Limitless Exchange",
+    version: "1",
+    chainId: 8453,
+    verifyingContract: "0x0000000000000000000000000000000000000001"
+  },
+  types: {
+    Order: [
+      { name: "marketSlug", type: "string" },
+      { name: "tokenId", type: "string" },
+      { name: "side", type: "string" },
+      { name: "size", type: "string" },
+      { name: "price", type: "string" }
+    ]
+  },
+  message: {
+    marketSlug: "limitless-market-slug",
+    tokenId: "limitless-token-id",
+    side: "BUY",
+    size: "1",
+    price: "0.42",
+    ...Object.fromEntries(
+      Object.entries(overrides)
+        .filter(([key]) => ["marketSlug", "tokenId", "side", "size", "price"].includes(key))
+        .map(([key, value]) => [key, String(value)])
+    )
+  }
+});
+
+const limitlessRelayPayload = async (overrides: Record<string, unknown> = {}) => {
+  const typedData = typedDataForLimitlessOrder(overrides);
+  const signature = await signerWallet._signTypedData(typedData.domain, typedData.types, typedData.message);
+  return {
+  expectedBinding: {
+    profileId: "12345",
+    venueAccountId: "12345",
+    signerAddress: evmAddress,
+    venueAccountAddress: evmAddress
+  },
+  signedPayload: {
+    signer: evmAddress,
+    account: evmAddress,
+    signature,
+    typedData,
+    marketSlug: "limitless-market-slug",
+    tokenId: "limitless-token-id",
+    side: Side.BUY,
+    size: 1,
+    price: 0.42,
+    ...overrides
+  }
+  };
 };
 
 const mockOrderResponse = (): OrderResponse => ({
@@ -164,6 +232,28 @@ describe("LimitlessExecutionAdapter", () => {
     });
   });
 
+  it("supports user-signed backend relay mode without requiring an execution private key", () => {
+    const status = getLimitlessExecutionAdapterEnvStatus({
+      LIMITLESS_EXECUTION_MODE: "user_signed_backend_relay",
+      LIMITLESS_BASE_URL: "https://api.limitless.exchange",
+      LIMITLESS_PARTNER_ACCOUNT_ENABLED: "true",
+      LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID: "partner-token-id",
+      LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET: "partner-secret",
+      LIMITLESS_LIVE_EXECUTION_ENABLED: "true"
+    });
+
+    expect(status).toMatchObject({
+      executionMode: "user_signed_backend_relay",
+      executionSigningModel: "USER_SIGNED_BACKEND_RELAY",
+      featureFlagSelected: true,
+      liveExecutionEnabled: true,
+      readinessState: "LIVE_READY",
+      requiredEnvPresent: true,
+      missingEnv: []
+    });
+    expect(status.missingEnv).not.toContain("LIMITLESS_EXECUTION_PRIVATE_KEY");
+  });
+
   it("still requires the execution private key in legacy backend signer mode", () => {
     const status = getLimitlessExecutionAdapterEnvStatus({
       LIMITLESS_EXECUTION_MODE: "backend_signer",
@@ -203,6 +293,29 @@ describe("LimitlessExecutionAdapter", () => {
     });
     expect(JSON.stringify(prepared)).not.toContain("private");
     expect(JSON.stringify(prepared)).not.toContain("api-key");
+  });
+
+  it("prepares user-signed relay instructions without letting the backend sign", async () => {
+    const adapter = new LimitlessExecutionAdapter({
+      executionMode: "user_signed_backend_relay",
+      baseUrl: "https://api.limitless.exchange",
+      liveExecutionEnabled: false
+    });
+
+    const prepared = await adapter.prepareOrder(leg());
+
+    expect(prepared.payload).toMatchObject({
+      relayMode: "USER_SIGNED_BACKEND_RELAY",
+      signingRequired: true,
+      backendMayRelaySignedPayload: true,
+      backendMaySign: false,
+      marketSlug: "limitless-market-slug",
+      tokenId: "limitless-token-id",
+      metadata: {
+        executionSigningModel: "USER_SIGNED_BACKEND_RELAY"
+      }
+    });
+    expect(JSON.stringify(prepared)).not.toContain("partner-hmac-secret");
   });
 
   it("blocks submission while live execution is disabled", async () => {
@@ -303,6 +416,80 @@ describe("LimitlessExecutionAdapter", () => {
     await expect(adapter.fetchSettlementState("limitless-order-1")).resolves.toMatchObject({
       status: "SETTLEMENT_PENDING",
       evidence: { delegatedProfileScoped: true }
+    });
+  });
+
+  it("relays only a user-signed Limitless payload on behalf of the linked profile", async () => {
+    const relayClient: LimitlessUserSignedRelayClient = {
+      async submitSignedOrder(input) {
+        expect(input).toMatchObject({
+          onBehalfOf: 12345,
+          ownerId: 12345,
+          signedPayload: {
+            signer: evmAddress,
+            account: evmAddress,
+            marketSlug: "limitless-market-slug",
+            tokenId: "limitless-token-id",
+            side: Side.BUY,
+            size: 1,
+            price: 0.42
+          }
+        });
+        return { order: { id: "limitless-relay-order-1", price: 0.42 } };
+      }
+    };
+    const adapter = new LimitlessExecutionAdapter(userSignedRelayLiveConfig, undefined, relayClient);
+    const prepared = await adapter.prepareOrder(leg());
+    prepared.payload = {
+      ...(prepared.payload as Record<string, unknown>),
+      relayPayload: await limitlessRelayPayload()
+    };
+
+    await expect(adapter.submitOrder(prepared)).resolves.toEqual({
+      venueOrderId: "limitless-relay-order-1",
+      status: "SUBMITTED",
+      filledSize: "0",
+      averagePrice: 0.42
+    });
+  });
+
+  it.each([
+    ["LIMITLESS_RELAY_SIGNER_MISMATCH", { signer: "0x2222222222222222222222222222222222222222" }],
+    ["LIMITLESS_RELAY_ACCOUNT_MISMATCH", { account: "0x2222222222222222222222222222222222222222" }],
+    ["LIMITLESS_RELAY_TOKEN_MISMATCH", { tokenId: "wrong-token" }],
+    ["LIMITLESS_RELAY_SIDE_MISMATCH", { side: Side.SELL }],
+    ["LIMITLESS_RELAY_PRICE_MISMATCH", { price: 0.43 }],
+    ["LIMITLESS_RELAY_SIZE_MISMATCH", { size: 2 }]
+  ])("rejects user-signed relay payload drift: %s", async (reasonCode, signedOverrides) => {
+    const adapter = new LimitlessExecutionAdapter(userSignedRelayLiveConfig, undefined, {
+      async submitSignedOrder() {
+        throw new Error("should not relay");
+      }
+    });
+    const prepared = await adapter.prepareOrder(leg());
+    prepared.payload = {
+      ...(prepared.payload as Record<string, unknown>),
+      relayPayload: await limitlessRelayPayload(signedOverrides)
+    };
+
+    await expect(adapter.submitOrder(prepared)).rejects.toMatchObject({ reasonCode });
+  });
+
+  it("rejects expired prepared user-signed relay orders", async () => {
+    const adapter = new LimitlessExecutionAdapter(userSignedRelayLiveConfig, undefined, {
+      async submitSignedOrder() {
+        throw new Error("should not relay");
+      }
+    });
+    const prepared = await adapter.prepareOrder(leg());
+    prepared.payload = {
+      ...(prepared.payload as Record<string, unknown>),
+      expiresAt: "2026-01-01T00:00:00.000Z",
+      relayPayload: await limitlessRelayPayload()
+    };
+
+    await expect(adapter.submitOrder(prepared)).rejects.toMatchObject({
+      reasonCode: "LIMITLESS_PREPARED_ORDER_EXPIRED"
     });
   });
 
@@ -506,5 +693,42 @@ describe("LimitlessExecutionAdapter", () => {
       delegatedProfileIdConfigured: true
     });
     expect(JSON.stringify(plan)).not.toContain("partner-hmac-secret");
+  });
+
+  it("allows the user-signed live-submit harness only with profile, signer, account, and signed payload", async () => {
+    const relayPayload = await limitlessRelayPayload();
+    const env: NodeJS.ProcessEnv = {
+      LIMITLESS_EXECUTION_MODE: "user_signed_backend_relay",
+      LIMITLESS_LIVE_EXECUTION_ENABLED: "true",
+      LIMITLESS_BASE_URL: "https://api.limitless.exchange",
+      LIMITLESS_PARTNER_ACCOUNT_ENABLED: "true",
+      LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID: "partner-token-id",
+      LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET: "partner-hmac-secret",
+      LIMITLESS_LIVE_SUBMIT_PROFILE_ID: "12345",
+      LIMITLESS_LIVE_SUBMIT_SIGNER_ADDRESS: evmAddress,
+      LIMITLESS_LIVE_SUBMIT_ACCOUNT_ADDRESS: evmAddress,
+      LIMITLESS_LIVE_SUBMIT_SIGNED_PAYLOAD_JSON: JSON.stringify(relayPayload.signedPayload),
+      LIMITLESS_LIVE_SUBMIT_HARNESS_ENABLED: "true",
+      LIMITLESS_LIVE_SUBMIT_OPERATOR_CONFIRM: limitlessLiveSubmitOperatorConfirmation,
+      LIMITLESS_LIVE_SUBMIT_VENUE_MARKET_ID: "limitless-market-slug",
+      LIMITLESS_LIVE_SUBMIT_VENUE_OUTCOME_ID: "limitless-token-id",
+      LIMITLESS_LIVE_SUBMIT_SIDE: "buy",
+      LIMITLESS_LIVE_SUBMIT_SIZE: "0.01",
+      LIMITLESS_LIVE_SUBMIT_PRICE: "0.5",
+      LIMITLESS_LIVE_SUBMIT_MAX_SIZE: "0.05"
+    };
+
+    const plan = evaluateLimitlessLiveSubmitHarness({
+      env,
+      adapterStatus: getLimitlessExecutionAdapterEnvStatus(env)
+    });
+
+    expect(plan.allowed).toBe(true);
+    expect(plan.safeConfig).toMatchObject({
+      executionMode: "user_signed_backend_relay",
+      delegatedProfileIdConfigured: true
+    });
+    expect(JSON.stringify(plan)).not.toContain("partner-hmac-secret");
+    expect(JSON.stringify(plan)).not.toContain(relayPayload.signedPayload.signature);
   });
 });

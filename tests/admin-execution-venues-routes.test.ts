@@ -45,6 +45,16 @@ const delegatedLimitlessEnv: NodeJS.ProcessEnv = {
   LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET: "server-side-limitless-hmac-secret"
 };
 
+const userSignedLimitlessEnv: NodeJS.ProcessEnv = {
+  ...liveReadyEnv,
+  LIMITLESS_EXECUTION_MODE: "user_signed_backend_relay",
+  LIMITLESS_API_KEY: "",
+  LIMITLESS_EXECUTION_PRIVATE_KEY: "",
+  LIMITLESS_PARTNER_ACCOUNT_ENABLED: "true",
+  LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID: "server-side-limitless-hmac-token",
+  LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET: "server-side-limitless-hmac-secret"
+};
+
 const buildService = async (): Promise<ExecutionVenuesAdminService> => {
   const repoRoot = await mkdtemp(join(tmpdir(), "lotus-execution-venues-"));
   const artifactDir = join(repoRoot, "artifacts", "execution");
@@ -115,6 +125,19 @@ const buildDelegatedLimitlessService = async (): Promise<ExecutionVenuesAdminSer
   return new ExecutionVenuesAdminService({
     repoRoot,
     env: delegatedLimitlessEnv,
+    venueAccountRepository: {
+      async countActiveAccountsByVenue() {
+        return { LIMITLESS: 1 };
+      }
+    }
+  });
+};
+
+const buildUserSignedLimitlessService = async (): Promise<ExecutionVenuesAdminService> => {
+  const repoRoot = await mkdtemp(join(tmpdir(), "lotus-execution-venues-"));
+  return new ExecutionVenuesAdminService({
+    repoRoot,
+    env: userSignedLimitlessEnv,
     venueAccountRepository: {
       async countActiveAccountsByVenue() {
         return { LIMITLESS: 1 };
@@ -297,6 +320,41 @@ describe("admin execution venue readiness routes", () => {
     expect(response.body).not.toContain("server-side-limitless-hmac-secret");
     expect(response.body).not.toContain("privateKey");
     expect(response.body).not.toContain("auth");
+    await app.close();
+  });
+
+  it("reports user-signed Limitless relay readiness without requiring the legacy private key", async () => {
+    const app = Fastify({ logger: false });
+    await registerAdminExecutionVenuesRoutes(app, adminMiddleware, {
+      executionVenuesAdminService: await buildUserSignedLimitlessService()
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/admin/execution-venues/limitless"
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.venue).toMatchObject({
+      venue: "LIMITLESS",
+      adapter: "LimitlessExecutionAdapter",
+      executionSigningModel: "USER_SIGNED_BACKEND_RELAY",
+      structuralReadiness: "LIVE_DISABLED",
+      operationalStatus: "LIVE_DISABLED",
+      liveSubmissionSupported: true,
+      liveExecutionEnabled: false,
+      requiredEnvPresent: true,
+      missingEnv: [],
+      venueAccountRequired: true,
+      venueAccountConfigured: true,
+      activeLinkedAccounts: 1,
+      accountSetupBlockers: []
+    });
+    expect(body.venue.operatorMessage).toContain("user-signed backend relay");
+    expect(response.body).not.toContain("LIMITLESS_EXECUTION_PRIVATE_KEY");
+    expect(response.body).not.toContain("server-side-limitless-hmac-token");
+    expect(response.body).not.toContain("server-side-limitless-hmac-secret");
+    expect(response.body).not.toContain("privateKey");
     await app.close();
   });
 });

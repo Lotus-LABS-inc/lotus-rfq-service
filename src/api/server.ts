@@ -1200,7 +1200,11 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         buildPolymarketExecutionAdapterV2ConfigFromEnv(process.env)
       ));
     }
-    if (process.env.LIMITLESS_EXECUTION_MODE === "backend_signer" || process.env.LIMITLESS_EXECUTION_MODE === "delegated_partner_server_wallet") {
+    if (
+      process.env.LIMITLESS_EXECUTION_MODE === "backend_signer" ||
+      process.env.LIMITLESS_EXECUTION_MODE === "delegated_partner_server_wallet" ||
+      process.env.LIMITLESS_EXECUTION_MODE === "user_signed_backend_relay"
+    ) {
       adapterRegistry.register(new LimitlessExecutionAdapter(
         buildLimitlessExecutionAdapterConfigFromEnv(process.env)
       ));

@@ -309,7 +309,7 @@ export class ExecutionVenuesAdminService {
   private limitlessBlockers(adapterStatus: LimitlessExecutionAdapterEnvStatus): string[] {
     const blockers: string[] = [];
     if (!adapterStatus.featureFlagSelected) {
-      blockers.push("LIMITLESS_EXECUTION_MODE must be backend_signer or delegated_partner_server_wallet before this adapter is selected.");
+      blockers.push("LIMITLESS_EXECUTION_MODE must be user_signed_backend_relay, backend_signer, or delegated_partner_server_wallet before this adapter is selected.");
     }
     if (!adapterStatus.dryRunRequiredEnvPresent) {
       blockers.push(`Missing Limitless dry-run env: ${adapterStatus.missingDryRunEnv.join(", ")}.`);
@@ -329,7 +329,16 @@ export class ExecutionVenuesAdminService {
     adapterStatus: LimitlessExecutionAdapterEnvStatus
   ): string {
     if (!adapterStatus.featureFlagSelected) {
-      return "Limitless adapter is scaffolded but not selected. Set LIMITLESS_EXECUTION_MODE=delegated_partner_server_wallet for the partner server-wallet flow, or backend_signer only for the legacy reviewed key flow.";
+      return "Limitless adapter is scaffolded but not selected. Set LIMITLESS_EXECUTION_MODE=user_signed_backend_relay for the non-custodial Turnkey wallet flow; delegated_partner_server_wallet and backend_signer are non-default legacy/operator paths.";
+    }
+    if (adapterStatus.executionMode === "user_signed_backend_relay") {
+      if (status === "STRUCTURALLY_READY") {
+        return "Limitless user-signed backend relay is structurally ready. Users keep control of their Turnkey EVM wallets; Lotus only relays signed orders with server-side HMAC after quote and account checks.";
+      }
+      if (status === "LIVE_DISABLED") {
+        return "Limitless user-signed backend relay dry-run path is configured, but live relay is disabled.";
+      }
+      return "Limitless user-signed backend relay is not fully configured.";
     }
     if (adapterStatus.executionMode === "delegated_partner_server_wallet") {
       if (status === "STRUCTURALLY_READY") {
@@ -439,7 +448,10 @@ export class ExecutionVenuesAdminService {
     const venueAccountRequired = summary.venue === "POLYMARKET" ||
       summary.venue === "OPINION" ||
       summary.venue === "PREDICT_FUN" ||
-      (summary.venue === "LIMITLESS" && summary.executionSigningModel === "DELEGATED_BACKEND_SIGNER");
+      (summary.venue === "LIMITLESS" && (
+        summary.executionSigningModel === "DELEGATED_BACKEND_SIGNER" ||
+        summary.executionSigningModel === "USER_SIGNED_BACKEND_RELAY"
+      ));
     const activeLinkedAccounts = accountCounts[summary.venue] ?? 0;
     const venueAccountConfigured = !venueAccountRequired || activeLinkedAccounts > 0;
     return {

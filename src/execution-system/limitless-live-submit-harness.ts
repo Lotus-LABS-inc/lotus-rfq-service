@@ -62,7 +62,7 @@ export const evaluateLimitlessLiveSubmitHarness = (
   const price = parsePositiveNumber(env.LIMITLESS_LIVE_SUBMIT_PRICE);
 
   if (!enabled) blockers.push("LIMITLESS_LIVE_SUBMIT_HARNESS_ENABLED must be true");
-  if (!adapterStatus.featureFlagSelected) blockers.push("LIMITLESS_EXECUTION_MODE must be backend_signer or delegated_partner_server_wallet");
+  if (!adapterStatus.featureFlagSelected) blockers.push("LIMITLESS_EXECUTION_MODE must be backend_signer, delegated_partner_server_wallet, or user_signed_backend_relay");
   if (!adapterStatus.liveExecutionEnabled) blockers.push("LIMITLESS_LIVE_EXECUTION_ENABLED must be true");
   if (adapterStatus.readinessState !== "LIVE_READY") {
     blockers.push(`Limitless adapter must be LIVE_READY; current state is ${adapterStatus.readinessState}`);
@@ -78,6 +78,26 @@ export const evaluateLimitlessLiveSubmitHarness = (
   }
   if (adapterStatus.executionMode === "delegated_partner_server_wallet" && !nonEmpty(env.LIMITLESS_LIVE_SUBMIT_PROFILE_ID) && !nonEmpty(env.LIMITLESS_DELEGATED_PROFILE_ID)) {
     blockers.push("LIMITLESS_LIVE_SUBMIT_PROFILE_ID or LIMITLESS_DELEGATED_PROFILE_ID is required for delegated Limitless live submit");
+  }
+  if (adapterStatus.executionMode === "user_signed_backend_relay") {
+    if (!nonEmpty(env.LIMITLESS_LIVE_SUBMIT_PROFILE_ID)) {
+      blockers.push("LIMITLESS_LIVE_SUBMIT_PROFILE_ID is required for user-signed Limitless relay");
+    }
+    if (!nonEmpty(env.LIMITLESS_LIVE_SUBMIT_SIGNER_ADDRESS)) {
+      blockers.push("LIMITLESS_LIVE_SUBMIT_SIGNER_ADDRESS is required for user-signed Limitless relay");
+    }
+    if (!nonEmpty(env.LIMITLESS_LIVE_SUBMIT_ACCOUNT_ADDRESS)) {
+      blockers.push("LIMITLESS_LIVE_SUBMIT_ACCOUNT_ADDRESS is required for user-signed Limitless relay");
+    }
+    if (!nonEmpty(env.LIMITLESS_LIVE_SUBMIT_SIGNED_PAYLOAD_JSON)) {
+      blockers.push("LIMITLESS_LIVE_SUBMIT_SIGNED_PAYLOAD_JSON is required for user-signed Limitless relay");
+    } else {
+      try {
+        JSON.parse(env.LIMITLESS_LIVE_SUBMIT_SIGNED_PAYLOAD_JSON);
+      } catch {
+        blockers.push("LIMITLESS_LIVE_SUBMIT_SIGNED_PAYLOAD_JSON must be valid JSON");
+      }
+    }
   }
   if (!side) blockers.push("LIMITLESS_LIVE_SUBMIT_SIDE must be buy or sell");
   if (!size) blockers.push("LIMITLESS_LIVE_SUBMIT_SIZE must be a positive number");
@@ -178,6 +198,20 @@ export const runLimitlessLiveSubmitHarness = async (
     return { plan, submitted: false };
   }
   const preparedOrder = await adapter.prepareOrder(buildLimitlessLiveSubmitHarnessLeg(env));
+  if (config.executionMode === "user_signed_backend_relay") {
+    preparedOrder.payload = {
+      ...(typeof preparedOrder.payload === "object" && preparedOrder.payload !== null ? preparedOrder.payload : {}),
+      relayPayload: {
+        expectedBinding: {
+          profileId: env.LIMITLESS_LIVE_SUBMIT_PROFILE_ID,
+          venueAccountId: env.LIMITLESS_LIVE_SUBMIT_PROFILE_ID,
+          signerAddress: env.LIMITLESS_LIVE_SUBMIT_SIGNER_ADDRESS,
+          venueAccountAddress: env.LIMITLESS_LIVE_SUBMIT_ACCOUNT_ADDRESS
+        },
+        signedPayload: JSON.parse(env.LIMITLESS_LIVE_SUBMIT_SIGNED_PAYLOAD_JSON!)
+      }
+    };
+  }
   const safePreparedOrder = redactSensitiveLimitlessHarnessArtifactValue(preparedOrder);
   const submitResult = await adapter.submitOrder(preparedOrder).catch((error: unknown) => {
     const normalized = adapter.normalizeVenueError(error);
