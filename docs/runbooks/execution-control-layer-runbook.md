@@ -1,7 +1,7 @@
 # Execution Control Layer Runbook
 
 Status: ACTIVE  
-Last Updated: 2026-04-25
+Last Updated: 2026-05-06
 
 ## Purpose
 The execution control layer is the hard boundary between decisioning and executable action.
@@ -116,7 +116,7 @@ Current scope:
 - venue entries for `POLYMARKET`, `LIMITLESS`, `OPINION`, `MYRIAD`, and `PREDICT_FUN`
 - venue-by-venue hybrid execution model:
   - `POLYMARKET`: `BACKEND_SIGNER` through `PolymarketExecutionAdapterV2`
-  - `LIMITLESS`: `BACKEND_SIGNER` scaffold through `LimitlessExecutionAdapter`, live flag default false
+  - `LIMITLESS`: `USER_SIGNED_BACKEND_RELAY` through `LimitlessExecutionAdapter`, live flag default false
   - `OPINION`: `USER_SIGNED_BACKEND_RELAY`; builder mode can relay user-signed orders, but Lotus must not sign Safe/user-wallet actions
   - `PREDICT_FUN`: `USER_SIGNED_BACKEND_RELAY`; OAuth order API can relay signed orders when access is enabled, but Lotus must not sign orders with its own key
   - `MYRIAD`: `USER_SIGNED` until official delegated/backend signing is reviewed
@@ -158,7 +158,7 @@ Current Polymarket interpretation:
 
 Non-Polymarket interpretation:
 - `marketRoutingCoverage=COVERED_BY_MATCHING` means Lotus can surface venue market coverage for matching/routing review
-- `LIMITLESS` may report `liveSubmissionSupported=true` for the delegated partner server-wallet adapter or the legacy backend-signer adapter; `LIMITLESS_LIVE_EXECUTION_ENABLED=false` remains the default
+- `LIMITLESS` may report `liveSubmissionSupported=true` for the user-signed backend relay adapter; `LIMITLESS_LIVE_EXECUTION_ENABLED=false` remains the default
 - `OPINION` remains a prepare-only/manual Safe-link scaffold until builder-mode account linking and settlement evidence are reviewed
 - `POST /user/venue-accounts/opinion/complete-link` is the private-beta manual link path: it requires a user JWT, accepts only a valid Opinion Safe EVM address, forces `venueAccountType=SAFE`, and stores safe public metadata only
 - the current Opinion blocker is API scope/endpoint availability for builder account creation; the existing Opinion API key has not been confirmed to grant the required builder account creation path
@@ -169,16 +169,17 @@ Non-Polymarket interpretation:
 - `operationalStatus=NOT_CONFIGURED` is expected until a venue-specific execution adapter, smoke harness, settlement proof, and operator signoff are implemented
 - do not treat funding readiness or market coverage as live execution readiness
 
-Limitless delegated/server-wallet boundary:
-- `LIMITLESS_EXECUTION_MODE=delegated_partner_server_wallet` selects the preferred beta adapter scaffold
-- `LIMITLESS_PARTNER_ACCOUNT_ENABLED=true`, `LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID`, and `LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET` are required for delegated mode
-- `POST /user/venue-accounts/limitless/ensure` creates or returns a Limitless server-wallet partner account and stores only public `profileId/account` metadata
-- `LIMITLESS_EXECUTION_PRIVATE_KEY` is not required in delegated mode; it is only valid for the legacy `LIMITLESS_EXECUTION_MODE=backend_signer` path
+Limitless user-signed backend relay boundary:
+- `LIMITLESS_EXECUTION_MODE=user_signed_backend_relay` selects the initial non-custodial production adapter scaffold
+- `LIMITLESS_PARTNER_ACCOUNT_ENABLED=true`, `LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID`, and `LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET` are required for EOA account setup and backend relay
+- `POST /user/venue-accounts/setup-batch` returns a Limitless ownership-message signature request for the user's Turnkey EVM wallet; `complete-batch` stores only public `profileId/account` metadata
+- Lotus never signs Limitless orders in this mode. The frontend signs the Limitless EIP-712 order payload with the user's Turnkey EVM wallet, then the backend verifies and relays it with HMAC.
+- `LIMITLESS_EXECUTION_PRIVATE_KEY` must remain absent in user-signed relay mode; it is only valid for the legacy `LIMITLESS_EXECUTION_MODE=backend_signer` path after explicit custody approval
 - `LIMITLESS_LIVE_EXECUTION_ENABLED=true` is required before submit attempts
-- `LIMITLESS_BASE_URL` plus the mode-specific credentials are server-only live-submit inputs
-- `npm run execution:limitless-live-submit-harness` writes a redacted operator checklist artifact and remains blocked unless `LIMITLESS_LIVE_SUBMIT_HARNESS_ENABLED=true`, the operator confirmation string, and tiny order envs are configured
+- the official Limitless API host defaults in code; only mode-specific credentials are required server-side
+- `npm run execution:limitless-live-submit-harness` writes a redacted operator checklist artifact and remains blocked unless `LIMITLESS_LIVE_SUBMIT_HARNESS_ENABLED=true`, the operator confirmation string, tiny order envs, linked profile/account envs, and a user-signed payload are configured
 - `/admin/execution-venues/LIMITLESS` reads `artifacts/execution/limitless-live-submit-checklist.json` when present so operators can see the latest harness mode, blockers, warnings, and submit result without secrets
-- Limitless settlement evidence is read through `POST /orders/status/batch`; delegated reads must be scoped to the active server-wallet profile with `x-on-behalf-of`
+- Limitless settlement evidence is read through `POST /orders/status/batch`; profile-scoped reads must use the active user/venue `profileId` where required by the API
 - submit success is not settlement: only matched order evidence plus maker-match/trade/tx evidence plus finality such as `MINED`/settled/finalized may map to `SETTLEMENT_VERIFIED`
 - submitted-but-unmatched, missing, stale, ambiguous, or unrecognized Limitless status evidence must remain `SETTLEMENT_PENDING` or `SETTLEMENT_UNKNOWN`
 - the live-submit harness artifact includes submit result, fill state, settlement state, and `settlementVerified`; broader live route testing must wait until a tiny operator-approved harness run proves this evidence path

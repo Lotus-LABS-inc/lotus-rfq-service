@@ -64,7 +64,8 @@ Pair-first route promotion does not by itself approve live execution. Before any
 
 - deploy the backend containing the current venue adapter and settlement evidence code
 - confirm `GET /admin/execution-venues` and `GET /admin/execution-venues/LIMITLESS`
-- run the Limitless live-submit harness in dry/checklist mode
+- keep `LIMITLESS_EXECUTION_MODE=user_signed_backend_relay` for the initial non-custodial path
+- run the Limitless live-submit harness in dry/checklist mode with a user-owned Turnkey EVM signer/account binding
 - run one tiny operator-approved Limitless live harness only after explicit live gates are set
 - inspect the redacted harness artifact for submit result, fill state, settlement state, and `settlementVerified`
 - if a route includes Predict.fun after explicit lane approval, run the Predict.fun user-signed live-submit harness first; backend must relay only a frontend Turnkey-signed payload and must not sign the order
@@ -73,7 +74,7 @@ Pair-first route promotion does not by itself approve live execution. Before any
 Settlement rules:
 
 - submit success is not settlement
-- Limitless settlement may be verified only from `POST /orders/status/batch` evidence scoped to the active delegated profile when using server-wallet mode
+- Limitless settlement may be verified only from `POST /orders/status/batch` evidence scoped to the active user/venue profile when the API requires profile scoping
 - Predict.fun settlement may be verified only from venue status evidence where a final status such as `SETTLED`/`COMPLETED` has zero remaining size and matching linked-account evidence; `FILLED`/`MATCHED` alone is fill evidence, not settlement
 - matched order evidence plus maker-match/trade/tx evidence plus finality such as `MINED`/settled/finalized is required for `SETTLEMENT_VERIFIED`
 - unmatched, missing, stale, ambiguous, failed, or unrecognized evidence must remain pending or failed-closed

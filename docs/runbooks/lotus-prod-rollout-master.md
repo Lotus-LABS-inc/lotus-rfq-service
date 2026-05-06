@@ -2,7 +2,7 @@
 
 Status: PRODUCTION ROLLOUT SOURCE OF TRUTH
 Audience: engineering, security, infra, operator, market-integration owners
-Last updated: 2026-04-27
+Last updated: 2026-05-06
 
 ## 1. Purpose
 
@@ -45,6 +45,7 @@ Hard production boundaries:
 | Backend broadcast | Backend transaction broadcasting stays disabled unless explicitly approved for a specific adapter. |
 | LI.FI live execution | Live LI.FI execution stays disabled until separately approved. |
 | Venue execution | Live venue order submission stays disabled until the execution adapter and lane gates pass. |
+| Quote mappings | Production quote routing reads venue market IDs only from approved shared-core/Postgres profiles. No venue market IDs or env override maps are allowed. |
 | Funding enforcement | Route-level funding enforcement is enabled only for routes where every venue has fresh persisted `READY_TO_TRADE` evidence. |
 | Withdrawal completion | Completion persistence is disabled by default and may be enabled only for one controlled venue at a time after fresh evidence gates pass. |
 | Limitless withdrawals | Limitless normal user withdrawals are `AUTO_RESOLUTION_ONLY`; partner-managed backend withdrawal remains blocked until explicit custody/security/operator approval. |
@@ -206,6 +207,13 @@ Market approval rules:
 | Stale evidence | Any stale market evidence blocks launch unless refreshed. |
 | Operator approval | Required for every production market lane. |
 
+Quote source rules:
+
+- Shared-core/Postgres is the production source of venue quote mappings.
+- `EXECUTION_QUOTE_VENUE_MARKET_MAP_JSON` must not be configured in production.
+- Quote readiness audit and smoke default to `POLYMARKET,LIMITLESS`; no env is required for that default.
+- Missing executable quote IDs are blockers, not env TODOs.
+
 Market data envs:
 
 | Env | Required | Example | Secret | Production expectation |
@@ -218,7 +226,7 @@ Market data envs:
 | `PREDICT_API_KEY` | If Predict.fun requires auth | `<server-side key>` | Yes | Secret manager only. |
 | `PREDICT_ACCOUNT_AUTH_TIMEOUT_MS` | Optional | `15000` | No | Timeout for Predict.fun auth-message/JWT/account-linking calls. |
 | `PREDICT_WS_MAINNET_URL` | If Predict.fun WS used | `wss://ws.predict.fun/` | No | Mainnet WS host. |
-| `LIMITLESS_BASE_URL` | If Limitless used | `https://api.limitless.exchange` | No | Official Limitless API host. |
+| Limitless official API host | Built-in default | `https://api.limitless.exchange` | No | Do not configure env unless a reviewed non-production or emergency override is needed. |
 | `LIMITLESS_API_KEY` | If Limitless read APIs require auth | `<server-side key>` | Yes | Secret manager only. |
 | `OPINION_CLOB_BASE_URL` | If Opinion CLOB used | `https://proxy.opinion.trade:8443/openapi` | No | Approved Opinion CLOB API host. |
 | `OPINION_OPENAPI_BASE_URL` | If Opinion metadata used | `https://openapi.opinion.trade/openapi` | No | Approved Opinion OpenAPI host. |
@@ -255,9 +263,12 @@ Execution readiness is separate from funding and withdrawal readiness.
 | `POLYMARKET_DEPOSIT_WALLET_IMPLEMENTATION_ADDRESS` | Optional | SDK default | No | Override only if Polymarket changes the active implementation. |
 | `POLYMARKET_TICK_SIZE` | Optional | `0.01` | No | Must match market tick size when used. |
 | `POLYMARKET_NEG_RISK` | Optional | `false` | No | Must match market risk mode. |
-| `LIMITLESS_EXECUTION_MODE` | Yes | `disabled` | No | Use `delegated_partner_server_wallet` for the preferred beta path. Use `backend_signer` only after legacy key custody review. |
-| `LIMITLESS_LIVE_EXECUTION_ENABLED` | Yes | `false` | No | Must remain false until Limitless live-submit and settlement evidence review. |
-| `LIMITLESS_EXECUTION_PRIVATE_KEY` | Legacy backend signer only | `<secret>` | Yes | Not required in delegated server-wallet mode. Server-side only; do not configure before explicit backend-signer approval. |
+| `LIMITLESS_EXECUTION_MODE` | Yes | `disabled` | No | Initial production mode is `user_signed_backend_relay`. `delegated_partner_server_wallet` and `backend_signer` are non-default legacy/operator paths. |
+| `LIMITLESS_LIVE_EXECUTION_ENABLED` | Yes | `false` | No | Must remain false until user-signed relay tiny live proof and settlement evidence review pass. |
+| `LIMITLESS_PARTNER_ACCOUNT_ENABLED` | If Limitless relay/setup enabled | `true` | No | Required for EOA partner-account setup and user-signed backend relay. |
+| `LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID` | If Limitless relay/setup enabled | `<secret>` | Yes | Server-side HMAC token id; never returned to frontend. |
+| `LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET` | If Limitless relay/setup enabled | `<secret>` | Yes | Secret manager only; never logged or returned. |
+| `LIMITLESS_EXECUTION_PRIVATE_KEY` | Legacy backend signer only | `<secret>` | Yes | Must remain absent for `user_signed_backend_relay`; do not configure before explicit backend-signer custody approval. |
 | `OPINION_EXECUTION_MODE` | Yes | `disabled` | No | Set to `user_signed_backend_relay` only for prepare-only relay instructions until submit/status/settlement are reviewed. |
 | `OPINION_LIVE_EXECUTION_ENABLED` | Yes | `false` | No | Private beta backend submission remains disabled; user-signed backend relay only after builder-mode relay is implemented and reviewed. |
 | `MYRIAD_LIVE_EXECUTION_ENABLED` | Yes | `false` | No | Private beta backend submission remains disabled; user-signed flow only. |
@@ -286,12 +297,12 @@ Execution go/no-go:
 
 Turnkey venue account rule for user-signed venues:
 
-- The user's active Turnkey EVM wallet is the canonical identity wallet for Opinion, Predict.fun, and optional Limitless partner-account setup.
+- The user's active Turnkey EVM wallet is the canonical identity wallet for Opinion, Predict.fun, and Limitless EOA partner-account setup.
 - `POST /user/venue-accounts/{venue}/ensure` must be completed before any signed relay submit path is enabled for that venue.
-- Opinion account bindings store safe public metadata for the Opinion Safe/multisig account; Predict.fun bindings store safe OAuth/connected-wallet account metadata; Limitless partner-account bindings store only the returned public profile/account metadata. Myriad is not account-linking for beta and remains wallet-call/user-signed.
+- Opinion account bindings store safe public metadata for the Opinion Safe/multisig account; Predict.fun bindings store safe OAuth/connected-wallet account metadata; Limitless EOA partner-account bindings store only public wallet address, `profileId`, and account status metadata. Myriad is not account-linking for beta and remains wallet-call/user-signed.
 - Batch setup uses `POST /user/venue-accounts/setup-batch` and `POST /user/venue-accounts/complete-batch`. The frontend may sign every returned setup request sequentially in one UX session, but each signature request must still name the venue, signer, request type, and exact message/payload.
 - Predict.fun account linking uses `POST /user/venue-accounts/predict_fun/auth-message`, frontend Turnkey signing, then `POST /user/venue-accounts/predict_fun/complete-auth`. Lotus may exchange the signature for a temporary Predict JWT server-side, but it must not store or return that JWT.
-- Limitless delegated beta account setup is enabled when `LIMITLESS_EXECUTION_MODE=delegated_partner_server_wallet`, `LIMITLESS_PARTNER_ACCOUNT_ENABLED=true`, and HMAC credentials are configured server-side. Lotus creates/ensures a Limitless server-wallet partner account with `createServerWallet=true` and stores only public `profileId/account` metadata. The older EOA ownership-message path remains legacy-only.
+- Limitless initial production setup is EOA/user-signed: `setup-batch` returns a Limitless ownership-message signature request for the user's Turnkey EVM wallet, and `complete-batch` creates/stores only public `profileId/account` metadata. `delegated_partner_server_wallet` remains a non-default operator path and must not be selected for the first user-owned-wallet rollout.
 - Signed relay submit must reject any payload whose signer/account does not match the user's active Turnkey EVM wallet and active `user_venue_accounts` binding.
 - Lotus must not backend-sign user orders, export keys, broadcast user transactions, store raw signatures as secrets, or mix Polymarket operator signer/proxy wallet state with user Turnkey venue-account bindings.
 | RFQ lifecycle | `npx vitest run test/integration/rfq-lifecycle.test.ts --maxWorkers=1` | Pass before production RFQ accept changes. |
@@ -450,14 +461,18 @@ Withdrawal completion persistence may be enabled only after:
 
 | Env | Example | Production expectation |
 |---|---|---|
-| `LIMITLESS_BASE_URL` | `https://api.limitless.exchange` | Official Limitless base URL. |
-| `LIMITLESS_EXECUTION_MODE` | `delegated_partner_server_wallet` | Preferred beta execution mode for delegated server-wallet accounts. `backend_signer` is legacy-only. |
-| `LIMITLESS_LIVE_EXECUTION_ENABLED` | `false` | Must remain false until the delegated live-submit harness and settlement evidence pass. |
-| `LIMITLESS_PARTNER_ACCOUNT_ENABLED` | `true` | Required for delegated server-wallet account creation. |
-| `LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID` | `<secret>` | Server-side HMAC token id with account creation/delegated signing/trading scopes. |
+| Official Limitless API host | `https://api.limitless.exchange` | Built-in code default; do not set env unless a reviewed override is needed. |
+| `LIMITLESS_EXECUTION_MODE` | `user_signed_backend_relay` | Preferred initial production mode. Users sign with their Turnkey EVM wallets; Lotus only verifies and relays signed payloads with HMAC. |
+| `LIMITLESS_LIVE_EXECUTION_ENABLED` | `false` | Must remain false until the user-signed relay harness and settlement evidence pass. |
+| `LIMITLESS_PARTNER_ACCOUNT_ENABLED` | `true` | Required for EOA partner-account setup and user-signed relay. |
+| `LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID` | `<secret>` | Server-side HMAC token id with account creation/relay scopes. |
 | `LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET` | `<secret>` | Secret manager only; never logged or returned. |
-| `LIMITLESS_DELEGATED_PROFILE_ID` | `1291576` | Optional operator harness profile id. Normal user execution should resolve this from `user_venue_accounts`. |
-| `LIMITLESS_EXECUTION_PRIVATE_KEY` | empty unless legacy reviewed | Required only for `LIMITLESS_EXECUTION_MODE=backend_signer`; not required in delegated server-wallet mode. |
+| `LIMITLESS_LIVE_SUBMIT_PROFILE_ID` | `1291576` | Optional operator harness profile id. Normal user execution resolves this from `user_venue_accounts`. |
+| `LIMITLESS_LIVE_SUBMIT_SIGNER_ADDRESS` | `0x...` | Harness-only expected Turnkey EVM signer address for a tiny user-signed relay test. |
+| `LIMITLESS_LIVE_SUBMIT_ACCOUNT_ADDRESS` | `0x...` | Harness-only expected Limitless account address for a tiny user-signed relay test. |
+| `LIMITLESS_LIVE_SUBMIT_SIGNED_PAYLOAD_JSON` | `<signed order json>` | Harness-only user-signed Limitless order payload; never commit or store in long-lived artifacts. |
+| `LIMITLESS_DELEGATED_PROFILE_ID` | `1291576` | Optional only for delegated/server-wallet operator harnesses; not the initial user-owned-wallet path. |
+| `LIMITLESS_EXECUTION_PRIVATE_KEY` | empty unless legacy reviewed | Required only for `LIMITLESS_EXECUTION_MODE=backend_signer`; must stay absent for user-signed relay. |
 | `LIMITLESS_FUNDING_DESTINATION_ADDRESS` | `0x1234...abcd` | Approved funding destination. |
 | `LIMITLESS_FUNDING_READINESS_MODE` | `LIVE_READ` | Live/operator read mode. |
 | `LIMITLESS_FUNDING_BALANCE_URL` | `https://ops.example.com/lotus/limitless/balance` | Approved balance read service. |
