@@ -6,6 +6,7 @@ import { normalizePredictOrderbook, PredictQuoteReader } from "../src/integratio
 import { LimitlessQuoteReader } from "../src/integrations/limitless/limitless-quote-reader.js";
 import { PolymarketQuoteReader, resolveOutcomeTokenFromGammaMarkets } from "../src/integrations/polymarket/polymarket-quote-reader.js";
 import { MyriadQuoteReader } from "../src/integrations/myriad/myriad-quote-reader.js";
+import { parsePredictMarketOrderbookResponse } from "../src/integrations/predict/predict-schemas.js";
 
 const now = new Date("2026-05-05T22:30:00.000Z");
 
@@ -30,6 +31,36 @@ describe("extended venue quote readers", () => {
     expect(calculated.effectiveFeeBps).toBe(25);
     expect(calculated.missingFactors).not.toContain("FEE_DISCOVERY");
   });
+
+  it("normalizes Predict.fun tuple orderbook levels from the venue API", () => {
+    const parsed = parsePredictMarketOrderbookResponse({
+      data: {
+        marketId: "predict-market-1",
+        bids: [[0.487, 16.8867]],
+        asks: [[0.508, 437.93]]
+      }
+    });
+    const snapshot = normalizePredictOrderbook({
+      payload: {
+        bids: [[0.487, 16.8867]],
+        asks: [[0.508, 437.93]],
+        timestamp: now.toISOString()
+      },
+      venueMarketId: "predict-market-1",
+      receivedAt: now,
+      environment: "mainnet",
+      venueFeeBps: 25
+    });
+
+    const calculated = calculateVenueQuote({ snapshot, side: "buy", amount: 1, now });
+
+    expect(parsed.bids[0]).toMatchObject({ price: "0.487", size: "16.8867" });
+    expect(parsed.asks[0]).toMatchObject({ price: "0.508", size: "437.93" });
+    expect(snapshot.bids[0]).toEqual({ price: "0.487", size: "16.8867" });
+    expect(snapshot.asks[0]).toEqual({ price: "0.508", size: "437.93" });
+    expect(calculated.ok).toBe(true);
+  });
+
 
   it("Predict reader fetches stats alongside orderbook", async () => {
     const reader = new PredictQuoteReader({

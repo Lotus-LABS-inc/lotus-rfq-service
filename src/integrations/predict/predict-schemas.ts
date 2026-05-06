@@ -83,7 +83,7 @@ const lastSaleSchema = z.object({
   matched_at: timestampSchema.nullable().optional()
 }).passthrough();
 
-const orderbookLevelSchema = z.object({
+const orderbookLevelObjectSchema = z.object({
   price: numericStringSchema,
   size: z.union([z.string(), z.number().finite(), z.object({ size: z.union([z.string(), z.number().finite()]) }).passthrough()])
 }).passthrough().transform((level) => {
@@ -94,6 +94,15 @@ const orderbookLevelSchema = z.object({
     raw: level as Record<string, unknown>
   };
 });
+const orderbookLevelTupleSchema = z.tuple([
+  z.union([z.string(), z.number().finite()]),
+  z.union([z.string(), z.number().finite()])
+]).transform((level) => ({
+  price: String(level[0]),
+  size: String(level[1]),
+  raw: { price: level[0], size: level[1] }
+}));
+const orderbookLevelSchema = z.union([orderbookLevelObjectSchema, orderbookLevelTupleSchema]);
 
 const orderbookSchema = z.object({
   marketId: z.union([z.string(), z.number().finite()]).optional().transform((value) => value === undefined ? undefined : String(value)),
