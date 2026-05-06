@@ -9,7 +9,7 @@ import type { VenueFeeQuote } from "../../core/sor/venue-fees.js";
 import type { MyriadClient } from "./myriad-client.js";
 
 export interface MyriadQuoteReaderConfig {
-  client: Pick<MyriadClient, "getMarketQuote">;
+  client: Pick<MyriadClient, "getMarketQuote"> & Partial<Pick<MyriadClient, "getMarket">>;
   streamCache: QuoteSnapshotCache;
   now?: () => Date;
 }
@@ -32,9 +32,11 @@ export class MyriadQuoteReader implements VenueQuoteSnapshotReader {
       return cached;
     }
 
+    const marketDetail = await this.config.client.getMarket?.({ idOrSlug: input.venueMarketId }).catch(() => null);
+    const venueOutcomeId = resolveMyriadOutcome(input.venueOutcomeId, input.canonicalOutcomeId, marketDetail);
     const payload = await this.config.client.getMarketQuote({
       market_slug: input.venueMarketId,
-      outcome_id: parseOutcomeId(input.venueOutcomeId),
+      outcome_id: parseOutcomeId(venueOutcomeId),
       action: input.side,
       shares: input.quantity,
       slippage: 0.005
@@ -42,7 +44,7 @@ export class MyriadQuoteReader implements VenueQuoteSnapshotReader {
     return normalizeMyriadQuote({
       payload,
       venueMarketId: input.venueMarketId,
-      venueOutcomeId: input.venueOutcomeId,
+      venueOutcomeId,
       side: input.side,
       quantity: input.quantity,
       receivedAt: this.now()
@@ -112,6 +114,32 @@ const parseOutcomeId = (value: string | undefined): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const resolveMyriadOutcome = (
+  configuredOutcomeId: string | undefined,
+  canonicalOutcomeId: string | undefined,
+  marketDetail: unknown
+): string | undefined => {
+  if (configuredOutcomeId) {
+    return configuredOutcomeId;
+  }
+  if (!canonicalOutcomeId) {
+    return undefined;
+  }
+  const rawOutcomes = asRecord(marketDetail).outcomes;
+  const outcomes: readonly unknown[] = Array.isArray(rawOutcomes) ? rawOutcomes : [];
+  const normalizedCanonical = normalizeOutcomeLabel(canonicalOutcomeId);
+  const matches = outcomes.flatMap((outcome) => {
+    const record = asRecord(outcome);
+    const title = firstString(record.title, record.label, record.name);
+    const id = firstString(record.id, record.outcomeId, record.outcome_id);
+    return title && id && normalizeOutcomeLabel(title) === normalizedCanonical ? [id] : [];
+  });
+  return matches.length === 1 ? matches[0] : undefined;
+};
+
+const normalizeOutcomeLabel = (value: string): string =>
+  value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+
 const sumFees = (value: unknown): InstanceType<typeof Decimal> | null => {
   const record = asRecord(value);
   const entries = Object.values(record).flatMap((entry) => {
@@ -143,3 +171,15 @@ const unwrapRecord = (payload: unknown): Record<string, unknown> => {
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
+
+const firstString = (...values: readonly unknown[]): string | undefined => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+  return undefined;
+};

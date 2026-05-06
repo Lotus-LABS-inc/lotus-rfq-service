@@ -4,6 +4,8 @@ import { normalizeMyriadQuote } from "../src/integrations/myriad/myriad-quote-re
 import { normalizeOpinionOrderbook, OpinionQuoteReader, parseOpinionTopicRate } from "../src/integrations/opinion/opinion-quote-reader.js";
 import { normalizePredictOrderbook, PredictQuoteReader } from "../src/integrations/predict/predict-quote-reader.js";
 import { LimitlessQuoteReader } from "../src/integrations/limitless/limitless-quote-reader.js";
+import { PolymarketQuoteReader, resolveOutcomeTokenFromGammaMarkets } from "../src/integrations/polymarket/polymarket-quote-reader.js";
+import { MyriadQuoteReader } from "../src/integrations/myriad/myriad-quote-reader.js";
 
 const now = new Date("2026-05-05T22:30:00.000Z");
 
@@ -53,6 +55,46 @@ describe("extended venue quote readers", () => {
 
     expect(snapshot?.venueFeeBps).toBe(35);
     expect(snapshot?.venueFeeModel).toBe("PREDICT_MARKET_STATS");
+  });
+
+  it("Predict.fun reader resolves missing binary outcome ids from market detail and inverts NO", async () => {
+    const reader = new PredictQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      environment: "mainnet",
+      now: () => now,
+      client: {
+        async getMarketOrderbook() {
+          return { bids: [{ price: "0.48", size: "10" }], asks: [{ price: "0.51", size: "10" }] };
+        },
+        async getMarketStatistics() {
+          return { feeRateBps: "35" };
+        },
+        async getMarketById() {
+          return {
+            id: "predict-market-1",
+            title: "Market",
+            outcomes: [
+              { label: "Yes", tokenId: "yes-token" },
+              { label: "No", tokenId: "no-token" }
+            ]
+          };
+        }
+      }
+    });
+
+    const snapshot = await reader.getQuoteSnapshot({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "NO",
+      venueMarketId: "predict-market-1",
+      side: "buy",
+      quantity: 1
+    });
+    const calculated = calculateVenueQuote({ snapshot: snapshot!, side: "buy", amount: 1, now });
+
+    expect(snapshot?.venue).toBe("PREDICT_FUN");
+    expect(snapshot?.venueOutcomeId).toBe("no-token");
+    expect(snapshot?.metadata).toMatchObject({ outcomeSide: "NO" });
+    expect(calculated.price).toBe(0.52);
   });
 
   it("Limitless reader fetches full market tokens and inverts YES book for NO outcome", async () => {
@@ -113,6 +155,33 @@ describe("extended venue quote readers", () => {
     expect(calculated.missingFactors).not.toContain("FEE_DISCOVERY");
   });
 
+  it("Opinion reader treats numeric market ids as token ids when no separate outcome id exists", async () => {
+    const reader = new OpinionQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      now: () => now,
+      client: {
+        async getTokenOrderbook() {
+          return {
+            result: {
+              feeConfig: { topic_rate: "0.04" },
+              bids: [{ price: "0.49", size: "10" }],
+              asks: [{ price: "0.51", size: "10" }]
+            }
+          };
+        }
+      }
+    });
+
+    const snapshot = await reader.getQuoteSnapshot({
+      canonicalMarketId: "canonical-1",
+      venueMarketId: "12345",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(snapshot?.venueOutcomeId).toBe("12345");
+  });
+
   it("parses Opinion topic rate from nested API payload variants", () => {
     expect(parseOpinionTopicRate({ result: { market: { topic_rate: "0.04" } } })).toBe(0.04);
     expect(parseOpinionTopicRate({ data: { feeConfig: { topicRate: 0.03 } } })).toBe(0.03);
@@ -170,5 +239,111 @@ describe("extended venue quote readers", () => {
     expect(calculated.quoteQuality).toBe("INDICATIVE_DEPTH");
     expect(calculated.feeQuote?.feeModel).toBe("MYRIAD_QUOTE_API");
     expect(calculated.feeAmount).toBeCloseTo(0.07);
+  });
+
+  it("Myriad reader resolves missing outcome ids from market detail before quote", async () => {
+    let requestedOutcomeId: unknown = null;
+    const reader = new MyriadQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      now: () => now,
+      client: {
+        async getMarket() {
+          return {
+            id: "myriad-market-1",
+            networkId: 1,
+            slug: "myriad-market-1",
+            title: "Market",
+            state: "open",
+            topics: [],
+            outcomes: [
+              { id: 0, title: "Yes", price: 0.4 },
+              { id: 1, title: "No", price: 0.6 }
+            ]
+          };
+        },
+        async getMarketQuote(input) {
+          requestedOutcomeId = input.outcome_id;
+          return {
+            price_average: 0.6,
+            price_before: 0.59,
+            price_after: 0.61,
+            shares: 1,
+            fees: { fee: 0.01 }
+          };
+        }
+      }
+    });
+
+    const snapshot = await reader.getQuoteSnapshot({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "NO",
+      venueMarketId: "myriad-market-1",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(requestedOutcomeId).toBe(1);
+    expect(snapshot?.venueOutcomeId).toBe("1");
+  });
+
+  it("Polymarket reader resolves missing CLOB tokens from official Gamma metadata", async () => {
+    const token = resolveOutcomeTokenFromGammaMarkets([{
+      conditionId: "0xcondition",
+      marketId: "123",
+      marketSlug: "market-slug",
+      title: "Market",
+      raw: {
+        outcomes: [
+          { label: "Yes", token_id: "yes-token" },
+          { label: "No", token_id: "no-token" }
+        ]
+      }
+    }], "NO");
+
+    expect(token).toEqual({ venueOutcomeId: "no-token", outcomeLabel: "No" });
+  });
+
+  it("Polymarket reader fetches Gamma before CLOB when shared core lacks token id", async () => {
+    let requestedTokenId: string | null = null;
+    const reader = new PolymarketQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      now: () => now,
+      client: {
+        async getOrderbook(input) {
+          requestedTokenId = input.tokenId;
+          return {
+            bids: [{ price: "0.49", size: "10" }],
+            asks: [{ price: "0.51", size: "10" }]
+          };
+        }
+      },
+      metadataClient: {
+        async getMarketByIdentifier() {
+          return [{
+            conditionId: "0xcondition",
+            marketId: "123",
+            marketSlug: "market-slug",
+            title: "Market",
+            raw: {
+              outcomes: [
+                { label: "Yes", token_id: "yes-token" },
+                { label: "No", token_id: "no-token" }
+              ]
+            }
+          }];
+        }
+      }
+    });
+
+    const snapshot = await reader.getQuoteSnapshot({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "NO",
+      venueMarketId: "market-slug",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(requestedTokenId).toBe("no-token");
+    expect(snapshot?.venueOutcomeId).toBe("no-token");
   });
 });

@@ -383,7 +383,7 @@ describe("venue quote mapping resolvers", () => {
     ]);
   });
 
-  it("reports missing executable ids for approved Polymarket and Opinion profiles", async () => {
+  it("lets Polymarket resolve missing tokens at quote time while blocking unresolved Opinion slugs", async () => {
     const resolver = new SharedCoreVenueQuoteMappingResolver({
       async loadApprovedVenueMappings() {
         return [
@@ -409,8 +409,11 @@ describe("venue quote mapping resolvers", () => {
     const readiness = await resolver.getReadiness({ canonicalMarketId: "canonical-world-cup-brazil" });
     const routable = await resolver.resolve({ canonicalMarketId: "canonical-world-cup-brazil" });
 
-    expect(routable).toEqual([]);
-    expect(readiness.find((row) => row.venue === "POLYMARKET")?.blockers).toContain("POLYMARKET_CLOB_TOKEN_ID_MISSING");
+    expect(routable).toEqual([{
+      venue: "POLYMARKET",
+      venueMarketId: "2026-fifa-world-cup-winner:brazil"
+    }]);
+    expect(readiness.find((row) => row.venue === "POLYMARKET")?.blockers).toEqual([]);
     expect(readiness.find((row) => row.venue === "OPINION")?.blockers).toContain("OPINION_TOKEN_ID_MISSING");
   });
 

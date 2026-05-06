@@ -6,6 +6,7 @@ import type {
   QuoteSnapshotCache
 } from "../../core/sor/quote-snapshot.js";
 import type { PolymarketFeeReader } from "./polymarket-fee-reader.js";
+import { PolymarketGammaClient, type PolymarketGammaMarket } from "./polymarket-gamma-client.js";
 
 export interface PolymarketOrderbookClient {
   getOrderbook(input: {
@@ -20,6 +21,7 @@ export interface PolymarketQuoteReaderConfig {
   now?: () => Date;
   feeBps?: number | undefined;
   feeReader?: PolymarketFeeReader | undefined;
+  metadataClient?: Pick<PolymarketGammaClient, "getMarketByIdentifier"> | undefined;
 }
 
 export class PolymarketQuoteReader implements VenueQuoteSnapshotReader {
@@ -40,9 +42,10 @@ export class PolymarketQuoteReader implements VenueQuoteSnapshotReader {
       return cached;
     }
 
+    const resolvedOutcome = await this.resolveOutcomeToken(input);
     const payload = await this.config.client.getOrderbook({
       marketId: input.venueMarketId,
-      tokenId: input.venueOutcomeId ?? input.venueMarketId
+      tokenId: resolvedOutcome.venueOutcomeId
     });
     const feeRate = this.config.feeBps === undefined
       ? await this.config.feeReader?.getFeeRate({ conditionId: input.venueMarketId })
@@ -50,12 +53,31 @@ export class PolymarketQuoteReader implements VenueQuoteSnapshotReader {
     return normalizePolymarketOrderbook({
       payload,
       venueMarketId: input.venueMarketId,
-      venueOutcomeId: input.venueOutcomeId,
+      venueOutcomeId: resolvedOutcome.venueOutcomeId,
       receivedAt: this.now(),
       feeBps: this.config.feeBps,
       polymarketFeeRate: feeRate ?? undefined,
-      polymarketCategory: inferPolymarketCategory(input.canonicalMarketId)
+      polymarketCategory: inferPolymarketCategory(input.canonicalMarketId),
+      outcomeLabel: resolvedOutcome.outcomeLabel
     });
+  }
+
+  private async resolveOutcomeToken(input: VenueQuoteSnapshotReaderInput): Promise<{
+    venueOutcomeId: string;
+    outcomeLabel?: string | undefined;
+  }> {
+    if (input.venueOutcomeId) {
+      return { venueOutcomeId: input.venueOutcomeId };
+    }
+    if (!this.config.metadataClient) {
+      throw new Error("POLYMARKET_CLOB_TOKEN_ID_MISSING");
+    }
+    const markets = await this.config.metadataClient.getMarketByIdentifier(input.venueMarketId);
+    const token = resolveOutcomeTokenFromGammaMarkets(markets, input.canonicalOutcomeId);
+    if (!token) {
+      throw new Error("POLYMARKET_CLOB_TOKEN_ID_MISSING");
+    }
+    return token;
   }
 }
 
@@ -88,6 +110,7 @@ export const normalizePolymarketOrderbook = (input: {
   feeBps?: number | undefined;
   polymarketFeeRate?: number | undefined;
   polymarketCategory?: string | undefined;
+  outcomeLabel?: string | undefined;
 }): NormalizedVenueQuoteSnapshot => {
   const record = asRecord(input.payload);
   const bids = normalizeLevels(record.bids);
@@ -110,14 +133,47 @@ export const normalizePolymarketOrderbook = (input: {
     missingFactors: [],
     blockers: [],
     streamResynced: true,
-    metadata: { venueMarketId: input.venueMarketId, venueOutcomeId: input.venueOutcomeId ?? null }
+    metadata: {
+      venueMarketId: input.venueMarketId,
+      venueOutcomeId: input.venueOutcomeId ?? null,
+      outcomeLabel: input.outcomeLabel ?? null
+    }
   };
+};
+
+export const resolveOutcomeTokenFromGammaMarkets = (
+  markets: readonly PolymarketGammaMarket[],
+  canonicalOutcomeId?: string | undefined
+): { venueOutcomeId: string; outcomeLabel?: string | undefined } | null => {
+  if (!canonicalOutcomeId || markets.length !== 1) {
+    return null;
+  }
+  const outcomes = extractGammaOutcomes(markets[0]?.raw);
+  const wanted = normalizeOutcomeLabel(canonicalOutcomeId);
+  const matches = outcomes.filter((outcome) => normalizeOutcomeLabel(outcome.label) === wanted);
+  if (matches.length !== 1) {
+    return null;
+  }
+  return { venueOutcomeId: matches[0]!.tokenId, outcomeLabel: matches[0]!.label };
 };
 
 const inferPolymarketCategory = (canonicalMarketId: string): string | undefined => {
   const firstSegment = canonicalMarketId.split("|", 1)[0]?.split(":", 2).pop();
   return firstSegment && firstSegment.length > 0 ? firstSegment.toUpperCase() : undefined;
 };
+
+const extractGammaOutcomes = (raw: Record<string, unknown> | undefined): Array<{ label: string; tokenId: string }> => {
+  const outcomes = Array.isArray(raw?.outcomes) ? raw.outcomes : [];
+  return outcomes.flatMap((entry) => {
+    const record = asRecord(entry);
+    const label = firstString(record.label, record.outcome, record.name, record.title);
+    const tokenId = firstString(record.token_id, record.tokenId, record.id);
+    return label && tokenId ? [{ label, tokenId }] : [];
+  });
+};
+
+const normalizeOutcomeLabel = (value: string): string =>
+  value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 
 const normalizeLevels = (value: unknown): readonly NormalizedQuoteLevel[] => {
   if (!Array.isArray(value)) {
@@ -141,6 +197,18 @@ const normalizeLevel = (price: unknown, size: unknown): NormalizedQuoteLevel[] =
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
+
+const firstString = (...values: readonly unknown[]): string | null => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+  return null;
+};
 
 const isNumericLike = (value: unknown): value is string | number =>
   typeof value === "string" || typeof value === "number";

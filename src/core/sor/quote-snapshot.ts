@@ -187,7 +187,12 @@ export class CompositeVenueQuoteSource {
     private readonly mappingResolver: VenueQuoteMappingResolver,
     private readonly now: () => Date = () => new Date()
   ) {
-    this.readerByVenue = new Map(readers.map((reader) => [reader.venue.toUpperCase(), reader]));
+    this.readerByVenue = new Map(readers.flatMap((reader) => {
+      const venue = reader.venue.toUpperCase();
+      return venue === "PREDICT_FUN"
+        ? [[venue, reader] as const, ["PREDICT", reader] as const]
+        : [[venue, reader] as const];
+    }));
   }
 
   public async getCalculatedSnapshots(input: {
@@ -592,9 +597,9 @@ const quoteMappingBlockers = (input: {
   if (!input.venueMarketId) {
     blockers.push("VENUE_MARKET_ID_MISSING");
   }
-  if (input.venue === "POLYMARKET" && !input.venueOutcomeId) {
-    blockers.push("POLYMARKET_CLOB_TOKEN_ID_MISSING");
-  }
+  // Some official venue APIs can resolve executable outcome tokens from the approved
+  // shared-core market id at quote time. Keep routing fail-closed in the reader instead
+  // of blocking before that source-backed lookup runs.
   if (input.venue === "OPINION" && !input.venueOutcomeId && !looksLikeNumericId(input.venueMarketId)) {
     blockers.push("OPINION_TOKEN_ID_MISSING");
   }

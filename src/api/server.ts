@@ -165,6 +165,7 @@ import { LimitlessQuoteReader, LimitlessRestOrderbookClient } from "../integrati
 import { LimitlessProfileFeeReader } from "../integrations/limitless/limitless-fee-reader.js";
 import { PolymarketClobFeeReader } from "../integrations/polymarket/polymarket-fee-reader.js";
 import { PolymarketQuoteReader, PolymarketRestOrderbookClient } from "../integrations/polymarket/polymarket-quote-reader.js";
+import { PolymarketGammaClient } from "../integrations/polymarket/polymarket-gamma-client.js";
 import { PredictClient } from "../integrations/predict/predict-client.js";
 import { PredictQuoteReader } from "../integrations/predict/predict-quote-reader.js";
 import { OpinionClient } from "../integrations/opinion/opinion-client.js";
@@ -791,6 +792,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const opinionQuoteCache = new QuoteSnapshotCache();
   const myriadQuoteCache = new QuoteSnapshotCache();
   const polymarketClobHost = process.env.POLYMARKET_CLOB_HOST ?? process.env.POLY_CLOB_HOST ?? "https://clob.polymarket.com";
+  const polymarketGammaBaseUrl = process.env.POLYMARKET_GAMMA_BASE_URL ?? "https://gamma-api.polymarket.com";
   const limitlessBaseUrl = process.env.LIMITLESS_BASE_URL ?? "https://api.limitless.exchange";
   const venueQuoteSource = new CompositeVenueQuoteSource([
     new PolymarketQuoteReader({
@@ -799,7 +801,11 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       }),
       streamCache: polymarketQuoteCache,
       feeBps: parseOptionalNumber(process.env.POLYMARKET_QUOTE_FEE_BPS),
-      feeReader: new PolymarketClobFeeReader({ clobHost: polymarketClobHost })
+      feeReader: new PolymarketClobFeeReader({ clobHost: polymarketClobHost }),
+      metadataClient: new PolymarketGammaClient({
+        baseUrl: polymarketGammaBaseUrl,
+        clobHost: polymarketClobHost
+      })
     }),
     new LimitlessQuoteReader({
       client: new LimitlessRestOrderbookClient({
