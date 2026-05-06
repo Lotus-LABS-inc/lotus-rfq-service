@@ -1318,19 +1318,20 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     liveCandidateProvider: {
       getCandidates: async (input) => {
         const quantity = Number(input.amount);
-        const snapshots = Number.isFinite(quantity) && quantity > 0
-          ? await venueQuoteSource.getCalculatedSnapshots({
+        const report = Number.isFinite(quantity) && quantity > 0
+          ? await venueQuoteSource.getCalculatedSnapshotReport({
               canonicalMarketId: input.marketId,
               canonicalOutcomeId: input.outcomeId,
               side: input.side,
               quantity
             })
-          : [];
+          : { snapshots: [], blocked: [] };
         return buildLiveExecutionCandidatesResponse({
           marketId: input.marketId,
           outcomeId: input.outcomeId,
           amount: input.amount,
-          snapshots,
+          snapshots: report.snapshots,
+          snapshotBlockers: report.blocked,
           readiness: await executionVenuesAdminService.listVenues(),
           ...(input.venues ? { venues: input.venues } : {})
         });

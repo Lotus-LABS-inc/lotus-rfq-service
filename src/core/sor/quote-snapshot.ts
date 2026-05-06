@@ -116,6 +116,10 @@ export interface VenueQuoteMappingResolver {
     canonicalMarketId: string;
     canonicalOutcomeId?: string | undefined;
   }): Promise<readonly VenueQuoteMapping[]>;
+  getReadiness?(input: {
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+  }): Promise<readonly VenueQuoteMappingReadiness[]>;
 }
 
 export interface SharedCoreVenueQuoteMappingRow extends Record<string, unknown> {
@@ -151,6 +155,18 @@ export interface CalculatedVenueQuoteSnapshot {
   metadata: Readonly<Record<string, unknown>>;
 }
 
+export interface VenueQuoteSnapshotBlocker {
+  venue: string;
+  reason: string;
+  venueMarketId?: string | undefined;
+  venueOutcomeId?: string | undefined;
+}
+
+export interface CalculatedVenueQuoteSnapshotReport {
+  snapshots: readonly CalculatedVenueQuoteSnapshot[];
+  blocked: readonly VenueQuoteSnapshotBlocker[];
+}
+
 export class QuoteSnapshotCache {
   private readonly snapshots = new Map<string, NormalizedVenueQuoteSnapshot>();
 
@@ -180,12 +196,48 @@ export class CompositeVenueQuoteSource {
     side: "buy" | "sell";
     quantity: number;
   }): Promise<readonly CalculatedVenueQuoteSnapshot[]> {
-    const mappings = await this.mappingResolver.resolve(input);
-    const results = await Promise.all(mappings.map(async (mapping): Promise<CalculatedVenueQuoteSnapshot | null> => {
+    return (await this.getCalculatedSnapshotReport(input)).snapshots;
+  }
+
+  public async getCalculatedSnapshotReport(input: {
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+    side: "buy" | "sell";
+    quantity: number;
+  }): Promise<CalculatedVenueQuoteSnapshotReport> {
+    const readiness = await this.loadMappingReadiness(input);
+    const mappingBlockers: VenueQuoteSnapshotBlocker[] = readiness
+      .filter((row) => !row.quoteReady)
+      .map((row) => ({
+        venue: row.venue,
+        reason: row.blockers.join(",") || "QUOTE_MAPPING_NOT_READY",
+        ...(row.venueMarketId ? { venueMarketId: row.venueMarketId } : {}),
+        ...(row.venueOutcomeId ? { venueOutcomeId: row.venueOutcomeId } : {})
+      }));
+    const mappings = readiness
+      .filter((row) => row.quoteReady && row.venueMarketId !== null)
+      .map((row) => ({
+        venue: row.venue,
+        venueMarketId: row.venueMarketId!,
+        ...(row.venueOutcomeId ? { venueOutcomeId: row.venueOutcomeId } : {})
+      }));
+
+    const results = await Promise.all(mappings.map(async (mapping): Promise<{
+      snapshot: CalculatedVenueQuoteSnapshot | null;
+      blocker: VenueQuoteSnapshotBlocker | null;
+    }> => {
       try {
         const reader = this.readerByVenue.get(mapping.venue.toUpperCase());
         if (!reader) {
-          return null;
+          return {
+            snapshot: null,
+            blocker: {
+              venue: mapping.venue.toUpperCase(),
+              reason: "QUOTE_READER_UNSUPPORTED",
+              venueMarketId: mapping.venueMarketId,
+              ...(mapping.venueOutcomeId ? { venueOutcomeId: mapping.venueOutcomeId } : {})
+            }
+          };
         }
         const snapshot = await reader.getQuoteSnapshot({
           canonicalMarketId: input.canonicalMarketId,
@@ -196,7 +248,15 @@ export class CompositeVenueQuoteSource {
           quantity: input.quantity
         });
         if (!snapshot) {
-          return null;
+          return {
+            snapshot: null,
+            blocker: {
+              venue: mapping.venue.toUpperCase(),
+              reason: "QUOTE_SNAPSHOT_UNAVAILABLE",
+              venueMarketId: mapping.venueMarketId,
+              ...(mapping.venueOutcomeId ? { venueOutcomeId: mapping.venueOutcomeId } : {})
+            }
+          };
         }
         const calculated = calculateVenueQuote({
           snapshot,
@@ -205,7 +265,15 @@ export class CompositeVenueQuoteSource {
           now: this.now()
         });
         if (!calculated.ok) {
-          return null;
+          return {
+            snapshot: null,
+            blocker: {
+              venue: mapping.venue.toUpperCase(),
+              reason: calculated.blockers.join(",") || "QUOTE_CALCULATION_BLOCKED",
+              venueMarketId: snapshot.venueMarketId,
+              ...(snapshot.venueOutcomeId ? { venueOutcomeId: snapshot.venueOutcomeId } : {})
+            }
+          };
         }
         const output: CalculatedVenueQuoteSnapshot = {
           venue: calculated.venue,
@@ -238,12 +306,47 @@ export class CompositeVenueQuoteSource {
             ...calculated.metadata
           }
         };
-        return output;
+        return { snapshot: output, blocker: null };
       } catch {
-        return null;
+        return {
+          snapshot: null,
+          blocker: {
+            venue: mapping.venue.toUpperCase(),
+            reason: "QUOTE_READER_FAILED",
+            venueMarketId: mapping.venueMarketId,
+            ...(mapping.venueOutcomeId ? { venueOutcomeId: mapping.venueOutcomeId } : {})
+          }
+        };
       }
     }));
-    return results.filter((result): result is CalculatedVenueQuoteSnapshot => result !== null);
+    return {
+      snapshots: results
+        .map((result) => result.snapshot)
+        .filter((result): result is CalculatedVenueQuoteSnapshot => result !== null),
+      blocked: [
+        ...mappingBlockers,
+        ...results
+          .map((result) => result.blocker)
+          .filter((result): result is VenueQuoteSnapshotBlocker => result !== null)
+      ]
+    };
+  }
+
+  private async loadMappingReadiness(input: {
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+  }): Promise<readonly VenueQuoteMappingReadiness[]> {
+    if (this.mappingResolver.getReadiness) {
+      return this.mappingResolver.getReadiness(input);
+    }
+    return (await this.mappingResolver.resolve(input)).map((mapping) => ({
+      venue: mapping.venue.toUpperCase(),
+      approvedVenueMarketId: mapping.venueMarketId,
+      venueMarketId: mapping.venueMarketId,
+      venueOutcomeId: mapping.venueOutcomeId ?? null,
+      quoteReady: true,
+      blockers: []
+    }));
   }
 }
 

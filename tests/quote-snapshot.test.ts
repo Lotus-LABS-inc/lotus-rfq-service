@@ -275,6 +275,77 @@ describe("venue quote readers", () => {
 
     expect(results.map((result) => result.venue)).toEqual(["POLYMARKET"]);
   });
+
+  it("reports every mapped venue as either a snapshot or blocker", async () => {
+    const source = new CompositeVenueQuoteSource([
+      {
+        venue: "POLYMARKET",
+        async getQuoteSnapshot() {
+          return snapshot({ venue: "POLYMARKET", venueMarketId: "pm-1", venueOutcomeId: "yes" });
+        }
+      },
+      {
+        venue: "PREDICT_FUN",
+        async getQuoteSnapshot() {
+          throw new Error("Predict market orderbook payload validation failed.");
+        }
+      }
+    ], {
+      async resolve() {
+        return [];
+      },
+      async getReadiness() {
+        return [
+          {
+            venue: "POLYMARKET",
+            approvedVenueMarketId: "pm-approved",
+            venueMarketId: "pm-1",
+            venueOutcomeId: "yes",
+            quoteReady: true,
+            blockers: []
+          },
+          {
+            venue: "LIMITLESS",
+            approvedVenueMarketId: "limitless-approved",
+            venueMarketId: "lim-1",
+            venueOutcomeId: null,
+            quoteReady: false,
+            blockers: ["LIMITLESS_OUTCOME_ID_MISSING"]
+          },
+          {
+            venue: "PREDICT_FUN",
+            approvedVenueMarketId: "predict-approved",
+            venueMarketId: "predict-1",
+            venueOutcomeId: "yes",
+            quoteReady: true,
+            blockers: []
+          }
+        ];
+      }
+    }, () => now);
+
+    const report = await source.getCalculatedSnapshotReport({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "yes",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(report.snapshots.map((result) => result.venue)).toEqual(["POLYMARKET"]);
+    expect(report.blocked).toEqual([
+      {
+        venue: "LIMITLESS",
+        reason: "LIMITLESS_OUTCOME_ID_MISSING",
+        venueMarketId: "lim-1"
+      },
+      {
+        venue: "PREDICT_FUN",
+        reason: "QUOTE_READER_FAILED",
+        venueMarketId: "predict-1",
+        venueOutcomeId: "yes"
+      }
+    ]);
+  });
 });
 
 describe("venue quote mapping resolvers", () => {

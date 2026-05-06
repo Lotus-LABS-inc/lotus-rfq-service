@@ -156,6 +156,14 @@ describe("execution signed bundle routes", () => {
           }
         }
       ],
+      snapshotBlockers: [
+        {
+          venue: "PREDICT_FUN",
+          reason: "QUOTE_READER_FAILED",
+          venueMarketId: "predict-market",
+          venueOutcomeId: "yes"
+        }
+      ],
       readiness: [
         {
           venue: "POLYMARKET",
@@ -178,6 +186,11 @@ describe("execution signed bundle routes", () => {
       price: 0.51
     });
     expect(response.blocked).toEqual([{
+      venue: "PREDICT_FUN",
+      reason: "QUOTE_READER_FAILED",
+      venueMarketId: "predict-market",
+      venueOutcomeId: "yes"
+    }, {
       venue: "LIMITLESS",
       reason: "VENUE_OUTCOME_ID_MISSING_FROM_LIVE_QUOTE",
       venueMarketId: "limitless-market"

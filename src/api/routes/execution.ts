@@ -10,7 +10,7 @@ import {
   SignedTradeBundleError,
   type SignedTradeBundleService
 } from "../../execution-system/signed-trade-bundle.js";
-import type { CalculatedVenueQuoteSnapshot } from "../../core/sor/quote-snapshot.js";
+import type { CalculatedVenueQuoteSnapshot, VenueQuoteSnapshotBlocker } from "../../core/sor/quote-snapshot.js";
 import type { ExecutionVenueReadinessSummary } from "../admin/execution-venues-admin-service.js";
 
 const candidateSchema = z.object({
@@ -352,6 +352,7 @@ export const buildLiveExecutionCandidatesResponse = (input: {
   outcomeId: string;
   amount: string;
   snapshots: readonly CalculatedVenueQuoteSnapshot[];
+  snapshotBlockers?: readonly VenueQuoteSnapshotBlocker[] | undefined;
   readiness: readonly ExecutionVenueReadinessSummary[];
   venues?: readonly string[] | undefined;
 }): LiveExecutionCandidatesResponse => {
@@ -361,6 +362,18 @@ export const buildLiveExecutionCandidatesResponse = (input: {
   const readinessByVenue = new Map(input.readiness.map((venue) => [venue.venue.toUpperCase(), venue]));
   const candidates: TradeRouteCandidate[] = [];
   const blocked: LiveExecutionCandidateBlocker[] = [];
+  for (const blocker of input.snapshotBlockers ?? []) {
+    const venue = blocker.venue.toUpperCase();
+    if (allowedVenues && !allowedVenues.has(venue)) {
+      continue;
+    }
+    blocked.push({
+      venue,
+      reason: blocker.reason,
+      ...(blocker.venueMarketId ? { venueMarketId: blocker.venueMarketId } : {}),
+      ...(blocker.venueOutcomeId ? { venueOutcomeId: blocker.venueOutcomeId } : {})
+    });
+  }
 
   for (const snapshot of input.snapshots) {
     const venue = snapshot.venue.toUpperCase();
