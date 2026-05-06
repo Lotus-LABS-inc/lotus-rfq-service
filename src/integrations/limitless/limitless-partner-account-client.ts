@@ -1,6 +1,8 @@
 import { createHmac } from "node:crypto";
 import { Client } from "@limitless-exchange/sdk";
 
+export const LIMITLESS_PARTNER_ACCOUNT_DEFAULT_BASE_URL = "https://api.limitless.exchange";
+
 export interface LimitlessPartnerAccountClientConfig {
   enabled?: boolean | undefined;
   serverWalletDelegationEnabled?: boolean | undefined;
@@ -31,7 +33,7 @@ export class LimitlessPartnerAccountClient {
   private readonly timeoutMs: number;
 
   public constructor(private readonly config: LimitlessPartnerAccountClientConfig) {
-    this.baseUrl = (config.baseUrl ?? "https://api.limitless.exchange").replace(/\/+$/, "");
+    this.baseUrl = (config.baseUrl ?? LIMITLESS_PARTNER_ACCOUNT_DEFAULT_BASE_URL).replace(/\/+$/, "");
     this.timeoutMs = config.timeoutMs ?? 15_000;
   }
 

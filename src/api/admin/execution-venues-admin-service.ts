@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   getLimitlessExecutionAdapterEnvStatus,
+  LIMITLESS_DEFAULT_BASE_URL,
   getOpinionExecutionAdapterEnvStatus,
   getPredictFunExecutionAdapterEnvStatus,
   getPolymarketExecutionAdapterV2EnvStatus,
@@ -158,7 +159,7 @@ export class ExecutionVenuesAdminService {
       liveSubmissionSupported: true,
       liveExecutionEnabled: adapterStatus.liveExecutionEnabled,
       featureFlagSelected: adapterStatus.featureFlagSelected,
-      host: this.env.LIMITLESS_BASE_URL ?? null,
+      host: this.env.LIMITLESS_BASE_URL ?? LIMITLESS_DEFAULT_BASE_URL,
       chainId: this.env.LIMITLESS_CHAIN_ID ?? this.env.LIMITLESS_FUNDING_PREFERRED_CHAIN_ID ?? null,
       requiredEnvPresent: adapterStatus.requiredEnvPresent,
       missingEnv: adapterStatus.missingEnv,

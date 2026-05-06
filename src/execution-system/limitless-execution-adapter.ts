@@ -16,22 +16,20 @@ import type {
   VenueSubmitResult
 } from "./venue-adapter.js";
 
+export const LIMITLESS_DEFAULT_BASE_URL = "https://api.limitless.exchange";
+
 export const limitlessExecutionRequiredEnvKeys = [
-  "LIMITLESS_BASE_URL",
   "LIMITLESS_API_KEY",
   "LIMITLESS_EXECUTION_PRIVATE_KEY"
 ] as const;
 
 export const limitlessDelegatedExecutionRequiredEnvKeys = [
-  "LIMITLESS_BASE_URL",
   "LIMITLESS_PARTNER_ACCOUNT_ENABLED",
   "LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID",
   "LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET"
 ] as const;
 
-export const limitlessExecutionDryRunRequiredEnvKeys = [
-  "LIMITLESS_BASE_URL"
-] as const;
+export const limitlessExecutionDryRunRequiredEnvKeys = [] as const;
 
 export type LimitlessExecutionRequiredEnvKey = (typeof limitlessExecutionRequiredEnvKeys)[number];
 export type LimitlessDelegatedExecutionRequiredEnvKey = (typeof limitlessDelegatedExecutionRequiredEnvKeys)[number];
@@ -164,7 +162,7 @@ export const buildLimitlessExecutionAdapterConfigFromEnv = (
   env: NodeJS.ProcessEnv = process.env
 ): LimitlessExecutionAdapterConfig => ({
   executionMode: parseExecutionMode(env.LIMITLESS_EXECUTION_MODE),
-  baseUrl: env.LIMITLESS_BASE_URL,
+  baseUrl: env.LIMITLESS_BASE_URL ?? LIMITLESS_DEFAULT_BASE_URL,
   apiKey: env.LIMITLESS_API_KEY,
   privateKey: env.LIMITLESS_EXECUTION_PRIVATE_KEY,
   hmacTokenId: env.LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID ?? env.LIMITLESS_WITHDRAWAL_ADAPTER_API_KEY,
@@ -175,13 +173,7 @@ export const buildLimitlessExecutionAdapterConfigFromEnv = (
 });
 
 const createLimitlessOrderClient = (config: LimitlessExecutionAdapterConfig): LimitlessOrderClient => {
-  const baseUrl = config.baseUrl;
-  if (!nonEmpty(baseUrl)) {
-    throw new LimitlessExecutionNotConfiguredError(
-      "LIMITLESS_ENV_INCOMPLETE",
-      "Limitless live execution requires LIMITLESS_BASE_URL."
-    );
-  }
+  const baseUrl = config.baseUrl ?? LIMITLESS_DEFAULT_BASE_URL;
   if (config.executionMode === "delegated_partner_server_wallet") {
     const tokenId = config.hmacTokenId;
     const secret = config.hmacSecret;
@@ -227,7 +219,7 @@ const createLimitlessOrderClient = (config: LimitlessExecutionAdapterConfig): Li
   if (!nonEmpty(apiKey) || !nonEmpty(privateKey)) {
     throw new LimitlessExecutionNotConfiguredError(
       "LIMITLESS_ENV_INCOMPLETE",
-      "Limitless live execution requires LIMITLESS_BASE_URL, LIMITLESS_API_KEY, and LIMITLESS_EXECUTION_PRIVATE_KEY."
+      "Limitless live execution requires LIMITLESS_API_KEY and LIMITLESS_EXECUTION_PRIVATE_KEY."
     );
   }
   const client = new Client({
@@ -247,13 +239,13 @@ const createLimitlessOrderClient = (config: LimitlessExecutionAdapterConfig): Li
 };
 
 const createLimitlessUserSignedRelayClient = (config: LimitlessExecutionAdapterConfig): LimitlessUserSignedRelayClient => {
-  const baseUrl = config.baseUrl;
+  const baseUrl = config.baseUrl ?? LIMITLESS_DEFAULT_BASE_URL;
   const tokenId = config.hmacTokenId;
   const secret = config.hmacSecret;
-  if (!nonEmpty(baseUrl) || config.partnerAccountEnabled !== true || !nonEmpty(tokenId) || !nonEmpty(secret)) {
+  if (config.partnerAccountEnabled !== true || !nonEmpty(tokenId) || !nonEmpty(secret)) {
     throw new LimitlessExecutionNotConfiguredError(
       "LIMITLESS_ENV_INCOMPLETE",
-      "Limitless user-signed relay requires LIMITLESS_BASE_URL, LIMITLESS_PARTNER_ACCOUNT_ENABLED=true, LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID, and LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET."
+      "Limitless user-signed relay requires LIMITLESS_PARTNER_ACCOUNT_ENABLED=true, LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID, and LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET."
     );
   }
   const httpClient = createLimitlessHttpClient({
