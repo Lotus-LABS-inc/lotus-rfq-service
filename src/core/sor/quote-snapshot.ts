@@ -182,62 +182,66 @@ export class CompositeVenueQuoteSource {
   }): Promise<readonly CalculatedVenueQuoteSnapshot[]> {
     const mappings = await this.mappingResolver.resolve(input);
     const results = await Promise.all(mappings.map(async (mapping): Promise<CalculatedVenueQuoteSnapshot | null> => {
-      const reader = this.readerByVenue.get(mapping.venue.toUpperCase());
-      if (!reader) {
-        return null;
-      }
-      const snapshot = await reader.getQuoteSnapshot({
-        canonicalMarketId: input.canonicalMarketId,
-        ...(input.canonicalOutcomeId ? { canonicalOutcomeId: input.canonicalOutcomeId } : {}),
-        venueMarketId: mapping.venueMarketId,
-        ...(mapping.venueOutcomeId ? { venueOutcomeId: mapping.venueOutcomeId } : {}),
-        side: input.side,
-        quantity: input.quantity
-      });
-      if (!snapshot) {
-        return null;
-      }
-      const calculated = calculateVenueQuote({
-        snapshot,
-        side: input.side,
-        amount: input.quantity,
-        now: this.now()
-      });
-      if (!calculated.ok) {
-        return null;
-      }
-      const output: CalculatedVenueQuoteSnapshot = {
-        venue: calculated.venue,
-        availableSize: calculated.availableSize,
-        quotedPrice: calculated.price,
-        fees: {
-          ...(calculated.feeAmount !== undefined ? { provider_fee: calculated.feeAmount } : {}),
-          ...(calculated.fixedFee !== undefined ? { fixed_fee: calculated.fixedFee } : {})
-        },
-        latencyMs: calculated.freshnessMs,
-        fillProb: calculated.liquidityScore,
-        metadata: {
-          source: "venue_quote_snapshot",
-          venue: calculated.venue,
-          venueMarketId: snapshot.venueMarketId,
-          venueOutcomeId: snapshot.venueOutcomeId,
-          quoteQuality: calculated.quoteQuality,
-          quoteSource: calculated.source,
-          freshnessMs: calculated.freshnessMs,
-          spreadBps: calculated.spreadBps,
-          slippageBps: calculated.slippageBps,
-          liquidityScore: calculated.liquidityScore,
-          confidencePenaltyBps: calculated.confidencePenaltyBps,
-          feeAmount: calculated.feeAmount,
-          effectiveFeeBps: calculated.effectiveFeeBps,
-          feeQuote: calculated.feeQuote,
-          missingFactors: calculated.missingFactors,
-          blockers: calculated.blockers,
-          settlementEvidenceSupported: calculated.settlementEvidenceSupported,
-          ...calculated.metadata
+      try {
+        const reader = this.readerByVenue.get(mapping.venue.toUpperCase());
+        if (!reader) {
+          return null;
         }
-      };
-      return output;
+        const snapshot = await reader.getQuoteSnapshot({
+          canonicalMarketId: input.canonicalMarketId,
+          ...(input.canonicalOutcomeId ? { canonicalOutcomeId: input.canonicalOutcomeId } : {}),
+          venueMarketId: mapping.venueMarketId,
+          ...(mapping.venueOutcomeId ? { venueOutcomeId: mapping.venueOutcomeId } : {}),
+          side: input.side,
+          quantity: input.quantity
+        });
+        if (!snapshot) {
+          return null;
+        }
+        const calculated = calculateVenueQuote({
+          snapshot,
+          side: input.side,
+          amount: input.quantity,
+          now: this.now()
+        });
+        if (!calculated.ok) {
+          return null;
+        }
+        const output: CalculatedVenueQuoteSnapshot = {
+          venue: calculated.venue,
+          availableSize: calculated.availableSize,
+          quotedPrice: calculated.price,
+          fees: {
+            ...(calculated.feeAmount !== undefined ? { provider_fee: calculated.feeAmount } : {}),
+            ...(calculated.fixedFee !== undefined ? { fixed_fee: calculated.fixedFee } : {})
+          },
+          latencyMs: calculated.freshnessMs,
+          fillProb: calculated.liquidityScore,
+          metadata: {
+            source: "venue_quote_snapshot",
+            venue: calculated.venue,
+            venueMarketId: snapshot.venueMarketId,
+            venueOutcomeId: snapshot.venueOutcomeId,
+            quoteQuality: calculated.quoteQuality,
+            quoteSource: calculated.source,
+            freshnessMs: calculated.freshnessMs,
+            spreadBps: calculated.spreadBps,
+            slippageBps: calculated.slippageBps,
+            liquidityScore: calculated.liquidityScore,
+            confidencePenaltyBps: calculated.confidencePenaltyBps,
+            feeAmount: calculated.feeAmount,
+            effectiveFeeBps: calculated.effectiveFeeBps,
+            feeQuote: calculated.feeQuote,
+            missingFactors: calculated.missingFactors,
+            blockers: calculated.blockers,
+            settlementEvidenceSupported: calculated.settlementEvidenceSupported,
+            ...calculated.metadata
+          }
+        };
+        return output;
+      } catch {
+        return null;
+      }
     }));
     return results.filter((result): result is CalculatedVenueQuoteSnapshot => result !== null);
   }

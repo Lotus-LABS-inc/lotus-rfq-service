@@ -242,6 +242,39 @@ describe("venue quote readers", () => {
     expect(results.every((result) => result.metadata.quoteQuality === "FULL_DEPTH_REST")).toBe(true);
     expect(results.every((result) => result.fees.provider_fee !== undefined)).toBe(true);
   });
+
+  it("keeps usable venue snapshots when another mapped reader throws", async () => {
+    const source = new CompositeVenueQuoteSource([
+      {
+        venue: "POLYMARKET",
+        async getQuoteSnapshot() {
+          return snapshot({ venue: "POLYMARKET", venueMarketId: "pm-1", venueOutcomeId: "yes" });
+        }
+      },
+      {
+        venue: "PREDICT_FUN",
+        async getQuoteSnapshot() {
+          throw new Error("Predict market orderbook payload validation failed.");
+        }
+      }
+    ], {
+      async resolve() {
+        return [
+          { venue: "POLYMARKET", venueMarketId: "pm-1", venueOutcomeId: "yes" },
+          { venue: "PREDICT_FUN", venueMarketId: "predict-1", venueOutcomeId: "yes" }
+        ];
+      }
+    }, () => now);
+
+    const results = await source.getCalculatedSnapshots({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "yes",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(results.map((result) => result.venue)).toEqual(["POLYMARKET"]);
+  });
 });
 
 describe("venue quote mapping resolvers", () => {
