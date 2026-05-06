@@ -1,6 +1,9 @@
 import Fastify from "fastify";
 import { describe, expect, it, vi } from "vitest";
-import { registerExecutionRoutes } from "../src/api/routes/execution.js";
+import {
+  buildLiveExecutionCandidatesResponse,
+  registerExecutionRoutes
+} from "../src/api/routes/execution.js";
 
 describe("execution signed bundle routes", () => {
   it("wires prepare-signatures and submit-signed-bundle through the signed bundle service", async () => {
@@ -54,5 +57,130 @@ describe("execution signed bundle routes", () => {
       signedLegs: [],
       dryRun: true
     });
+  });
+
+  it("serves live execution candidates from backend quote evidence", async () => {
+    const app = Fastify();
+    const liveCandidateProvider = {
+      getCandidates: vi.fn(async () => ({
+        generatedAt: "2026-05-06T00:00:00.000Z",
+        marketId: "canonical-market",
+        outcomeId: "YES",
+        amount: "1",
+        source: "LIVE_QUOTE_SOURCE" as const,
+        candidates: [{
+          venue: "POLYMARKET",
+          venueMarketId: "condition-1",
+          venueOutcomeId: "token-1",
+          price: 0.52,
+          availableSize: "10"
+        }],
+        blocked: []
+      }))
+    };
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: {
+        quote: vi.fn(),
+        getQuote: vi.fn()
+      } as never,
+      sellQuoteService: {
+        prepareExit: vi.fn()
+      } as never,
+      liveCandidateProvider
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/execution/live-candidates",
+      payload: {
+        side: "buy",
+        marketId: "canonical-market",
+        outcomeId: "YES",
+        amount: "1"
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      source: "LIVE_QUOTE_SOURCE",
+      candidates: [{
+        venue: "POLYMARKET",
+        venueMarketId: "condition-1",
+        venueOutcomeId: "token-1",
+        price: 0.52
+      }]
+    });
+    expect(liveCandidateProvider.getCandidates).toHaveBeenCalledWith({
+      userId: "user-1",
+      side: "buy",
+      marketId: "canonical-market",
+      outcomeId: "YES",
+      amount: "1"
+    });
+  });
+
+  it("builds live candidates only when executable venue ids are present", () => {
+    const response = buildLiveExecutionCandidatesResponse({
+      generatedAt: new Date("2026-05-06T00:00:00.000Z"),
+      marketId: "canonical-market",
+      outcomeId: "YES",
+      amount: "1",
+      snapshots: [
+        {
+          venue: "POLYMARKET",
+          availableSize: 4,
+          quotedPrice: 0.51,
+          fees: {},
+          latencyMs: 40,
+          fillProb: 0.9,
+          metadata: {
+            venueMarketId: "condition-1",
+            venueOutcomeId: "token-1",
+            quoteQuality: "FULL_DEPTH_REST",
+            freshnessMs: 40,
+            blockers: []
+          }
+        },
+        {
+          venue: "LIMITLESS",
+          availableSize: 4,
+          quotedPrice: 0.53,
+          fees: {},
+          latencyMs: 45,
+          fillProb: 0.9,
+          metadata: {
+            venueMarketId: "limitless-market",
+            blockers: []
+          }
+        }
+      ],
+      readiness: [
+        {
+          venue: "POLYMARKET",
+          executionSigningModel: "BACKEND_SIGNER",
+          liveSubmissionSupported: true
+        },
+        {
+          venue: "LIMITLESS",
+          executionSigningModel: "USER_SIGNED_BACKEND_RELAY",
+          liveSubmissionSupported: true
+        }
+      ] as never
+    });
+
+    expect(response.candidates).toHaveLength(1);
+    expect(response.candidates[0]).toMatchObject({
+      venue: "POLYMARKET",
+      venueMarketId: "condition-1",
+      venueOutcomeId: "token-1",
+      price: 0.51
+    });
+    expect(response.blocked).toEqual([{
+      venue: "LIMITLESS",
+      reason: "VENUE_OUTCOME_ID_MISSING_FROM_LIVE_QUOTE",
+      venueMarketId: "limitless-market"
+    }]);
   });
 });

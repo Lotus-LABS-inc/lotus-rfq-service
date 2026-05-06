@@ -219,6 +219,8 @@ export class CompositeVenueQuoteSource {
         metadata: {
           source: "venue_quote_snapshot",
           venue: calculated.venue,
+          venueMarketId: snapshot.venueMarketId,
+          venueOutcomeId: snapshot.venueOutcomeId,
           quoteQuality: calculated.quoteQuality,
           quoteSource: calculated.source,
           freshnessMs: calculated.freshnessMs,

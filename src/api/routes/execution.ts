@@ -3,12 +3,15 @@ import { z } from "zod";
 import type {
   ExecutableRouteService,
   ExecutableTradeQuote,
-  SellQuoteService
+  SellQuoteService,
+  TradeRouteCandidate
 } from "../../execution-system/executable-routing.js";
 import {
   SignedTradeBundleError,
   type SignedTradeBundleService
 } from "../../execution-system/signed-trade-bundle.js";
+import type { CalculatedVenueQuoteSnapshot } from "../../core/sor/quote-snapshot.js";
+import type { ExecutionVenueReadinessSummary } from "../admin/execution-venues-admin-service.js";
 
 const candidateSchema = z.object({
   venue: z.string().min(1),
@@ -46,6 +49,14 @@ const quoteRequestSchema = z.object({
   candidates: z.array(candidateSchema).min(1)
 });
 
+const liveCandidatesRequestSchema = z.object({
+  side: z.enum(["buy", "sell"]),
+  marketId: z.string().min(1),
+  outcomeId: z.string().min(1),
+  amount: z.string().regex(/^\d+(\.\d+)?$/),
+  venues: z.array(z.string().min(1)).optional()
+});
+
 const submitRequestSchema = z.object({
   quoteId: z.string().min(1)
 });
@@ -74,6 +85,35 @@ export interface ExecutionRouteDeps {
   executableRouteService: ExecutableRouteService;
   sellQuoteService: SellQuoteService;
   signedTradeBundleService?: SignedTradeBundleService | undefined;
+  liveCandidateProvider?: LiveExecutionCandidateProvider | undefined;
+}
+
+export interface LiveExecutionCandidateProvider {
+  getCandidates(input: {
+    userId: string;
+    side: "buy" | "sell";
+    marketId: string;
+    outcomeId: string;
+    amount: string;
+    venues?: readonly string[] | undefined;
+  }): Promise<LiveExecutionCandidatesResponse>;
+}
+
+export interface LiveExecutionCandidatesResponse {
+  generatedAt: string;
+  marketId: string;
+  outcomeId: string;
+  amount: string;
+  source: "LIVE_QUOTE_SOURCE";
+  candidates: readonly TradeRouteCandidate[];
+  blocked: readonly LiveExecutionCandidateBlocker[];
+}
+
+export interface LiveExecutionCandidateBlocker {
+  venue: string;
+  reason: string;
+  venueMarketId?: string | undefined;
+  venueOutcomeId?: string | undefined;
 }
 
 export const registerExecutionRoutes = async (
@@ -81,6 +121,35 @@ export const registerExecutionRoutes = async (
   authMiddleware: preHandlerHookHandler,
   deps: ExecutionRouteDeps
 ): Promise<void> => {
+  app.post("/execution/live-candidates", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!deps.liveCandidateProvider) {
+      return reply.status(501).send({
+        code: "LIVE_EXECUTION_CANDIDATES_NOT_CONFIGURED",
+        message: "Live execution candidate sourcing is not configured on this backend."
+      });
+    }
+    const parsed = liveCandidatesRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "Live execution candidate request validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    const result = await deps.liveCandidateProvider.getCandidates({
+      userId: request.user.userId,
+      ...parsed.data
+    });
+    if (result.candidates.length === 0) {
+      return reply.status(409).send({
+        code: "NO_LIVE_EXECUTION_CANDIDATES",
+        message: "No live-tradeable venue candidates are available for this market/outcome right now.",
+        ...result
+      });
+    }
+    return reply.send(result);
+  });
+
   app.post("/execution/quote", { preHandler: authMiddleware }, async (request, reply) => {
     const parsed = quoteRequestSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -276,3 +345,94 @@ const toUserQuote = (quote: ExecutableTradeQuote): Record<string, unknown> => ({
     requiresUserSignature: leg.requiresUserSignature
   }))
 });
+
+export const buildLiveExecutionCandidatesResponse = (input: {
+  generatedAt?: Date | undefined;
+  marketId: string;
+  outcomeId: string;
+  amount: string;
+  snapshots: readonly CalculatedVenueQuoteSnapshot[];
+  readiness: readonly ExecutionVenueReadinessSummary[];
+  venues?: readonly string[] | undefined;
+}): LiveExecutionCandidatesResponse => {
+  const allowedVenues = input.venues?.length
+    ? new Set(input.venues.map((venue) => venue.toUpperCase()))
+    : null;
+  const readinessByVenue = new Map(input.readiness.map((venue) => [venue.venue.toUpperCase(), venue]));
+  const candidates: TradeRouteCandidate[] = [];
+  const blocked: LiveExecutionCandidateBlocker[] = [];
+
+  for (const snapshot of input.snapshots) {
+    const venue = snapshot.venue.toUpperCase();
+    if (allowedVenues && !allowedVenues.has(venue)) {
+      continue;
+    }
+    const metadata = snapshot.metadata;
+    const venueMarketId = asString(metadata.venueMarketId);
+    const venueOutcomeId = asString(metadata.venueOutcomeId);
+    if (!venueMarketId) {
+      blocked.push({ venue, reason: "VENUE_MARKET_ID_MISSING_FROM_LIVE_QUOTE" });
+      continue;
+    }
+    if (!venueOutcomeId) {
+      blocked.push({ venue, reason: "VENUE_OUTCOME_ID_MISSING_FROM_LIVE_QUOTE", venueMarketId });
+      continue;
+    }
+    const quoteBlockers = asStringArray(metadata.blockers);
+    if (quoteBlockers.length > 0) {
+      blocked.push({ venue, reason: quoteBlockers.join(","), venueMarketId, venueOutcomeId });
+      continue;
+    }
+    const readiness = readinessByVenue.get(venue);
+    const feeQuote = isRecord(metadata.feeQuote) ? metadata.feeQuote : {};
+    candidates.push({
+      venue,
+      venueMarketId,
+      venueOutcomeId,
+      price: snapshot.quotedPrice,
+      availableSize: String(snapshot.availableSize),
+      requiresUserSignature: readiness?.executionSigningModel.includes("USER_SIGNED") === true,
+      activationRequired: false,
+      settlementEvidenceSupported: asBoolean(metadata.settlementEvidenceSupported) ?? readiness?.liveSubmissionSupported === true,
+      recoveryRequired: false,
+      ...(asNumber(metadata.feeAmount) !== undefined ? { feeAmount: asNumber(metadata.feeAmount) } : {}),
+      ...(asNumber(metadata.effectiveFeeBps) !== undefined ? { effectiveFeeBps: asNumber(metadata.effectiveFeeBps) } : {}),
+      ...(asString(feeQuote.feeModel) ? { feeModel: asString(feeQuote.feeModel) } : {}),
+      ...(asString(feeQuote.source) ? { feeSource: asString(feeQuote.source) } : {}),
+      ...(asString(feeQuote.confidence) ? { feeConfidence: asString(feeQuote.confidence) } : {}),
+      ...(asNumber(metadata.spreadBps) !== undefined ? { spreadBps: asNumber(metadata.spreadBps) } : {}),
+      ...(asNumber(metadata.slippageBps) !== undefined ? { slippageBps: asNumber(metadata.slippageBps) } : {}),
+      ...(asNumber(metadata.liquidityScore) !== undefined ? { liquidityScore: asNumber(metadata.liquidityScore) } : {}),
+      ...(asString(metadata.quoteQuality) ? { quoteQuality: asString(metadata.quoteQuality) } : {}),
+      ...(asNumber(metadata.freshnessMs) !== undefined ? { freshnessMs: asNumber(metadata.freshnessMs) } : {}),
+      ...(asNumber(metadata.confidencePenaltyBps) !== undefined ? { confidencePenaltyBps: asNumber(metadata.confidencePenaltyBps) } : {}),
+      missingFactors: asStringArray(metadata.missingFactors),
+      quoteBlockers
+    });
+  }
+
+  return {
+    generatedAt: (input.generatedAt ?? new Date()).toISOString(),
+    marketId: input.marketId,
+    outcomeId: input.outcomeId,
+    amount: input.amount,
+    source: "LIVE_QUOTE_SOURCE",
+    candidates,
+    blocked
+  };
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const asString = (value: unknown): string | undefined =>
+  typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+
+const asNumber = (value: unknown): number | undefined =>
+  typeof value === "number" && Number.isFinite(value) ? value : undefined;
+
+const asBoolean = (value: unknown): boolean | undefined =>
+  typeof value === "boolean" ? value : undefined;
+
+const asStringArray = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];

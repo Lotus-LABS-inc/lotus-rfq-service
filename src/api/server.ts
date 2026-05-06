@@ -16,7 +16,7 @@ import { RFQExecutionRepository } from "../db/repositories/rfq-execution-reposit
 import { registerHealthRoute } from "./routes/health.js";
 import { registerMetricsRoute } from "./routes/metrics.js";
 import { registerFundingRoutes } from "./routes/funding.js";
-import { registerExecutionRoutes } from "./routes/execution.js";
+import { buildLiveExecutionCandidatesResponse, registerExecutionRoutes } from "./routes/execution.js";
 import { registerMarketCatalogRoutes } from "./routes/markets.js";
 import { buildVenueBalanceActivationActions } from "../core/funding/venue-activation.js";
 import { registerUserWithdrawalWalletRoutes } from "./routes/user-withdrawal-wallets.js";
@@ -1314,7 +1314,28 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   await registerExecutionRoutes(app, userAuthMiddleware, {
     executableRouteService,
     sellQuoteService,
-    signedTradeBundleService
+    signedTradeBundleService,
+    liveCandidateProvider: {
+      getCandidates: async (input) => {
+        const quantity = Number(input.amount);
+        const snapshots = Number.isFinite(quantity) && quantity > 0
+          ? await venueQuoteSource.getCalculatedSnapshots({
+              canonicalMarketId: input.marketId,
+              canonicalOutcomeId: input.outcomeId,
+              side: input.side,
+              quantity
+            })
+          : [];
+        return buildLiveExecutionCandidatesResponse({
+          marketId: input.marketId,
+          outcomeId: input.outcomeId,
+          amount: input.amount,
+          snapshots,
+          readiness: await executionVenuesAdminService.listVenues(),
+          ...(input.venues ? { venues: input.venues } : {})
+        });
+      }
+    }
   });
   await registerMarketCatalogRoutes(app, {
     marketCatalogRepository
