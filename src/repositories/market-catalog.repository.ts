@@ -347,6 +347,7 @@ export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingL
           WHERE ce.id::text = $1
              OR ce.proposition_key = $1
              OR cem.id = $1
+             OR regexp_replace(cem.id, ':(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$', '') = $1
           LIMIT 1
        )
        SELECT

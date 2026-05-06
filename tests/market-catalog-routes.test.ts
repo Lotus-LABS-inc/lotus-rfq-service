@@ -8,7 +8,10 @@ import type {
   MarketCatalogMarket,
   MarketCatalogRepository
 } from "../src/repositories/market-catalog.repository.js";
-import { MarketCatalogRepository as PgMarketCatalogRepository } from "../src/repositories/market-catalog.repository.js";
+import {
+  MarketCatalogRepository as PgMarketCatalogRepository,
+  SharedCoreQuoteMappingRepository
+} from "../src/repositories/market-catalog.repository.js";
 
 const market: MarketCatalogMarket = {
   eventId: "event:NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
@@ -353,5 +356,35 @@ describe("market catalog routes", () => {
     expect(queries[0]).toContain("fma.metadata->>'source' = 'frontend-curated-catalog'");
     expect(queries[1]).toContain("fma.status = 'APPROVED'");
     expect(queries[1]).toContain("fma.metadata->>'source' = 'frontend-curated-catalog'");
+  });
+
+  it("resolves shared-core quote mappings when frontend sends a venue-neutral canonical market id", async () => {
+    const queries: Array<{ sql: string; params?: unknown[] }> = [];
+    const pool = {
+      query: async (sql: string, params?: unknown[]) => {
+        queries.push({ sql, params });
+        return {
+          rows: [{
+            venue: "POLYMARKET",
+            venue_market_id: "POLYMARKET:condition-1:CANONICAL|YES",
+            normalized_payload: {
+              quoteMarketId: "condition-1",
+              quoteOutcomeTokenIds: { YES: "token-yes", NO: "token-no" }
+            },
+            raw_source_payload: {}
+          }]
+        };
+      }
+    };
+
+    const repository = new SharedCoreQuoteMappingRepository(pool as never);
+    const rows = await repository.loadApprovedVenueMappings({
+      canonicalMarketId: "FRONTEND_CURATED:CANONICAL|YES",
+      canonicalOutcomeId: "YES"
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(queries[0]?.sql).toContain("regexp_replace(cem.id");
+    expect(queries[0]?.params?.[0]).toBe("FRONTEND_CURATED:CANONICAL|YES");
   });
 });
