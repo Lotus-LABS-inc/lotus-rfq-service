@@ -1190,42 +1190,43 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     ...defaultExecutionScopeAuthorities,
     ...(dependencies.executionScopeAuthorities ?? {})
   };
-  let signedTradeBundleService: SignedTradeBundleService | undefined;
+  const adapterRegistry = new ExecutionVenueAdapterRegistry();
   if (dependencies.executionSystemSandboxEnabled) {
-    const laneGate = new ApprovedLaneExecutionGate(new ScopeAuthorityLaneResolver(executionScopeAuthorities));
-    const adapterRegistry = new ExecutionVenueAdapterRegistry();
     for (const venue of ["LIMITLESS", "OPINION", "POLYMARKET", "PREDICT", "MYRIAD", "TEST"]) {
       adapterRegistry.register(new TestExecutionAdapter(venue));
     }
-    if (process.env.POLYMARKET_EXECUTION_MODE === "v2") {
-      adapterRegistry.register(new PolymarketExecutionAdapterV2(
-        buildPolymarketExecutionAdapterV2ConfigFromEnv(process.env)
-      ));
-    }
-    if (
-      process.env.LIMITLESS_EXECUTION_MODE === "backend_signer" ||
-      process.env.LIMITLESS_EXECUTION_MODE === "delegated_partner_server_wallet" ||
-      process.env.LIMITLESS_EXECUTION_MODE === "user_signed_backend_relay"
-    ) {
-      adapterRegistry.register(new LimitlessExecutionAdapter(
-        buildLimitlessExecutionAdapterConfigFromEnv(process.env)
-      ));
-    }
-    if (process.env.OPINION_EXECUTION_MODE === "user_signed_backend_relay") {
-      adapterRegistry.register(new OpinionExecutionAdapter(
-        buildOpinionExecutionAdapterConfigFromEnv(process.env)
-      ));
-    }
-    if (process.env.PREDICT_FUN_EXECUTION_MODE === "user_signed_backend_relay") {
-      adapterRegistry.register(new PredictFunExecutionAdapter(
-        buildPredictFunExecutionAdapterConfigFromEnv(process.env)
-      ));
-    }
-    signedTradeBundleService = new SignedTradeBundleService(
-      executableRouteService,
-      adapterRegistry,
-      userVenueAccountService
-    );
+  }
+  if (process.env.POLYMARKET_EXECUTION_MODE === "v2") {
+    adapterRegistry.register(new PolymarketExecutionAdapterV2(
+      buildPolymarketExecutionAdapterV2ConfigFromEnv(process.env)
+    ));
+  }
+  if (
+    process.env.LIMITLESS_EXECUTION_MODE === "backend_signer" ||
+    process.env.LIMITLESS_EXECUTION_MODE === "delegated_partner_server_wallet" ||
+    process.env.LIMITLESS_EXECUTION_MODE === "user_signed_backend_relay"
+  ) {
+    adapterRegistry.register(new LimitlessExecutionAdapter(
+      buildLimitlessExecutionAdapterConfigFromEnv(process.env)
+    ));
+  }
+  if (process.env.OPINION_EXECUTION_MODE === "user_signed_backend_relay") {
+    adapterRegistry.register(new OpinionExecutionAdapter(
+      buildOpinionExecutionAdapterConfigFromEnv(process.env)
+    ));
+  }
+  if (process.env.PREDICT_FUN_EXECUTION_MODE === "user_signed_backend_relay") {
+    adapterRegistry.register(new PredictFunExecutionAdapter(
+      buildPredictFunExecutionAdapterConfigFromEnv(process.env)
+    ));
+  }
+  const signedTradeBundleService = new SignedTradeBundleService(
+    executableRouteService,
+    adapterRegistry,
+    userVenueAccountService
+  );
+  if (dependencies.executionSystemSandboxEnabled) {
+    const laneGate = new ApprovedLaneExecutionGate(new ScopeAuthorityLaneResolver(executionScopeAuthorities));
     const preflightDeps = alwaysHealthyPreflightDeps(laneGate);
     preflightDeps.funding = new FundingReadinessChecker(
       fundingService,
