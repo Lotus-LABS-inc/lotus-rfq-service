@@ -1,4 +1,5 @@
 import type { Pool } from "pg";
+import type { SharedCoreQuoteMappingLoader, SharedCoreVenueQuoteMappingRow } from "../core/sor/quote-snapshot.js";
 
 export interface MarketCatalogFilter {
   category?: string;
@@ -324,6 +325,85 @@ export class MarketCatalogRepository {
       byEvent.set(row.canonical_event_id, bucket);
     }
     return rows.map((row) => toMarket(row, byEvent.get(row.canonical_event_id) ?? []));
+  }
+}
+
+export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingLoader {
+  public constructor(
+    private readonly pool: Pool,
+    private readonly options: { approvalSource?: string | undefined } = {}
+  ) {}
+
+  public async loadApprovedVenueMappings(input: {
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+  }): Promise<readonly SharedCoreVenueQuoteMappingRow[]> {
+    const result = await this.pool.query<SharedCoreVenueQuoteMappingRow>(
+      `WITH selected_event AS (
+         SELECT ce.id
+           FROM canonical_events ce
+           LEFT JOIN canonical_executable_markets cem
+             ON cem.canonical_event_id = ce.id
+          WHERE ce.id::text = $1
+             OR ce.proposition_key = $1
+             OR cem.id = $1
+          LIMIT 1
+       )
+       SELECT
+         vmp.venue,
+         vmp.venue_market_id,
+         vmp.normalized_payload,
+         vmp.raw_source_payload
+        FROM selected_event se
+        JOIN frontend_market_approvals fma
+          ON fma.canonical_event_id = se.id
+         AND fma.status = 'APPROVED'
+         AND fma.metadata->>'source' = $2
+        JOIN venue_market_profiles vmp
+          ON vmp.canonical_event_id = se.id
+       ORDER BY vmp.venue`,
+      [input.canonicalMarketId, this.options.approvalSource ?? FRONTEND_SHARED_CORE_APPROVAL_SOURCE]
+    );
+    return result.rows;
+  }
+
+  public async listApprovedVenueMappings(input: {
+    limit: number;
+  }): Promise<readonly SharedCoreVenueQuoteMappingRow[]> {
+    const result = await this.pool.query<SharedCoreVenueQuoteMappingRow>(
+      `WITH selected_events AS (
+         SELECT ce.id
+           FROM canonical_events ce
+           JOIN frontend_market_approvals fma
+             ON fma.canonical_event_id = ce.id
+            AND fma.status = 'APPROVED'
+            AND fma.metadata->>'source' = $2
+          ORDER BY COALESCE(fma.sort_priority, 1000), ce.updated_at DESC
+          LIMIT $1
+       )
+       SELECT
+         ce.id::text AS canonical_event_id,
+         cem.id AS canonical_market_id,
+         ce.title,
+         ce.canonical_category,
+         vmp.venue,
+         vmp.venue_market_id,
+         vmp.normalized_payload,
+         vmp.raw_source_payload
+        FROM selected_events se
+        JOIN canonical_events ce
+          ON ce.id = se.id
+        LEFT JOIN canonical_executable_markets cem
+          ON cem.canonical_event_id = ce.id
+        JOIN venue_market_profiles vmp
+          ON vmp.canonical_event_id = ce.id
+       ORDER BY ce.title, vmp.venue`,
+      [
+        Math.max(1, Math.min(1000, Math.floor(input.limit))),
+        this.options.approvalSource ?? FRONTEND_SHARED_CORE_APPROVAL_SOURCE
+      ]
+    );
+    return result.rows;
   }
 }
 

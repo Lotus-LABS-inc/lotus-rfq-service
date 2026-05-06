@@ -1,15 +1,19 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { config as loadDotenv } from "dotenv";
+import { Pool } from "pg";
 
 import {
   calculateVenueQuote,
-  EnvVenueQuoteMappingResolver,
   QuoteSnapshotCache,
+  SharedCoreVenueQuoteMappingResolver,
   type QuoteCalculationResult,
+  type SharedCoreQuoteReadinessMarket,
   type VenueQuoteMapping,
+  type VenueQuoteMappingReadiness,
   type VenueQuoteSnapshotReader
 } from "../../src/core/sor/quote-snapshot.js";
+import { SharedCoreQuoteMappingRepository } from "../../src/repositories/market-catalog.repository.js";
 import {
   PolymarketQuoteReader,
   PolymarketRestOrderbookClient
@@ -72,10 +76,27 @@ interface QuoteSourceSmokeArtifact {
   };
   requiredVenues: string[];
   mappingSummary: {
-    sourceEnvPresent: boolean;
-    selectedKey: string | null;
+    source: "POSTGRES_SHARED_CORE";
     mappingsResolved: number;
     venuesResolved: string[];
+  };
+  approvedMarketAudit?: {
+    limit: number;
+    marketsScanned: number;
+    venueProfilesScanned: number;
+    quoteReadyVenueProfiles: number;
+    blockedVenueProfiles: number;
+    markets: Array<{
+      canonicalEventId: string;
+      canonicalMarketIds: string[];
+      title: string;
+      category: string;
+      venues: Array<{
+        venue: string;
+        quoteReady: boolean;
+        blockers: string[];
+      }>;
+    }>;
   };
   venues: QuoteSourceSmokeVenueRow[];
   safety: {
@@ -89,7 +110,7 @@ interface QuoteSourceSmokeArtifact {
 }
 
 const requiredVenues = parseRequiredVenues(process.env.QUOTE_SOURCE_SMOKE_REQUIRED_VENUES);
-const artifactDir = join(process.cwd(), "artifacts", "execution");
+const artifactDir = join(process.cwd(), "artifacts", "shared", "optional");
 const sensitiveKeyPatterns = [
   /api[-_]?key/i,
   /api[-_]?secret/i,
@@ -106,55 +127,79 @@ const sensitiveKeyPatterns = [
 const mode = parseMode(process.env.QUOTE_SOURCE_SMOKE_MODE);
 const side = parseSide(process.env.QUOTE_SOURCE_SMOKE_SIDE);
 const amount = parsePositiveNumber(process.env.QUOTE_SOURCE_SMOKE_AMOUNT, 1);
-const rawMappingJson = process.env.EXECUTION_QUOTE_VENUE_MARKET_MAP_JSON;
-const mappingSelection = selectCanonicalInput(rawMappingJson);
-const canonicalMarketId = process.env.QUOTE_SOURCE_SMOKE_CANONICAL_MARKET_ID?.trim() || mappingSelection.canonicalMarketId;
-const canonicalOutcomeId = process.env.QUOTE_SOURCE_SMOKE_CANONICAL_OUTCOME_ID?.trim() || mappingSelection.canonicalOutcomeId;
+const auditLimit = Math.floor(parsePositiveNumber(process.env.QUOTE_SOURCE_AUDIT_LIMIT, 100));
+const canonicalMarketId = process.env.QUOTE_SOURCE_SMOKE_CANONICAL_MARKET_ID?.trim();
+const canonicalOutcomeId = process.env.QUOTE_SOURCE_SMOKE_CANONICAL_OUTCOME_ID?.trim();
 
 const generatedAt = new Date().toISOString();
 const rows: QuoteSourceSmokeVenueRow[] = [];
 const nextActions: string[] = [];
 let mappings: readonly VenueQuoteMapping[] = [];
+let readinessRows: readonly VenueQuoteMappingReadiness[] = [];
+let auditMarkets: readonly SharedCoreQuoteReadinessMarket[] = [];
+let mappingPool: Pool | null = null;
 
-if (!canonicalMarketId) {
-  nextActions.push("Set QUOTE_SOURCE_SMOKE_CANONICAL_MARKET_ID or provide EXECUTION_QUOTE_VENUE_MARKET_MAP_JSON with at least one canonical key.");
-}
-
-if (canonicalMarketId) {
-  try {
-    mappings = await new EnvVenueQuoteMappingResolver(rawMappingJson).resolve({
+try {
+  const databaseUrl = process.env.SUPABASE_DB_URL ?? process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error("SUPABASE_DB_URL or DATABASE_URL is required to read shared-core quote mappings.");
+  }
+    const ssl = databaseUrl.includes("sslmode=require") || databaseUrl.includes("supabase")
+      ? { rejectUnauthorized: false }
+      : undefined;
+  mappingPool = new Pool({ connectionString: databaseUrl, ...(ssl ? { ssl } : {}) });
+  const resolver = new SharedCoreVenueQuoteMappingResolver(new SharedCoreQuoteMappingRepository(mappingPool));
+  if (canonicalMarketId) {
+    readinessRows = await resolver.getReadiness({
       canonicalMarketId,
       ...(canonicalOutcomeId ? { canonicalOutcomeId } : {})
     });
-  } catch (error) {
-    nextActions.push(`Fix EXECUTION_QUOTE_VENUE_MARKET_MAP_JSON parse error: ${errorMessage(error)}.`);
+    mappings = await resolver.resolve({
+      canonicalMarketId,
+      ...(canonicalOutcomeId ? { canonicalOutcomeId } : {})
+    });
+  } else {
+    auditMarkets = await resolver.listApprovedReadiness({ limit: auditLimit });
   }
+} catch (error) {
+  nextActions.push(`Fix shared-core quote mapping lookup: ${errorMessage(error)}.`);
+} finally {
+  await mappingPool?.end();
 }
 
 const mappingsByVenue = new Map(mappings.map((mapping) => [mapping.venue.toUpperCase(), mapping]));
-for (const venue of requiredVenues) {
-  const mapping = mappingsByVenue.get(venue);
-  if (!mapping) {
-    rows.push(emptyVenueRow(venue, ["QUOTE_MAPPING_MISSING"], null));
-    nextActions.push(`Add a ${venue} mapping to EXECUTION_QUOTE_VENUE_MARKET_MAP_JSON for the selected canonical key.`);
-    continue;
-  }
-  if (venue === "POLYMARKET" && !mapping.venueOutcomeId) {
-    rows.push(emptyVenueRow(venue, ["POLYMARKET_VENUE_OUTCOME_ID_REQUIRED"], null, mapping));
-    nextActions.push("Add Polymarket venueOutcomeId as the CLOB token_id; condition/market id alone is not enough for executable orderbook quotes.");
-    continue;
-  }
-  if (mode === "DISCOVER") {
-    rows.push(emptyVenueRow(venue, ["DISCOVER_MODE_NO_LIVE_VALIDATION"], null, mapping));
-    continue;
-  }
+if (canonicalMarketId) {
+  for (const venue of requiredVenues) {
+    const mapping = mappingsByVenue.get(venue);
+    if (!mapping) {
+      const readiness = readinessRows.find((row) => row.venue.toUpperCase() === venue);
+      rows.push(emptyVenueRow(venue, readiness?.blockers.length ? [...readiness.blockers] : ["QUOTE_MAPPING_MISSING"], null, readiness));
+      nextActions.push(`Store complete executable quote identifiers for ${venue} on the approved shared-core venue profile.`);
+      continue;
+    }
+    if (venue === "POLYMARKET" && !mapping.venueOutcomeId) {
+      rows.push(emptyVenueRow(venue, ["POLYMARKET_VENUE_OUTCOME_ID_REQUIRED"], null, mapping));
+      nextActions.push("Store the Polymarket CLOB token_id on the approved shared-core venue profile.");
+      continue;
+    }
+    if (mode === "DISCOVER") {
+      rows.push(emptyVenueRow(venue, ["DISCOVER_MODE_NO_LIVE_VALIDATION"], null, mapping));
+      continue;
+    }
 
-  rows.push(await validateVenue(mapping));
+    rows.push(await validateVenue(mapping));
+  }
 }
 
 const secretFindings = findSensitiveValues(rows);
 const requiredVenueSet = new Set(requiredVenues);
-const passed = rows.length === requiredVenues.length &&
+const auditOnly = !canonicalMarketId;
+if (auditOnly && auditMarkets.length === 0 && nextActions.length === 0) {
+  nextActions.push("No approved shared-core markets were found for quote-readiness audit.");
+}
+const passed = auditOnly
+  ? auditMarkets.length > 0 && secretFindings.length === 0 && nextActions.length === 0
+  : rows.length === requiredVenues.length &&
   rows.every((row) =>
     requiredVenueSet.has(row.venue) &&
     row.mappingPresent &&
@@ -176,11 +221,11 @@ const artifact: QuoteSourceSmokeArtifact = {
   },
   requiredVenues,
   mappingSummary: {
-    sourceEnvPresent: Boolean(rawMappingJson && rawMappingJson.trim().length > 0),
-    selectedKey: mappingSelection.selectedKey,
+    source: "POSTGRES_SHARED_CORE",
     mappingsResolved: mappings.length,
     venuesResolved: mappings.map((mapping) => mapping.venue.toUpperCase()).sort()
   },
+  ...(auditOnly ? { approvedMarketAudit: toAuditSummary(auditMarkets, auditLimit) } : {}),
   venues: rows,
   safety: {
     readOnly: true,
@@ -300,6 +345,28 @@ function readerForVenue(venue: string): VenueQuoteSnapshotReader | null {
   return null;
 }
 
+function toAuditSummary(markets: readonly SharedCoreQuoteReadinessMarket[], limit: number): QuoteSourceSmokeArtifact["approvedMarketAudit"] {
+  const venues = markets.flatMap((market) => market.venues);
+  return {
+    limit,
+    marketsScanned: markets.length,
+    venueProfilesScanned: venues.length,
+    quoteReadyVenueProfiles: venues.filter((venue) => venue.quoteReady).length,
+    blockedVenueProfiles: venues.filter((venue) => !venue.quoteReady).length,
+    markets: markets.map((market) => ({
+      canonicalEventId: market.canonicalEventId,
+      canonicalMarketIds: [...market.canonicalMarketIds],
+      title: market.title,
+      category: market.category,
+      venues: market.venues.map((venue) => ({
+        venue: venue.venue,
+        quoteReady: venue.quoteReady,
+        blockers: [...venue.blockers]
+      }))
+    }))
+  };
+}
+
 function rowFromCalculation(mapping: VenueQuoteMapping, calculated: QuoteCalculationResult): QuoteSourceSmokeVenueRow {
   return {
     venue: mapping.venue.toUpperCase(),
@@ -333,7 +400,7 @@ function emptyVenueRow(
   venue: string,
   blockers: string[],
   error: string | null,
-  mapping?: VenueQuoteMapping
+  mapping?: VenueQuoteMapping | VenueQuoteMappingReadiness
 ): QuoteSourceSmokeVenueRow {
   return {
     venue: venue.toUpperCase(),
@@ -361,30 +428,6 @@ function emptyVenueRow(
     blockers,
     error
   };
-}
-
-function selectCanonicalInput(rawJson: string | undefined): {
-  selectedKey: string | null;
-  canonicalMarketId: string | undefined;
-  canonicalOutcomeId: string | undefined;
-} {
-  if (!rawJson || rawJson.trim().length === 0) {
-    return { selectedKey: null, canonicalMarketId: undefined, canonicalOutcomeId: undefined };
-  }
-  try {
-    const parsed = JSON.parse(rawJson) as unknown;
-    if (typeof parsed !== "object" || parsed === null) {
-      return { selectedKey: null, canonicalMarketId: undefined, canonicalOutcomeId: undefined };
-    }
-    const selectedKey = Object.keys(parsed as Record<string, unknown>)[0];
-    if (!selectedKey) {
-      return { selectedKey: null, canonicalMarketId: undefined, canonicalOutcomeId: undefined };
-    }
-    const [canonicalMarketId, canonicalOutcomeId] = selectedKey.split("|", 2);
-    return { selectedKey, canonicalMarketId, canonicalOutcomeId };
-  } catch {
-    return { selectedKey: null, canonicalMarketId: undefined, canonicalOutcomeId: undefined };
-  }
 }
 
 function renderMarkdown(artifact: QuoteSourceSmokeArtifact): string {
@@ -428,6 +471,15 @@ function renderMarkdown(artifact: QuoteSourceSmokeArtifact): string {
     "- Raw venue payloads are not stored.",
     "- Credentials and env values are not stored.",
     `- Secret scan: ${artifact.safety.secretScanPassed ? "passed" : "failed"}`,
+    ...(artifact.approvedMarketAudit ? [
+      "",
+      "## Approved Market Audit",
+      "",
+      `- markets scanned: ${artifact.approvedMarketAudit.marketsScanned}`,
+      `- venue profiles scanned: ${artifact.approvedMarketAudit.venueProfilesScanned}`,
+      `- quote-ready venue profiles: ${artifact.approvedMarketAudit.quoteReadyVenueProfiles}`,
+      `- blocked venue profiles: ${artifact.approvedMarketAudit.blockedVenueProfiles}`
+    ] : []),
     "",
     "## Next Actions",
     "",

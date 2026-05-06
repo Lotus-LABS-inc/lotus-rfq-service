@@ -44,6 +44,7 @@
     "migrate:canonical:exact-markets": "tsx scripts/batch/rewrite-canonical-exact-markets.ts",
     "sync:predexon:live-mappings": "tsx scripts/sync/sync-live-predexon-mappings.ts",
     "sync:predexon:opinion-curation": "tsx scripts/sync/sync-opinion-curated-mappings.ts",
+    "sync:polymarket:quote-token-enrichment": "tsx scripts/sync/sync-polymarket-quote-token-enrichment.ts",
     "generate:opinion:exact-match-curation": "tsx scripts/batch/generate-opinion-exact-match-curation.ts",
     "sync:limitless:targeted-seeds": "tsx scripts/sync/sync-limitless-targeted-seeds.ts",
     "sync:limitless:live-current-state": "tsx scripts/sync/sync-limitless-live-current-state.ts",

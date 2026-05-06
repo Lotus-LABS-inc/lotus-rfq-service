@@ -134,12 +134,12 @@ import { NoResolutionRiskBaselineBuilder } from "../core/qualification/baselines
 import {
   CompositeVenueQuoteSource,
   CostModel,
-  EnvVenueQuoteMappingResolver,
   OrderRouter,
   PlanComposer,
   PlanRunner,
   QuoteSnapshotCache,
   RouteScout,
+  SharedCoreVenueQuoteMappingResolver,
   Splitter,
   type SORAcceptancePolicy,
   type CanonicalRFQInput
@@ -319,7 +319,7 @@ import {
   PgExecutionQuoteRepository,
   PgVerifiedPositionRepository
 } from "../repositories/execution-routing.repository.js";
-import { MarketCatalogRepository } from "../repositories/market-catalog.repository.js";
+import { MarketCatalogRepository, SharedCoreQuoteMappingRepository } from "../repositories/market-catalog.repository.js";
 import {
   buildFundingReadinessWatcherConfigFromEnv,
   FundingReadinessWatcher
@@ -842,7 +842,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       }),
       streamCache: myriadQuoteCache
     })
-  ], new EnvVenueQuoteMappingResolver(process.env.EXECUTION_QUOTE_VENUE_MARKET_MAP_JSON));
+  ], new SharedCoreVenueQuoteMappingResolver(new SharedCoreQuoteMappingRepository(dependencies.pgPool)));
 
   const sorRouteScout = new RouteScout({
     redis: dependencies.redisClient,

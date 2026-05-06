@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   calculateVenueQuote,
   CompositeVenueQuoteSource,
-  EnvVenueQuoteMappingResolver,
   QuoteSnapshotCache,
+  SharedCoreVenueQuoteMappingResolver,
   type NormalizedVenueQuoteSnapshot
 } from "../src/core/sor/quote-snapshot.js";
 import { LimitlessQuoteReader } from "../src/integrations/limitless/limitless-quote-reader.js";
@@ -222,12 +222,14 @@ describe("venue quote readers", () => {
           return snapshot({ venue: "LIMITLESS", venueMarketId: "lim-1", venueOutcomeId: "yes" });
         }
       }
-    ], new EnvVenueQuoteMappingResolver(JSON.stringify({
-      "canonical-1|yes": [
+    ], {
+      async resolve() {
+        return [
         { venue: "POLYMARKET", venueMarketId: "pm-1", venueOutcomeId: "yes" },
         { venue: "LIMITLESS", venueMarketId: "lim-1", venueOutcomeId: "yes" }
-      ]
-    })), () => now);
+        ];
+      }
+    }, () => now);
 
     const results = await source.getCalculatedSnapshots({
       canonicalMarketId: "canonical-1",
@@ -239,5 +241,119 @@ describe("venue quote readers", () => {
     expect(results.map((result) => result.venue)).toEqual(["POLYMARKET", "LIMITLESS"]);
     expect(results.every((result) => result.metadata.quoteQuality === "FULL_DEPTH_REST")).toBe(true);
     expect(results.every((result) => result.fees.provider_fee !== undefined)).toBe(true);
+  });
+});
+
+describe("venue quote mapping resolvers", () => {
+  it("resolves approved frontend-curated DB venue mappings back to raw venue ids", async () => {
+    const resolver = new SharedCoreVenueQuoteMappingResolver({
+      async loadApprovedVenueMappings() {
+        return [
+            {
+              venue: "LIMITLESS",
+              venue_market_id: "LIMITLESS:2026-fifa-world-cup-winner-1765296582257:brazil:SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026|BRAZIL",
+              normalized_payload: {
+                curatedKey: "SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026|BRAZIL",
+                venueMarketId: "2026-fifa-world-cup-winner-1765296582257:brazil"
+              },
+              raw_source_payload: {}
+            },
+            {
+              venue: "PREDICT",
+              venue_market_id: "PREDICT:1522:SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026|BRAZIL",
+              normalized_payload: {},
+              raw_source_payload: { venueMarketId: "1522" }
+            }
+          ];
+      },
+      async listApprovedVenueMappings() {
+        return [];
+      }
+    });
+
+    const result = await resolver.resolve({ canonicalMarketId: "FRONTEND_CURATED:SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026|BRAZIL" });
+
+    expect(result).toEqual([
+      { venue: "LIMITLESS", venueMarketId: "2026-fifa-world-cup-winner-1765296582257:brazil" },
+      { venue: "PREDICT", venueMarketId: "1522" }
+    ]);
+  });
+
+  it("reports missing executable ids for approved Polymarket and Opinion profiles", async () => {
+    const resolver = new SharedCoreVenueQuoteMappingResolver({
+      async loadApprovedVenueMappings() {
+        return [
+            {
+              venue: "POLYMARKET",
+              venue_market_id: "POLYMARKET:2026-fifa-world-cup-winner:brazil:SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026|BRAZIL",
+              normalized_payload: { venueMarketId: "2026-fifa-world-cup-winner:brazil" },
+              raw_source_payload: {}
+            },
+            {
+              venue: "OPINION",
+              venue_market_id: "OPINION:2026-fifa-world-cup-winner:brazil:SPORTS|TOURNAMENT_WINNER|FIFA_WORLD_CUP|2026|BRAZIL",
+              normalized_payload: { venueMarketId: "2026-fifa-world-cup-winner:brazil" },
+              raw_source_payload: {}
+            }
+          ];
+      },
+      async listApprovedVenueMappings() {
+        return [];
+      }
+    });
+
+    const readiness = await resolver.getReadiness({ canonicalMarketId: "canonical-world-cup-brazil" });
+    const routable = await resolver.resolve({ canonicalMarketId: "canonical-world-cup-brazil" });
+
+    expect(routable).toEqual([]);
+    expect(readiness.find((row) => row.venue === "POLYMARKET")?.blockers).toContain("POLYMARKET_CLOB_TOKEN_ID_MISSING");
+    expect(readiness.find((row) => row.venue === "OPINION")?.blockers).toContain("OPINION_TOKEN_ID_MISSING");
+  });
+
+  it("uses stored Polymarket quote token ids from shared-core payloads", async () => {
+    const resolver = new SharedCoreVenueQuoteMappingResolver({
+      async loadApprovedVenueMappings() {
+        return [
+          {
+            venue: "POLYMARKET",
+            venue_market_id: "POLYMARKET:bitcoin-all-time-high-by-june-30-2026:CRYPTO|ATH_BY_DATE|BTC|2026-06-30|2026_06_30",
+            normalized_payload: {
+              curatedKey: "CRYPTO|ATH_BY_DATE|BTC|2026-06-30|2026_06_30",
+              venueMarketId: "bitcoin-all-time-high-by-june-30-2026",
+              quoteMarketId: "0x337ed4a919995ef9ba9d705b319055633a5dfdcb3ab97cf610009a7d11a9ade4",
+              quoteTokenId: "yes-token",
+              quoteOutcomeTokenIds: {
+                YES: "yes-token",
+                NO: "no-token"
+              }
+            },
+            raw_source_payload: {}
+          }
+        ];
+      },
+      async listApprovedVenueMappings() {
+        return [];
+      }
+    });
+
+    await expect(resolver.resolve({
+      canonicalMarketId: "FRONTEND_CURATED:CRYPTO|ATH_BY_DATE|BTC|2026-06-30|2026_06_30"
+    })).resolves.toEqual([
+      {
+        venue: "POLYMARKET",
+        venueMarketId: "0x337ed4a919995ef9ba9d705b319055633a5dfdcb3ab97cf610009a7d11a9ade4",
+        venueOutcomeId: "yes-token"
+      }
+    ]);
+    await expect(resolver.resolve({
+      canonicalMarketId: "FRONTEND_CURATED:CRYPTO|ATH_BY_DATE|BTC|2026-06-30|2026_06_30",
+      canonicalOutcomeId: "NO"
+    })).resolves.toEqual([
+      {
+        venue: "POLYMARKET",
+        venueMarketId: "0x337ed4a919995ef9ba9d705b319055633a5dfdcb3ab97cf610009a7d11a9ade4",
+        venueOutcomeId: "no-token"
+      }
+    ]);
   });
 });

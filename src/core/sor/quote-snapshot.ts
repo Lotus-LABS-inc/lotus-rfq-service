@@ -94,12 +94,52 @@ export interface VenueQuoteMapping {
   venueOutcomeId?: string | undefined;
 }
 
+export interface VenueQuoteMappingReadiness {
+  venue: string;
+  approvedVenueMarketId: string;
+  venueMarketId: string | null;
+  venueOutcomeId: string | null;
+  quoteReady: boolean;
+  blockers: readonly string[];
+}
+
+export interface SharedCoreQuoteReadinessMarket {
+  canonicalEventId: string;
+  canonicalMarketIds: readonly string[];
+  title: string;
+  category: string;
+  venues: readonly VenueQuoteMappingReadiness[];
+}
+
 export interface VenueQuoteMappingResolver {
   resolve(input: {
     canonicalMarketId: string;
     canonicalOutcomeId?: string | undefined;
   }): Promise<readonly VenueQuoteMapping[]>;
 }
+
+export interface SharedCoreVenueQuoteMappingRow extends Record<string, unknown> {
+  canonical_event_id?: string;
+  canonical_market_id?: string | null;
+  title?: string;
+  canonical_category?: string;
+  venue: string;
+  venue_market_id: string;
+  normalized_payload: unknown;
+  raw_source_payload: unknown;
+}
+
+export interface SharedCoreQuoteMappingLoader {
+  loadApprovedVenueMappings(input: {
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+  }): Promise<readonly SharedCoreVenueQuoteMappingRow[]>;
+  listApprovedVenueMappings(input: {
+    limit: number;
+  }): Promise<readonly SharedCoreVenueQuoteMappingRow[]>;
+}
+
+const supportedQuoteVenues = new Set(["POLYMARKET", "LIMITLESS", "PREDICT", "PREDICT_FUN", "OPINION", "MYRIAD"]);
 
 export interface CalculatedVenueQuoteSnapshot {
   venue: string;
@@ -201,29 +241,38 @@ export class CompositeVenueQuoteSource {
   }
 }
 
-export class EnvVenueQuoteMappingResolver implements VenueQuoteMappingResolver {
-  public constructor(private readonly rawJson: string | undefined) {}
+export class SharedCoreVenueQuoteMappingResolver implements VenueQuoteMappingResolver {
+  public constructor(
+    private readonly loader: SharedCoreQuoteMappingLoader
+  ) {}
 
   public async resolve(input: {
     canonicalMarketId: string;
     canonicalOutcomeId?: string | undefined;
   }): Promise<readonly VenueQuoteMapping[]> {
-    if (!this.rawJson || this.rawJson.trim().length === 0) {
-      return [];
-    }
-    const parsed = JSON.parse(this.rawJson) as unknown;
-    if (typeof parsed !== "object" || parsed === null) {
-      return [];
-    }
-    const record = parsed as Record<string, unknown>;
-    const key = input.canonicalOutcomeId
-      ? `${input.canonicalMarketId}|${input.canonicalOutcomeId}`
-      : input.canonicalMarketId;
-    const direct = normalizeMappings(record[key]);
-    if (direct.length > 0) {
-      return direct;
-    }
-    return normalizeMappings(record[input.canonicalMarketId]);
+    const readiness = await this.getReadiness(input);
+    return readiness
+      .filter((row) => row.quoteReady && row.venueMarketId !== null)
+      .map((row) => ({
+        venue: row.venue,
+        venueMarketId: row.venueMarketId!,
+        ...(row.venueOutcomeId ? { venueOutcomeId: row.venueOutcomeId } : {})
+      }));
+  }
+
+  public async getReadiness(input: {
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+  }): Promise<readonly VenueQuoteMappingReadiness[]> {
+    const rows = await this.loader.loadApprovedVenueMappings(input);
+    return normalizeSharedCoreMappingReadiness(rows, input.canonicalOutcomeId);
+  }
+
+  public async listApprovedReadiness(input: {
+    limit: number;
+  }): Promise<readonly SharedCoreQuoteReadinessMarket[]> {
+    const rows = await this.loader.listApprovedVenueMappings(input);
+    return normalizeSharedCoreReadinessMarkets(rows);
   }
 }
 
@@ -329,24 +378,168 @@ export const calculateVenueQuote = (input: QuoteCalculationInput): QuoteCalculat
   };
 };
 
-const normalizeMappings = (value: unknown): readonly VenueQuoteMapping[] => {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.flatMap((entry) => {
-    if (typeof entry !== "object" || entry === null) {
+const normalizeSharedCoreMappingReadiness = (
+  rows: readonly SharedCoreVenueQuoteMappingRow[],
+  canonicalOutcomeId?: string | undefined
+): readonly VenueQuoteMappingReadiness[] =>
+  rows.flatMap((row) => {
+    const venue = typeof row.venue === "string" ? row.venue.toUpperCase() : "";
+    if (!venue) {
       return [];
     }
-    const record = entry as Record<string, unknown>;
-    if (typeof record.venue !== "string" || typeof record.venueMarketId !== "string") {
-      return [];
-    }
+    const normalizedPayload = asRecord(row.normalized_payload);
+    const rawPayload = asRecord(row.raw_source_payload);
+    const venueMarketId = firstString(
+      normalizedPayload.quoteMarketId,
+      normalizedPayload.quote_market_id,
+      normalizedPayload.executableMarketId,
+      normalizedPayload.executable_market_id,
+      normalizedPayload.venueMarketId,
+      normalizedPayload.venue_market_id,
+      rawPayload.quoteMarketId,
+      rawPayload.quote_market_id,
+      rawPayload.executableMarketId,
+      rawPayload.executable_market_id,
+      rawPayload.venueMarketId,
+      rawPayload.venue_market_id,
+      stripCuratedVenueMarketId(row.venue_market_id, venue, normalizedPayload.curatedKey ?? rawPayload.curatedKey)
+    );
+    const venueOutcomeId = firstString(
+      tokenForCanonicalOutcome(normalizedPayload.quoteOutcomeTokenIds, canonicalOutcomeId),
+      tokenForCanonicalOutcome(normalizedPayload.quote_outcome_token_ids, canonicalOutcomeId),
+      tokenForCanonicalOutcome(rawPayload.quoteOutcomeTokenIds, canonicalOutcomeId),
+      tokenForCanonicalOutcome(rawPayload.quote_outcome_token_ids, canonicalOutcomeId),
+      normalizedPayload.quoteTokenId,
+      normalizedPayload.quote_token_id,
+      normalizedPayload.quoteOutcomeId,
+      normalizedPayload.quote_outcome_id,
+      normalizedPayload.executableOutcomeId,
+      normalizedPayload.executable_outcome_id,
+      normalizedPayload.venueOutcomeId,
+      normalizedPayload.venue_outcome_id,
+      rawPayload.quoteTokenId,
+      rawPayload.quote_token_id,
+      rawPayload.quoteOutcomeId,
+      rawPayload.quote_outcome_id,
+      rawPayload.executableOutcomeId,
+      rawPayload.executable_outcome_id,
+      rawPayload.venueOutcomeId,
+      rawPayload.venue_outcome_id
+    );
+    const blockers = quoteMappingBlockers({ venue, venueMarketId, venueOutcomeId });
     return [{
-      venue: record.venue.toUpperCase(),
-      venueMarketId: record.venueMarketId,
-      ...(typeof record.venueOutcomeId === "string" ? { venueOutcomeId: record.venueOutcomeId } : {})
+      venue,
+      approvedVenueMarketId: row.venue_market_id,
+      venueMarketId,
+      venueOutcomeId,
+      quoteReady: blockers.length === 0,
+      blockers
     }];
   });
+
+const normalizeSharedCoreReadinessMarkets = (rows: readonly SharedCoreVenueQuoteMappingRow[]): readonly SharedCoreQuoteReadinessMarket[] => {
+  const byEvent = new Map<string, {
+    canonicalMarketIds: Set<string>;
+    title: string;
+    category: string;
+    rowByVenueKey: Map<string, SharedCoreVenueQuoteMappingRow>;
+  }>();
+  for (const row of rows) {
+    const eventId = firstString(row.canonical_event_id);
+    if (!eventId) {
+      continue;
+    }
+    const bucket = byEvent.get(eventId) ?? {
+      canonicalMarketIds: new Set<string>(),
+      title: firstString(row.title) ?? eventId,
+      category: firstString(row.canonical_category) ?? "UNKNOWN",
+      rowByVenueKey: new Map<string, SharedCoreVenueQuoteMappingRow>()
+    };
+    const canonicalMarketId = firstString(row.canonical_market_id);
+    if (canonicalMarketId) {
+      bucket.canonicalMarketIds.add(canonicalMarketId);
+    }
+    bucket.rowByVenueKey.set(`${row.venue}:${row.venue_market_id}`, row);
+    byEvent.set(eventId, bucket);
+  }
+  return [...byEvent.entries()].map(([canonicalEventId, bucket]) => ({
+    canonicalEventId,
+    canonicalMarketIds: [...bucket.canonicalMarketIds].sort(),
+    title: bucket.title,
+    category: bucket.category,
+    venues: normalizeSharedCoreMappingReadiness([...bucket.rowByVenueKey.values()])
+  }));
+};
+
+const quoteMappingBlockers = (input: {
+  venue: string;
+  venueMarketId: string | null;
+  venueOutcomeId: string | null;
+}): readonly string[] => {
+  const blockers: string[] = [];
+  if (!supportedQuoteVenues.has(input.venue)) {
+    blockers.push("QUOTE_READER_UNSUPPORTED");
+  }
+  if (!input.venueMarketId) {
+    blockers.push("VENUE_MARKET_ID_MISSING");
+  }
+  if (input.venue === "POLYMARKET" && !input.venueOutcomeId) {
+    blockers.push("POLYMARKET_CLOB_TOKEN_ID_MISSING");
+  }
+  if (input.venue === "OPINION" && !input.venueOutcomeId && !looksLikeNumericId(input.venueMarketId)) {
+    blockers.push("OPINION_TOKEN_ID_MISSING");
+  }
+  return [...new Set(blockers)];
+};
+
+const looksLikeNumericId = (value: string | null): boolean =>
+  typeof value === "string" && /^\d+$/.test(value);
+
+const tokenForCanonicalOutcome = (value: unknown, canonicalOutcomeId?: string | undefined): string | null => {
+  if (!canonicalOutcomeId) {
+    return null;
+  }
+  const record = asRecord(value);
+  const normalizedOutcomeId = canonicalOutcomeId.trim().toUpperCase();
+  return firstString(
+    record[canonicalOutcomeId],
+    record[canonicalOutcomeId.trim()],
+    record[normalizedOutcomeId],
+    record[normalizedOutcomeId.replace(/\s+/g, "_")]
+  );
+};
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+
+const firstString = (...values: readonly unknown[]): string | null => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return null;
+};
+
+const stripCuratedVenueMarketId = (
+  venueMarketId: string,
+  venue: string,
+  curatedKey: unknown
+): string | null => {
+  const prefix = `${venue}:`;
+  if (!venueMarketId.startsWith(prefix)) {
+    return venueMarketId || null;
+  }
+  const withoutPrefix = venueMarketId.slice(prefix.length);
+  if (typeof curatedKey === "string" && curatedKey.length > 0) {
+    const suffix = `:${curatedKey}`;
+    return withoutPrefix.endsWith(suffix)
+      ? withoutPrefix.slice(0, -suffix.length)
+      : withoutPrefix;
+  }
+  return withoutPrefix;
 };
 
 const normalizeBook = (levels: readonly NormalizedQuoteLevel[], sort: "asc" | "desc") =>
