@@ -392,6 +392,14 @@ const buildPredictOrderPayload = (
   if (price === null || price <= 0 || price >= 1 || size === null || size <= 0) {
     throw new SignedTradeBundleError("PREDICT_FUN_ORDER_PRICE_SIZE_INVALID", "Predict.fun prepared order has invalid price or size.");
   }
+  const orderValueUsd = price * size;
+  if (!Number.isFinite(orderValueUsd) || orderValueUsd < 0.9) {
+    const minimumSize = Math.ceil((0.9 / price) * 1_000_000) / 1_000_000;
+    throw new SignedTradeBundleError(
+      "PREDICT_FUN_ORDER_VALUE_TOO_LOW",
+      `Predict.fun order value must be at least 0.9 USD. Increase amount to at least ${minimumSize}.`
+    );
+  }
   const metadata = recordField(payload, "predictOrderMetadata") ?? {};
   const chainId = Number(numericStringField(metadata, "chainId") ?? 56);
   const builder = OrderBuilder.make(chainId === 97 ? ChainId.BnbTestnet : ChainId.BnbMainnet);

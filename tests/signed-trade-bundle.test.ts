@@ -19,7 +19,7 @@ const quote = (): ExecutableTradeQuote => ({
   outcomeId: "YES",
   routeType: "CROSS_VENUE",
   venuePath: ["PREDICT_FUN", "LIMITLESS"],
-  executableAmount: "2",
+  executableAmount: "4",
   skippedAmount: "0",
   expectedPrice: 0.42,
   requiredUserSignatureSteps: [
@@ -32,7 +32,7 @@ const quote = (): ExecutableTradeQuote => ({
       venue: "PREDICT_FUN",
       venueMarketId: "predict-market",
       venueOutcomeId: "123456789",
-      size: "1",
+      size: "3",
       price: 0.42,
       requiresUserSignature: true
     },
@@ -156,6 +156,39 @@ describe("SignedTradeBundleService", () => {
 
     expect(hint.data?.strategy).toBe("LIMIT");
     expect(hint.data).not.toHaveProperty("reservedBalancePolicy");
+  });
+
+  it("blocks Predict.fun orders below the venue minimum order value", async () => {
+    const registry = new ExecutionVenueAdapterRegistry();
+    registry.register(new PredictFunExecutionAdapter({
+      executionMode: "user_signed_backend_relay",
+      baseUrl: "https://api.predict.fun",
+      apiKey: "predict-api-key",
+      liveExecutionEnabled: false,
+      orderCreatePath: "/v1/orders",
+      docsUrl: "https://dev.predict.fun"
+    }));
+    const lowValueQuote = quote();
+    lowValueQuote.venuePath = ["PREDICT_FUN"];
+    lowValueQuote.legs = [{
+      venue: "PREDICT_FUN",
+      venueMarketId: "predict-market",
+      venueOutcomeId: "123456789",
+      size: "2",
+      price: 0.4,
+      requiresUserSignature: true
+    }];
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => lowValueQuote } as never,
+      registry,
+      { getAccount: async (_userId, venue) => account(venue.toUpperCase() as UserVenueAccount["venue"]) }
+    );
+
+    await expect(sut.prepare({ userId: "user-1", quoteId: "exec_quote_test" }))
+      .rejects.toMatchObject({
+        code: "PREDICT_FUN_ORDER_VALUE_TOO_LOW",
+        message: "Predict.fun order value must be at least 0.9 USD. Increase amount to at least 2.25."
+      });
   });
 
   it("rejects a Limitless signature from the wrong signer", async () => {
