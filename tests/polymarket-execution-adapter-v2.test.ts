@@ -16,6 +16,7 @@ import {
   InMemoryExecutionAuditSink,
   PolymarketClobV2DryRunClient,
   PolymarketExecutionAdapterV2,
+  RelayPolymarketClobV2LiveClient,
   SdkPolymarketClobV2LiveClient,
   SettlementVerificationService,
   StaticLaneAuthorityResolver,
@@ -28,6 +29,12 @@ import {
   type ExecutionRequestV0,
   type PolymarketClobV2SdkClient
 } from "../src/execution-system/index.js";
+import {
+  createPolymarketRelayNonce,
+  signPolymarketRelayRequest,
+  verifyPolymarketRelayRequest
+} from "../src/execution-system/polymarket-execution-relay-auth.js";
+import { buildPolymarketExecutionRelayServer } from "../src/polymarket-execution-relay.js";
 
 const completeEnv = {
   POLYMARKET_EXECUTION_MODE: "v2",
@@ -185,6 +192,126 @@ describe("PolymarketExecutionAdapterV2", () => {
     await expect(adapter.prepareOrder(leg())).rejects.toMatchObject({
       reasonCode: "POLYMARKET_V2_NOT_CONFIGURED"
     });
+  });
+
+  it("treats relay URL and secret as live env in relay submit mode", () => {
+    const status = getPolymarketExecutionAdapterV2EnvStatus({
+      POLYMARKET_EXECUTION_MODE: "v2",
+      POLYMARKET_LIVE_EXECUTION_ENABLED: "true",
+      POLYMARKET_EXECUTION_SUBMIT_MODE: "relay",
+      POLYMARKET_EXECUTION_RELAY_URL: "https://relay.example",
+      POLYMARKET_EXECUTION_RELAY_SECRET: "relay-secret",
+      POLYMARKET_CLOB_HOST: "https://clob.polymarket.test",
+      POLYMARKET_CHAIN_ID: "137",
+      POLYMARKET_BUILDER_CODE: "lotus-builder"
+    });
+
+    expect(status).toMatchObject({
+      submitMode: "relay",
+      relayConfigured: true,
+      readinessState: "LIVE_READY",
+      requiredEnvPresent: true,
+      missingEnv: []
+    });
+  });
+
+  it("signs relay requests and rejects stale or tampered signatures", () => {
+    const body = { order: { venue: "POLYMARKET", clientOrderId: "order-1", payload: { price: 0.5 } } };
+    const timestamp = "2026-05-07T00:00:00.000Z";
+    const nonce = createPolymarketRelayNonce();
+    const signature = signPolymarketRelayRequest("relay-secret", {
+      timestamp,
+      nonce,
+      method: "POST",
+      path: "/internal/polymarket/v2/submit-order",
+      body
+    });
+
+    expect(verifyPolymarketRelayRequest("relay-secret", {
+      timestamp,
+      nonce,
+      signature,
+      method: "POST",
+      path: "/internal/polymarket/v2/submit-order",
+      body,
+      now: new Date("2026-05-07T00:00:10.000Z")
+    })).toBe(true);
+    expect(verifyPolymarketRelayRequest("relay-secret", {
+      timestamp,
+      nonce,
+      signature,
+      method: "POST",
+      path: "/internal/polymarket/v2/submit-order",
+      body: { ...body, extra: true },
+      now: new Date("2026-05-07T00:00:10.000Z")
+    })).toBe(false);
+    expect(verifyPolymarketRelayRequest("relay-secret", {
+      timestamp,
+      nonce,
+      signature,
+      method: "POST",
+      path: "/internal/polymarket/v2/submit-order",
+      body,
+      now: new Date("2026-05-07T00:01:00.000Z")
+    })).toBe(false);
+  });
+
+  it("relay client signs and submits prepared Polymarket orders without local CLOB credentials", async () => {
+    const requests: Array<{ url: string; headers: Headers; body: unknown }> = [];
+    const client = new RelayPolymarketClobV2LiveClient({
+      relayUrl: "https://relay.example",
+      relaySecret: "relay-secret",
+      fetchImpl: (async (url, init) => {
+        requests.push({
+          url: String(url),
+          headers: new Headers(init?.headers),
+          body: JSON.parse(String(init?.body))
+        });
+        return new Response(JSON.stringify({
+          venueOrderId: "pm-order-1",
+          status: "SUBMITTED",
+          filledSize: "0",
+          averagePrice: 0
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }) as typeof fetch
+    });
+
+    const result = await client.submitOrder({
+      venue: "POLYMARKET",
+      clientOrderId: "execution-1-leg-1",
+      payload: {
+        venueMarketId: "pm-market-1",
+        venueOutcomeId: "pm-outcome-yes",
+        side: "buy",
+        size: "1",
+        price: 0.51
+      }
+    });
+
+    expect(result.venueOrderId).toBe("pm-order-1");
+    expect(requests[0]?.url).toBe("https://relay.example/internal/polymarket/v2/submit-order");
+    expect(requests[0]?.headers.get("x-lotus-relay-signature")).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(requests[0]?.body)).not.toContain("server-side-secret");
+  });
+
+  it("relay routes reject missing authentication before reaching the CLOB client", async () => {
+    const previousSecret = process.env.POLYMARKET_EXECUTION_RELAY_SECRET;
+    process.env.POLYMARKET_EXECUTION_RELAY_SECRET = "relay-secret";
+    const app = buildPolymarketExecutionRelayServer();
+    const response = await app.inject({
+      method: "POST",
+      url: "/internal/polymarket/v2/submit-order",
+      payload: { order: { venue: "POLYMARKET", clientOrderId: "order-1", payload: {} } }
+    });
+    await app.close();
+    if (previousSecret === undefined) {
+      delete process.env.POLYMARKET_EXECUTION_RELAY_SECRET;
+    } else {
+      process.env.POLYMARKET_EXECUTION_RELAY_SECRET = previousSecret;
+    }
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({ code: "POLYMARKET_RELAY_AUTH_MISSING" });
   });
 
   it("prepares a safe Lotus-internal dry-run envelope with builderCode while live execution is disabled", async () => {

@@ -243,6 +243,9 @@ Execution readiness is separate from funding and withdrawal readiness.
 |---|---:|---|---:|---|
 | `POLYMARKET_EXECUTION_MODE` | Yes | `disabled` | No | Set to `v2` only for reviewed Polymarket V2 dry-run/live path. |
 | `POLYMARKET_LIVE_EXECUTION_ENABLED` | Yes | `false` | No | Must remain false until live submit approval. |
+| `POLYMARKET_EXECUTION_SUBMIT_MODE` | Yes | `direct` or `relay` | No | Main backend should use `relay` when live CLOB calls are sent to the dedicated allowed-region relay. Relay process itself uses `direct`. |
+| `POLYMARKET_EXECUTION_RELAY_URL` | If submit mode is `relay` | `https://lotus-polymarket-execution-relay.onrender.com` | No | Internal-only relay target for submit/fill/cancel/settlement calls. Do not use for quote reads. |
+| `POLYMARKET_EXECUTION_RELAY_SECRET` | If submit mode is `relay` | `<secret>` | Yes | Shared HMAC secret between main backend and relay. Secret manager only; never log or expose to frontend. |
 | `POLYMARKET_CLOB_HOST` | If Polymarket execution enabled | `https://clob.polymarket.com` | No | Official live V2 host only. |
 | `POLYMARKET_CHAIN_ID` | If Polymarket execution enabled | `137` | No | Must match venue chain. |
 | `POLYMARKET_API_KEY` | If live Polymarket submit enabled | `<secret>` | Yes | Server-side only. |
@@ -286,6 +289,15 @@ Polymarket V2 migration notes:
 | Order fields | V2 order creation must use `builderCode` and must not send legacy `nonce`, `feeRateBps`, or `taker` fields from Lotus. |
 | Collateral | Trading collateral is pUSD. API-only funding flows must account for USDC.e -> pUSD wrapping through Polymarket's Collateral Onramp. |
 | Withdrawals | Polymarket Bridge withdrawals are separate from CLOB trading and must stay user-transfer/read-status oriented until separately approved. |
+
+Dedicated Polymarket execution relay:
+
+- The main backend may stay in its existing Render region for quotes, routing, signatures, and non-Polymarket venues.
+- If the main backend region is geoblocked by Polymarket CLOB, deploy `lotus-polymarket-execution-relay` in an allowed Render region and set the main backend to `POLYMARKET_EXECUTION_SUBMIT_MODE=relay`.
+- The relay start command is `npm run start:polymarket-execution-relay`; its health route is `/health` and readiness route is `/readiness`.
+- The relay handles only live Polymarket CLOB submit, fill-state, cancel, and settlement-state calls. It must reuse the existing SDK live client and must not implement a second CLOB client.
+- Main-backend-to-relay calls must be HMAC signed with `POLYMARKET_EXECUTION_RELAY_SECRET`; stale or tampered requests fail closed.
+- Keep `POLYMARKET_LIVE_EXECUTION_ENABLED=false` until relay readiness passes and a tiny operator canary is approved.
 
 Execution go/no-go:
 

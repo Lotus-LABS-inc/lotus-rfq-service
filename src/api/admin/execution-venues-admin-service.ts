@@ -33,6 +33,9 @@ export interface ExecutionVenueReadinessSummary {
   liveSubmissionSupported: boolean;
   liveExecutionEnabled: boolean;
   featureFlagSelected: boolean;
+  submitMode?: "direct" | "relay";
+  relayConfigured?: boolean;
+  relayUrlConfigured?: boolean;
   host: string | null;
   chainId: string | null;
   requiredEnvPresent: boolean;
@@ -128,6 +131,9 @@ export class ExecutionVenuesAdminService {
       liveSubmissionSupported: true,
       liveExecutionEnabled: adapterStatus.liveExecutionEnabled,
       featureFlagSelected: adapterStatus.featureFlagSelected,
+      submitMode: adapterStatus.submitMode,
+      relayConfigured: adapterStatus.relayConfigured,
+      relayUrlConfigured: Boolean(this.env.POLYMARKET_EXECUTION_RELAY_URL),
       host: this.env.POLYMARKET_CLOB_HOST ?? this.env.POLY_CLOB_HOST ?? null,
       chainId: this.env.POLYMARKET_CHAIN_ID ?? this.env.POLY_CHAIN_ID ?? null,
       requiredEnvPresent: adapterStatus.requiredEnvPresent,
@@ -136,7 +142,7 @@ export class ExecutionVenuesAdminService {
       missingDryRunEnv: adapterStatus.missingDryRunEnv,
       credentialsServerSideOnly: true,
       lastHarnessAttempt,
-      operatorMessage: this.operatorMessage(operationalStatus, lastHarnessAttempt.errorCode),
+      operatorMessage: this.operatorMessage(adapterStatus, operationalStatus, lastHarnessAttempt.errorCode),
       venueAccountRequired: false,
       venueAccountConfigured: false,
       activeLinkedAccounts: 0,
@@ -282,15 +288,22 @@ export class ExecutionVenuesAdminService {
     return "NOT_CONFIGURED";
   }
 
-  private operatorMessage(status: ExecutionVenueOperationalStatus, lastErrorCode: string | null): string {
+  private operatorMessage(
+    adapterStatus: PolymarketExecutionAdapterV2EnvStatus,
+    status: ExecutionVenueOperationalStatus,
+    lastErrorCode: string | null
+  ): string {
+    const relaySuffix = adapterStatus.submitMode === "relay"
+      ? " Polymarket live CLOB calls are configured to use the dedicated execution relay."
+      : "";
     if (status === "EXTERNALLY_BLOCKED" && lastErrorCode === "POLYMARKET_V2_UNAUTHORIZED") {
       return "Polymarket adapter is structurally ready, but the last live-submit attempt was rejected by the venue with invalid API credentials.";
     }
     if (status === "STRUCTURALLY_READY") {
-      return "Polymarket adapter is structurally ready; live submission remains controlled by the operator harness gates.";
+      return `Polymarket adapter is structurally ready; live submission remains controlled by the operator harness gates.${relaySuffix}`;
     }
     if (status === "LIVE_DISABLED") {
-      return "Polymarket V2 dry-run path is configured, but live execution is disabled.";
+      return `Polymarket V2 dry-run path is configured, but live execution is disabled.${relaySuffix}`;
     }
     return "Polymarket V2 adapter is not fully configured.";
   }

@@ -25,6 +25,11 @@ import type {
   VenueSettlementState,
   VenueSubmitResult
 } from "./venue-adapter.js";
+import {
+  createPolymarketRelayNonce,
+  polymarketRelayHeaders,
+  signPolymarketRelayRequest
+} from "./polymarket-execution-relay-auth.js";
 
 export const polymarketV2RequiredEnvKeys = [
   "POLYMARKET_CLOB_HOST",
@@ -74,6 +79,9 @@ export interface PolymarketExecutionAdapterV2Config {
   negRisk?: boolean | undefined;
   relayerHost?: string | undefined;
   relayerApiKey?: string | undefined;
+  executionSubmitMode?: string | undefined;
+  executionRelayUrl?: string | undefined;
+  executionRelaySecret?: string | undefined;
   settlementStateOverride?: SettlementStatusV0 | undefined;
   fillStateOverride?: VenueFillState["status"] | undefined;
 }
@@ -86,12 +94,14 @@ export interface PolymarketExecutionAdapterV2EnvStatus {
   liveExecutionEnabled: boolean;
   readinessState: PolymarketExecutionAdapterV2Readiness;
   requiredEnvPresent: boolean;
-  missingEnv: readonly PolymarketV2RequiredEnvKey[];
+  missingEnv: readonly string[];
   dryRunRequiredEnvPresent: boolean;
   missingDryRunEnv: readonly PolymarketV2DryRunRequiredEnvKey[];
   builderCodeConfigured: boolean;
   credentialsServerSideOnly: true;
-  liveSubmissionStatus: "NOT_CONFIGURED" | "LIVE_DISABLED" | "ENV_INCOMPLETE" | "LIVE_CLIENT_DISABLED";
+  liveSubmissionStatus: "NOT_CONFIGURED" | "LIVE_DISABLED" | "ENV_INCOMPLETE" | "LIVE_READY" | "LIVE_CLIENT_DISABLED";
+  submitMode: "direct" | "relay";
+  relayConfigured: boolean;
 }
 
 export class PolymarketExecutionNotConfiguredError extends Error {
@@ -178,10 +188,14 @@ const stableStringify = (value: unknown): string => {
 export const getPolymarketExecutionAdapterV2EnvStatus = (
   env: NodeJS.ProcessEnv = process.env
 ): PolymarketExecutionAdapterV2EnvStatus => {
-  const missingEnv = polymarketV2RequiredEnvKeys.filter((key) => !nonEmpty(readPolymarketEnv(env, key)));
+  const submitMode = env.POLYMARKET_EXECUTION_SUBMIT_MODE === "relay" ? "relay" : "direct";
+  const relayEnvKeys = ["POLYMARKET_EXECUTION_RELAY_URL", "POLYMARKET_EXECUTION_RELAY_SECRET"] as const;
+  const missingRelayEnv = relayEnvKeys.filter((key) => !nonEmpty(env[key]));
+  const missingDirectEnv = polymarketV2RequiredEnvKeys.filter((key) => !nonEmpty(readPolymarketEnv(env, key)));
   const missingDryRunEnv = polymarketV2DryRunRequiredEnvKeys.filter((key) => !nonEmpty(readPolymarketEnv(env, key)));
   const liveExecutionEnabled = env.POLYMARKET_LIVE_EXECUTION_ENABLED === "true";
   const featureFlagSelected = env.POLYMARKET_EXECUTION_MODE === "v2";
+  const missingEnv = submitMode === "relay" ? missingRelayEnv : missingDirectEnv;
   const requiredEnvPresent = missingEnv.length === 0;
   const dryRunRequiredEnvPresent = missingDryRunEnv.length === 0;
   const readinessState: PolymarketExecutionAdapterV2Readiness =
@@ -205,13 +219,17 @@ export const getPolymarketExecutionAdapterV2EnvStatus = (
     missingDryRunEnv,
     builderCodeConfigured: nonEmpty(readPolymarketEnv(env, "POLYMARKET_BUILDER_CODE")),
     credentialsServerSideOnly: true,
+    submitMode,
+    relayConfigured: missingRelayEnv.length === 0,
     liveSubmissionStatus: readinessState === "NOT_CONFIGURED"
       ? "NOT_CONFIGURED"
       : !liveExecutionEnabled
         ? "LIVE_DISABLED"
-        : !requiredEnvPresent
+      : !requiredEnvPresent
         ? "ENV_INCOMPLETE"
-        : "LIVE_CLIENT_DISABLED"
+        : submitMode === "relay"
+          ? "LIVE_READY"
+          : "LIVE_CLIENT_DISABLED"
   };
 };
 
@@ -232,7 +250,10 @@ export const buildPolymarketExecutionAdapterV2ConfigFromEnv = (
   tickSize: parseTickSize(env.POLYMARKET_TICK_SIZE ?? env.POLY_TICK_SIZE),
   negRisk: parseOptionalBoolean(env.POLYMARKET_NEG_RISK ?? env.POLY_NEG_RISK),
   relayerHost: env.POLYMARKET_RELAYER_HOST ?? env.POLY_RELAYER_HOST,
-  relayerApiKey: env.POLYMARKET_RELAYER_API_KEY ?? env.POLY_RELAYER_API_KEY
+  relayerApiKey: env.POLYMARKET_RELAYER_API_KEY ?? env.POLY_RELAYER_API_KEY,
+  executionSubmitMode: env.POLYMARKET_EXECUTION_SUBMIT_MODE,
+  executionRelayUrl: env.POLYMARKET_EXECUTION_RELAY_URL,
+  executionRelaySecret: env.POLYMARKET_EXECUTION_RELAY_SECRET
 });
 
 const assertLiveClientConfig = (config: PolymarketExecutionAdapterV2Config): void => {
@@ -342,7 +363,7 @@ export interface PolymarketClobV2PreparedDryRunEnvelope {
 }
 
 export interface PolymarketClobV2LiveClient {
-  readonly mode: "disabled" | "live";
+  readonly mode: "disabled" | "live" | "relay";
   submitOrder(order: PreparedVenueOrder): Promise<VenueSubmitResult>;
   fetchFillState(venueOrderId: string): Promise<VenueFillState>;
   cancelOrder(venueOrderId: string): Promise<{ cancelled: boolean }>;
@@ -501,6 +522,81 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
     } finally {
       console.error = originalError;
     }
+  }
+}
+
+export class RelayPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient {
+  public readonly mode = "relay";
+  private readonly baseUrl: string;
+  private readonly secret: string;
+  private readonly fetchImpl: typeof fetch;
+
+  public constructor(config: {
+    relayUrl: string;
+    relaySecret: string;
+    fetchImpl?: typeof fetch | undefined;
+  }) {
+    if (!nonEmpty(config.relayUrl) || !nonEmpty(config.relaySecret)) {
+      throw new PolymarketExecutionNotConfiguredError(
+        "POLYMARKET_V2_RELAY_ENV_INCOMPLETE",
+        "Polymarket execution relay requires POLYMARKET_EXECUTION_RELAY_URL and POLYMARKET_EXECUTION_RELAY_SECRET."
+      );
+    }
+    this.baseUrl = config.relayUrl.replace(/\/+$/, "");
+    this.secret = config.relaySecret;
+    this.fetchImpl = config.fetchImpl ?? fetch;
+  }
+
+  public submitOrder(order: PreparedVenueOrder): Promise<VenueSubmitResult> {
+    return this.post<VenueSubmitResult>("/internal/polymarket/v2/submit-order", { order });
+  }
+
+  public fetchFillState(venueOrderId: string): Promise<VenueFillState> {
+    return this.post<VenueFillState>("/internal/polymarket/v2/fill-state", { venueOrderId });
+  }
+
+  public cancelOrder(venueOrderId: string): Promise<{ cancelled: boolean }> {
+    return this.post<{ cancelled: boolean }>("/internal/polymarket/v2/cancel-order", { venueOrderId });
+  }
+
+  public fetchSettlementState(fillOrOrderId: string): Promise<VenueSettlementState> {
+    return this.post<VenueSettlementState>("/internal/polymarket/v2/settlement-state", { fillOrOrderId });
+  }
+
+  private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
+    const timestamp = new Date().toISOString();
+    const nonce = createPolymarketRelayNonce();
+    const signature = signPolymarketRelayRequest(this.secret, {
+      timestamp,
+      nonce,
+      method: "POST",
+      path,
+      body
+    });
+    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        [polymarketRelayHeaders.timestamp]: timestamp,
+        [polymarketRelayHeaders.nonce]: nonce,
+        [polymarketRelayHeaders.signature]: signature
+      },
+      body: JSON.stringify(body)
+    });
+    const payload = await response.json().catch(() => null) as unknown;
+    if (!response.ok) {
+      const message = isRecord(payload) && typeof payload.message === "string"
+        ? payload.message
+        : `Polymarket execution relay request failed with status ${response.status}.`;
+      throw new PolymarketExecutionNotConfiguredError(
+        response.status === 401 || response.status === 403
+          ? "POLYMARKET_V2_RELAY_UNAUTHORIZED"
+          : "POLYMARKET_V2_RELAY_ERROR",
+        message
+      );
+    }
+    return payload as T;
   }
 }
 
@@ -808,6 +904,12 @@ export const createPolymarketClobV2LiveClient = (
   sdkFactory?: PolymarketClobV2SdkFactory
 ): PolymarketClobV2LiveClient => {
   try {
+    if (config.executionSubmitMode === "relay") {
+      return new RelayPolymarketClobV2LiveClient({
+        relayUrl: config.executionRelayUrl ?? "",
+        relaySecret: config.executionRelaySecret ?? ""
+      });
+    }
     return new SdkPolymarketClobV2LiveClient(config, sdkFactory);
   } catch {
     return new DisabledPolymarketClobV2LiveClient();
@@ -839,6 +941,15 @@ export class PolymarketExecutionAdapterV2 implements ExecutionVenueAdapter {
       POLYMARKET_BUILDER_CODE: this.config.builderCode,
       POLYMARKET_PRIVATE_KEY: this.config.privateKey
     };
+    if (this.config.executionSubmitMode) {
+      envLike.POLYMARKET_EXECUTION_SUBMIT_MODE = this.config.executionSubmitMode;
+    }
+    if (this.config.executionRelayUrl) {
+      envLike.POLYMARKET_EXECUTION_RELAY_URL = this.config.executionRelayUrl;
+    }
+    if (this.config.executionRelaySecret) {
+      envLike.POLYMARKET_EXECUTION_RELAY_SECRET = this.config.executionRelaySecret;
+    }
     return getPolymarketExecutionAdapterV2EnvStatus(envLike);
   }
 
