@@ -64,7 +64,7 @@ export class PredictOauthOrderClient {
   public constructor(private readonly config: PredictOauthOrderClientConfig) {
     this.baseUrl = (config.baseUrl ?? "https://api.predict.fun").replace(/\/+$/, "");
     this.orderCreatePath = config.orderCreatePath ?? "/v1/orders";
-    this.timeoutMs = config.timeoutMs ?? 15_000;
+    this.timeoutMs = config.timeoutMs ?? 45_000;
   }
 
   public configured(): boolean {

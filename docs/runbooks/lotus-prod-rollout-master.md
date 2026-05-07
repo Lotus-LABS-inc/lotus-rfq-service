@@ -278,7 +278,7 @@ Execution readiness is separate from funding and withdrawal readiness.
 | `PREDICT_FUN_EXECUTION_MODE` | Yes | `disabled` | No | Set to `user_signed_backend_relay` only after the user has an active Predict.fun venue-account binding. |
 | `PREDICT_FUN_LIVE_EXECUTION_ENABLED` | Yes | `false` | No | Private beta backend relay remains disabled until signed OAuth relay, status/fill evidence, and settlement semantics are reviewed. |
 | `PREDICT_FUN_EXECUTION_ORDER_CREATE_PATH` | Optional | `/v1/oauth/orders/create` | No | Predict.fun OAuth signed-order relay endpoint. |
-| `PREDICT_FUN_EXECUTION_TIMEOUT_MS` | Optional | `15000` | No | Bounded timeout for Predict.fun OAuth order relay/status calls. |
+| `PREDICT_FUN_EXECUTION_TIMEOUT_MS` | Optional | `45000` | No | Bounded timeout for Predict.fun live order relay/status calls. Venue submit latency is not part of the sub-ms routing target. |
 
 Polymarket V2 migration notes:
 
