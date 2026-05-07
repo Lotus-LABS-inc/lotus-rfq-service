@@ -184,6 +184,7 @@ describe("extended venue quote readers", () => {
         async getOrderbook(input) {
           requestedMarkets.push(input.marketId);
           return {
+            tokenId: "gavin-token",
             bids: [{ price: 0.24, size: "10" }],
             asks: [{ price: 0.25, size: "10" }]
           };
@@ -199,7 +200,7 @@ describe("extended venue quote readers", () => {
 
     const snapshot = await reader.getQuoteSnapshot({
       canonicalMarketId: "FRONTEND_CURATED:NOMINEE|US_PRESIDENT|2028|DEMOCRATIC|GAVIN_NEWSOM",
-      canonicalOutcomeId: "YES",
+      canonicalOutcomeId: "NO",
       venueMarketId: "democratic-presidential-nominee-2028-1768929458278",
       side: "buy",
       quantity: 1
@@ -208,9 +209,13 @@ describe("extended venue quote readers", () => {
     expect(requestedMarkets).toEqual(["gavin-newsom-1768927395479"]);
     expect(feeMarkets).toEqual(["gavin-newsom-1768927395479"]);
     expect(snapshot?.venueMarketId).toBe("gavin-newsom-1768927395479");
+    expect(snapshot?.venueOutcomeId).toBe("gavin-token");
+    expect(snapshot?.asks[0]?.price).toBe("0.76");
     expect(snapshot?.metadata).toMatchObject({
       approvedVenueMarketId: "democratic-presidential-nominee-2028-1768929458278",
-      venueMarketId: "gavin-newsom-1768927395479"
+      venueMarketId: "gavin-newsom-1768927395479",
+      venueOutcomeId: "gavin-token",
+      outcomeSide: "NO"
     });
   });
 

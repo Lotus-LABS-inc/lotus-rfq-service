@@ -105,6 +105,7 @@ export const normalizeLimitlessOrderbook = (input: {
   feeBps?: number | undefined;
 }): NormalizedVenueQuoteSnapshot => {
   const record = unwrapOrderbookRecord(input.payload);
+  const venueOutcomeId = input.venueOutcomeId ?? firstString(record.tokenId, record.token_id);
   const rawBids = normalizeLevels(record.bids ?? record.buy);
   const rawAsks = normalizeLevels(record.asks ?? record.sell);
   const bids = input.outcomeSide === "NO" ? invertBinaryLevels(rawAsks, "desc") : rawBids;
@@ -112,7 +113,7 @@ export const normalizeLimitlessOrderbook = (input: {
   return {
     venue: "LIMITLESS",
     venueMarketId: input.venueMarketId,
-    ...(input.venueOutcomeId ? { venueOutcomeId: input.venueOutcomeId } : {}),
+    ...(venueOutcomeId ? { venueOutcomeId } : {}),
     source: "REST",
     quoteQuality: bids.length > 1 && asks.length > 1 ? "FULL_DEPTH_REST" : "TOP_OF_BOOK_REST",
     sourceTimestamp: asDate(record.timestamp ?? record.updated_at ?? record.updatedAt),
@@ -129,7 +130,7 @@ export const normalizeLimitlessOrderbook = (input: {
     metadata: {
       approvedVenueMarketId: input.approvedVenueMarketId ?? input.venueMarketId,
       venueMarketId: input.venueMarketId,
-      venueOutcomeId: input.venueOutcomeId ?? null,
+      venueOutcomeId: venueOutcomeId ?? null,
       ...(input.outcomeSide ? { outcomeSide: input.outcomeSide } : {})
     }
   };
@@ -200,7 +201,9 @@ const resolveLimitlessOutcome = (
     return {
       venueOutcomeId: configuredOutcomeId,
       ...(yes && configuredOutcomeId === yes ? { outcomeSide: "YES" as const } : {}),
-      ...(no && configuredOutcomeId === no ? { outcomeSide: "NO" as const } : {})
+      ...(no && configuredOutcomeId === no ? { outcomeSide: "NO" as const } : {}),
+      ...(!yes && !no && normalizedCanonical === "YES" ? { outcomeSide: "YES" as const } : {}),
+      ...(!yes && !no && normalizedCanonical === "NO" ? { outcomeSide: "NO" as const } : {})
     };
   }
   if (normalizedCanonical === "YES" && yes) {
@@ -208,6 +211,9 @@ const resolveLimitlessOutcome = (
   }
   if (normalizedCanonical === "NO" && no) {
     return { venueOutcomeId: no, outcomeSide: "NO" };
+  }
+  if (normalizedCanonical === "YES" || normalizedCanonical === "NO") {
+    return { outcomeSide: normalizedCanonical };
   }
   return {};
 };
