@@ -297,8 +297,14 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
     const expiresAt = new Date(preparedAt.getTime() + 5 * 60_000);
     const backendMayRelaySignedPayload = this.venue === "PREDICT_FUN" &&
       status.relayImplementationStatus === "SIGNED_RELAY_IMPLEMENTED";
+    const resolvedPredictOrder = this.venue === "PREDICT_FUN"
+      ? await this.resolvePredictOrderIdentifiers(leg.venueMarketId, leg.venueOutcomeId)
+      : {
+          venueMarketId: leg.venueMarketId,
+          venueOutcomeId: leg.venueOutcomeId
+        };
     const predictOrderMetadata = this.venue === "PREDICT_FUN"
-      ? await this.resolvePredictOrderMetadata(leg.venueMarketId)
+      ? await this.resolvePredictOrderMetadata(resolvedPredictOrder.venueMarketId)
       : null;
     return {
       venue: this.venue,
@@ -307,16 +313,16 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
         relayMode: "USER_SIGNED_BACKEND_RELAY",
         adapter: this.config.adapter,
         venue: this.venue,
-        venueMarketId: leg.venueMarketId,
-        venueOutcomeId: leg.venueOutcomeId,
+        venueMarketId: resolvedPredictOrder.venueMarketId,
+        venueOutcomeId: resolvedPredictOrder.venueOutcomeId,
         side: leg.side,
         size,
         price,
         preparedAt: preparedAt.toISOString(),
         expiresAt: expiresAt.toISOString(),
         expectedOrder: {
-          venueMarketId: leg.venueMarketId,
-          venueOutcomeId: leg.venueOutcomeId,
+          venueMarketId: resolvedPredictOrder.venueMarketId,
+          venueOutcomeId: resolvedPredictOrder.venueOutcomeId,
           side: leg.side,
           size,
           price
@@ -503,6 +509,26 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
         false
     };
   }
+
+  private async resolvePredictOrderIdentifiers(
+    venueMarketId: string,
+    venueOutcomeId?: string | undefined
+  ): Promise<{ venueMarketId: string; venueOutcomeId?: string | undefined }> {
+    const executableMarketId = stripPredictSharedCoreMarketId(venueMarketId);
+    if (venueOutcomeId && /^\d+$/.test(venueOutcomeId.trim())) {
+      return { venueMarketId: executableMarketId, venueOutcomeId: venueOutcomeId.trim() };
+    }
+    const label = normalizePredictOutcomeLabel(venueOutcomeId);
+    if (!label || !this.predictOrderMetadataClient) {
+      return { venueMarketId: executableMarketId, ...(venueOutcomeId ? { venueOutcomeId } : {}) };
+    }
+    const market = await this.predictOrderMetadataClient.getMarketById(executableMarketId).catch(() => null);
+    const token = resolvePredictTokenFromMarketDetail(market, label);
+    return {
+      venueMarketId: executableMarketId,
+      venueOutcomeId: token ?? venueOutcomeId
+    };
+  }
 }
 
 export class OpinionExecutionAdapter extends UserSignedRelayExecutionAdapter {
@@ -555,6 +581,53 @@ const numericStringField = (payload: Record<string, unknown>, key: string): stri
   }
   if (typeof value === "number" && Number.isFinite(value)) {
     return String(value);
+  }
+  return null;
+};
+
+const stripPredictSharedCoreMarketId = (venueMarketId: string): string => {
+  const trimmed = venueMarketId.trim();
+  if (!trimmed.startsWith("PREDICT:")) {
+    return trimmed;
+  }
+  const [, executableId] = trimmed.split(":");
+  return executableId && executableId.length > 0 ? executableId : trimmed;
+};
+
+const normalizePredictOutcomeLabel = (value: unknown): "YES" | "NO" | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  if (normalized === "YES") return "YES";
+  if (normalized === "NO") return "NO";
+  return null;
+};
+
+const resolvePredictTokenFromMarketDetail = (
+  market: unknown,
+  label: "YES" | "NO"
+): string | null => {
+  const outcomes = isRecord(market) && Array.isArray(market.outcomes) ? market.outcomes : [];
+  const matches = outcomes.flatMap((outcome) => {
+    if (!isRecord(outcome)) {
+      return [];
+    }
+    const outcomeLabel = firstPayloadString(outcome.label, outcome.name, outcome.title, outcome.outcomeType, outcome.outcome_type);
+    const token = firstPayloadString(outcome.tokenId, outcome.token_id, outcome.onChainId, outcome.on_chain_id, outcome.id, outcome.indexSet);
+    return normalizePredictOutcomeLabel(outcomeLabel) === label && token && /^\d+$/.test(token) ? [token] : [];
+  });
+  return matches.length === 1 ? matches[0]! : null;
+};
+
+const firstPayloadString = (...values: readonly unknown[]): string | null => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
   }
   return null;
 };

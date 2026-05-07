@@ -255,6 +255,46 @@ describe("user-signed backend relay execution adapters", () => {
     });
   });
 
+  it("resolves Predict.fun shared-core YES/NO labels before preparing typed data", async () => {
+    const adapter = new PredictFunExecutionAdapter({
+      ...buildPredictFunExecutionAdapterConfigFromEnv({
+        PREDICT_FUN_EXECUTION_MODE: "user_signed_backend_relay",
+        PREDICT_MAINNET_BASE_URL: "https://api.predict.fun/",
+        PREDICT_API_KEY: "server-side-predict-key",
+        PREDICT_FUN_LIVE_EXECUTION_ENABLED: "true"
+      }),
+      predictOrderMetadataClient: {
+        async getMarketById(marketId) {
+          expect(marketId).toBe("14347");
+          return {
+            id: "14347",
+            outcomes: [
+              { label: "Yes", tokenId: "111111111111111111111111111111111111111111111111111111111111111111" },
+              { label: "No", tokenId: "222222222222222222222222222222222222222222222222222222222222222222" }
+            ]
+          };
+        },
+        async getMarketStatistics() {
+          return { feeRateBps: "0" };
+        }
+      }
+    });
+    const prepared = await adapter.prepareOrder({
+      ...leg("PREDICT_FUN"),
+      venueMarketId: "PREDICT:14347:CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|300000000|300M",
+      venueOutcomeId: "NO"
+    });
+
+    expect(prepared.payload).toMatchObject({
+      venueMarketId: "14347",
+      venueOutcomeId: "222222222222222222222222222222222222222222222222222222222222222222",
+      expectedOrder: {
+        venueMarketId: "14347",
+        venueOutcomeId: "222222222222222222222222222222222222222222222222222222222222222222"
+      }
+    });
+  });
+
   it("rejects Predict.fun relay submit when the signer does not match the active Turnkey wallet", async () => {
     const adapter = new PredictFunExecutionAdapter({
       ...buildPredictFunExecutionAdapterConfigFromEnv({
