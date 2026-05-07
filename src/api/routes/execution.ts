@@ -278,6 +278,23 @@ export const registerExecutionRoutes = async (
 
   app.get("/execution/:executionId/status", { preHandler: authMiddleware }, async (request, reply) => {
     const { executionId } = request.params as { executionId: string };
+    const signedStatus = await deps.signedTradeBundleService?.getExecutionStatus({
+      userId: request.user.userId,
+      executionId
+    });
+    if (signedStatus) {
+      return reply.send({
+        executionId,
+        userStatus: signedStatus.status,
+        settlementStatus: signedStatus.status === "FILLED" ? "SETTLEMENT_PENDING" : "SETTLEMENT_PENDING",
+        ghostFillStatus: "NOT_APPLICABLE",
+        recoveryStatus: "none",
+        dryRun: signedStatus.dryRun,
+        submittedAt: signedStatus.submittedAt,
+        updatedAt: signedStatus.updatedAt,
+        submittedLegs: signedStatus.submittedLegs
+      });
+    }
     const quote = await deps.executableRouteService.getQuote(request.user.userId, executionId);
     if (!quote) {
       return reply.status(404).send({

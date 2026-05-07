@@ -5,6 +5,7 @@ import {
   LimitlessExecutionAdapter,
   PredictFunExecutionAdapter,
   SignedTradeBundleService,
+  TestExecutionAdapter,
   type ExecutableTradeQuote
 } from "../src/execution-system/index.js";
 import type { UserVenueAccount } from "../src/core/execution/user-venue-accounts.js";
@@ -190,6 +191,56 @@ describe("SignedTradeBundleService", () => {
 
     expect(hint.data?.strategy).toBe("MARKET");
     expect(hint.data).not.toHaveProperty("reservedBalancePolicy");
+  });
+
+  it("persists live submit status and refreshes venue fill state after quote submit", async () => {
+    const registry = new ExecutionVenueAdapterRegistry();
+    registry.register(new TestExecutionAdapter("TEST", { fillStatus: "FILLED", fillPrice: 0.51 }));
+    const liveQuote: ExecutableTradeQuote = {
+      ...quote(),
+      quoteId: "exec_quote_status",
+      venuePath: ["TEST"],
+      requiredUserSignatureSteps: [],
+      legs: [{
+        venue: "TEST",
+        venueMarketId: "test-market",
+        venueOutcomeId: "test-outcome",
+        size: "1",
+        price: 0.51,
+        requiresUserSignature: false
+      }]
+    };
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => liveQuote } as never,
+      registry,
+      { getAccount: async () => account("PREDICT_FUN") }
+    );
+
+    const submitted = await sut.submit({
+      userId: "user-1",
+      quoteId: "exec_quote_status",
+      dryRun: false,
+      signedLegs: []
+    });
+    expect(submitted.status).toBe("SUBMITTED");
+
+    const status = await sut.getExecutionStatus({
+      userId: "user-1",
+      executionId: "exec_quote_status"
+    });
+    expect(status).toMatchObject({
+      executionId: "exec_quote_status",
+      status: "FILLED",
+      submittedLegs: [{
+        venue: "TEST",
+        status: "FILLED",
+        fillState: {
+          status: "FILLED",
+          filledSize: "1",
+          averagePrice: 0.51
+        }
+      }]
+    });
   });
 
   it("blocks Predict.fun orders below the venue minimum order value", async () => {

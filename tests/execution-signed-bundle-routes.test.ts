@@ -19,7 +19,8 @@ describe("execution signed bundle routes", () => {
         status: "DRY_RUN_VERIFIED",
         dryRun: true,
         submittedLegs: []
-      }))
+      })),
+      getExecutionStatus: vi.fn(async () => null)
     };
     await registerExecutionRoutes(app, async (request) => {
       request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
@@ -56,6 +57,68 @@ describe("execution signed bundle routes", () => {
       quoteId: "exec_quote_1",
       signedLegs: [],
       dryRun: true
+    });
+  });
+
+  it("serves persisted signed-bundle execution status after quote cache expiry", async () => {
+    const app = Fastify();
+    const signedTradeBundleService = {
+      getExecutionStatus: vi.fn(async () => ({
+        executionId: "exec_quote_submitted",
+        userId: "user-1",
+        status: "FILLED",
+        dryRun: false,
+        submittedAt: "2026-05-07T21:00:00.000Z",
+        updatedAt: "2026-05-07T21:01:00.000Z",
+        submittedLegs: [{
+          legIndex: 0,
+          venue: "PREDICT_FUN",
+          status: "FILLED",
+          venueOrderId: `0x${"a".repeat(64)}`,
+          fillState: {
+            status: "FILLED",
+            filledSize: "2.5",
+            averagePrice: 0.388
+          }
+        }]
+      }))
+    };
+    const getQuote = vi.fn(async () => null);
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: {
+        quote: vi.fn(),
+        getQuote
+      } as never,
+      sellQuoteService: {
+        prepareExit: vi.fn()
+      } as never,
+      signedTradeBundleService: signedTradeBundleService as never
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/execution/exec_quote_submitted/status"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      executionId: "exec_quote_submitted",
+      userStatus: "FILLED",
+      submittedLegs: [{
+        venue: "PREDICT_FUN",
+        status: "FILLED",
+        fillState: {
+          status: "FILLED",
+          filledSize: "2.5"
+        }
+      }]
+    });
+    expect(getQuote).not.toHaveBeenCalled();
+    expect(signedTradeBundleService.getExecutionStatus).toHaveBeenCalledWith({
+      userId: "user-1",
+      executionId: "exec_quote_submitted"
     });
   });
 

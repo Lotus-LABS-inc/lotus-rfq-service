@@ -5,7 +5,7 @@ import { verifyTypedData as verifyTypedDataV6 } from "ethers";
 import type { UserVenueAccount } from "../core/execution/user-venue-accounts.js";
 import type { ExecutableRouteLeg, ExecutableRouteService, ExecutableTradeQuote } from "./executable-routing.js";
 import type { ExecutionLegV0 } from "./types.js";
-import type { ExecutionVenueAdapterRegistry, PreparedVenueOrder, VenueSubmitResult } from "./venue-adapter.js";
+import type { ExecutionVenueAdapterRegistry, PreparedVenueOrder, VenueFillState, VenueSubmitResult } from "./venue-adapter.js";
 
 export type TradeSignatureKind = "EIP712" | "MESSAGE";
 
@@ -43,6 +43,23 @@ export interface SignedTradeBundleSubmitResult {
     status: string;
     venueOrderId?: string | undefined;
     reason?: string | undefined;
+  }>;
+}
+
+export interface SignedTradeExecutionStatus {
+  executionId: string;
+  userId: string;
+  status: "DRY_RUN_VERIFIED" | "SUBMITTED" | "PARTIAL" | "FILLED" | "FAILED";
+  dryRun: boolean;
+  submittedAt: string;
+  updatedAt: string;
+  submittedLegs: Array<{
+    legIndex: number;
+    venue: string;
+    status: string;
+    venueOrderId?: string | undefined;
+    reason?: string | undefined;
+    fillState?: VenueFillState | undefined;
   }>;
 }
 
@@ -92,6 +109,8 @@ export class SignedTradeBundleError extends Error {
 }
 
 export class SignedTradeBundleService {
+  private readonly executionStatuses = new Map<string, SignedTradeExecutionStatus>();
+
   public constructor(
     private readonly routes: ExecutableRouteService,
     private readonly adapters: ExecutionVenueAdapterRegistry,
@@ -169,21 +188,67 @@ export class SignedTradeBundleService {
           status: "FAILED",
           reason: normalized.message
         });
-        return {
+        const result: SignedTradeBundleSubmitResult = {
           executionId: quote.quoteId,
           status: "FAILED",
           dryRun: false,
           submittedLegs
         };
+        this.recordExecutionStatus(input.userId, result);
+        return result;
       }
     }
 
-    return {
+    const result: SignedTradeBundleSubmitResult = {
       executionId: quote.quoteId,
       status: input.dryRun === true ? "DRY_RUN_VERIFIED" : "SUBMITTED",
       dryRun: input.dryRun === true,
       submittedLegs
     };
+    this.recordExecutionStatus(input.userId, result);
+    return result;
+  }
+
+  public async getExecutionStatus(input: { userId: string; executionId: string }): Promise<SignedTradeExecutionStatus | null> {
+    const stored = this.executionStatuses.get(statusKey(input.userId, input.executionId));
+    if (!stored) {
+      return null;
+    }
+    if (stored.dryRun) {
+      return stored;
+    }
+    const submittedLegs = await Promise.all(stored.submittedLegs.map(async (leg) => {
+      if (!leg.venueOrderId || leg.status === "FAILED") {
+        return leg;
+      }
+      try {
+        const fillState = await this.adapters.get(leg.venue).fetchFillState(leg.venueOrderId);
+        return {
+          ...leg,
+          fillState,
+          status: fillState.status
+        };
+      } catch (error) {
+        return {
+          ...leg,
+          fillState: {
+            status: "OPEN" as const,
+            filledSize: "0",
+            averagePrice: 0,
+            offchainFilled: false
+          },
+          reason: error instanceof Error ? error.message : "Venue status lookup failed."
+        };
+      }
+    }));
+    const next: SignedTradeExecutionStatus = {
+      ...stored,
+      updatedAt: this.now().toISOString(),
+      status: summarizeStoredExecutionStatus(submittedLegs),
+      submittedLegs
+    };
+    this.executionStatuses.set(statusKey(input.userId, input.executionId), next);
+    return next;
   }
 
   public async getLiveReadiness(input: { userId: string; quoteId: string }): Promise<LiveSubmitReadinessSnapshot> {
@@ -500,7 +565,35 @@ export class SignedTradeBundleService {
       venueOrderId: submitted.venueOrderId
     };
   }
+
+  private recordExecutionStatus(userId: string, result: SignedTradeBundleSubmitResult): void {
+    const now = this.now().toISOString();
+    this.executionStatuses.set(statusKey(userId, result.executionId), {
+      executionId: result.executionId,
+      userId,
+      status: result.status,
+      dryRun: result.dryRun,
+      submittedAt: now,
+      updatedAt: now,
+      submittedLegs: result.submittedLegs
+    });
+  }
 }
+
+const statusKey = (userId: string, executionId: string): string => `${userId}:${executionId}`;
+
+const summarizeStoredExecutionStatus = (legs: SignedTradeExecutionStatus["submittedLegs"]): SignedTradeExecutionStatus["status"] => {
+  if (legs.some((leg) => leg.status === "FAILED")) {
+    return "FAILED";
+  }
+  if (legs.length > 0 && legs.every((leg) => leg.status === "FILLED")) {
+    return "FILLED";
+  }
+  if (legs.some((leg) => leg.status === "PARTIAL_FILL")) {
+    return "PARTIAL";
+  }
+  return "SUBMITTED";
+};
 
 interface ExpectedBinding {
   userId: string;
