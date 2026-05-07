@@ -191,6 +191,38 @@ describe("SignedTradeBundleService", () => {
       });
   });
 
+  it("blocks Predict.fun orders without a numeric venue token id", async () => {
+    const registry = new ExecutionVenueAdapterRegistry();
+    registry.register(new PredictFunExecutionAdapter({
+      executionMode: "user_signed_backend_relay",
+      baseUrl: "https://api.predict.fun",
+      apiKey: "predict-api-key",
+      liveExecutionEnabled: false,
+      orderCreatePath: "/v1/orders",
+      docsUrl: "https://dev.predict.fun"
+    }));
+    const invalidTokenQuote = quote();
+    invalidTokenQuote.venuePath = ["PREDICT_FUN"];
+    invalidTokenQuote.legs = [{
+      venue: "PREDICT_FUN",
+      venueMarketId: "predict-market",
+      venueOutcomeId: "NO",
+      size: "3",
+      price: 0.42,
+      requiresUserSignature: true
+    }];
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => invalidTokenQuote } as never,
+      registry,
+      { getAccount: async (_userId, venue) => account(venue.toUpperCase() as UserVenueAccount["venue"]) }
+    );
+
+    await expect(sut.prepare({ userId: "user-1", quoteId: "exec_quote_test" }))
+      .rejects.toMatchObject({
+        code: "PREDICT_FUN_TOKEN_ID_INVALID"
+      });
+  });
+
   it("rejects a Limitless signature from the wrong signer", async () => {
     const sut = service();
     const prepared = await sut.prepare({ userId: "user-1", quoteId: "exec_quote_test" });

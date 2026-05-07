@@ -386,6 +386,12 @@ const buildPredictOrderPayload = (
   if (!tokenId) {
     throw new SignedTradeBundleError("PREDICT_FUN_TOKEN_ID_MISSING", "Predict.fun prepared order is missing venueOutcomeId.");
   }
+  if (!/^\d+$/.test(tokenId)) {
+    throw new SignedTradeBundleError(
+      "PREDICT_FUN_TOKEN_ID_INVALID",
+      "Predict.fun prepared order requires a numeric venueOutcomeId token id before it can be signed."
+    );
+  }
   const side = stringField(payload, "side") === "sell" ? Side.SELL : Side.BUY;
   const price = numberField(payload, "price");
   const size = numberField(payload, "size");

@@ -70,6 +70,9 @@ export const normalizePredictOrderbook = (input: {
   const rawAsks = normalizeLevels(record.asks);
   const bids = input.outcomeSide === "NO" ? invertBinaryLevels(rawAsks, "desc") : rawBids;
   const asks = input.outcomeSide === "NO" ? invertBinaryLevels(rawBids, "asc") : rawAsks;
+  const blockers = !input.venueOutcomeId || !looksLikeNumericId(input.venueOutcomeId)
+    ? ["PREDICT_FUN_TOKEN_ID_MISSING"]
+    : [];
   return {
     venue: "PREDICT_FUN",
     venueMarketId: input.venueMarketId,
@@ -87,7 +90,7 @@ export const normalizePredictOrderbook = (input: {
     } : {}),
     settlementEvidenceSupported: true,
     missingFactors: [],
-    blockers: [],
+    blockers,
     streamResynced: true,
     metadata: {
       venueMarketId: input.venueMarketId,
@@ -175,6 +178,8 @@ const findOutcomeToken = (outcomes: readonly unknown[], label: "YES" | "NO"): st
   });
   return matches.length === 1 ? matches[0] : undefined;
 };
+
+const looksLikeNumericId = (value: string): boolean => /^\d+$/.test(value);
 
 const normalizeOutcomeLabel = (value: string): string =>
   value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");

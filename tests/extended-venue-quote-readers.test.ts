@@ -19,6 +19,7 @@ describe("extended venue quote readers", () => {
         timestamp: now.toISOString()
       },
       venueMarketId: "predict-market-1",
+      venueOutcomeId: "1001",
       receivedAt: now,
       environment: "mainnet",
       venueFeeBps: 25
@@ -47,6 +48,7 @@ describe("extended venue quote readers", () => {
         timestamp: now.toISOString()
       },
       venueMarketId: "predict-market-1",
+      venueOutcomeId: "1001",
       receivedAt: now,
       environment: "mainnet",
       venueFeeBps: 25
@@ -86,6 +88,7 @@ describe("extended venue quote readers", () => {
 
     expect(snapshot?.venueFeeBps).toBe(35);
     expect(snapshot?.venueFeeModel).toBe("PREDICT_MARKET_STATS");
+    expect(snapshot?.blockers).toContain("PREDICT_FUN_TOKEN_ID_MISSING");
   });
 
   it("Predict.fun reader resolves missing binary outcome ids from market detail and inverts NO", async () => {
@@ -105,8 +108,8 @@ describe("extended venue quote readers", () => {
             id: "predict-market-1",
             title: "Market",
             outcomes: [
-              { label: "Yes", tokenId: "yes-token" },
-              { label: "No", tokenId: "no-token" }
+              { label: "Yes", tokenId: "1001" },
+              { label: "No", tokenId: "1002" }
             ]
           };
         }
@@ -123,9 +126,45 @@ describe("extended venue quote readers", () => {
     const calculated = calculateVenueQuote({ snapshot: snapshot!, side: "buy", amount: 1, now });
 
     expect(snapshot?.venue).toBe("PREDICT_FUN");
-    expect(snapshot?.venueOutcomeId).toBe("no-token");
+    expect(snapshot?.venueOutcomeId).toBe("1002");
     expect(snapshot?.metadata).toMatchObject({ outcomeSide: "NO" });
     expect(calculated.price).toBe(0.52);
+  });
+
+  it("Predict.fun reader blocks execution quotes when an executable token id is unresolved", async () => {
+    const reader = new PredictQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      environment: "mainnet",
+      now: () => now,
+      client: {
+        async getMarketOrderbook() {
+          return { bids: [{ price: "0.48", size: "10" }], asks: [{ price: "0.51", size: "10" }] };
+        },
+        async getMarketStatistics() {
+          return { feeRateBps: "35" };
+        },
+        async getMarketById() {
+          return {
+            id: "predict-market-1",
+            title: "Market",
+            outcomes: [{ label: "Maybe", tokenId: "maybe-token" }]
+          };
+        }
+      }
+    });
+
+    const snapshot = await reader.getQuoteSnapshot({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "NO",
+      venueMarketId: "predict-market-1",
+      side: "buy",
+      quantity: 1
+    });
+    const calculated = calculateVenueQuote({ snapshot: snapshot!, side: "buy", amount: 1, now });
+
+    expect(snapshot?.blockers).toContain("PREDICT_FUN_TOKEN_ID_MISSING");
+    expect(calculated.ok).toBe(false);
+    expect(calculated.blockers).toContain("PREDICT_FUN_TOKEN_ID_MISSING");
   });
 
   it("Limitless reader fetches full market tokens and inverts YES book for NO outcome", async () => {
