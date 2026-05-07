@@ -42,21 +42,23 @@ export class LimitlessQuoteReader implements VenueQuoteSnapshotReader {
     }
 
     const marketDetail = await this.config.client.getMarketDetail?.(input.venueMarketId).catch(() => null);
+    const executableMarketId = resolveLimitlessExecutableMarketId(input.venueMarketId, input.canonicalMarketId, marketDetail);
     const outcomeResolution = resolveLimitlessOutcome(input.venueOutcomeId, input.canonicalOutcomeId, marketDetail);
     const payload = await this.config.client.getOrderbook({
-      marketId: input.venueMarketId,
+      marketId: executableMarketId,
       ...(outcomeResolution.venueOutcomeId ? { outcomeId: outcomeResolution.venueOutcomeId } : {})
     });
     const resolvedFeeBps = this.config.feeBps ?? await this.config.feeReader?.getFeeBps({
-      marketSlug: input.venueMarketId
+      marketSlug: executableMarketId
     });
     return normalizeLimitlessOrderbook({
       payload,
-      venueMarketId: input.venueMarketId,
+      venueMarketId: executableMarketId,
       venueOutcomeId: outcomeResolution.venueOutcomeId,
       outcomeSide: outcomeResolution.outcomeSide,
       receivedAt: this.now(),
-      feeBps: resolvedFeeBps ?? undefined
+      feeBps: resolvedFeeBps ?? undefined,
+      approvedVenueMarketId: input.venueMarketId
     });
   }
 }
@@ -96,6 +98,7 @@ export class LimitlessRestOrderbookClient implements LimitlessOrderbookClient {
 export const normalizeLimitlessOrderbook = (input: {
   payload: unknown;
   venueMarketId: string;
+  approvedVenueMarketId?: string | undefined;
   venueOutcomeId?: string | undefined;
   outcomeSide?: "YES" | "NO" | undefined;
   receivedAt: Date;
@@ -124,6 +127,7 @@ export const normalizeLimitlessOrderbook = (input: {
     blockers: [],
     streamResynced: true,
     metadata: {
+      approvedVenueMarketId: input.approvedVenueMarketId ?? input.venueMarketId,
       venueMarketId: input.venueMarketId,
       venueOutcomeId: input.venueOutcomeId ?? null,
       ...(input.outcomeSide ? { outcomeSide: input.outcomeSide } : {})
@@ -207,6 +211,71 @@ const resolveLimitlessOutcome = (
   }
   return {};
 };
+
+const resolveLimitlessExecutableMarketId = (
+  approvedMarketId: string,
+  canonicalMarketId: string,
+  marketDetail: unknown
+): string => {
+  const detail = asRecord(marketDetail);
+  const children = Array.isArray(detail.markets) ? detail.markets.map(asRecord) : [];
+  if (children.length === 0) {
+    return approvedMarketId;
+  }
+
+  const hints = candidateHints(canonicalMarketId);
+  const exactMatches = children.filter((child) => {
+    const labels = [
+      child.slug,
+      child.title,
+      child.proxyTitle,
+      child.conditionId,
+      child.id
+    ].flatMap((value) => normalizedAliases(value));
+    return labels.some((label) => hints.has(label));
+  });
+
+  if (exactMatches.length !== 1) {
+    return approvedMarketId;
+  }
+
+  return firstString(
+    exactMatches[0]?.slug,
+    exactMatches[0]?.conditionId,
+    exactMatches[0]?.id
+  ) ?? approvedMarketId;
+};
+
+const candidateHints = (canonicalMarketId: string): ReadonlySet<string> => {
+  const rawParts = canonicalMarketId.split("|").flatMap((part) => part.split(":"));
+  const hints = new Set<string>();
+  for (const part of rawParts) {
+    for (const alias of normalizedAliases(part)) {
+      hints.add(alias);
+    }
+  }
+  return hints;
+};
+
+const normalizedAliases = (value: unknown): readonly string[] => {
+  const text = firstString(value);
+  if (!text) {
+    return [];
+  }
+  const compact = normalizeLabel(text);
+  const withoutNumericSuffix = normalizeLabel(text.replace(/-\d{10,}$/, ""));
+  const words = normalizeLabel(text.replace(/[_-]+/g, " "));
+  return [...new Set([compact, withoutNumericSuffix, words].filter((entry) => entry.length > 0))];
+};
+
+const normalizeLabel = (value: string): string =>
+  value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
 
 const firstString = (...values: readonly unknown[]): string | undefined => {
   for (const value of values) {

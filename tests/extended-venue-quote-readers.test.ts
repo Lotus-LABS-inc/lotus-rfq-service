@@ -164,6 +164,56 @@ describe("extended venue quote readers", () => {
     expect(calculated.price).toBe(0.52);
   });
 
+  it("Limitless reader resolves group markets to the canonical child market before reading orderbook", async () => {
+    const requestedMarkets: string[] = [];
+    const feeMarkets: string[] = [];
+    const reader = new LimitlessQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      now: () => now,
+      client: {
+        async getMarketDetail() {
+          return {
+            slug: "democratic-presidential-nominee-2028-1768929458278",
+            marketType: "group",
+            markets: [
+              { slug: "jon-ossoff-1768927395480", title: "Jon Ossoff" },
+              { slug: "gavin-newsom-1768927395479", title: "Gavin Newsom" }
+            ]
+          };
+        },
+        async getOrderbook(input) {
+          requestedMarkets.push(input.marketId);
+          return {
+            bids: [{ price: 0.24, size: "10" }],
+            asks: [{ price: 0.25, size: "10" }]
+          };
+        }
+      },
+      feeReader: {
+        async getFeeBps(input) {
+          feeMarkets.push(input.marketSlug);
+          return 0;
+        }
+      }
+    });
+
+    const snapshot = await reader.getQuoteSnapshot({
+      canonicalMarketId: "FRONTEND_CURATED:NOMINEE|US_PRESIDENT|2028|DEMOCRATIC|GAVIN_NEWSOM",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "democratic-presidential-nominee-2028-1768929458278",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(requestedMarkets).toEqual(["gavin-newsom-1768927395479"]);
+    expect(feeMarkets).toEqual(["gavin-newsom-1768927395479"]);
+    expect(snapshot?.venueMarketId).toBe("gavin-newsom-1768927395479");
+    expect(snapshot?.metadata).toMatchObject({
+      approvedVenueMarketId: "democratic-presidential-nominee-2028-1768929458278",
+      venueMarketId: "gavin-newsom-1768927395479"
+    });
+  });
+
   it("normalizes Opinion orderbooks with documented topic-rate fee curve", () => {
     const snapshot = normalizeOpinionOrderbook({
       payload: {
