@@ -766,7 +766,12 @@ const validatePredictSignedPayloadMatchesPreparedOrder = (
   }
   const expectedPrice = numberPayloadField(payload, "price");
   const signedPriceWei = numericStringPayloadField(relay.signedPayload.data, "pricePerShare");
-  if (expectedPrice === null || signedPriceWei === null || decimalToWeiString(String(expectedPrice)) !== signedPriceWei) {
+  const strategy = stringPayloadField(relay.signedPayload.data, "strategy")?.toUpperCase() ?? "";
+  if (
+    expectedPrice === null ||
+    signedPriceWei === null ||
+    !predictSignedPriceMatchesPreparedPrice(expectedPrice, signedPriceWei, expectedSide, strategy)
+  ) {
     throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_PRICE_MISMATCH", "Predict.fun signed order price does not match the prepared price.");
   }
   const expectedSize = numberPayloadField(payload, "size");
@@ -776,6 +781,37 @@ const validatePredictSignedPayloadMatchesPreparedOrder = (
   if (expectedSize === null || signedQuantityWei === null || !predictSignedSizeMatchesPreparedSize(expectedSize, signedQuantityWei)) {
     throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_SIZE_MISMATCH", "Predict.fun signed order size does not match the prepared size.");
   }
+};
+
+const predictSignedPriceMatchesPreparedPrice = (
+  expectedPrice: number,
+  signedPriceWei: string,
+  expectedSide: string | null,
+  strategy: string
+): boolean => {
+  const expectedWei = BigInt(decimalToWeiString(String(expectedPrice)));
+  const signedWei = BigInt(signedPriceWei);
+  if (expectedWei <= 0n || signedWei <= 0n) {
+    return false;
+  }
+  if (signedWei === expectedWei) {
+    return true;
+  }
+  if (strategy !== "MARKET") {
+    return false;
+  }
+  // Predict.fun MARKET orders derive pricePerShare from live orderbook depth.
+  // Keep a tight guardrail around the prepared route price instead of requiring
+  // exact equality with the display/reference price.
+  const toleranceBps = 100n;
+  const toleranceWei = (expectedWei * toleranceBps) / 10_000n + 1n;
+  if (expectedSide === "buy") {
+    return signedWei <= expectedWei + toleranceWei;
+  }
+  if (expectedSide === "sell") {
+    return signedWei + toleranceWei >= expectedWei;
+  }
+  return false;
 };
 
 const predictSignedSizeMatchesPreparedSize = (expectedSize: number, signedQuantityWei: string): boolean => {

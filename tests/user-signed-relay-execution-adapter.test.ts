@@ -429,6 +429,38 @@ describe("user-signed backend relay execution adapters", () => {
     });
   });
 
+  it("accepts Predict.fun MARKET order price within the bounded live orderbook tolerance", async () => {
+    const adapter = new PredictFunExecutionAdapter({
+      ...buildPredictFunExecutionAdapterConfigFromEnv({
+        PREDICT_FUN_EXECUTION_MODE: "user_signed_backend_relay",
+        PREDICT_MAINNET_BASE_URL: "https://api.predict.fun/",
+        PREDICT_API_KEY: "server-side-predict-key",
+        PREDICT_FUN_LIVE_EXECUTION_ENABLED: "true"
+      }),
+      predictOrderMetadataClient: undefined,
+      predictJwtProvider: { getPredictFunJwt: () => "predict-user-jwt" },
+      predictOauthOrderClient: mockPredictOrderClient()
+    });
+    const prepared = await adapter.prepareOrder({
+      ...leg("PREDICT_FUN"),
+      price: 0.388,
+      size: "2.57732"
+    });
+
+    await expect(adapter.submitOrder(attachPredictRelayPayload(prepared, signedPayloadWithDataOverrides({
+      pricePerShare: "389000000000000000",
+      strategy: "MARKET",
+      order: {
+        ...signedPayload().data.order,
+        tokenId: "venue-outcome-id",
+        makerAmount: "1002550000000000000",
+        takerAmount: "2577300000000000000"
+      }
+    })))).resolves.toMatchObject({
+      status: "SUBMITTED"
+    });
+  });
+
   it("maps Predict.fun status and settlement evidence conservatively", async () => {
     const adapter = new PredictFunExecutionAdapter({
       ...buildPredictFunExecutionAdapterConfigFromEnv({
