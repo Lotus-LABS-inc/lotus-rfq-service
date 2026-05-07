@@ -42,7 +42,7 @@ export interface UserSignedRelayExecutionAdapterConfig {
 export interface PredictOauthOrderRelayClient {
   configured(): boolean;
   createOauthOrder(payload: PredictOauthCreateOrderPayload, jwt?: string | undefined): Promise<{ orderId: string; orderHash: string }>;
-  getOrderByHash(orderHash: string): Promise<PredictOauthOrderStatus>;
+  getOrderByHash(orderHash: string, jwt?: string | undefined): Promise<PredictOauthOrderStatus>;
   cancelOrder?(orderHash: string): Promise<{ cancelled: boolean }>;
 }
 
@@ -356,7 +356,7 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
   public async fetchFillState(venueOrderId: string): Promise<VenueFillState> {
     if (this.venue === "PREDICT_FUN" && this.predictOauthOrderClient?.configured()) {
       try {
-        const status = await this.predictOauthOrderClient.getOrderByHash(venueOrderId);
+        const status = await this.predictOauthOrderClient.getOrderByHash(venueOrderId, this.predictJwtForOrder(venueOrderId));
         this.lastOrderStatus = status;
         return mapPredictOrderStatusToFillState(status);
       } catch (error) {
@@ -375,7 +375,7 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
   public async fetchSettlementState(fillOrOrderId: string): Promise<VenueSettlementState> {
     if (this.venue === "PREDICT_FUN" && this.predictOauthOrderClient?.configured()) {
       try {
-        const status = await this.predictOauthOrderClient.getOrderByHash(fillOrOrderId);
+        const status = await this.predictOauthOrderClient.getOrderByHash(fillOrOrderId, this.predictJwtForOrder(fillOrOrderId));
         this.lastOrderStatus = status;
         return mapPredictOrderStatusToSettlementState(status, this.expectedBindingByOrderHash.get(fillOrOrderId));
       } catch {
@@ -480,6 +480,14 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
       filledSize: "0",
       averagePrice: numberPayloadField(order.payload, "price") ?? 0
     };
+  }
+
+  private predictJwtForOrder(orderHash: string): string | undefined {
+    const binding = this.expectedBindingByOrderHash.get(orderHash);
+    if (!binding) {
+      return undefined;
+    }
+    return this.predictJwtProvider?.getPredictFunJwt(binding.userId) ?? undefined;
   }
 
   private async resolvePredictOrderMetadata(venueMarketId: string): Promise<Record<string, unknown> | null> {

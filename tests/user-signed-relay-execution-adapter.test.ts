@@ -318,6 +318,7 @@ describe("user-signed backend relay execution adapters", () => {
 
   it("relays a full Predict.fun order payload without exposing the server API key", async () => {
     let createCalled = false;
+    let statusJwt: string | undefined;
     const adapter = new PredictFunExecutionAdapter({
       ...buildPredictFunExecutionAdapterConfigFromEnv({
         PREDICT_FUN_EXECUTION_MODE: "user_signed_backend_relay",
@@ -350,7 +351,8 @@ describe("user-signed backend relay execution adapters", () => {
             orderHash: "predict-order-hash-1"
           };
         },
-        async getOrderByHash(orderHash) {
+        async getOrderByHash(orderHash, jwt) {
+          statusJwt = jwt;
           return {
             orderHash,
             status: "OPEN",
@@ -369,7 +371,9 @@ describe("user-signed backend relay execution adapters", () => {
       fillId: "predict-order-id-1",
       status: "SUBMITTED"
     });
+    await expect(adapter.fetchFillState("predict-order-hash-1")).resolves.toMatchObject({ status: "OPEN" });
     expect(createCalled).toBe(true);
+    expect(statusJwt).toBe("predict-user-jwt");
   });
 
   it("rejects Predict.fun relay submit when signed price or size differs from the prepared order", async () => {

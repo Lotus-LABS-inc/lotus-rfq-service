@@ -94,7 +94,9 @@ describe("Predict.fun execution relay", () => {
     process.env.PREDICT_FUN_EXECUTION_RELAY_SECRET = secret;
     process.env.PREDICT_MAINNET_BASE_URL = "https://api.predict.fun";
     process.env.PREDICT_API_KEY = "predict-api-key";
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(200, {
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      expect(init.headers).toMatchObject({ authorization: "Bearer predict-user-jwt" });
+      return jsonResponse(200, {
       success: true,
       data: {
         status: "SETTLED",
@@ -102,9 +104,10 @@ describe("Predict.fun execution relay", () => {
         remainingSize: "0",
         price: "0.45"
       }
-    })));
+      });
+    }));
     const app = buildPredictfunExecutionRelayServer();
-    const stateBody = { orderHash: "predict-hash-1" };
+    const stateBody = { orderHash: "predict-hash-1", jwt: "predict-user-jwt" };
     const state = await app.inject({
       method: "POST",
       url: "/internal/predictfun/v1/order-state",
@@ -151,7 +154,7 @@ describe("Predict.fun execution relay", () => {
       }) as typeof fetch
     });
     await client.createOauthOrder(signedPayload(), "predict-user-jwt");
-    await client.getOrderByHash("hash-1");
+    await client.getOrderByHash("hash-1", "predict-user-jwt");
     await expect(client.cancelOrder("hash-1")).resolves.toEqual({ cancelled: false });
 
     expect(calls.map((call) => call.url)).toEqual([
@@ -165,6 +168,11 @@ describe("Predict.fun execution relay", () => {
       });
       expect(JSON.stringify(call.init.headers)).not.toContain("predict-user-jwt");
     }
+    expect(calls.map((call) => JSON.parse(String(call.init.body)))).toMatchObject([
+      { jwt: "predict-user-jwt" },
+      { jwt: "predict-user-jwt", orderHash: "hash-1" },
+      { orderHash: "hash-1" }
+    ]);
   });
 });
 

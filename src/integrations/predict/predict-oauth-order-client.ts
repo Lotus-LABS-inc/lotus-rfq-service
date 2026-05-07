@@ -91,9 +91,10 @@ export class PredictOauthOrderClient {
     return { orderId, orderHash };
   }
 
-  public async getOrderByHash(orderHash: string): Promise<PredictOauthOrderStatus> {
+  public async getOrderByHash(orderHash: string, jwt?: string | undefined): Promise<PredictOauthOrderStatus> {
     const envelope = await this.request<Record<string, unknown>>(`/v1/orders/${encodeURIComponent(orderHash)}`, {
-      method: "GET"
+      method: "GET",
+      jwt
     });
     const data = envelope.data;
     if (!data || typeof data !== "object") {
@@ -180,8 +181,8 @@ export class RelayPredictOauthOrderClient {
     return this.post<PredictOauthCreateOrderResult>("/internal/predictfun/v1/submit-order", { payload, jwt });
   }
 
-  public getOrderByHash(orderHash: string): Promise<PredictOauthOrderStatus> {
-    return this.post<PredictOauthOrderStatus>("/internal/predictfun/v1/order-state", { orderHash });
+  public getOrderByHash(orderHash: string, jwt?: string | undefined): Promise<PredictOauthOrderStatus> {
+    return this.post<PredictOauthOrderStatus>("/internal/predictfun/v1/order-state", { orderHash, jwt });
   }
 
   public cancelOrder(orderHash: string): Promise<{ cancelled: boolean }> {

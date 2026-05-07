@@ -84,15 +84,17 @@ export const buildPredictfunExecutionRelayServer = () => {
     preHandler: authenticated("/internal/predictfun/v1/order-state")
   }, async (request, reply) => {
     const orderHash = parseStringField(request.body, "orderHash");
-    return handleRelayCall(reply, async () => orderClient().getOrderByHash(orderHash));
+    const jwt = optionalStringField(request.body, "jwt");
+    return handleRelayCall(reply, async () => orderClient().getOrderByHash(orderHash, jwt));
   });
 
   app.post("/internal/predictfun/v1/settlement-state", {
     preHandler: authenticated("/internal/predictfun/v1/settlement-state")
   }, async (request, reply) => {
     const orderHash = parseStringField(request.body, "orderHash");
+    const jwt = optionalStringField(request.body, "jwt");
     return handleRelayCall(reply, async () => {
-      const status = await orderClient().getOrderByHash(orderHash);
+      const status = await orderClient().getOrderByHash(orderHash, jwt);
       return mapPredictOrderStatusToSettlementState(status);
     });
   });
@@ -175,6 +177,11 @@ const parseStringField = (body: unknown, field: string): string => {
     );
   }
   return value.trim();
+};
+
+const optionalStringField = (body: unknown, field: string): string | undefined => {
+  const value = asRecord(body)[field];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 };
 
 const parseTimeoutMs = (value: string | undefined): number | undefined => {
