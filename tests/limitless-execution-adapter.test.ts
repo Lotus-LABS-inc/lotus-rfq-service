@@ -436,6 +436,11 @@ describe("LimitlessExecutionAdapter", () => {
           }
         });
         return { order: { id: "limitless-relay-order-1", price: 0.42 } };
+      },
+      async getOrderStatus(orderId, onBehalfOf) {
+        expect(orderId).toBe("limitless-relay-order-1");
+        expect(onBehalfOf).toBe(12345);
+        return minedOrderStatus();
       }
     };
     const adapter = new LimitlessExecutionAdapter(userSignedRelayLiveConfig, undefined, relayClient);
@@ -450,6 +455,16 @@ describe("LimitlessExecutionAdapter", () => {
       status: "SUBMITTED",
       filledSize: "0",
       averagePrice: 0.42
+    });
+    await expect(adapter.fetchFillState("limitless-relay-order-1")).resolves.toMatchObject({
+      status: "FILLED",
+      filledSize: "1"
+    });
+    await expect(adapter.fetchSettlementState("limitless-relay-order-1")).resolves.toMatchObject({
+      status: "SETTLEMENT_VERIFIED",
+      evidence: {
+        settlementEvidenceVerified: true
+      }
     });
   });
 
@@ -601,18 +616,18 @@ describe("LimitlessExecutionAdapter", () => {
     });
   });
 
-  it("does not claim settlement verification without a reviewed settlement evidence reader", async () => {
+  it("fails closed without a real Limitless status reader", async () => {
     const adapter = new LimitlessExecutionAdapter({
       executionMode: "backend_signer",
       baseUrl: "https://api.limitless.exchange",
       liveExecutionEnabled: false
     });
 
-    await expect(adapter.fetchSettlementState("limitless-order-1")).resolves.toMatchObject({
-      status: "SETTLEMENT_PENDING",
-      evidence: {
-        settlementEvidenceSupported: false
-      }
+    await expect(adapter.fetchFillState("limitless-order-1")).rejects.toMatchObject({
+      reasonCode: "LIMITLESS_ENV_INCOMPLETE"
+    });
+    await expect(adapter.fetchSettlementState("limitless-order-1")).rejects.toMatchObject({
+      reasonCode: "LIMITLESS_ENV_INCOMPLETE"
     });
   });
 

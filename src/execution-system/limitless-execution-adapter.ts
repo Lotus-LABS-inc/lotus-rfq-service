@@ -97,6 +97,9 @@ export interface LimitlessUserSignedRelayClient {
     ownerId: number;
     signedPayload: Record<string, unknown>;
   }): Promise<unknown>;
+  getOrderStatus?(orderId: string, onBehalfOf?: number | undefined): Promise<unknown>;
+  getFillState?(orderId: string, onBehalfOf?: number | undefined): Promise<VenueFillState>;
+  getSettlementState?(orderId: string, onBehalfOf?: number | undefined): Promise<VenueSettlementState>;
 }
 
 export class LimitlessExecutionNotConfiguredError extends Error {
@@ -258,7 +261,16 @@ const createLimitlessUserSignedRelayClient = (config: LimitlessExecutionAdapterC
       ...input.signedPayload,
       onBehalfOf: input.onBehalfOf,
       ownerId: input.ownerId
-    })
+    }),
+    getOrderStatus: (orderId, onBehalfOf) => fetchLimitlessOrderStatusBatch(
+      createLimitlessHttpClient({
+        baseUrl,
+        hmacTokenId: tokenId,
+        hmacSecret: secret,
+        onBehalfOf: onBehalfOf ? requireDelegatedProfileId(onBehalfOf) : undefined
+      }),
+      orderId
+    )
   };
 };
 
@@ -705,6 +717,7 @@ export class LimitlessExecutionAdapter implements ExecutionVenueAdapter {
   public readonly venue = "LIMITLESS";
   private client: LimitlessOrderClient | undefined;
   private relayClient: LimitlessUserSignedRelayClient | undefined;
+  private readonly profileIdByOrderId = new Map<string, number>();
 
   public constructor(
     private readonly config: LimitlessExecutionAdapterConfig,
@@ -807,8 +820,10 @@ export class LimitlessExecutionAdapter implements ExecutionVenueAdapter {
       const responseRecord = asRecord(response);
       const orderRecord = asRecord(firstPresent(responseRecord.order, responseRecord.data, responseRecord));
       const venueOrderId = firstPresent(orderRecord.id, orderRecord.orderId, responseRecord.orderId);
+      const resolvedVenueOrderId = String(venueOrderId ?? order.clientOrderId);
+      this.profileIdByOrderId.set(resolvedVenueOrderId, relayInput.onBehalfOf);
       return {
-        venueOrderId: String(venueOrderId ?? order.clientOrderId),
+        venueOrderId: resolvedVenueOrderId,
         status: "SUBMITTED",
         filledSize: "0",
         averagePrice: Number(firstPresent(orderRecord.price, payload.price, 0))
@@ -842,21 +857,30 @@ export class LimitlessExecutionAdapter implements ExecutionVenueAdapter {
   }
 
   public async fetchFillState(venueOrderId: string): Promise<VenueFillState> {
-    const profileId = parseDelegatedProfileId(this.config.delegatedProfileId);
-    const clientFillState = await this.client?.getFillState?.(venueOrderId, profileId);
+    const profileId = parseDelegatedProfileId(this.config.delegatedProfileId) ?? this.profileIdByOrderId.get(venueOrderId);
+    const statusClient = this.status().executionMode === "user_signed_backend_relay"
+      ? this.getRelayClient()
+      : this.getClient();
+    const clientFillState = await statusClient.getFillState?.(venueOrderId, profileId);
     if (clientFillState) {
       return clientFillState;
     }
-    const orderStatus = await this.client?.getOrderStatus?.(venueOrderId, profileId);
+    const orderStatus = await statusClient.getOrderStatus?.(venueOrderId, profileId);
     if (orderStatus) {
       return mapLimitlessOrderStatusToFillState(orderStatus);
     }
-    return {
-      status: this.config.fillStateOverride ?? "OPEN",
-      filledSize: "0",
-      averagePrice: 0,
-      offchainFilled: false
-    };
+    if (this.config.fillStateOverride) {
+      return {
+        status: this.config.fillStateOverride,
+        filledSize: "0",
+        averagePrice: 0,
+        offchainFilled: false
+      };
+    }
+    throw new LimitlessExecutionNotConfiguredError(
+      "LIMITLESS_STATUS_READER_NOT_CONFIGURED",
+      "Limitless fill status requires a real order status reader; fallback fill states are not allowed for live execution."
+    );
   }
 
   public async cancelOrder(venueOrderId: string): Promise<{ cancelled: boolean }> {
@@ -864,29 +888,47 @@ export class LimitlessExecutionAdapter implements ExecutionVenueAdapter {
       ? parseDelegatedProfileId(this.config.delegatedProfileId)
       : undefined;
     await this.getClient().cancel(venueOrderId, profileId);
-    return { cancelled: true };
+    return {
+      cancelled: true
+    };
   }
 
   public async fetchSettlementState(fillOrOrderId: string): Promise<VenueSettlementState> {
-    const profileId = parseDelegatedProfileId(this.config.delegatedProfileId);
-    const clientSettlementState = await this.client?.getSettlementState?.(fillOrOrderId, profileId);
+    const profileId = parseDelegatedProfileId(this.config.delegatedProfileId) ?? this.profileIdByOrderId.get(fillOrOrderId);
+    const statusClient = this.status().executionMode === "user_signed_backend_relay"
+      ? this.getRelayClient()
+      : this.getClient();
+    const clientSettlementState = await statusClient.getSettlementState?.(fillOrOrderId, profileId);
     if (clientSettlementState) {
       return clientSettlementState;
     }
-    const orderStatus = await this.client?.getOrderStatus?.(fillOrOrderId, profileId);
+    const orderStatus = await statusClient.getOrderStatus?.(fillOrOrderId, profileId);
     if (orderStatus) {
       return mapLimitlessOrderStatusToSettlementState(orderStatus, {
         orderId: fillOrOrderId,
         delegatedProfileId: profileId
       });
     }
+    if (this.config.settlementStateOverride) {
+      return {
+        status: this.config.settlementStateOverride,
+        evidence: {
+          source: "limitless_execution_adapter",
+          fillOrOrderId,
+          delegatedProfileScoped: this.status().executionMode === "delegated_partner_server_wallet",
+          settlementEvidenceSupported: false,
+          override: true
+        }
+      };
+    }
     return {
-      status: this.config.settlementStateOverride ?? "SETTLEMENT_PENDING",
+      status: "SETTLEMENT_UNKNOWN",
       evidence: {
         source: "limitless_execution_adapter",
         fillOrOrderId,
         delegatedProfileScoped: this.status().executionMode === "delegated_partner_server_wallet",
-        settlementEvidenceSupported: false
+        settlementEvidenceSupported: false,
+        reason: "limitless_status_reader_not_configured"
       }
     };
   }

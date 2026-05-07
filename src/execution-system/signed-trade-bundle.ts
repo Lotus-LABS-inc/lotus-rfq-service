@@ -232,7 +232,7 @@ export class SignedTradeBundleService {
         return {
           ...leg,
           fillState: {
-            status: "OPEN" as const,
+            status: "FAILED" as const,
             filledSize: "0",
             averagePrice: 0,
             offchainFilled: false

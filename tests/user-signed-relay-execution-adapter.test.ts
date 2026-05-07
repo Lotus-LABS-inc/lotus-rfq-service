@@ -584,9 +584,40 @@ describe("user-signed backend relay execution adapters", () => {
     });
 
     await expect(adapter.fetchSettlementState("predict-order-1")).resolves.toMatchObject({
-      status: "SETTLEMENT_PENDING",
+      status: "SETTLEMENT_UNKNOWN",
       evidence: {
-        settlementEvidenceSupported: false
+        settlementEvidenceSupported: false,
+        reason: "user_signed_relay_settlement_reader_not_implemented"
+      }
+    });
+  });
+
+  it("fails closed when Predict.fun status lookup cannot read the venue", async () => {
+    const adapter = new PredictFunExecutionAdapter({
+      ...buildPredictFunExecutionAdapterConfigFromEnv({
+        PREDICT_FUN_EXECUTION_MODE: "user_signed_backend_relay",
+        PREDICT_MAINNET_BASE_URL: "https://api.predict.fun/",
+        PREDICT_API_KEY: "server-side-predict-key",
+        PREDICT_FUN_LIVE_EXECUTION_ENABLED: "true"
+      }),
+      predictOauthOrderClient: {
+        configured: () => true,
+        async createOauthOrder() {
+          return { orderId: "predict-order-1", orderHash: "predict-order-hash-1" };
+        },
+        async getOrderByHash() {
+          throw new Error("Predict status API unavailable.");
+        }
+      }
+    });
+
+    await expect(adapter.fetchFillState("predict-order-hash-1")).rejects.toMatchObject({
+      reasonCode: "PREDICT_FUN_STATUS_READ_FAILED"
+    });
+    await expect(adapter.fetchSettlementState("predict-order-hash-1")).resolves.toMatchObject({
+      status: "SETTLEMENT_UNKNOWN",
+      evidence: {
+        reason: "predict_status_read_failed"
       }
     });
   });

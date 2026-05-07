@@ -359,21 +359,17 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
         const status = await this.predictOauthOrderClient.getOrderByHash(venueOrderId);
         this.lastOrderStatus = status;
         return mapPredictOrderStatusToFillState(status);
-      } catch {
-        return {
-          status: "OPEN",
-          filledSize: "0",
-          averagePrice: 0,
-          offchainFilled: false
-        };
+      } catch (error) {
+        throw new UserSignedRelayExecutionNotConfiguredError(
+          "PREDICT_FUN_STATUS_READ_FAILED",
+          error instanceof Error ? error.message : "Predict.fun order status read failed."
+        );
       }
     }
-    return {
-      status: "OPEN",
-      filledSize: "0",
-      averagePrice: 0,
-      offchainFilled: false
-    };
+    throw new UserSignedRelayExecutionNotConfiguredError(
+      "USER_SIGNED_RELAY_STATUS_NOT_IMPLEMENTED",
+      `${this.venue} fill status lookup is not implemented; fallback fill states are not allowed for live execution.`
+    );
   }
 
   public async fetchSettlementState(fillOrOrderId: string): Promise<VenueSettlementState> {
@@ -395,11 +391,12 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
       }
     }
     return {
-      status: "SETTLEMENT_PENDING",
+      status: "SETTLEMENT_UNKNOWN",
       evidence: {
         source: `${this.venue.toLowerCase()}_user_signed_relay_adapter`,
         fillOrOrderId,
         settlementEvidenceSupported: false,
+        reason: "user_signed_relay_settlement_reader_not_implemented",
         ...(this.lastOrderStatus && this.lastOrderStatus.orderHash === fillOrOrderId
           ? {
               orderStatus: this.lastOrderStatus.status,
