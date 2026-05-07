@@ -147,7 +147,21 @@ export class UserVenueAccountService {
   }
 
   public async getAccount(userId: string, venue: string): Promise<UserVenueAccount | null> {
-    return this.repository.findAccount({ userId, venue: normalizeVenue(venue) });
+    const normalizedVenue = normalizeVenue(venue);
+    const account = await this.repository.findAccount({ userId, venue: normalizedVenue });
+    if (normalizedVenue !== "PREDICT_FUN" || !account || account.status !== "ACTIVE") {
+      return account;
+    }
+    const wallet = await this.resolveRequiredTurnkeyEvmWallet(userId);
+    if (
+      account.userWalletId === wallet.walletId &&
+      equalsAddress(account.walletAddress, wallet.address) &&
+      equalsAddress(account.venueAccountAddress, wallet.address) &&
+      account.venueAccountType === "EOA"
+    ) {
+      return account;
+    }
+    return (await this.ensureWalletAddressVenueAccount(userId, normalizedVenue, wallet, account)).account;
   }
 
   public async ensureAccount(input: EnsureUserVenueAccountInput): Promise<{
@@ -164,7 +178,7 @@ export class UserVenueAccountService {
     if (venue === "LIMITLESS" && !input.venueAccountId && !input.venueAccountAddress && this.limitlessPartnerAccountClient?.serverWalletDelegationEnabled?.() === true) {
       return this.ensureLimitlessServerWalletAccount(input.userId, wallet, existing);
     }
-    if (venue === "MYRIAD" && !input.venueAccountId && !input.venueAccountAddress) {
+    if ((venue === "MYRIAD" || venue === "PREDICT_FUN") && !input.venueAccountId && !input.venueAccountAddress) {
       return this.ensureWalletAddressVenueAccount(input.userId, venue, wallet, existing);
     }
     if (venue === "OPINION") {
@@ -453,9 +467,9 @@ export class UserVenueAccountService {
     const ensured = await this.ensureAccount({
       userId: input.userId,
       venue: "PREDICT_FUN",
-      venueAccountId: connectedAccount.name,
-      venueAccountAddress: connectedAccount.address,
-      venueAccountType: "SMART_WALLET"
+      venueAccountId: connectedAccount.name ?? wallet.address,
+      venueAccountAddress: wallet.address,
+      venueAccountType: "EOA"
     });
     await this.repository.appendAccountAuditEvent({
       userId: input.userId,
@@ -464,7 +478,8 @@ export class UserVenueAccountService {
       payload: {
         venue: "PREDICT_FUN",
         signer: wallet.address,
-        venueAccountAddress: connectedAccount.address,
+        venueAccountAddress: wallet.address,
+        connectedAccountAddress: connectedAccount.address,
         venueAccountIdPresent: connectedAccount.name !== null
       }
     });
@@ -978,7 +993,7 @@ const defaultAccountTypeForVenue = (venue: UserVenueAccountVenue): UserVenueAcco
     return "SAFE";
   }
   if (venue === "PREDICT_FUN") {
-    return "OAUTH_ACCOUNT";
+    return "EOA";
   }
   if (venue === "POLYMARKET") {
     return "DEPOSIT_WALLET";
@@ -1008,7 +1023,7 @@ const setupInstructionsForVenue = (venue: UserVenueAccountVenue, account: UserVe
     return ["Create or link the Opinion Safe using the displayed Turnkey EVM wallet, then submit the Safe address to Lotus."];
   }
   if (venue === "PREDICT_FUN") {
-    return ["Sign the Predict.fun auth message with the displayed Turnkey EVM wallet so Lotus can link the returned Predict smart-wallet address."];
+    return ["Sign the Predict.fun auth message with the displayed Turnkey EVM wallet so Lotus can refresh the venue JWT for the active wallet."];
   }
   if (venue === "MYRIAD") {
     return ["Myriad uses wallet-call user-signed actions. Lotus does not create or link a separate Myriad account in the venue-account setup batch."];

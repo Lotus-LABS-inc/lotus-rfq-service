@@ -1007,6 +1007,71 @@ describe("Funding v0 domain", () => {
     expect(lifi.quoteInputs[0]?.toAddress).not.toBe("0x31C5BB55B032Fe6Fc54F3A7b7b32FcA569170EaD");
   });
 
+  it("routes Predict.fun funding to the active user venue account when user-specific destination mode is enabled", async () => {
+    const repository = new InMemoryFundingRepository();
+    const lifi = new StubLifiProvider();
+    const activePredictWallet = "0x1111111111111111111111111111111111111111";
+    const oldStaticWallet = "0x6666666666666666666666666666666666666666";
+    const service = new FundingService(
+      repository,
+      lifi,
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env: {
+          ...env,
+          PREDICT_FUN_FUNDING_DESTINATION_MODE: "USER_VENUE_DEPOSIT_WALLET",
+          PREDICT_FUN_FUNDING_DESTINATION_ADDRESS: oldStaticWallet,
+          PREDICT_FUN_FUNDING_PREFERRED_CHAIN: "BSC",
+          PREDICT_FUN_FUNDING_PREFERRED_CHAIN_ID: "56",
+          PREDICT_FUN_FUNDING_PREFERRED_TOKEN: "USDT"
+        } as NodeJS.ProcessEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {
+        findAccount: async ({ userId, venue }) => userId === "user-1" && venue === "PREDICT_FUN"
+          ? {
+            venue: "PREDICT_FUN",
+            venueAccountAddress: activePredictWallet,
+            venueAccountType: "EOA",
+            status: "ACTIVE"
+          }
+          : null
+      }
+    );
+    const matrix = buildVenueCapabilityMatrix({
+      env: {
+        PREDICT_FUN_FUNDING_DESTINATION_MODE: "USER_VENUE_DEPOSIT_WALLET",
+        PREDICT_FUN_FUNDING_PREFERRED_CHAIN: "BSC",
+        PREDICT_FUN_FUNDING_PREFERRED_CHAIN_ID: "56",
+        PREDICT_FUN_FUNDING_PREFERRED_TOKEN: "USDT"
+      } as NodeJS.ProcessEnv
+    });
+    expect(matrix.PREDICT_FUN.readinessStatus).toBe("READY");
+    expect(matrix.PREDICT_FUN.depositAddressConfigured).toBe(true);
+
+    const created = await service.createIntent("user-1", {
+      sourceChain: "SOLANA",
+      sourceToken: "USDT",
+      sourceAmount: "4",
+      sourceWalletAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+      idempotencyKey: "predict-user-venue-wallet-target",
+      targets: [{ targetVenue: "PREDICT_FUN", targetPercentage: 100 }]
+    });
+    await service.quoteIntent("user-1", created.intent.fundingIntentId);
+
+    expect(lifi.quoteInputs[0]?.toAddress).toBe(activePredictWallet);
+    expect(lifi.quoteInputs[0]?.toAddress).not.toBe(oldStaticWallet);
+  });
+
   it("fails closed for Polymarket funding when deposit-wallet automation has no active deposit wallet", async () => {
     const repository = new InMemoryFundingRepository();
     const service = new FundingService(repository, new StubLifiProvider(), {

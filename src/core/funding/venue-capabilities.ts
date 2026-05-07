@@ -47,6 +47,7 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
   const opinionDepositAddress = configuredVenueDepositAddress(env, "OPINION", "BSC", ["SOLANA", "POLYGON"]);
   const myriadDepositAddress = configuredVenueDepositAddress(env, "MYRIAD", "BSC", ["SOLANA", "POLYGON"]);
   const predictFunDepositAddress = configuredVenueDepositAddress(env, "PREDICT_FUN", "BSC", ["SOLANA", "POLYGON"]);
+  const predictFunUserVenueDepositWalletEnabled = envValue(env, "PREDICT_FUN_FUNDING_DESTINATION_MODE") === "USER_VENUE_DEPOSIT_WALLET";
   const solanaUsdcAddress = envValue(env, "SOLANA_USDC_TOKEN_ADDRESS") ?? "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
   const solanaUsdtAddress = envValue(env, "SOLANA_USDT_TOKEN_ADDRESS") ?? "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY1p8ARw5ygP2Z7n";
   const polygonUsdcAddress = envValue(env, "POLYGON_USDC_TOKEN_ADDRESS") ?? "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
@@ -204,18 +205,27 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       configuredNote: `Myriad funding quote path is configured for approved ${myriadPreferredToken} source chains to the operator-approved Myriad funding destination.`,
       missingNote: "Set MYRIAD_FUNDING_DESTINATION_ADDRESS before enabling Myriad funding quotes."
     }),
-    PREDICT_FUN: configurableCapability({
-      venue: "PREDICT_FUN",
-      depositAddress: predictFunDepositAddress,
-      preferredChain: predictFunPreferredChain,
-      preferredChainId: predictFunPreferredChainId,
-      preferredToken: predictFunPreferredToken,
-      preferredTokenAddress: predictFunPreferredTokenAddress,
-      sourceTokenAddressByChain: predictFunSourceTokenAddressByChain,
-      supportsWithdrawal: supportsWithdrawal("PREDICT_FUN"),
-      configuredNote: `Predict.fun funding quote path is configured for approved ${predictFunPreferredToken} source chains to the operator-approved Predict.fun funding destination.`,
-      missingNote: "Set PREDICT_FUN_FUNDING_DESTINATION_ADDRESS before enabling Predict.fun funding quotes; do not confuse Predict.fun with PredictIt."
-    })
+    PREDICT_FUN: {
+      ...configurableCapability({
+        venue: "PREDICT_FUN",
+        depositAddress: predictFunDepositAddress,
+        preferredChain: predictFunPreferredChain,
+        preferredChainId: predictFunPreferredChainId,
+        preferredToken: predictFunPreferredToken,
+        preferredTokenAddress: predictFunPreferredTokenAddress,
+        sourceTokenAddressByChain: predictFunSourceTokenAddressByChain,
+        supportsWithdrawal: supportsWithdrawal("PREDICT_FUN"),
+        configuredNote: `Predict.fun funding quote path is configured for approved ${predictFunPreferredToken} source chains to the operator-approved Predict.fun funding destination.`,
+        missingNote: "Set PREDICT_FUN_FUNDING_DESTINATION_ADDRESS or PREDICT_FUN_FUNDING_DESTINATION_MODE=USER_VENUE_DEPOSIT_WALLET before enabling Predict.fun funding quotes; do not confuse Predict.fun with PredictIt."
+      }),
+      ...(predictFunUserVenueDepositWalletEnabled
+        ? {
+          readinessStatus: "READY" as const,
+          depositAddressConfigured: true,
+          notes: "Predict.fun funding quote path is configured for the active user-specific Turnkey EVM venue account."
+        }
+        : {})
+    }
   };
 };
 

@@ -297,8 +297,8 @@ describe("user venue account service", () => {
       venue: "PREDICT_FUN",
       walletAddress: "0x1111111111111111111111111111111111111111",
       venueAccountId: "predict-test-account",
-      venueAccountAddress: "0x4444444444444444444444444444444444444444",
-      venueAccountType: "SMART_WALLET",
+      venueAccountAddress: "0x1111111111111111111111111111111111111111",
+      venueAccountType: "EOA",
       status: "ACTIVE"
     });
     expect(JSON.stringify(repository.auditEvents)).not.toContain("predict-jwt-redacted");
@@ -496,7 +496,8 @@ describe("user venue account service", () => {
       setupMode: "NO_USER_SETUP_REQUIRED",
       account: {
         status: "ACTIVE",
-        venueAccountAddress: "0x4444444444444444444444444444444444444444"
+        venueAccountType: "EOA",
+        venueAccountAddress: "0x1111111111111111111111111111111111111111"
       }
     });
 
@@ -514,6 +515,53 @@ describe("user venue account service", () => {
         venueAccountType: "SAFE",
         venueAccountAddress: "0x2222222222222222222222222222222222222222"
       }
+    });
+  });
+
+  it("moves Predict.fun binding to the active Turnkey wallet instead of preserving an old account address", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    await repository.upsertAccount({
+      userId: "user-1",
+      venue: "PREDICT_FUN",
+      userWalletId: "old-wallet",
+      walletAddress: "0x2222222222222222222222222222222222222222",
+      venueAccountId: "old-predict-account",
+      venueAccountAddress: "0x3333333333333333333333333333333333333333",
+      venueAccountType: "SMART_WALLET",
+      status: "ACTIVE",
+      lastVerifiedAt: "2026-05-01T00:00:00.000Z"
+    });
+    const service = new UserVenueAccountService(
+      repository,
+      {
+        async resolveUserTurnkeyEvmFundingWallet() {
+          return evmWallet({ walletId: "new-wallet", address: "0x1111111111111111111111111111111111111111" });
+        }
+      },
+      predictAccountClient()
+    );
+
+    const prepared = await service.prepareAccountSetupBatch("user-1");
+    const predict = prepared.venueAccounts.find((item) => item.venue === "PREDICT_FUN");
+
+    expect(predict).toMatchObject({
+      setupMode: "SIGNATURE_REQUIRED",
+      account: {
+        userWalletId: "new-wallet",
+        walletAddress: "0x1111111111111111111111111111111111111111",
+        venueAccountType: "EOA",
+        venueAccountAddress: "0x1111111111111111111111111111111111111111",
+        status: "ACTIVE"
+      }
+    });
+
+    const healed = await service.getAccount("user-1", "PREDICT_FUN");
+    expect(healed).toMatchObject({
+      userWalletId: "new-wallet",
+      walletAddress: "0x1111111111111111111111111111111111111111",
+      venueAccountType: "EOA",
+      venueAccountAddress: "0x1111111111111111111111111111111111111111",
+      status: "ACTIVE"
     });
   });
 
@@ -786,8 +834,8 @@ describe("user venue account routes", () => {
     expect(predictCompleted.body).not.toContain("predict-jwt-redacted");
     expect(predictCompleted.json().venueAccount).toMatchObject({
       venue: "PREDICT_FUN",
-      venueAccountAddress: "0x4444444444444444444444444444444444444444",
-      venueAccountType: "SMART_WALLET",
+      venueAccountAddress: "0x1111111111111111111111111111111111111111",
+      venueAccountType: "EOA",
       status: "ACTIVE"
     });
 
