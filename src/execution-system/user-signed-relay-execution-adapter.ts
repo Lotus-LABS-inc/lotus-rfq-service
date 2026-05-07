@@ -233,7 +233,7 @@ export const buildPredictFunExecutionAdapterConfigFromEnv = (
   apiKey: env.PREDICT_API_KEY,
   apiKeyEnvKey: "PREDICT_API_KEY",
   liveExecutionEnabled: env.PREDICT_FUN_LIVE_EXECUTION_ENABLED === "true",
-  orderCreatePath: env.PREDICT_FUN_EXECUTION_ORDER_CREATE_PATH ?? "/v1/orders",
+  orderCreatePath: "/v1/orders",
   docsUrl: "https://dev.predict.fun/create-an-order-32534694e0",
   predictOauthOrderClient: buildPredictOauthOrderClientFromEnv(env),
   predictOrderMetadataClient: new PredictClient({

@@ -145,7 +145,6 @@ export const buildPredictOauthOrderClientFromEnv = (
   new PredictOauthOrderClient({
     baseUrl: env.PREDICT_MAINNET_BASE_URL,
     apiKey: env.PREDICT_API_KEY,
-    orderCreatePath: env.PREDICT_FUN_EXECUTION_ORDER_CREATE_PATH,
     timeoutMs: parseTimeoutMs(env.PREDICT_FUN_EXECUTION_TIMEOUT_MS)
   });
 
