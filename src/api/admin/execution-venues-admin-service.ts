@@ -401,6 +401,8 @@ export class ExecutionVenuesAdminService {
     if (adapterStatus.relayImplementationStatus === "PREPARE_ONLY") {
       if (adapterStatus.venue === "OPINION") {
         blockers.push("Opinion builder account creation and signed-payload relay submit are not confirmed for this API key; cancel/fill/status and settlement evidence readers are not implemented yet.");
+      } else if (adapterStatus.venue === "PREDICT_FUN") {
+        blockers.push("Predict.fun live relay is disabled until Lotus builds the venue's full OAuth create-order schema; the current simplified signed order is quote/signature-prep only and must not be submitted live.");
       } else {
         blockers.push("Signed-payload relay submit is prepare-only; cancel/fill/status and settlement evidence readers are not implemented yet.");
       }
@@ -423,6 +425,9 @@ export class ExecutionVenuesAdminService {
     if (status === "STRUCTURALLY_READY") {
       if (adapterStatus.venue === "OPINION") {
         return "OPINION user-signed relay prepare path is configured, but backend submit remains disabled until builder account creation, signed-payload relay, cancel/fill/status, and settlement evidence are confirmed.";
+      }
+      if (adapterStatus.venue === "PREDICT_FUN") {
+        return "PREDICT_FUN user-signed relay prepare path is configured, but live submit is disabled until the full Predict.fun OAuth create-order schema and settlement evidence are implemented.";
       }
       return `${adapterStatus.venue} user-signed relay env is structurally ready, but backend submit remains disabled until signed-payload relay, cancel/fill/status, and settlement evidence are reviewed.`;
     }

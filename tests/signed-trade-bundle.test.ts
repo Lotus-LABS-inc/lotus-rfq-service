@@ -31,7 +31,7 @@ const quote = (): ExecutableTradeQuote => ({
     {
       venue: "PREDICT_FUN",
       venueMarketId: "predict-market",
-      venueOutcomeId: "predict-token",
+      venueOutcomeId: "123456789",
       size: "1",
       price: 0.42,
       requiresUserSignature: true
@@ -95,6 +95,18 @@ describe("SignedTradeBundleService", () => {
 
     const predictRequest = prepared.signatureRequests[0]!;
     const limitlessRequest = prepared.signatureRequests[1]!;
+    const predictTypedData = predictRequest.typedData as {
+      domain: Record<string, unknown>;
+      types: Record<string, unknown>;
+      message: Record<string, unknown>;
+    };
+    const predictTypes = { ...predictTypedData.types };
+    delete predictTypes.EIP712Domain;
+    const predictSignature = await wallet._signTypedData(
+      predictTypedData.domain,
+      predictTypes,
+      predictTypedData.message
+    );
     const limitlessTypedData = limitlessRequest.typedData as {
       domain: Record<string, unknown>;
       types: Record<string, unknown>;
@@ -116,7 +128,7 @@ describe("SignedTradeBundleService", () => {
           venue: predictRequest.venue,
           signedPayload: {
             ...predictRequest.signedPayloadHint,
-            signature: `0x${"a".repeat(130)}`
+            signature: predictSignature
           }
         },
         {
@@ -139,6 +151,18 @@ describe("SignedTradeBundleService", () => {
     const prepared = await sut.prepare({ userId: "user-1", quoteId: "exec_quote_test" });
     const predictRequest = prepared.signatureRequests.find((request) => request.venue === "PREDICT_FUN")!;
     const limitlessRequest = prepared.signatureRequests.find((request) => request.venue === "LIMITLESS")!;
+    const predictTypedData = predictRequest.typedData as {
+      domain: Record<string, unknown>;
+      types: Record<string, unknown>;
+      message: Record<string, unknown>;
+    };
+    const predictTypes = { ...predictTypedData.types };
+    delete predictTypes.EIP712Domain;
+    const predictSignature = await wallet._signTypedData(
+      predictTypedData.domain,
+      predictTypes,
+      predictTypedData.message
+    );
     const wrongWallet = Wallet.createRandom();
     const typedData = limitlessRequest.typedData as {
       domain: Record<string, unknown>;
@@ -157,7 +181,7 @@ describe("SignedTradeBundleService", () => {
           venue: predictRequest.venue,
           signedPayload: {
             ...predictRequest.signedPayloadHint,
-            signature: `0x${"a".repeat(130)}`
+            signature: predictSignature
           }
         },
         {

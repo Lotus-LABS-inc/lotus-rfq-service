@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { ChainId, OrderBuilder, Side, SignatureType } from "@predictdotfun/sdk";
 import { verifyTypedData } from "@ethersproject/wallet";
+import { verifyTypedData as verifyTypedDataV6 } from "ethers";
 import type { UserVenueAccount } from "../core/execution/user-venue-accounts.js";
 import type { ExecutableRouteLeg, ExecutableRouteService, ExecutableTradeQuote } from "./executable-routing.js";
 import type { ExecutionLegV0 } from "./types.js";
@@ -226,20 +228,20 @@ export class SignedTradeBundleService {
         }
       };
     }
-    const order = buildPredictOrderPayload(payload, binding);
-    const message = JSON.stringify(order);
+    const predictOrder = buildPredictOrderPayload(payload, binding, this.now());
     return {
       legIndex,
       venue: prepared.venue,
       signer: binding.signerAddress,
       account: binding.venueAccountAddress,
-      kind: "MESSAGE",
+      kind: "EIP712",
       expiresAt: stringField(payload, "expiresAt") ?? new Date(this.now().getTime() + 60_000).toISOString(),
-      message,
+      typedData: predictOrder.typedData,
       signedPayloadHint: {
         signer: binding.signerAddress,
         account: binding.venueAccountAddress,
-        data: { order }
+        data: predictOrder.data,
+        typedData: predictOrder.typedData
       }
     };
   }
@@ -304,6 +306,21 @@ export class SignedTradeBundleService {
       }
       return;
     }
+    if (prepared.venue.toUpperCase() === "PREDICT_FUN") {
+      const typedData = recordField(signedPayload, "typedData");
+      if (!typedData) {
+        throw new SignedTradeBundleError("SIGNED_TRADE_TYPED_DATA_MISSING", "Predict.fun signed payload is missing EIP-712 typed data.");
+      }
+      const recovered = verifyTypedDataV6(
+        recordField(typedData, "domain") ?? {},
+        stripEip712Domain(recordField(typedData, "types") ?? {}) as never,
+        recordField(typedData, "message") ?? {},
+        signature
+      ).toLowerCase();
+      if (recovered !== binding.signerAddress.toLowerCase()) {
+        throw new SignedTradeBundleError("SIGNED_TRADE_SIGNATURE_MISMATCH", "Predict.fun EIP-712 signature does not recover to the linked Turnkey wallet.");
+      }
+    }
     const data = recordField(signedPayload, "data");
     const order = data ? recordField(data, "order") : null;
     if (!order) {
@@ -362,16 +379,56 @@ const buildLimitlessTypedData = (
 
 const buildPredictOrderPayload = (
   payload: Record<string, unknown>,
-  binding: ExpectedBinding
-): Record<string, unknown> => ({
-  maker: binding.venueAccountAddress,
-  signer: binding.venueAccountAddress,
-  tokenId: String(payload.venueOutcomeId ?? ""),
-  side: payload.side === "sell" ? 1 : 0,
-  price: Number(payload.price),
-  size: Number(payload.size),
-  venueMarketId: payload.venueMarketId
-});
+  binding: ExpectedBinding,
+  now: Date
+): { typedData: Record<string, unknown>; data: Record<string, unknown> } => {
+  const tokenId = stringField(payload, "venueOutcomeId");
+  if (!tokenId) {
+    throw new SignedTradeBundleError("PREDICT_FUN_TOKEN_ID_MISSING", "Predict.fun prepared order is missing venueOutcomeId.");
+  }
+  const side = stringField(payload, "side") === "sell" ? Side.SELL : Side.BUY;
+  const price = numberField(payload, "price");
+  const size = numberField(payload, "size");
+  if (price === null || price <= 0 || price >= 1 || size === null || size <= 0) {
+    throw new SignedTradeBundleError("PREDICT_FUN_ORDER_PRICE_SIZE_INVALID", "Predict.fun prepared order has invalid price or size.");
+  }
+  const metadata = recordField(payload, "predictOrderMetadata") ?? {};
+  const chainId = Number(numericStringField(metadata, "chainId") ?? 56);
+  const builder = OrderBuilder.make(chainId === 97 ? ChainId.BnbTestnet : ChainId.BnbMainnet);
+  const amounts = builder.getLimitOrderAmounts({
+    side,
+    pricePerShareWei: decimalToWei(String(price)),
+    quantityWei: decimalToWei(String(size))
+  });
+  const order = builder.buildOrder("LIMIT", {
+    maker: binding.venueAccountAddress,
+    signer: binding.venueAccountAddress,
+    side,
+    tokenId,
+    makerAmount: amounts.makerAmount,
+    takerAmount: amounts.takerAmount,
+    nonce: 0n,
+    feeRateBps: BigInt(numericStringField(metadata, "feeRateBps") ?? "0"),
+    signatureType: SignatureType.EOA
+  });
+  const typedData = builder.buildTypedData(order, {
+    isNegRisk: booleanField(metadata, "isNegRisk") ?? false,
+    isYieldBearing: booleanField(metadata, "isYieldBearing") ?? false
+  }) as unknown as Record<string, unknown>;
+  const hash = builder.buildTypedDataHash(typedData as never);
+  const data = {
+    timestamp: now.getTime(),
+    pricePerShare: String(amounts.pricePerShare),
+    strategy: "LIMIT",
+    slippageBps: "0",
+    isFillOrKill: false,
+    order: {
+      ...order,
+      hash
+    }
+  };
+  return { typedData, data };
+};
 
 const requireAddress = (value: string | null | undefined, label: string): string => {
   if (!value || !/^0x[a-fA-F0-9]{40}$/.test(value)) {
@@ -388,3 +445,48 @@ const stringField = (value: Record<string, unknown>, key: string): string | null
 
 const recordField = (value: Record<string, unknown>, key: string): Record<string, unknown> | null =>
   typeof value[key] === "object" && value[key] !== null ? value[key] as Record<string, unknown> : null;
+
+const numberField = (value: Record<string, unknown>, key: string): number | null => {
+  const candidate = value[key];
+  if (typeof candidate === "number" && Number.isFinite(candidate)) return candidate;
+  if (typeof candidate === "string" && candidate.trim().length > 0) {
+    const parsed = Number(candidate);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const numericStringField = (value: Record<string, unknown>, key: string): string | null => {
+  const candidate = value[key];
+  if (typeof candidate === "string" && candidate.trim().length > 0 && Number.isFinite(Number(candidate))) {
+    return candidate.trim();
+  }
+  if (typeof candidate === "number" && Number.isFinite(candidate)) return String(candidate);
+  return null;
+};
+
+const booleanField = (value: Record<string, unknown>, key: string): boolean | null => {
+  const candidate = value[key];
+  if (typeof candidate === "boolean") return candidate;
+  if (typeof candidate === "string") {
+    const normalized = candidate.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return null;
+};
+
+const decimalToWei = (value: string): bigint => {
+  const normalized = value.trim();
+  if (!/^\d+(\.\d+)?$/.test(normalized)) {
+    throw new SignedTradeBundleError("DECIMAL_TO_WEI_INVALID", "Predict.fun order amount contains an invalid decimal value.");
+  }
+  const [whole = "0", fractional = ""] = normalized.split(".");
+  const paddedFractional = `${fractional.slice(0, 18)}${"0".repeat(Math.max(18 - fractional.length, 0))}`;
+  return BigInt(whole) * 10n ** 18n + BigInt(paddedFractional);
+};
+
+const stripEip712Domain = (types: Record<string, unknown>): Record<string, unknown> => {
+  const { EIP712Domain: _domain, ...rest } = types;
+  return rest;
+};

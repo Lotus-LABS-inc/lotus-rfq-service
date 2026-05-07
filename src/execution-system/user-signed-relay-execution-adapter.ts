@@ -4,6 +4,7 @@ import {
   type PredictOauthCreateOrderPayload,
   type PredictOauthOrderStatus
 } from "../integrations/predict/predict-oauth-order-client.js";
+import { PredictClient } from "../integrations/predict/predict-client.js";
 import type {
   ExecutionVenueAdapter,
   NormalizedVenueError,
@@ -31,12 +32,18 @@ export interface UserSignedRelayExecutionAdapterConfig {
   docsUrl: string;
   now?: (() => Date) | undefined;
   predictOauthOrderClient?: PredictOauthOrderRelayClient | undefined;
+  predictOrderMetadataClient?: PredictOrderMetadataClient | undefined;
 }
 
 export interface PredictOauthOrderRelayClient {
   configured(): boolean;
   createOauthOrder(payload: PredictOauthCreateOrderPayload): Promise<{ orderId: string; orderHash: string }>;
   getOrderByHash(orderHash: string): Promise<PredictOauthOrderStatus>;
+}
+
+export interface PredictOrderMetadataClient {
+  getMarketById(marketId: string): Promise<Record<string, unknown>>;
+  getMarketStatistics(marketId: string): Promise<Record<string, unknown>>;
 }
 
 export interface UserSignedRelayExecutionAdapterEnvStatus {
@@ -223,13 +230,19 @@ export const buildPredictFunExecutionAdapterConfigFromEnv = (
   liveExecutionEnabled: env.PREDICT_FUN_LIVE_EXECUTION_ENABLED === "true",
   orderCreatePath: env.PREDICT_FUN_EXECUTION_ORDER_CREATE_PATH ?? "/v1/oauth/orders/create",
   docsUrl: "https://dev.predict.fun/create-an-order-for-a-oauth-connection-25326914e0",
-  predictOauthOrderClient: buildPredictOauthOrderClientFromEnv(env)
+  predictOauthOrderClient: buildPredictOauthOrderClientFromEnv(env),
+  predictOrderMetadataClient: new PredictClient({
+    environment: "mainnet",
+    ...(env.PREDICT_MAINNET_BASE_URL ? { baseUrl: env.PREDICT_MAINNET_BASE_URL } : {}),
+    ...(env.PREDICT_API_KEY ? { apiKey: env.PREDICT_API_KEY } : {})
+  })
 });
 
 export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
   public readonly venue: UserSignedRelayVenue;
   private readonly now: () => Date;
   private readonly predictOauthOrderClient: PredictOauthOrderRelayClient | undefined;
+  private readonly predictOrderMetadataClient: PredictOrderMetadataClient | undefined;
   private lastOrderStatus: PredictOauthOrderStatus | null = null;
   private readonly expectedBindingByOrderHash = new Map<string, UserSignedRelayPreparedBinding>();
 
@@ -237,6 +250,7 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
     this.venue = config.venue;
     this.now = config.now ?? (() => new Date());
     this.predictOauthOrderClient = config.predictOauthOrderClient;
+    this.predictOrderMetadataClient = config.predictOrderMetadataClient;
   }
 
   public status(): UserSignedRelayExecutionAdapterEnvStatus {
@@ -257,6 +271,9 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
     const expiresAt = new Date(preparedAt.getTime() + 5 * 60_000);
     const backendMayRelaySignedPayload = this.venue === "PREDICT_FUN" &&
       status.relayImplementationStatus === "SIGNED_RELAY_IMPLEMENTED";
+    const predictOrderMetadata = this.venue === "PREDICT_FUN"
+      ? await this.resolvePredictOrderMetadata(leg.venueMarketId)
+      : null;
     return {
       venue: this.venue,
       clientOrderId: leg.executionLegId,
@@ -287,7 +304,8 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
           readinessState: status.readinessState,
           relayImplementationStatus: status.relayImplementationStatus,
           credentialsServerSideOnly: true
-        }
+        },
+        ...(predictOrderMetadata ? { predictOrderMetadata } : {})
       }
     };
   }
@@ -397,6 +415,12 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
     const relayPayload = parseRelaySubmitPayload(order.payload);
     validatePreparedOrderExpiry(order.payload, this.now());
     validatePredictSignedPayloadMatchesPreparedOrder(order.payload, relayPayload);
+    if (status.relayImplementationStatus !== "SIGNED_RELAY_IMPLEMENTED") {
+      throw new UserSignedRelayExecutionNotConfiguredError(
+        "PREDICT_FUN_OAUTH_ORDER_SCHEMA_NOT_IMPLEMENTED",
+        "Predict.fun live relay is disabled until Lotus builds the venue's full OAuth create-order payload schema with timestamp, hash, salt, amounts, expiration, nonce, fee, signature type, and venue-verified signing semantics."
+      );
+    }
     const result = await this.predictOauthOrderClient.createOauthOrder(relayPayload.signedPayload);
     this.expectedBindingByOrderHash.set(result.orderHash, relayPayload.expectedBinding);
     return {
@@ -405,6 +429,32 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
       status: "SUBMITTED",
       filledSize: "0",
       averagePrice: numberPayloadField(order.payload, "price") ?? 0
+    };
+  }
+
+  private async resolvePredictOrderMetadata(venueMarketId: string): Promise<Record<string, unknown> | null> {
+    if (!this.predictOrderMetadataClient) {
+      return null;
+    }
+    const [market, stats] = await Promise.all([
+      this.predictOrderMetadataClient.getMarketById(venueMarketId),
+      this.predictOrderMetadataClient.getMarketStatistics(venueMarketId).catch(() => ({}))
+    ]);
+    return {
+      chainId: numericStringField(market, "chainId") ?? numericStringField(market, "chain_id") ?? "56",
+      feeRateBps: numericStringField(stats, "feeRateBps") ??
+        numericStringField(stats, "fee_rate_bps") ??
+        numericStringField(market, "feeRateBps") ??
+        numericStringField(market, "fee_rate_bps") ??
+        "0",
+      isNegRisk: booleanField(market, "isNegRisk") ??
+        booleanField(market, "is_neg_risk") ??
+        booleanField(market, "negRisk") ??
+        false,
+      isYieldBearing: booleanField(market, "isYieldBearing") ??
+        booleanField(market, "is_yield_bearing") ??
+        booleanField(market, "yieldBearing") ??
+        false
     };
   }
 }
@@ -448,6 +498,59 @@ const numberPayloadField = (payload: Record<string, unknown>, key: string): numb
   if (typeof value === "string" && value.trim().length > 0) {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const numericStringField = (payload: Record<string, unknown>, key: string): string | null => {
+  const value = payload[key];
+  if (typeof value === "string" && value.trim().length > 0 && Number.isFinite(Number(value))) {
+    return value.trim();
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  return null;
+};
+
+const numericStringPayloadField = (payload: Record<string, unknown>, key: string): string | null => {
+  const value = payload[key];
+  if (typeof value === "string" && /^\d+$/.test(value.trim())) {
+    return value.trim();
+  }
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) {
+    return String(value);
+  }
+  return null;
+};
+
+const integerPayloadField = (payload: Record<string, unknown>, key: string): number | null => {
+  const value = payload[key];
+  if (typeof value === "number" && Number.isSafeInteger(value)) return value;
+  if (typeof value === "string" && /^\d+$/.test(value.trim())) {
+    const parsed = Number(value);
+    return Number.isSafeInteger(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const decimalToWeiString = (value: string): string => {
+  const normalized = value.trim();
+  if (!/^\d+(\.\d+)?$/.test(normalized)) {
+    return "";
+  }
+  const [whole = "0", fractional = ""] = normalized.split(".");
+  const paddedFractional = `${fractional.slice(0, 18)}${"0".repeat(Math.max(18 - fractional.length, 0))}`;
+  return String(BigInt(whole) * 10n ** 18n + BigInt(paddedFractional));
+};
+
+const booleanField = (payload: Record<string, unknown>, key: string): boolean | null => {
+  const value = payload[key];
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
   }
   return null;
 };
@@ -517,6 +620,14 @@ const validatePredictSignedPayloadMatchesPreparedOrder = (
   if (!order) {
     throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_ORDER_MISSING", "Predict.fun signed payload is missing data.order.");
   }
+  const timestamp = integerPayloadField(relay.signedPayload.data, "timestamp");
+  if (timestamp === null || timestamp <= 0) {
+    throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_TIMESTAMP_MISSING", "Predict.fun signed payload is missing data.timestamp.");
+  }
+  const orderHash = stringPayloadField(order, "hash");
+  if (!orderHash || !/^0x[a-fA-F0-9]{64}$/.test(orderHash)) {
+    throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_ORDER_HASH_MISSING", "Predict.fun signed payload is missing data.order.hash.");
+  }
   if (!equalsAddress(stringPayloadField(order, "maker"), relay.expectedBinding.venueAccountAddress) ||
       !equalsAddress(stringPayloadField(order, "signer"), relay.expectedBinding.venueAccountAddress)) {
     throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_ORDER_ACCOUNT_MISMATCH", "Predict.fun signed order maker/signer must match the linked Predict account.");
@@ -532,13 +643,15 @@ const validatePredictSignedPayloadMatchesPreparedOrder = (
     throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_SIDE_MISMATCH", "Predict.fun signed order side does not match the prepared side.");
   }
   const expectedPrice = numberPayloadField(payload, "price");
-  const signedPrice = numberPayloadField(order, "price");
-  if (expectedPrice === null || signedPrice === null || Math.abs(expectedPrice - signedPrice) > 1e-9) {
+  const signedPriceWei = numericStringPayloadField(relay.signedPayload.data, "pricePerShare");
+  if (expectedPrice === null || signedPriceWei === null || decimalToWeiString(String(expectedPrice)) !== signedPriceWei) {
     throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_PRICE_MISMATCH", "Predict.fun signed order price does not match the prepared price.");
   }
   const expectedSize = numberPayloadField(payload, "size");
-  const signedSize = numberPayloadField(order, "size");
-  if (expectedSize === null || signedSize === null || Math.abs(expectedSize - signedSize) > 1e-9) {
+  const signedQuantityWei = expectedSide === "sell"
+    ? numericStringPayloadField(order, "makerAmount")
+    : numericStringPayloadField(order, "takerAmount");
+  if (expectedSize === null || signedQuantityWei === null || decimalToWeiString(String(expectedSize)) !== signedQuantityWei) {
     throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_SIZE_MISMATCH", "Predict.fun signed order size does not match the prepared size.");
   }
 };

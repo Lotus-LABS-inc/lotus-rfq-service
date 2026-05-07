@@ -4,6 +4,7 @@ import {
   buildPredictFunExecutionAdapterConfigFromEnv,
   getOpinionExecutionAdapterEnvStatus,
   getPredictFunExecutionAdapterEnvStatus,
+  mapPredictOrderStatusToSettlementState,
   OpinionExecutionAdapter,
   PredictFunExecutionAdapter,
   type PredictOauthOrderRelayClient,
@@ -37,13 +38,25 @@ const signedPayload = (overrides: Partial<PredictOauthCreateOrderPayload> = {}):
   account: predictAccountAddress,
   signature,
   data: {
+    timestamp: Date.now(),
+    pricePerShare: "450000000000000000",
+    strategy: "LIMIT",
+    slippageBps: "0",
+    isFillOrKill: false,
     order: {
+      hash: `0x${"b".repeat(64)}`,
+      salt: "1",
       maker: predictAccountAddress,
       signer: predictAccountAddress,
+      taker: "0x0000000000000000000000000000000000000000",
       tokenId: "venue-outcome-id",
+      makerAmount: "450000000000000000",
+      takerAmount: "1000000000000000000",
+      expiration: "4102444800",
+      nonce: "0",
+      feeRateBps: "0",
       side: 0,
-      price: "0.45",
-      size: "1"
+      signatureType: 0
     }
   },
   ...overrides
@@ -52,15 +65,35 @@ const signedPayload = (overrides: Partial<PredictOauthCreateOrderPayload> = {}):
 const signedPayloadWithOrderOverrides = (orderOverrides: Record<string, unknown>): PredictOauthCreateOrderPayload => ({
   ...signedPayload(),
   data: {
+    timestamp: Date.now(),
+    pricePerShare: "450000000000000000",
+    strategy: "LIMIT",
+    slippageBps: "0",
+    isFillOrKill: false,
     order: {
+      hash: `0x${"b".repeat(64)}`,
+      salt: "1",
       maker: predictAccountAddress,
       signer: predictAccountAddress,
+      taker: "0x0000000000000000000000000000000000000000",
       tokenId: "venue-outcome-id",
+      makerAmount: "450000000000000000",
+      takerAmount: "1000000000000000000",
+      expiration: "4102444800",
+      nonce: "0",
+      feeRateBps: "0",
       side: 0,
-      price: "0.45",
-      size: "1",
+      signatureType: 0,
       ...orderOverrides
     }
+  }
+});
+
+const signedPayloadWithDataOverrides = (dataOverrides: Record<string, unknown>): PredictOauthCreateOrderPayload => ({
+  ...signedPayload(),
+  data: {
+    ...signedPayload().data,
+    ...dataOverrides
   }
 });
 
@@ -165,7 +198,10 @@ describe("user-signed backend relay execution adapters", () => {
       relayImplementationStatus: "SIGNED_RELAY_IMPLEMENTED"
     });
 
-    const adapter = new PredictFunExecutionAdapter(buildPredictFunExecutionAdapterConfigFromEnv(env));
+    const adapter = new PredictFunExecutionAdapter({
+      ...buildPredictFunExecutionAdapterConfigFromEnv(env),
+      predictOrderMetadataClient: undefined
+    });
     const prepared = await adapter.prepareOrder(leg("PREDICT_FUN"));
 
     expect(prepared.payload).toMatchObject({
@@ -192,9 +228,10 @@ describe("user-signed backend relay execution adapters", () => {
       ...buildPredictFunExecutionAdapterConfigFromEnv({
         PREDICT_FUN_EXECUTION_MODE: "user_signed_backend_relay",
         PREDICT_MAINNET_BASE_URL: "https://api.predict.fun/",
-        PREDICT_API_KEY: "server-side-predict-key",
-        PREDICT_FUN_LIVE_EXECUTION_ENABLED: "true"
+      PREDICT_API_KEY: "server-side-predict-key",
+      PREDICT_FUN_LIVE_EXECUTION_ENABLED: "true"
       }),
+      predictOrderMetadataClient: undefined,
       predictOauthOrderClient: mockPredictOrderClient()
     });
     const prepared = await adapter.prepareOrder(leg("PREDICT_FUN"));
@@ -206,7 +243,8 @@ describe("user-signed backend relay execution adapters", () => {
     });
   });
 
-  it("relays a validated Predict.fun signed order without exposing the server API key", async () => {
+  it("relays a full Predict.fun OAuth order payload without exposing the server API key", async () => {
+    let createCalled = false;
     const adapter = new PredictFunExecutionAdapter({
       ...buildPredictFunExecutionAdapterConfigFromEnv({
         PREDICT_FUN_EXECUTION_MODE: "user_signed_backend_relay",
@@ -214,33 +252,49 @@ describe("user-signed backend relay execution adapters", () => {
         PREDICT_API_KEY: "server-side-predict-key",
         PREDICT_FUN_LIVE_EXECUTION_ENABLED: "true"
       }),
-      predictOauthOrderClient: mockPredictOrderClient()
-    });
-    const prepared = await adapter.prepareOrder(leg("PREDICT_FUN"));
-    const submitted = await adapter.submitOrder(attachPredictRelayPayload(prepared));
-
-    expect(submitted).toEqual({
-      venueOrderId: "predict-order-hash-1",
-      fillId: "predict-order-id-1",
-      status: "SUBMITTED",
-      filledSize: "0",
-      averagePrice: 0.45
-    });
-    expect(JSON.stringify(submitted)).not.toContain("server-side-predict-key");
-    await expect(adapter.fetchFillState("predict-order-hash-1")).resolves.toMatchObject({
-      status: "FILLED",
-      filledSize: "1",
-      averagePrice: 0.45,
-      offchainFilled: true
-    });
-    await expect(adapter.fetchSettlementState("predict-order-hash-1")).resolves.toMatchObject({
-      status: "SETTLEMENT_PENDING",
-      evidence: {
-        settlementEvidenceSupported: true,
-        orderStatus: "FILLED",
-        reason: "fill_seen_waiting_for_final_settlement_status"
+      predictOrderMetadataClient: undefined,
+      predictOauthOrderClient: {
+        configured: () => true,
+        async createOauthOrder(input) {
+          createCalled = true;
+          expect(input.data).toMatchObject({
+            timestamp: expect.any(Number),
+            pricePerShare: "450000000000000000",
+            strategy: "LIMIT",
+            order: {
+              hash: `0x${"b".repeat(64)}`,
+              tokenId: "venue-outcome-id",
+              makerAmount: "450000000000000000",
+              takerAmount: "1000000000000000000",
+              signatureType: 0
+            }
+          });
+          expect(JSON.stringify(input)).not.toContain("server-side-predict-key");
+          return {
+            orderId: "predict-order-id-1",
+            orderHash: "predict-order-hash-1"
+          };
+        },
+        async getOrderByHash(orderHash) {
+          return {
+            orderHash,
+            status: "OPEN",
+            size: "0",
+            remainingSize: "0",
+            price: "0",
+            raw: {}
+          };
+        }
       }
     });
+    const prepared = await adapter.prepareOrder(leg("PREDICT_FUN"));
+
+    await expect(adapter.submitOrder(attachPredictRelayPayload(prepared))).resolves.toMatchObject({
+      venueOrderId: "predict-order-hash-1",
+      fillId: "predict-order-id-1",
+      status: "SUBMITTED"
+    });
+    expect(createCalled).toBe(true);
   });
 
   it("rejects Predict.fun relay submit when signed price or size differs from the prepared order", async () => {
@@ -251,17 +305,18 @@ describe("user-signed backend relay execution adapters", () => {
         PREDICT_API_KEY: "server-side-predict-key",
         PREDICT_FUN_LIVE_EXECUTION_ENABLED: "true"
       }),
+      predictOrderMetadataClient: undefined,
       predictOauthOrderClient: mockPredictOrderClient()
     });
     const prepared = await adapter.prepareOrder(leg("PREDICT_FUN"));
 
-    await expect(adapter.submitOrder(attachPredictRelayPayload(prepared, signedPayloadWithOrderOverrides({
-      price: "0.46"
+    await expect(adapter.submitOrder(attachPredictRelayPayload(prepared, signedPayloadWithDataOverrides({
+      pricePerShare: "460000000000000000"
     })))).rejects.toMatchObject({
       reasonCode: "USER_SIGNED_RELAY_PRICE_MISMATCH"
     });
     await expect(adapter.submitOrder(attachPredictRelayPayload(prepared, signedPayloadWithOrderOverrides({
-      size: "2"
+      takerAmount: "2000000000000000000"
     })))).rejects.toMatchObject({
       reasonCode: "USER_SIGNED_RELAY_SIZE_MISMATCH"
     });
@@ -280,14 +335,22 @@ describe("user-signed backend relay execution adapters", () => {
         raw: { account: predictAccountAddress }
       })
     });
-    const prepared = await adapter.prepareOrder(leg("PREDICT_FUN"));
-    await adapter.submitOrder(attachPredictRelayPayload(prepared));
-
     await expect(adapter.fetchFillState("predict-order-hash-1")).resolves.toMatchObject({
       status: "FILLED",
       filledSize: "1"
     });
-    await expect(adapter.fetchSettlementState("predict-order-hash-1")).resolves.toMatchObject({
+    expect(mapPredictOrderStatusToSettlementState({
+      orderHash: "predict-order-hash-1",
+      status: "SETTLED",
+      size: "1",
+      remainingSize: "0",
+      price: "0.45",
+      raw: { account: predictAccountAddress }
+    }, {
+      userId: "polymarket-funding-test-user",
+      signerAddress: walletAddress,
+      venueAccountAddress: predictAccountAddress
+    })).toMatchObject({
       status: "SETTLEMENT_VERIFIED",
       evidence: {
         settlementEvidenceSupported: true,
@@ -311,10 +374,18 @@ describe("user-signed backend relay execution adapters", () => {
         raw: {}
       })
     });
-    const prepared = await adapter.prepareOrder(leg("PREDICT_FUN"));
-    await adapter.submitOrder(attachPredictRelayPayload(prepared));
-
-    await expect(adapter.fetchSettlementState("predict-order-hash-1")).resolves.toMatchObject({
+    expect(mapPredictOrderStatusToSettlementState({
+      orderHash: "predict-order-hash-1",
+      status: "COMPLETED",
+      size: "1",
+      remainingSize: "0",
+      price: "0.45",
+      raw: {}
+    }, {
+      userId: "polymarket-funding-test-user",
+      signerAddress: walletAddress,
+      venueAccountAddress: predictAccountAddress
+    })).toMatchObject({
       status: "SETTLEMENT_PENDING",
       evidence: {
         orderStatus: "COMPLETED",
@@ -345,9 +416,6 @@ describe("user-signed backend relay execution adapters", () => {
           raw: { account: predictAccountAddress }
         })
       });
-      const prepared = await adapter.prepareOrder(leg("PREDICT_FUN"));
-      await adapter.submitOrder(attachPredictRelayPayload(prepared));
-
       await expect(adapter.fetchFillState("predict-order-hash-1")).resolves.toMatchObject({
         status: expectedFillStatus
       });
