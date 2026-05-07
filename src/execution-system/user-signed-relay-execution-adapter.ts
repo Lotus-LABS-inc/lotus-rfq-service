@@ -27,6 +27,9 @@ export interface UserSignedRelayExecutionAdapterConfig {
   baseUrlEnvKey?: string | undefined;
   apiKey?: string | undefined;
   apiKeyEnvKey?: string | undefined;
+  executionSubmitMode?: "direct" | "relay" | undefined;
+  executionRelayUrl?: string | undefined;
+  executionRelaySecret?: string | undefined;
   liveExecutionEnabled: boolean;
   orderCreatePath: string;
   docsUrl: string;
@@ -40,6 +43,7 @@ export interface PredictOauthOrderRelayClient {
   configured(): boolean;
   createOauthOrder(payload: PredictOauthCreateOrderPayload, jwt?: string | undefined): Promise<{ orderId: string; orderHash: string }>;
   getOrderByHash(orderHash: string): Promise<PredictOauthOrderStatus>;
+  cancelOrder?(orderHash: string): Promise<{ cancelled: boolean }>;
 }
 
 export interface PredictOrderMetadataClient {
@@ -138,14 +142,23 @@ const statusFromConfig = (config: {
   baseUrlEnvKey?: string | undefined;
   apiKey?: string | undefined;
   apiKeyEnvKey?: string | undefined;
+  executionSubmitMode?: "direct" | "relay" | undefined;
+  executionRelayUrl?: string | undefined;
+  executionRelaySecret?: string | undefined;
   liveExecutionEnabled: boolean;
 }): UserSignedRelayExecutionAdapterEnvStatus => {
   const baseUrlEnvKey = config.baseUrlEnvKey ?? `${config.venue}_EXECUTION_BASE_URL`;
   const apiKeyEnvKey = config.apiKeyEnvKey ?? `${config.venue}_EXECUTION_API_KEY`;
-  const missingEnv = [
-    ...(!nonEmpty(config.baseUrl) ? [baseUrlEnvKey] : []),
-    ...(!nonEmpty(config.apiKey) ? [apiKeyEnvKey] : [])
-  ];
+  const relaySelected = config.executionSubmitMode === "relay";
+  const missingEnv = relaySelected
+    ? [
+        ...(!nonEmpty(config.executionRelayUrl) ? [`${config.venue}_EXECUTION_RELAY_URL`] : []),
+        ...(!nonEmpty(config.executionRelaySecret) ? [`${config.venue}_EXECUTION_RELAY_SECRET`] : [])
+      ]
+    : [
+        ...(!nonEmpty(config.baseUrl) ? [baseUrlEnvKey] : []),
+        ...(!nonEmpty(config.apiKey) ? [apiKeyEnvKey] : [])
+      ];
   const missingDryRunEnv = !nonEmpty(config.baseUrl) ? [baseUrlEnvKey] : [];
   const featureFlagSelected = config.executionMode === "user_signed_backend_relay";
   const readinessState = readinessFromEnv({
@@ -204,6 +217,9 @@ export const getPredictFunExecutionAdapterEnvStatus = (
     baseUrlEnvKey: "PREDICT_MAINNET_BASE_URL",
     apiKey: env.PREDICT_API_KEY,
     apiKeyEnvKey: "PREDICT_API_KEY",
+    executionSubmitMode: env.PREDICT_FUN_EXECUTION_SUBMIT_MODE === "relay" ? "relay" : "direct",
+    executionRelayUrl: env.PREDICT_FUN_EXECUTION_RELAY_URL,
+    executionRelaySecret: env.PREDICT_FUN_EXECUTION_RELAY_SECRET,
     liveExecutionEnabled: env.PREDICT_FUN_LIVE_EXECUTION_ENABLED === "true"
   });
 
@@ -232,6 +248,9 @@ export const buildPredictFunExecutionAdapterConfigFromEnv = (
   baseUrlEnvKey: "PREDICT_MAINNET_BASE_URL",
   apiKey: env.PREDICT_API_KEY,
   apiKeyEnvKey: "PREDICT_API_KEY",
+  executionSubmitMode: env.PREDICT_FUN_EXECUTION_SUBMIT_MODE === "relay" ? "relay" : "direct",
+  executionRelayUrl: env.PREDICT_FUN_EXECUTION_RELAY_URL,
+  executionRelaySecret: env.PREDICT_FUN_EXECUTION_RELAY_SECRET,
   liveExecutionEnabled: env.PREDICT_FUN_LIVE_EXECUTION_ENABLED === "true",
   orderCreatePath: "/v1/orders",
   docsUrl: "https://dev.predict.fun/create-an-order-32534694e0",
@@ -382,6 +401,19 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
           : {})
       }
     };
+  }
+
+  public async cancelOrder(venueOrderId: string): Promise<{ cancelled: boolean }> {
+    if (this.venue === "PREDICT_FUN" && this.predictOauthOrderClient?.configured()) {
+      if (!this.predictOauthOrderClient.cancelOrder) {
+        throw new UserSignedRelayExecutionNotConfiguredError(
+          "PREDICT_FUN_CANCEL_NOT_IMPLEMENTED",
+          "Predict.fun cancel is reserved but not implemented until official signed cancel semantics are confirmed."
+        );
+      }
+      return this.predictOauthOrderClient.cancelOrder(venueOrderId);
+    }
+    return { cancelled: false };
   }
 
   public normalizeVenueError(error: unknown): NormalizedVenueError {
