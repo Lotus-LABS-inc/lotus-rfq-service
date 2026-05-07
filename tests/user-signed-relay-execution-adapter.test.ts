@@ -223,6 +223,38 @@ describe("user-signed backend relay execution adapters", () => {
     });
   });
 
+  it("prepares Predict.fun signed relay orders when optional metadata lookup fails", async () => {
+    const adapter = new PredictFunExecutionAdapter({
+      ...buildPredictFunExecutionAdapterConfigFromEnv({
+        PREDICT_FUN_EXECUTION_MODE: "user_signed_backend_relay",
+        PREDICT_MAINNET_BASE_URL: "https://api.predict.fun/",
+        PREDICT_API_KEY: "server-side-predict-key",
+        PREDICT_FUN_LIVE_EXECUTION_ENABLED: "true"
+      }),
+      predictOrderMetadataClient: {
+        async getMarketById() {
+          throw new Error("Predict request failed with status 400.");
+        },
+        async getMarketStatistics() {
+          throw new Error("Predict request failed with status 400.");
+        }
+      }
+    });
+
+    const prepared = await adapter.prepareOrder(leg("PREDICT_FUN"));
+
+    expect(prepared.payload).toMatchObject({
+      venue: "PREDICT_FUN",
+      backendMayRelaySignedPayload: true,
+      predictOrderMetadata: {
+        chainId: "56",
+        feeRateBps: "0",
+        isNegRisk: false,
+        isYieldBearing: false
+      }
+    });
+  });
+
   it("rejects Predict.fun relay submit when the signer does not match the active Turnkey wallet", async () => {
     const adapter = new PredictFunExecutionAdapter({
       ...buildPredictFunExecutionAdapterConfigFromEnv({

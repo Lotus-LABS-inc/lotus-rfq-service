@@ -483,7 +483,7 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
       return null;
     }
     const [market, stats] = await Promise.all([
-      this.predictOrderMetadataClient.getMarketById(venueMarketId),
+      this.predictOrderMetadataClient.getMarketById(venueMarketId).catch(() => ({})),
       this.predictOrderMetadataClient.getMarketStatistics(venueMarketId).catch(() => ({}))
     ]);
     return {
