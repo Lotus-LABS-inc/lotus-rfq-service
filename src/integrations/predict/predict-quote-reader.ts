@@ -153,7 +153,7 @@ const resolvePredictOutcome = (
   const normalizedCanonical = canonicalOutcomeId?.trim().toUpperCase();
   const yes = findOutcomeToken(outcomes, "YES");
   const no = findOutcomeToken(outcomes, "NO");
-  if (configuredOutcomeId) {
+  if (configuredOutcomeId && looksLikeNumericId(configuredOutcomeId)) {
     return {
       venueOutcomeId: configuredOutcomeId,
       ...(yes && configuredOutcomeId === yes ? { outcomeSide: "YES" as const } : {}),

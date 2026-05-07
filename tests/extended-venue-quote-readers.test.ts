@@ -131,6 +131,45 @@ describe("extended venue quote readers", () => {
     expect(calculated.price).toBe(0.52);
   });
 
+  it("Predict.fun reader treats YES/NO shared-core labels as labels, not executable token ids", async () => {
+    const reader = new PredictQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      environment: "mainnet",
+      now: () => now,
+      client: {
+        async getMarketOrderbook() {
+          return { bids: [{ price: "0.38", size: "10" }], asks: [{ price: "0.39", size: "10" }] };
+        },
+        async getMarketStatistics() {
+          return { feeRateBps: "35" };
+        },
+        async getMarketById() {
+          return {
+            id: "14347",
+            title: "Market",
+            outcomes: [
+              { label: "Yes", tokenId: "875841741480746520604679210811814028357467302712417806610111179101805869578687" },
+              { label: "No", tokenId: "242424242424242424242424242424242424242424242424242424242424242424" }
+            ]
+          };
+        }
+      }
+    });
+
+    const snapshot = await reader.getQuoteSnapshot({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "14347",
+      venueOutcomeId: "YES",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(snapshot?.venueOutcomeId).toBe("875841741480746520604679210811814028357467302712417806610111179101805869578687");
+    expect(snapshot?.blockers).not.toContain("PREDICT_FUN_TOKEN_ID_MISSING");
+    expect(snapshot?.metadata).toMatchObject({ outcomeSide: "YES" });
+  });
+
   it("Predict.fun reader blocks execution quotes when an executable token id is unresolved", async () => {
     const reader = new PredictQuoteReader({
       streamCache: new QuoteSnapshotCache(),
