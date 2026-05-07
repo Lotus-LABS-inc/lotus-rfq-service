@@ -565,6 +565,51 @@ describe("user venue account service", () => {
     });
   });
 
+  it("adds operator-configured ERC20 approval transactions to setup batch for EOA venues", async () => {
+    const previousEnv = { ...process.env };
+    process.env.PREDICT_FUN_BALANCE_ACTIVATION_TOKEN_ADDRESS = "0x5555555555555555555555555555555555555555";
+    process.env.PREDICT_FUN_BALANCE_ACTIVATION_SPENDER_ADDRESS = "0x6666666666666666666666666666666666666666";
+    process.env.PREDICT_FUN_BALANCE_ACTIVATION_CHAIN_ID = "56";
+    process.env.PREDICT_FUN_BALANCE_ACTIVATION_TOKEN_SYMBOL = "USDT";
+    process.env.PREDICT_FUN_BALANCE_ACTIVATION_TOKEN_DECIMALS = "18";
+    process.env.PREDICT_FUN_SETUP_APPROVAL_AMOUNT = "100000";
+    try {
+      const repository = new InMemoryVenueAccountRepository();
+      const service = new UserVenueAccountService(
+        repository,
+        {
+          async resolveUserTurnkeyEvmFundingWallet() {
+            return evmWallet();
+          }
+        },
+        predictAccountClient()
+      );
+
+      const prepared = await service.prepareAccountSetupBatch("user-1");
+      const approval = prepared.signatureRequests.find((request) => request.requestType === "ERC20_ALLOWANCE_APPROVAL");
+      expect(approval).toMatchObject({
+        venue: "PREDICT_FUN",
+        signer: "0x1111111111111111111111111111111111111111",
+        approval: {
+          tokenSymbol: "USDT",
+          tokenAddress: "0x5555555555555555555555555555555555555555",
+          spenderAddress: "0x6666666666666666666666666666666666666666",
+          amountDisplay: "100000"
+        },
+        transactionRequest: {
+          to: "0x5555555555555555555555555555555555555555",
+          from: "0x1111111111111111111111111111111111111111",
+          value: "0",
+          chainId: 56
+        }
+      });
+      expect(approval?.approval?.amount).toBe("100000000000000000000000");
+      expect(approval?.transactionRequest?.data).toContain("6666666666666666666666666666666666666666");
+    } finally {
+      process.env = previousEnv;
+    }
+  });
+
   it("prepares and completes Limitless partner account registration when configured", async () => {
     const repository = new InMemoryVenueAccountRepository();
     const service = new UserVenueAccountService(

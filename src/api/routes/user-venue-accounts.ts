@@ -61,6 +61,20 @@ export interface UserVenueAccountRouteHandlers {
       signer: string;
       message: string;
       venueAccount: UserVenueAccount;
+      transactionRequest?: {
+        to: string;
+        from: string;
+        data: string;
+        value: "0";
+        chainId: number;
+      } | undefined;
+      approval?: {
+        tokenSymbol: string | null;
+        tokenAddress: string;
+        spenderAddress: string;
+        amount: string;
+        amountDisplay: string;
+      } | undefined;
     }>;
   }>;
   completePredictFunAccountAuth?(input: {
@@ -108,6 +122,20 @@ export interface UserVenueAccountRouteHandlers {
       signer: string;
       message: string;
       venueAccount: UserVenueAccount;
+      transactionRequest?: {
+        to: string;
+        from: string;
+        data: string;
+        value: "0";
+        chainId: number;
+      } | undefined;
+      approval?: {
+        tokenSymbol: string | null;
+        tokenAddress: string;
+        spenderAddress: string;
+        amount: string;
+        amountDisplay: string;
+      } | undefined;
     }>;
   }>;
 }
@@ -287,6 +315,20 @@ const toSafeBatch = (batch: {
     signer: string;
     message: string;
     venueAccount: UserVenueAccount;
+    transactionRequest?: {
+      to: string;
+      from: string;
+      data: string;
+      value: "0";
+      chainId: number;
+    } | undefined;
+    approval?: {
+      tokenSymbol: string | null;
+      tokenAddress: string;
+      spenderAddress: string;
+      amount: string;
+      amountDisplay: string;
+    } | undefined;
   }>;
 }): Record<string, unknown> => ({
   venueAccounts: batch.venueAccounts.map((item) => ({
@@ -299,7 +341,9 @@ const toSafeBatch = (batch: {
     requestType: request.requestType,
     signer: request.signer,
     message: request.message,
-    venueAccount: toSafeVenueAccount(request.venueAccount)
+    venueAccount: toSafeVenueAccount(request.venueAccount),
+    ...(request.transactionRequest ? { transactionRequest: request.transactionRequest } : {}),
+    ...(request.approval ? { approval: request.approval } : {})
   }))
 });
 

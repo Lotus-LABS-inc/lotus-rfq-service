@@ -87,11 +87,25 @@ export interface UserVenueAccountSetupBatchItem {
 }
 
 export interface UserVenueAccountSignatureRequest {
-  venue: "PREDICT_FUN" | "LIMITLESS";
-  requestType: "PREDICT_FUN_AUTH_MESSAGE" | "LIMITLESS_PARTNER_ACCOUNT_OWNERSHIP_MESSAGE";
+  venue: "PREDICT_FUN" | "LIMITLESS" | "POLYMARKET" | "OPINION" | "MYRIAD";
+  requestType: "PREDICT_FUN_AUTH_MESSAGE" | "LIMITLESS_PARTNER_ACCOUNT_OWNERSHIP_MESSAGE" | "ERC20_ALLOWANCE_APPROVAL";
   signer: string;
   message: string;
   venueAccount: UserVenueAccount;
+  transactionRequest?: {
+    to: string;
+    from: string;
+    data: string;
+    value: "0";
+    chainId: number;
+  } | undefined;
+  approval?: {
+    tokenSymbol: string | null;
+    tokenAddress: string;
+    spenderAddress: string;
+    amount: string;
+    amountDisplay: string;
+  } | undefined;
 }
 
 export interface UserVenueAccountSetupBatch {
@@ -269,10 +283,31 @@ export class UserVenueAccountService {
   public async prepareAccountSetupBatch(userId: string): Promise<UserVenueAccountSetupBatch> {
     const venueAccounts: UserVenueAccountSetupBatchItem[] = [];
     const signatureRequests: UserVenueAccountSignatureRequest[] = [];
+    const maybeAddApproval = async (venue: UserVenueAccountVenue, account: UserVenueAccount): Promise<void> => {
+      const approval = buildSetupApprovalRequest(venue, account, process.env);
+      if (!approval) {
+        return;
+      }
+      signatureRequests.push(approval);
+      await this.repository.appendAccountAuditEvent({
+        userId,
+        venueAccountBindingId: account.venueAccountBindingId,
+        eventType: "USER_VENUE_ACCOUNT_SETUP_APPROVAL_REQUEST_CREATED",
+        payload: {
+          venue,
+          signer: approval.signer,
+          tokenSymbol: approval.approval?.tokenSymbol ?? null,
+          tokenAddress: approval.approval?.tokenAddress,
+          spenderAddress: approval.approval?.spenderAddress,
+          amountDisplay: approval.approval?.amountDisplay
+        }
+      });
+    };
 
     for (const venue of batchSetupVenues) {
       if (venue === "PREDICT_FUN") {
         const ensured = await this.ensureAccount({ userId, venue: "PREDICT_FUN" });
+        await maybeAddApproval(venue, ensured.account);
         if (ensured.account.status === "ACTIVE" && this.getPredictFunJwt(userId)) {
           venueAccounts.push({
             venue,
@@ -327,6 +362,7 @@ export class UserVenueAccountService {
 
       if (venue === "LIMITLESS") {
         const ensured = await this.ensureAccount({ userId, venue: "LIMITLESS" });
+        await maybeAddApproval(venue, ensured.account);
         if (ensured.account.status === "ACTIVE") {
           venueAccounts.push({
             venue,
@@ -387,6 +423,7 @@ export class UserVenueAccountService {
         continue;
       }
       const ensured = await this.ensureAccount({ userId, venue });
+      await maybeAddApproval(venue, ensured.account);
       venueAccounts.push({
         venue,
         account: ensured.account,
@@ -1068,6 +1105,86 @@ const isEvmSignature = (value: string): boolean =>
 
 const isEvmAddress = (value: string): boolean =>
   /^0x[a-fA-F0-9]{40}$/.test(value.trim());
+
+const defaultSetupApprovalAmount = "100000";
+
+const envValue = (env: NodeJS.ProcessEnv, key: string): string | null => {
+  const value = env[key];
+  return value && value.trim().length > 0 ? value.trim() : null;
+};
+
+const parsePositiveInt = (value: string | null): number | null => {
+  if (!value) {
+    return null;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const decimalToBaseUnits = (amount: string, decimals: number): string => {
+  const [whole = "0", fraction = ""] = amount.trim().split(".");
+  const normalizedWhole = whole.replace(/[^\d]/g, "") || "0";
+  const normalizedFraction = fraction.replace(/[^\d]/g, "").padEnd(decimals, "0").slice(0, decimals);
+  return BigInt(`${normalizedWhole}${normalizedFraction}`.replace(/^0+(?=\d)/, "") || "0").toString();
+};
+
+const encodeErc20Approve = (spender: string, amount: string): string => {
+  const cleanSpender = spender.toLowerCase().replace(/^0x/, "").padStart(64, "0");
+  const cleanAmount = BigInt(amount).toString(16).padStart(64, "0");
+  return `0x095ea7b3${cleanSpender}${cleanAmount}`;
+};
+
+const buildSetupApprovalRequest = (
+  venue: UserVenueAccountVenue,
+  account: UserVenueAccount,
+  env: NodeJS.ProcessEnv
+): UserVenueAccountSignatureRequest | null => {
+  const mode = envValue(env, `${venue}_BALANCE_ACTIVATION_MODE`)?.toUpperCase();
+  const tokenAddress = envValue(env, `${venue}_BALANCE_ACTIVATION_TOKEN_ADDRESS`) ??
+    (venue === "PREDICT_FUN" ? "0x55d398326f99059fF775485246999027B3197955" : null);
+  const spenderAddress = envValue(env, `${venue}_BALANCE_ACTIVATION_SPENDER_ADDRESS`);
+  const chainId = parsePositiveInt(envValue(env, `${venue}_BALANCE_ACTIVATION_CHAIN_ID`)) ??
+    (venue === "PREDICT_FUN" ? 56 : null);
+  const tokenSymbol = envValue(env, `${venue}_BALANCE_ACTIVATION_TOKEN_SYMBOL`) ??
+    (venue === "PREDICT_FUN" ? "USDT" : null);
+  const decimals = parsePositiveInt(envValue(env, `${venue}_BALANCE_ACTIVATION_TOKEN_DECIMALS`)) ?? 18;
+  const amountDisplay = envValue(env, `${venue}_SETUP_APPROVAL_AMOUNT`)
+    ?? envValue(env, "VENUE_SETUP_APPROVAL_AMOUNT")
+    ?? defaultSetupApprovalAmount;
+  const shouldBuild = mode === "ERC20_APPROVAL" ||
+    (venue === "PREDICT_FUN" && tokenAddress !== null && spenderAddress !== null && chainId !== null);
+  if (!shouldBuild || account.status !== "ACTIVE") {
+    return null;
+  }
+  if (!tokenAddress || !spenderAddress || !chainId || !isEvmAddress(tokenAddress) || !isEvmAddress(spenderAddress)) {
+    return null;
+  }
+  if (!isEvmAddress(account.walletAddress) || !equalsAddress(account.walletAddress, account.venueAccountAddress ?? account.walletAddress)) {
+    return null;
+  }
+  const amount = decimalToBaseUnits(amountDisplay, decimals);
+  return {
+    venue,
+    requestType: "ERC20_ALLOWANCE_APPROVAL",
+    signer: account.walletAddress,
+    message: `Approve ${amountDisplay} ${tokenSymbol ?? "venue collateral"} for ${venue}`,
+    venueAccount: account,
+    transactionRequest: {
+      to: tokenAddress,
+      from: account.walletAddress,
+      data: encodeErc20Approve(spenderAddress, amount),
+      value: "0",
+      chainId
+    },
+    approval: {
+      tokenSymbol,
+      tokenAddress,
+      spenderAddress,
+      amount,
+      amountDisplay
+    }
+  };
+};
 
 const isPolymarketDepositWalletDeploymentReady = (
   status: Awaited<ReturnType<PolymarketDepositWalletClient["deriveOrCreateDepositWallet"]>>["deploymentStatus"]
