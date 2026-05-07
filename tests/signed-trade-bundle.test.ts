@@ -146,6 +146,18 @@ describe("SignedTradeBundleService", () => {
     expect(result.submittedLegs).toHaveLength(2);
   });
 
+  it("does not send Predict.fun reserved balance policy for limit orders", async () => {
+    const sut = service();
+    const prepared = await sut.prepare({ userId: "user-1", quoteId: "exec_quote_test" });
+    const predictRequest = prepared.signatureRequests.find((request) => request.venue === "PREDICT_FUN")!;
+    const hint = predictRequest.signedPayloadHint as {
+      data?: Record<string, unknown>;
+    };
+
+    expect(hint.data?.strategy).toBe("LIMIT");
+    expect(hint.data).not.toHaveProperty("reservedBalancePolicy");
+  });
+
   it("rejects a Limitless signature from the wrong signer", async () => {
     const sut = service();
     const prepared = await sut.prepare({ userId: "user-1", quoteId: "exec_quote_test" });
