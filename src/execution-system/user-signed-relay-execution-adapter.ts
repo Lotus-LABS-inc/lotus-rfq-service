@@ -49,6 +49,7 @@ export interface PredictOauthOrderRelayClient {
 export interface PredictOrderMetadataClient {
   getMarketById(marketId: string): Promise<Record<string, unknown>>;
   getMarketStatistics(marketId: string): Promise<Record<string, unknown>>;
+  getMarketOrderbook?(marketId: string): Promise<Record<string, unknown>>;
 }
 
 export interface PredictJwtProvider {
@@ -488,9 +489,10 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
     if (!this.predictOrderMetadataClient) {
       return null;
     }
-    const [market, stats] = await Promise.all([
+    const [market, stats, orderbook] = await Promise.all([
       this.predictOrderMetadataClient.getMarketById(venueMarketId).catch(() => ({})),
-      this.predictOrderMetadataClient.getMarketStatistics(venueMarketId).catch(() => ({}))
+      this.predictOrderMetadataClient.getMarketStatistics(venueMarketId).catch(() => ({})),
+      this.predictOrderMetadataClient.getMarketOrderbook?.(venueMarketId).catch(() => null) ?? Promise.resolve(null)
     ]);
     return {
       chainId: numericStringField(market, "chainId") ?? numericStringField(market, "chain_id") ?? "56",
@@ -506,7 +508,8 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
       isYieldBearing: booleanField(market, "isYieldBearing") ??
         booleanField(market, "is_yield_bearing") ??
         booleanField(market, "yieldBearing") ??
-        false
+        false,
+      ...(orderbook ? { orderbook } : {})
     };
   }
 
@@ -770,9 +773,24 @@ const validatePredictSignedPayloadMatchesPreparedOrder = (
   const signedQuantityWei = expectedSide === "sell"
     ? numericStringPayloadField(order, "makerAmount")
     : numericStringPayloadField(order, "takerAmount");
-  if (expectedSize === null || signedQuantityWei === null || decimalToWeiString(String(expectedSize)) !== signedQuantityWei) {
+  if (expectedSize === null || signedQuantityWei === null || !predictSignedSizeMatchesPreparedSize(expectedSize, signedQuantityWei)) {
     throw new UserSignedRelayExecutionNotConfiguredError("USER_SIGNED_RELAY_SIZE_MISMATCH", "Predict.fun signed order size does not match the prepared size.");
   }
+};
+
+const predictSignedSizeMatchesPreparedSize = (expectedSize: number, signedQuantityWei: string): boolean => {
+  const expectedWei = BigInt(decimalToWeiString(String(expectedSize)));
+  const signedWei = BigInt(signedQuantityWei);
+  if (expectedWei <= 0n || signedWei <= 0n || signedWei > expectedWei) {
+    return false;
+  }
+  if (signedWei === expectedWei) {
+    return true;
+  }
+  // Predict.fun's SDK truncates order quantity to 5 significant digits
+  // before building typed data. Accept only that narrow, downward SDK rounding.
+  const toleranceWei = expectedWei / 10_000n + 1n;
+  return expectedWei - signedWei <= toleranceWei;
 };
 
 const mapPredictOrderStatusToFillState = (status: PredictOauthOrderStatus): VenueFillState => {

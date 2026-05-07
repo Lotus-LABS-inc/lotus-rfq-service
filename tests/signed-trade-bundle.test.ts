@@ -62,6 +62,21 @@ const account = (venue: UserVenueAccount["venue"]): UserVenueAccount => ({
   lastVerifiedAt: new Date().toISOString()
 });
 
+const predictOrderMetadataClient = {
+  async getMarketById() {
+    return { chainId: "56", isNegRisk: false, isYieldBearing: false };
+  },
+  async getMarketStatistics() {
+    return { feeRateBps: "0" };
+  },
+  async getMarketOrderbook() {
+    return {
+      asks: [[0.42, 10]],
+      bids: [[0.41, 10]]
+    };
+  }
+};
+
 const service = () => {
   const registry = new ExecutionVenueAdapterRegistry();
   registry.register(new PredictFunExecutionAdapter({
@@ -70,7 +85,8 @@ const service = () => {
     apiKey: "predict-api-key",
     liveExecutionEnabled: false,
     orderCreatePath: "/v1/orders",
-    docsUrl: "https://dev.predict.fun"
+    docsUrl: "https://dev.predict.fun",
+    predictOrderMetadataClient
   }));
   registry.register(new LimitlessExecutionAdapter({
     executionMode: "user_signed_backend_relay",
@@ -146,7 +162,7 @@ describe("SignedTradeBundleService", () => {
     expect(result.submittedLegs).toHaveLength(2);
   });
 
-  it("does not send Predict.fun reserved balance policy for limit orders", async () => {
+  it("prepares Predict.fun MARKET orders without reserved balance policy", async () => {
     const sut = service();
     const prepared = await sut.prepare({ userId: "user-1", quoteId: "exec_quote_test" });
     const predictRequest = prepared.signatureRequests.find((request) => request.venue === "PREDICT_FUN")!;
@@ -154,7 +170,7 @@ describe("SignedTradeBundleService", () => {
       data?: Record<string, unknown>;
     };
 
-    expect(hint.data?.strategy).toBe("LIMIT");
+    expect(hint.data?.strategy).toBe("MARKET");
     expect(hint.data).not.toHaveProperty("reservedBalancePolicy");
   });
 

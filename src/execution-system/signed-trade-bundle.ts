@@ -409,12 +409,17 @@ const buildPredictOrderPayload = (
   const metadata = recordField(payload, "predictOrderMetadata") ?? {};
   const chainId = Number(numericStringField(metadata, "chainId") ?? 56);
   const builder = OrderBuilder.make(chainId === 97 ? ChainId.BnbTestnet : ChainId.BnbMainnet);
-  const amounts = builder.getLimitOrderAmounts({
+  const orderbook = predictMarketOrderbookFromMetadata(metadata);
+  if (!orderbook) {
+    throw new SignedTradeBundleError("PREDICT_FUN_MARKET_ORDERBOOK_MISSING", "Predict.fun MARKET order signing requires a fresh venue orderbook.");
+  }
+  const amounts = builder.getMarketOrderAmounts({
     side,
-    pricePerShareWei: decimalToWei(String(price)),
-    quantityWei: decimalToWei(String(size))
-  });
-  const order = builder.buildOrder("LIMIT", {
+    quantityWei: decimalToWei(String(size)),
+    slippageBps: BigInt(numericStringField(metadata, "slippageBps") ?? "0"),
+    isMinAmountOut: booleanField(metadata, "isMinAmountOut") ?? false
+  }, orderbook);
+  const order = builder.buildOrder("MARKET", {
     maker: binding.venueAccountAddress,
     signer: binding.venueAccountAddress,
     side,
@@ -433,11 +438,12 @@ const buildPredictOrderPayload = (
   const data = {
     timestamp: now.getTime(),
     pricePerShare: String(amounts.pricePerShare),
-    strategy: "LIMIT",
+    strategy: "MARKET",
     slippageBps: "0",
     isFillOrKill: false,
     isPostOnly: false,
     isMinAmountOut: false,
+    amount: String(amounts.amount),
     selfTradePrevention: "CANCEL_MAKER",
     order: {
       ...order,
@@ -491,6 +497,44 @@ const booleanField = (value: Record<string, unknown>, key: string): boolean | nu
     if (normalized === "false") return false;
   }
   return null;
+};
+
+const predictMarketOrderbookFromMetadata = (metadata: Record<string, unknown>): {
+  updateTimestampMs: number;
+  asks: [number, number][];
+  bids: [number, number][];
+} | null => {
+  const orderbook = recordField(metadata, "orderbook");
+  if (!orderbook) {
+    return null;
+  }
+  const asks = predictDepthLevels(orderbook.asks);
+  const bids = predictDepthLevels(orderbook.bids);
+  const updateTimestampMs = numberField(orderbook, "updateTimestampMs") ??
+    numberField(orderbook, "update_timestamp_ms") ??
+    Date.now();
+  return asks.length > 0 && bids.length > 0 ? { updateTimestampMs, asks, bids } : null;
+};
+
+const predictDepthLevels = (value: unknown): [number, number][] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((entry) => {
+    if (Array.isArray(entry) && entry.length >= 2) {
+      return depthLevel(entry[0], entry[1]);
+    }
+    const record = typeof entry === "object" && entry !== null ? entry as Record<string, unknown> : {};
+    return depthLevel(record.price ?? record.p, record.size ?? record.s ?? record.quantity);
+  });
+};
+
+const depthLevel = (price: unknown, size: unknown): [number, number][] => {
+  const parsedPrice = Number(price);
+  const parsedSize = Number(size);
+  return Number.isFinite(parsedPrice) && parsedPrice > 0 && parsedPrice < 1 && Number.isFinite(parsedSize) && parsedSize > 0
+    ? [[parsedPrice, parsedSize]]
+    : [];
 };
 
 const decimalToWei = (value: string): bigint => {
