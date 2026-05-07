@@ -69,7 +69,7 @@ const service = () => {
     baseUrl: "https://api.predict.fun",
     apiKey: "predict-api-key",
     liveExecutionEnabled: false,
-    orderCreatePath: "/v1/oauth/orders/create",
+    orderCreatePath: "/v1/orders",
     docsUrl: "https://dev.predict.fun"
   }));
   registry.register(new LimitlessExecutionAdapter({

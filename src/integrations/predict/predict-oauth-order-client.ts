@@ -51,7 +51,7 @@ export class PredictOauthOrderClient {
 
   public constructor(private readonly config: PredictOauthOrderClientConfig) {
     this.baseUrl = (config.baseUrl ?? "https://api.predict.fun").replace(/\/+$/, "");
-    this.orderCreatePath = config.orderCreatePath ?? "/v1/oauth/orders/create";
+    this.orderCreatePath = config.orderCreatePath ?? "/v1/orders";
     this.timeoutMs = config.timeoutMs ?? 15_000;
   }
 
@@ -59,15 +59,22 @@ export class PredictOauthOrderClient {
     return Boolean(this.config.apiKey?.trim());
   }
 
-  public async createOauthOrder(payload: PredictOauthCreateOrderPayload): Promise<PredictOauthCreateOrderResult> {
-    const envelope = await this.request<{ orderId?: unknown; orderHash?: unknown }>(this.orderCreatePath, {
+  public async createOauthOrder(
+    payload: PredictOauthCreateOrderPayload,
+    jwt?: string | undefined
+  ): Promise<PredictOauthCreateOrderResult> {
+    const requestPayload = toPredictCreateOrderRequest(payload);
+    const envelope = await this.request<Record<string, unknown>>(this.orderCreatePath, {
       method: "POST",
-      body: payload
+      body: requestPayload,
+      jwt
     });
-    const orderId = envelope.data?.orderId;
-    const orderHash = envelope.data?.orderHash;
+    const data = envelope.data ?? {};
+    const order = isRecord(data.order) ? data.order : {};
+    const orderId = stringField(data, "orderId") ?? stringField(data, "id") ?? stringField(order, "id") ?? stringField(order, "hash");
+    const orderHash = stringField(data, "orderHash") ?? stringField(data, "hash") ?? stringField(order, "hash");
     if (typeof orderId !== "string" || orderId.trim().length === 0 || typeof orderHash !== "string" || orderHash.trim().length === 0) {
-      throw new PredictOauthOrderClientError("Predict OAuth create-order response did not include orderId and orderHash.", 502);
+      throw new PredictOauthOrderClientError("Predict create-order response did not include an order id/hash.", 502);
     }
     return { orderId, orderHash };
   }
@@ -93,6 +100,7 @@ export class PredictOauthOrderClient {
   private async request<T>(path: string, input: {
     method: "GET" | "POST";
     body?: unknown;
+    jwt?: string | undefined;
   }): Promise<PredictEnvelope<T>> {
     const apiKey = this.config.apiKey?.trim();
     if (!apiKey) {
@@ -107,7 +115,8 @@ export class PredictOauthOrderClient {
         headers: {
           accept: "application/json",
           "content-type": "application/json",
-          "x-api-key": apiKey
+          "x-api-key": apiKey,
+          ...(input.jwt ? { authorization: `Bearer ${input.jwt}` } : {})
         },
         ...(input.body !== undefined ? { body: JSON.stringify(input.body) } : {})
       });
@@ -165,3 +174,16 @@ const safePredictOauthErrorMessage = (body: PredictEnvelope<unknown>, status: nu
       : `Predict OAuth order request failed with status ${status}.`;
   return message.slice(0, 240);
 };
+
+const toPredictCreateOrderRequest = (payload: PredictOauthCreateOrderPayload): { data: Record<string, unknown> } => {
+  const data = isRecord(payload.data) ? { ...payload.data } : {};
+  const order = isRecord(data.order) ? { ...data.order } : {};
+  data.order = {
+    ...order,
+    signature: payload.signature
+  };
+  return { data };
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;

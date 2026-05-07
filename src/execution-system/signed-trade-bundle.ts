@@ -422,6 +422,10 @@ const buildPredictOrderPayload = (
     strategy: "LIMIT",
     slippageBps: "0",
     isFillOrKill: false,
+    isPostOnly: false,
+    reservedBalancePolicy: "REJECT_MARKET_ORDER",
+    isMinAmountOut: false,
+    selfTradePrevention: "CANCEL_MAKER",
     order: {
       ...order,
       hash

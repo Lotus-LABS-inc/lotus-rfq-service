@@ -33,17 +33,22 @@ export interface UserSignedRelayExecutionAdapterConfig {
   now?: (() => Date) | undefined;
   predictOauthOrderClient?: PredictOauthOrderRelayClient | undefined;
   predictOrderMetadataClient?: PredictOrderMetadataClient | undefined;
+  predictJwtProvider?: PredictJwtProvider | undefined;
 }
 
 export interface PredictOauthOrderRelayClient {
   configured(): boolean;
-  createOauthOrder(payload: PredictOauthCreateOrderPayload): Promise<{ orderId: string; orderHash: string }>;
+  createOauthOrder(payload: PredictOauthCreateOrderPayload, jwt?: string | undefined): Promise<{ orderId: string; orderHash: string }>;
   getOrderByHash(orderHash: string): Promise<PredictOauthOrderStatus>;
 }
 
 export interface PredictOrderMetadataClient {
   getMarketById(marketId: string): Promise<Record<string, unknown>>;
   getMarketStatistics(marketId: string): Promise<Record<string, unknown>>;
+}
+
+export interface PredictJwtProvider {
+  getPredictFunJwt(userId: string): string | null;
 }
 
 export interface UserSignedRelayExecutionAdapterEnvStatus {
@@ -228,8 +233,8 @@ export const buildPredictFunExecutionAdapterConfigFromEnv = (
   apiKey: env.PREDICT_API_KEY,
   apiKeyEnvKey: "PREDICT_API_KEY",
   liveExecutionEnabled: env.PREDICT_FUN_LIVE_EXECUTION_ENABLED === "true",
-  orderCreatePath: env.PREDICT_FUN_EXECUTION_ORDER_CREATE_PATH ?? "/v1/oauth/orders/create",
-  docsUrl: "https://dev.predict.fun/create-an-order-for-a-oauth-connection-25326914e0",
+  orderCreatePath: env.PREDICT_FUN_EXECUTION_ORDER_CREATE_PATH ?? "/v1/orders",
+  docsUrl: "https://dev.predict.fun/create-an-order-32534694e0",
   predictOauthOrderClient: buildPredictOauthOrderClientFromEnv(env),
   predictOrderMetadataClient: new PredictClient({
     environment: "mainnet",
@@ -243,6 +248,7 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
   private readonly now: () => Date;
   private readonly predictOauthOrderClient: PredictOauthOrderRelayClient | undefined;
   private readonly predictOrderMetadataClient: PredictOrderMetadataClient | undefined;
+  private readonly predictJwtProvider: PredictJwtProvider | undefined;
   private lastOrderStatus: PredictOauthOrderStatus | null = null;
   private readonly expectedBindingByOrderHash = new Map<string, UserSignedRelayPreparedBinding>();
 
@@ -251,6 +257,7 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
     this.now = config.now ?? (() => new Date());
     this.predictOauthOrderClient = config.predictOauthOrderClient;
     this.predictOrderMetadataClient = config.predictOrderMetadataClient;
+    this.predictJwtProvider = config.predictJwtProvider;
   }
 
   public status(): UserSignedRelayExecutionAdapterEnvStatus {
@@ -409,19 +416,26 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
     if (!this.predictOauthOrderClient?.configured()) {
       throw new UserSignedRelayExecutionNotConfiguredError(
         "PREDICT_FUN_RELAY_CLIENT_NOT_CONFIGURED",
-        "Predict.fun OAuth order client is not configured."
+        "Predict.fun order client is not configured."
       );
     }
     const relayPayload = parseRelaySubmitPayload(order.payload);
+    const predictJwt = this.predictJwtProvider?.getPredictFunJwt(relayPayload.expectedBinding.userId);
+    if (!predictJwt) {
+      throw new UserSignedRelayExecutionNotConfiguredError(
+        "PREDICT_FUN_JWT_NOT_AVAILABLE",
+        "Predict.fun requires a fresh user auth JWT for live order submit. Refresh the Predict.fun venue setup signature, then retry the live submit."
+      );
+    }
     validatePreparedOrderExpiry(order.payload, this.now());
     validatePredictSignedPayloadMatchesPreparedOrder(order.payload, relayPayload);
     if (status.relayImplementationStatus !== "SIGNED_RELAY_IMPLEMENTED") {
       throw new UserSignedRelayExecutionNotConfiguredError(
         "PREDICT_FUN_OAUTH_ORDER_SCHEMA_NOT_IMPLEMENTED",
-        "Predict.fun live relay is disabled until Lotus builds the venue's full OAuth create-order payload schema with timestamp, hash, salt, amounts, expiration, nonce, fee, signature type, and venue-verified signing semantics."
+        "Predict.fun live relay is disabled until Lotus builds the venue's full create-order payload schema with timestamp, hash, salt, amounts, expiration, nonce, fee, signature type, and venue-verified signing semantics."
       );
     }
-    const result = await this.predictOauthOrderClient.createOauthOrder(relayPayload.signedPayload);
+    const result = await this.predictOauthOrderClient.createOauthOrder(relayPayload.signedPayload, predictJwt);
     this.expectedBindingByOrderHash.set(result.orderHash, relayPayload.expectedBinding);
     return {
       venueOrderId: result.orderHash,

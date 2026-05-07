@@ -122,6 +122,8 @@ export class UserVenueAccountError extends Error {
 }
 
 export class UserVenueAccountService {
+  private readonly predictFunJwtByUserId = new Map<string, { jwt: string; cachedAt: number }>();
+
   public constructor(
     private readonly repository: UserVenueAccountRepository,
     private readonly userWalletService: Pick<UserWalletService, "resolveUserTurnkeyEvmFundingWallet">,
@@ -132,6 +134,16 @@ export class UserVenueAccountService {
 
   public async listAccounts(userId: string): Promise<UserVenueAccount[]> {
     return this.repository.listAccounts(userId);
+  }
+
+  public getPredictFunJwt(userId: string): string | null {
+    const cached = this.predictFunJwtByUserId.get(userId);
+    if (!cached) return null;
+    if (Date.now() - cached.cachedAt > 55 * 60_000) {
+      this.predictFunJwtByUserId.delete(userId);
+      return null;
+    }
+    return cached.jwt;
   }
 
   public async getAccount(userId: string, venue: string): Promise<UserVenueAccount | null> {
@@ -247,7 +259,7 @@ export class UserVenueAccountService {
     for (const venue of batchSetupVenues) {
       if (venue === "PREDICT_FUN") {
         const ensured = await this.ensureAccount({ userId, venue: "PREDICT_FUN" });
-        if (ensured.account.status === "ACTIVE") {
+        if (ensured.account.status === "ACTIVE" && this.getPredictFunJwt(userId)) {
           venueAccounts.push({
             venue,
             account: ensured.account,
@@ -275,7 +287,9 @@ export class UserVenueAccountService {
             venue,
             account: ensured.account,
             readinessBlockers: ensured.readinessBlockers,
-            setupInstructions: ensured.setupInstructions,
+            setupInstructions: ensured.account.status === "ACTIVE"
+              ? ["Sign the Predict.fun authentication message to refresh the short-lived live-submit token."]
+              : ensured.setupInstructions,
             setupMode: "SIGNATURE_REQUIRED"
           });
           signatureRequests.push({
@@ -434,6 +448,7 @@ export class UserVenueAccountService {
       signature: input.signature,
       message: input.message
     }));
+    this.predictFunJwtByUserId.set(input.userId, { jwt, cachedAt: Date.now() });
     const connectedAccount = await this.withPredictAccountFailureBoundary(() => client.getConnectedAccount(jwt));
     const ensured = await this.ensureAccount({
       userId: input.userId,

@@ -207,7 +207,7 @@ describe("user-signed backend relay execution adapters", () => {
     expect(prepared.payload).toMatchObject({
       relayMode: "USER_SIGNED_BACKEND_RELAY",
       adapter: "PredictFunExecutionAdapter",
-      orderCreatePath: "/v1/oauth/orders/create",
+      orderCreatePath: "/v1/orders",
       backendMayRelaySignedPayload: true,
       backendMaySign: false,
       expectedOrder: {
@@ -232,6 +232,7 @@ describe("user-signed backend relay execution adapters", () => {
       PREDICT_FUN_LIVE_EXECUTION_ENABLED: "true"
       }),
       predictOrderMetadataClient: undefined,
+      predictJwtProvider: { getPredictFunJwt: () => "predict-user-jwt" },
       predictOauthOrderClient: mockPredictOrderClient()
     });
     const prepared = await adapter.prepareOrder(leg("PREDICT_FUN"));
@@ -243,7 +244,7 @@ describe("user-signed backend relay execution adapters", () => {
     });
   });
 
-  it("relays a full Predict.fun OAuth order payload without exposing the server API key", async () => {
+  it("relays a full Predict.fun order payload without exposing the server API key", async () => {
     let createCalled = false;
     const adapter = new PredictFunExecutionAdapter({
       ...buildPredictFunExecutionAdapterConfigFromEnv({
@@ -253,10 +254,12 @@ describe("user-signed backend relay execution adapters", () => {
         PREDICT_FUN_LIVE_EXECUTION_ENABLED: "true"
       }),
       predictOrderMetadataClient: undefined,
+      predictJwtProvider: { getPredictFunJwt: () => "predict-user-jwt" },
       predictOauthOrderClient: {
         configured: () => true,
-        async createOauthOrder(input) {
+        async createOauthOrder(input, jwt) {
           createCalled = true;
+          expect(jwt).toBe("predict-user-jwt");
           expect(input.data).toMatchObject({
             timestamp: expect.any(Number),
             pricePerShare: "450000000000000000",
@@ -306,6 +309,7 @@ describe("user-signed backend relay execution adapters", () => {
         PREDICT_FUN_LIVE_EXECUTION_ENABLED: "true"
       }),
       predictOrderMetadataClient: undefined,
+      predictJwtProvider: { getPredictFunJwt: () => "predict-user-jwt" },
       predictOauthOrderClient: mockPredictOrderClient()
     });
     const prepared = await adapter.prepareOrder(leg("PREDICT_FUN"));

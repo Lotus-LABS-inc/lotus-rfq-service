@@ -1223,7 +1223,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   }
   if (process.env.PREDICT_FUN_EXECUTION_MODE === "user_signed_backend_relay") {
     adapterRegistry.register(new PredictFunExecutionAdapter(
-      buildPredictFunExecutionAdapterConfigFromEnv(process.env)
+      {
+        ...buildPredictFunExecutionAdapterConfigFromEnv(process.env),
+        predictJwtProvider: userVenueAccountService
+      }
     ));
   }
   const signedTradeBundleService = new SignedTradeBundleService(
