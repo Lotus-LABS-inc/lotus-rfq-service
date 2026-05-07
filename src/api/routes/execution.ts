@@ -254,6 +254,28 @@ export const registerExecutionRoutes = async (
     }
   });
 
+  app.get("/execution/:executionId/live-readiness", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!deps.signedTradeBundleService) {
+      return reply.status(501).send({
+        code: "SIGNED_TRADE_BUNDLE_NOT_CONFIGURED",
+        message: "Signed trade bundle readiness is not configured on this backend."
+      });
+    }
+    const { executionId } = request.params as { executionId: string };
+    try {
+      const readiness = await deps.signedTradeBundleService.getLiveReadiness({
+        userId: request.user.userId,
+        quoteId: executionId
+      });
+      return reply.send(readiness);
+    } catch (error) {
+      if (error instanceof SignedTradeBundleError) {
+        return reply.status(error.statusCode).send({ code: error.code, message: error.message });
+      }
+      throw error;
+    }
+  });
+
   app.get("/execution/:executionId/status", { preHandler: authMiddleware }, async (request, reply) => {
     const { executionId } = request.params as { executionId: string };
     const quote = await deps.executableRouteService.getQuote(request.user.userId, executionId);

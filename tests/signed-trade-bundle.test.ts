@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Wallet } from "@ethersproject/wallet";
 import {
   ExecutionVenueAdapterRegistry,
@@ -103,7 +103,25 @@ const service = () => {
   );
 };
 
+const registryWithPredict = (): ExecutionVenueAdapterRegistry => {
+  const registry = new ExecutionVenueAdapterRegistry();
+  registry.register(new PredictFunExecutionAdapter({
+    executionMode: "user_signed_backend_relay",
+    baseUrl: "https://api.predict.fun",
+    apiKey: "predict-api-key",
+    liveExecutionEnabled: false,
+    orderCreatePath: "/v1/orders",
+    docsUrl: "https://dev.predict.fun",
+    predictOrderMetadataClient
+  }));
+  return registry;
+};
+
 describe("SignedTradeBundleService", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("prepares user-signature requests and dry-run verifies a signed pair bundle", async () => {
     const sut = service();
     const prepared = await sut.prepare({ userId: "user-1", quoteId: "exec_quote_test" });
@@ -237,6 +255,86 @@ describe("SignedTradeBundleService", () => {
       .rejects.toMatchObject({
         code: "PREDICT_FUN_TOKEN_ID_INVALID"
       });
+  });
+
+  it("reports Predict.fun live readiness blocked when allowance is below the bid", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, input: RequestInit) => {
+      const body = JSON.parse(String(input.body)) as { params: Array<{ data: string }> };
+      const data = body.params[0]?.data ?? "";
+      const isAllowance = data.startsWith("0xdd62ed3e");
+      return new Response(JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        result: isAllowance ? "0x0" : "0xde0b6b3a7640000"
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }));
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => quote() } as never,
+      registryWithPredict(),
+      { getAccount: async (_userId, venue) => account(venue.toUpperCase() as UserVenueAccount["venue"]) },
+      () => new Date("2026-05-07T00:00:00.000Z"),
+      {
+        PREDICT_FUN_BALANCE_PREFLIGHT_RPC_URL: "https://bsc-rpc.example",
+        PREDICT_FUN_BALANCE_ACTIVATION_TOKEN_ADDRESS: "0x55d398326f99059fF775485246999027B3197955",
+        PREDICT_FUN_BALANCE_ACTIVATION_TOKEN_DECIMALS: "18"
+      } as NodeJS.ProcessEnv
+    );
+
+    const readiness = await sut.getLiveReadiness({ userId: "user-1", quoteId: "exec_quote_test" });
+
+    expect(readiness.status).toBe("blocked");
+    expect(readiness.blockers).toContain("PREDICT_FUN: Predict.fun collateral USDT allowance is less than the total bid amount.");
+    expect(readiness.venues.find((venue) => venue.venue === "PREDICT_FUN")?.collateral).toMatchObject({
+      balance: "1",
+      allowance: "0",
+      requiredNotional: "1.26"
+    });
+  });
+
+  it("blocks live submit before venue calls when Predict.fun readiness is stale", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("rpc unavailable");
+    }));
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => quote() } as never,
+      registryWithPredict(),
+      { getAccount: async (_userId, venue) => account(venue.toUpperCase() as UserVenueAccount["venue"]) },
+      () => new Date("2026-05-07T00:00:00.000Z"),
+      {} as NodeJS.ProcessEnv
+    );
+
+    await expect(sut.submit({
+      userId: "user-1",
+      quoteId: "exec_quote_test",
+      dryRun: false,
+      signedLegs: []
+    })).rejects.toMatchObject({
+      code: "LIVE_SUBMIT_READINESS_BLOCKED"
+    });
+  });
+
+  it("reports Predict.fun live readiness fresh when balance and allowance cover the bid", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: "0x1bc16d674ec80000"
+    }), { status: 200, headers: { "content-type": "application/json" } })));
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => quote() } as never,
+      registryWithPredict(),
+      { getAccount: async (_userId, venue) => account(venue.toUpperCase() as UserVenueAccount["venue"]) },
+      () => new Date("2026-05-07T00:00:00.000Z"),
+      {
+        PREDICT_FUN_BALANCE_PREFLIGHT_RPC_URL: "https://bsc-rpc.example",
+        PREDICT_FUN_BALANCE_ACTIVATION_TOKEN_ADDRESS: "0x55d398326f99059fF775485246999027B3197955",
+        PREDICT_FUN_BALANCE_ACTIVATION_TOKEN_DECIMALS: "18"
+      } as NodeJS.ProcessEnv
+    );
+
+    const readiness = await sut.getLiveReadiness({ userId: "user-1", quoteId: "exec_quote_test" });
+
+    expect(readiness.status).toBe("fresh");
+    expect(readiness.blockers).toEqual([]);
   });
 
   it("rejects a Limitless signature from the wrong signer", async () => {

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ChainId, OrderBuilder, Side, SignatureType } from "@predictdotfun/sdk";
+import { AddressesByChainId, ChainId, OrderBuilder, Side, SignatureType } from "@predictdotfun/sdk";
 import { verifyTypedData } from "@ethersproject/wallet";
 import { verifyTypedData as verifyTypedDataV6 } from "ethers";
 import type { UserVenueAccount } from "../core/execution/user-venue-accounts.js";
@@ -46,6 +46,36 @@ export interface SignedTradeBundleSubmitResult {
   }>;
 }
 
+export interface LiveSubmitVenueReadiness {
+  venue: string;
+  status: "fresh" | "stale" | "blocked";
+  checkedAt: string;
+  blockers: string[];
+  account: {
+    walletAddress: string | null;
+    venueAccountAddress: string | null;
+    ownerAddress: string | null;
+  };
+  collateral: {
+    requiredNotional: string | null;
+    balance: string | null;
+    allowance: string | null;
+    tokenSymbol: string | null;
+    tokenAddress: string | null;
+    spenderAddress: string | null;
+    chainId: number | null;
+  };
+}
+
+export interface LiveSubmitReadinessSnapshot {
+  quoteId: string;
+  generatedAt: string;
+  expiresAt: string;
+  status: "fresh" | "stale" | "blocked";
+  blockers: string[];
+  venues: LiveSubmitVenueReadiness[];
+}
+
 export interface SignedTradeBundleVenueAccountProvider {
   getAccount(userId: string, venue: string): Promise<UserVenueAccount | null>;
 }
@@ -66,7 +96,8 @@ export class SignedTradeBundleService {
     private readonly routes: ExecutableRouteService,
     private readonly adapters: ExecutionVenueAdapterRegistry,
     private readonly venueAccounts: SignedTradeBundleVenueAccountProvider,
-    private readonly now: () => Date = () => new Date()
+    private readonly now: () => Date = () => new Date(),
+    private readonly env: NodeJS.ProcessEnv = process.env
   ) {}
 
   public async prepare(input: { userId: string; quoteId: string }): Promise<PreparedTradeSignatureBundle> {
@@ -94,6 +125,15 @@ export class SignedTradeBundleService {
     dryRun?: boolean | undefined;
   }): Promise<SignedTradeBundleSubmitResult> {
     const quote = await this.requireFreshQuote(input.userId, input.quoteId);
+    if (input.dryRun !== true) {
+      const readiness = await this.getLiveReadiness({ userId: input.userId, quoteId: input.quoteId });
+      if (readiness.status !== "fresh") {
+        throw new SignedTradeBundleError(
+          "LIVE_SUBMIT_READINESS_BLOCKED",
+          readiness.blockers[0] ?? "Live submit readiness is blocked or stale."
+        );
+      }
+    }
     const signedByLeg = new Map(input.signedLegs.map((leg) => [`${leg.legIndex}:${leg.venue.toUpperCase()}`, leg]));
     const submittedLegs: SignedTradeBundleSubmitResult["submittedLegs"] = [];
 
@@ -146,6 +186,23 @@ export class SignedTradeBundleService {
     };
   }
 
+  public async getLiveReadiness(input: { userId: string; quoteId: string }): Promise<LiveSubmitReadinessSnapshot> {
+    const quote = await this.requireFreshQuote(input.userId, input.quoteId);
+    const generatedAt = this.now().toISOString();
+    const venues = await Promise.all(quote.legs.map((leg, index) => this.liveReadinessForLeg(quote, leg, index, generatedAt)));
+    const blockers = venues.flatMap((venue) => venue.blockers.map((blocker) => `${venue.venue}: ${blocker}`));
+    const hasBlocked = venues.some((venue) => venue.status === "blocked");
+    const hasStale = venues.some((venue) => venue.status === "stale");
+    return {
+      quoteId: quote.quoteId,
+      generatedAt,
+      expiresAt: quote.expiresAt,
+      status: hasBlocked ? "blocked" : hasStale ? "stale" : "fresh",
+      blockers,
+      venues
+    };
+  }
+
   private async requireFreshQuote(userId: string, quoteId: string): Promise<ExecutableTradeQuote> {
     const quote = await this.routes.getQuote(userId, quoteId);
     if (!quote) {
@@ -177,6 +234,113 @@ export class SignedTradeBundleService {
       status: "CREATED",
       settlementStatus: "SETTLEMENT_PENDING"
     };
+  }
+
+  private async liveReadinessForLeg(
+    quote: ExecutableTradeQuote,
+    leg: ExecutableRouteLeg,
+    index: number,
+    checkedAt: string
+  ): Promise<LiveSubmitVenueReadiness> {
+    const binding = await this.expectedBinding(quote.userId, leg.venue);
+    const requiredNotional = requiredUsdNotional(quote.side, leg);
+    const base: LiveSubmitVenueReadiness = {
+      venue: leg.venue,
+      status: "fresh",
+      checkedAt,
+      blockers: [],
+      account: {
+        walletAddress: binding.signerAddress,
+        venueAccountAddress: binding.venueAccountAddress,
+        ownerAddress: binding.venueAccountAddress
+      },
+      collateral: {
+        requiredNotional,
+        balance: null,
+        allowance: null,
+        tokenSymbol: null,
+        tokenAddress: null,
+        spenderAddress: null,
+        chainId: null
+      }
+    };
+    if (leg.venue.toUpperCase() !== "PREDICT_FUN" || quote.side !== "buy") {
+      return base;
+    }
+    const executionLeg = this.toExecutionLeg(quote, leg, index);
+    const prepared = await this.adapters.get(leg.venue).prepareOrder(executionLeg);
+    return this.predictFunCollateralReadiness(base, binding.venueAccountAddress, requiredNotional, recordField(prepared.payload, "predictOrderMetadata") ?? {});
+  }
+
+  private async predictFunCollateralReadiness(
+    base: LiveSubmitVenueReadiness,
+    ownerAddress: string,
+    requiredNotional: string | null,
+    predictMetadata: Record<string, unknown>
+  ): Promise<LiveSubmitVenueReadiness> {
+    const chainId = parsePositiveInteger(this.env.PREDICT_FUN_BALANCE_ACTIVATION_CHAIN_ID) ??
+      Number(numericStringField(predictMetadata, "chainId") ?? 56);
+    const contractAddresses = predictAddressesForChain(chainId);
+    const tokenAddress = this.env.PREDICT_FUN_BALANCE_ACTIVATION_TOKEN_ADDRESS?.trim() ||
+      this.env.PREDICT_FUN_OPS_FUNDING_BALANCE_TOKEN_ADDRESS?.trim() ||
+      contractAddresses?.USDT ||
+      "0x55d398326f99059fF775485246999027B3197955";
+    const spenderAddress = this.env.PREDICT_FUN_BALANCE_ACTIVATION_SPENDER_ADDRESS?.trim() ||
+      predictExchangeSpender(contractAddresses, predictMetadata) ||
+      "";
+    const rpcUrl = this.env.PREDICT_FUN_BALANCE_PREFLIGHT_RPC_URL?.trim() ||
+      this.env.PREDICT_FUN_OPS_FUNDING_BALANCE_RPC_URL?.trim() ||
+      (chainId === 97 ? "https://bsc-testnet-dataseed.bnbchain.org/" : "https://bsc-dataseed.bnbchain.org/");
+    const decimals = parsePositiveInteger(this.env.PREDICT_FUN_BALANCE_ACTIVATION_TOKEN_DECIMALS) ?? 18;
+    const next: LiveSubmitVenueReadiness = {
+      ...base,
+      account: { ...base.account, ownerAddress },
+      collateral: {
+        ...base.collateral,
+        tokenSymbol: this.env.PREDICT_FUN_BALANCE_ACTIVATION_TOKEN_SYMBOL?.trim() || "USDT",
+        tokenAddress: isEvmAddress(tokenAddress) ? tokenAddress : null,
+        spenderAddress: isEvmAddress(spenderAddress) ? spenderAddress : null,
+        chainId
+      }
+    };
+    const configBlockers = [
+      !isEvmAddress(ownerAddress) ? "Predict.fun live preflight owner account is missing or invalid." : null,
+      !isEvmAddress(tokenAddress) ? "PREDICT_FUN_BALANCE_ACTIVATION_TOKEN_ADDRESS is missing or invalid." : null,
+      !isEvmAddress(spenderAddress) ? "Predict.fun exchange spender address could not be derived from SDK metadata." : null,
+      !rpcUrl ? "Predict.fun live preflight RPC URL is required before live submit." : null,
+      !requiredNotional ? "Predict.fun live preflight could not derive required notional." : null
+    ].filter((blocker): blocker is string => Boolean(blocker));
+    if (configBlockers.length > 0 || !requiredNotional || !isEvmAddress(tokenAddress) || !isEvmAddress(spenderAddress) || !rpcUrl) {
+      return { ...next, status: "blocked", blockers: configBlockers };
+    }
+    try {
+      const [balanceAtomic, allowanceAtomic] = await Promise.all([
+        readErc20Value(rpcUrl, tokenAddress, encodeErc20BalanceOf(ownerAddress)),
+        readErc20Value(rpcUrl, tokenAddress, encodeErc20Allowance(ownerAddress, spenderAddress))
+      ]);
+      const balance = formatBaseUnits(balanceAtomic, decimals);
+      const allowance = formatBaseUnits(allowanceAtomic, decimals);
+      const blockers = [
+        compareDecimalStrings(balance, requiredNotional) < 0
+          ? "Predict.fun collateral balance is below the total bid amount."
+          : null,
+        compareDecimalStrings(allowance, requiredNotional) < 0
+          ? "Predict.fun collateral USDT allowance is less than the total bid amount."
+          : null
+      ].filter((blocker): blocker is string => Boolean(blocker));
+      return {
+        ...next,
+        status: blockers.length > 0 ? "blocked" : "fresh",
+        blockers,
+        collateral: { ...next.collateral, balance, allowance }
+      };
+    } catch {
+      return {
+        ...next,
+        status: "stale",
+        blockers: ["Predict.fun collateral balance/allowance read is unavailable."]
+      };
+    }
   }
 
   private async expectedBinding(userId: string, venue: string): Promise<ExpectedBinding> {
@@ -550,4 +714,110 @@ const decimalToWei = (value: string): bigint => {
 const stripEip712Domain = (types: Record<string, unknown>): Record<string, unknown> => {
   const { EIP712Domain: _domain, ...rest } = types;
   return rest;
+};
+
+const requiredUsdNotional = (side: string, leg: ExecutableRouteLeg): string | null => {
+  if (side !== "buy") {
+    return null;
+  }
+  const size = Number(leg.size);
+  const price = Number(leg.price);
+  if (!Number.isFinite(size) || size <= 0 || !Number.isFinite(price) || price <= 0) {
+    return null;
+  }
+  return multiplyDecimalStrings(leg.size, String(leg.price));
+};
+
+const parsePositiveInteger = (value: string | undefined): number | null => {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const isEvmAddress = (value: string | null | undefined): value is string =>
+  typeof value === "string" && /^0x[a-fA-F0-9]{40}$/.test(value);
+
+const encodeErc20BalanceOf = (owner: string): string =>
+  `0x70a08231${addressArgument(owner)}`;
+
+const encodeErc20Allowance = (owner: string, spender: string): string =>
+  `0xdd62ed3e${addressArgument(owner)}${addressArgument(spender)}`;
+
+const addressArgument = (address: string): string =>
+  address.toLowerCase().replace(/^0x/, "").padStart(64, "0");
+
+const readErc20Value = async (rpcUrl: string, tokenAddress: string, data: string): Promise<bigint> => {
+  const response = await fetch(rpcUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "eth_call",
+      params: [{ to: tokenAddress, data }, "latest"]
+    })
+  });
+  if (!response.ok) {
+    throw new Error("erc20_read_http_failed");
+  }
+  const body = await response.json() as { result?: unknown; error?: unknown };
+  if (body.error || typeof body.result !== "string" || !/^0x[0-9a-fA-F]*$/.test(body.result)) {
+    throw new Error("erc20_read_malformed");
+  }
+  return BigInt(body.result);
+};
+
+const formatBaseUnits = (value: bigint, decimals: number): string => {
+  const scale = 10n ** BigInt(decimals);
+  const whole = value / scale;
+  const fraction = value % scale;
+  if (fraction === 0n) {
+    return whole.toString();
+  }
+  return trimDecimal(`${whole}.${fraction.toString().padStart(decimals, "0")}`);
+};
+
+const trimDecimal = (value: string): string =>
+  value.includes(".") ? value.replace(/0+$/, "").replace(/\.$/, "") : value;
+
+const compareDecimalStrings = (left: string, right: string): number => {
+  const [leftWhole = "0", leftFraction = ""] = left.split(".");
+  const [rightWhole = "0", rightFraction = ""] = right.split(".");
+  const scale = Math.max(leftFraction.length, rightFraction.length);
+  const leftAtomic = BigInt(leftWhole) * 10n ** BigInt(scale) + BigInt(leftFraction.padEnd(scale, "0") || "0");
+  const rightAtomic = BigInt(rightWhole) * 10n ** BigInt(scale) + BigInt(rightFraction.padEnd(scale, "0") || "0");
+  return leftAtomic === rightAtomic ? 0 : leftAtomic > rightAtomic ? 1 : -1;
+};
+
+const multiplyDecimalStrings = (left: string, right: string): string => {
+  const [leftWhole = "0", leftFraction = ""] = left.split(".");
+  const [rightWhole = "0", rightFraction = ""] = right.split(".");
+  const leftScale = leftFraction.length;
+  const rightScale = rightFraction.length;
+  const leftAtomic = BigInt(`${leftWhole}${leftFraction}`.replace(/^0+(?=\d)/, "") || "0");
+  const rightAtomic = BigInt(`${rightWhole}${rightFraction}`.replace(/^0+(?=\d)/, "") || "0");
+  const scale = leftScale + rightScale;
+  const product = (leftAtomic * rightAtomic).toString().padStart(scale + 1, "0");
+  const whole = scale === 0 ? product : product.slice(0, -scale);
+  const fraction = scale === 0 ? "" : product.slice(-scale);
+  return trimDecimal(fraction ? `${whole}.${fraction}` : whole);
+};
+
+const predictAddressesForChain = (chainId: number): Record<string, string> | null => {
+  const addresses = (AddressesByChainId as Record<number, Record<string, string> | undefined>)[chainId];
+  return addresses ?? null;
+};
+
+const predictExchangeSpender = (
+  addresses: Record<string, string> | null,
+  metadata: Record<string, unknown>
+): string | null => {
+  if (!addresses) {
+    return null;
+  }
+  const isNegRisk = booleanField(metadata, "isNegRisk") === true;
+  const isYieldBearing = booleanField(metadata, "isYieldBearing") === true;
+  if (isYieldBearing && isNegRisk) return addresses.YIELD_BEARING_NEG_RISK_CTF_EXCHANGE ?? null;
+  if (isYieldBearing) return addresses.YIELD_BEARING_CTF_EXCHANGE ?? null;
+  if (isNegRisk) return addresses.NEG_RISK_CTF_EXCHANGE ?? null;
+  return addresses.CTF_EXCHANGE ?? null;
 };
