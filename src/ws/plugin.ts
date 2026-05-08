@@ -24,8 +24,8 @@ export const registerWebSocketPlugin = async (
 
   await gateway.start();
 
-  app.get("/ws", { websocket: true }, (connection) => {
-    gateway.registerConnection(connection.socket);
+  app.get("/ws", { websocket: true }, (socket) => {
+    gateway.registerConnection(socket);
   });
 
   app.addHook("onClose", async () => {
