@@ -1,8 +1,0 @@
-# Politics Office Winner Family Pass
-
-- family supply by venue: {"OPINION":5,"POLYMARKET":4,"LIMITLESS":4}
-- strongest candidate topics: OFFICE_WINNER|BUSAN|MAYOR|2026(FAMILY_REFRESHED_COMPARABLE_PAIR_EXISTS), OFFICE_WINNER|COLOMBIA|US_PRESIDENT|2026(FAMILY_REFRESHED_COMPARABLE_PAIR_EXISTS), OFFICE_WINNER|SEOUL|MAYOR|2026(FAMILY_REFRESHED_COMPARABLE_TRI_EXISTS), OFFICE_WINNER|USA|US_PRESIDENT|2028(FAMILY_REFRESHED_COMPARABLE_PAIR_EXISTS)
-- fragmented topics: none
-- best next matcher candidate: OFFICE_WINNER|SEOUL|MAYOR|2026
-- matcher follow-up justified: yes
-- single best next action: Start a narrow office-winner matcher follow-up on OFFICE_WINNER|SEOUL|MAYOR|2026.

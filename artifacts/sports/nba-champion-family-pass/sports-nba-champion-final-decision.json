@@ -1,9 +1,0 @@
-{
-  "observedAt": "2026-04-09T11:04:32.906Z",
-  "overallFamilyDecision": "SPORTS_NBA_CHAMPION_FAMILY_REFRESHED_MULTI_VENUE_MATCHER_CANDIDATE_FOUND",
-  "bestCandidateTopicKey": "SPORTS|TOURNAMENT_WINNER|NBA|2025_2026",
-  "familySupplyCredible": true,
-  "operatorCredible": true,
-  "matcherFollowUpJustified": true,
-  "singleBestNextAction": "run a narrow matcher pass for SPORTS|TOURNAMENT_WINNER|NBA|2025_2026, preserving the strict shared core and excluding venue-only tails."
-}

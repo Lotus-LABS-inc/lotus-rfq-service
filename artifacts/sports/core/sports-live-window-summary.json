@@ -1,9 +1,0 @@
-{
-  "observedAt": "2026-04-03T00:13:37.828Z",
-  "lookbackHours": 6,
-  "lookaheadHours": 72,
-  "windowStartIso": "2026-04-02T18:13:37.825Z",
-  "windowEndIso": "2026-04-06T00:13:37.825Z",
-  "liveWindowPolicy": "LIVE_AND_NEAR_UPCOMING_ONLY",
-  "shallowLookbackAllowed": true
-}

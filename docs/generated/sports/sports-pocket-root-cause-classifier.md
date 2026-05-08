@@ -1,6 +1,0 @@
-# Sports Pocket Root-Cause Classifier
-
-- SPORTS|MATCHUP_WINNER|NBA: dominant=MATCH_IDENTITY_NOISY, secondary=DATE_ALIGNMENT_NOISY
-- ESPORTS|MATCHUP_WINNER|DOTA2_ESL: dominant=COVERAGE_THIN, secondary=none
-- ESPORTS|MATCHUP_WINNER|KPL: dominant=COVERAGE_THIN, secondary=none
-- ESPORTS|MATCHUP_WINNER|LCK: dominant=LOW_SIGNAL_POCKET, secondary=none

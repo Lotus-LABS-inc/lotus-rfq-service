@@ -1,7 +1,0 @@
-# Crypto BNB Threshold By Date April 2026 Limited Prod Readiness
-
-- lane id: CRYPTO_BNB_THRESHOLD_BY_DATE_APR_2026_PAIR_POLYMARKET_PREDICT
-- exact family: CRYPTO|THRESHOLD_BY_DATE|BNB|2026-04-30
-- exact-safe shared thresholds: ↑ 1,000, ↑ 700, ↑ 800, ↑ 900, ↓ 100, ↓ 200, ↓ 300, ↓ 400, ↓ 500
-- final readiness label: CRYPTO_BNB_THRESHOLD_BY_DATE_APR_2026_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW
-- admin decision: READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION

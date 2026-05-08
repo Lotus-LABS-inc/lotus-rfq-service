@@ -1,9 +1,0 @@
-{
-  "observedAt": "2026-04-08T22:00:23.027Z",
-  "labels": {
-    "MISSING_OFFICE_OR_CYCLE": 414,
-    "NOMINEE_ADMITTED": 82,
-    "OUTCOME_SET_TOO_AMBIGUOUS": 1
-  },
-  "admittedCount": 82
-}

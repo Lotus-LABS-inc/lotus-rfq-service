@@ -1,9 +1,0 @@
-{
-  "observedAt": "2026-04-08T22:22:46.346Z",
-  "overallFamilyDecision": "SPORTS_EPL_WINNER_FAMILY_REFRESHED_MULTI_VENUE_MATCHER_CANDIDATE_FOUND",
-  "bestCandidateTopicKey": "SPORTS|LEAGUE_WINNER|EPL|2025_2026",
-  "familySupplyCredible": true,
-  "operatorCredible": true,
-  "matcherFollowUpJustified": true,
-  "singleBestNextAction": "Run a narrow matcher pass for SPORTS|LEAGUE_WINNER|EPL|2025_2026, preserving the four-club shared core and excluding venue-only tails."
-}

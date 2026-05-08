@@ -1,7 +1,0 @@
-# Crypto METAMASK Token Launch By Date Limited Prod Readiness
-
-- lane id: CRYPTO_METAMASK_TOKEN_LAUNCH_BY_DATE_PAIR_POLYMARKET_PREDICT
-- exact family: CRYPTO|TOKEN_LAUNCH_BY_DATE|METAMASK
-- exact-safe shared launch dates: 2025-12-31, 2026-06-30, 2026-09-30
-- final readiness label: CRYPTO_METAMASK_TOKEN_LAUNCH_BY_DATE_LIMITED_PROD_READY_FOR_REVIEW
-- admin decision: READY_BUT_MISSING_OPERATOR_REVIEW

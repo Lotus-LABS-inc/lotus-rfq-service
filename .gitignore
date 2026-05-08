@@ -1,8 +1,11 @@
 node_modules/
 dist/
 .env
+.env.*
+!.env.example
 .DS_Store
 coverage/
+*.log
 
 # Local temp/debug artifacts
 .tmp/
@@ -10,3 +13,11 @@ coverage/
 .local-pg.log
 .local-pgdata/
 tmp-*.html
+
+# Generated local evidence and operator scratch files
+artifacts/
+docs/generated/
+docs/historical-route-candidates.json
+SESSION.md
+SUMMARY.md
+rules.md

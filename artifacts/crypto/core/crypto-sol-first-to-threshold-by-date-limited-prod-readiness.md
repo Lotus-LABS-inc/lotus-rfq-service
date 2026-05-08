@@ -1,7 +1,0 @@
-# Crypto SOL First To Threshold By Date Limited Prod Readiness
-
-- lane id: CRYPTO_SOL_FIRST_TO_THRESHOLD_BY_DATE_PAIR_POLYMARKET_PREDICT
-- exact family: CRYPTO|FIRST_TO_THRESHOLD_BY_DATE|SOL|60|140|2027-01-01
-- exact-safe binary outcomes: $60 first, $140 first
-- final readiness label: CRYPTO_SOL_FIRST_TO_THRESHOLD_BY_DATE_LIMITED_PROD_READY_PENDING_OPERATOR_RULE_REVIEW
-- admin decision: READY_FOR_LIMITED_PROD_PENDING_OPERATOR_ACTION

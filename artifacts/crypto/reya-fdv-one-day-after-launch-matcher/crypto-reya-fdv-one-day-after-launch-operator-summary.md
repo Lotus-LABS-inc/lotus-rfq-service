@@ -1,7 +1,0 @@
-# Crypto REYA FDV After Launch Matcher
-
-- exact family: CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|REYA|ONE_DAY_AFTER_LAUNCH
-- target pair: POLYMARKET|PREDICT
-- shared FDV thresholds: $150M, $200M, $300M, $400M, $1B
-- rejected thresholds: $70M
-- final decision: CRYPTO_REYA_FDV_ONE_DAY_AFTER_LAUNCH_PAIR_MATCHER_READY_PENDING_OPERATOR_REVIEW

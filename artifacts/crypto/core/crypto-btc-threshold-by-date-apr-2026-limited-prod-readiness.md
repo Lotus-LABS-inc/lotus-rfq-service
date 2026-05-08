@@ -1,7 +1,0 @@
-# Crypto BTC Threshold By Date April 2026 Limited Prod Readiness
-
-- lane id: CRYPTO_BTC_THRESHOLD_BY_DATE_APR_2026_PAIR_POLYMARKET_PREDICT
-- exact family: CRYPTO|THRESHOLD_BY_DATE|BTC|2026-04-30
-- exact-safe shared thresholds: ↑ 100,000, ↑ 105,000, ↑ 110,000, ↑ 150,000, ↑ 70,000, ↑ 75,000, ↑ 80,000, ↑ 85,000, ↑ 90,000, ↑ 95,000, ↓ 20,000, ↓ 25,000, ↓ 30,000, ↓ 35,000, ↓ 40,000, ↓ 45,000, ↓ 50,000, ↓ 55,000, ↓ 60,000, ↓ 65,000
-- final readiness label: CRYPTO_BTC_THRESHOLD_BY_DATE_APR_2026_LIMITED_PROD_READY_FOR_REVIEW
-- admin decision: READY_BUT_MISSING_OPERATOR_REVIEW

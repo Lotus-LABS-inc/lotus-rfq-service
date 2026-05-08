@@ -1,4 +1,0 @@
-# DOTA2_ESL Date Window Summary
-
-- statuses: DATE_CONFIRMED=6
-- pair-date statuses: DIFFERENT_EVENT_DATE=12, SAME_DAY_CONFIRMED=2, SAME_DAY_DIFFERENT_WINDOW=1
