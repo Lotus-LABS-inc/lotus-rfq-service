@@ -1,14 +1,20 @@
 Proprietary License
 
-Copyright (c) 2026 Lotus. All rights reserved.
+Copyright (c) 2026 Lotus.
 
-This repository and its contents are proprietary and confidential. No license is
-granted to copy, modify, distribute, sublicense, publish, or use this software
-except with prior written permission from Lotus.
+All rights reserved.
 
-Permission is granted to authorized reviewers, judges, investors, and service
-operators to view and run this repository solely for evaluating or operating
-Lotus. That permission does not include redistribution, public publication,
-commercial reuse, or creation of derivative works.
+This software and associated documentation files are proprietary and
+confidential. No permission is granted to copy, modify, publish, distribute,
+sublicense, sell, or use this software, in whole or in part, without prior
+written permission from Lotus.
 
-All third-party dependencies remain governed by their own licenses.
+Unauthorized use, reproduction, distribution, or commercial exploitation is
+prohibited.
+
+If future files or packages are released under separate licenses, those files
+must include their own explicit license headers or license files. Unless
+otherwise stated, all code and documentation in this repository remains
+proprietary and all rights are reserved.
+
+Third-party dependencies remain governed by their own licenses.

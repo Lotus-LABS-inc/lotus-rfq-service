@@ -16,6 +16,9 @@ tmp-*.html
 
 # Generated local evidence and operator scratch files
 artifacts/
+docs/*
+!docs/legal/
+!docs/legal/**
 docs/generated/
 docs/historical-route-candidates.json
 SESSION.md
