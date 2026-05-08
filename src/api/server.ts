@@ -318,6 +318,13 @@ import {
   SellQuoteService
 } from "../execution-system/executable-routing.js";
 import {
+  buildExecutionStatusWatcherConfigFromEnv,
+  ExecutionStatusWatcher,
+  executionPositionsTopic,
+  executionQuoteTopic,
+  executionUserTopic
+} from "../execution-system/execution-status-watcher.js";
+import {
   PgExecutionQuoteRepository,
   PgSignedTradePositionRecorder,
   PgSignedTradeExecutionStatusRepository,
@@ -1279,6 +1286,83 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const wsGateway = await registerWebSocketPlugin(app, {
     redisClient: dependencies.redisClient,
     logger: dependencies.logger
+  });
+  const executionWsUpdatesEnabled = process.env.EXECUTION_WS_UPDATES_ENABLED !== "false";
+  const executionStatusWatcher = new ExecutionStatusWatcher(
+    signedTradeExecutionStatusRepository,
+    signedTradeBundleService,
+    verifiedPositionRepository,
+    {
+      publishExecutionStatus: async (status) => {
+        if (!executionWsUpdatesEnabled) {
+          return;
+        }
+        const payload = {
+          executionId: status.executionId,
+          status: status.status,
+          submittedLegs: status.submittedLegs,
+          freshness: status.watcherMetadata?.lastWatcherError ? "stale" : "live",
+          updatedAt: status.updatedAt
+        };
+        await Promise.all([
+          wsGateway.publishEvent({
+            type: "EXECUTION_STATUS_UPDATE",
+            topic: executionQuoteTopic(status.executionId),
+            emittedAt: new Date().toISOString(),
+            payload
+          }),
+          wsGateway.publishEvent({
+            type: "EXECUTION_STATUS_UPDATE",
+            topic: executionUserTopic(status.userId),
+            emittedAt: new Date().toISOString(),
+            payload
+          })
+        ]);
+      },
+      publishPositions: async (input) => {
+        if (!executionWsUpdatesEnabled) {
+          return;
+        }
+        const payload = {
+          marketId: input.marketId,
+          outcomeId: input.outcomeId,
+          positions: input.positions,
+          generatedAt: new Date().toISOString(),
+          freshness: "live"
+        };
+        await Promise.all([
+          wsGateway.publishEvent({
+            type: "EXECUTION_POSITION_UPDATE",
+            topic: executionPositionsTopic(input.userId, input.marketId, input.outcomeId),
+            emittedAt: new Date().toISOString(),
+            payload
+          }),
+          wsGateway.publishEvent({
+            type: "EXECUTION_POSITION_UPDATE",
+            topic: executionUserTopic(input.userId),
+            emittedAt: new Date().toISOString(),
+            payload
+          })
+        ]);
+      },
+      publishReadiness: async (readiness, userId) => {
+        if (!executionWsUpdatesEnabled) {
+          return;
+        }
+        await wsGateway.publishEvent({
+          type: "EXECUTION_READINESS_UPDATE",
+          topic: executionUserTopic(userId),
+          emittedAt: new Date().toISOString(),
+          payload: readiness as unknown as Record<string, unknown>
+        });
+      }
+    },
+    dependencies.logger,
+    buildExecutionStatusWatcherConfigFromEnv(process.env)
+  );
+  executionStatusWatcher.start();
+  app.addHook("onClose", async () => {
+    executionStatusWatcher.stop();
   });
   await registerHealthRoute(app);
   await registerMetricsRoute(app);

@@ -5,7 +5,7 @@ import { verifyTypedData as verifyTypedDataV6 } from "ethers";
 import type { UserVenueAccount } from "../core/execution/user-venue-accounts.js";
 import type { ExecutableRouteLeg, ExecutableRouteService, ExecutableTradeQuote } from "./executable-routing.js";
 import type { ExecutionLegV0 } from "./types.js";
-import type { ExecutionVenueAdapterRegistry, PreparedVenueOrder, VenueFillState, VenueSubmitResult } from "./venue-adapter.js";
+import type { ExecutionVenueAdapterRegistry, PreparedVenueOrder, VenueFillState, VenueSettlementState, VenueSubmitResult } from "./venue-adapter.js";
 
 export type TradeSignatureKind = "EIP712" | "MESSAGE";
 
@@ -54,6 +54,7 @@ export interface SignedTradeExecutionStatus {
   submittedAt: string;
   updatedAt: string;
   route?: ExecutableTradeQuote | undefined;
+  watcherMetadata?: SignedTradeWatcherMetadata | undefined;
   submittedLegs: Array<{
     legIndex: number;
     venue: string;
@@ -61,7 +62,18 @@ export interface SignedTradeExecutionStatus {
     venueOrderId?: string | undefined;
     reason?: string | undefined;
     fillState?: VenueFillState | undefined;
+    settlementState?: VenueSettlementState | undefined;
+    lastStatusCheckedAt?: string | undefined;
+    lastSettlementCheckedAt?: string | undefined;
+    lastWatcherError?: string | undefined;
   }>;
+}
+
+export interface SignedTradeWatcherMetadata {
+  lastStatusCheckedAt?: string | undefined;
+  lastSettlementCheckedAt?: string | undefined;
+  lastWatcherError?: string | undefined;
+  nextCheckAfter?: string | undefined;
 }
 
 export interface SignedTradeExecutionStatusRepository {
@@ -239,39 +251,69 @@ export class SignedTradeBundleService {
     if (stored.dryRun) {
       return stored;
     }
+    const next = await this.refreshStoredExecutionStatus(stored);
+    await this.saveExecutionStatus(next);
+    await this.recordFilledPositions(next);
+    return next;
+  }
+
+  public async refreshStoredExecutionStatus(
+    stored: SignedTradeExecutionStatus,
+    options: { settlementIntervalMs?: number | undefined } = {}
+  ): Promise<SignedTradeExecutionStatus> {
+    if (stored.dryRun) {
+      return stored;
+    }
+    const checkedAt = this.now().toISOString();
     const submittedLegs = await Promise.all(stored.submittedLegs.map(async (leg) => {
       if (!leg.venueOrderId || leg.status === "FAILED") {
         return leg;
       }
       try {
-        const fillState = await this.adapters.get(leg.venue).fetchFillState(leg.venueOrderId);
+        const adapter = this.adapters.get(leg.venue);
+        const fillState = await adapter.fetchFillState(leg.venueOrderId);
+        const settlementIntervalMs = options.settlementIntervalMs ?? 0;
+        const lastSettlementCheckedAt = leg.lastSettlementCheckedAt ? Date.parse(leg.lastSettlementCheckedAt) : 0;
+        const settlementCheckDue = !lastSettlementCheckedAt ||
+          this.now().getTime() - lastSettlementCheckedAt >= settlementIntervalMs;
+        const shouldRefreshSettlement = settlementCheckDue &&
+          (fillState.status === "FILLED" || leg.settlementState?.status === "SETTLEMENT_PENDING");
+        const settlementState = shouldRefreshSettlement
+          ? await adapter.fetchSettlementState(leg.venueOrderId)
+          : leg.settlementState;
         return {
           ...leg,
           fillState,
-          status: fillState.status
+          ...(settlementState ? { settlementState } : {}),
+          status: fillState.status,
+          lastStatusCheckedAt: checkedAt,
+          ...(shouldRefreshSettlement ? { lastSettlementCheckedAt: checkedAt } : {}),
+          lastWatcherError: undefined
         };
       } catch (error) {
         return {
           ...leg,
-          fillState: {
-            status: "FAILED" as const,
-            filledSize: "0",
-            averagePrice: 0,
-            offchainFilled: false
-          },
-          reason: error instanceof Error ? error.message : "Venue status lookup failed."
+          lastStatusCheckedAt: checkedAt,
+          lastWatcherError: error instanceof Error ? error.message : "Venue status lookup failed."
         };
       }
     }));
-    const next: SignedTradeExecutionStatus = {
+    return {
       ...stored,
-      updatedAt: this.now().toISOString(),
+      updatedAt: checkedAt,
       status: summarizeStoredExecutionStatus(submittedLegs),
+      watcherMetadata: {
+        ...stored.watcherMetadata,
+        lastStatusCheckedAt: checkedAt,
+        nextCheckAfter: new Date(this.now().getTime() + 1_000).toISOString(),
+        lastWatcherError: submittedLegs.find((leg) => leg.lastWatcherError)?.lastWatcherError
+      },
       submittedLegs
     };
-    await this.saveExecutionStatus(next);
-    await this.recordFilledPositions(next);
-    return next;
+  }
+
+  public async recordFilledPositionsForStatus(status: SignedTradeExecutionStatus): Promise<void> {
+    await this.recordFilledPositions(status);
   }
 
   public async getLiveReadiness(input: { userId: string; quoteId: string }): Promise<LiveSubmitReadinessSnapshot> {

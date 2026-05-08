@@ -5,12 +5,20 @@ import { wsConnectionsActive } from "../observability/metrics.js";
 
 const SUBSCRIPTION_MESSAGE_SCHEMA = z.object({
   action: z.enum(["subscribe", "unsubscribe"]),
-  topic: z.string().regex(/^rfq:[^:]+$/)
+  topic: z.string().regex(/^(rfq:[^:]+|execution:(user|quote):[A-Za-z0-9_.-]+|execution:positions:[A-Za-z0-9_.-]+:[a-f0-9]{24}:[a-f0-9]{24})$/)
 });
 
 const BROADCAST_EVENT_SCHEMA = z.object({
-  type: z.enum(["QUOTE_RECEIVED", "STATE_TRANSITION", "EXECUTION_UPDATE"]),
-  topic: z.string().regex(/^rfq:[^:]+$/),
+  type: z.enum([
+    "QUOTE_RECEIVED",
+    "STATE_TRANSITION",
+    "EXECUTION_UPDATE",
+    "EXECUTION_STATUS_UPDATE",
+    "EXECUTION_POSITION_UPDATE",
+    "EXECUTION_READINESS_UPDATE",
+    "EXECUTION_BALANCE_UPDATE"
+  ]),
+  topic: z.string().regex(/^(rfq:[^:]+|execution:(user|quote):[A-Za-z0-9_.-]+|execution:positions:[A-Za-z0-9_.-]+:[a-f0-9]{24}:[a-f0-9]{24})$/),
   emittedAt: z.string().datetime(),
   payload: z.record(z.string(), z.unknown())
 });

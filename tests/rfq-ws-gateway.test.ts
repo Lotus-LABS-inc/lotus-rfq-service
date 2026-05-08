@@ -241,6 +241,36 @@ describe("RFQWebSocketGateway", () => {
     await gateway.stop();
   });
 
+  it("broadcasts execution status updates to subscribed execution quote topics", async () => {
+    const bus = new FakeRedisBus();
+    const publisher = new FakeRedisClient(bus);
+    const subscriber = new FakeRedisClient(bus);
+    const gateway = new RFQWebSocketGateway({
+      publisher,
+      subscriber,
+      logger: { warn: vi.fn(), error: vi.fn() }
+    });
+
+    await gateway.start();
+    const socket = new FakeSocket();
+    gateway.registerConnection(socket);
+    socket.emit("message", JSON.stringify({ action: "subscribe", topic: "execution:quote:exec_quote_123" }));
+
+    await gateway.publishEvent({
+      type: "EXECUTION_STATUS_UPDATE",
+      topic: "execution:quote:exec_quote_123",
+      emittedAt: "2026-02-25T10:00:00.000Z",
+      payload: { executionId: "exec_quote_123", status: "FILLED" }
+    });
+
+    const payloads = socket.sent.map((entry) => JSON.parse(entry) as Record<string, unknown>);
+    const executionEvent = payloads.find((entry) => entry.type === "EXECUTION_STATUS_UPDATE");
+    expect(executionEvent).toBeTruthy();
+    expect(executionEvent?.payload).toEqual({ executionId: "exec_quote_123", status: "FILLED" });
+
+    await gateway.stop();
+  });
+
   it("does not fail service startup when Redis subscriber is temporarily unavailable", async () => {
     vi.useFakeTimers();
     const bus = new FakeRedisBus();

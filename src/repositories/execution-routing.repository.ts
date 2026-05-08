@@ -47,6 +47,7 @@ interface SignedTradeExecutionStatusRow {
   submitted_at: Date;
   updated_at: Date;
   selected_route: ExecutableTradeQuote | null;
+  watcher_metadata: SignedTradeExecutionStatus["watcherMetadata"] | null;
   submitted_legs: SignedTradeExecutionStatus["submittedLegs"];
 }
 
@@ -203,14 +204,16 @@ export class PgSignedTradeExecutionStatusRepository implements SignedTradeExecut
         submitted_at,
         updated_at,
         selected_route,
+        watcher_metadata,
         submitted_legs
-      ) VALUES ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz, $7::jsonb, $8::jsonb)
+      ) VALUES ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz, $7::jsonb, $8::jsonb, $9::jsonb)
       ON CONFLICT (execution_id, user_id) DO UPDATE SET
         status = EXCLUDED.status,
         dry_run = EXCLUDED.dry_run,
         submitted_at = LEAST(signed_trade_bundle_executions.submitted_at, EXCLUDED.submitted_at),
         updated_at = EXCLUDED.updated_at,
         selected_route = COALESCE(EXCLUDED.selected_route, signed_trade_bundle_executions.selected_route),
+        watcher_metadata = EXCLUDED.watcher_metadata,
         submitted_legs = EXCLUDED.submitted_legs`,
       [
         status.executionId,
@@ -220,6 +223,7 @@ export class PgSignedTradeExecutionStatusRepository implements SignedTradeExecut
         status.submittedAt,
         status.updatedAt,
         JSON.stringify(status.route ?? null),
+        JSON.stringify(status.watcherMetadata ?? null),
         JSON.stringify(status.submittedLegs)
       ]
     );
@@ -234,6 +238,28 @@ export class PgSignedTradeExecutionStatusRepository implements SignedTradeExecut
     );
     const row = result.rows[0];
     return row ? mapSignedTradeExecutionStatusRow(row) : null;
+  }
+
+  public async listActiveExecutionStatuses(input: {
+    limit: number;
+    activeWindowSeconds: number;
+  }): Promise<SignedTradeExecutionStatus[]> {
+    const result = await this.pool.query<SignedTradeExecutionStatusRow>(
+      `SELECT *
+       FROM signed_trade_bundle_executions
+       WHERE dry_run = false
+         AND status IN ('SUBMITTED', 'PARTIAL', 'FILLED')
+         AND updated_at >= now() - ($2::int * interval '1 second')
+         AND (
+           watcher_metadata IS NULL
+           OR watcher_metadata->>'nextCheckAfter' IS NULL
+           OR (watcher_metadata->>'nextCheckAfter')::timestamptz <= now()
+         )
+       ORDER BY updated_at DESC
+       LIMIT $1`,
+      [input.limit, input.activeWindowSeconds]
+    );
+    return result.rows.map(mapSignedTradeExecutionStatusRow);
   }
 }
 
@@ -357,6 +383,7 @@ const mapSignedTradeExecutionStatusRow = (row: SignedTradeExecutionStatusRow): S
   submittedAt: row.submitted_at.toISOString(),
   updatedAt: row.updated_at.toISOString(),
   ...(row.selected_route ? { route: row.selected_route } : {}),
+  ...(row.watcher_metadata ? { watcherMetadata: row.watcher_metadata } : {}),
   submittedLegs: row.submitted_legs
 });
 
