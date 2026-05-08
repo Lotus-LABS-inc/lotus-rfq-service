@@ -35,8 +35,9 @@ npm run test:execution-system
 
 ## Configuration
 
-Use `.env.example` as the public configuration template. Real `.env` files,
-secrets, generated artifacts, and local operator evidence must not be committed.
+Runtime configuration is managed privately by Lotus operators. Environment
+files, secret templates, generated artifacts, and local operator evidence must
+not be committed.
 
 ## License
 
