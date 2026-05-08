@@ -9,7 +9,8 @@ import type {
 } from "../execution-system/executable-routing.js";
 import type {
   SignedTradeExecutionStatus,
-  SignedTradeExecutionStatusRepository
+  SignedTradeExecutionStatusRepository,
+  SignedTradePositionRecorder
 } from "../execution-system/signed-trade-bundle.js";
 
 interface QuoteRow {
@@ -45,6 +46,7 @@ interface SignedTradeExecutionStatusRow {
   dry_run: boolean;
   submitted_at: Date;
   updated_at: Date;
+  selected_route: ExecutableTradeQuote | null;
   submitted_legs: SignedTradeExecutionStatus["submittedLegs"];
 }
 
@@ -200,13 +202,15 @@ export class PgSignedTradeExecutionStatusRepository implements SignedTradeExecut
         dry_run,
         submitted_at,
         updated_at,
+        selected_route,
         submitted_legs
-      ) VALUES ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz, $7::jsonb)
+      ) VALUES ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz, $7::jsonb, $8::jsonb)
       ON CONFLICT (execution_id, user_id) DO UPDATE SET
         status = EXCLUDED.status,
         dry_run = EXCLUDED.dry_run,
         submitted_at = LEAST(signed_trade_bundle_executions.submitted_at, EXCLUDED.submitted_at),
         updated_at = EXCLUDED.updated_at,
+        selected_route = COALESCE(EXCLUDED.selected_route, signed_trade_bundle_executions.selected_route),
         submitted_legs = EXCLUDED.submitted_legs`,
       [
         status.executionId,
@@ -215,6 +219,7 @@ export class PgSignedTradeExecutionStatusRepository implements SignedTradeExecut
         status.dryRun,
         status.submittedAt,
         status.updatedAt,
+        JSON.stringify(status.route ?? null),
         JSON.stringify(status.submittedLegs)
       ]
     );
@@ -229,6 +234,103 @@ export class PgSignedTradeExecutionStatusRepository implements SignedTradeExecut
     );
     const row = result.rows[0];
     return row ? mapSignedTradeExecutionStatusRow(row) : null;
+  }
+}
+
+export class PgSignedTradePositionRecorder implements SignedTradePositionRecorder {
+  public constructor(private readonly pool: Pool) {}
+
+  public async recordFilledLeg(input: Parameters<SignedTradePositionRecorder["recordFilledLeg"]>[0]): Promise<void> {
+    const fillSize = positionSizeFromFill(input.fillState, input.routeLeg.size);
+    const averagePrice = input.fillState.averagePrice > 0 ? input.fillState.averagePrice : input.routeLeg.price;
+    if (Number(fillSize) <= 0 || !Number.isFinite(Number(fillSize))) {
+      return;
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const application = await client.query<{ application_id: string }>(
+        `INSERT INTO signed_trade_bundle_position_applications (
+          execution_id,
+          user_id,
+          leg_index,
+          venue,
+          venue_order_id,
+          fill_state
+        ) VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+        ON CONFLICT (execution_id, user_id, leg_index, venue_order_id) DO NOTHING
+        RETURNING application_id`,
+        [
+          input.executionId,
+          input.userId,
+          input.legIndex,
+          input.routeLeg.venue.toUpperCase(),
+          input.venueOrderId,
+          JSON.stringify(input.fillState)
+        ]
+      );
+      if (application.rowCount === 0) {
+        await client.query("ROLLBACK");
+        return;
+      }
+      const signedSize = input.route.side === "buy" ? Number(fillSize) : -Number(fillSize);
+      await client.query(
+        `INSERT INTO user_execution_positions (
+          user_id,
+          venue,
+          market_id,
+          outcome_id,
+          venue_account_address,
+          verified_size,
+          average_entry_price,
+          sellable_size,
+          last_settlement_evidence_id,
+          status,
+          metadata
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          GREATEST($6::numeric, 0),
+          $7::numeric,
+          GREATEST($6::numeric, 0),
+          $8,
+          'VERIFIED',
+          $9::jsonb
+        )
+        ON CONFLICT (user_id, venue, market_id, outcome_id) DO UPDATE SET
+          verified_size = GREATEST(user_execution_positions.verified_size + $6::numeric, 0),
+          sellable_size = GREATEST(user_execution_positions.sellable_size + $6::numeric, 0),
+          average_entry_price = CASE
+            WHEN $6::numeric > 0 THEN $7::numeric
+            ELSE user_execution_positions.average_entry_price
+          END,
+          last_settlement_evidence_id = EXCLUDED.last_settlement_evidence_id,
+          status = 'VERIFIED',
+          metadata = user_execution_positions.metadata || EXCLUDED.metadata,
+          updated_at = now()`,
+        [
+          input.userId,
+          input.routeLeg.venue.toUpperCase(),
+          input.route.marketId,
+          input.route.outcomeId,
+          null,
+          String(signedSize),
+          String(averagePrice),
+          input.venueOrderId,
+          JSON.stringify({
+            source: "signed_trade_bundle",
+            executionId: input.executionId,
+            legIndex: input.legIndex,
+            venueOrderId: input.venueOrderId
+          })
+        ]
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 }
 
@@ -254,5 +356,14 @@ const mapSignedTradeExecutionStatusRow = (row: SignedTradeExecutionStatusRow): S
   dryRun: row.dry_run,
   submittedAt: row.submitted_at.toISOString(),
   updatedAt: row.updated_at.toISOString(),
+  ...(row.selected_route ? { route: row.selected_route } : {}),
   submittedLegs: row.submitted_legs
 });
+
+const positionSizeFromFill = (fillState: { filledSize: string; offchainFilled?: boolean | undefined }, fallbackSize: string): string => {
+  const parsed = Number(fillState.filledSize);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return fillState.filledSize;
+  }
+  return fillState.offchainFilled === true ? fallbackSize : "0";
+};

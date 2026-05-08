@@ -319,6 +319,7 @@ import {
 } from "../execution-system/executable-routing.js";
 import {
   PgExecutionQuoteRepository,
+  PgSignedTradePositionRecorder,
   PgSignedTradeExecutionStatusRepository,
   PgVerifiedPositionRepository
 } from "../repositories/execution-routing.repository.js";
@@ -467,6 +468,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const executionQuoteRepository = new PgExecutionQuoteRepository(dependencies.pgPool);
   const verifiedPositionRepository = new PgVerifiedPositionRepository(dependencies.pgPool);
   const signedTradeExecutionStatusRepository = new PgSignedTradeExecutionStatusRepository(dependencies.pgPool);
+  const signedTradePositionRecorder = new PgSignedTradePositionRecorder(dependencies.pgPool);
   const marketCatalogRepository = new MarketCatalogRepository(dependencies.pgPool);
   const executionVenuesAdminService = new ExecutionVenuesAdminService({
     env: process.env,
@@ -1237,7 +1239,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     userVenueAccountService,
     undefined,
     process.env,
-    signedTradeExecutionStatusRepository
+    signedTradeExecutionStatusRepository,
+    signedTradePositionRecorder
   );
   if (dependencies.executionSystemSandboxEnabled) {
     const laneGate = new ApprovedLaneExecutionGate(new ScopeAuthorityLaneResolver(executionScopeAuthorities));

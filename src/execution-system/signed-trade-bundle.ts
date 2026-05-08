@@ -53,6 +53,7 @@ export interface SignedTradeExecutionStatus {
   dryRun: boolean;
   submittedAt: string;
   updatedAt: string;
+  route?: ExecutableTradeQuote | undefined;
   submittedLegs: Array<{
     legIndex: number;
     venue: string;
@@ -66,6 +67,18 @@ export interface SignedTradeExecutionStatus {
 export interface SignedTradeExecutionStatusRepository {
   saveExecutionStatus(status: SignedTradeExecutionStatus): Promise<void>;
   findExecutionStatus(input: { userId: string; executionId: string }): Promise<SignedTradeExecutionStatus | null>;
+}
+
+export interface SignedTradePositionRecorder {
+  recordFilledLeg(input: {
+    executionId: string;
+    userId: string;
+    legIndex: number;
+    venueOrderId: string;
+    route: ExecutableTradeQuote;
+    routeLeg: ExecutableRouteLeg;
+    fillState: VenueFillState;
+  }): Promise<void>;
 }
 
 export interface LiveSubmitVenueReadiness {
@@ -122,7 +135,8 @@ export class SignedTradeBundleService {
     private readonly venueAccounts: SignedTradeBundleVenueAccountProvider,
     private readonly now: () => Date = () => new Date(),
     private readonly env: NodeJS.ProcessEnv = process.env,
-    private readonly statusRepository?: SignedTradeExecutionStatusRepository | undefined
+    private readonly statusRepository?: SignedTradeExecutionStatusRepository | undefined,
+    private readonly positionRecorder?: SignedTradePositionRecorder | undefined
   ) {}
 
   public async prepare(input: { userId: string; quoteId: string }): Promise<PreparedTradeSignatureBundle> {
@@ -200,7 +214,7 @@ export class SignedTradeBundleService {
           dryRun: false,
           submittedLegs
         };
-        await this.recordExecutionStatus(input.userId, result);
+        await this.recordExecutionStatus(input.userId, result, quote);
         return result;
       }
     }
@@ -211,7 +225,7 @@ export class SignedTradeBundleService {
       dryRun: input.dryRun === true,
       submittedLegs
     };
-    await this.recordExecutionStatus(input.userId, result);
+    await this.recordExecutionStatus(input.userId, result, quote);
     return result;
   }
 
@@ -256,6 +270,7 @@ export class SignedTradeBundleService {
       submittedLegs
     };
     await this.saveExecutionStatus(next);
+    await this.recordFilledPositions(next);
     return next;
   }
 
@@ -574,7 +589,7 @@ export class SignedTradeBundleService {
     };
   }
 
-  private async recordExecutionStatus(userId: string, result: SignedTradeBundleSubmitResult): Promise<void> {
+  private async recordExecutionStatus(userId: string, result: SignedTradeBundleSubmitResult, route: ExecutableTradeQuote): Promise<void> {
     const now = this.now().toISOString();
     await this.saveExecutionStatus({
       executionId: result.executionId,
@@ -583,6 +598,7 @@ export class SignedTradeBundleService {
       dryRun: result.dryRun,
       submittedAt: now,
       updatedAt: now,
+      route,
       submittedLegs: result.submittedLegs
     });
   }
@@ -590,6 +606,30 @@ export class SignedTradeBundleService {
   private async saveExecutionStatus(status: SignedTradeExecutionStatus): Promise<void> {
     this.executionStatuses.set(statusKey(status.userId, status.executionId), status);
     await this.statusRepository?.saveExecutionStatus(status);
+  }
+
+  private async recordFilledPositions(status: SignedTradeExecutionStatus): Promise<void> {
+    if (!this.positionRecorder || status.dryRun || !status.route) {
+      return;
+    }
+    await Promise.all(status.submittedLegs.map(async (leg) => {
+      if (leg.status !== "FILLED" || !leg.venueOrderId || !leg.fillState) {
+        return;
+      }
+      const routeLeg = status.route!.legs[leg.legIndex];
+      if (!routeLeg) {
+        return;
+      }
+      await this.positionRecorder!.recordFilledLeg({
+        executionId: status.executionId,
+        userId: status.userId,
+        legIndex: leg.legIndex,
+        venueOrderId: leg.venueOrderId,
+        route: status.route!,
+        routeLeg,
+        fillState: leg.fillState
+      });
+    }));
   }
 }
 

@@ -11,7 +11,8 @@ import {
 import type { UserVenueAccount } from "../src/core/execution/user-venue-accounts.js";
 import type {
   SignedTradeExecutionStatus,
-  SignedTradeExecutionStatusRepository
+  SignedTradeExecutionStatusRepository,
+  SignedTradePositionRecorder
 } from "../src/execution-system/signed-trade-bundle.js";
 
 const wallet = new Wallet("0x59c6995e998f97a5a004497e5daae82f0e6d4d6e773f8f5a11a95d2218e14e4f");
@@ -117,6 +118,17 @@ class MemorySignedTradeStatusRepository implements SignedTradeExecutionStatusRep
 
   public async findExecutionStatus(input: { userId: string; executionId: string }): Promise<SignedTradeExecutionStatus | null> {
     return structuredClone(this.rows.get(`${input.userId}:${input.executionId}`) ?? null);
+  }
+}
+
+class MemorySignedTradePositionRecorder implements SignedTradePositionRecorder {
+  public readonly applications = new Map<string, Parameters<SignedTradePositionRecorder["recordFilledLeg"]>[0]>();
+
+  public async recordFilledLeg(input: Parameters<SignedTradePositionRecorder["recordFilledLeg"]>[0]): Promise<void> {
+    this.applications.set(
+      `${input.executionId}:${input.userId}:${input.legIndex}:${input.venueOrderId}`,
+      structuredClone(input)
+    );
   }
 }
 
@@ -277,6 +289,7 @@ describe("SignedTradeBundleService", () => {
       }]
     };
     const statusRepository = new MemorySignedTradeStatusRepository();
+    const positionRecorder = new MemorySignedTradePositionRecorder();
     const firstService = new SignedTradeBundleService(
       { getQuote: async () => liveQuote } as never,
       registry,
@@ -300,7 +313,8 @@ describe("SignedTradeBundleService", () => {
       { getAccount: async () => account("PREDICT_FUN") },
       undefined,
       process.env,
-      statusRepository
+      statusRepository,
+      positionRecorder
     );
 
     const status = await restartedService.getExecutionStatus({
@@ -322,6 +336,34 @@ describe("SignedTradeBundleService", () => {
       }]
     });
     expect(status?.submittedLegs[0]?.venueOrderId).toBe(submitted.submittedLegs[0]?.venueOrderId);
+    expect(positionRecorder.applications.size).toBe(1);
+    const [application] = Array.from(positionRecorder.applications.values());
+    expect(application).toMatchObject({
+      executionId: "exec_quote_persisted_status",
+      userId: "user-1",
+      legIndex: 0,
+      venueOrderId: submitted.submittedLegs[0]?.venueOrderId,
+      route: {
+        marketId: "canonical-market",
+        outcomeId: "YES"
+      },
+      routeLeg: {
+        venue: "TEST",
+        venueMarketId: "test-market",
+        venueOutcomeId: "test-outcome"
+      },
+      fillState: {
+        status: "FILLED",
+        filledSize: "1",
+        averagePrice: 0.51
+      }
+    });
+
+    await restartedService.getExecutionStatus({
+      userId: "user-1",
+      executionId: "exec_quote_persisted_status"
+    });
+    expect(positionRecorder.applications.size).toBe(1);
   });
 
   it("blocks Predict.fun orders below the venue minimum order value", async () => {
