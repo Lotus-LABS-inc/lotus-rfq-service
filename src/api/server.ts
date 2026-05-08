@@ -1324,6 +1324,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     executableRouteService,
     sellQuoteService,
     signedTradeBundleService,
+    positionRepository: verifiedPositionRepository,
     liveCandidateProvider: {
       getCandidates: async (input) => {
         const quantity = Number(input.amount);

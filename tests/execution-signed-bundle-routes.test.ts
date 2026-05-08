@@ -122,6 +122,61 @@ describe("execution signed bundle routes", () => {
     });
   });
 
+  it("serves verified execution positions for the selected market outcome", async () => {
+    const app = Fastify();
+    const positionRepository = {
+      listVerifiedPositions: vi.fn(async () => ([{
+        positionId: "position-1",
+        userId: "user-1",
+        venue: "PREDICT_FUN",
+        marketId: "market-1",
+        outcomeId: "YES",
+        venueAccountAddress: "0xabc",
+        verifiedSize: "2.5",
+        averageEntryPrice: 0.388,
+        sellableSize: "2.5",
+        lastSettlementEvidenceId: "order-1",
+        status: "VERIFIED",
+        metadata: {}
+      }]))
+    };
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: {
+        quote: vi.fn(),
+        getQuote: vi.fn()
+      } as never,
+      sellQuoteService: {
+        prepareExit: vi.fn()
+      } as never,
+      positionRepository
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/execution/positions?marketId=market-1&outcomeId=YES&venue=PREDICT_FUN"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      marketId: "market-1",
+      outcomeId: "YES",
+      positions: [{
+        positionId: "position-1",
+        venue: "PREDICT_FUN",
+        verifiedSize: "2.5",
+        sellableSize: "2.5"
+      }]
+    });
+    expect(positionRepository.listVerifiedPositions).toHaveBeenCalledWith({
+      userId: "user-1",
+      marketId: "market-1",
+      outcomeId: "YES",
+      venue: "PREDICT_FUN"
+    });
+  });
+
   it("serves live execution candidates from backend quote evidence", async () => {
     const app = Fastify();
     const liveCandidateProvider = {

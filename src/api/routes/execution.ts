@@ -4,7 +4,8 @@ import type {
   ExecutableRouteService,
   ExecutableTradeQuote,
   SellQuoteService,
-  TradeRouteCandidate
+  TradeRouteCandidate,
+  VerifiedPositionRepository
 } from "../../execution-system/executable-routing.js";
 import {
   SignedTradeBundleError,
@@ -86,6 +87,7 @@ export interface ExecutionRouteDeps {
   sellQuoteService: SellQuoteService;
   signedTradeBundleService?: SignedTradeBundleService | undefined;
   liveCandidateProvider?: LiveExecutionCandidateProvider | undefined;
+  positionRepository?: Pick<VerifiedPositionRepository, "listVerifiedPositions"> | undefined;
 }
 
 export interface LiveExecutionCandidateProvider {
@@ -309,6 +311,38 @@ export const registerExecutionRoutes = async (
       ghostFillStatus: "NOT_APPLICABLE",
       recoveryStatus: "none",
       route: toUserQuote(quote)
+    });
+  });
+
+  app.get("/execution/positions", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!deps.positionRepository) {
+      return reply.status(501).send({
+        code: "EXECUTION_POSITIONS_NOT_CONFIGURED",
+        message: "Execution position lookup is not configured on this backend."
+      });
+    }
+    const query = request.query as {
+      marketId?: string;
+      outcomeId?: string;
+      venue?: string;
+    };
+    if (!query.marketId || !query.outcomeId) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "marketId and outcomeId are required for execution position lookup."
+      });
+    }
+    const positions = await deps.positionRepository.listVerifiedPositions({
+      userId: request.user.userId,
+      marketId: query.marketId,
+      outcomeId: query.outcomeId,
+      ...(query.venue ? { venue: query.venue } : {})
+    });
+    return reply.send({
+      generatedAt: new Date().toISOString(),
+      marketId: query.marketId,
+      outcomeId: query.outcomeId,
+      positions
     });
   });
 
