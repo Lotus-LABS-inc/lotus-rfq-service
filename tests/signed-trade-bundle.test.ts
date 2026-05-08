@@ -9,6 +9,10 @@ import {
   type ExecutableTradeQuote
 } from "../src/execution-system/index.js";
 import type { UserVenueAccount } from "../src/core/execution/user-venue-accounts.js";
+import type {
+  SignedTradeExecutionStatus,
+  SignedTradeExecutionStatusRepository
+} from "../src/execution-system/signed-trade-bundle.js";
 
 const wallet = new Wallet("0x59c6995e998f97a5a004497e5daae82f0e6d4d6e773f8f5a11a95d2218e14e4f");
 
@@ -103,6 +107,18 @@ const service = () => {
     { getAccount: async (_userId, venue) => account(venue.toUpperCase() as UserVenueAccount["venue"]) }
   );
 };
+
+class MemorySignedTradeStatusRepository implements SignedTradeExecutionStatusRepository {
+  public readonly rows = new Map<string, SignedTradeExecutionStatus>();
+
+  public async saveExecutionStatus(status: SignedTradeExecutionStatus): Promise<void> {
+    this.rows.set(`${status.userId}:${status.executionId}`, structuredClone(status));
+  }
+
+  public async findExecutionStatus(input: { userId: string; executionId: string }): Promise<SignedTradeExecutionStatus | null> {
+    return structuredClone(this.rows.get(`${input.userId}:${input.executionId}`) ?? null);
+  }
+}
 
 const registryWithPredict = (): ExecutionVenueAdapterRegistry => {
   const registry = new ExecutionVenueAdapterRegistry();
@@ -241,6 +257,71 @@ describe("SignedTradeBundleService", () => {
         }
       }]
     });
+  });
+
+  it("recovers submitted live order ids from persistent status storage after service restart", async () => {
+    const registry = new ExecutionVenueAdapterRegistry();
+    registry.register(new TestExecutionAdapter("TEST", { fillStatus: "FILLED", fillPrice: 0.51 }));
+    const liveQuote: ExecutableTradeQuote = {
+      ...quote(),
+      quoteId: "exec_quote_persisted_status",
+      venuePath: ["TEST"],
+      requiredUserSignatureSteps: [],
+      legs: [{
+        venue: "TEST",
+        venueMarketId: "test-market",
+        venueOutcomeId: "test-outcome",
+        size: "1",
+        price: 0.51,
+        requiresUserSignature: false
+      }]
+    };
+    const statusRepository = new MemorySignedTradeStatusRepository();
+    const firstService = new SignedTradeBundleService(
+      { getQuote: async () => liveQuote } as never,
+      registry,
+      { getAccount: async () => account("PREDICT_FUN") },
+      undefined,
+      process.env,
+      statusRepository
+    );
+
+    const submitted = await firstService.submit({
+      userId: "user-1",
+      quoteId: "exec_quote_persisted_status",
+      dryRun: false,
+      signedLegs: []
+    });
+    expect(submitted.submittedLegs[0]?.venueOrderId).toMatch(/^test-order-/);
+
+    const restartedService = new SignedTradeBundleService(
+      { getQuote: async () => null } as never,
+      registry,
+      { getAccount: async () => account("PREDICT_FUN") },
+      undefined,
+      process.env,
+      statusRepository
+    );
+
+    const status = await restartedService.getExecutionStatus({
+      userId: "user-1",
+      executionId: "exec_quote_persisted_status"
+    });
+
+    expect(status).toMatchObject({
+      executionId: "exec_quote_persisted_status",
+      status: "FILLED",
+      submittedLegs: [{
+        venue: "TEST",
+        status: "FILLED",
+        fillState: {
+          status: "FILLED",
+          filledSize: "1",
+          averagePrice: 0.51
+        }
+      }]
+    });
+    expect(status?.submittedLegs[0]?.venueOrderId).toBe(submitted.submittedLegs[0]?.venueOrderId);
   });
 
   it("blocks Predict.fun orders below the venue minimum order value", async () => {

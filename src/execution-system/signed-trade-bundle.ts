@@ -63,6 +63,11 @@ export interface SignedTradeExecutionStatus {
   }>;
 }
 
+export interface SignedTradeExecutionStatusRepository {
+  saveExecutionStatus(status: SignedTradeExecutionStatus): Promise<void>;
+  findExecutionStatus(input: { userId: string; executionId: string }): Promise<SignedTradeExecutionStatus | null>;
+}
+
 export interface LiveSubmitVenueReadiness {
   venue: string;
   status: "fresh" | "stale" | "blocked";
@@ -116,7 +121,8 @@ export class SignedTradeBundleService {
     private readonly adapters: ExecutionVenueAdapterRegistry,
     private readonly venueAccounts: SignedTradeBundleVenueAccountProvider,
     private readonly now: () => Date = () => new Date(),
-    private readonly env: NodeJS.ProcessEnv = process.env
+    private readonly env: NodeJS.ProcessEnv = process.env,
+    private readonly statusRepository?: SignedTradeExecutionStatusRepository | undefined
   ) {}
 
   public async prepare(input: { userId: string; quoteId: string }): Promise<PreparedTradeSignatureBundle> {
@@ -194,7 +200,7 @@ export class SignedTradeBundleService {
           dryRun: false,
           submittedLegs
         };
-        this.recordExecutionStatus(input.userId, result);
+        await this.recordExecutionStatus(input.userId, result);
         return result;
       }
     }
@@ -205,12 +211,14 @@ export class SignedTradeBundleService {
       dryRun: input.dryRun === true,
       submittedLegs
     };
-    this.recordExecutionStatus(input.userId, result);
+    await this.recordExecutionStatus(input.userId, result);
     return result;
   }
 
   public async getExecutionStatus(input: { userId: string; executionId: string }): Promise<SignedTradeExecutionStatus | null> {
-    const stored = this.executionStatuses.get(statusKey(input.userId, input.executionId));
+    const stored = this.executionStatuses.get(statusKey(input.userId, input.executionId)) ??
+      await this.statusRepository?.findExecutionStatus(input) ??
+      null;
     if (!stored) {
       return null;
     }
@@ -247,7 +255,7 @@ export class SignedTradeBundleService {
       status: summarizeStoredExecutionStatus(submittedLegs),
       submittedLegs
     };
-    this.executionStatuses.set(statusKey(input.userId, input.executionId), next);
+    await this.saveExecutionStatus(next);
     return next;
   }
 
@@ -566,9 +574,9 @@ export class SignedTradeBundleService {
     };
   }
 
-  private recordExecutionStatus(userId: string, result: SignedTradeBundleSubmitResult): void {
+  private async recordExecutionStatus(userId: string, result: SignedTradeBundleSubmitResult): Promise<void> {
     const now = this.now().toISOString();
-    this.executionStatuses.set(statusKey(userId, result.executionId), {
+    await this.saveExecutionStatus({
       executionId: result.executionId,
       userId,
       status: result.status,
@@ -577,6 +585,11 @@ export class SignedTradeBundleService {
       updatedAt: now,
       submittedLegs: result.submittedLegs
     });
+  }
+
+  private async saveExecutionStatus(status: SignedTradeExecutionStatus): Promise<void> {
+    this.executionStatuses.set(statusKey(status.userId, status.executionId), status);
+    await this.statusRepository?.saveExecutionStatus(status);
   }
 }
 

@@ -7,6 +7,10 @@ import type {
   VerifiedExecutionPosition,
   VerifiedPositionRepository
 } from "../execution-system/executable-routing.js";
+import type {
+  SignedTradeExecutionStatus,
+  SignedTradeExecutionStatusRepository
+} from "../execution-system/signed-trade-bundle.js";
 
 interface QuoteRow {
   quote_id: string;
@@ -32,6 +36,16 @@ interface PositionRow {
   last_settlement_evidence_id: string | null;
   status: VerifiedExecutionPosition["status"];
   metadata: Record<string, unknown>;
+}
+
+interface SignedTradeExecutionStatusRow {
+  execution_id: string;
+  user_id: string;
+  status: SignedTradeExecutionStatus["status"];
+  dry_run: boolean;
+  submitted_at: Date;
+  updated_at: Date;
+  submitted_legs: SignedTradeExecutionStatus["submittedLegs"];
 }
 
 export class PgExecutionQuoteRepository implements ExecutionQuoteRepository {
@@ -174,6 +188,50 @@ export class PgVerifiedPositionRepository implements VerifiedPositionRepository 
   }
 }
 
+export class PgSignedTradeExecutionStatusRepository implements SignedTradeExecutionStatusRepository {
+  public constructor(private readonly pool: Pool) {}
+
+  public async saveExecutionStatus(status: SignedTradeExecutionStatus): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO signed_trade_bundle_executions (
+        execution_id,
+        user_id,
+        status,
+        dry_run,
+        submitted_at,
+        updated_at,
+        submitted_legs
+      ) VALUES ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz, $7::jsonb)
+      ON CONFLICT (execution_id, user_id) DO UPDATE SET
+        status = EXCLUDED.status,
+        dry_run = EXCLUDED.dry_run,
+        submitted_at = LEAST(signed_trade_bundle_executions.submitted_at, EXCLUDED.submitted_at),
+        updated_at = EXCLUDED.updated_at,
+        submitted_legs = EXCLUDED.submitted_legs`,
+      [
+        status.executionId,
+        status.userId,
+        status.status,
+        status.dryRun,
+        status.submittedAt,
+        status.updatedAt,
+        JSON.stringify(status.submittedLegs)
+      ]
+    );
+  }
+
+  public async findExecutionStatus(input: { userId: string; executionId: string }): Promise<SignedTradeExecutionStatus | null> {
+    const result = await this.pool.query<SignedTradeExecutionStatusRow>(
+      `SELECT *
+       FROM signed_trade_bundle_executions
+       WHERE execution_id = $1 AND user_id = $2`,
+      [input.executionId, input.userId]
+    );
+    const row = result.rows[0];
+    return row ? mapSignedTradeExecutionStatusRow(row) : null;
+  }
+}
+
 const mapPositionRow = (row: PositionRow): VerifiedExecutionPosition => ({
   positionId: row.position_id,
   userId: row.user_id,
@@ -187,4 +245,14 @@ const mapPositionRow = (row: PositionRow): VerifiedExecutionPosition => ({
   lastSettlementEvidenceId: row.last_settlement_evidence_id,
   status: row.status,
   metadata: row.metadata
+});
+
+const mapSignedTradeExecutionStatusRow = (row: SignedTradeExecutionStatusRow): SignedTradeExecutionStatus => ({
+  executionId: row.execution_id,
+  userId: row.user_id,
+  status: row.status,
+  dryRun: row.dry_run,
+  submittedAt: row.submitted_at.toISOString(),
+  updatedAt: row.updated_at.toISOString(),
+  submittedLegs: row.submitted_legs
 });
