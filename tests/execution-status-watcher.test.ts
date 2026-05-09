@@ -190,7 +190,7 @@ describe("ExecutionStatusWatcher", () => {
       async fetchFillState() {
         throw new Error("venue unavailable");
       }
-    } as TestExecutionAdapter;
+    } as unknown as TestExecutionAdapter;
     const watcher = new ExecutionStatusWatcher(
       repository,
       service(positionStore, failingAdapter),

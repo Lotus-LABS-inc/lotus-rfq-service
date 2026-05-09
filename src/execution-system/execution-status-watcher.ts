@@ -23,6 +23,12 @@ export interface ExecutionUpdatePublisher {
     positions: VerifiedExecutionPosition[];
   }): Promise<void>;
   publishReadiness?(readiness: LiveSubmitReadinessSnapshot, userId: string): Promise<void>;
+  publishPortfolio?(input: {
+    userId: string;
+    marketId: string;
+    outcomeId: string;
+    positions: VerifiedExecutionPosition[];
+  }): Promise<void>;
 }
 
 export interface ExecutionStatusWatcherLogger {
@@ -160,6 +166,12 @@ export class ExecutionStatusWatcher {
         outcomeId: next.route.outcomeId,
         positions
       });
+      await this.publisher.publishPortfolio?.({
+        userId: next.userId,
+        marketId: next.route.marketId,
+        outcomeId: next.route.outcomeId,
+        positions
+      });
       if (this.publisher.publishReadiness) {
         try {
           const readiness = await this.signedTradeBundleService.getLiveReadiness({
@@ -177,6 +189,8 @@ export class ExecutionStatusWatcher {
 
 export const executionUserTopic = (userId: string): string => `execution:user:${safeTopicPart(userId)}`;
 export const executionQuoteTopic = (executionId: string): string => `execution:quote:${safeTopicPart(executionId)}`;
+export const executionPortfolioTopic = (userId: string): string => `execution:portfolio:${safeTopicPart(userId)}`;
+export const notificationUserTopic = (userId: string): string => `notifications:user:${safeTopicPart(userId)}`;
 export const executionPositionsTopic = (userId: string, marketId: string, outcomeId: string): string =>
   `execution:positions:${safeTopicPart(userId)}:${topicHash(marketId)}:${topicHash(outcomeId)}`;
 

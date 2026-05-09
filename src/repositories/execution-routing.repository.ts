@@ -51,6 +51,27 @@ interface SignedTradeExecutionStatusRow {
   submitted_legs: SignedTradeExecutionStatus["submittedLegs"];
 }
 
+export interface ListUserVerifiedPositionsInput {
+  userId: string;
+  marketId?: string | undefined;
+  outcomeId?: string | undefined;
+  venue?: string | undefined;
+  limit?: number | undefined;
+}
+
+export interface ListUserExecutionStatusesInput {
+  userId: string;
+  status?: SignedTradeExecutionStatus["status"] | undefined;
+  limit: number;
+  cursor?: string | undefined;
+}
+
+export interface ListOpenUserExecutionStatusesInput {
+  userId: string;
+  limit: number;
+  cursor?: string | undefined;
+}
+
 export class PgExecutionQuoteRepository implements ExecutionQuoteRepository {
   public constructor(private readonly pool: Pool) {}
 
@@ -119,6 +140,32 @@ export class PgVerifiedPositionRepository implements VerifiedPositionRepository 
          AND outcome_id = $3
          ${venueClause}
        ORDER BY updated_at DESC`,
+      values
+    );
+    return result.rows.map(mapPositionRow);
+  }
+
+  public async listUserVerifiedPositions(input: ListUserVerifiedPositionsInput): Promise<VerifiedExecutionPosition[]> {
+    const values: unknown[] = [input.userId];
+    const clauses = ["user_id = $1"];
+    if (input.marketId) {
+      values.push(input.marketId);
+      clauses.push(`market_id = $${values.length}`);
+    }
+    if (input.outcomeId) {
+      values.push(input.outcomeId);
+      clauses.push(`outcome_id = $${values.length}`);
+    }
+    if (input.venue) {
+      values.push(input.venue.toUpperCase());
+      clauses.push(`venue = $${values.length}`);
+    }
+    values.push(Math.min(Math.max(input.limit ?? 100, 1), 500));
+    const result = await this.pool.query<PositionRow>(
+      `SELECT * FROM user_execution_positions
+       WHERE ${clauses.join(" AND ")}
+       ORDER BY updated_at DESC
+       LIMIT $${values.length}`,
       values
     );
     return result.rows.map(mapPositionRow);
@@ -258,6 +305,52 @@ export class PgSignedTradeExecutionStatusRepository implements SignedTradeExecut
        ORDER BY updated_at DESC
        LIMIT $1`,
       [input.limit, input.activeWindowSeconds]
+    );
+    return result.rows.map(mapSignedTradeExecutionStatusRow);
+  }
+
+  public async listExecutionStatusesForUser(input: ListUserExecutionStatusesInput): Promise<SignedTradeExecutionStatus[]> {
+    const values: unknown[] = [input.userId];
+    const clauses = ["user_id = $1"];
+    if (input.status) {
+      values.push(input.status);
+      clauses.push(`status = $${values.length}`);
+    }
+    if (input.cursor) {
+      values.push(input.cursor);
+      clauses.push(`updated_at < $${values.length}::timestamptz`);
+    }
+    values.push(Math.min(Math.max(input.limit, 1), 100));
+    const result = await this.pool.query<SignedTradeExecutionStatusRow>(
+      `SELECT *
+       FROM signed_trade_bundle_executions
+       WHERE ${clauses.join(" AND ")}
+       ORDER BY updated_at DESC
+       LIMIT $${values.length}`,
+      values
+    );
+    return result.rows.map(mapSignedTradeExecutionStatusRow);
+  }
+
+  public async listOpenExecutionStatusesForUser(input: ListOpenUserExecutionStatusesInput): Promise<SignedTradeExecutionStatus[]> {
+    const values: unknown[] = [input.userId];
+    const clauses = [
+      "user_id = $1",
+      "dry_run = false",
+      "status IN ('SUBMITTED', 'PARTIAL')"
+    ];
+    if (input.cursor) {
+      values.push(input.cursor);
+      clauses.push(`updated_at < $${values.length}::timestamptz`);
+    }
+    values.push(Math.min(Math.max(input.limit, 1), 100));
+    const result = await this.pool.query<SignedTradeExecutionStatusRow>(
+      `SELECT *
+       FROM signed_trade_bundle_executions
+       WHERE ${clauses.join(" AND ")}
+       ORDER BY updated_at DESC
+       LIMIT $${values.length}`,
+      values
     );
     return result.rows.map(mapSignedTradeExecutionStatusRow);
   }

@@ -66,6 +66,7 @@ const createRuntimeEnv = (overrides: Partial<ReturnType<typeof loadEnv>> = {}): 
   CANONICAL_SERVICE_BASE_URL: "http://localhost:4001",
   DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_rfq",
   JWT_SECRET: "test-secret-at-least-thirty-two-chars",
+  USER_JWT_TTL_SECONDS: 86400,
   ADMIN_JWT_TTL_SECONDS: 3600,
   ADMIN_MAGIC_LINK_TTL_SECONDS: 900,
   ADMIN_LOGIN_LINK_RATE_LIMIT_WINDOW_SECONDS: 900,
@@ -103,7 +104,7 @@ const createRuntimeEnv = (overrides: Partial<ReturnType<typeof loadEnv>> = {}): 
   LATENCY_WEIGHT: 0.03,
   FAILURE_WEIGHT: 0.08,
   ...overrides
-});
+}) as ReturnType<typeof loadEnv>;
 
 describe("infrastructure scaffold", () => {
   it("GET /health returns 200 and expected payload", async () => {
@@ -209,45 +210,11 @@ describe("bootstrap lifecycle", () => {
     const runtime = await startService({
       loadEnv: () => {
         callOrder.push("loadEnv");
-        return {
+        return createRuntimeEnv({
           NODE_ENV: "test",
-          HOST: "127.0.0.1",
           PORT: 3001,
-          LOG_LEVEL: "info",
-          REDIS_URL: "redis://localhost:6379",
-          CANONICAL_SERVICE_BASE_URL: "http://localhost:4001",
-          DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_rfq",
-          JWT_SECRET: "test-secret-at-least-thirty-two-chars",
-          DEV_SIMULATION_PREVIEW_ENABLED: false,
-          COMBO_RFQ_ENABLED: false,
-          SOR_ENABLED: false,
-          SOR_CANARY_SHADOW_ENABLED: false,
-          SOR_CANARY_PERCENT: 0,
-          INTERNAL_CROSS_ENABLED: false,
-          INTERNAL_CROSS_SHADOW_ENABLED: false,
-          INTERNAL_CROSS_SHADOW_PERCENT: 0,
-          INTERNAL_NETTING_ENABLED: false,
-          INTERNAL_NETTING_SHADOW_ENABLED: false,
-          INTERNAL_NETTING_SHADOW_PERCENT: 0,
-          INTERNAL_NETTING_CANARY_ENABLED: false,
-          INTERNAL_NETTING_CANARY_PERCENT: 0,
-          INTERNAL_CLEARING_ENABLED: false,
-          INTERNAL_CLEARING_SHADOW_ENABLED: false,
-          INTERNAL_CLEARING_SHADOW_PERCENT: 0,
-          INTERNAL_CLEARING_CANARY_ENABLED: false,
-          INTERNAL_CLEARING_CANARY_PERCENT: 0,
-          RESOLUTION_RISK_ENABLED: false,
-          RESOLUTION_RISK_SHADOW_ENABLED: false,
-          RESOLUTION_RISK_SHADOW_PERCENT: 0,
-          PHASE3A_GUARDRAIL_SHADOW_ENABLED: false,
-          PHASE3A_GUARDRAIL_SHADOW_PERCENT: 0,
-          SOR_RESOLUTION_RISK_PENALTY: 0.05,
-          SOR_ACCEPT_AON_AWAIT: true,
-          SOR_ACCEPT_NON_AON_BACKGROUND: true,
-          RELIABILITY_WEIGHT: 0.05,
-          LATENCY_WEIGHT: 0.03,
-          FAILURE_WEIGHT: 0.08
-        };
+          DEV_SIMULATION_PREVIEW_ENABLED: false
+        });
       },
       createLogger: () => {
         callOrder.push("createLogger");
@@ -303,44 +270,10 @@ describe("bootstrap lifecycle", () => {
     } as unknown as FastifyInstance;
 
     const runtime = await startService({
-      loadEnv: () => ({
+      loadEnv: () => createRuntimeEnv({
         NODE_ENV: "test",
-        HOST: "127.0.0.1",
         PORT: 3002,
-        LOG_LEVEL: "info",
-        REDIS_URL: "redis://localhost:6379",
-        CANONICAL_SERVICE_BASE_URL: "http://localhost:4001",
-        DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_rfq",
-        JWT_SECRET: "test-secret-at-least-thirty-two-chars",
-        DEV_SIMULATION_PREVIEW_ENABLED: false,
-        COMBO_RFQ_ENABLED: false,
-        SOR_ENABLED: false,
-        SOR_CANARY_SHADOW_ENABLED: false,
-        SOR_CANARY_PERCENT: 0,
-        INTERNAL_CROSS_ENABLED: false,
-        INTERNAL_CROSS_SHADOW_ENABLED: false,
-        INTERNAL_CROSS_SHADOW_PERCENT: 0,
-        INTERNAL_NETTING_ENABLED: false,
-        INTERNAL_NETTING_SHADOW_ENABLED: false,
-        INTERNAL_NETTING_SHADOW_PERCENT: 0,
-        INTERNAL_NETTING_CANARY_ENABLED: false,
-        INTERNAL_NETTING_CANARY_PERCENT: 0,
-        INTERNAL_CLEARING_ENABLED: false,
-        INTERNAL_CLEARING_SHADOW_ENABLED: false,
-        INTERNAL_CLEARING_SHADOW_PERCENT: 0,
-        INTERNAL_CLEARING_CANARY_ENABLED: false,
-        INTERNAL_CLEARING_CANARY_PERCENT: 0,
-        RESOLUTION_RISK_ENABLED: false,
-        RESOLUTION_RISK_SHADOW_ENABLED: false,
-        RESOLUTION_RISK_SHADOW_PERCENT: 0,
-        PHASE3A_GUARDRAIL_SHADOW_ENABLED: false,
-        PHASE3A_GUARDRAIL_SHADOW_PERCENT: 0,
-        SOR_RESOLUTION_RISK_PENALTY: 0.05,
-        SOR_ACCEPT_AON_AWAIT: true,
-        SOR_ACCEPT_NON_AON_BACKGROUND: true,
-        RELIABILITY_WEIGHT: 0.05,
-        LATENCY_WEIGHT: 0.03,
-        FAILURE_WEIGHT: 0.08
+        DEV_SIMULATION_PREVIEW_ENABLED: false
       }),
       createLogger: () => createTestLogger(),
       createRedisClient: () => ({} as unknown as RedisClient),
@@ -371,44 +304,10 @@ describe("bootstrap lifecycle", () => {
     } as unknown as FastifyInstance;
 
     const runtime = await startService({
-      loadEnv: () => ({
+      loadEnv: () => createRuntimeEnv({
         NODE_ENV: "development",
-        HOST: "127.0.0.1",
         PORT: 3003,
-        LOG_LEVEL: "info",
-        REDIS_URL: "redis://localhost:6379",
-        CANONICAL_SERVICE_BASE_URL: "http://localhost:4001",
-        DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_rfq",
-        JWT_SECRET: "test-secret-at-least-thirty-two-chars",
-        DEV_SIMULATION_PREVIEW_ENABLED: true,
-        COMBO_RFQ_ENABLED: false,
-        SOR_ENABLED: false,
-        SOR_CANARY_SHADOW_ENABLED: false,
-        SOR_CANARY_PERCENT: 0,
-        INTERNAL_CROSS_ENABLED: false,
-        INTERNAL_CROSS_SHADOW_ENABLED: false,
-        INTERNAL_CROSS_SHADOW_PERCENT: 0,
-        INTERNAL_NETTING_ENABLED: false,
-        INTERNAL_NETTING_SHADOW_ENABLED: false,
-        INTERNAL_NETTING_SHADOW_PERCENT: 0,
-        INTERNAL_NETTING_CANARY_ENABLED: false,
-        INTERNAL_NETTING_CANARY_PERCENT: 0,
-        INTERNAL_CLEARING_ENABLED: false,
-        INTERNAL_CLEARING_SHADOW_ENABLED: false,
-        INTERNAL_CLEARING_SHADOW_PERCENT: 0,
-        INTERNAL_CLEARING_CANARY_ENABLED: false,
-        INTERNAL_CLEARING_CANARY_PERCENT: 0,
-        RESOLUTION_RISK_ENABLED: false,
-        RESOLUTION_RISK_SHADOW_ENABLED: false,
-        RESOLUTION_RISK_SHADOW_PERCENT: 0,
-        PHASE3A_GUARDRAIL_SHADOW_ENABLED: false,
-        PHASE3A_GUARDRAIL_SHADOW_PERCENT: 0,
-        SOR_RESOLUTION_RISK_PENALTY: 0.05,
-        SOR_ACCEPT_AON_AWAIT: true,
-        SOR_ACCEPT_NON_AON_BACKGROUND: true,
-        RELIABILITY_WEIGHT: 0.05,
-        LATENCY_WEIGHT: 0.03,
-        FAILURE_WEIGHT: 0.08
+        DEV_SIMULATION_PREVIEW_ENABLED: true
       }),
       createLogger: () => createTestLogger(),
       createRedisClient: () => ({} as unknown as RedisClient),

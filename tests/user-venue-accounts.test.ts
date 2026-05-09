@@ -351,7 +351,7 @@ describe("user venue account service", () => {
       {
         configured: () => true,
         deriveOrCreateDepositWallet: async (input) => {
-          calls.push({ allowDeploy: input.allowDeploy });
+          calls.push(input.allowDeploy === undefined ? {} : { allowDeploy: input.allowDeploy });
           return {
             walletAddress: "0x5555555555555555555555555555555555555555",
             deploymentStatus: input.allowDeploy === false ? "DERIVED_NOT_DEPLOYED" : "DEPLOY_SUBMITTED",

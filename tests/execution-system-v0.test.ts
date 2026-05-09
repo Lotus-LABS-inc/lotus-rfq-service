@@ -346,7 +346,7 @@ describe("Venue adapter, settlement, ghost-fill, fallback, accounting, and fees"
       canonicalTopicKey: "CRYPTO|ATH_BY_DATE|BTC",
       candidateId: "2026-05-31",
       side: "buy",
-      fees: { totalFees: 0 },
+      fees: zeroFees(),
       legs: [
         {
           executionLegId: "leg-1",

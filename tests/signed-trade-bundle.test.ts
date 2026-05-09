@@ -167,7 +167,7 @@ describe("SignedTradeBundleService", () => {
     delete predictTypes.EIP712Domain;
     const predictSignature = await wallet._signTypedData(
       predictTypedData.domain,
-      predictTypes,
+      predictTypes as never,
       predictTypedData.message
     );
     const limitlessTypedData = limitlessRequest.typedData as {
@@ -177,7 +177,7 @@ describe("SignedTradeBundleService", () => {
     };
     const limitlessSignature = await wallet._signTypedData(
       limitlessTypedData.domain,
-      limitlessTypedData.types,
+      limitlessTypedData.types as never,
       limitlessTypedData.message
     );
 
@@ -525,7 +525,7 @@ describe("SignedTradeBundleService", () => {
     delete predictTypes.EIP712Domain;
     const predictSignature = await wallet._signTypedData(
       predictTypedData.domain,
-      predictTypes,
+      predictTypes as never,
       predictTypedData.message
     );
     const wrongWallet = Wallet.createRandom();
@@ -534,7 +534,7 @@ describe("SignedTradeBundleService", () => {
       types: Record<string, unknown>;
       message: Record<string, unknown>;
     };
-    const signature = await wrongWallet._signTypedData(typedData.domain, typedData.types, typedData.message);
+    const signature = await wrongWallet._signTypedData(typedData.domain, typedData.types as never, typedData.message);
 
     await expect(sut.submit({
       userId: "user-1",

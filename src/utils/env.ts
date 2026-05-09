@@ -19,6 +19,7 @@ const envSchema = z
     TEST_DATABASE_URL: z.string().url().optional(),
     SUPABASE_DB_URL: z.string().url().optional(),
     JWT_SECRET: z.string().min(32),
+    USER_JWT_TTL_SECONDS: z.coerce.number().int().min(300).max(2592000).default(86400),
     ADMIN_CORS_ORIGINS: z.string().optional(),
     ADMIN_ALLOWED_EMAIL_DOMAINS: z.string().optional(),
     ADMIN_AUTH_KEY_PEPPER: z.string().optional(),

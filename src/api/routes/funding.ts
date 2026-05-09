@@ -148,6 +148,19 @@ export const registerFundingRoutes = async (
     }
   });
 
+  app.get("/funding/intents/:id/receipt", { preHandler: authMiddleware }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const result = await handlers.getIntent(request.user.userId, id);
+      return reply.status(200).send({
+        generatedAt: new Date().toISOString(),
+        receipt: toFundingReceipt(result)
+      });
+    } catch (error) {
+      return handleFundingError(error, reply);
+    }
+  });
+
   app.get("/funding/venues/capabilities", { preHandler: authMiddleware }, async (_request, reply) => {
     const capabilities = await handlers.listVenueCapabilities();
     return reply.status(200).send({ capabilities });
@@ -303,6 +316,19 @@ export const registerFundingRoutes = async (
       return handleFundingError(error, reply);
     }
   });
+
+  app.get("/funding/withdrawals/:id/receipt", { preHandler: authMiddleware }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const result = await handlers.getWithdrawalIntent(request.user.userId, id);
+      return reply.status(200).send({
+        generatedAt: new Date().toISOString(),
+        receipt: toWithdrawalReceipt(result)
+      });
+    } catch (error) {
+      return handleFundingError(error, reply);
+    }
+  });
 };
 
 const toFundingResponse = (view: FundingIntentView): Record<string, unknown> => ({
@@ -335,6 +361,105 @@ const toWithdrawalResponse = (view: WithdrawalIntentView): Record<string, unknow
   sources: view.sources,
   routeLegs: view.routeLegs,
   reconciliations: view.reconciliations,
+  userSafeMessage: view.userSafeMessage
+});
+
+const toFundingReceipt = (view: FundingIntentView): Record<string, unknown> => ({
+  fundingIntentId: view.intent.fundingIntentId,
+  currentStatus: view.intent.status,
+  sourceChain: view.intent.sourceChain,
+  sourceToken: view.intent.sourceToken,
+  sourceAmount: view.intent.sourceAmount,
+  sourceWalletAddress: view.intent.sourceWalletAddress,
+  totalEstimatedFees: view.intent.totalEstimatedFees,
+  totalEstimatedTimeSeconds: view.intent.totalEstimatedTimeSeconds,
+  createdAt: view.intent.createdAt,
+  updatedAt: view.intent.updatedAt,
+  targets: view.targets.map((target) => ({
+    venue: target.targetVenue,
+    token: target.targetToken,
+    amount: target.targetAmount,
+    chain: target.targetChain,
+    status: target.status
+  })),
+  routeLegs: view.routeLegs.map((leg) => ({
+    routeLegId: leg.routeLegId,
+    provider: leg.routeProvider,
+    sourceChain: leg.sourceChain,
+    sourceToken: leg.sourceToken,
+    sourceAmount: leg.sourceAmount,
+    destinationChain: leg.destinationChain,
+    destinationToken: leg.destinationToken,
+    destinationAmountEstimate: leg.destinationAmountEstimate,
+    txHashes: leg.txHashes,
+    status: leg.status,
+    errorReason: leg.errorReason,
+    createdAt: leg.createdAt,
+    updatedAt: leg.updatedAt
+  })),
+  reconciliations: view.reconciliations.map((record) => ({
+    reconciliationId: record.reconciliationId,
+    routeLegId: record.routeLegId,
+    targetVenue: record.targetVenue,
+    destinationTxHash: record.destinationTxHash,
+    destinationReceived: record.destinationReceived,
+    venueCreditConfirmed: record.venueCreditConfirmed,
+    readyToTrade: record.readyToTrade,
+    checkedAt: record.checkedAt,
+    notes: record.notes
+  })),
+  userSafeMessage: view.userSafeMessage
+});
+
+const toWithdrawalReceipt = (view: WithdrawalIntentView): Record<string, unknown> => ({
+  withdrawalIntentId: view.intent.withdrawalIntentId,
+  currentStatus: view.intent.status,
+  token: view.intent.token,
+  amount: view.intent.amount,
+  destinationChain: view.intent.destinationChain,
+  destinationWalletAddress: view.intent.destinationWalletAddress,
+  totalEstimatedFees: view.intent.totalEstimatedFees,
+  totalEstimatedTimeSeconds: view.intent.totalEstimatedTimeSeconds,
+  createdAt: view.intent.createdAt,
+  updatedAt: view.intent.updatedAt,
+  sources: view.sources.map((source) => ({
+    withdrawalSourceId: source.withdrawalSourceId,
+    sourceVenue: source.sourceVenue,
+    sourceToken: source.sourceToken,
+    sourceAmount: source.sourceAmount,
+    sourcePercentage: source.sourcePercentage,
+    status: source.status,
+    createdAt: source.createdAt,
+    updatedAt: source.updatedAt
+  })),
+  routeLegs: view.routeLegs.map((leg) => ({
+    withdrawalRouteLegId: leg.withdrawalRouteLegId,
+    withdrawalSourceId: leg.withdrawalSourceId,
+    sourceVenue: leg.sourceVenue,
+    sourceToken: leg.sourceToken,
+    sourceAmount: leg.sourceAmount,
+    destinationChain: leg.destinationChain,
+    destinationWalletAddress: leg.destinationWalletAddress,
+    destinationAmountEstimate: leg.destinationAmountEstimate,
+    txHashes: leg.txHashes,
+    venueReleaseStatus: leg.venueReleaseStatus,
+    destinationStatus: leg.destinationStatus,
+    status: leg.status,
+    errorReason: leg.errorReason,
+    createdAt: leg.createdAt,
+    updatedAt: leg.updatedAt
+  })),
+  reconciliations: view.reconciliations.map((record) => ({
+    withdrawalReconciliationId: record.withdrawalReconciliationId,
+    withdrawalRouteLegId: record.withdrawalRouteLegId,
+    sourceVenue: record.sourceVenue,
+    withdrawalTxHash: record.withdrawalTxHash,
+    venueReleased: record.venueReleased,
+    destinationReceived: record.destinationReceived,
+    completed: record.completed,
+    checkedAt: record.checkedAt,
+    notes: record.notes
+  })),
   userSafeMessage: view.userSafeMessage
 });
 

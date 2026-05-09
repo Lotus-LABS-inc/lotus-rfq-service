@@ -97,6 +97,9 @@ const signedPayloadWithDataOverrides = (dataOverrides: Record<string, unknown>):
   }
 });
 
+const basePredictOrder = (): Record<string, unknown> =>
+  (signedPayload().data as { order: Record<string, unknown> }).order;
+
 const attachPredictRelayPayload = (
   prepared: Awaited<ReturnType<PredictFunExecutionAdapter["prepareOrder"]>>,
   overrides: Partial<PredictOauthCreateOrderPayload> = {}
@@ -423,7 +426,7 @@ describe("user-signed backend relay execution adapters", () => {
     await expect(adapter.submitOrder(attachPredictRelayPayload(prepared, signedPayloadWithDataOverrides({
       pricePerShare: "389000000000000000",
       order: {
-        ...signedPayload().data.order,
+        ...basePredictOrder(),
         tokenId: "venue-outcome-id",
         makerAmount: "1002550000000000000",
         takerAmount: "2577300000000000000"
@@ -455,7 +458,7 @@ describe("user-signed backend relay execution adapters", () => {
       pricePerShare: "389000000000000000",
       strategy: "MARKET",
       order: {
-        ...signedPayload().data.order,
+        ...basePredictOrder(),
         tokenId: "venue-outcome-id",
         makerAmount: "1002550000000000000",
         takerAmount: "2577300000000000000"

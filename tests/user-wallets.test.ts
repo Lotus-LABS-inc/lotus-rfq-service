@@ -154,15 +154,16 @@ describe("user wallet service", () => {
       defaultEvmWalletEnabled: true
     }, new MockTurnkeyProvisioner());
     const [solana] = await service.ensureDefaultWallets("user-1");
+    const solanaWallet = solana!;
     await expect(service.resolveFundingSourceWallet({
       userId: "user-2",
       sourceChain: "SOLANA",
-      sourceWalletId: solana?.walletId
+      sourceWalletId: solanaWallet.walletId
     })).rejects.toMatchObject({ code: "USER_WALLET_FORBIDDEN" });
     await expect(service.resolveFundingSourceWallet({
       userId: "user-1",
       sourceChain: "SOLANA"
-    })).resolves.toMatchObject({ address: solana?.address });
+    })).resolves.toMatchObject({ address: solanaWallet.address });
   });
 
   it("resolves user-specific venue target wallets without exposing provider internals", async () => {

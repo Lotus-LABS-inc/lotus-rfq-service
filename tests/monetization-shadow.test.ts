@@ -215,7 +215,7 @@ describe("monetization fee math", () => {
     const summary = fees.realized({ request: request({ expectedPrice: 2 }), realizedPrice: 1 });
     expect(summary.executionFee).toBe(0);
     expect(summary.totalLotusFee).toBe(7.5);
-    expect(summary.totalLotusFee).toBeLessThanOrEqual(summary.notionalCap);
+    expect(summary.totalLotusFee).toBeLessThanOrEqual(summary.notionalCap ?? Number.POSITIVE_INFINITY);
   });
 });
 

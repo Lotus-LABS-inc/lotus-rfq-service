@@ -34,6 +34,8 @@ const market: MarketCatalogMarket = {
     hasSingleVenue: true,
     hasCrossVenue: true
   },
+  imageUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/republican-nominee.png",
+  iconUrl: null,
   venueMarkets: [{
     canonicalMarketId: "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
     canonicalMarketTitle: "Republican Presidential Nominee 2028",
@@ -41,6 +43,8 @@ const market: MarketCatalogMarket = {
     venueMarketProfileId: "vmp_poly",
     venueMarketId: "poly-1",
     venueTitle: "Republican nominee?",
+    imageUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/republican-nominee.png",
+    iconUrl: null,
     marketClass: "CATEGORICAL",
     outcomes: [{ id: "jd-vance", label: "JD Vance" }, { id: "donald-trump", label: "Donald Trump" }],
     network: "POLYGON",
@@ -68,6 +72,8 @@ const marketEvent: MarketCatalogEvent = {
     hasSingleVenue: true,
     hasCrossVenue: true
   },
+  imageUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/republican-nominee.png",
+  iconUrl: null,
   updatedAt: "2026-05-03T00:00:00.000Z"
 };
 
@@ -115,6 +121,8 @@ describe("market catalog routes", () => {
         title: "Republican Presidential Nominee 2028",
         category: "POLITICS",
         venues: ["LIMITLESS", "POLYMARKET", "PREDICT_FUN"],
+        imageUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/republican-nominee.png",
+        iconUrl: null,
         routeability: { hasCrossVenue: true }
       }]
     });
@@ -169,6 +177,7 @@ describe("market catalog routes", () => {
     });
     expect(detail.statusCode).toBe(200);
     expect(detail.json().market.title).toBe("Republican Presidential Nominee 2028");
+    expect(detail.json().market.venueMarkets[0].imageUrl).toBe("https://polymarket-upload.s3.us-east-2.amazonaws.com/republican-nominee.png");
 
     const outcomes = await app.inject({
       method: "GET",
@@ -358,11 +367,89 @@ describe("market catalog routes", () => {
     expect(queries[1]).toContain("fma.metadata->>'source' = 'frontend-curated-catalog'");
   });
 
+  it("extracts only approved HTTPS media URLs from venue metadata", async () => {
+    const queries: unknown[] = [];
+    const pool = {
+      query: async (_sql: string, _params?: unknown[]) => {
+        queries.push({ sql: _sql, params: _params });
+        if (queries.length === 1) {
+          return {
+            rows: [{
+              canonical_event_id: "11111111-1111-5111-8111-111111111115",
+              proposition_key: "POLY|MEDIA",
+              title: "Polymarket Media Market",
+              normalized_proposition_text: "polymarket media market",
+              canonical_category: "SPORTS",
+              market_class: "BINARY",
+              starts_at: "2026-05-03T00:00:00.000Z",
+              expires_at: "2028-05-10T00:00:00.000Z",
+              resolves_at: null,
+              updated_at: "2026-05-03T00:00:00.000Z",
+              event_metadata: {},
+              frontend_display_title: null,
+              frontend_sort_priority: 1000,
+              canonical_market_ids: ["POLY|MEDIA"],
+              venues: ["POLYMARKET"],
+              venue_market_count: "2"
+            }]
+          };
+        }
+        return {
+          rows: [
+            {
+              canonical_event_id: "11111111-1111-5111-8111-111111111115",
+              canonical_market_id: "POLY|MEDIA",
+              canonical_market_title: "Polymarket Media Market",
+              venue_market_profile_id: "vmp_poly_media",
+              venue: "POLYMARKET",
+              venue_market_id: "poly-media",
+              venue_title: "Polymarket Media Market",
+              market_class: "BINARY",
+              outcomes: [{ id: "YES", label: "Yes" }],
+              network: "POLYGON",
+              chain: "POLYGON",
+              expires_at: "2028-05-10T00:00:00.000Z",
+              resolves_at: null,
+              normalized_payload: { image: "https://polymarket-upload.s3.us-east-2.amazonaws.com/media.png#fragment" },
+              raw_source_payload: { icon: "javascript:alert(1)" }
+            },
+            {
+              canonical_event_id: "11111111-1111-5111-8111-111111111115",
+              canonical_market_id: "POLY|MEDIA",
+              canonical_market_title: "Polymarket Media Market",
+              venue_market_profile_id: "vmp_bad_media",
+              venue: "POLYMARKET",
+              venue_market_id: "bad-media",
+              venue_title: "Bad Media Market",
+              market_class: "BINARY",
+              outcomes: [{ id: "NO", label: "No" }],
+              network: "POLYGON",
+              chain: "POLYGON",
+              expires_at: "2028-05-10T00:00:00.000Z",
+              resolves_at: null,
+              normalized_payload: { imageUrl: "http://polymarket-upload.s3.us-east-2.amazonaws.com/insecure.png" },
+              raw_source_payload: { iconUrl: "https://not-approved.example.com/icon.png" }
+            }
+          ]
+        };
+      }
+    };
+
+    const repository = new PgMarketCatalogRepository(pool as never);
+    const [mediaMarket] = await repository.listMarkets({ limit: 1 });
+
+    expect(mediaMarket?.imageUrl).toBe("https://polymarket-upload.s3.us-east-2.amazonaws.com/media.png");
+    expect(mediaMarket?.iconUrl).toBeNull();
+    expect(mediaMarket?.venueMarkets[0]?.imageUrl).toBe("https://polymarket-upload.s3.us-east-2.amazonaws.com/media.png");
+    expect(mediaMarket?.venueMarkets[0]?.iconUrl).toBeNull();
+    expect(mediaMarket?.venueMarkets[1]?.imageUrl).toBeNull();
+  });
+
   it("resolves shared-core quote mappings when frontend sends a venue-neutral canonical market id", async () => {
     const queries: Array<{ sql: string; params?: unknown[] }> = [];
     const pool = {
       query: async (sql: string, params?: unknown[]) => {
-        queries.push({ sql, params });
+        queries.push(params ? { sql, params } : { sql });
         return {
           rows: [{
             venue: "POLYMARKET",

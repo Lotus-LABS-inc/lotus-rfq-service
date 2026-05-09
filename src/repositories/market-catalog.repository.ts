@@ -21,6 +21,8 @@ export interface MarketCatalogVenueMarket {
   venueMarketProfileId: string;
   venueMarketId: string;
   venueTitle: string;
+  imageUrl: string | null;
+  iconUrl: string | null;
   marketClass: string;
   outcomes: Array<{ id: string; label: string }>;
   network: string | null;
@@ -50,6 +52,8 @@ export interface MarketCatalogMarket {
     hasSingleVenue: boolean;
     hasCrossVenue: boolean;
   };
+  imageUrl: string | null;
+  iconUrl: string | null;
   venueMarkets: MarketCatalogVenueMarket[];
   updatedAt: string;
 }
@@ -68,6 +72,8 @@ export interface MarketCatalogEvent {
   venueMarketCount: number;
   outcomeCount: number;
   routeability: MarketCatalogMarket["routeability"];
+  imageUrl: string | null;
+  iconUrl: string | null;
   updatedAt: string;
 }
 
@@ -104,6 +110,8 @@ interface VenueMarketRow {
   chain: string | null;
   expires_at: string | null;
   resolves_at: string | null;
+  normalized_payload: unknown;
+  raw_source_payload: unknown;
 }
 
 interface CategoryRow {
@@ -306,7 +314,9 @@ export class MarketCatalogRepository {
           vmp.network,
           vmp.chain,
           vmp.expires_at::text,
-          vmp.resolves_at::text
+          vmp.resolves_at::text,
+          vmp.normalized_payload,
+          vmp.raw_source_payload
          FROM canonical_events ce
          JOIN venue_market_profiles vmp
            ON vmp.canonical_event_id = ce.id
@@ -413,6 +423,7 @@ const toMarket = (row: MarketRow, venueRows: VenueMarketRow[]): MarketCatalogMar
   const venueMarkets = venueRows.map(toVenueMarket);
   const outcomeLabels = new Set(venueMarkets.flatMap((market) => market.outcomes.map((outcome) => outcome.label)));
   const eventGroup = deriveEventGroup(row);
+  const media = chooseMarketMedia(venueMarkets);
   return {
     eventId: eventGroup.eventId,
     eventTitle: eventGroup.title,
@@ -434,6 +445,8 @@ const toMarket = (row: MarketRow, venueRows: VenueMarketRow[]): MarketCatalogMar
       hasSingleVenue: venues.length > 0,
       hasCrossVenue: venues.length > 1
     },
+    imageUrl: media.imageUrl,
+    iconUrl: media.iconUrl,
     venueMarkets,
     updatedAt: row.updated_at
   };
@@ -455,6 +468,7 @@ const groupMarketsIntoEvents = (markets: MarketCatalogMarket[]): MarketCatalogEv
     const latestUpdatedAt = groupedMarkets
       .map((market) => market.updatedAt)
       .sort((left, right) => right.localeCompare(left))[0] ?? firstMarket!.updatedAt;
+    const media = chooseMarketMedia(groupedMarkets);
     return {
       eventId,
       title: firstMarket!.eventTitle ?? firstMarket!.title,
@@ -472,6 +486,8 @@ const groupMarketsIntoEvents = (markets: MarketCatalogMarket[]): MarketCatalogEv
         hasSingleVenue: groupedMarkets.some((market) => market.routeability.hasSingleVenue),
         hasCrossVenue: groupedMarkets.some((market) => market.routeability.hasCrossVenue)
       },
+      imageUrl: media.imageUrl,
+      iconUrl: media.iconUrl,
       updatedAt: latestUpdatedAt
     };
   });
@@ -610,6 +626,8 @@ const toVenueMarket = (row: VenueMarketRow): MarketCatalogVenueMarket => ({
   venueMarketProfileId: row.venue_market_profile_id,
   venueMarketId: row.venue_market_id,
   venueTitle: row.venue_title,
+  imageUrl: extractSanitizedMediaUrl(row.normalized_payload, row.raw_source_payload, ["imageUrl", "image_url", "image", "twitterCardImage", "thumbnailUrl", "thumbnail", "banner"]),
+  iconUrl: extractSanitizedMediaUrl(row.normalized_payload, row.raw_source_payload, ["iconUrl", "icon_url", "icon", "logoUrl", "logo"]),
   marketClass: row.market_class,
   outcomes: normalizeOutcomes(row.outcomes),
   network: row.network,
@@ -617,6 +635,91 @@ const toVenueMarket = (row: VenueMarketRow): MarketCatalogVenueMarket => ({
   expiresAt: row.expires_at,
   resolvesAt: row.resolves_at
 });
+
+const chooseMarketMedia = (
+  items: Array<{ imageUrl: string | null; iconUrl: string | null }>
+): { imageUrl: string | null; iconUrl: string | null } => ({
+  imageUrl: items.find((item) => item.imageUrl !== null)?.imageUrl ?? null,
+  iconUrl: items.find((item) => item.iconUrl !== null)?.iconUrl ?? null
+});
+
+const MEDIA_HOST_ALLOWLIST = [
+  "polymarket-upload.s3.us-east-2.amazonaws.com",
+  "polymarket.com",
+  "gamma-api.polymarket.com",
+  "cdn.polymarket.com",
+  "myriad.markets",
+  "myriad.social",
+  "cdn.myriad.markets",
+  "cdn.myriad.social",
+  "limitless.exchange",
+  "predict.fun"
+];
+
+const extractSanitizedMediaUrl = (
+  normalizedPayload: unknown,
+  rawSourcePayload: unknown,
+  fieldNames: readonly string[]
+): string | null => {
+  const candidates = [
+    ...collectStringFields(normalizedPayload, fieldNames, 3),
+    ...collectStringFields(rawSourcePayload, fieldNames, 4)
+  ];
+  for (const candidate of candidates) {
+    const sanitized = sanitizeMediaUrl(candidate);
+    if (sanitized) {
+      return sanitized;
+    }
+  }
+  return null;
+};
+
+const collectStringFields = (
+  value: unknown,
+  fieldNames: readonly string[],
+  depth: number
+): string[] => {
+  if (depth < 0) {
+    return [];
+  }
+  if (typeof value === "string") {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => collectStringFields(entry, fieldNames, depth - 1));
+  }
+  if (!isRecord(value)) {
+    return [];
+  }
+  const direct = fieldNames.flatMap((field) => {
+    const candidate = value[field];
+    return typeof candidate === "string" ? [candidate] : [];
+  });
+  const nested = Object.values(value).flatMap((entry) => collectStringFields(entry, fieldNames, depth - 1));
+  return [...direct, ...nested];
+};
+
+const sanitizeMediaUrl = (value: string): string | null => {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 2048) {
+    return null;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:") {
+    return null;
+  }
+  parsed.hash = "";
+  parsed.username = "";
+  parsed.password = "";
+  const hostname = parsed.hostname.toLowerCase();
+  const allowed = MEDIA_HOST_ALLOWLIST.some((host) => hostname === host || hostname.endsWith(`.${host}`));
+  return allowed ? parsed.toString() : null;
+};
 
 const normalizeOutcomes = (value: unknown): Array<{ id: string; label: string }> => {
   if (!Array.isArray(value)) {

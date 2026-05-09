@@ -205,6 +205,8 @@ const buildUserFundingApp = async (fundingService: FundingService) => {
     refreshIntentStatus: (userId, fundingIntentId) => fundingService.refreshIntentStatus(userId, fundingIntentId),
     listVenueCapabilities: async () => fundingService.listVenueCapabilities(),
     listVenueBalances: (userId) => fundingService.listVenueBalances(userId),
+    listVenueActivations: async () => [],
+    listFundingHistory: (userId, input) => fundingService.listFundingHistory(userId, input),
     createWithdrawalIntent: (userId, request) => fundingService.createWithdrawalIntent(userId, request),
     getWithdrawalIntent: (userId, withdrawalIntentId) => fundingService.getWithdrawalIntent(userId, withdrawalIntentId),
     quoteWithdrawalIntent: (userId, withdrawalIntentId) => fundingService.quoteWithdrawalIntent(userId, withdrawalIntentId),

@@ -39,7 +39,7 @@ describe("extended venue quote readers", () => {
         marketId: "predict-market-1",
         bids: [[0.487, 16.8867]],
         asks: [[0.508, 437.93]]
-      }
+      } as never
     });
     const snapshot = normalizePredictOrderbook({
       payload: {
@@ -76,7 +76,7 @@ describe("extended venue quote readers", () => {
         async getMarketStatistics() {
           return { feeRateBps: "35" };
         }
-      }
+      } as never
     });
 
     const snapshot = await reader.getQuoteSnapshot({
@@ -113,7 +113,7 @@ describe("extended venue quote readers", () => {
             ]
           };
         }
-      }
+      } as never
     });
 
     const snapshot = await reader.getQuoteSnapshot({
@@ -153,7 +153,7 @@ describe("extended venue quote readers", () => {
             ]
           };
         }
-      }
+      } as never
     });
 
     const snapshot = await reader.getQuoteSnapshot({
@@ -189,7 +189,7 @@ describe("extended venue quote readers", () => {
             outcomes: [{ label: "Maybe", tokenId: "maybe-token" }]
           };
         }
-      }
+      } as never
     });
 
     const snapshot = await reader.getQuoteSnapshot({
@@ -259,7 +259,7 @@ describe("extended venue quote readers", () => {
             ]
           };
         },
-        async getOrderbook(input) {
+        async getOrderbook(input: { marketId: string }) {
           requestedMarkets.push(input.marketId);
           return {
             tokenId: "gavin-token",
@@ -269,7 +269,7 @@ describe("extended venue quote readers", () => {
         }
       },
       feeReader: {
-        async getFeeBps(input) {
+        async getFeeBps(input: { marketSlug: string }) {
           feeMarkets.push(input.marketSlug);
           return 0;
         }

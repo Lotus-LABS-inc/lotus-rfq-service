@@ -271,6 +271,44 @@ describe("RFQWebSocketGateway", () => {
     await gateway.stop();
   });
 
+  it("broadcasts notification and portfolio mark updates to subscribed user topics", async () => {
+    const bus = new FakeRedisBus();
+    const publisher = new FakeRedisClient(bus);
+    const subscriber = new FakeRedisClient(bus);
+    const gateway = new RFQWebSocketGateway({
+      publisher,
+      subscriber,
+      logger: { warn: vi.fn(), error: vi.fn() }
+    });
+
+    await gateway.start();
+    const socket = new FakeSocket();
+    gateway.registerConnection(socket);
+    socket.emit("message", JSON.stringify({ action: "subscribe", topic: "notifications:user:user-1" }));
+    socket.emit("message", JSON.stringify({ action: "subscribe", topic: "execution:portfolio:user-1" }));
+
+    await gateway.publishEvent({
+      type: "USER_NOTIFICATION",
+      topic: "notifications:user:user-1",
+      emittedAt: "2026-02-25T10:00:00.000Z",
+      payload: { notification: { notificationId: "notice-1" } }
+    });
+    await gateway.publishEvent({
+      type: "EXECUTION_MARK_UPDATE",
+      topic: "execution:portfolio:user-1",
+      emittedAt: "2026-02-25T10:00:01.000Z",
+      payload: { marketId: "market-1", positions: [] }
+    });
+
+    const payloads = socket.sent.map((entry) => JSON.parse(entry) as Record<string, unknown>);
+    expect(payloads.find((entry) => entry.type === "USER_NOTIFICATION")?.payload)
+      .toEqual({ notification: { notificationId: "notice-1" } });
+    expect(payloads.find((entry) => entry.type === "EXECUTION_MARK_UPDATE")?.payload)
+      .toEqual({ marketId: "market-1", positions: [] });
+
+    await gateway.stop();
+  });
+
   it("does not fail service startup when Redis subscriber is temporarily unavailable", async () => {
     vi.useFakeTimers();
     const bus = new FakeRedisBus();

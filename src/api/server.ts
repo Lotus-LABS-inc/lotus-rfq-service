@@ -17,6 +17,8 @@ import { registerHealthRoute } from "./routes/health.js";
 import { registerMetricsRoute } from "./routes/metrics.js";
 import { registerFundingRoutes } from "./routes/funding.js";
 import { buildLiveExecutionCandidatesResponse, registerExecutionRoutes } from "./routes/execution.js";
+import { registerTurnkeyAuthRoutes } from "./routes/turnkey-auth.js";
+import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerMarketCatalogRoutes } from "./routes/markets.js";
 import { buildVenueBalanceActivationActions } from "../core/funding/venue-activation.js";
 import { registerUserWithdrawalWalletRoutes } from "./routes/user-withdrawal-wallets.js";
@@ -320,9 +322,11 @@ import {
 import {
   buildExecutionStatusWatcherConfigFromEnv,
   ExecutionStatusWatcher,
+  executionPortfolioTopic,
   executionPositionsTopic,
   executionQuoteTopic,
-  executionUserTopic
+  executionUserTopic,
+  notificationUserTopic
 } from "../execution-system/execution-status-watcher.js";
 import {
   PgExecutionQuoteRepository,
@@ -330,6 +334,7 @@ import {
   PgSignedTradeExecutionStatusRepository,
   PgVerifiedPositionRepository
 } from "../repositories/execution-routing.repository.js";
+import { PgNotificationRepository } from "../repositories/notification.repository.js";
 import { MarketCatalogRepository, SharedCoreQuoteMappingRepository } from "../repositories/market-catalog.repository.js";
 import {
   buildFundingReadinessWatcherConfigFromEnv,
@@ -401,6 +406,11 @@ export interface ServerDependencies {
 const parseAdminJwtTtlSeconds = (value: string | undefined): number => {
   const parsed = Number(value ?? "3600");
   return Number.isFinite(parsed) && parsed >= 300 && parsed <= 86_400 ? Math.trunc(parsed) : 3600;
+};
+
+const parseUserJwtTtlSeconds = (value: string | undefined): number => {
+  const parsed = Number(value ?? "86400");
+  return Number.isFinite(parsed) && parsed >= 300 && parsed <= 2_592_000 ? Math.trunc(parsed) : 86_400;
 };
 
 const parseAdminMagicLinkTtlSeconds = (value: string | undefined): number => {
@@ -1288,6 +1298,17 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     logger: dependencies.logger
   });
   const executionWsUpdatesEnabled = process.env.EXECUTION_WS_UPDATES_ENABLED !== "false";
+  const notificationRepository = new PgNotificationRepository(dependencies.pgPool, async (notification) => {
+    if (!executionWsUpdatesEnabled) {
+      return;
+    }
+    await wsGateway.publishEvent({
+      type: "USER_NOTIFICATION",
+      topic: notificationUserTopic(notification.userId),
+      emittedAt: new Date().toISOString(),
+      payload: { notification }
+    });
+  });
   const executionStatusWatcher = new ExecutionStatusWatcher(
     signedTradeExecutionStatusRepository,
     signedTradeBundleService,
@@ -1355,6 +1376,32 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           emittedAt: new Date().toISOString(),
           payload: readiness as unknown as Record<string, unknown>
         });
+      },
+      publishPortfolio: async (input) => {
+        if (!executionWsUpdatesEnabled) {
+          return;
+        }
+        const payload = {
+          marketId: input.marketId,
+          outcomeId: input.outcomeId,
+          positions: input.positions,
+          generatedAt: new Date().toISOString(),
+          freshness: "live"
+        };
+        await Promise.all([
+          wsGateway.publishEvent({
+            type: "EXECUTION_MARK_UPDATE",
+            topic: executionPortfolioTopic(input.userId),
+            emittedAt: new Date().toISOString(),
+            payload
+          }),
+          wsGateway.publishEvent({
+            type: "EXECUTION_PORTFOLIO_UPDATE",
+            topic: executionUserTopic(input.userId),
+            emittedAt: new Date().toISOString(),
+            payload
+          })
+        ]);
       }
     },
     dependencies.logger,
@@ -1366,6 +1413,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   });
   await registerHealthRoute(app);
   await registerMetricsRoute(app);
+  await registerTurnkeyAuthRoutes(app, {
+    jwtTtlSeconds: parseUserJwtTtlSeconds(process.env.USER_JWT_TTL_SECONDS)
+  });
+  await registerNotificationRoutes(app, userAuthMiddleware, notificationRepository);
   await registerFundingRoutes(app, userAuthMiddleware, {
     createIntent: (userId, request) => fundingService.createIntent(userId, request),
     getIntent: (userId, fundingIntentId) => fundingService.getIntent(userId, fundingIntentId),
@@ -1417,6 +1468,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     sellQuoteService,
     signedTradeBundleService,
     positionRepository: verifiedPositionRepository,
+    executionStatusRepository: signedTradeExecutionStatusRepository,
     liveCandidateProvider: {
       getCandidates: async (input) => {
         const quantity = Number(input.amount);

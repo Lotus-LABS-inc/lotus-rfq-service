@@ -5,7 +5,7 @@ import { wsConnectionsActive } from "../observability/metrics.js";
 
 const SUBSCRIPTION_MESSAGE_SCHEMA = z.object({
   action: z.enum(["subscribe", "unsubscribe"]),
-  topic: z.string().regex(/^(rfq:[^:]+|execution:(user|quote):[A-Za-z0-9_.-]+|execution:positions:[A-Za-z0-9_.-]+:[a-f0-9]{24}:[a-f0-9]{24})$/)
+  topic: z.string().regex(/^(rfq:[^:]+|execution:(user|quote|portfolio):[A-Za-z0-9_.-]+|execution:positions:[A-Za-z0-9_.-]+:[a-f0-9]{24}:[a-f0-9]{24}|notifications:user:[A-Za-z0-9_.-]+)$/)
 });
 
 const BROADCAST_EVENT_SCHEMA = z.object({
@@ -15,10 +15,13 @@ const BROADCAST_EVENT_SCHEMA = z.object({
     "EXECUTION_UPDATE",
     "EXECUTION_STATUS_UPDATE",
     "EXECUTION_POSITION_UPDATE",
+    "EXECUTION_MARK_UPDATE",
+    "EXECUTION_PORTFOLIO_UPDATE",
     "EXECUTION_READINESS_UPDATE",
-    "EXECUTION_BALANCE_UPDATE"
+    "EXECUTION_BALANCE_UPDATE",
+    "USER_NOTIFICATION"
   ]),
-  topic: z.string().regex(/^(rfq:[^:]+|execution:(user|quote):[A-Za-z0-9_.-]+|execution:positions:[A-Za-z0-9_.-]+:[a-f0-9]{24}:[a-f0-9]{24})$/),
+  topic: z.string().regex(/^(rfq:[^:]+|execution:(user|quote|portfolio):[A-Za-z0-9_.-]+|execution:positions:[A-Za-z0-9_.-]+:[a-f0-9]{24}:[a-f0-9]{24}|notifications:user:[A-Za-z0-9_.-]+)$/),
   emittedAt: z.string().datetime(),
   payload: z.record(z.string(), z.unknown())
 });

@@ -5,10 +5,12 @@ import type {
   ExecutableTradeQuote,
   SellQuoteService,
   TradeRouteCandidate,
+  VerifiedExecutionPosition,
   VerifiedPositionRepository
 } from "../../execution-system/executable-routing.js";
 import {
   SignedTradeBundleError,
+  type SignedTradeExecutionStatus,
   type SignedTradeBundleService
 } from "../../execution-system/signed-trade-bundle.js";
 import type { CalculatedVenueQuoteSnapshot, VenueQuoteSnapshotBlocker } from "../../core/sor/quote-snapshot.js";
@@ -82,12 +84,58 @@ const exitRequestSchema = z.object({
   candidates: z.array(candidateSchema).min(1)
 });
 
+const positionsQuerySchema = z.object({
+  marketId: z.string().min(1).optional(),
+  outcomeId: z.string().min(1).optional(),
+  venue: z.string().min(1).optional(),
+  limit: z.coerce.number().int().positive().max(500).optional()
+}).refine((query) => !query.marketId === !query.outcomeId, {
+  message: "marketId and outcomeId must be provided together.",
+  path: ["outcomeId"]
+});
+
+const executionHistoryQuerySchema = z.object({
+  status: z.enum(["DRY_RUN_VERIFIED", "SUBMITTED", "PARTIAL", "FILLED", "FAILED"]).optional(),
+  limit: z.coerce.number().int().positive().max(100).optional(),
+  cursor: z.string().datetime().optional()
+});
+
+const openOrdersQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(100).optional(),
+  cursor: z.string().datetime().optional()
+});
+
+const portfolioTimeSeriesQuerySchema = z.object({
+  range: z.enum(["1D", "7D", "30D", "90D", "ALL"]).optional()
+});
+
 export interface ExecutionRouteDeps {
   executableRouteService: ExecutableRouteService;
   sellQuoteService: SellQuoteService;
   signedTradeBundleService?: SignedTradeBundleService | undefined;
   liveCandidateProvider?: LiveExecutionCandidateProvider | undefined;
-  positionRepository?: Pick<VerifiedPositionRepository, "listVerifiedPositions"> | undefined;
+  positionRepository?: (Pick<VerifiedPositionRepository, "listVerifiedPositions"> & {
+    listUserVerifiedPositions?(input: {
+      userId: string;
+      marketId?: string | undefined;
+      outcomeId?: string | undefined;
+      venue?: string | undefined;
+      limit?: number | undefined;
+    }): Promise<VerifiedExecutionPosition[]>;
+  }) | undefined;
+  executionStatusRepository?: {
+    listExecutionStatusesForUser(input: {
+      userId: string;
+      status?: SignedTradeExecutionStatus["status"] | undefined;
+      limit: number;
+      cursor?: string | undefined;
+    }): Promise<SignedTradeExecutionStatus[]>;
+    listOpenExecutionStatusesForUser?(input: {
+      userId: string;
+      limit: number;
+      cursor?: string | undefined;
+    }): Promise<SignedTradeExecutionStatus[]>;
+  } | undefined;
 }
 
 export interface LiveExecutionCandidateProvider {
@@ -116,6 +164,18 @@ export interface LiveExecutionCandidateBlocker {
   reason: string;
   venueMarketId?: string | undefined;
   venueOutcomeId?: string | undefined;
+}
+
+export type MarkFreshness = "live" | "unavailable";
+
+export interface MarkedExecutionPosition extends VerifiedExecutionPosition {
+  markPrice: number | null;
+  markValue: string | null;
+  unrealizedPnl: string | null;
+  markSource: "LIVE_QUOTE_SOURCE" | null;
+  markFreshness: MarkFreshness;
+  markGeneratedAt: string | null;
+  markBlocker: string | null;
 }
 
 export const registerExecutionRoutes = async (
@@ -278,6 +338,166 @@ export const registerExecutionRoutes = async (
     }
   });
 
+  app.get("/execution/portfolio/summary", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!deps.positionRepository?.listUserVerifiedPositions) {
+      return reply.status(501).send({
+        code: "EXECUTION_PORTFOLIO_NOT_CONFIGURED",
+        message: "Execution portfolio lookup is not configured on this backend."
+      });
+    }
+    const generatedAt = new Date().toISOString();
+    const positions = await deps.positionRepository.listUserVerifiedPositions({
+      userId: request.user.userId,
+      limit: 500
+    });
+    const markedPositions = await markPositions({
+      positions,
+      generatedAt,
+      liveCandidateProvider: deps.liveCandidateProvider,
+      userId: request.user.userId
+    });
+    const summary = summarizePortfolio(markedPositions);
+    return reply.send({
+      generatedAt,
+      markPolicy: "LIVE_QUOTE_REQUIRED",
+      ...summary,
+      positions: markedPositions
+    });
+  });
+
+  app.get("/execution/portfolio/timeseries", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!deps.positionRepository?.listUserVerifiedPositions) {
+      return reply.status(501).send({
+        code: "EXECUTION_PORTFOLIO_NOT_CONFIGURED",
+        message: "Execution portfolio lookup is not configured on this backend."
+      });
+    }
+    const parsed = portfolioTimeSeriesQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "Execution portfolio time-series query validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    const generatedAt = new Date().toISOString();
+    const positions = await deps.positionRepository.listUserVerifiedPositions({
+      userId: request.user.userId,
+      limit: 500
+    });
+    const markedPositions = await markPositions({
+      positions,
+      generatedAt,
+      liveCandidateProvider: deps.liveCandidateProvider,
+      userId: request.user.userId
+    });
+    const summary = summarizePortfolio(markedPositions);
+    return reply.send({
+      generatedAt,
+      range: parsed.data.range ?? "1D",
+      markPolicy: "LIVE_QUOTE_REQUIRED",
+      seriesBasis: "CURRENT_MARK_TO_MARKET_SNAPSHOT",
+      historyAvailable: false,
+      points: [{
+        timestamp: generatedAt,
+        ...summary
+      }]
+    });
+  });
+
+  app.get("/execution/history", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!deps.executionStatusRepository) {
+      return reply.status(501).send({
+        code: "EXECUTION_HISTORY_NOT_CONFIGURED",
+        message: "Execution history lookup is not configured on this backend."
+      });
+    }
+    const parsed = executionHistoryQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "Execution history query validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    const limit = parsed.data.limit ?? 50;
+    const rows = await deps.executionStatusRepository.listExecutionStatusesForUser({
+      userId: request.user.userId,
+      limit: limit + 1,
+      ...(parsed.data.status ? { status: parsed.data.status } : {}),
+      ...(parsed.data.cursor ? { cursor: parsed.data.cursor } : {})
+    });
+    const items = rows.slice(0, limit).map(toExecutionHistoryItem);
+    return reply.send({
+      generatedAt: new Date().toISOString(),
+      items,
+      nextCursor: rows.length > limit ? items[items.length - 1]?.updatedAt ?? null : null
+    });
+  });
+
+  app.get("/execution/open-orders", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!deps.executionStatusRepository?.listOpenExecutionStatusesForUser) {
+      return reply.status(501).send({
+        code: "EXECUTION_OPEN_ORDERS_NOT_CONFIGURED",
+        message: "Execution open order lookup is not configured on this backend."
+      });
+    }
+    const parsed = openOrdersQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "Execution open orders query validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    const limit = parsed.data.limit ?? 50;
+    const rows = await deps.executionStatusRepository.listOpenExecutionStatusesForUser({
+      userId: request.user.userId,
+      limit: limit + 1,
+      ...(parsed.data.cursor ? { cursor: parsed.data.cursor } : {})
+    });
+    const items = rows.slice(0, limit).map(toOpenOrderItem);
+    return reply.send({
+      generatedAt: new Date().toISOString(),
+      items,
+      nextCursor: rows.length > limit ? items[items.length - 1]?.updatedAt ?? null : null
+    });
+  });
+
+  app.get("/execution/:executionId/receipt", { preHandler: authMiddleware }, async (request, reply) => {
+    const { executionId } = request.params as { executionId: string };
+    const signedStatus = await deps.signedTradeBundleService?.getExecutionStatus({
+      userId: request.user.userId,
+      executionId
+    });
+    if (signedStatus) {
+      return reply.send({
+        generatedAt: new Date().toISOString(),
+        receipt: toExecutionReceipt(signedStatus)
+      });
+    }
+    const quote = await deps.executableRouteService.getQuote(request.user.userId, executionId);
+    if (!quote) {
+      return reply.status(404).send({
+        code: "EXECUTION_NOT_FOUND",
+        message: "Execution receipt was not found."
+      });
+    }
+    return reply.send({
+      generatedAt: new Date().toISOString(),
+      receipt: {
+        executionId,
+        userStatus: "quote_ready",
+        settlementStatus: "SETTLEMENT_PENDING",
+        dryRun: false,
+        submittedAt: null,
+        updatedAt: null,
+        route: toUserQuote(quote),
+        submittedLegs: []
+      }
+    });
+  });
+
   app.get("/execution/:executionId/status", { preHandler: authMiddleware }, async (request, reply) => {
     const { executionId } = request.params as { executionId: string };
     const signedStatus = await deps.signedTradeBundleService?.getExecutionStatus({
@@ -321,27 +541,33 @@ export const registerExecutionRoutes = async (
         message: "Execution position lookup is not configured on this backend."
       });
     }
-    const query = request.query as {
-      marketId?: string;
-      outcomeId?: string;
-      venue?: string;
-    };
-    if (!query.marketId || !query.outcomeId) {
+    const parsed = positionsQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
       return reply.status(400).send({
         code: "INVALID_REQUEST",
-        message: "marketId and outcomeId are required for execution position lookup."
+        message: "Execution positions query validation failed.",
+        details: parsed.error.flatten()
       });
     }
-    const positions = await deps.positionRepository.listVerifiedPositions({
-      userId: request.user.userId,
-      marketId: query.marketId,
-      outcomeId: query.outcomeId,
-      ...(query.venue ? { venue: query.venue } : {})
-    });
+    const query = parsed.data;
+    const positions = query.marketId && query.outcomeId
+      ? await deps.positionRepository.listVerifiedPositions({
+          userId: request.user.userId,
+          marketId: query.marketId,
+          outcomeId: query.outcomeId,
+          ...(query.venue ? { venue: query.venue } : {})
+        })
+      : deps.positionRepository.listUserVerifiedPositions
+        ? await deps.positionRepository.listUserVerifiedPositions({
+            userId: request.user.userId,
+            ...(query.venue ? { venue: query.venue } : {}),
+            ...(query.limit ? { limit: query.limit } : {})
+          })
+        : [];
     return reply.send({
       generatedAt: new Date().toISOString(),
-      marketId: query.marketId,
-      outcomeId: query.outcomeId,
+      marketId: query.marketId ?? null,
+      outcomeId: query.outcomeId ?? null,
       positions
     });
   });
@@ -418,6 +644,127 @@ const toUserQuote = (quote: ExecutableTradeQuote): Record<string, unknown> => ({
     requiresUserSignature: leg.requiresUserSignature
   }))
 });
+
+const markPositions = async (input: {
+  positions: readonly VerifiedExecutionPosition[];
+  generatedAt: string;
+  liveCandidateProvider?: LiveExecutionCandidateProvider | undefined;
+  userId: string;
+}): Promise<MarkedExecutionPosition[]> => Promise.all(input.positions.map(async (position) => {
+  if (!input.liveCandidateProvider || Number(position.verifiedSize) <= 0) {
+    return unavailableMarkedPosition(position, input.generatedAt, "LIVE_MARK_SOURCE_UNAVAILABLE");
+  }
+  try {
+    const candidates = await input.liveCandidateProvider.getCandidates({
+      userId: input.userId,
+      side: "sell",
+      marketId: position.marketId,
+      outcomeId: position.outcomeId,
+      amount: position.verifiedSize,
+      venues: [position.venue]
+    });
+    const candidate = candidates.candidates[0];
+    if (!candidate || !Number.isFinite(candidate.price)) {
+      return unavailableMarkedPosition(position, input.generatedAt, candidates.blocked[0]?.reason ?? "LIVE_MARK_QUOTE_UNAVAILABLE");
+    }
+    const size = Number(position.verifiedSize);
+    const markValue = size * candidate.price;
+    const entryValue = size * position.averageEntryPrice;
+    return {
+      ...position,
+      markPrice: candidate.price,
+      markValue: fixedDecimal(markValue),
+      unrealizedPnl: fixedDecimal(markValue - entryValue),
+      markSource: "LIVE_QUOTE_SOURCE",
+      markFreshness: "live",
+      markGeneratedAt: candidates.generatedAt,
+      markBlocker: null
+    };
+  } catch (error) {
+    return unavailableMarkedPosition(
+      position,
+      input.generatedAt,
+      error instanceof Error && error.message ? "LIVE_MARK_QUOTE_FAILED" : "LIVE_MARK_QUOTE_UNAVAILABLE"
+    );
+  }
+}));
+
+const unavailableMarkedPosition = (
+  position: VerifiedExecutionPosition,
+  generatedAt: string,
+  blocker: string
+): MarkedExecutionPosition => ({
+  ...position,
+  markPrice: null,
+  markValue: null,
+  unrealizedPnl: null,
+  markSource: null,
+  markFreshness: "unavailable",
+  markGeneratedAt: generatedAt,
+  markBlocker: blocker
+});
+
+const summarizePortfolio = (positions: readonly MarkedExecutionPosition[]): Record<string, unknown> => {
+  const totalCostBasis = positions.reduce((sum, position) =>
+    sum + Number(position.verifiedSize) * position.averageEntryPrice, 0);
+  const marked = positions.filter((position) => position.markValue !== null);
+  const totalMarkValue = marked.reduce((sum, position) => sum + Number(position.markValue), 0);
+  const markedCostBasis = marked.reduce((sum, position) =>
+    sum + Number(position.verifiedSize) * position.averageEntryPrice, 0);
+  return {
+    positionCount: positions.length,
+    markedPositionCount: marked.length,
+    unavailableMarkCount: positions.length - marked.length,
+    totalCostBasis: fixedDecimal(totalCostBasis),
+    totalMarkValue: marked.length > 0 ? fixedDecimal(totalMarkValue) : null,
+    totalUnrealizedPnl: marked.length > 0 ? fixedDecimal(totalMarkValue - markedCostBasis) : null
+  };
+};
+
+const toExecutionHistoryItem = (status: SignedTradeExecutionStatus): Record<string, unknown> => ({
+  executionId: status.executionId,
+  status: status.status,
+  dryRun: status.dryRun,
+  submittedAt: status.submittedAt,
+  updatedAt: status.updatedAt,
+  route: status.route ? toUserQuote(status.route) : null,
+  submittedLegs: sanitizeSubmittedLegs(status.submittedLegs)
+});
+
+const toOpenOrderItem = (status: SignedTradeExecutionStatus): Record<string, unknown> => ({
+  ...toExecutionHistoryItem(status),
+  openStatus: status.status,
+  userStatus: status.status
+});
+
+const toExecutionReceipt = (status: SignedTradeExecutionStatus): Record<string, unknown> => ({
+  executionId: status.executionId,
+  userStatus: status.status,
+  settlementStatus: status.status === "FILLED" ? "SETTLEMENT_PENDING" : "SETTLEMENT_PENDING",
+  dryRun: status.dryRun,
+  submittedAt: status.submittedAt,
+  updatedAt: status.updatedAt,
+  route: status.route ? toUserQuote(status.route) : null,
+  submittedLegs: sanitizeSubmittedLegs(status.submittedLegs)
+});
+
+const sanitizeSubmittedLegs = (
+  legs: SignedTradeExecutionStatus["submittedLegs"]
+): Array<Record<string, unknown>> => legs.map((leg) => ({
+  legIndex: leg.legIndex,
+  venue: leg.venue,
+  status: leg.status,
+  venueOrderId: leg.venueOrderId,
+  reason: leg.reason,
+  fillState: leg.fillState,
+  settlementState: leg.settlementState,
+  lastStatusCheckedAt: leg.lastStatusCheckedAt,
+  lastSettlementCheckedAt: leg.lastSettlementCheckedAt,
+  lastWatcherError: leg.lastWatcherError
+}));
+
+const fixedDecimal = (value: number): string =>
+  Number.isFinite(value) ? value.toFixed(8).replace(/\.?0+$/, "") : "0";
 
 export const buildLiveExecutionCandidatesResponse = (input: {
   generatedAt?: Date | undefined;

@@ -2819,8 +2819,9 @@ describe("Funding v0 domain", () => {
       toChain: "BASE"
     })).resolves.toMatchObject({ status: "DONE_COMPLETED" });
 
-    expect(requestedUrl?.searchParams.get("fromChain")).toBe("SOL");
-    expect(requestedUrl?.searchParams.get("toChain")).toBe("8453");
+    const capturedUrl = requestedUrl as URL | null;
+    expect(capturedUrl?.searchParams.get("fromChain")).toBe("SOL");
+    expect(capturedUrl?.searchParams.get("toChain")).toBe("8453");
   });
 
   it("gates execution preflight on exact ready funding when enabled", async () => {

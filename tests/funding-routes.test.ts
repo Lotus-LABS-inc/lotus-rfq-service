@@ -429,6 +429,19 @@ describe("Funding routes", () => {
     expect(history.body).not.toContain("privateKey");
     expect(history.body).not.toContain("providerWalletAccountId");
 
+    const fundingReceipt = await app.inject({ method: "GET", url: "/funding/intents/funding-1/receipt", headers });
+    expect(fundingReceipt.statusCode).toBe(200);
+    expect(fundingReceipt.json()).toMatchObject({
+      receipt: {
+        fundingIntentId: "funding-1",
+        currentStatus: "INTENT_CREATED",
+        sourceChain: "SOLANA",
+        userSafeMessage: "Funding intent created. Route quote is pending."
+      }
+    });
+    expect(fundingReceipt.body).not.toContain("providerStatus");
+    expect(fundingReceipt.body).not.toContain("privateKey");
+
     const created = await app.inject({
       method: "POST",
       url: "/funding/withdrawals",
@@ -475,6 +488,18 @@ describe("Funding routes", () => {
     })).resolves.toMatchObject({ statusCode: 202 });
     await expect(app.inject({ method: "GET", url: "/funding/withdrawals/withdrawal-1/status", headers }))
       .resolves.toMatchObject({ statusCode: 200 });
+    const withdrawalReceipt = await app.inject({ method: "GET", url: "/funding/withdrawals/withdrawal-1/receipt", headers });
+    expect(withdrawalReceipt.statusCode).toBe(200);
+    expect(withdrawalReceipt.json()).toMatchObject({
+      receipt: {
+        withdrawalIntentId: "withdrawal-1",
+        currentStatus: "WITHDRAWAL_CREATED",
+        destinationChain: "POLYGON",
+        userSafeMessage: "Withdrawal intent created. Route preview is pending."
+      }
+    });
+    expect(withdrawalReceipt.body).not.toContain("providerStatus");
+    expect(withdrawalReceipt.body).not.toContain("privateKey");
     expect(created.body).not.toContain("secret");
     expect(created.body).not.toContain("transactionRequest");
     await app.close();
