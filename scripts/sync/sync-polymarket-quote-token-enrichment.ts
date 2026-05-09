@@ -14,7 +14,7 @@ import {
 } from "../../src/core/sor/polymarket-clob-token-enrichment.js";
 import { PolymarketGammaClient, type PolymarketGammaMarket } from "../../src/integrations/polymarket/polymarket-gamma-client.js";
 
-const envCandidates = [path.resolve(process.cwd(), "..", ".env"), path.resolve(process.cwd(), ".env")];
+const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
 for (const envPath of envCandidates) {
   if (existsSync(envPath)) {
     process.loadEnvFile(envPath);
@@ -80,7 +80,7 @@ const metadataVersion = process.env.POLYMARKET_METADATA_VERSION ?? "polymarket-o
 const args = parseArgs();
 const generatedAt = new Date().toISOString();
 const marketLookupCache = new Map<string, Promise<PolymarketGammaMarket[]>>();
-const databaseUrl = process.env.SUPABASE_DB_URL ?? process.env.DATABASE_URL;
+const databaseUrl = process.env.DATABASE_URL ?? process.env.SUPABASE_DB_URL;
 if (!databaseUrl) {
   throw new Error("SUPABASE_DB_URL or DATABASE_URL is required.");
 }
@@ -345,6 +345,8 @@ async function listApprovedPolymarketProfiles(
        vmp.normalized_payload->>'quoteTokenId' IS NULL
        OR vmp.normalized_payload->>'quoteMarketId' IS NULL
        OR COALESCE(vmp.normalized_payload->>'quoteSource', '') <> $3
+       OR COALESCE(vmp.normalized_payload->>'imageUrl', vmp.raw_source_payload->>'imageUrl', '') = ''
+       OR COALESCE(vmp.normalized_payload->>'iconUrl', vmp.raw_source_payload->>'iconUrl', '') = ''
     )
       ${profileFilter}
     ORDER BY COALESCE(fma.sort_priority, 1000), ce.updated_at DESC, vmp.title

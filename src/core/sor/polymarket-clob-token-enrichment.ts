@@ -34,19 +34,19 @@ export const extractPolymarketQuoteIdentifier = (
   const normalizedPayload = asRecord(profile.normalizedPayload);
   const rawPayload = asRecord(profile.rawSourcePayload);
   return firstString(
+    normalizedPayload.venueMarketId,
+    normalizedPayload.venue_market_id,
+    rawPayload.venueMarketId,
+    rawPayload.venue_market_id,
+    stripCuratedVenueMarketId(profile.approvedVenueMarketId, firstString(normalizedPayload.curatedKey, rawPayload.curatedKey)),
     normalizedPayload.quoteMarketId,
     normalizedPayload.quote_market_id,
     normalizedPayload.conditionId,
     normalizedPayload.condition_id,
-    normalizedPayload.venueMarketId,
-    normalizedPayload.venue_market_id,
     rawPayload.quoteMarketId,
     rawPayload.quote_market_id,
     rawPayload.conditionId,
-    rawPayload.condition_id,
-    rawPayload.venueMarketId,
-    rawPayload.venue_market_id,
-    stripCuratedVenueMarketId(profile.approvedVenueMarketId, firstString(normalizedPayload.curatedKey, rawPayload.curatedKey))
+    rawPayload.condition_id
   );
 };
 
@@ -116,6 +116,7 @@ export const buildPolymarketClobTokenEnrichment = (input: {
   }
 
   const matchedMarket = matchedMarkets[0]!;
+  const media = extractPolymarketMedia(matchedMarket.raw);
   const inactiveBlockers = officialMarketActivityBlockers(matchedMarket.raw);
   if (inactiveBlockers.length > 0) {
     return {
@@ -147,10 +148,14 @@ export const buildPolymarketClobTokenEnrichment = (input: {
     quoteSource: input.source,
     quoteMatchedIdentifier: matchedIdentifier,
     quoteMetadataVersion: input.metadataVersion,
-    quoteEnrichedAt: input.generatedAt
+    quoteEnrichedAt: input.generatedAt,
+    ...(media.imageUrl ? { imageUrl: media.imageUrl } : {}),
+    ...(media.iconUrl ? { iconUrl: media.iconUrl } : {})
   };
   const rawSourcePayload = {
     ...asRecord(input.profile.rawSourcePayload),
+    ...(media.imageUrl ? { imageUrl: media.imageUrl } : {}),
+    ...(media.iconUrl ? { iconUrl: media.iconUrl } : {}),
     quoteEvidence: {
       source: input.source,
       conditionId: matchedMarket.conditionId,
@@ -195,6 +200,27 @@ const officialMarketActivityBlockers = (raw: Record<string, unknown>): string[] 
     blockers.push("POLYMARKET_OFFICIAL_ORDERBOOK_DISABLED");
   }
   return [...new Set(blockers)];
+};
+
+const extractPolymarketMedia = (raw: Record<string, unknown>): { imageUrl: string | null; iconUrl: string | null } => {
+  const imageUrl = firstSafeHttpsUrl(
+    raw.imageUrl,
+    raw.image_url,
+    raw.image,
+    raw.twitterCardImage,
+    raw.thumbnailUrl,
+    raw.thumbnail,
+    raw.banner
+  );
+  const iconUrl = firstSafeHttpsUrl(
+    raw.iconUrl,
+    raw.icon_url,
+    raw.icon,
+    raw.logoUrl,
+    raw.logo,
+    imageUrl
+  );
+  return { imageUrl, iconUrl };
 };
 
 const marketMatchesIdentifier = (market: PolymarketQuoteMetadataMarket, identifier: string): boolean =>
@@ -359,6 +385,24 @@ const firstString = (...values: readonly unknown[]): string | null => {
   for (const value of values) {
     if (typeof value === "string" && value.trim().length > 0) {
       return value.trim();
+    }
+  }
+  return null;
+};
+
+const firstSafeHttpsUrl = (...values: readonly unknown[]): string | null => {
+  for (const value of values) {
+    const candidate = firstString(value);
+    if (!candidate) {
+      continue;
+    }
+    try {
+      const url = new URL(candidate);
+      if (url.protocol === "https:" && !url.username && !url.password) {
+        return url.toString();
+      }
+    } catch {
+      continue;
     }
   }
   return null;

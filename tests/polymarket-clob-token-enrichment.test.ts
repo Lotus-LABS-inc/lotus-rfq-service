@@ -24,6 +24,8 @@ const market = {
   marketSlug: "bitcoin-all-time-high-by-june-30-2026",
   title: "Bitcoin all time high by June 30, 2026?",
   raw: {
+    image: "https://polymarket-upload.s3.us-east-2.amazonaws.com/BTC+fullsize.png",
+    icon: "https://polymarket-upload.s3.us-east-2.amazonaws.com/BTC+icon.png",
     outcomes: [
       { label: "Yes", token_id: "yes-token" },
       { label: "No", token_id: "no-token" }
@@ -61,7 +63,13 @@ describe("Polymarket CLOB token enrichment", () => {
         YES: "yes-token",
         NO: "no-token"
       },
-      quoteSource: "polymarket_official_api"
+      quoteSource: "polymarket_official_api",
+      imageUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/BTC+fullsize.png",
+      iconUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/BTC+icon.png"
+    });
+    expect(result.enrichment.rawSourcePayload).toMatchObject({
+      imageUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/BTC+fullsize.png",
+      iconUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/BTC+icon.png"
     });
     expect(result.enrichment.rawSourcePayload.quoteEvidence).toMatchObject({
       conditionId: market.conditionId,
