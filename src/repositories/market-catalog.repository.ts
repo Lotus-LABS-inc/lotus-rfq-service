@@ -26,6 +26,11 @@ export interface MarketCatalogVenueMarket {
   volume: string | null;
   volume24h: string | null;
   liquidity: string | null;
+  buyVolume: string | null;
+  sellVolume: string | null;
+  tradeCount: string | null;
+  buyCount: string | null;
+  sellCount: string | null;
   marketClass: string;
   outcomes: Array<{ id: string; label: string }>;
   network: string | null;
@@ -60,6 +65,11 @@ export interface MarketCatalogMarket {
   volume: string | null;
   volume24h: string | null;
   liquidity: string | null;
+  buyVolume: string | null;
+  sellVolume: string | null;
+  tradeCount: string | null;
+  buyCount: string | null;
+  sellCount: string | null;
   venueMarkets: MarketCatalogVenueMarket[];
   updatedAt: string;
 }
@@ -83,6 +93,11 @@ export interface MarketCatalogEvent {
   volume: string | null;
   volume24h: string | null;
   liquidity: string | null;
+  buyVolume: string | null;
+  sellVolume: string | null;
+  tradeCount: string | null;
+  buyCount: string | null;
+  sellCount: string | null;
   updatedAt: string;
 }
 
@@ -460,6 +475,11 @@ const toMarket = (row: MarketRow, venueRows: VenueMarketRow[]): MarketCatalogMar
     volume: metrics.volume,
     volume24h: metrics.volume24h,
     liquidity: metrics.liquidity,
+    buyVolume: metrics.buyVolume,
+    sellVolume: metrics.sellVolume,
+    tradeCount: metrics.tradeCount,
+    buyCount: metrics.buyCount,
+    sellCount: metrics.sellCount,
     venueMarkets,
     updatedAt: row.updated_at
   };
@@ -505,6 +525,11 @@ const groupMarketsIntoEvents = (markets: MarketCatalogMarket[]): MarketCatalogEv
       volume: metrics.volume,
       volume24h: metrics.volume24h,
       liquidity: metrics.liquidity,
+      buyVolume: metrics.buyVolume,
+      sellVolume: metrics.sellVolume,
+      tradeCount: metrics.tradeCount,
+      buyCount: metrics.buyCount,
+      sellCount: metrics.sellCount,
       updatedAt: latestUpdatedAt
     };
   });
@@ -648,6 +673,11 @@ const toVenueMarket = (row: VenueMarketRow): MarketCatalogVenueMarket => ({
   volume: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["volume", "totalVolume", "total_volume", "volumeTotalUsd", "volume_total_usd"]),
   volume24h: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["volume24h", "volume_24h", "volume24hUsd", "volume_24h_usd", "volume_1d"]),
   liquidity: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["liquidity", "totalLiquidity", "total_liquidity", "totalLiquidityUsd", "total_liquidity_usd", "openInterest", "open_interest"]),
+  buyVolume: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["buyVolume", "buy_volume", "buyVolumeUsd", "buy_volume_usd", "totalBuyVolume", "total_buy_volume"]),
+  sellVolume: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["sellVolume", "sell_volume", "sellVolumeUsd", "sell_volume_usd", "totalSellVolume", "total_sell_volume"]),
+  tradeCount: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["tradeCount", "trade_count", "tradesCount", "trades_count", "transactionCount", "transaction_count"]),
+  buyCount: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["buyCount", "buy_count", "buyTrades", "buy_trades", "buyTransactions", "buy_transactions"]),
+  sellCount: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["sellCount", "sell_count", "sellTrades", "sell_trades", "sellTransactions", "sell_transactions"]),
   marketClass: row.market_class,
   outcomes: normalizeOutcomes(row.outcomes),
   network: row.network,
@@ -664,11 +694,34 @@ const chooseMarketMedia = (
 });
 
 const aggregateVenueMetrics = (
-  items: Array<{ volume?: string | null; volume24h?: string | null; liquidity?: string | null }>
-): { volume: string | null; volume24h: string | null; liquidity: string | null } => ({
+  items: Array<{
+    volume?: string | null;
+    volume24h?: string | null;
+    liquidity?: string | null;
+    buyVolume?: string | null;
+    sellVolume?: string | null;
+    tradeCount?: string | null;
+    buyCount?: string | null;
+    sellCount?: string | null;
+  }>
+): {
+  volume: string | null;
+  volume24h: string | null;
+  liquidity: string | null;
+  buyVolume: string | null;
+  sellVolume: string | null;
+  tradeCount: string | null;
+  buyCount: string | null;
+  sellCount: string | null;
+} => ({
   volume: sumNumericStrings(items.map((item) => item.volume)),
   volume24h: sumNumericStrings(items.map((item) => item.volume24h)),
-  liquidity: sumNumericStrings(items.map((item) => item.liquidity))
+  liquidity: sumNumericStrings(items.map((item) => item.liquidity)),
+  buyVolume: sumNumericStrings(items.map((item) => item.buyVolume)),
+  sellVolume: sumNumericStrings(items.map((item) => item.sellVolume)),
+  tradeCount: sumNumericStrings(items.map((item) => item.tradeCount)),
+  buyCount: sumNumericStrings(items.map((item) => item.buyCount)),
+  sellCount: sumNumericStrings(items.map((item) => item.sellCount))
 });
 
 const MEDIA_HOST_ALLOWLIST = [

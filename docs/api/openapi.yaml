@@ -4095,6 +4095,26 @@ components:
           type: string
           nullable: true
           description: Aggregated venue market liquidity/open-interest metric from approved venue metadata, when available.
+        buyVolume:
+          type: string
+          nullable: true
+          description: Aggregated buy-side volume from approved venue metadata, when available.
+        sellVolume:
+          type: string
+          nullable: true
+          description: Aggregated sell-side volume from approved venue metadata, when available.
+        tradeCount:
+          type: string
+          nullable: true
+          description: Aggregated trade or transaction count from approved venue metadata, when available.
+        buyCount:
+          type: string
+          nullable: true
+          description: Aggregated buy-side trade or transaction count from approved venue metadata, when available.
+        sellCount:
+          type: string
+          nullable: true
+          description: Aggregated sell-side trade or transaction count from approved venue metadata, when available.
     MarketCatalogVenueMarket:
       allOf:
         - $ref: "#/components/schemas/MarketCatalogMediaFields"

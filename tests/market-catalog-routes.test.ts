@@ -39,6 +39,11 @@ const market: MarketCatalogMarket = {
   volume: "1200000",
   volume24h: "250000",
   liquidity: "500000",
+  buyVolume: "125000",
+  sellVolume: "95000",
+  tradeCount: "1100",
+  buyCount: "650",
+  sellCount: "450",
   venueMarkets: [{
     canonicalMarketId: "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
     canonicalMarketTitle: "Republican Presidential Nominee 2028",
@@ -51,6 +56,11 @@ const market: MarketCatalogMarket = {
     volume: "1200000",
     volume24h: "250000",
     liquidity: "500000",
+    buyVolume: "125000",
+    sellVolume: "95000",
+    tradeCount: "1100",
+    buyCount: "650",
+    sellCount: "450",
     marketClass: "CATEGORICAL",
     outcomes: [{ id: "jd-vance", label: "JD Vance" }, { id: "donald-trump", label: "Donald Trump" }],
     network: "POLYGON",
@@ -83,6 +93,11 @@ const marketEvent: MarketCatalogEvent = {
   volume: "1200000",
   volume24h: "250000",
   liquidity: "500000",
+  buyVolume: "125000",
+  sellVolume: "95000",
+  tradeCount: "1100",
+  buyCount: "650",
+  sellCount: "450",
   updatedAt: "2026-05-03T00:00:00.000Z"
 };
 
