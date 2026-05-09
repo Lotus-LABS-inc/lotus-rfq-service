@@ -13,6 +13,43 @@ import type {
     ResolutionRiskAssessmentServiceConfig
 } from "./resolution-risk.types.js";
 
+const stripHtmlRules = (value: string | null | undefined): string | null => {
+    if (!value) {
+        return null;
+    }
+    const stripped = value
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<\/p>/gi, "\n\n")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/gi, " ")
+        .replace(/&amp;/gi, "&")
+        .replace(/&quot;/gi, "\"")
+        .replace(/&#39;/gi, "'")
+        .replace(/&ldquo;|&rdquo;/gi, "\"")
+        .replace(/&lsquo;|&rsquo;/gi, "'")
+        .replace(/[ \t]+/g, " ")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    return stripped.length > 0 ? stripped : null;
+};
+
+const looksLikeTrustedResolutionText = (value: string | null | undefined): value is string => {
+    if (!value || value.trim().length < 40) {
+        return false;
+    }
+    return /\b(resolve|resolves|resolution|source|oracle|settle|settlement|outcome|will be considered|will not be considered)\b/i.test(value);
+};
+
+const selectTrustedResolutionText = (...values: readonly (string | null | undefined)[]): string | null => {
+    for (const value of values) {
+        const normalized = stripHtmlRules(value);
+        if (looksLikeTrustedResolutionText(normalized)) {
+            return normalized;
+        }
+    }
+    return null;
+};
+
 type ServiceErrorCode =
     | "profile_not_found"
     | "canonical_event_not_found"
@@ -197,7 +234,21 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
         canonicalEventId: string,
         profiles: readonly NormalizedResolutionProfile[]
     ): Promise<readonly ResolutionRiskAssessment[]> {
-        const pairs = this.generatePairs(profiles);
+        const assessableProfiles = profiles.filter((profile) => looksLikeTrustedResolutionText(profile.primaryResolutionText));
+        if (assessableProfiles.length < 2) {
+            this.logger.warn(
+                {
+                    canonicalEventId,
+                    profileCount: profiles.length,
+                    assessableProfileCount: assessableProfiles.length,
+                    version: this.version
+                },
+                "Resolution risk assessment skipped because fewer than two profiles have trusted venue rule text."
+            );
+            return [];
+        }
+
+        const pairs = this.generatePairs(assessableProfiles);
         const assessments: ResolutionRiskAssessment[] = [];
 
         for (const pair of pairs) {
@@ -422,15 +473,18 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
             oracleType: row.oracle_type,
             oracleName: row.oracle_name,
             resolutionAuthorityType: row.resolution_authority_type,
-            primaryResolutionText: row.primary_resolution_text
-                ?? row.vmp_resolution_rules_text
-                ?? row.vmp_description
-                ?? row.vrp_rule_text
-                ?? null,
-            supplementalRulesText: row.supplemental_rules_text
-                ?? row.vmp_resolution_source
-                ?? row.vrp_resolution_source
-                ?? null,
+            primaryResolutionText: selectTrustedResolutionText(
+                row.primary_resolution_text,
+                row.vmp_resolution_rules_text,
+                row.vmp_description,
+                row.vrp_rule_text,
+                row.supplemental_rules_text
+            ),
+            supplementalRulesText: selectTrustedResolutionText(
+                row.supplemental_rules_text,
+                row.vmp_resolution_source,
+                row.vrp_resolution_source
+            ),
             disputeWindowHours: row.dispute_window_hours,
             settlementLagHours: row.settlement_lag_hours,
             marketType: row.market_type,
