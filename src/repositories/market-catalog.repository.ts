@@ -23,6 +23,9 @@ export interface MarketCatalogVenueMarket {
   venueTitle: string;
   imageUrl: string | null;
   iconUrl: string | null;
+  volume: string | null;
+  volume24h: string | null;
+  liquidity: string | null;
   marketClass: string;
   outcomes: Array<{ id: string; label: string }>;
   network: string | null;
@@ -54,6 +57,9 @@ export interface MarketCatalogMarket {
   };
   imageUrl: string | null;
   iconUrl: string | null;
+  volume: string | null;
+  volume24h: string | null;
+  liquidity: string | null;
   venueMarkets: MarketCatalogVenueMarket[];
   updatedAt: string;
 }
@@ -74,6 +80,9 @@ export interface MarketCatalogEvent {
   routeability: MarketCatalogMarket["routeability"];
   imageUrl: string | null;
   iconUrl: string | null;
+  volume: string | null;
+  volume24h: string | null;
+  liquidity: string | null;
   updatedAt: string;
 }
 
@@ -424,6 +433,7 @@ const toMarket = (row: MarketRow, venueRows: VenueMarketRow[]): MarketCatalogMar
   const outcomeLabels = new Set(venueMarkets.flatMap((market) => market.outcomes.map((outcome) => outcome.label)));
   const eventGroup = deriveEventGroup(row);
   const media = chooseMarketMedia(venueMarkets);
+  const metrics = aggregateVenueMetrics(venueMarkets);
   return {
     eventId: eventGroup.eventId,
     eventTitle: eventGroup.title,
@@ -447,6 +457,9 @@ const toMarket = (row: MarketRow, venueRows: VenueMarketRow[]): MarketCatalogMar
     },
     imageUrl: media.imageUrl,
     iconUrl: media.iconUrl,
+    volume: metrics.volume,
+    volume24h: metrics.volume24h,
+    liquidity: metrics.liquidity,
     venueMarkets,
     updatedAt: row.updated_at
   };
@@ -465,6 +478,7 @@ const groupMarketsIntoEvents = (markets: MarketCatalogMarket[]): MarketCatalogEv
     const venues = normalizeStringArray(groupedMarkets.flatMap((market) => market.venues));
     const outcomeCount = groupedMarkets.reduce((total, market) => total + market.outcomeCount, 0);
     const venueMarketCount = groupedMarkets.reduce((total, market) => total + market.venueMarketCount, 0);
+    const metrics = aggregateVenueMetrics(groupedMarkets);
     const latestUpdatedAt = groupedMarkets
       .map((market) => market.updatedAt)
       .sort((left, right) => right.localeCompare(left))[0] ?? firstMarket!.updatedAt;
@@ -488,6 +502,9 @@ const groupMarketsIntoEvents = (markets: MarketCatalogMarket[]): MarketCatalogEv
       },
       imageUrl: media.imageUrl,
       iconUrl: media.iconUrl,
+      volume: metrics.volume,
+      volume24h: metrics.volume24h,
+      liquidity: metrics.liquidity,
       updatedAt: latestUpdatedAt
     };
   });
@@ -628,6 +645,9 @@ const toVenueMarket = (row: VenueMarketRow): MarketCatalogVenueMarket => ({
   venueTitle: row.venue_title,
   imageUrl: extractSanitizedMediaUrl(row.normalized_payload, row.raw_source_payload, ["imageUrl", "image_url", "image", "twitterCardImage", "thumbnailUrl", "thumbnail", "banner"]),
   iconUrl: extractSanitizedMediaUrl(row.normalized_payload, row.raw_source_payload, ["iconUrl", "icon_url", "icon", "logoUrl", "logo"]),
+  volume: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["volume", "totalVolume", "total_volume", "volumeTotalUsd", "volume_total_usd"]),
+  volume24h: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["volume24h", "volume_24h", "volume24hUsd", "volume_24h_usd", "volume_1d"]),
+  liquidity: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["liquidity", "totalLiquidity", "total_liquidity", "totalLiquidityUsd", "total_liquidity_usd", "openInterest", "open_interest"]),
   marketClass: row.market_class,
   outcomes: normalizeOutcomes(row.outcomes),
   network: row.network,
@@ -641,6 +661,14 @@ const chooseMarketMedia = (
 ): { imageUrl: string | null; iconUrl: string | null } => ({
   imageUrl: items.find((item) => item.imageUrl !== null)?.imageUrl ?? null,
   iconUrl: items.find((item) => item.iconUrl !== null)?.iconUrl ?? null
+});
+
+const aggregateVenueMetrics = (
+  items: Array<{ volume?: string | null; volume24h?: string | null; liquidity?: string | null }>
+): { volume: string | null; volume24h: string | null; liquidity: string | null } => ({
+  volume: sumNumericStrings(items.map((item) => item.volume)),
+  volume24h: sumNumericStrings(items.map((item) => item.volume24h)),
+  liquidity: sumNumericStrings(items.map((item) => item.liquidity))
 });
 
 const MEDIA_HOST_ALLOWLIST = [
@@ -674,6 +702,24 @@ const extractSanitizedMediaUrl = (
   return null;
 };
 
+const extractNumericMetric = (
+  normalizedPayload: unknown,
+  rawSourcePayload: unknown,
+  fieldNames: readonly string[]
+): string | null => {
+  const candidates = [
+    ...collectNumericFields(normalizedPayload, fieldNames, 3),
+    ...collectNumericFields(rawSourcePayload, fieldNames, 4)
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseFiniteMetric(candidate);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
 const collectStringFields = (
   value: unknown,
   fieldNames: readonly string[],
@@ -697,6 +743,48 @@ const collectStringFields = (
   });
   const nested = Object.values(value).flatMap((entry) => collectStringFields(entry, fieldNames, depth - 1));
   return [...direct, ...nested];
+};
+
+const collectNumericFields = (
+  value: unknown,
+  fieldNames: readonly string[],
+  depth: number
+): unknown[] => {
+  if (depth < 0 || typeof value === "string") {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => collectNumericFields(entry, fieldNames, depth - 1));
+  }
+  if (!isRecord(value)) {
+    return [];
+  }
+  const direct = fieldNames.flatMap((field) => {
+    const candidate = value[field];
+    return typeof candidate === "string" || typeof candidate === "number" ? [candidate] : [];
+  });
+  const nested = Object.values(value).flatMap((entry) => collectNumericFields(entry, fieldNames, depth - 1));
+  return [...direct, ...nested];
+};
+
+const parseFiniteMetric = (value: unknown): string | null => {
+  const parsed = typeof value === "number"
+    ? value
+    : typeof value === "string"
+      ? Number(value.replace(/[$,\s]/g, ""))
+      : NaN;
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+  return parsed.toFixed(8).replace(/\.?0+$/, "");
+};
+
+const sumNumericStrings = (values: Array<string | null | undefined>): string | null => {
+  const total = values.reduce((sum, value) => {
+    const parsed = parseFiniteMetric(value);
+    return parsed === null ? sum : sum + Number(parsed);
+  }, 0);
+  return total > 0 ? parseFiniteMetric(total) : null;
 };
 
 const sanitizeMediaUrl = (value: string): string | null => {

@@ -4080,9 +4080,25 @@ components:
           type: string
           nullable: true
           description: Sanitized HTTPS icon URL from approved venue metadata, or null.
+    MarketCatalogMetricFields:
+      type: object
+      properties:
+        volume:
+          type: string
+          nullable: true
+          description: Aggregated venue market volume from approved venue metadata, when available.
+        volume24h:
+          type: string
+          nullable: true
+          description: Aggregated 24 hour venue market volume from approved venue metadata, when available.
+        liquidity:
+          type: string
+          nullable: true
+          description: Aggregated venue market liquidity/open-interest metric from approved venue metadata, when available.
     MarketCatalogVenueMarket:
       allOf:
         - $ref: "#/components/schemas/MarketCatalogMediaFields"
+        - $ref: "#/components/schemas/MarketCatalogMetricFields"
         - type: object
           required: [canonicalMarketId, canonicalMarketTitle, venue, venueMarketProfileId, venueMarketId, venueTitle, marketClass, outcomes, expiresAt, resolvesAt]
           properties:
@@ -4108,6 +4124,7 @@ components:
     MarketCatalogMarket:
       allOf:
         - $ref: "#/components/schemas/MarketCatalogMediaFields"
+        - $ref: "#/components/schemas/MarketCatalogMetricFields"
         - type: object
           required: [canonicalEventId, canonicalMarketIds, title, normalizedTitle, category, marketClass, status, venues, venueCount, venueMarketCount, outcomeCount, routeability, venueMarkets, updatedAt]
           properties:
@@ -4145,6 +4162,7 @@ components:
     MarketCatalogEvent:
       allOf:
         - $ref: "#/components/schemas/MarketCatalogMediaFields"
+        - $ref: "#/components/schemas/MarketCatalogMetricFields"
         - type: object
           required: [eventId, title, normalizedTitle, category, status, marketCount, featuredMarkets, markets, venues, venueCount, venueMarketCount, outcomeCount, routeability, updatedAt]
           properties:

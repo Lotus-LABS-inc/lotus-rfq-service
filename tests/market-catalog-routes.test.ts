@@ -36,6 +36,9 @@ const market: MarketCatalogMarket = {
   },
   imageUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/republican-nominee.png",
   iconUrl: null,
+  volume: "1200000",
+  volume24h: "250000",
+  liquidity: "500000",
   venueMarkets: [{
     canonicalMarketId: "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
     canonicalMarketTitle: "Republican Presidential Nominee 2028",
@@ -45,6 +48,9 @@ const market: MarketCatalogMarket = {
     venueTitle: "Republican nominee?",
     imageUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/republican-nominee.png",
     iconUrl: null,
+    volume: "1200000",
+    volume24h: "250000",
+    liquidity: "500000",
     marketClass: "CATEGORICAL",
     outcomes: [{ id: "jd-vance", label: "JD Vance" }, { id: "donald-trump", label: "Donald Trump" }],
     network: "POLYGON",
@@ -74,6 +80,9 @@ const marketEvent: MarketCatalogEvent = {
   },
   imageUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/republican-nominee.png",
   iconUrl: null,
+  volume: "1200000",
+  volume24h: "250000",
+  liquidity: "500000",
   updatedAt: "2026-05-03T00:00:00.000Z"
 };
 
