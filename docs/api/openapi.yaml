@@ -4139,6 +4139,14 @@ components:
                   label: { type: string }
             network: { type: string, nullable: true }
             chain: { type: string, nullable: true }
+            change24h:
+              type: string
+              nullable: true
+              description: Venue-provided absolute 24 hour price movement, when available.
+            changePercent24h:
+              type: string
+              nullable: true
+              description: Venue-provided 24 hour percentage price movement, when available.
             expiresAt: { type: string, nullable: true }
             resolvesAt: { type: string, nullable: true }
     MarketCatalogMarket:

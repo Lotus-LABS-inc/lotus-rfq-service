@@ -31,6 +31,8 @@ export interface MarketCatalogVenueMarket {
   tradeCount: string | null;
   buyCount: string | null;
   sellCount: string | null;
+  change24h: string | null;
+  changePercent24h: string | null;
   marketClass: string;
   outcomes: Array<{ id: string; label: string }>;
   network: string | null;
@@ -678,6 +680,8 @@ const toVenueMarket = (row: VenueMarketRow): MarketCatalogVenueMarket => ({
   tradeCount: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["tradeCount", "trade_count", "tradesCount", "trades_count", "transactionCount", "transaction_count"]),
   buyCount: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["buyCount", "buy_count", "buyTrades", "buy_trades", "buyTransactions", "buy_transactions"]),
   sellCount: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["sellCount", "sell_count", "sellTrades", "sell_trades", "sellTransactions", "sell_transactions"]),
+  change24h: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["change24h", "change_24h", "priceChange24h", "price_change_24h", "dailyChange", "daily_change"]),
+  changePercent24h: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["changePercent24h", "change_percent_24h", "priceChangePercent24h", "price_change_percent_24h", "percentChange24h", "percent_change_24h", "changePct24h", "change_pct_24h"]),
   marketClass: row.market_class,
   outcomes: normalizeOutcomes(row.outcomes),
   network: row.network,

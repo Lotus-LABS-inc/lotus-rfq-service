@@ -61,6 +61,8 @@ const market: MarketCatalogMarket = {
     tradeCount: "1100",
     buyCount: "650",
     sellCount: "450",
+    change24h: "0.02",
+    changePercent24h: "1.5",
     marketClass: "CATEGORICAL",
     outcomes: [{ id: "jd-vance", label: "JD Vance" }, { id: "donald-trump", label: "Donald Trump" }],
     network: "POLYGON",
