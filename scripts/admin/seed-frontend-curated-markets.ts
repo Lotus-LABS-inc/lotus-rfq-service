@@ -501,10 +501,12 @@ const main = async (): Promise<void> => {
   if (!databaseUrl) {
     throw new Error("SUPABASE_DB_URL or DATABASE_URL is required.");
   }
+  const target = new URL(databaseUrl);
+  const useSsl = !["localhost", "127.0.0.1", "::1"].includes(target.hostname);
 
   const pool = new Pool({
     connectionString: databaseUrl,
-    ssl: { rejectUnauthorized: false },
+    ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
     application_name: "seed-frontend-curated-markets",
     statement_timeout: 0,
     query_timeout: 0
@@ -570,7 +572,6 @@ const main = async (): Promise<void> => {
       acc[market.category] = (acc[market.category] ?? 0) + 1;
       return acc;
     }, {});
-    const target = new URL(databaseUrl);
     console.log(JSON.stringify({
       dryRun,
       approvalsOnly,
