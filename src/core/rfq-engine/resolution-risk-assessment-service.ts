@@ -50,6 +50,71 @@ const selectTrustedResolutionText = (...values: readonly (string | null | undefi
     return null;
 };
 
+const deriveVenueDeclaredOracleSource = (text: string | null | undefined): { oracleType: string; oracleName: string } | null => {
+    if (!text) {
+        return null;
+    }
+    const normalized = text.replace(/\s+/g, " ").trim();
+
+    if (/\bUMA\b|optimistic oracle/i.test(normalized)) {
+        return {
+            oracleType: "OPTIMISTIC_ORACLE",
+            oracleName: "UMA"
+        };
+    }
+
+    if (/\bKleros\b/i.test(normalized)) {
+        return {
+            oracleType: "ARBITRATION_ORACLE",
+            oracleName: "Kleros"
+        };
+    }
+
+    const exchangePair = normalized.match(/\b(Binance|Coinbase|Kraken|OKX|Bybit|Bitstamp|Bitfinex|Gemini)\b[^.,"\n]*?\b(BTC[\/_]USDT|BTCUSD|BTC[\/_]USD|ETH[\/_]USDT|ETHUSD|ETH[\/_]USD|SOL[\/_]USDT|SOLUSD|SOL[\/_]USD|[A-Z]{2,10}[\/_]USD[A-Z]?)\b/i);
+    if (exchangePair) {
+        return {
+            oracleType: "EXCHANGE_PRICE_SOURCE",
+            oracleName: `${canonicalSourceName(exchangePair[1]!)} ${normalizeOraclePair(exchangePair[2]!)}`
+        };
+    }
+
+    const tradingViewSymbol = normalized.match(/\bTradingView\b[^.,"\n]*(?:symbol=)?([A-Z0-9_]+:[A-Z0-9_]+)/i);
+    if (tradingViewSymbol) {
+        return {
+            oracleType: "PRICE_CHART_SOURCE",
+            oracleName: `TradingView ${tradingViewSymbol[1]!.toUpperCase()}`
+        };
+    }
+
+    const namedSource = normalized.match(/\bresolution source for this market is ([^,.]+)(?:,|\.)/i)
+        ?? normalized.match(/\baccording to ([^,.]+)(?:,|\.)/i);
+    if (namedSource) {
+        return {
+            oracleType: "VENUE_DECLARED_SOURCE",
+            oracleName: normalizeDeclaredSourceName(namedSource[1]!)
+        };
+    }
+
+    return null;
+};
+
+const canonicalSourceName = (value: string): string => {
+    const normalized = value.toLowerCase();
+    if (normalized === "okx") {
+        return "OKX";
+    }
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+};
+
+const normalizeOraclePair = (value: string): string => value.toUpperCase().replace("_", "/");
+
+const normalizeDeclaredSourceName = (value: string): string =>
+    value
+        .replace(/\s+/g, " ")
+        .replace(/\s+specifically\s+.*$/i, "")
+        .trim()
+        .slice(0, 120);
+
 type ServiceErrorCode =
     | "profile_not_found"
     | "canonical_event_not_found"
@@ -464,27 +529,31 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
     }
 
     private mapProfileRow(row: ResolutionProfileRow): NormalizedResolutionProfile {
+        const primaryResolutionText = selectTrustedResolutionText(
+            row.primary_resolution_text,
+            row.vmp_resolution_rules_text,
+            row.vmp_description,
+            row.vrp_rule_text,
+            row.supplemental_rules_text
+        );
+        const supplementalRulesText = selectTrustedResolutionText(
+            row.supplemental_rules_text,
+            row.vmp_resolution_source,
+            row.vrp_resolution_source
+        );
+        const derivedOracleSource = deriveVenueDeclaredOracleSource(supplementalRulesText ?? primaryResolutionText);
+
         return {
             id: row.id,
             venue: row.venue,
             venueMarketId: row.venue_market_id,
             canonicalEventId: row.canonical_event_id,
             canonicalMarketId: row.canonical_market_id,
-            oracleType: row.oracle_type,
-            oracleName: row.oracle_name,
+            oracleType: derivedOracleSource?.oracleType ?? row.oracle_type,
+            oracleName: derivedOracleSource?.oracleName ?? row.oracle_name,
             resolutionAuthorityType: row.resolution_authority_type,
-            primaryResolutionText: selectTrustedResolutionText(
-                row.primary_resolution_text,
-                row.vmp_resolution_rules_text,
-                row.vmp_description,
-                row.vrp_rule_text,
-                row.supplemental_rules_text
-            ),
-            supplementalRulesText: selectTrustedResolutionText(
-                row.supplemental_rules_text,
-                row.vmp_resolution_source,
-                row.vrp_resolution_source
-            ),
+            primaryResolutionText,
+            supplementalRulesText,
             disputeWindowHours: row.dispute_window_hours,
             settlementLagHours: row.settlement_lag_hours,
             marketType: row.market_type,

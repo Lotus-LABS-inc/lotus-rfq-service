@@ -2493,9 +2493,16 @@ interface OfficialVenueResolutionMetadata {
   primaryResolutionText: string;
   supplementalRulesText: string | null;
   resolutionSourceText: string | null;
+  oracleType: string | null;
+  oracleName: string | null;
   resolver: string | null;
   sourceUrl: string | null;
   fetchedBy: string;
+}
+
+interface VenueDeclaredOracleSource {
+  oracleType: string;
+  oracleName: string;
 }
 
 const polymarketResolutionMetadataClient = new PolymarketGammaClient();
@@ -2591,14 +2598,17 @@ const fetchPolymarketOfficialResolutionMetadata = async (
 
       const resolutionSourceText = apiServerFirstString(raw.resolutionSource, raw.resolution_source)
         ?? extractResolutionSourceText(primaryResolutionText);
+      const oracleSource = deriveVenueDeclaredOracleSource(resolutionSourceText ?? primaryResolutionText);
 
       return {
         title: apiServerFirstString(raw.question, raw.title, market.title),
         primaryResolutionText,
         supplementalRulesText: resolutionSourceText,
         resolutionSourceText,
+        oracleType: oracleSource?.oracleType ?? null,
+        oracleName: oracleSource?.oracleName ?? null,
         resolver: apiServerFirstString(raw.resolvedBy, raw.resolved_by, raw.resolver),
-        sourceUrl: extractFirstUrl(resolutionSourceText ?? primaryResolutionText),
+        sourceUrl: extractFirstUrl(resolutionSourceText ?? primaryResolutionText) ?? defaultOracleSourceUrl(oracleSource),
         fetchedBy: `polymarket_gamma:${identifier}`
       };
     } catch {
@@ -2625,13 +2635,16 @@ const fetchLimitlessOfficialResolutionMetadata = async (
       const primaryResolutionText = stripHtmlRules(apiServerFirstString(rawDetail.description));
       if (primaryResolutionText && looksLikeTrustedResolutionText(primaryResolutionText)) {
         const resolutionSourceText = extractResolutionSourceText(primaryResolutionText);
+        const oracleSource = deriveVenueDeclaredOracleSource(resolutionSourceText ?? primaryResolutionText);
         return {
           title: apiServerFirstString(rawDetail.title, rawDetail.proxyTitle, identifier),
           primaryResolutionText,
           supplementalRulesText: resolutionSourceText,
           resolutionSourceText: resolutionSourceText ?? "Limitless public market detail",
+          oracleType: oracleSource?.oracleType ?? null,
+          oracleName: oracleSource?.oracleName ?? null,
           resolver: null,
-          sourceUrl: extractFirstUrl(resolutionSourceText ?? primaryResolutionText),
+          sourceUrl: extractFirstUrl(resolutionSourceText ?? primaryResolutionText) ?? defaultOracleSourceUrl(oracleSource),
           fetchedBy: `limitless_market_detail:${identifier}`
         };
       }
@@ -2653,13 +2666,16 @@ const fetchLimitlessOfficialResolutionMetadata = async (
       continue;
     }
     const resolutionSourceText = extractResolutionSourceText(primaryResolutionText);
+    const oracleSource = deriveVenueDeclaredOracleSource(resolutionSourceText ?? primaryResolutionText);
     return {
       title: apiServerFirstString(payload.title, payload.proxyTitle),
       primaryResolutionText,
       supplementalRulesText: resolutionSourceText,
       resolutionSourceText: resolutionSourceText ?? "Limitless persisted market detail",
+      oracleType: oracleSource?.oracleType ?? null,
+      oracleName: oracleSource?.oracleName ?? null,
       resolver: null,
-      sourceUrl: extractFirstUrl(resolutionSourceText ?? primaryResolutionText),
+      sourceUrl: extractFirstUrl(resolutionSourceText ?? primaryResolutionText) ?? defaultOracleSourceUrl(oracleSource),
       fetchedBy: "limitless_persisted_market_detail"
     };
   }
@@ -2685,14 +2701,16 @@ const persistOfficialVenueResolutionMetadata = async (
     `UPDATE resolution_profiles
         SET primary_resolution_text = $1,
             supplemental_rules_text = COALESCE($2, supplemental_rules_text),
-            oracle_name = COALESCE($3, oracle_name),
-            metadata = metadata || $4::jsonb,
+            oracle_type = COALESCE($3, oracle_type),
+            oracle_name = COALESCE($4, oracle_name),
+            metadata = metadata || $5::jsonb,
             updated_at = now()
-      WHERE id = $5`,
+      WHERE id = $6`,
     [
       metadata.primaryResolutionText,
       metadata.supplementalRulesText,
-      metadata.resolutionSourceText,
+      metadata.oracleType,
+      metadata.oracleName,
       JSON.stringify(metadataPatch),
       row.id
     ]
@@ -2817,6 +2835,85 @@ const extractFirstUrl = (text: string | null): string | null => {
   return match?.[0] ?? null;
 };
 
+const deriveVenueDeclaredOracleSource = (text: string | null | undefined): VenueDeclaredOracleSource | null => {
+  if (!text) {
+    return null;
+  }
+  const normalized = text.replace(/\s+/g, " ").trim();
+
+  if (/\bUMA\b|optimistic oracle/i.test(normalized)) {
+    return {
+      oracleType: "OPTIMISTIC_ORACLE",
+      oracleName: "UMA"
+    };
+  }
+
+  if (/\bKleros\b/i.test(normalized)) {
+    return {
+      oracleType: "ARBITRATION_ORACLE",
+      oracleName: "Kleros"
+    };
+  }
+
+  const exchangePair = normalized.match(/\b(Binance|Coinbase|Kraken|OKX|Bybit|Bitstamp|Bitfinex|Gemini)\b[^.,"\n]*?\b(BTC[\/_]USDT|BTCUSD|BTC[\/_]USD|ETH[\/_]USDT|ETHUSD|ETH[\/_]USD|SOL[\/_]USDT|SOLUSD|SOL[\/_]USD|[A-Z]{2,10}[\/_]USD[A-Z]?)\b/i);
+  if (exchangePair) {
+    return {
+      oracleType: "EXCHANGE_PRICE_SOURCE",
+      oracleName: `${canonicalSourceName(exchangePair[1]!)} ${normalizeOraclePair(exchangePair[2]!)}`
+    };
+  }
+
+  const tradingViewSymbol = normalized.match(/\bTradingView\b[^.,"\n]*(?:symbol=)?([A-Z0-9_]+:[A-Z0-9_]+)/i);
+  if (tradingViewSymbol) {
+    return {
+      oracleType: "PRICE_CHART_SOURCE",
+      oracleName: `TradingView ${tradingViewSymbol[1]!.toUpperCase()}`
+    };
+  }
+
+  const namedSource = normalized.match(/\bresolution source for this market is ([^,.]+)(?:,|\.)/i)
+    ?? normalized.match(/\baccording to ([^,.]+)(?:,|\.)/i);
+  if (namedSource) {
+    return {
+      oracleType: "VENUE_DECLARED_SOURCE",
+      oracleName: normalizeDeclaredSourceName(namedSource[1]!)
+    };
+  }
+
+  return null;
+};
+
+const canonicalSourceName = (value: string): string => {
+  const normalized = value.toLowerCase();
+  if (normalized === "okx") {
+    return "OKX";
+  }
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+};
+
+const normalizeOraclePair = (value: string): string => value.toUpperCase().replace("_", "/");
+
+const normalizeDeclaredSourceName = (value: string): string =>
+  value
+    .replace(/\s+/g, " ")
+    .replace(/\s+specifically\s+.*$/i, "")
+    .trim()
+    .slice(0, 120);
+
+const defaultOracleSourceUrl = (source: VenueDeclaredOracleSource | null): string | null => {
+  if (!source) {
+    return null;
+  }
+  const name = source.oracleName.toLowerCase();
+  if (name === "uma") {
+    return "https://uma.xyz/";
+  }
+  if (name === "kleros") {
+    return "https://kleros.io/";
+  }
+  return null;
+};
+
 const stripHtmlRules = (value: string | null): string | null => {
   if (!value) {
     return null;
@@ -2922,6 +3019,25 @@ const findResolutionProfileByVenueMarket = async (
       }
       : {})
   };
+  const trustedPrimaryResolutionText = officialResolutionMetadata?.primaryResolutionText
+    ?? selectTrustedResolutionText(
+      row.primary_resolution_text,
+      row.vmp_resolution_rules_text,
+      row.vmp_description,
+      row.vrp_rule_text,
+      row.supplemental_rules_text
+    );
+  const trustedSupplementalRulesText = officialResolutionMetadata?.supplementalRulesText
+    ?? selectTrustedResolutionText(
+      row.supplemental_rules_text,
+      row.vmp_resolution_source,
+      row.vrp_resolution_source
+    );
+  const derivedOracleSource = deriveVenueDeclaredOracleSource(
+    officialResolutionMetadata?.resolutionSourceText
+    ?? trustedSupplementalRulesText
+    ?? trustedPrimaryResolutionText
+  );
 
   return {
     id: row.id,
@@ -2929,23 +3045,11 @@ const findResolutionProfileByVenueMarket = async (
     venueMarketId: row.venue_market_id,
     canonicalEventId: row.canonical_event_id,
     canonicalMarketId: row.canonical_market_id,
-    oracleType: row.oracle_type,
-    oracleName: officialResolutionMetadata?.resolutionSourceText ?? row.oracle_name,
+    oracleType: officialResolutionMetadata?.oracleType ?? derivedOracleSource?.oracleType ?? row.oracle_type,
+    oracleName: officialResolutionMetadata?.oracleName ?? derivedOracleSource?.oracleName ?? row.oracle_name,
     resolutionAuthorityType: row.resolution_authority_type,
-    primaryResolutionText: officialResolutionMetadata?.primaryResolutionText
-      ?? selectTrustedResolutionText(
-        row.primary_resolution_text,
-        row.vmp_resolution_rules_text,
-        row.vmp_description,
-        row.vrp_rule_text,
-        row.supplemental_rules_text
-      ),
-    supplementalRulesText: officialResolutionMetadata?.supplementalRulesText
-      ?? selectTrustedResolutionText(
-        row.supplemental_rules_text,
-        row.vmp_resolution_source,
-        row.vrp_resolution_source
-      ),
+    primaryResolutionText: trustedPrimaryResolutionText,
+    supplementalRulesText: trustedSupplementalRulesText,
     disputeWindowHours: row.dispute_window_hours,
     settlementLagHours: row.settlement_lag_hours,
     marketType: row.market_type,

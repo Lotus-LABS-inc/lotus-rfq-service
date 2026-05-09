@@ -21,10 +21,10 @@ const ResolutionRiskPresentationResponseSchema = z.object({
   label: z.string().min(1),
   riskScore: z.string(),
   confidenceScore: z.string(),
-  equivalenceClass: z.enum(["SAFE_EQUIVALENT", "CAUTION", "HIGH_RISK", "DO_NOT_POOL"]),
+  equivalenceClass: z.enum(["SAFE_EQUIVALENT", "EQUIVALENT_WITH_LAG", "CAUTION", "HIGH_RISK", "DO_NOT_POOL"]),
   shortReasons: z.array(z.string()),
   factorBreakdown: z.record(z.string(), z.unknown()),
-  recommendedAction: z.enum(["Poolable", "Pool with caution", "Isolate execution", "Do not pool"])
+  recommendedAction: z.enum(["Poolable", "Pool with caution", "Pool with caution (lag)", "Isolate execution", "Do not pool"])
 });
 
 const ResolutionProfileResponseSchema = z.object({
@@ -110,6 +110,7 @@ export const registerResolutionRiskRoutes = async (
 
       return reply.status(200).send(response);
     } catch (error) {
+      app.log.error({ err: error, eventId }, "Resolution risk canonical-event request failed.");
       return sendResolutionRiskError(reply, error);
     }
   });
@@ -134,6 +135,7 @@ export const registerResolutionRiskRoutes = async (
 
       return reply.status(200).send(response);
     } catch (error) {
+      app.log.error({ err: error, profileAId, profileBId }, "Resolution risk pair request failed.");
       return sendResolutionRiskError(reply, error);
     }
   });
@@ -173,6 +175,7 @@ export const registerResolutionRiskRoutes = async (
 
       return reply.status(200).send(response);
     } catch (error) {
+      app.log.error({ err: error, venue, marketId }, "Resolution risk market request failed.");
       return sendResolutionRiskError(reply, error);
     }
   });

@@ -58,7 +58,9 @@ describe("resolution risk routes", () => {
       buildAssessment({
         id: "44444444-4444-4444-8444-444444444444",
         marketAProfileId: PROFILE_A_ID,
-        marketBProfileId: "55555555-5555-4555-8555-555555555555"
+        marketBProfileId: "55555555-5555-4555-8555-555555555555",
+        equivalenceClass: "EQUIVALENT_WITH_LAG",
+        reasons: ["settlement lag differs but is bounded"]
       })
     ];
     const firstAssessment = assessments[0]!;
@@ -90,13 +92,13 @@ describe("resolution risk routes", () => {
           recommendedAction: "Poolable"
         },
         {
-          label: "Safe equivalent",
+          label: "Equivalent with lag",
           riskScore: "0.18",
           confidenceScore: "0.84",
-          equivalenceClass: "SAFE_EQUIVALENT",
-          shortReasons: [],
+          equivalenceClass: "EQUIVALENT_WITH_LAG",
+          shortReasons: ["settlement lag differs but is bounded"],
           factorBreakdown: secondAssessment.factorBreakdown,
-          recommendedAction: "Poolable"
+          recommendedAction: "Pool with caution (lag)"
         }
       ]
     });
