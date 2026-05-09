@@ -117,6 +117,7 @@ export const buildPolymarketClobTokenEnrichment = (input: {
 
   const matchedMarket = matchedMarkets[0]!;
   const media = extractPolymarketMedia(matchedMarket.raw);
+  const metadata = extractPolymarketMarketMetadata(input.profile, matchedMarket.raw);
   const inactiveBlockers = officialMarketActivityBlockers(matchedMarket.raw);
   if (inactiveBlockers.length > 0) {
     return {
@@ -150,12 +151,14 @@ export const buildPolymarketClobTokenEnrichment = (input: {
     quoteMetadataVersion: input.metadataVersion,
     quoteEnrichedAt: input.generatedAt,
     ...(media.imageUrl ? { imageUrl: media.imageUrl } : {}),
-    ...(media.iconUrl ? { iconUrl: media.iconUrl } : {})
+    ...(media.iconUrl ? { iconUrl: media.iconUrl } : {}),
+    ...metadata
   };
   const rawSourcePayload = {
     ...asRecord(input.profile.rawSourcePayload),
     ...(media.imageUrl ? { imageUrl: media.imageUrl } : {}),
     ...(media.iconUrl ? { iconUrl: media.iconUrl } : {}),
+    ...metadata,
     quoteEvidence: {
       source: input.source,
       conditionId: matchedMarket.conditionId,
@@ -221,6 +224,72 @@ const extractPolymarketMedia = (raw: Record<string, unknown>): { imageUrl: strin
     imageUrl
   );
   return { imageUrl, iconUrl };
+};
+
+const extractPolymarketMarketMetadata = (
+  profile: PolymarketQuoteProfileForEnrichment,
+  raw: Record<string, unknown>
+): Record<string, string> => {
+  const metadata: Record<string, string> = {};
+  const closeDate = curatedCloseDate(profile) ?? firstSafeIsoTimestamp(
+    raw.endDateIso,
+    raw.end_date_iso,
+    raw.endDate,
+    raw.end_date,
+    raw.expiration,
+    raw.expirationTimestamp,
+    raw.expiresAt,
+    raw.expires_at,
+    raw.closeTime,
+    raw.close_time
+  );
+  if (closeDate) {
+    metadata.expiresAt = closeDate;
+    metadata.resolvesAt = closeDate;
+  }
+  const volume = firstFiniteNumberString(raw.volume, raw.volumeNum, raw.volume_num, raw.totalVolume, raw.total_volume);
+  if (volume) {
+    metadata.volume = volume;
+  }
+  const volume24h = firstFiniteNumberString(
+    raw.volume24h,
+    raw.volume24hr,
+    raw.volume_24h,
+    raw.volume24hUsd,
+    raw.volume_24h_usd,
+    raw.volume1d,
+    raw.volume_1d
+  );
+  if (volume24h) {
+    metadata.volume24h = volume24h;
+  }
+  const liquidity = firstFiniteNumberString(raw.liquidity, raw.liquidityNum, raw.liquidity_num, raw.openInterest, raw.open_interest);
+  if (liquidity) {
+    metadata.liquidity = liquidity;
+  }
+  const change24h = firstFiniteNumberString(
+    raw.oneDayPriceChange,
+    raw.one_day_price_change,
+    raw.priceChange24h,
+    raw.price_change_24h,
+    raw.change24h,
+    raw.change_24h
+  );
+  if (change24h) {
+    metadata.change24h = change24h;
+  }
+  const changePercent24h = firstFiniteNumberString(
+    raw.oneDayPriceChangePercent,
+    raw.one_day_price_change_percent,
+    raw.priceChangePercent24h,
+    raw.price_change_percent_24h,
+    raw.changePercent24h,
+    raw.change_percent_24h
+  );
+  if (changePercent24h) {
+    metadata.changePercent24h = changePercent24h;
+  }
+  return metadata;
 };
 
 const marketMatchesIdentifier = (market: PolymarketQuoteMetadataMarket, identifier: string): boolean =>
@@ -403,6 +472,48 @@ const firstSafeHttpsUrl = (...values: readonly unknown[]): string | null => {
       }
     } catch {
       continue;
+    }
+  }
+  return null;
+};
+
+const curatedCloseDate = (profile: PolymarketQuoteProfileForEnrichment): string | null => {
+  const normalizedPayload = asRecord(profile.normalizedPayload);
+  const rawPayload = asRecord(profile.rawSourcePayload);
+  const curatedKey = firstString(normalizedPayload.curatedKey, rawPayload.curatedKey);
+  if (!curatedKey) {
+    return null;
+  }
+  const date = curatedKey.split("|").find((part) => /^\d{4}-\d{2}-\d{2}$/.test(part));
+  return date ? `${date}T12:00:00.000Z` : null;
+};
+
+const firstSafeIsoTimestamp = (...values: readonly unknown[]): string | null => {
+  for (const value of values) {
+    const candidate = firstString(value);
+    if (!candidate) {
+      continue;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(candidate)) {
+      return `${candidate}T12:00:00.000Z`;
+    }
+    const parsed = new Date(candidate);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString();
+    }
+  }
+  return null;
+};
+
+const firstFiniteNumberString = (...values: readonly unknown[]): string | null => {
+  for (const value of values) {
+    const parsed = typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value.replace(/[$,%\s,]/g, ""))
+        : NaN;
+    if (Number.isFinite(parsed)) {
+      return String(parsed);
     }
   }
   return null;

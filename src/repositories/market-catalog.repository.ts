@@ -451,6 +451,8 @@ const toMarket = (row: MarketRow, venueRows: VenueMarketRow[]): MarketCatalogMar
   const eventGroup = deriveEventGroup(row);
   const media = chooseMarketMedia(venueMarkets);
   const metrics = aggregateVenueMetrics(venueMarkets);
+  const expiresAt = row.expires_at ?? venueMarkets.find((market) => market.expiresAt !== null)?.expiresAt ?? null;
+  const resolvesAt = row.resolves_at ?? venueMarkets.find((market) => market.resolvesAt !== null)?.resolvesAt ?? null;
   return {
     eventId: eventGroup.eventId,
     eventTitle: eventGroup.title,
@@ -460,10 +462,10 @@ const toMarket = (row: MarketRow, venueRows: VenueMarketRow[]): MarketCatalogMar
     normalizedTitle: row.normalized_proposition_text,
     category: row.canonical_category,
     marketClass: row.market_class,
-    status: marketStatus(row.expires_at, row.resolves_at),
+    status: marketStatus(expiresAt, resolvesAt),
     startsAt: row.starts_at,
-    expiresAt: row.expires_at,
-    resolvesAt: row.resolves_at,
+    expiresAt,
+    resolvesAt,
     venues,
     venueCount: venues.length,
     venueMarketCount: Number(row.venue_market_count),
@@ -663,32 +665,53 @@ const deriveTitleEventGroup = (title: string): { eventId: string; title: string 
   return null;
 };
 
-const toVenueMarket = (row: VenueMarketRow): MarketCatalogVenueMarket => ({
-  canonicalMarketId: row.canonical_market_id,
-  canonicalMarketTitle: displayTitle(row.canonical_market_title, row.canonical_market_id),
-  venue: row.venue === "PREDICT" ? "PREDICT_FUN" : row.venue,
-  venueMarketProfileId: row.venue_market_profile_id,
-  venueMarketId: row.venue_market_id,
-  venueTitle: row.venue_title,
-  imageUrl: extractSanitizedMediaUrl(row.normalized_payload, row.raw_source_payload, ["imageUrl", "image_url", "image", "twitterCardImage", "thumbnailUrl", "thumbnail", "banner"]),
-  iconUrl: extractSanitizedMediaUrl(row.normalized_payload, row.raw_source_payload, ["iconUrl", "icon_url", "icon", "logoUrl", "logo"]),
-  volume: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["volume", "totalVolume", "total_volume", "volumeTotalUsd", "volume_total_usd"]),
-  volume24h: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["volume24h", "volume_24h", "volume24hUsd", "volume_24h_usd", "volume_1d"]),
-  liquidity: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["liquidity", "totalLiquidity", "total_liquidity", "totalLiquidityUsd", "total_liquidity_usd", "openInterest", "open_interest"]),
-  buyVolume: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["buyVolume", "buy_volume", "buyVolumeUsd", "buy_volume_usd", "totalBuyVolume", "total_buy_volume"]),
-  sellVolume: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["sellVolume", "sell_volume", "sellVolumeUsd", "sell_volume_usd", "totalSellVolume", "total_sell_volume"]),
-  tradeCount: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["tradeCount", "trade_count", "tradesCount", "trades_count", "transactionCount", "transaction_count"]),
-  buyCount: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["buyCount", "buy_count", "buyTrades", "buy_trades", "buyTransactions", "buy_transactions"]),
-  sellCount: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["sellCount", "sell_count", "sellTrades", "sell_trades", "sellTransactions", "sell_transactions"]),
-  change24h: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["change24h", "change_24h", "priceChange24h", "price_change_24h", "dailyChange", "daily_change"]),
-  changePercent24h: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["changePercent24h", "change_percent_24h", "priceChangePercent24h", "price_change_percent_24h", "percentChange24h", "percent_change_24h", "changePct24h", "change_pct_24h"]),
-  marketClass: row.market_class,
-  outcomes: normalizeOutcomes(row.outcomes),
-  network: row.network,
-  chain: row.chain,
-  expiresAt: row.expires_at,
-  resolvesAt: row.resolves_at
-});
+const toVenueMarket = (row: VenueMarketRow): MarketCatalogVenueMarket => {
+  const payloadExpiresAt = extractSanitizedTimestamp(row.normalized_payload, row.raw_source_payload, [
+    "expiresAt",
+    "expires_at",
+    "endDate",
+    "end_date",
+    "endDateIso",
+    "end_date_iso",
+    "closeTime",
+    "close_time"
+  ]);
+  const payloadResolvesAt = extractSanitizedTimestamp(row.normalized_payload, row.raw_source_payload, [
+    "resolvesAt",
+    "resolves_at",
+    "resolvedAt",
+    "resolved_at",
+    "resolutionTime",
+    "resolution_time"
+  ]);
+  const curatedTimestamp = extractCuratedTimestamp(row.normalized_payload, row.raw_source_payload);
+  return {
+    canonicalMarketId: row.canonical_market_id,
+    canonicalMarketTitle: displayTitle(row.canonical_market_title, row.canonical_market_id),
+    venue: row.venue === "PREDICT" ? "PREDICT_FUN" : row.venue,
+    venueMarketProfileId: row.venue_market_profile_id,
+    venueMarketId: row.venue_market_id,
+    venueTitle: row.venue_title,
+    imageUrl: extractSanitizedMediaUrl(row.normalized_payload, row.raw_source_payload, ["imageUrl", "image_url", "image", "twitterCardImage", "thumbnailUrl", "thumbnail", "banner"]),
+    iconUrl: extractSanitizedMediaUrl(row.normalized_payload, row.raw_source_payload, ["iconUrl", "icon_url", "icon", "logoUrl", "logo"]),
+    volume: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["volume", "totalVolume", "total_volume", "volumeTotalUsd", "volume_total_usd"]),
+    volume24h: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["volume24h", "volume24hr", "volume_24h", "volume24hUsd", "volume_24h_usd", "volume_1d"]),
+    liquidity: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["liquidity", "totalLiquidity", "total_liquidity", "totalLiquidityUsd", "total_liquidity_usd", "openInterest", "open_interest"]),
+    buyVolume: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["buyVolume", "buy_volume", "buyVolumeUsd", "buy_volume_usd", "totalBuyVolume", "total_buy_volume"]),
+    sellVolume: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["sellVolume", "sell_volume", "sellVolumeUsd", "sell_volume_usd", "totalSellVolume", "total_sell_volume"]),
+    tradeCount: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["tradeCount", "trade_count", "tradesCount", "trades_count", "transactionCount", "transaction_count"]),
+    buyCount: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["buyCount", "buy_count", "buyTrades", "buy_trades", "buyTransactions", "buy_transactions"]),
+    sellCount: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["sellCount", "sell_count", "sellTrades", "sell_trades", "sellTransactions", "sell_transactions"]),
+    change24h: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["change24h", "change_24h", "priceChange24h", "price_change_24h", "oneDayPriceChange", "one_day_price_change", "dailyChange", "daily_change"]),
+    changePercent24h: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["changePercent24h", "change_percent_24h", "priceChangePercent24h", "price_change_percent_24h", "oneDayPriceChangePercent", "one_day_price_change_percent", "percentChange24h", "percent_change_24h", "changePct24h", "change_pct_24h"]),
+    marketClass: row.market_class,
+    outcomes: normalizeOutcomes(row.outcomes),
+    network: row.network,
+    chain: row.chain,
+    expiresAt: row.expires_at ?? payloadExpiresAt ?? curatedTimestamp,
+    resolvesAt: row.resolves_at ?? payloadResolvesAt ?? payloadExpiresAt ?? curatedTimestamp
+  };
+};
 
 const chooseMarketMedia = (
   items: Array<{ imageUrl: string | null; iconUrl: string | null }>
@@ -754,6 +777,41 @@ const extractSanitizedMediaUrl = (
     const sanitized = sanitizeMediaUrl(candidate);
     if (sanitized) {
       return sanitized;
+    }
+  }
+  return null;
+};
+
+const extractSanitizedTimestamp = (
+  normalizedPayload: unknown,
+  rawSourcePayload: unknown,
+  fieldNames: readonly string[]
+): string | null => {
+  const candidates = [
+    ...collectStringFields(normalizedPayload, fieldNames, 3),
+    ...collectStringFields(rawSourcePayload, fieldNames, 4)
+  ];
+  for (const candidate of candidates) {
+    const sanitized = sanitizeTimestamp(candidate);
+    if (sanitized) {
+      return sanitized;
+    }
+  }
+  return null;
+};
+
+const extractCuratedTimestamp = (
+  normalizedPayload: unknown,
+  rawSourcePayload: unknown
+): string | null => {
+  const curatedKeys = [
+    ...collectStringFields(normalizedPayload, ["curatedKey", "curated_key"], 1),
+    ...collectStringFields(rawSourcePayload, ["curatedKey", "curated_key"], 1)
+  ];
+  for (const key of curatedKeys) {
+    const date = key.split("|").find((part) => /^\d{4}-\d{2}-\d{2}$/.test(part));
+    if (date) {
+      return `${date}T12:00:00.000Z`;
     }
   }
   return null;
@@ -864,6 +922,21 @@ const sanitizeMediaUrl = (value: string): string | null => {
   const hostname = parsed.hostname.toLowerCase();
   const allowed = MEDIA_HOST_ALLOWLIST.some((host) => hostname === host || hostname.endsWith(`.${host}`));
   return allowed ? parsed.toString() : null;
+};
+
+const sanitizeTimestamp = (value: string): string | null => {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 64) {
+    return null;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return `${trimmed}T12:00:00.000Z`;
+  }
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed.toISOString();
 };
 
 const normalizeOutcomes = (value: unknown): Array<{ id: string; label: string }> => {

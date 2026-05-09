@@ -347,6 +347,10 @@ async function listApprovedPolymarketProfiles(
        OR COALESCE(vmp.normalized_payload->>'quoteSource', '') <> $3
        OR COALESCE(vmp.normalized_payload->>'imageUrl', vmp.raw_source_payload->>'imageUrl', '') = ''
        OR COALESCE(vmp.normalized_payload->>'iconUrl', vmp.raw_source_payload->>'iconUrl', '') = ''
+       OR COALESCE(vmp.normalized_payload->>'expiresAt', vmp.raw_source_payload->>'expiresAt', '') = ''
+       OR COALESCE(vmp.normalized_payload->>'change24h', vmp.raw_source_payload->>'change24h', '') = ''
+       OR COALESCE(vmp.normalized_payload->>'volume24h', vmp.raw_source_payload->>'volume24h', '') = ''
+       OR COALESCE(vmp.normalized_payload->>'liquidity', vmp.raw_source_payload->>'liquidity', '') = ''
     )
       ${profileFilter}
     ORDER BY COALESCE(fma.sort_priority, 1000), ce.updated_at DESC, vmp.title

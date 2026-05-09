@@ -24,8 +24,13 @@ const market = {
   marketSlug: "bitcoin-all-time-high-by-june-30-2026",
   title: "Bitcoin all time high by June 30, 2026?",
   raw: {
+    endDate: "2026-07-01T05:00:00Z",
     image: "https://polymarket-upload.s3.us-east-2.amazonaws.com/BTC+fullsize.png",
     icon: "https://polymarket-upload.s3.us-east-2.amazonaws.com/BTC+icon.png",
+    volume: "1597986.110278",
+    volume24hr: 12870.845445,
+    liquidity: "70660.18548",
+    oneDayPriceChange: 0.0025,
     outcomes: [
       { label: "Yes", token_id: "yes-token" },
       { label: "No", token_id: "no-token" }
@@ -65,11 +70,20 @@ describe("Polymarket CLOB token enrichment", () => {
       },
       quoteSource: "polymarket_official_api",
       imageUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/BTC+fullsize.png",
-      iconUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/BTC+icon.png"
+      iconUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/BTC+icon.png",
+      expiresAt: "2026-06-30T12:00:00.000Z",
+      resolvesAt: "2026-06-30T12:00:00.000Z",
+      volume: "1597986.110278",
+      volume24h: "12870.845445",
+      liquidity: "70660.18548",
+      change24h: "0.0025"
     });
     expect(result.enrichment.rawSourcePayload).toMatchObject({
       imageUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/BTC+fullsize.png",
-      iconUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/BTC+icon.png"
+      iconUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/BTC+icon.png",
+      expiresAt: "2026-06-30T12:00:00.000Z",
+      volume24h: "12870.845445",
+      change24h: "0.0025"
     });
     expect(result.enrichment.rawSourcePayload.quoteEvidence).toMatchObject({
       conditionId: market.conditionId,
