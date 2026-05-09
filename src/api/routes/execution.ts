@@ -1,4 +1,4 @@
-import type { FastifyInstance, preHandlerHookHandler } from "fastify";
+import type { FastifyInstance, FastifyReply, preHandlerHookHandler } from "fastify";
 import { z } from "zod";
 import type {
   ExecutableRouteService,
@@ -345,24 +345,28 @@ export const registerExecutionRoutes = async (
         message: "Execution portfolio lookup is not configured on this backend."
       });
     }
-    const generatedAt = new Date().toISOString();
-    const positions = await deps.positionRepository.listUserVerifiedPositions({
-      userId: request.user.userId,
-      limit: 500
-    });
-    const markedPositions = await markPositions({
-      positions,
-      generatedAt,
-      liveCandidateProvider: deps.liveCandidateProvider,
-      userId: request.user.userId
-    });
-    const summary = summarizePortfolio(markedPositions);
-    return reply.send({
-      generatedAt,
-      markPolicy: "LIVE_QUOTE_REQUIRED",
-      ...summary,
-      positions: markedPositions
-    });
+    try {
+      const generatedAt = new Date().toISOString();
+      const positions = await deps.positionRepository.listUserVerifiedPositions({
+        userId: request.user.userId,
+        limit: 500
+      });
+      const markedPositions = await markPositions({
+        positions,
+        generatedAt,
+        liveCandidateProvider: deps.liveCandidateProvider,
+        userId: request.user.userId
+      });
+      const summary = summarizePortfolio(markedPositions);
+      return reply.send({
+        generatedAt,
+        markPolicy: "LIVE_QUOTE_REQUIRED",
+        ...summary,
+        positions: markedPositions
+      });
+    } catch (error) {
+      return sendExecutionDataUnavailable(app, reply, error, "portfolio summary");
+    }
   });
 
   app.get("/execution/portfolio/timeseries", { preHandler: authMiddleware }, async (request, reply) => {
@@ -380,29 +384,33 @@ export const registerExecutionRoutes = async (
         details: parsed.error.flatten()
       });
     }
-    const generatedAt = new Date().toISOString();
-    const positions = await deps.positionRepository.listUserVerifiedPositions({
-      userId: request.user.userId,
-      limit: 500
-    });
-    const markedPositions = await markPositions({
-      positions,
-      generatedAt,
-      liveCandidateProvider: deps.liveCandidateProvider,
-      userId: request.user.userId
-    });
-    const summary = summarizePortfolio(markedPositions);
-    return reply.send({
-      generatedAt,
-      range: parsed.data.range ?? "1D",
-      markPolicy: "LIVE_QUOTE_REQUIRED",
-      seriesBasis: "CURRENT_MARK_TO_MARKET_SNAPSHOT",
-      historyAvailable: false,
-      points: [{
-        timestamp: generatedAt,
-        ...summary
-      }]
-    });
+    try {
+      const generatedAt = new Date().toISOString();
+      const positions = await deps.positionRepository.listUserVerifiedPositions({
+        userId: request.user.userId,
+        limit: 500
+      });
+      const markedPositions = await markPositions({
+        positions,
+        generatedAt,
+        liveCandidateProvider: deps.liveCandidateProvider,
+        userId: request.user.userId
+      });
+      const summary = summarizePortfolio(markedPositions);
+      return reply.send({
+        generatedAt,
+        range: parsed.data.range ?? "1D",
+        markPolicy: "LIVE_QUOTE_REQUIRED",
+        seriesBasis: "CURRENT_MARK_TO_MARKET_SNAPSHOT",
+        historyAvailable: false,
+        points: [{
+          timestamp: generatedAt,
+          ...summary
+        }]
+      });
+    } catch (error) {
+      return sendExecutionDataUnavailable(app, reply, error, "portfolio time-series");
+    }
   });
 
   app.get("/execution/history", { preHandler: authMiddleware }, async (request, reply) => {
@@ -420,19 +428,23 @@ export const registerExecutionRoutes = async (
         details: parsed.error.flatten()
       });
     }
-    const limit = parsed.data.limit ?? 50;
-    const rows = await deps.executionStatusRepository.listExecutionStatusesForUser({
-      userId: request.user.userId,
-      limit: limit + 1,
-      ...(parsed.data.status ? { status: parsed.data.status } : {}),
-      ...(parsed.data.cursor ? { cursor: parsed.data.cursor } : {})
-    });
-    const items = rows.slice(0, limit).map(toExecutionHistoryItem);
-    return reply.send({
-      generatedAt: new Date().toISOString(),
-      items,
-      nextCursor: rows.length > limit ? items[items.length - 1]?.updatedAt ?? null : null
-    });
+    try {
+      const limit = parsed.data.limit ?? 50;
+      const rows = await deps.executionStatusRepository.listExecutionStatusesForUser({
+        userId: request.user.userId,
+        limit: limit + 1,
+        ...(parsed.data.status ? { status: parsed.data.status } : {}),
+        ...(parsed.data.cursor ? { cursor: parsed.data.cursor } : {})
+      });
+      const items = rows.slice(0, limit).map(toExecutionHistoryItem);
+      return reply.send({
+        generatedAt: new Date().toISOString(),
+        items,
+        nextCursor: rows.length > limit ? items[items.length - 1]?.updatedAt ?? null : null
+      });
+    } catch (error) {
+      return sendExecutionDataUnavailable(app, reply, error, "execution history");
+    }
   });
 
   app.get("/execution/open-orders", { preHandler: authMiddleware }, async (request, reply) => {
@@ -450,18 +462,22 @@ export const registerExecutionRoutes = async (
         details: parsed.error.flatten()
       });
     }
-    const limit = parsed.data.limit ?? 50;
-    const rows = await deps.executionStatusRepository.listOpenExecutionStatusesForUser({
-      userId: request.user.userId,
-      limit: limit + 1,
-      ...(parsed.data.cursor ? { cursor: parsed.data.cursor } : {})
-    });
-    const items = rows.slice(0, limit).map(toOpenOrderItem);
-    return reply.send({
-      generatedAt: new Date().toISOString(),
-      items,
-      nextCursor: rows.length > limit ? items[items.length - 1]?.updatedAt ?? null : null
-    });
+    try {
+      const limit = parsed.data.limit ?? 50;
+      const rows = await deps.executionStatusRepository.listOpenExecutionStatusesForUser({
+        userId: request.user.userId,
+        limit: limit + 1,
+        ...(parsed.data.cursor ? { cursor: parsed.data.cursor } : {})
+      });
+      const items = rows.slice(0, limit).map(toOpenOrderItem);
+      return reply.send({
+        generatedAt: new Date().toISOString(),
+        items,
+        nextCursor: rows.length > limit ? items[items.length - 1]?.updatedAt ?? null : null
+      });
+    } catch (error) {
+      return sendExecutionDataUnavailable(app, reply, error, "open orders");
+    }
   });
 
   app.get("/execution/:executionId/receipt", { preHandler: authMiddleware }, async (request, reply) => {
@@ -549,27 +565,31 @@ export const registerExecutionRoutes = async (
         details: parsed.error.flatten()
       });
     }
-    const query = parsed.data;
-    const positions = query.marketId && query.outcomeId
-      ? await deps.positionRepository.listVerifiedPositions({
-          userId: request.user.userId,
-          marketId: query.marketId,
-          outcomeId: query.outcomeId,
-          ...(query.venue ? { venue: query.venue } : {})
-        })
-      : deps.positionRepository.listUserVerifiedPositions
-        ? await deps.positionRepository.listUserVerifiedPositions({
+    try {
+      const query = parsed.data;
+      const positions = query.marketId && query.outcomeId
+        ? await deps.positionRepository.listVerifiedPositions({
             userId: request.user.userId,
-            ...(query.venue ? { venue: query.venue } : {}),
-            ...(query.limit ? { limit: query.limit } : {})
+            marketId: query.marketId,
+            outcomeId: query.outcomeId,
+            ...(query.venue ? { venue: query.venue } : {})
           })
-        : [];
-    return reply.send({
-      generatedAt: new Date().toISOString(),
-      marketId: query.marketId ?? null,
-      outcomeId: query.outcomeId ?? null,
-      positions
-    });
+        : deps.positionRepository.listUserVerifiedPositions
+          ? await deps.positionRepository.listUserVerifiedPositions({
+              userId: request.user.userId,
+              ...(query.venue ? { venue: query.venue } : {}),
+              ...(query.limit ? { limit: query.limit } : {})
+            })
+          : [];
+      return reply.send({
+        generatedAt: new Date().toISOString(),
+        marketId: query.marketId ?? null,
+        outcomeId: query.outcomeId ?? null,
+        positions
+      });
+    } catch (error) {
+      return sendExecutionDataUnavailable(app, reply, error, "execution positions");
+    }
   });
 
   app.post("/execution/:executionId/prepare-exit", { preHandler: authMiddleware }, async (request, reply) => {
@@ -644,6 +664,19 @@ const toUserQuote = (quote: ExecutableTradeQuote): Record<string, unknown> => ({
     requiresUserSignature: leg.requiresUserSignature
   }))
 });
+
+const sendExecutionDataUnavailable = (
+  app: FastifyInstance,
+  reply: FastifyReply,
+  error: unknown,
+  resource: string
+) => {
+  app.log.error({ err: error, resource }, "Execution account data lookup failed.");
+  return reply.status(503).send({
+    code: "EXECUTION_ACCOUNT_DATA_UNAVAILABLE",
+    message: "Execution account data is temporarily unavailable. Please try again shortly."
+  });
+};
 
 const markPositions = async (input: {
   positions: readonly VerifiedExecutionPosition[];

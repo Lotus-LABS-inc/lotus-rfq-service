@@ -218,6 +218,32 @@ describe("execution signed bundle routes", () => {
     });
   });
 
+  it("does not expose database errors from execution account routes", async () => {
+    const app = Fastify({ logger: false });
+    const positionRepository = {
+      listVerifiedPositions: vi.fn(),
+      listUserVerifiedPositions: vi.fn(async () => {
+        throw new Error('relation "user_execution_positions" does not exist');
+      })
+    };
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: { quote: vi.fn(), getQuote: vi.fn() } as never,
+      sellQuoteService: { prepareExit: vi.fn() } as never,
+      positionRepository
+    });
+
+    const response = await app.inject({ method: "GET", url: "/execution/positions?limit=25" });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.body).not.toContain("user_execution_positions");
+    expect(response.json()).toEqual({
+      code: "EXECUTION_ACCOUNT_DATA_UNAVAILABLE",
+      message: "Execution account data is temporarily unavailable. Please try again shortly."
+    });
+  });
+
   it("serves portfolio summary with live marks and unavailable mark fallbacks", async () => {
     const app = Fastify();
     const positionRepository = {
