@@ -16,7 +16,9 @@ export interface TurnkeyAuthRouteDeps {
 
 type TurnkeySessionPayload = {
   userId?: string;
+  user_id?: string;
   organizationId?: string;
+  organization_id?: string;
   exp?: number;
   expiry?: number;
 };
@@ -44,7 +46,9 @@ export const registerTurnkeyAuthRoutes = async (
       });
     }
 
-    if (payload.userId !== turnkeyUserId || payload.organizationId !== turnkeyOrganizationId) {
+    const payloadUserId = readTurnkeySessionUserId(payload);
+    const payloadOrganizationId = readTurnkeySessionOrganizationId(payload);
+    if (payloadUserId !== turnkeyUserId || payloadOrganizationId !== turnkeyOrganizationId) {
       return reply.status(401).send({
         code: "TURNKEY_SESSION_MISMATCH",
         message: "Turnkey session does not match the requested user."
@@ -107,6 +111,12 @@ const isTurnkeySessionExpired = (payload: TurnkeySessionPayload, nowSeconds = Ma
   return expiresAt !== null && expiresAt <= nowSeconds;
 };
 
+const readTurnkeySessionUserId = (payload: TurnkeySessionPayload): string | undefined =>
+  payload.user_id ?? payload.userId;
+
+const readTurnkeySessionOrganizationId = (payload: TurnkeySessionPayload): string | undefined =>
+  payload.organization_id ?? payload.organizationId;
+
 const lotusUserIdForTurnkeySession = (organizationId: string, userId: string): string => {
   const stableId = createHash("sha256")
     .update(`${organizationId}:${userId}`)
@@ -114,4 +124,3 @@ const lotusUserIdForTurnkeySession = (organizationId: string, userId: string): s
     .slice(0, 32);
   return `turnkey_${stableId}`;
 };
-

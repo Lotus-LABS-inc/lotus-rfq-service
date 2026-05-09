@@ -59,6 +59,33 @@ describe("Turnkey auth exchange route", () => {
     await app.close();
   });
 
+  it("accepts Turnkey's signed session JWT claim names", async () => {
+    const { app, verifySessionJwt } = await setupApp();
+    const session = unsignedTurnkeySession({
+      user_id: "turnkey-user-1",
+      organization_id: "turnkey-org-1",
+      session_type: "SESSION_TYPE_READ_WRITE",
+      public_key: "public-key",
+      exp: Math.floor(Date.now() / 1000) + 300
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/turnkey/exchange",
+      payload: {
+        turnkeySessionToken: session,
+        turnkeyUserId: "turnkey-user-1",
+        turnkeyOrganizationId: "turnkey-org-1"
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().user.turnkeyUserId).toBe("turnkey-user-1");
+    expect(response.json().user.turnkeyOrganizationId).toBe("turnkey-org-1");
+    expect(verifySessionJwt).toHaveBeenCalledWith(session);
+    await app.close();
+  });
+
   it("rejects a mismatched Turnkey user", async () => {
     const { app } = await setupApp();
     const session = unsignedTurnkeySession({
@@ -128,4 +155,3 @@ describe("Turnkey auth exchange route", () => {
     await app.close();
   });
 });
-
