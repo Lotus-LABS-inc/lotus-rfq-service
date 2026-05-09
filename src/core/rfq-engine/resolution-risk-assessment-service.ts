@@ -59,6 +59,11 @@ interface ResolutionProfileRow {
     metadata: Record<string, unknown>;
     created_at: Date;
     updated_at: Date;
+    vmp_description?: string | null;
+    vmp_resolution_source?: string | null;
+    vmp_resolution_rules_text?: string | null;
+    vrp_resolution_source?: string | null;
+    vrp_rule_text?: string | null;
 }
 
 export class ResolutionRiskAssessmentServiceError extends Error {
@@ -336,10 +341,9 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
 
     private async loadProfilesForCanonicalEvent(canonicalEventId: string): Promise<readonly NormalizedResolutionProfile[]> {
         const result = await this.pool.query<ResolutionProfileRow>(
-            `SELECT *
-               FROM resolution_profiles
-              WHERE canonical_event_id = $1
-              ORDER BY id ASC`,
+            `${this.profileSelectSql()}
+              WHERE rp.canonical_event_id = $1
+              ORDER BY rp.id ASC`,
             [canonicalEventId]
         );
 
@@ -348,10 +352,9 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
 
     private async loadProfilesByIds(profileIds: readonly string[]): Promise<readonly NormalizedResolutionProfile[]> {
         const result = await this.pool.query<ResolutionProfileRow>(
-            `SELECT *
-               FROM resolution_profiles
-              WHERE id = ANY($1::uuid[])
-              ORDER BY id ASC`,
+            `${this.profileSelectSql()}
+              WHERE rp.id = ANY($1::uuid[])
+              ORDER BY rp.id ASC`,
             [profileIds]
         );
 
@@ -360,9 +363,8 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
 
     private async loadProfileById(profileId: string): Promise<NormalizedResolutionProfile | null> {
         const result = await this.pool.query<ResolutionProfileRow>(
-            `SELECT *
-               FROM resolution_profiles
-              WHERE id = $1`,
+            `${this.profileSelectSql()}
+              WHERE rp.id = $1`,
             [profileId]
         );
 
@@ -420,8 +422,15 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
             oracleType: row.oracle_type,
             oracleName: row.oracle_name,
             resolutionAuthorityType: row.resolution_authority_type,
-            primaryResolutionText: row.primary_resolution_text,
-            supplementalRulesText: row.supplemental_rules_text,
+            primaryResolutionText: row.primary_resolution_text
+                ?? row.vmp_resolution_rules_text
+                ?? row.vmp_description
+                ?? row.vrp_rule_text
+                ?? null,
+            supplementalRulesText: row.supplemental_rules_text
+                ?? row.vmp_resolution_source
+                ?? row.vrp_resolution_source
+                ?? null,
             disputeWindowHours: row.dispute_window_hours,
             settlementLagHours: row.settlement_lag_hours,
             marketType: row.market_type,
@@ -434,6 +443,21 @@ export class ResolutionRiskAssessmentService implements IResolutionRiskAssessmen
             createdAt: new Date(row.created_at),
             updatedAt: new Date(row.updated_at)
         };
+    }
+
+    private profileSelectSql(): string {
+        return `SELECT rp.*,
+                       vmp.description AS vmp_description,
+                       vmp.resolution_source AS vmp_resolution_source,
+                       vmp.resolution_rules_text AS vmp_resolution_rules_text,
+                       vrp.resolution_source AS vrp_resolution_source,
+                       vrp.rule_text AS vrp_rule_text
+                  FROM resolution_profiles rp
+                  LEFT JOIN venue_market_profiles vmp
+                         ON vmp.venue = rp.venue
+                        AND vmp.venue_market_id = rp.venue_market_id
+                  LEFT JOIN venue_resolution_profiles vrp
+                         ON vrp.venue_market_profile_id = vmp.id`;
     }
 
     private mapAssessmentRow(row: ResolutionRiskAssessmentRow): ResolutionRiskAssessment {

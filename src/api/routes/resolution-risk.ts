@@ -32,6 +32,7 @@ const ResolutionProfileResponseSchema = z.object({
   venue: z.string().min(1),
   venueMarketId: z.string().min(1),
   canonicalEventId: z.string().uuid(),
+  canonicalMarketId: z.string().min(1),
   oracleType: z.string().nullable().optional(),
   oracleName: z.string().nullable().optional(),
   resolutionAuthorityType: z.string().nullable().optional(),

@@ -66,6 +66,23 @@ const DEFAULT_THRESHOLDS: ResolutionRiskEquivalenceThresholds = {
     lowConfidenceThreshold: "0.50"
 };
 
+const FALLBACK_VENUE_SUFFIX_PATTERN = /:(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|PREDICTIFY|OPINION|MYRIAD)$/i;
+
+const normalizeVenueSegment = (venue: string | null | undefined): string =>
+    (venue ?? "").trim().replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").toUpperCase();
+
+const normalizeCanonicalMarketIdentity = (
+    canonicalMarketId: string | null | undefined,
+    venue: string | null | undefined
+): string => {
+    const trimmed = canonicalMarketId?.trim() ?? "";
+    const venueSegment = normalizeVenueSegment(venue);
+    if (venueSegment.length > 0 && trimmed.toUpperCase().endsWith(`:${venueSegment}`)) {
+        return trimmed.slice(0, -1 * (venueSegment.length + 1));
+    }
+    return trimmed.replace(FALLBACK_VENUE_SUFFIX_PATTERN, "");
+};
+
 export const DEFAULT_RESOLUTION_RISK_SCORING_CONFIG: ResolutionRiskScoringConfig = {
     weights: {
         oracleMismatch: "0.22",
@@ -128,14 +145,15 @@ export class ResolutionRiskScoringEngine implements IResolutionRiskScoringEngine
         this.validateInput(input);
         const { canonicalEventId, profileA, profileB, factorComparison, version } = input;
         
-        // Ensure we use the correct canonicalMarketId from the profiles
-        // (They should be identical as they are linked to the same canonical market)
-        const canonicalMarketId = profileA.canonicalMarketId || canonicalEventId;
+        const normalizedMarketA = normalizeCanonicalMarketIdentity(profileA.canonicalMarketId, profileA.venue);
+        const normalizedMarketB = normalizeCanonicalMarketIdentity(profileB.canonicalMarketId, profileB.venue);
+        const canonicalMarketId = normalizedMarketA || profileA.canonicalMarketId || canonicalEventId;
 
         const maxSettlementDelayHours = this.calculateMaxSettlementDelay(profileA, profileB);
         
-        // Identity Guard: Scoped markets must have matching canonicalMarketId
-        if (profileA.canonicalMarketId !== profileB.canonicalMarketId) {
+        // Identity Guard: scoped markets must match after removing venue-specific suffixes
+        // from curated IDs such as CRYPTO|ATH_BY_DATE|BTC|...:POLYMARKET.
+        if (normalizedMarketA !== normalizedMarketB) {
             return {
                 id: "",
                 canonicalEventId,

@@ -266,7 +266,7 @@ describe("ResolutionRiskAssessmentService", () => {
     ]);
 
     const query = vi.fn(async (sql: string, params?: unknown[]) => {
-      if (sql.includes("FROM resolution_profiles") && sql.includes("WHERE id = $1")) {
+      if (sql.includes("FROM resolution_profiles") && sql.includes("WHERE rp.id = $1")) {
         return makeQueryResult([toProfileRow(profiles[0]!)]);
       }
 

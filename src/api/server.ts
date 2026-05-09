@@ -2473,7 +2473,31 @@ interface ResolutionProfileLookupRow {
   metadata: Record<string, unknown>;
   created_at: Date;
   updated_at: Date;
+  vmp_id: string | null;
+  vmp_title: string | null;
+  vmp_description: string | null;
+  vmp_resolution_source: string | null;
+  vmp_resolution_title: string | null;
+  vmp_resolution_rules_text: string | null;
+  vmp_normalized_payload: Record<string, unknown> | null;
+  vmp_raw_source_payload: Record<string, unknown> | null;
+  vrp_id: string | null;
+  vrp_resolution_source: string | null;
+  vrp_resolution_title: string | null;
+  vrp_rule_text: string | null;
 }
+
+interface OfficialVenueResolutionMetadata {
+  title: string | null;
+  primaryResolutionText: string;
+  supplementalRulesText: string | null;
+  resolutionSourceText: string | null;
+  resolver: string | null;
+  sourceUrl: string | null;
+  fetchedBy: string;
+}
+
+const polymarketResolutionMetadataClient = new PolymarketGammaClient();
 
 const resolveCanonicalIdentity = async (
   pool: Pool,
@@ -2504,16 +2528,218 @@ const resolveCanonicalIdentity = async (
   };
 };
 
+const fetchOfficialVenueResolutionMetadata = async (
+  row: ResolutionProfileLookupRow
+): Promise<OfficialVenueResolutionMetadata | null> => {
+  if (row.venue.trim().toUpperCase() !== "POLYMARKET") {
+    return null;
+  }
+
+  const identifiers = collectPolymarketMetadataIdentifiers(row);
+  for (const identifier of identifiers) {
+    try {
+      const markets = await polymarketResolutionMetadataClient.getMarketByIdentifier(identifier);
+      const market = markets.find((entry) => {
+        const raw = apiServerAsRecord(entry.raw);
+        return apiServerFirstString(raw.description, raw.resolutionRules, raw.rules) !== null;
+      }) ?? markets[0];
+      if (!market) {
+        continue;
+      }
+
+      const raw = apiServerAsRecord(market.raw);
+      const primaryResolutionText = apiServerFirstString(
+        raw.description,
+        raw.resolutionRules,
+        raw.rules,
+        raw.resolution_rules
+      );
+      if (!primaryResolutionText) {
+        continue;
+      }
+
+      const resolutionSourceText = apiServerFirstString(raw.resolutionSource, raw.resolution_source)
+        ?? extractResolutionSourceText(primaryResolutionText);
+
+      return {
+        title: apiServerFirstString(raw.question, raw.title, market.title),
+        primaryResolutionText,
+        supplementalRulesText: resolutionSourceText,
+        resolutionSourceText,
+        resolver: apiServerFirstString(raw.resolvedBy, raw.resolved_by, raw.resolver),
+        sourceUrl: extractFirstUrl(resolutionSourceText ?? primaryResolutionText),
+        fetchedBy: `polymarket_gamma:${identifier}`
+      };
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+};
+
+const persistOfficialVenueResolutionMetadata = async (
+  pool: Pool,
+  row: ResolutionProfileLookupRow,
+  metadata: OfficialVenueResolutionMetadata
+): Promise<void> => {
+  const metadataPatch = {
+    officialVenueRules: {
+      fetchedBy: metadata.fetchedBy,
+      sourceUrl: metadata.sourceUrl,
+      resolver: metadata.resolver,
+      hydratedAt: new Date().toISOString()
+    }
+  };
+
+  await pool.query(
+    `UPDATE resolution_profiles
+        SET primary_resolution_text = $1,
+            supplemental_rules_text = COALESCE($2, supplemental_rules_text),
+            oracle_name = COALESCE($3, oracle_name),
+            metadata = metadata || $4::jsonb,
+            updated_at = now()
+      WHERE id = $5`,
+    [
+      metadata.primaryResolutionText,
+      metadata.supplementalRulesText,
+      metadata.resolutionSourceText,
+      JSON.stringify(metadataPatch),
+      row.id
+    ]
+  );
+
+  if (row.vmp_id) {
+    await pool.query(
+      `UPDATE venue_market_profiles
+          SET description = COALESCE(description, $1),
+              resolution_title = COALESCE($2, resolution_title),
+              resolution_rules_text = $1,
+              resolution_source = COALESCE($3, resolution_source),
+              updated_at = now()
+        WHERE id = $4`,
+      [metadata.primaryResolutionText, metadata.title, metadata.resolutionSourceText, row.vmp_id]
+    );
+  }
+
+  if (row.vrp_id) {
+    await pool.query(
+      `UPDATE venue_resolution_profiles
+          SET resolution_title = COALESCE($1, resolution_title),
+              resolution_source = COALESCE($2, resolution_source),
+              rule_text = $3,
+              metadata = metadata || $4::jsonb,
+              updated_at = now()
+        WHERE id = $5`,
+      [
+        metadata.title,
+        metadata.resolutionSourceText,
+        metadata.primaryResolutionText,
+        JSON.stringify(metadataPatch),
+        row.vrp_id
+      ]
+    );
+  }
+};
+
+const collectPolymarketMetadataIdentifiers = (row: ResolutionProfileLookupRow): readonly string[] => {
+  const normalizedPayload = apiServerAsRecord(row.vmp_normalized_payload);
+  const rawPayload = apiServerAsRecord(row.vmp_raw_source_payload);
+  const quoteEvidence = apiServerAsRecord(normalizedPayload.quoteEvidence);
+  const rawQuoteEvidence = apiServerAsRecord(rawPayload.quoteEvidence);
+  const rawMarket = apiServerAsRecord(rawPayload.market);
+  const normalizedMarket = apiServerAsRecord(normalizedPayload.market);
+  const parsedVenueMarketSlug = row.venue_market_id.match(/^POLYMARKET:([^:]+):/i)?.[1] ?? null;
+
+  return uniqueNonEmptyStrings([
+    apiServerFirstString(normalizedPayload.quoteMatchedIdentifier, rawPayload.quoteMatchedIdentifier),
+    apiServerFirstString(quoteEvidence.marketSlug, rawQuoteEvidence.marketSlug),
+    apiServerFirstString(normalizedPayload.marketSlug, rawPayload.marketSlug),
+    apiServerFirstString(normalizedPayload.slug, rawPayload.slug),
+    apiServerFirstString(normalizedMarket.slug, rawMarket.slug),
+    parsedVenueMarketSlug,
+    apiServerFirstString(quoteEvidence.marketId, rawQuoteEvidence.marketId),
+    apiServerFirstString(normalizedPayload.marketId, rawPayload.marketId),
+    apiServerFirstString(normalizedMarket.id, rawMarket.id),
+    apiServerFirstString(quoteEvidence.conditionId, rawQuoteEvidence.conditionId),
+    apiServerFirstString(normalizedPayload.conditionId, rawPayload.conditionId)
+  ]);
+};
+
+const extractResolutionSourceText = (ruleText: string): string | null => {
+  const paragraphs = ruleText
+    .split(/\n{2,}|\r\n{2,}/)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  const sourceParagraphs = paragraphs.filter((paragraph) =>
+    /resolution source|source for this market|according to|available at|will not be considered/i.test(paragraph)
+  );
+  return sourceParagraphs.length > 0 ? sourceParagraphs.join("\n\n") : null;
+};
+
+const extractFirstUrl = (text: string | null): string | null => {
+  const match = text?.match(/https?:\/\/[^\s"',)]+/i);
+  return match?.[0] ?? null;
+};
+
+const uniqueNonEmptyStrings = (values: readonly (string | null | undefined)[]): readonly string[] => {
+  const seen = new Set<string>();
+  const output: string[] = [];
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    output.push(trimmed);
+  }
+  return output;
+};
+
+const apiServerAsRecord = (value: unknown): Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+
+const apiServerFirstString = (...values: readonly unknown[]): string | null => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+  return null;
+};
+
 const findResolutionProfileByVenueMarket = async (
   pool: Pool,
   venue: string,
   marketId: string
 ): Promise<NormalizedResolutionProfile | null> => {
   const result = await pool.query<ResolutionProfileLookupRow>(
-    `SELECT *
-       FROM resolution_profiles
-      WHERE venue = $1
-        AND venue_market_id = $2
+    `SELECT rp.*,
+            vmp.id AS vmp_id,
+            vmp.title AS vmp_title,
+            vmp.description AS vmp_description,
+            vmp.resolution_source AS vmp_resolution_source,
+            vmp.resolution_title AS vmp_resolution_title,
+            vmp.resolution_rules_text AS vmp_resolution_rules_text,
+            vmp.normalized_payload AS vmp_normalized_payload,
+            vmp.raw_source_payload AS vmp_raw_source_payload,
+            vrp.id AS vrp_id,
+            vrp.resolution_source AS vrp_resolution_source,
+            vrp.resolution_title AS vrp_resolution_title,
+            vrp.rule_text AS vrp_rule_text
+       FROM resolution_profiles rp
+       LEFT JOIN venue_market_profiles vmp
+              ON vmp.venue = rp.venue
+             AND vmp.venue_market_id = rp.venue_market_id
+       LEFT JOIN venue_resolution_profiles vrp
+              ON vrp.venue_market_profile_id = vmp.id
+      WHERE rp.venue = $1
+        AND rp.venue_market_id = $2
       LIMIT 1`,
     [venue, marketId]
   );
@@ -2523,6 +2749,25 @@ const findResolutionProfileByVenueMarket = async (
     return null;
   }
 
+  const officialResolutionMetadata = await fetchOfficialVenueResolutionMetadata(row);
+  if (officialResolutionMetadata) {
+    await persistOfficialVenueResolutionMetadata(pool, row, officialResolutionMetadata);
+  }
+
+  const metadata = {
+    ...row.metadata,
+    ...(officialResolutionMetadata
+      ? {
+        officialVenueRules: {
+          fetchedBy: officialResolutionMetadata.fetchedBy,
+          sourceUrl: officialResolutionMetadata.sourceUrl,
+          resolver: officialResolutionMetadata.resolver,
+          hydratedAt: new Date().toISOString()
+        }
+      }
+      : {})
+  };
+
   return {
     id: row.id,
     venue: row.venue,
@@ -2530,10 +2775,19 @@ const findResolutionProfileByVenueMarket = async (
     canonicalEventId: row.canonical_event_id,
     canonicalMarketId: row.canonical_market_id,
     oracleType: row.oracle_type,
-    oracleName: row.oracle_name,
+    oracleName: officialResolutionMetadata?.resolutionSourceText ?? row.oracle_name,
     resolutionAuthorityType: row.resolution_authority_type,
-    primaryResolutionText: row.primary_resolution_text,
-    supplementalRulesText: row.supplemental_rules_text,
+    primaryResolutionText: officialResolutionMetadata?.primaryResolutionText
+      ?? row.primary_resolution_text
+      ?? row.vmp_resolution_rules_text
+      ?? row.vmp_description
+      ?? row.vrp_rule_text
+      ?? null,
+    supplementalRulesText: officialResolutionMetadata?.supplementalRulesText
+      ?? row.supplemental_rules_text
+      ?? row.vmp_resolution_source
+      ?? row.vrp_resolution_source
+      ?? null,
     disputeWindowHours: row.dispute_window_hours,
     settlementLagHours: row.settlement_lag_hours,
     marketType: row.market_type,
@@ -2542,7 +2796,7 @@ const findResolutionProfileByVenueMarket = async (
     hasAmbiguousJurisdictionBoundary: row.has_ambiguous_jurisdiction_boundary,
     hasAmbiguousSourceReference: row.has_ambiguous_source_reference,
     historicalDivergenceRate: row.historical_divergence_rate,
-    metadata: row.metadata,
+    metadata,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at)
   };
