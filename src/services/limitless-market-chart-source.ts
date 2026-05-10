@@ -23,13 +23,13 @@ export class LimitlessMarketChartSource implements MarketHistoricalChartSource {
     const limitlessMappings = [...new Map(
       (input.venueMappings ?? [])
         .filter((mapping) => mapping.venue.toUpperCase() === "LIMITLESS")
-        .map((mapping) => [mapping.venueMarketId, mapping])
+        .map((mapping) => [resolveLimitlessSlug(mapping.venueMarketId), mapping])
     ).values()];
 
     const rows = await Promise.all(limitlessMappings.map(async (mapping) => {
       try {
         const series = await this.config.client.getHistoricalPrice({
-          slug: mapping.venueMarketId,
+          slug: resolveLimitlessSlug(mapping.venueMarketId),
           ...(input.since ? { from: input.since.toISOString() } : {}),
           interval: intervalByTimeframe[input.timeframe ?? "1H"]
         });
@@ -67,4 +67,9 @@ const toDate = (value: string | number): Date | null => {
     : Date.parse(value);
   const date = new Date(millis);
   return Number.isFinite(date.getTime()) ? date : null;
+};
+
+const resolveLimitlessSlug = (venueMarketId: string): string => {
+  const prefixed = venueMarketId.match(/^LIMITLESS:([^:]+):/i);
+  return prefixed?.[1] ?? venueMarketId;
 };
