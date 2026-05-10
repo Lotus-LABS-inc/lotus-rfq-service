@@ -6,6 +6,7 @@ import {
   type ExecutionQuoteRepository,
   type ExecutableTradeQuote,
   type RejectedRouteCandidate,
+  type SmartRoutePolicy,
   type VerifiedExecutionPosition,
   type VerifiedPositionRepository
 } from "../src/execution-system/executable-routing.js";
@@ -48,6 +49,16 @@ const readyVenue = (venue: string, overrides: Partial<ExecutionVenueReadinessSum
   activeLinkedAccounts: 0,
   accountSetupBlockers: [],
   ...overrides
+});
+
+const routePolicy = (mode: SmartRoutePolicy["mode"]): SmartRoutePolicy => ({
+  mode,
+  highNotionalUsd: 99.9,
+  productionHighNotionalMinBps: 2,
+  productionLowNotionalMinBps: 10,
+  stagingHighNotionalMinBps: 0,
+  stagingLowNotionalMinBps: 1,
+  minimumPositiveImprovement: 0.000001
 });
 
 class MemoryQuoteRepository implements ExecutionQuoteRepository {
@@ -361,6 +372,87 @@ describe("executable route selection", () => {
       venuePath: ["POLYMARKET"],
       routeDecisionReason: "single_venue_selected_multi_venue_improvement_below_threshold"
     });
+  });
+
+  it("keeps production high-notional routes single unless split routing gives meaningful net improvement", async () => {
+    const service = new ExecutableRouteService({
+      async listVenues() {
+        return [readyVenue("POLYMARKET"), readyVenue("LIMITLESS")];
+      }
+    }, undefined, () => new Date("2026-05-03T00:00:00.000Z"), routePolicy("PRODUCTION"));
+
+    const result = await service.quote({
+      userId: "user-1",
+      side: "buy",
+      marketId: "market-1",
+      outcomeId: "yes",
+      amount: "200",
+      candidates: [
+        { venue: "POLYMARKET", price: 0.5, availableSize: "200" },
+        { venue: "LIMITLESS", price: 0.4997, availableSize: "100" }
+      ]
+    });
+
+    expect(result.quote).toMatchObject({
+      routeType: "SINGLE_VENUE",
+      venuePath: ["POLYMARKET"],
+      routeDecisionReason: "single_venue_selected_multi_venue_improvement_below_threshold"
+    });
+    expect(result.routeDiagnostics?.improvementThreshold).toBeGreaterThanOrEqual(0.02);
+  });
+
+  it("selects production high-notional split routes when net improvement clears the threshold", async () => {
+    const service = new ExecutableRouteService({
+      async listVenues() {
+        return [readyVenue("POLYMARKET"), readyVenue("LIMITLESS")];
+      }
+    }, undefined, () => new Date("2026-05-03T00:00:00.000Z"), routePolicy("PRODUCTION"));
+
+    const result = await service.quote({
+      userId: "user-1",
+      side: "buy",
+      marketId: "market-1",
+      outcomeId: "yes",
+      amount: "200",
+      candidates: [
+        { venue: "POLYMARKET", price: 0.5, availableSize: "200" },
+        { venue: "LIMITLESS", price: 0.499, availableSize: "100" }
+      ]
+    });
+
+    expect(result.quote).toMatchObject({
+      routeType: "CROSS_VENUE",
+      venuePath: ["LIMITLESS", "POLYMARKET"],
+      routeDecisionReason: "multi_venue_selected_best_net_execution"
+    });
+    expect(result.quote?.estimatedSavings).toBeGreaterThan(0);
+  });
+
+  it("uses casual staging policy to exercise high-notional split routes on small positive improvement", async () => {
+    const service = new ExecutableRouteService({
+      async listVenues() {
+        return [readyVenue("POLYMARKET"), readyVenue("LIMITLESS")];
+      }
+    }, undefined, () => new Date("2026-05-03T00:00:00.000Z"), routePolicy("STAGING"));
+
+    const result = await service.quote({
+      userId: "user-1",
+      side: "buy",
+      marketId: "market-1",
+      outcomeId: "yes",
+      amount: "200",
+      candidates: [
+        { venue: "POLYMARKET", price: 0.5, availableSize: "200" },
+        { venue: "LIMITLESS", price: 0.4997, availableSize: "100" }
+      ]
+    });
+
+    expect(result.quote).toMatchObject({
+      routeType: "CROSS_VENUE",
+      venuePath: ["LIMITLESS", "POLYMARKET"],
+      routeDecisionReason: "multi_venue_selected_best_net_execution"
+    });
+    expect(result.routeDiagnostics?.improvementThreshold).toBeLessThan(0.001);
   });
 
   it("uses multi-venue when no single venue can fill but combined venues can", async () => {

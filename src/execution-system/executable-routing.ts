@@ -124,6 +124,18 @@ export interface RouteDecisionDiagnostics {
   skippedDustVenues: string[];
 }
 
+export type SmartRoutePolicyMode = "PRODUCTION" | "STAGING";
+
+export interface SmartRoutePolicy {
+  mode: SmartRoutePolicyMode;
+  highNotionalUsd: number;
+  productionHighNotionalMinBps: number;
+  productionLowNotionalMinBps: number;
+  stagingHighNotionalMinBps: number;
+  stagingLowNotionalMinBps: number;
+  minimumPositiveImprovement: number;
+}
+
 interface ScoredRoute {
   routeType: TradeRouteType;
   legs: ExecutableRouteLeg[];
@@ -232,7 +244,8 @@ export class ExecutableRouteService {
   public constructor(
     private readonly readiness: TradeReadinessProvider,
     private readonly quoteRepository?: ExecutionQuoteRepository,
-    private readonly now: () => Date = () => new Date()
+    private readonly now: () => Date = () => new Date(),
+    private readonly smartRoutePolicy: SmartRoutePolicy = smartRoutePolicyFromEnv()
   ) {}
 
   public async quote(input: TradeQuoteRequest): Promise<TradeQuoteSelection> {
@@ -296,7 +309,7 @@ export class ExecutableRouteService {
   ): { route: ExecutableTradeQuote | null; diagnostics: RouteDecisionDiagnostics } {
     const singleRoute = this.buildSingleVenueRoute(input, executable, amount);
     const multiRoute = this.buildMultiVenueRoute(input, executable, amount);
-    const threshold = multiRoute && singleRoute ? routeImprovementThreshold(input.side, amount, singleRoute, multiRoute) : 0;
+    const threshold = multiRoute && singleRoute ? routeImprovementThreshold(singleRoute, multiRoute, this.smartRoutePolicy) : 0;
     const selected = chooseRoute(input.side, singleRoute, multiRoute, threshold);
     const diagnostics: RouteDecisionDiagnostics = {
       bestSingleRouteScore: singleRoute?.score ?? null,
@@ -658,17 +671,45 @@ const routeSavings = (side: TradeSide, selected: ScoredRoute, alternative: Score
     : selected.effectiveNotional - alternative.effectiveNotional;
 
 const routeImprovementThreshold = (
-  side: TradeSide,
-  amount: number,
   singleRoute: ScoredRoute,
-  multiRoute: ScoredRoute
+  multiRoute: ScoredRoute,
+  policy: SmartRoutePolicy
 ): number => {
   const referenceNotional = Math.max(singleRoute.effectiveNotional, multiRoute.effectiveNotional, 0);
-  const base = amount * 0.001;
-  const bps = referenceNotional * 5 / 10_000;
+  const highNotional = referenceNotional >= policy.highNotionalUsd;
+  const bpsRate = policy.mode === "STAGING"
+    ? highNotional ? policy.stagingHighNotionalMinBps : policy.stagingLowNotionalMinBps
+    : highNotional ? policy.productionHighNotionalMinBps : policy.productionLowNotionalMinBps;
+  const bps = referenceNotional * bpsRate / 10_000;
   const extraFixedFees = Math.max(0, multiRoute.legs.length - singleRoute.legs.length) * 0.0001;
-  const routeFriction = Math.abs(routeFrictionNotional(side, multiRoute.legs) - routeFrictionNotional(side, singleRoute.legs));
-  return Math.max(base, bps, extraFixedFees + routeFriction);
+  return Math.max(policy.minimumPositiveImprovement, bps, extraFixedFees);
+};
+
+const defaultSmartRoutePolicy: SmartRoutePolicy = {
+  mode: "PRODUCTION",
+  highNotionalUsd: 99.9,
+  productionHighNotionalMinBps: 2,
+  productionLowNotionalMinBps: 10,
+  stagingHighNotionalMinBps: 0,
+  stagingLowNotionalMinBps: 1,
+  minimumPositiveImprovement: 0.000001
+};
+
+const smartRoutePolicyFromEnv = (): SmartRoutePolicy => {
+  const explicitMode = process.env.EXECUTION_SMART_ROUTE_MODE?.trim().toUpperCase();
+  const deployEnv = [
+    process.env.LOTUS_DEPLOY_ENV,
+    process.env.APP_ENV,
+    process.env.RENDER_SERVICE_NAME,
+    process.env.FLY_APP_NAME
+  ].filter(Boolean).join(" ").trim().toUpperCase();
+  const nodeEnv = process.env.NODE_ENV?.trim().toLowerCase();
+  const mode: SmartRoutePolicyMode = explicitMode === "STAGING" || explicitMode === "CASUAL" || deployEnv.includes("STAGING")
+    ? "STAGING"
+    : nodeEnv === "production"
+      ? "PRODUCTION"
+      : "STAGING";
+  return { ...defaultSmartRoutePolicy, mode };
 };
 
 const compareCandidatesByEffectivePrice = (
