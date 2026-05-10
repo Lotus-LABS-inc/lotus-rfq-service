@@ -246,7 +246,7 @@ export class ExecutableRouteService {
       .filter((entry) => entry.evaluation.executable && entry.evaluation.status !== "QUOTE_ONLY")
       .map((entry) => entry.candidate);
     const quoteOnly = evaluated
-      .filter((entry) => entry.evaluation.status === "QUOTE_ONLY")
+      .filter((entry) => isQuotePreviewableEvaluation(entry.evaluation))
       .map((entry) => entry.candidate);
     const liveRejectedCandidates = evaluated
       .filter((entry) => !entry.evaluation.executable)
@@ -272,8 +272,9 @@ export class ExecutableRouteService {
       };
     }
 
+    const selectedQuoteVenues = new Set(selected.route.legs.map((leg) => leg.venue.toUpperCase()));
     const rejectedCandidates = selectedQuoteOnly
-      ? liveRejectedCandidates.filter((candidate) => candidate.status !== "QUOTE_ONLY")
+      ? liveRejectedCandidates.filter((candidate) => !selectedQuoteVenues.has(candidate.venue.toUpperCase()))
       : liveRejectedCandidates;
     await this.quoteRepository?.saveQuote({ quote: selected.route, rejectedCandidates });
     return {
@@ -557,6 +558,19 @@ const evaluateCandidate = (
     blockerCategory: "NONE",
     adminReason: "executable"
   };
+};
+
+const isQuotePreviewableEvaluation = (evaluation: {
+  executable: boolean;
+  status: ExecutabilityStatus;
+  blockerCategory: string;
+}): boolean => {
+  if (evaluation.executable) {
+    return false;
+  }
+  return evaluation.status === "QUOTE_ONLY" ||
+    evaluation.blockerCategory === "VENUE_ACCOUNT_NOT_READY" ||
+    evaluation.blockerCategory === "VENUE_NOT_CONFIGURED";
 };
 
 const allocateSellSizes = (

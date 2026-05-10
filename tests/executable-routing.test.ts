@@ -189,6 +189,74 @@ describe("executable route selection", () => {
     expect(result.rejectedCandidates).toEqual([]);
   });
 
+  it("still prepares a quote-only route when venue account readiness blocks live submit", async () => {
+    const service = new ExecutableRouteService({
+      async listVenues() {
+        return [
+          readyVenue("LIMITLESS", {
+            venueAccountRequired: true,
+            venueAccountConfigured: false,
+            accountSetupBlockers: ["No active Limitless account link."]
+          }),
+          readyVenue("POLYMARKET", {
+            venueAccountRequired: true,
+            venueAccountConfigured: false,
+            accountSetupBlockers: ["No active Polymarket account link."]
+          })
+        ];
+      }
+    });
+
+    const result = await service.quote({
+      userId: "user-1",
+      side: "buy",
+      marketId: "market-1",
+      outcomeId: "yes",
+      amount: "2",
+      candidates: [
+        { venue: "LIMITLESS", price: 0.035, availableSize: "100" },
+        { venue: "POLYMARKET", price: 0.027, availableSize: "100" }
+      ]
+    });
+
+    expect(result.quote).toMatchObject({
+      routeType: "SINGLE_VENUE",
+      venuePath: ["POLYMARKET"],
+      executableAmount: "2"
+    });
+    expect(result.rejectedCandidates).toEqual([
+      expect.objectContaining({
+        venue: "LIMITLESS",
+        blockerCategory: "VENUE_ACCOUNT_NOT_READY"
+      })
+    ]);
+  });
+
+  it("keeps activation-required candidates out of quote-only previews", async () => {
+    const service = new ExecutableRouteService({
+      async listVenues() {
+        return [readyVenue("LIMITLESS")];
+      }
+    });
+
+    const result = await service.quote({
+      userId: "user-1",
+      side: "buy",
+      marketId: "market-1",
+      outcomeId: "yes",
+      amount: "2",
+      candidates: [{ venue: "LIMITLESS", price: 0.035, availableSize: "100", activationRequired: true }]
+    });
+
+    expect(result.quote).toBeNull();
+    expect(result.rejectedCandidates).toEqual([
+      expect.objectContaining({
+        venue: "LIMITLESS",
+        blockerCategory: "ACTIVATION_REQUIRED"
+      })
+    ]);
+  });
+
   it("allows quote preparation when live submit is disabled but venue path is configured", async () => {
     const service = new ExecutableRouteService({
       async listVenues() {
