@@ -3,7 +3,7 @@ import { UserWalletError, type UserWallet } from "../../core/funding/user-wallet
 
 export interface UserWalletRouteHandlers {
   listWallets(userId: string): Promise<UserWallet[]>;
-  ensureDefaultWallets(userId: string, email?: string | null): Promise<UserWallet[]>;
+  ensureDefaultWallets(userId: string, email?: string | null, turnkeyOrganizationId?: string | null): Promise<UserWallet[]>;
 }
 
 export const registerUserWalletRoutes = async (
@@ -18,7 +18,11 @@ export const registerUserWalletRoutes = async (
 
   app.post("/user/wallets/ensure-defaults", { preHandler: authMiddleware }, async (request, reply) => {
     try {
-      const wallets = await handlers.ensureDefaultWallets(request.user.userId, request.user.email ?? null);
+      const wallets = await handlers.ensureDefaultWallets(
+        request.user.userId,
+        request.user.email ?? null,
+        request.user.turnkeyOrganizationId ?? null
+      );
       return reply.status(200).send({ wallets: wallets.map(toSafeWallet) });
     } catch (error) {
       return handleWalletError(error, reply);

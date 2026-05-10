@@ -1458,8 +1458,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   await registerMetricsRoute(app);
   await registerTurnkeyAuthRoutes(app, {
     jwtTtlSeconds: parseUserJwtTtlSeconds(process.env.USER_JWT_TTL_SECONDS),
-    provisionUserAccount: async ({ userId }) => {
-      const wallets = await userWalletService.ensureDefaultWallets(userId);
+    provisionUserAccount: async ({ userId, turnkeyOrganizationId }) => {
+      const wallets = await userWalletService.ensureDefaultWallets(userId, null, turnkeyOrganizationId);
       const setup = await userVenueAccountService.prepareAccountSetupBatch(userId);
       const blockers = [
         ...setup.venueAccounts.flatMap((item) => item.readinessBlockers),
@@ -1557,7 +1557,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   });
   await registerUserWalletRoutes(app, userAuthMiddleware, {
     listWallets: (userId) => userWalletService.listWallets(userId),
-    ensureDefaultWallets: (userId, email) => userWalletService.ensureDefaultWallets(userId, email)
+    ensureDefaultWallets: (userId, email, turnkeyOrganizationId) =>
+      userWalletService.ensureDefaultWallets(userId, email, turnkeyOrganizationId)
   });
   await registerUserVenueAccountRoutes(app, userAuthMiddleware, {
     listAccounts: (userId) => userVenueAccountService.listAccounts(userId),

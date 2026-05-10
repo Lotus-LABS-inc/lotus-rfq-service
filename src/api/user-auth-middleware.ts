@@ -5,6 +5,8 @@ export interface UserAuth {
     userId: string;
     role: "USER" | "ADMIN";
     email?: string;
+    turnkeyUserId?: string;
+    turnkeyOrganizationId?: string;
     adminMemberId?: string;
     adminRole?: "OWNER" | "ADMIN";
 }

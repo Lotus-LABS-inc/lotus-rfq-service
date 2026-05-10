@@ -7,6 +7,8 @@ import {
 } from "@turnkey/sdk-server";
 import type { ProvisionedUserWallet, TurnkeyWalletProvisioner } from "../../core/funding/user-wallets.js";
 
+const LOTUS_WALLET_NAME = "Lotus Wallet";
+
 export interface TurnkeyWalletConfig {
   enabled: boolean;
   apiBaseUrl: string;
@@ -51,6 +53,7 @@ export class TurnkeyUserWalletProvisioner implements TurnkeyWalletProvisioner {
   public async provisionDefaultWallets(input: {
     userId: string;
     email?: string | null;
+    turnkeyOrganizationId?: string | null;
     includeSolana: boolean;
     includeEvm: boolean;
   }): Promise<ProvisionedUserWallet[]> {
@@ -61,6 +64,16 @@ export class TurnkeyUserWalletProvisioner implements TurnkeyWalletProvisioner {
     if (accounts.length === 0) {
       return [];
     }
+    const existingOrganizationId = input.turnkeyOrganizationId?.trim();
+    if (existingOrganizationId) {
+      return this.provisionDefaultWalletsInExistingOrganization({
+        organizationId: existingOrganizationId,
+        accounts,
+        includeSolana: input.includeSolana,
+        includeEvm: input.includeEvm
+      });
+    }
+
     const response = await this.client.createSubOrganization({
       subOrganizationName: `lotus-user-${input.userId}`,
       rootQuorumThreshold: 1,
@@ -72,7 +85,7 @@ export class TurnkeyUserWalletProvisioner implements TurnkeyWalletProvisioner {
         oauthProviders: []
       }],
       wallet: {
-        walletName: "Lotus Wallet",
+        walletName: LOTUS_WALLET_NAME,
         accounts
       }
     } satisfies TurnkeySDKApiTypes.TCreateSubOrganizationBody);
@@ -88,35 +101,92 @@ export class TurnkeyUserWalletProvisioner implements TurnkeyWalletProvisioner {
     });
     return accountResponse.accounts
       .filter((account) => account.walletId === walletId)
-      .map((account): ProvisionedUserWallet | null => {
-        if (account.addressFormat === "ADDRESS_FORMAT_SOLANA") {
-          return {
-            provider: "TURNKEY",
-            providerSubOrgId: subOrganizationId,
-            providerWalletId: walletId,
-            providerWalletAccountId: account.walletAccountId,
-            chainFamily: "SOLANA",
-            chain: "SOLANA",
-            address: account.address,
-            purpose: "DEFAULT_FUNDING",
-            exportable: true
-          };
-        }
-        if (account.addressFormat === "ADDRESS_FORMAT_ETHEREUM") {
-          return {
-            provider: "TURNKEY",
-            providerSubOrgId: subOrganizationId,
-            providerWalletId: walletId,
-            providerWalletAccountId: account.walletAccountId,
-            chainFamily: "EVM",
-            chain: "EVM",
-            address: account.address,
-            purpose: "DEFAULT_FUNDING",
-            exportable: true
-          };
-        }
-        return null;
-      })
+      .map((account) => toProvisionedWallet(subOrganizationId, walletId, account))
+      .filter((wallet): wallet is ProvisionedUserWallet => wallet !== null);
+  }
+
+  private async provisionDefaultWalletsInExistingOrganization(input: {
+    organizationId: string;
+    accounts: TurnkeySDKApiTypes.TCreateWalletBody["accounts"];
+    includeSolana: boolean;
+    includeEvm: boolean;
+  }): Promise<ProvisionedUserWallet[]> {
+    const walletResponse = await this.client.getWallets({ organizationId: input.organizationId });
+    const wallet = walletResponse.wallets.find((entry) => entry.walletName === LOTUS_WALLET_NAME)
+      ?? walletResponse.wallets[0];
+
+    const walletId = wallet?.walletId
+      ?? (await this.client.createWallet({
+        organizationId: input.organizationId,
+        walletName: LOTUS_WALLET_NAME,
+        accounts: input.accounts
+      })).walletId;
+
+    let accountResponse = await this.client.getWalletAccounts({
+      organizationId: input.organizationId,
+      walletId
+    });
+    const missingAccounts = input.accounts.filter((requestedAccount) =>
+      !accountResponse.accounts.some((account) =>
+        account.walletId === walletId
+        && account.addressFormat === requestedAccount.addressFormat
+        && account.path === requestedAccount.path
+      )
+    );
+
+    if (wallet && missingAccounts.length > 0) {
+      await this.client.createWalletAccounts({
+        organizationId: input.organizationId,
+        walletId,
+        accounts: missingAccounts
+      });
+      accountResponse = await this.client.getWalletAccounts({
+        organizationId: input.organizationId,
+        walletId
+      });
+    }
+
+    return accountResponse.accounts
+      .filter((account) => account.walletId === walletId)
+      .filter((account) =>
+        (input.includeSolana && account.addressFormat === "ADDRESS_FORMAT_SOLANA")
+        || (input.includeEvm && account.addressFormat === "ADDRESS_FORMAT_ETHEREUM")
+      )
+      .map((account) => toProvisionedWallet(input.organizationId, walletId, account))
       .filter((wallet): wallet is ProvisionedUserWallet => wallet !== null);
   }
 }
+
+const toProvisionedWallet = (
+  organizationId: string,
+  walletId: string,
+  account: TurnkeySDKApiTypes.TGetWalletAccountsResponse["accounts"][number]
+): ProvisionedUserWallet | null => {
+  if (account.addressFormat === "ADDRESS_FORMAT_SOLANA") {
+    return {
+      provider: "TURNKEY",
+      providerSubOrgId: organizationId,
+      providerWalletId: walletId,
+      providerWalletAccountId: account.walletAccountId,
+      chainFamily: "SOLANA",
+      chain: "SOLANA",
+      address: account.address,
+      purpose: "DEFAULT_FUNDING",
+      exportable: true
+    };
+  }
+  if (account.addressFormat === "ADDRESS_FORMAT_ETHEREUM") {
+    return {
+      provider: "TURNKEY",
+      providerSubOrgId: organizationId,
+      providerWalletId: walletId,
+      providerWalletAccountId: account.walletAccountId,
+      chainFamily: "EVM",
+      chain: "EVM",
+      address: account.address,
+      purpose: "DEFAULT_FUNDING",
+      exportable: true
+    };
+  }
+  return null;
+};

@@ -58,6 +58,7 @@ export interface TurnkeyWalletProvisioner {
   provisionDefaultWallets(input: {
     userId: string;
     email?: string | null;
+    turnkeyOrganizationId?: string | null;
     includeSolana: boolean;
     includeEvm: boolean;
   }): Promise<ProvisionedUserWallet[]>;
@@ -90,7 +91,11 @@ export class UserWalletService {
     return this.repository.listWallets(userId);
   }
 
-  public async ensureDefaultWallets(userId: string, email?: string | null): Promise<UserWallet[]> {
+  public async ensureDefaultWallets(
+    userId: string,
+    email?: string | null,
+    turnkeyOrganizationId?: string | null
+  ): Promise<UserWallet[]> {
     const existing = await this.repository.listWallets(userId);
     const hasSolana = existing.some((wallet) => isActiveDefault(wallet, "SOLANA"));
     const hasEvm = existing.some((wallet) => isActiveDefault(wallet, "EVM"));
@@ -111,6 +116,7 @@ export class UserWalletService {
     const provisioned = await this.provisionDefaultWallets({
       userId,
       ...(email !== undefined ? { email } : {}),
+      ...(turnkeyOrganizationId !== undefined ? { turnkeyOrganizationId } : {}),
       needsSolana,
       needsEvm
     });
@@ -149,6 +155,7 @@ export class UserWalletService {
   private async provisionDefaultWallets(input: {
     userId: string;
     email?: string | null;
+    turnkeyOrganizationId?: string | null;
     needsSolana: boolean;
     needsEvm: boolean;
   }): Promise<ProvisionedUserWallet[]> {
@@ -156,6 +163,7 @@ export class UserWalletService {
       return await this.turnkeyProvisioner!.provisionDefaultWallets({
         userId: input.userId,
         ...(input.email !== undefined ? { email: input.email } : {}),
+        ...(input.turnkeyOrganizationId !== undefined ? { turnkeyOrganizationId: input.turnkeyOrganizationId } : {}),
         includeSolana: input.needsSolana,
         includeEvm: input.needsEvm
       });

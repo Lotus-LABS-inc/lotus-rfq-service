@@ -73,16 +73,19 @@ class InMemoryUserWalletRepository implements UserWalletRepository {
 
 class MockTurnkeyProvisioner implements TurnkeyWalletProvisioner {
   public calls = 0;
+  public lastTurnkeyOrganizationId: string | null | undefined;
 
   public async provisionDefaultWallets(input: {
+    turnkeyOrganizationId?: string | null;
     includeSolana: boolean;
     includeEvm: boolean;
   }): Promise<ProvisionedUserWallet[]> {
     this.calls += 1;
+    this.lastTurnkeyOrganizationId = input.turnkeyOrganizationId;
     return [
       ...(input.includeSolana ? [{
         provider: "TURNKEY" as const,
-        providerSubOrgId: "suborg-1",
+        providerSubOrgId: input.turnkeyOrganizationId ?? "suborg-1",
         providerWalletId: "turnkey-wallet-1",
         providerWalletAccountId: "sol-account-1",
         chainFamily: "SOLANA" as const,
@@ -93,7 +96,7 @@ class MockTurnkeyProvisioner implements TurnkeyWalletProvisioner {
       }] : []),
       ...(input.includeEvm ? [{
         provider: "TURNKEY" as const,
-        providerSubOrgId: "suborg-1",
+        providerSubOrgId: input.turnkeyOrganizationId ?? "suborg-1",
         providerWalletId: "turnkey-wallet-1",
         providerWalletAccountId: "evm-account-1",
         chainFamily: "EVM" as const,
@@ -135,12 +138,13 @@ describe("user wallet service", () => {
       defaultEvmWalletEnabled: true
     }, provisioner);
 
-    const first = await service.ensureDefaultWallets("user-1", "user@example.com");
-    const second = await service.ensureDefaultWallets("user-1", "user@example.com");
+    const first = await service.ensureDefaultWallets("user-1", "user@example.com", "turnkey-org-1");
+    const second = await service.ensureDefaultWallets("user-1", "user@example.com", "turnkey-org-1");
 
     expect(first).toHaveLength(2);
     expect(second).toHaveLength(2);
     expect(provisioner.calls).toBe(1);
+    expect(provisioner.lastTurnkeyOrganizationId).toBe("turnkey-org-1");
     expect(JSON.stringify(second)).not.toContain("private");
     expect(JSON.stringify(second)).not.toContain("seed");
     expect(repository.auditEvents.map((event) => event.eventType)).toContain("USER_WALLET_PROVISIONED");
@@ -219,11 +223,12 @@ describe("user wallet routes", () => {
     const app = Fastify({ logger: false });
     await app.register(fastifyJwt, { secret: "test-secret" });
     const repository = new InMemoryUserWalletRepository();
+    const provisioner = new MockTurnkeyProvisioner();
     const service = new UserWalletService(repository, {
       turnkeyEnabled: true,
       defaultSolanaWalletEnabled: true,
       defaultEvmWalletEnabled: true
-    }, new MockTurnkeyProvisioner());
+    }, provisioner);
     const auth = async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         await request.jwtVerify();
@@ -233,9 +238,15 @@ describe("user wallet routes", () => {
     };
     await registerUserWalletRoutes(app, auth, {
       listWallets: (userId) => service.listWallets(userId),
-      ensureDefaultWallets: (userId, email) => service.ensureDefaultWallets(userId, email)
+      ensureDefaultWallets: (userId, email, turnkeyOrganizationId) =>
+        service.ensureDefaultWallets(userId, email, turnkeyOrganizationId)
     });
-    const token = app.jwt.sign({ userId: "user-1", role: "USER", email: "user@example.com" });
+    const token = app.jwt.sign({
+      userId: "user-1",
+      role: "USER",
+      email: "user@example.com",
+      turnkeyOrganizationId: "turnkey-org-route"
+    });
 
     await expect(app.inject({ method: "GET", url: "/user/wallets" }))
       .resolves.toMatchObject({ statusCode: 401 });
@@ -246,6 +257,7 @@ describe("user wallet routes", () => {
     });
     expect(ensured.statusCode).toBe(200);
     expect(ensured.json().wallets).toHaveLength(2);
+    expect(provisioner.lastTurnkeyOrganizationId).toBe("turnkey-org-route");
     expect(ensured.body).not.toContain("providerSubOrgId");
     expect(ensured.body).not.toContain("providerWalletAccountId");
     expect(ensured.body).not.toContain("privateKey");
