@@ -17,6 +17,16 @@ export interface MarketDataQuoteSource {
   }): Promise<VenueQuoteSnapshotReport>;
 }
 
+export interface MarketHistoricalChartSource {
+  listChartPoints(input: {
+    marketId: string;
+    canonicalEventId?: string | null | undefined;
+    venueMarketIds?: readonly string[] | undefined;
+    since?: Date | null | undefined;
+    limit?: number | undefined;
+  }): Promise<Array<{ timestamp: Date; venue: string; value: string }>>;
+}
+
 export interface MarketOrderbookLevel {
   venue: string;
   venueMarketId: string;
@@ -98,10 +108,13 @@ export class LiveMarketDataViewService {
 
   public constructor(
     private readonly quoteSource: MarketDataQuoteSource,
-    options: { now?: () => Date } = {}
+    options: { now?: () => Date; historicalChartSource?: MarketHistoricalChartSource | undefined } = {}
   ) {
     this.now = options.now ?? (() => new Date());
+    this.historicalChartSource = options.historicalChartSource;
   }
+
+  private readonly historicalChartSource: MarketHistoricalChartSource | undefined;
 
   public async getOrderbook(input: {
     marketId: string;
@@ -161,6 +174,9 @@ export class LiveMarketDataViewService {
   public async getChart(input: {
     marketId: string;
     outcomeId?: string | undefined;
+    outcomeLabel?: string | undefined;
+    canonicalEventId?: string | null | undefined;
+    venueMarketIds?: readonly string[] | undefined;
     timeframe: MarketChartTimeframe;
   }): Promise<MarketChartResponse> {
     const orderbook = await this.getOrderbook({
@@ -169,13 +185,21 @@ export class LiveMarketDataViewService {
       depth: 5
     });
     const cutoff = timeframeCutoff(input.timeframe, this.now());
-    const points = this.chartPoints
+    const storedPoints = this.chartPoints
       .filter((point) =>
         point.marketId === input.marketId &&
         point.outcomeId === (input.outcomeId ?? null) &&
         (cutoff === null || point.timestamp >= cutoff)
       )
       .sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime());
+    const historicalPoints = await this.loadHistoricalChartPoints({
+      marketId: input.marketId,
+      canonicalEventId: input.canonicalEventId,
+      venueMarketIds: input.venueMarketIds,
+      since: cutoff,
+      outcomeLabel: input.outcomeLabel
+    });
+    const points = mergeChartPoints(historicalPoints, storedPoints);
     const venueIds = [...new Set(points.flatMap((point) => Object.keys(point.venues)))].sort();
     const series = [
       { id: "unified", label: "Unified", color: "#ccff00" },
@@ -218,6 +242,47 @@ export class LiveMarketDataViewService {
     while (this.chartPoints.length > MAX_STORED_POINTS || (this.chartPoints[0]?.timestamp.getTime() ?? cutoffMs) < cutoffMs) {
       this.chartPoints.shift();
     }
+  }
+
+  private async loadHistoricalChartPoints(input: {
+    marketId: string;
+    canonicalEventId?: string | null | undefined;
+    venueMarketIds?: readonly string[] | undefined;
+    since: Date | null;
+    outcomeLabel?: string | undefined;
+  }): Promise<StoredChartPoint[]> {
+    if (!this.historicalChartSource) {
+      return [];
+    }
+    const rows = await this.historicalChartSource.listChartPoints({
+      marketId: input.marketId,
+      canonicalEventId: input.canonicalEventId,
+      venueMarketIds: input.venueMarketIds,
+      since: input.since,
+      limit: 600
+    });
+    const byTimestamp = new Map<number, StoredChartPoint>();
+    for (const row of rows) {
+      const value = normalizeHistoricalOutcomeValue(row.value, input.outcomeLabel);
+      if (value === null) continue;
+      const bucket = Math.round(row.timestamp.getTime() / 60_000) * 60_000;
+      const existing = byTimestamp.get(bucket) ?? {
+        marketId: input.marketId,
+        outcomeId: null,
+        timestamp: new Date(bucket),
+        unified: null,
+        venues: {}
+      };
+      existing.venues[row.venue.toUpperCase()] = value;
+      byTimestamp.set(bucket, existing);
+    }
+    return [...byTimestamp.values()]
+      .map((point) => ({
+        ...point,
+        unified: averageDecimalStrings(Object.values(point.venues))
+      }))
+      .filter((point) => point.unified !== null || Object.keys(point.venues).length > 0)
+      .sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime());
   }
 }
 
@@ -276,6 +341,48 @@ const sortRawLevels = (levels: readonly NormalizedQuoteLevel[], direction: "asc"
   [...levels].sort((left, right) => direction === "asc"
     ? Number(left.price) - Number(right.price)
     : Number(right.price) - Number(left.price));
+
+const mergeChartPoints = (
+  historicalPoints: readonly StoredChartPoint[],
+  livePoints: readonly StoredChartPoint[]
+): StoredChartPoint[] => {
+  const byBucket = new Map<number, StoredChartPoint>();
+  for (const point of [...historicalPoints, ...livePoints]) {
+    const bucket = Math.round(point.timestamp.getTime() / 5_000) * 5_000;
+    const existing = byBucket.get(bucket);
+    byBucket.set(bucket, {
+      marketId: point.marketId,
+      outcomeId: point.outcomeId,
+      timestamp: new Date(bucket),
+      unified: point.unified ?? existing?.unified ?? null,
+      venues: {
+        ...(existing?.venues ?? {}),
+        ...point.venues
+      }
+    });
+  }
+  return [...byBucket.values()].sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime());
+};
+
+const normalizeHistoricalOutcomeValue = (value: string, outcomeLabel: string | undefined): string | null => {
+  const parsed = decimal(value);
+  if (!parsed || parsed.lt(0)) return null;
+  const bounded = parsed.gt(1) && parsed.lte(100) ? parsed.div(100) : parsed;
+  if (bounded.gt(1)) return null;
+  const isNoOutcome = outcomeLabel !== undefined && /^(no|down|false)$/i.test(outcomeLabel.trim());
+  const normalized = isNoOutcome ? new Decimal(1).minus(bounded) : bounded;
+  return normalized.toDecimalPlaces(12).toString();
+};
+
+const averageDecimalStrings = (values: readonly (string | null)[]): string | null => {
+  const decimals = values.flatMap((value) => {
+    const parsed = typeof value === "string" ? decimal(value) : null;
+    return parsed ? [parsed] : [];
+  });
+  if (decimals.length === 0) return null;
+  const total = decimals.reduce((sum, value) => sum.plus(value), new Decimal(0));
+  return total.div(decimals.length).toDecimalPlaces(12).toString();
+};
 
 const sortLevels = (levels: readonly MarketOrderbookLevel[], direction: "asc" | "desc"): MarketOrderbookLevel[] =>
   [...levels].sort((left, right) => direction === "asc"

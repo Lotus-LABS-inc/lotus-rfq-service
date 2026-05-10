@@ -216,6 +216,7 @@ import { ExecutionIntentRepository } from "../repositories/execution-intent.repo
 import { ExecutionRecordRepository } from "../repositories/execution-record.repository.js";
 import { ExecutionControlRepository } from "../repositories/execution-control.repository.js";
 import { FundingRepository } from "../repositories/funding.repository.js";
+import { HistoricalMarketStateRepository } from "../repositories/historical-market-state.repository.js";
 import { UserWalletRepository } from "../repositories/user-wallet.repository.js";
 import { UserVenueAccountRepository } from "../repositories/user-venue-account.repository.js";
 import { PairEdgeRepository } from "../repositories/pair-edge.repository.js";
@@ -873,7 +874,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       streamCache: myriadQuoteCache
     })
   ], new SharedCoreVenueQuoteMappingResolver(new SharedCoreQuoteMappingRepository(dependencies.pgPool)));
-  const marketDataViewService = new LiveMarketDataViewService(venueQuoteSource);
+  const marketDataViewService = new LiveMarketDataViewService(venueQuoteSource, {
+    historicalChartSource: new HistoricalMarketStateRepository(dependencies.pgPool)
+  });
 
   const sorRouteScout = new RouteScout({
     redis: dependencies.redisClient,

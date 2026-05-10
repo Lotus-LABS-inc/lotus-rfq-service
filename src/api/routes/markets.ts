@@ -221,8 +221,23 @@ export const registerMarketCatalogRoutes = async (
     const response = await deps.marketDataViewService.getChart({
       marketId,
       ...(parsed.data.outcomeId ? { outcomeId: parsed.data.outcomeId } : {}),
+      ...(parsed.data.outcomeId ? { outcomeLabel: resolveOutcomeLabel(market, parsed.data.outcomeId) } : {}),
+      canonicalEventId: market.canonicalEventId,
+      venueMarketIds: market.venueMarkets.map((venueMarket) => venueMarket.venueMarketId),
       timeframe: parsed.data.timeframe as MarketChartTimeframe
     });
     return reply.send(response);
   });
+};
+
+const resolveOutcomeLabel = (
+  market: Awaited<ReturnType<MarketCatalogRepository["getMarket"]>>,
+  outcomeId: string
+): string | undefined => {
+  if (!market) return undefined;
+  for (const venueMarket of market.venueMarkets) {
+    const outcome = venueMarket.outcomes.find((entry) => entry.id === outcomeId);
+    if (outcome) return outcome.label;
+  }
+  return undefined;
 };

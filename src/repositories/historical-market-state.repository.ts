@@ -21,6 +21,12 @@ interface InsertedRow extends QueryResultRow {
   id: string;
 }
 
+export interface HistoricalMarketChartPoint {
+  timestamp: Date;
+  venue: string;
+  value: string;
+}
+
 const asJson = (value: Record<string, unknown> | null | undefined): string | null =>
   value === undefined ? null : value === null ? null : JSON.stringify(value);
 
@@ -109,5 +115,49 @@ export class HistoricalMarketStateRepository {
     }
 
     return { inserted, skipped: states.length - inserted };
+  }
+
+  public async listChartPoints(input: {
+    marketId: string;
+    canonicalEventId?: string | null | undefined;
+    venueMarketIds?: readonly string[] | undefined;
+    since?: Date | null | undefined;
+    limit?: number | undefined;
+  }): Promise<HistoricalMarketChartPoint[]> {
+    const venueMarketIds = [...new Set(input.venueMarketIds ?? [])].filter((value) => value.length > 0);
+    const result = await this.pool.query<QueryResultRow & {
+      timestamp: Date;
+      venue: string;
+      value: string | null;
+    }>(
+      `SELECT "timestamp",
+              venue,
+              COALESCE(midpoint, last_price, best_bid, best_ask) AS value
+         FROM historical_market_states
+        WHERE (
+              canonical_market_id = $1
+              OR canonical_event_id = $2
+              OR ($3::text[] IS NOT NULL AND venue_market_id = ANY($3::text[]))
+        )
+          AND ($4::timestamptz IS NULL OR "timestamp" >= $4)
+          AND COALESCE(midpoint, last_price, best_bid, best_ask) IS NOT NULL
+          AND lower(metadata_version) NOT LIKE '%predexon%'
+          AND lower(venue) <> 'predexon'
+        ORDER BY "timestamp" DESC
+        LIMIT $5`,
+      [
+        input.marketId,
+        input.canonicalEventId ?? input.marketId,
+        venueMarketIds.length > 0 ? venueMarketIds : null,
+        input.since ?? null,
+        input.limit ?? 500
+      ]
+    );
+
+    return result.rows
+      .flatMap((row) => typeof row.value === "string"
+        ? [{ timestamp: row.timestamp, venue: row.venue, value: row.value }]
+        : [])
+      .sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime());
   }
 }
