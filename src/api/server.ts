@@ -1457,7 +1457,23 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   await registerHealthRoute(app);
   await registerMetricsRoute(app);
   await registerTurnkeyAuthRoutes(app, {
-    jwtTtlSeconds: parseUserJwtTtlSeconds(process.env.USER_JWT_TTL_SECONDS)
+    jwtTtlSeconds: parseUserJwtTtlSeconds(process.env.USER_JWT_TTL_SECONDS),
+    provisionUserAccount: async ({ userId }) => {
+      const wallets = await userWalletService.ensureDefaultWallets(userId);
+      const setup = await userVenueAccountService.prepareAccountSetupBatch(userId);
+      const blockers = [
+        ...setup.venueAccounts.flatMap((item) => item.readinessBlockers),
+        ...setup.venueAccounts.flatMap((item) => item.setupInstructions),
+        ...setup.signatureRequests.map((request) => `${request.venue} requires a user signature before the venue account is fully active.`)
+      ];
+      const uniqueBlockers = [...new Set(blockers.filter((value) => value.trim().length > 0))];
+      return {
+        status: uniqueBlockers.length === 0 ? "READY" : "ACTION_REQUIRED",
+        walletCount: wallets.filter((wallet) => wallet.status === "ACTIVE").length,
+        venueAccountCount: setup.venueAccounts.length,
+        blockers: uniqueBlockers
+      };
+    }
   });
   await registerNotificationRoutes(app, userAuthMiddleware, notificationRepository);
   await registerFundingRoutes(app, userAuthMiddleware, {

@@ -5,14 +5,23 @@ import { registerTurnkeyAuthRoutes } from "../src/api/routes/turnkey-auth.js";
 
 const jwtSecret = "test-secret-at-least-thirty-two-characters";
 
-const setupApp = async (verifySessionJwt = vi.fn(async () => true)) => {
+const setupApp = async (
+  verifySessionJwt = vi.fn(async () => true),
+  provisionUserAccount = vi.fn(async () => ({
+    status: "READY" as const,
+    walletCount: 2,
+    venueAccountCount: 5,
+    blockers: []
+  }))
+) => {
   const app = Fastify({ logger: false });
   await app.register(fastifyJwt, { secret: jwtSecret });
   await registerTurnkeyAuthRoutes(app, {
     jwtTtlSeconds: 3600,
-    verifySessionJwt
+    verifySessionJwt,
+    provisionUserAccount
   });
-  return { app, verifySessionJwt };
+  return { app, verifySessionJwt, provisionUserAccount };
 };
 
 const unsignedTurnkeySession = (payload: Record<string, unknown>) => {
@@ -24,7 +33,7 @@ const unsignedTurnkeySession = (payload: Record<string, unknown>) => {
 
 describe("Turnkey auth exchange route", () => {
   it("exchanges a valid Turnkey session for a Lotus user JWT", async () => {
-    const { app, verifySessionJwt } = await setupApp();
+    const { app, verifySessionJwt, provisionUserAccount } = await setupApp();
     const session = unsignedTurnkeySession({
       userId: "turnkey-user-1",
       organizationId: "turnkey-org-1",
@@ -49,7 +58,18 @@ describe("Turnkey auth exchange route", () => {
     expect(body.user.userId).toMatch(/^turnkey_[a-f0-9]{32}$/);
     expect(body.user.turnkeyUserId).toBe("turnkey-user-1");
     expect(body.user.turnkeyOrganizationId).toBe("turnkey-org-1");
+    expect(body.accountSetup).toEqual({
+      status: "READY",
+      walletCount: 2,
+      venueAccountCount: 5,
+      blockers: []
+    });
     expect(verifySessionJwt).toHaveBeenCalledWith(session);
+    expect(provisionUserAccount).toHaveBeenCalledWith({
+      userId: body.user.userId,
+      turnkeyUserId: "turnkey-user-1",
+      turnkeyOrganizationId: "turnkey-org-1"
+    });
 
     const decoded = app.jwt.decode(body.userJwt) as Record<string, unknown>;
     expect(decoded.role).toBe("USER");

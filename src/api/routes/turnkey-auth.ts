@@ -12,6 +12,18 @@ const exchangeBodySchema = z.object({
 export interface TurnkeyAuthRouteDeps {
   jwtTtlSeconds: number;
   verifySessionJwt?: (sessionToken: string) => Promise<boolean>;
+  provisionUserAccount?: (input: {
+    userId: string;
+    turnkeyUserId: string;
+    turnkeyOrganizationId: string;
+  }) => Promise<TurnkeyAccountSetupStatus>;
+}
+
+export interface TurnkeyAccountSetupStatus {
+  status: "READY" | "ACTION_REQUIRED" | "UNAVAILABLE";
+  walletCount: number;
+  venueAccountCount: number;
+  blockers: string[];
 }
 
 type TurnkeySessionPayload = {
@@ -81,6 +93,12 @@ export const registerTurnkeyAuthRoutes = async (
       { expiresIn: deps.jwtTtlSeconds }
     );
 
+    const accountSetup = await provisionUserAccount(deps, {
+      userId,
+      turnkeyUserId,
+      turnkeyOrganizationId
+    });
+
     return reply.send({
       userJwt,
       tokenType: "Bearer",
@@ -89,9 +107,46 @@ export const registerTurnkeyAuthRoutes = async (
         userId,
         turnkeyUserId,
         turnkeyOrganizationId
-      }
+      },
+      accountSetup
     });
   });
+};
+
+const provisionUserAccount = async (
+  deps: TurnkeyAuthRouteDeps,
+  input: {
+    userId: string;
+    turnkeyUserId: string;
+    turnkeyOrganizationId: string;
+  }
+): Promise<TurnkeyAccountSetupStatus> => {
+  if (!deps.provisionUserAccount) {
+    return {
+      status: "UNAVAILABLE",
+      walletCount: 0,
+      venueAccountCount: 0,
+      blockers: ["Automatic wallet provisioning is not configured."]
+    };
+  }
+  try {
+    return await deps.provisionUserAccount(input);
+  } catch (error) {
+    return {
+      status: "UNAVAILABLE",
+      walletCount: 0,
+      venueAccountCount: 0,
+      blockers: [safeProvisioningBlocker(error)]
+    };
+  }
+};
+
+const safeProvisioningBlocker = (error: unknown): string => {
+  const message = error instanceof Error ? error.message : "Account setup is temporarily unavailable.";
+  if (/turnkey/i.test(message) || /wallet/i.test(message) || /venue/i.test(message)) {
+    return message;
+  }
+  return "Account setup is temporarily unavailable.";
 };
 
 const decodeTurnkeySessionPayload = (sessionToken: string): TurnkeySessionPayload => {
