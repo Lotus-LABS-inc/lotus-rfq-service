@@ -243,9 +243,12 @@ export class ExecutableRouteService {
       evaluation: evaluateCandidate(candidate, readinessByVenue.get(candidate.venue.toUpperCase()))
     }));
     const executable = evaluated
-      .filter((entry) => entry.evaluation.executable)
+      .filter((entry) => entry.evaluation.executable && entry.evaluation.status !== "QUOTE_ONLY")
       .map((entry) => entry.candidate);
-    const rejectedCandidates = evaluated
+    const quoteOnly = evaluated
+      .filter((entry) => entry.evaluation.status === "QUOTE_ONLY")
+      .map((entry) => entry.candidate);
+    const liveRejectedCandidates = evaluated
       .filter((entry) => !entry.evaluation.executable)
       .map((entry) => ({
         venue: entry.candidate.venue.toUpperCase(),
@@ -254,17 +257,24 @@ export class ExecutableRouteService {
         adminReason: entry.evaluation.adminReason
       }));
 
-    const selected = this.selectBestRoute(input, executable, amount);
+    let selected = this.selectBestRoute(input, executable, amount);
+    const selectedQuoteOnly = !selected.route && quoteOnly.length > 0;
+    if (selectedQuoteOnly) {
+      selected = this.selectBestRoute(input, quoteOnly, amount);
+    }
     if (!selected.route) {
       return {
         quote: null,
         userMessage: "No executable route available right now.",
-        rejectedCandidates,
+        rejectedCandidates: liveRejectedCandidates,
         internalCandidateCount: input.candidates.length,
         routeDiagnostics: selected.diagnostics
       };
     }
 
+    const rejectedCandidates = selectedQuoteOnly
+      ? liveRejectedCandidates.filter((candidate) => candidate.status !== "QUOTE_ONLY")
+      : liveRejectedCandidates;
     await this.quoteRepository?.saveQuote({ quote: selected.route, rejectedCandidates });
     return {
       quote: selected.route,
@@ -525,20 +535,20 @@ const evaluateCandidate = (
   if (candidate.settlementEvidenceSupported === false) {
     return { executable: false, status: "SETTLEMENT_EVIDENCE_MISSING", blockerCategory: "SETTLEMENT_EVIDENCE_MISSING", adminReason: `${candidate.venue} settlement evidence is not supported.` };
   }
-  if (!readiness.liveSubmissionSupported || (readiness.operationalStatus !== "STRUCTURALLY_READY" && readiness.operationalStatus !== "LIVE_DISABLED")) {
-    return {
-      executable: false,
-      status: "QUOTE_ONLY",
-      blockerCategory: "LIVE_SUBMIT_NOT_READY",
-      adminReason: readiness.operatorMessage
-    };
-  }
   if (readiness.venueAccountRequired && !readiness.venueAccountConfigured) {
     return {
       executable: false,
       status: "BLOCKED",
       blockerCategory: "VENUE_ACCOUNT_NOT_READY",
       adminReason: readiness.accountSetupBlockers.join("; ") || `${readiness.venue} venue account is not ready.`
+    };
+  }
+  if (!readiness.liveSubmissionSupported || (readiness.operationalStatus !== "STRUCTURALLY_READY" && readiness.operationalStatus !== "LIVE_DISABLED")) {
+    return {
+      executable: false,
+      status: "QUOTE_ONLY",
+      blockerCategory: "LIVE_SUBMIT_NOT_READY",
+      adminReason: readiness.operatorMessage
     };
   }
   return {

@@ -165,7 +165,7 @@ describe("executable route selection", () => {
     });
   });
 
-  it("returns no user quote when no executable route exists", async () => {
+  it("still prepares a quote-only route when live submit readiness is not configured", async () => {
     const service = new ExecutableRouteService({
       async listVenues() {
         return [readyVenue("PREDICT_FUN", { liveSubmissionSupported: false, liveExecutionEnabled: false, operationalStatus: "NOT_CONFIGURED" })];
@@ -181,8 +181,12 @@ describe("executable route selection", () => {
       candidates: [{ venue: "PREDICT_FUN", price: 0.5, availableSize: "1" }]
     });
 
-    expect(result.quote).toBeNull();
-    expect(result.userMessage).toBe("No executable route available right now.");
+    expect(result.quote).toMatchObject({
+      routeType: "SINGLE_VENUE",
+      venuePath: ["PREDICT_FUN"],
+      executableAmount: "1"
+    });
+    expect(result.rejectedCandidates).toEqual([]);
   });
 
   it("allows quote preparation when live submit is disabled but venue path is configured", async () => {

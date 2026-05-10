@@ -809,8 +809,18 @@ export const buildLiveExecutionCandidatesResponse = (input: {
   readiness: readonly ExecutionVenueReadinessSummary[];
   venues?: readonly string[] | undefined;
 }): LiveExecutionCandidatesResponse => {
+  const normalizeVenueFilter = (venue: string): string => {
+    const normalized = venue.trim().toUpperCase().replace(/[\s.-]+/g, "_");
+    if (normalized === "POLY" || normalized === "POLY_MARKET") {
+      return "POLYMARKET";
+    }
+    if (normalized === "PREDICT" || normalized === "PREDICTFUN" || normalized === "PREDICT_DOT_FUN") {
+      return "PREDICT_FUN";
+    }
+    return normalized;
+  };
   const allowedVenues = input.venues?.length
-    ? new Set(input.venues.map((venue) => venue.toUpperCase()))
+    ? new Set(input.venues.map(normalizeVenueFilter))
     : null;
   const readinessByVenue = new Map(input.readiness.map((venue) => [venue.venue.toUpperCase(), venue]));
   const candidates: TradeRouteCandidate[] = [];
