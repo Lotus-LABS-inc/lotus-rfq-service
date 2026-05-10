@@ -217,6 +217,7 @@ import { ExecutionRecordRepository } from "../repositories/execution-record.repo
 import { ExecutionControlRepository } from "../repositories/execution-control.repository.js";
 import { FundingRepository } from "../repositories/funding.repository.js";
 import { HistoricalMarketStateRepository } from "../repositories/historical-market-state.repository.js";
+import { VenueOrderbookSnapshotRepository } from "../repositories/venue-orderbook-snapshot.repository.js";
 import { UserWalletRepository } from "../repositories/user-wallet.repository.js";
 import { UserVenueAccountRepository } from "../repositories/user-venue-account.repository.js";
 import { PairEdgeRepository } from "../repositories/pair-edge.repository.js";
@@ -340,6 +341,10 @@ import { PgNotificationRepository } from "../repositories/notification.repositor
 import { MarketCatalogRepository, SharedCoreQuoteMappingRepository } from "../repositories/market-catalog.repository.js";
 import { LiveMarketDataViewService } from "../services/market-data-view.service.js";
 import { LimitlessMarketChartSource } from "../services/limitless-market-chart-source.js";
+import {
+  buildMarketOrderbookRecorderConfigFromEnv,
+  MarketOrderbookRecorder
+} from "../services/market-orderbook-recorder.service.js";
 import {
   buildFundingReadinessWatcherConfigFromEnv,
   FundingReadinessWatcher
@@ -876,6 +881,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     })
   ], new SharedCoreVenueQuoteMappingResolver(new SharedCoreQuoteMappingRepository(dependencies.pgPool)));
   const historicalMarketStateRepository = new HistoricalMarketStateRepository(dependencies.pgPool);
+  const venueOrderbookSnapshotRepository = new VenueOrderbookSnapshotRepository(dependencies.pgPool);
   const limitlessMarketChartSource = new LimitlessMarketChartSource({
     client: new LimitlessHistoricalClient({
       baseUrl: limitlessBaseUrl,
@@ -887,11 +893,26 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   });
   const marketDataViewService = new LiveMarketDataViewService(venueQuoteSource, {
     historicalChartSource: {
-      listChartPoints: async (input) => [
-        ...await historicalMarketStateRepository.listChartPoints(input),
-        ...await limitlessMarketChartSource.listChartPoints(input)
-      ]
+      listChartPoints: async (input) => {
+        const results = await Promise.allSettled([
+          venueOrderbookSnapshotRepository.listChartPoints(input),
+          historicalMarketStateRepository.listChartPoints(input),
+          limitlessMarketChartSource.listChartPoints(input)
+        ]);
+        return results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+      }
     }
+  });
+  const marketOrderbookRecorder = new MarketOrderbookRecorder(
+    marketCatalogRepository,
+    venueQuoteSource,
+    venueOrderbookSnapshotRepository,
+    dependencies.logger,
+    buildMarketOrderbookRecorderConfigFromEnv(process.env)
+  );
+  marketOrderbookRecorder.start();
+  app.addHook("onClose", async () => {
+    marketOrderbookRecorder.stop();
   });
 
   const sorRouteScout = new RouteScout({

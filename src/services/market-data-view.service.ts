@@ -20,6 +20,7 @@ export interface MarketDataQuoteSource {
 export interface MarketHistoricalChartSource {
   listChartPoints(input: {
     marketId: string;
+    outcomeId?: string | null | undefined;
     canonicalEventId?: string | null | undefined;
     venueMarketIds?: readonly string[] | undefined;
     venueMappings?: readonly { venue: string; venueMarketId: string }[] | undefined;
@@ -197,6 +198,7 @@ export class LiveMarketDataViewService {
       .sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime());
     const historicalPoints = await this.loadHistoricalChartPoints({
       marketId: input.marketId,
+      outcomeId: input.outcomeId ?? null,
       canonicalEventId: input.canonicalEventId,
       venueMarketIds: input.venueMarketIds,
       venueMappings: input.venueMappings,
@@ -251,6 +253,7 @@ export class LiveMarketDataViewService {
 
   private async loadHistoricalChartPoints(input: {
     marketId: string;
+    outcomeId: string | null;
     canonicalEventId?: string | null | undefined;
     venueMarketIds?: readonly string[] | undefined;
     venueMappings?: readonly { venue: string; venueMarketId: string }[] | undefined;
@@ -261,15 +264,21 @@ export class LiveMarketDataViewService {
     if (!this.historicalChartSource) {
       return [];
     }
-    const rows = await this.historicalChartSource.listChartPoints({
-      marketId: input.marketId,
-      canonicalEventId: input.canonicalEventId,
-      venueMarketIds: input.venueMarketIds,
-      venueMappings: input.venueMappings,
-      since: input.since,
-      timeframe: input.timeframe,
-      limit: 600
-    });
+    let rows: Array<{ timestamp: Date; venue: string; value: string }>;
+    try {
+      rows = await this.historicalChartSource.listChartPoints({
+        marketId: input.marketId,
+        outcomeId: input.outcomeId,
+        canonicalEventId: input.canonicalEventId,
+        venueMarketIds: input.venueMarketIds,
+        venueMappings: input.venueMappings,
+        since: input.since,
+        timeframe: input.timeframe,
+        limit: 600
+      });
+    } catch {
+      return [];
+    }
     const byTimestamp = new Map<number, StoredChartPoint>();
     for (const row of rows) {
       const value = normalizeHistoricalOutcomeValue(row.value, input.outcomeLabel);
