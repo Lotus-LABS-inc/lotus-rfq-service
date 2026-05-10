@@ -22,8 +22,10 @@ export interface MarketHistoricalChartSource {
     marketId: string;
     canonicalEventId?: string | null | undefined;
     venueMarketIds?: readonly string[] | undefined;
+    venueMappings?: readonly { venue: string; venueMarketId: string }[] | undefined;
     since?: Date | null | undefined;
     limit?: number | undefined;
+    timeframe?: MarketChartTimeframe | undefined;
   }): Promise<Array<{ timestamp: Date; venue: string; value: string }>>;
 }
 
@@ -177,6 +179,7 @@ export class LiveMarketDataViewService {
     outcomeLabel?: string | undefined;
     canonicalEventId?: string | null | undefined;
     venueMarketIds?: readonly string[] | undefined;
+    venueMappings?: readonly { venue: string; venueMarketId: string }[] | undefined;
     timeframe: MarketChartTimeframe;
   }): Promise<MarketChartResponse> {
     const orderbook = await this.getOrderbook({
@@ -196,7 +199,9 @@ export class LiveMarketDataViewService {
       marketId: input.marketId,
       canonicalEventId: input.canonicalEventId,
       venueMarketIds: input.venueMarketIds,
+      venueMappings: input.venueMappings,
       since: cutoff,
+      timeframe: input.timeframe,
       outcomeLabel: input.outcomeLabel
     });
     const points = mergeChartPoints(historicalPoints, storedPoints);
@@ -248,7 +253,9 @@ export class LiveMarketDataViewService {
     marketId: string;
     canonicalEventId?: string | null | undefined;
     venueMarketIds?: readonly string[] | undefined;
+    venueMappings?: readonly { venue: string; venueMarketId: string }[] | undefined;
     since: Date | null;
+    timeframe: MarketChartTimeframe;
     outcomeLabel?: string | undefined;
   }): Promise<StoredChartPoint[]> {
     if (!this.historicalChartSource) {
@@ -258,7 +265,9 @@ export class LiveMarketDataViewService {
       marketId: input.marketId,
       canonicalEventId: input.canonicalEventId,
       venueMarketIds: input.venueMarketIds,
+      venueMappings: input.venueMappings,
       since: input.since,
+      timeframe: input.timeframe,
       limit: 600
     });
     const byTimestamp = new Map<number, StoredChartPoint>();

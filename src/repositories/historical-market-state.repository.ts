@@ -121,6 +121,7 @@ export class HistoricalMarketStateRepository {
     marketId: string;
     canonicalEventId?: string | null | undefined;
     venueMarketIds?: readonly string[] | undefined;
+    venueMappings?: readonly { venue: string; venueMarketId: string }[] | undefined;
     since?: Date | null | undefined;
     limit?: number | undefined;
   }): Promise<HistoricalMarketChartPoint[]> {

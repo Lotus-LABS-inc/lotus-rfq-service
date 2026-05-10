@@ -224,6 +224,10 @@ export const registerMarketCatalogRoutes = async (
       ...(parsed.data.outcomeId ? { outcomeLabel: resolveOutcomeLabel(market, parsed.data.outcomeId) } : {}),
       canonicalEventId: market.canonicalEventId,
       venueMarketIds: market.venueMarkets.map((venueMarket) => venueMarket.venueMarketId),
+      venueMappings: market.venueMarkets.map((venueMarket) => ({
+        venue: venueMarket.venue,
+        venueMarketId: venueMarket.venueMarketId
+      })),
       timeframe: parsed.data.timeframe as MarketChartTimeframe
     });
     return reply.send(response);

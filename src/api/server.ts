@@ -339,6 +339,7 @@ import {
 import { PgNotificationRepository } from "../repositories/notification.repository.js";
 import { MarketCatalogRepository, SharedCoreQuoteMappingRepository } from "../repositories/market-catalog.repository.js";
 import { LiveMarketDataViewService } from "../services/market-data-view.service.js";
+import { LimitlessMarketChartSource } from "../services/limitless-market-chart-source.js";
 import {
   buildFundingReadinessWatcherConfigFromEnv,
   FundingReadinessWatcher
@@ -874,8 +875,23 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       streamCache: myriadQuoteCache
     })
   ], new SharedCoreVenueQuoteMappingResolver(new SharedCoreQuoteMappingRepository(dependencies.pgPool)));
+  const historicalMarketStateRepository = new HistoricalMarketStateRepository(dependencies.pgPool);
+  const limitlessMarketChartSource = new LimitlessMarketChartSource({
+    client: new LimitlessHistoricalClient({
+      baseUrl: limitlessBaseUrl,
+      apiKey: process.env.LIMITLESS_API_KEY?.trim() ?? "",
+      logger: dependencies.logger,
+      retry: { maxRetries: 1, baseBackoffMs: 250, maxBackoffMs: 750 }
+    }),
+    logger: dependencies.logger
+  });
   const marketDataViewService = new LiveMarketDataViewService(venueQuoteSource, {
-    historicalChartSource: new HistoricalMarketStateRepository(dependencies.pgPool)
+    historicalChartSource: {
+      listChartPoints: async (input) => [
+        ...await historicalMarketStateRepository.listChartPoints(input),
+        ...await limitlessMarketChartSource.listChartPoints(input)
+      ]
+    }
   });
 
   const sorRouteScout = new RouteScout({
