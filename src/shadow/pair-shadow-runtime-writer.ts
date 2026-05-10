@@ -52,6 +52,11 @@ interface PairShadowCatalog {
   runnableByRouteAndMarket: Map<string, RuntimeScopeRecord>;
 }
 
+const emptyPairShadowCatalog = (): PairShadowCatalog => ({
+  safeByRouteAndMarket: new Map(),
+  runnableByRouteAndMarket: new Map()
+});
+
 const routeModeToVenues: Record<PairRouteClassId, readonly VenueName[]> = {
   PAIR_PM_LIMITLESS: ["POLYMARKET", "LIMITLESS"],
   PAIR_PM_OPINION: ["POLYMARKET", "OPINION"]
@@ -84,11 +89,23 @@ const inferVenueName = (candidate: RouteCandidate | undefined, providerId: strin
 const average = (values: readonly number[]): number | null =>
   values.length === 0 ? null : values.reduce((sum, value) => sum + value, 0) / values.length;
 
-const buildCatalog = (repoRoot: string): PairShadowCatalog => {
-  const qualifications = buildAllPairRouteQualifications({
-    PAIR_PM_LIMITLESS: QualificationStage.INTERNAL_ONLY,
-    PAIR_PM_OPINION: QualificationStage.INTERNAL_ONLY
-  }, loadPairRouteArtifactInputs(repoRoot));
+const buildCatalog = (
+  repoRoot: string,
+  logger?: Pick<Logger, "warn">
+): PairShadowCatalog => {
+  let qualifications: ReturnType<typeof buildAllPairRouteQualifications>;
+  try {
+    qualifications = buildAllPairRouteQualifications({
+      PAIR_PM_LIMITLESS: QualificationStage.INTERNAL_ONLY,
+      PAIR_PM_OPINION: QualificationStage.INTERNAL_ONLY
+    }, loadPairRouteArtifactInputs(repoRoot));
+  } catch (error) {
+    logger?.warn?.(
+      { err: error, repoRoot },
+      "Pair shadow route artifacts are unavailable; runtime shadow catalog is disabled."
+    );
+    return emptyPairShadowCatalog();
+  }
   const safeByRouteAndMarket = new Map<string, RuntimeScopeRecord>();
   const runnableByRouteAndMarket = new Map<string, RuntimeScopeRecord>();
 
@@ -136,7 +153,7 @@ export class PairShadowRuntimeWriter {
       listObservations: async () => []
     });
     this.logger = deps.logger;
-    this.catalog = buildCatalog(deps.repoRoot);
+    this.catalog = buildCatalog(deps.repoRoot, deps.logger);
   }
 
   private classifyRuntimeScope(input: PairShadowRuntimeSorInput): RuntimeScopeRecord | null {
