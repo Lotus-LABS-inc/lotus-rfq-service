@@ -337,6 +337,7 @@ import {
 } from "../repositories/execution-routing.repository.js";
 import { PgNotificationRepository } from "../repositories/notification.repository.js";
 import { MarketCatalogRepository, SharedCoreQuoteMappingRepository } from "../repositories/market-catalog.repository.js";
+import { LiveMarketDataViewService } from "../services/market-data-view.service.js";
 import {
   buildFundingReadinessWatcherConfigFromEnv,
   FundingReadinessWatcher
@@ -872,6 +873,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       streamCache: myriadQuoteCache
     })
   ], new SharedCoreVenueQuoteMappingResolver(new SharedCoreQuoteMappingRepository(dependencies.pgPool)));
+  const marketDataViewService = new LiveMarketDataViewService(venueQuoteSource);
 
   const sorRouteScout = new RouteScout({
     redis: dependencies.redisClient,
@@ -1494,7 +1496,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     }
   });
   await registerMarketCatalogRoutes(app, {
-    marketCatalogRepository
+    marketCatalogRepository,
+    marketDataViewService
   });
   await registerUserWalletRoutes(app, userAuthMiddleware, {
     listWallets: (userId) => userWalletService.listWallets(userId),

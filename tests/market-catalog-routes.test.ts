@@ -218,6 +218,119 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
+  it("returns sanitized live orderbook and chart contracts", async () => {
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: new FakeMarketCatalogRepository(),
+      marketDataViewService: {
+        getOrderbook: async (input) => ({
+          marketId: input.marketId,
+          outcomeId: input.outcomeId ?? null,
+          generatedAt: "2026-05-10T00:00:00.000Z",
+          depth: input.depth ?? 20,
+          status: "live" as const,
+          bestBid: "0.51",
+          bestAsk: "0.53",
+          midpoint: "0.52",
+          spread: "0.02",
+          blockers: [],
+          venues: [{
+            venue: "POLYMARKET",
+            venueMarketId: "poly-1",
+            venueOutcomeId: "yes",
+            source: "REST" as const,
+            quoteQuality: "FULL_DEPTH_REST",
+            sourceTimestamp: null,
+            receivedAt: "2026-05-10T00:00:00.000Z",
+            bestBid: "0.51",
+            bestAsk: "0.53",
+            midpoint: "0.52",
+            spread: "0.02",
+            bidDepth: "100",
+            askDepth: "90",
+            blockers: [],
+            bids: [{
+              venue: "POLYMARKET",
+              venueMarketId: "poly-1",
+              venueOutcomeId: "yes",
+              price: "0.51",
+              size: "100",
+              cumulativeSize: "100",
+              cumulativeNotional: "51"
+            }],
+            asks: [{
+              venue: "POLYMARKET",
+              venueMarketId: "poly-1",
+              venueOutcomeId: "yes",
+              price: "0.53",
+              size: "90",
+              cumulativeSize: "90",
+              cumulativeNotional: "47.7"
+            }]
+          }],
+          bids: [{
+            venue: "POLYMARKET",
+            venueMarketId: "poly-1",
+            venueOutcomeId: "yes",
+            price: "0.51",
+            size: "100",
+            cumulativeSize: "100",
+            cumulativeNotional: "51"
+          }],
+          asks: [{
+            venue: "POLYMARKET",
+            venueMarketId: "poly-1",
+            venueOutcomeId: "yes",
+            price: "0.53",
+            size: "90",
+            cumulativeSize: "90",
+            cumulativeNotional: "47.7"
+          }]
+        }),
+        getChart: async (input) => ({
+          marketId: input.marketId,
+          outcomeId: input.outcomeId ?? null,
+          timeframe: input.timeframe,
+          generatedAt: "2026-05-10T00:00:00.000Z",
+          historyStatus: "accumulating" as const,
+          blockers: [],
+          series: [{ id: "unified", label: "Unified", color: "#ccff00" }],
+          points: [{
+            timestamp: "2026-05-10T00:00:00.000Z",
+            label: "12:00 AM",
+            unified: "0.52",
+            venues: { POLYMARKET: "0.52" }
+          }]
+        })
+      }
+    });
+
+    const orderbook = await app.inject({
+      method: "GET",
+      url: `/markets/${market.canonicalEventId}/orderbook?outcomeId=yes&depth=10`
+    });
+    expect(orderbook.statusCode).toBe(200);
+    expect(orderbook.json()).toMatchObject({
+      status: "live",
+      bestBid: "0.51",
+      asks: [{ venue: "POLYMARKET", price: "0.53" }]
+    });
+    expect(orderbook.body).not.toContain("apiKey");
+    expect(orderbook.body).not.toContain("raw_source_payload");
+
+    const chart = await app.inject({
+      method: "GET",
+      url: `/markets/${market.canonicalEventId}/chart?outcomeId=yes&timeframe=1H`
+    });
+    expect(chart.statusCode).toBe(200);
+    expect(chart.json()).toMatchObject({
+      historyStatus: "accumulating",
+      points: [{ unified: "0.52" }]
+    });
+
+    await app.close();
+  });
+
   it("lists categories across available canonical markets", async () => {
     const app = Fastify({ logger: false });
     await registerMarketCatalogRoutes(app, { marketCatalogRepository: new FakeMarketCatalogRepository() });

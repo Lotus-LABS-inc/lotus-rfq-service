@@ -250,6 +250,66 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/MarketOutcomes" }
         "404": { $ref: "#/components/responses/Error" }
+  /markets/{marketId}/orderbook:
+    parameters:
+      - name: marketId
+        in: path
+        required: true
+        schema: { type: string }
+      - name: outcomeId
+        in: query
+        required: false
+        schema: { type: string }
+      - name: venue
+        in: query
+        required: false
+        schema: { type: string }
+      - name: depth
+        in: query
+        required: false
+        schema: { type: integer, minimum: 1, maximum: 50 }
+    get:
+      tags: [Markets]
+      summary: Read sanitized live orderbook depth for one canonical market.
+      description: Uses Lotus backend venue quote readers only. Does not expose raw provider payloads, provider secrets, or Predexon-derived data.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: public
+      x-lotus-side-effects: live-venue-read
+      x-lotus-danger: low
+      responses:
+        "200": { $ref: "#/components/responses/MarketOrderbook" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /markets/{marketId}/chart:
+    parameters:
+      - name: marketId
+        in: path
+        required: true
+        schema: { type: string }
+      - name: outcomeId
+        in: query
+        required: false
+        schema: { type: string }
+      - name: timeframe
+        in: query
+        required: false
+        schema: { type: string, enum: [1H, 6H, 1D, 1W, 1M, ALL] }
+    get:
+      tags: [Markets]
+      summary: Read Lotus live market chart points for one canonical market.
+      description: Returns live midpoint observations accumulated from backend orderbook reads. Older timeframes may be accumulating; no historical data is fabricated.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: public
+      x-lotus-side-effects: live-venue-read
+      x-lotus-danger: low
+      responses:
+        "200": { $ref: "#/components/responses/MarketChart" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /rfq:
     post:
       tags: [RFQ]
@@ -3885,6 +3945,18 @@ components:
                     venues:
                       type: array
                       items: { type: string }
+    MarketOrderbook:
+      description: Sanitized live orderbook response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MarketOrderbookResponse"
+    MarketChart:
+      description: Lotus live market chart response.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MarketChartResponse"
     LaneObject:
       description: Lane response.
       content:
@@ -4221,6 +4293,120 @@ components:
                 hasSingleVenue: { type: boolean }
                 hasCrossVenue: { type: boolean }
             updatedAt: { type: string }
+    MarketOrderbookLevel:
+      type: object
+      required: [venue, venueMarketId, venueOutcomeId, price, size, cumulativeSize, cumulativeNotional]
+      properties:
+        venue: { type: string }
+        venueMarketId: { type: string }
+        venueOutcomeId: { type: string, nullable: true }
+        price:
+          type: string
+          description: Probability price as a decimal string, usually 0 to 1.
+        size: { type: string }
+        cumulativeSize: { type: string }
+        cumulativeNotional: { type: string }
+    MarketOrderbookVenue:
+      type: object
+      required: [venue, venueMarketId, venueOutcomeId, source, quoteQuality, sourceTimestamp, receivedAt, bestBid, bestAsk, midpoint, spread, bidDepth, askDepth, blockers, bids, asks]
+      properties:
+        venue: { type: string }
+        venueMarketId: { type: string }
+        venueOutcomeId: { type: string, nullable: true }
+        source: { type: string, enum: [STREAM, REST] }
+        quoteQuality: { type: string }
+        sourceTimestamp: { type: string, nullable: true }
+        receivedAt: { type: string }
+        bestBid: { type: string, nullable: true }
+        bestAsk: { type: string, nullable: true }
+        midpoint: { type: string, nullable: true }
+        spread: { type: string, nullable: true }
+        bidDepth: { type: string }
+        askDepth: { type: string }
+        blockers:
+          type: array
+          items: { type: string }
+        bids:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarketOrderbookLevel"
+        asks:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarketOrderbookLevel"
+    MarketOrderbookBlocker:
+      type: object
+      required: [venue, reason]
+      properties:
+        venue: { type: string }
+        reason: { type: string }
+        venueMarketId: { type: string }
+        venueOutcomeId: { type: string }
+    MarketOrderbookResponse:
+      type: object
+      required: [marketId, outcomeId, generatedAt, depth, venues, bids, asks, bestBid, bestAsk, midpoint, spread, status, blockers]
+      properties:
+        marketId: { type: string }
+        outcomeId: { type: string, nullable: true }
+        generatedAt: { type: string }
+        depth: { type: integer }
+        venues:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarketOrderbookVenue"
+        bids:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarketOrderbookLevel"
+        asks:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarketOrderbookLevel"
+        bestBid: { type: string, nullable: true }
+        bestAsk: { type: string, nullable: true }
+        midpoint: { type: string, nullable: true }
+        spread: { type: string, nullable: true }
+        status: { type: string, enum: [live, partial, unavailable] }
+        blockers:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarketOrderbookBlocker"
+    MarketChartResponse:
+      type: object
+      required: [marketId, outcomeId, timeframe, generatedAt, historyStatus, series, points, blockers]
+      properties:
+        marketId: { type: string }
+        outcomeId: { type: string, nullable: true }
+        timeframe: { type: string, enum: [1H, 6H, 1D, 1W, 1M, ALL] }
+        generatedAt: { type: string }
+        historyStatus: { type: string, enum: [live, accumulating, unavailable] }
+        series:
+          type: array
+          items:
+            type: object
+            required: [id, label, color]
+            properties:
+              id: { type: string }
+              label: { type: string }
+              color: { type: string }
+        points:
+          type: array
+          items:
+            type: object
+            required: [timestamp, label, unified, venues]
+            properties:
+              timestamp: { type: string }
+              label: { type: string }
+              unified: { type: string, nullable: true }
+              venues:
+                type: object
+                additionalProperties:
+                  type: string
+                  nullable: true
+        blockers:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarketOrderbookBlocker"
     ErrorResponse:
       type: object
       additionalProperties: true

@@ -167,6 +167,11 @@ export interface CalculatedVenueQuoteSnapshotReport {
   blocked: readonly VenueQuoteSnapshotBlocker[];
 }
 
+export interface VenueQuoteSnapshotReport {
+  snapshots: readonly NormalizedVenueQuoteSnapshot[];
+  blocked: readonly VenueQuoteSnapshotBlocker[];
+}
+
 export class QuoteSnapshotCache {
   private readonly snapshots = new Map<string, NormalizedVenueQuoteSnapshot>();
 
@@ -210,6 +215,80 @@ export class CompositeVenueQuoteSource {
     side: "buy" | "sell";
     quantity: number;
   }): Promise<CalculatedVenueQuoteSnapshotReport> {
+    const rawReport = await this.getQuoteSnapshotReport(input);
+    const calculatedResults = rawReport.snapshots.map((snapshot): {
+      snapshot: CalculatedVenueQuoteSnapshot | null;
+      blocker: VenueQuoteSnapshotBlocker | null;
+    } => {
+      const calculated = calculateVenueQuote({
+        snapshot,
+        side: input.side,
+        amount: input.quantity,
+        now: this.now()
+      });
+      if (!calculated.ok) {
+        return {
+          snapshot: null,
+          blocker: {
+            venue: snapshot.venue.toUpperCase(),
+            reason: calculated.blockers.join(",") || "QUOTE_CALCULATION_BLOCKED",
+            venueMarketId: snapshot.venueMarketId,
+            ...(snapshot.venueOutcomeId ? { venueOutcomeId: snapshot.venueOutcomeId } : {})
+          }
+        };
+      }
+      const output: CalculatedVenueQuoteSnapshot = {
+        venue: calculated.venue,
+        availableSize: calculated.availableSize,
+        quotedPrice: calculated.price,
+        fees: {
+          ...(calculated.feeAmount !== undefined ? { provider_fee: calculated.feeAmount } : {}),
+          ...(calculated.fixedFee !== undefined ? { fixed_fee: calculated.fixedFee } : {})
+        },
+        latencyMs: calculated.freshnessMs,
+        fillProb: calculated.liquidityScore,
+        metadata: {
+          source: "venue_quote_snapshot",
+          venue: calculated.venue,
+          venueMarketId: snapshot.venueMarketId,
+          venueOutcomeId: snapshot.venueOutcomeId,
+          quoteQuality: calculated.quoteQuality,
+          quoteSource: calculated.source,
+          freshnessMs: calculated.freshnessMs,
+          spreadBps: calculated.spreadBps,
+          slippageBps: calculated.slippageBps,
+          liquidityScore: calculated.liquidityScore,
+          confidencePenaltyBps: calculated.confidencePenaltyBps,
+          feeAmount: calculated.feeAmount,
+          effectiveFeeBps: calculated.effectiveFeeBps,
+          feeQuote: calculated.feeQuote,
+          missingFactors: calculated.missingFactors,
+          blockers: calculated.blockers,
+          settlementEvidenceSupported: calculated.settlementEvidenceSupported,
+          ...calculated.metadata
+        }
+      };
+      return { snapshot: output, blocker: null };
+    });
+    return {
+      snapshots: calculatedResults
+        .map((result) => result.snapshot)
+        .filter((result): result is CalculatedVenueQuoteSnapshot => result !== null),
+      blocked: [
+        ...rawReport.blocked,
+        ...calculatedResults
+          .map((result) => result.blocker)
+          .filter((result): result is VenueQuoteSnapshotBlocker => result !== null)
+      ]
+    };
+  }
+
+  public async getQuoteSnapshotReport(input: {
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+    side: "buy" | "sell";
+    quantity: number;
+  }): Promise<VenueQuoteSnapshotReport> {
     const readiness = await this.loadMappingReadiness(input);
     const mappingBlockers: VenueQuoteSnapshotBlocker[] = readiness
       .filter((row) => !row.quoteReady)
@@ -228,7 +307,7 @@ export class CompositeVenueQuoteSource {
       }));
 
     const results = await Promise.all(mappings.map(async (mapping): Promise<{
-      snapshot: CalculatedVenueQuoteSnapshot | null;
+      snapshot: NormalizedVenueQuoteSnapshot | null;
       blocker: VenueQuoteSnapshotBlocker | null;
     }> => {
       try {
@@ -263,55 +342,7 @@ export class CompositeVenueQuoteSource {
             }
           };
         }
-        const calculated = calculateVenueQuote({
-          snapshot,
-          side: input.side,
-          amount: input.quantity,
-          now: this.now()
-        });
-        if (!calculated.ok) {
-          return {
-            snapshot: null,
-            blocker: {
-              venue: mapping.venue.toUpperCase(),
-              reason: calculated.blockers.join(",") || "QUOTE_CALCULATION_BLOCKED",
-              venueMarketId: snapshot.venueMarketId,
-              ...(snapshot.venueOutcomeId ? { venueOutcomeId: snapshot.venueOutcomeId } : {})
-            }
-          };
-        }
-        const output: CalculatedVenueQuoteSnapshot = {
-          venue: calculated.venue,
-          availableSize: calculated.availableSize,
-          quotedPrice: calculated.price,
-          fees: {
-            ...(calculated.feeAmount !== undefined ? { provider_fee: calculated.feeAmount } : {}),
-            ...(calculated.fixedFee !== undefined ? { fixed_fee: calculated.fixedFee } : {})
-          },
-          latencyMs: calculated.freshnessMs,
-          fillProb: calculated.liquidityScore,
-          metadata: {
-            source: "venue_quote_snapshot",
-            venue: calculated.venue,
-            venueMarketId: snapshot.venueMarketId,
-            venueOutcomeId: snapshot.venueOutcomeId,
-            quoteQuality: calculated.quoteQuality,
-            quoteSource: calculated.source,
-            freshnessMs: calculated.freshnessMs,
-            spreadBps: calculated.spreadBps,
-            slippageBps: calculated.slippageBps,
-            liquidityScore: calculated.liquidityScore,
-            confidencePenaltyBps: calculated.confidencePenaltyBps,
-            feeAmount: calculated.feeAmount,
-            effectiveFeeBps: calculated.effectiveFeeBps,
-            feeQuote: calculated.feeQuote,
-            missingFactors: calculated.missingFactors,
-            blockers: calculated.blockers,
-            settlementEvidenceSupported: calculated.settlementEvidenceSupported,
-            ...calculated.metadata
-          }
-        };
-        return { snapshot: output, blocker: null };
+        return { snapshot, blocker: null };
       } catch {
         return {
           snapshot: null,
@@ -327,7 +358,7 @@ export class CompositeVenueQuoteSource {
     return {
       snapshots: results
         .map((result) => result.snapshot)
-        .filter((result): result is CalculatedVenueQuoteSnapshot => result !== null),
+        .filter((result): result is NormalizedVenueQuoteSnapshot => result !== null),
       blocked: [
         ...mappingBlockers,
         ...results

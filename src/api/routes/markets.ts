@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { MarketCatalogRepository } from "../../repositories/market-catalog.repository.js";
+import type { LiveMarketDataViewService, MarketChartTimeframe } from "../../services/market-data-view.service.js";
 
 const listQuerySchema = z.object({
   category: z.string().min(1).optional(),
@@ -8,8 +9,22 @@ const listQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(1000).optional()
 });
 
+const orderbookQuerySchema = z.object({
+  outcomeId: z.string().min(1).optional(),
+  venue: z.string().min(1).optional(),
+  depth: z.coerce.number().int().positive().max(50).optional()
+});
+
+const chartTimeframeSchema = z.enum(["1H", "6H", "1D", "1W", "1M", "ALL"]);
+
+const chartQuerySchema = z.object({
+  outcomeId: z.string().min(1).optional(),
+  timeframe: chartTimeframeSchema.default("1H")
+});
+
 export interface MarketCatalogRouteDeps {
   marketCatalogRepository: Pick<MarketCatalogRepository, "listCategories" | "listMarkets" | "listEvents" | "getMarket" | "getEvent">;
+  marketDataViewService?: Pick<LiveMarketDataViewService, "getOrderbook" | "getChart"> | undefined;
 }
 
 export const registerMarketCatalogRoutes = async (
@@ -146,5 +161,68 @@ export const registerMarketCatalogRoutes = async (
       title: market.title,
       outcomes: [...outcomes.values()].sort((left, right) => left.label.localeCompare(right.label))
     });
+  });
+
+  app.get("/markets/:marketId/orderbook", async (request, reply) => {
+    if (!deps.marketDataViewService) {
+      return reply.status(503).send({
+        code: "MARKET_ORDERBOOK_UNAVAILABLE",
+        message: "Live market orderbook service is not configured."
+      });
+    }
+    const parsed = orderbookQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_MARKET_ORDERBOOK_QUERY",
+        message: "Market orderbook query validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    const { marketId } = request.params as { marketId: string };
+    const market = await deps.marketCatalogRepository.getMarket(marketId);
+    if (!market) {
+      return reply.status(404).send({
+        code: "MARKET_NOT_FOUND",
+        message: "Market was not found."
+      });
+    }
+    const response = await deps.marketDataViewService.getOrderbook({
+      marketId,
+      ...(parsed.data.outcomeId ? { outcomeId: parsed.data.outcomeId } : {}),
+      ...(parsed.data.depth ? { depth: parsed.data.depth } : {}),
+      ...(parsed.data.venue ? { venue: parsed.data.venue } : {})
+    });
+    return reply.send(response);
+  });
+
+  app.get("/markets/:marketId/chart", async (request, reply) => {
+    if (!deps.marketDataViewService) {
+      return reply.status(503).send({
+        code: "MARKET_CHART_UNAVAILABLE",
+        message: "Live market chart service is not configured."
+      });
+    }
+    const parsed = chartQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_MARKET_CHART_QUERY",
+        message: "Market chart query validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    const { marketId } = request.params as { marketId: string };
+    const market = await deps.marketCatalogRepository.getMarket(marketId);
+    if (!market) {
+      return reply.status(404).send({
+        code: "MARKET_NOT_FOUND",
+        message: "Market was not found."
+      });
+    }
+    const response = await deps.marketDataViewService.getChart({
+      marketId,
+      ...(parsed.data.outcomeId ? { outcomeId: parsed.data.outcomeId } : {}),
+      timeframe: parsed.data.timeframe as MarketChartTimeframe
+    });
+    return reply.send(response);
   });
 };
