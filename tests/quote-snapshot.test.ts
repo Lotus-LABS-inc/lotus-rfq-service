@@ -80,7 +80,7 @@ describe("quote snapshot calculator", () => {
     expect(result.blockers).toContain("QUOTE_SNAPSHOT_STALE");
   });
 
-  it("blocks insufficient depth for requested size", () => {
+  it("keeps partial-depth snapshots usable so the router can aggregate venues", () => {
     const result = calculateVenueQuote({
       snapshot: snapshot(),
       side: "buy",
@@ -88,8 +88,10 @@ describe("quote snapshot calculator", () => {
       now
     });
 
-    expect(result.ok).toBe(false);
-    expect(result.blockers).toContain("NO_DEPTH_FOR_SIZE");
+    expect(result.ok).toBe(true);
+    expect(result.availableSize).toBe(200);
+    expect(result.missingFactors).toContain("PARTIAL_DEPTH_FOR_SIZE");
+    expect(result.blockers).not.toContain("NO_DEPTH_FOR_SIZE");
   });
 
   it("adds confidence penalty for top-of-book and missing fee discovery", () => {

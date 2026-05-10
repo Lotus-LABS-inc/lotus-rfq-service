@@ -457,7 +457,7 @@ export const calculateVenueQuote = (input: QuoteCalculationInput): QuoteCalculat
     blockers.push("EXECUTABLE_DEPTH_MISSING");
   }
   if (fill.filledSize.lt(input.amount)) {
-    blockers.push("NO_DEPTH_FOR_SIZE");
+    missingFactors.push("PARTIAL_DEPTH_FOR_SIZE");
   }
 
   const weightedPrice = fill.filledSize.gt(0) ? fill.notional.div(fill.filledSize) : new Decimal(0);
