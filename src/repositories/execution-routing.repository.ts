@@ -138,6 +138,7 @@ export class PgVerifiedPositionRepository implements VerifiedPositionRepository 
        WHERE user_id = $1
          AND market_id = $2
          AND outcome_id = $3
+         AND verified_size > 0
          ${venueClause}
        ORDER BY updated_at DESC`,
       values
@@ -147,7 +148,7 @@ export class PgVerifiedPositionRepository implements VerifiedPositionRepository 
 
   public async listUserVerifiedPositions(input: ListUserVerifiedPositionsInput): Promise<VerifiedExecutionPosition[]> {
     const values: unknown[] = [input.userId];
-    const clauses = ["user_id = $1"];
+    const clauses = ["user_id = $1", "verified_size > 0"];
     if (input.marketId) {
       values.push(input.marketId);
       clauses.push(`market_id = $${values.length}`);
@@ -368,31 +369,67 @@ export class PgSignedTradePositionRecorder implements SignedTradePositionRecorde
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      const application = await client.query<{ application_id: string }>(
-        `INSERT INTO signed_trade_bundle_position_applications (
-          execution_id,
-          user_id,
-          leg_index,
-          venue,
-          venue_order_id,
-          fill_state
-        ) VALUES ($1, $2, $3, $4, $5, $6::jsonb)
-        ON CONFLICT (execution_id, user_id, leg_index, venue_order_id) DO NOTHING
-        RETURNING application_id`,
+      const existingApplication = await client.query<{ application_id: string; fill_state: { filledSize?: string; offchainFilled?: boolean } }>(
+        `SELECT application_id, fill_state
+         FROM signed_trade_bundle_position_applications
+         WHERE execution_id = $1
+           AND user_id = $2
+           AND leg_index = $3
+           AND venue_order_id = $4
+         FOR UPDATE`,
         [
           input.executionId,
           input.userId,
           input.legIndex,
-          input.routeLeg.venue.toUpperCase(),
-          input.venueOrderId,
-          JSON.stringify(input.fillState)
+          input.venueOrderId
         ]
       );
-      if (application.rowCount === 0) {
-        await client.query("ROLLBACK");
+      const previousFillSize = existingApplication.rowCount && existingApplication.rows[0]?.fill_state
+        ? Number(positionSizeFromFill(existingApplication.rows[0].fill_state, input.routeLeg.size))
+        : 0;
+      const nextFillSize = Number(fillSize);
+      const deltaFillSize = Math.max(0, nextFillSize - previousFillSize);
+      if (deltaFillSize <= 0 || !Number.isFinite(deltaFillSize)) {
+        await client.query("COMMIT");
         return;
       }
-      const signedSize = input.route.side === "buy" ? Number(fillSize) : -Number(fillSize);
+      if (existingApplication.rowCount === 0) {
+        await client.query(
+          `INSERT INTO signed_trade_bundle_position_applications (
+            execution_id,
+            user_id,
+            leg_index,
+            venue,
+            venue_order_id,
+            fill_state
+          ) VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+          [
+            input.executionId,
+            input.userId,
+            input.legIndex,
+            input.routeLeg.venue.toUpperCase(),
+            input.venueOrderId,
+            JSON.stringify(input.fillState)
+          ]
+        );
+      } else {
+        await client.query(
+          `UPDATE signed_trade_bundle_position_applications
+           SET fill_state = $5::jsonb
+           WHERE execution_id = $1
+             AND user_id = $2
+             AND leg_index = $3
+             AND venue_order_id = $4`,
+          [
+            input.executionId,
+            input.userId,
+            input.legIndex,
+            input.venueOrderId,
+            JSON.stringify(input.fillState)
+          ]
+        );
+      }
+      const signedSize = input.route.side === "buy" ? deltaFillSize : -deltaFillSize;
       await client.query(
         `INSERT INTO user_execution_positions (
           user_id,
@@ -451,6 +488,34 @@ export class PgSignedTradePositionRecorder implements SignedTradePositionRecorde
       client.release();
     }
   }
+
+  public async reconcileFailedSell(input: NonNullable<SignedTradePositionRecorder["reconcileFailedSell"]> extends (arg: infer Arg) => Promise<void> ? Arg : never): Promise<void> {
+    await this.pool.query(
+      `UPDATE user_execution_positions
+       SET sellable_size = 0,
+           metadata = metadata || $5::jsonb,
+           updated_at = now()
+       WHERE user_id = $1
+         AND venue = $2
+         AND market_id = $3
+         AND outcome_id = $4`,
+      [
+        input.userId,
+        input.routeLeg.venue.toUpperCase(),
+        input.route.marketId,
+        input.route.outcomeId,
+        JSON.stringify({
+          sellableReconciliation: {
+            source: "venue_reject",
+            executionId: input.executionId,
+            legIndex: input.legIndex,
+            venue: input.venue,
+            reason: input.reason
+          }
+        })
+      ]
+    );
+  }
 }
 
 const mapPositionRow = (row: PositionRow): VerifiedExecutionPosition => ({
@@ -480,10 +545,10 @@ const mapSignedTradeExecutionStatusRow = (row: SignedTradeExecutionStatusRow): S
   submittedLegs: row.submitted_legs
 });
 
-const positionSizeFromFill = (fillState: { filledSize: string; offchainFilled?: boolean | undefined }, fallbackSize: string): string => {
+const positionSizeFromFill = (fillState: { filledSize?: string | undefined; offchainFilled?: boolean | undefined }, fallbackSize: string): string => {
   const parsed = Number(fillState.filledSize);
   if (Number.isFinite(parsed) && parsed > 0) {
-    return fillState.filledSize;
+    return String(fillState.filledSize);
   }
   return fillState.offchainFilled === true ? fallbackSize : "0";
 };

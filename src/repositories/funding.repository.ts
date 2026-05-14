@@ -767,17 +767,24 @@ export class FundingRepository implements FundingRepositoryContract {
 
   public async listVenueBalances(userId: string): Promise<VenueBalanceView[]> {
     const result = await this.pool.query<VenueBalanceRow>(
-      `WITH ready AS (
+      `WITH latest_ready_reconciliation AS (
+           SELECT DISTINCT ON (route_leg_id)
+                  route_leg_id,
+                  checked_at
+             FROM funding_reconciliation_records
+            WHERE ready_to_trade = true
+            ORDER BY route_leg_id, checked_at DESC
+         ),
+        ready AS (
            SELECT ft.target_venue AS venue,
                   ${venueAccountingTokenSql("ft.target_venue", "ft.target_token")} AS token,
-                  COALESCE(SUM((ft.target_amount)::numeric), 0) AS ready_amount,
+                  COALESCE(SUM(${readyRouteLegAmountSql()}), 0) AS ready_amount,
                   MAX(fr.checked_at) AS updated_at
              FROM funding_targets ft
              JOIN funding_intents fi ON fi.id = ft.funding_intent_id
              JOIN funding_route_legs fl ON fl.funding_target_id = ft.id
-             JOIN funding_reconciliation_records fr ON fr.route_leg_id = fl.id
+             JOIN latest_ready_reconciliation fr ON fr.route_leg_id = fl.id
             WHERE fi.user_id = $1
-              AND fr.ready_to_trade = true
             GROUP BY ft.target_venue, ${venueAccountingTokenSql("ft.target_venue", "ft.target_token")}
          ),
         withdrawal_reservations AS (
@@ -913,16 +920,22 @@ export class FundingRepository implements FundingRepositoryContract {
 
   public async hasReadyVenueBalance(input: { userId: string; venue: string; token: string; amount: string }): Promise<boolean> {
     const result = await this.pool.query<{ ready_amount: string }>(
-      `SELECT COALESCE(SUM((ft.target_amount)::numeric), 0)::text AS ready_amount
+      `WITH latest_ready_reconciliation AS (
+           SELECT DISTINCT ON (route_leg_id)
+                  route_leg_id
+             FROM funding_reconciliation_records
+            WHERE ready_to_trade = true
+            ORDER BY route_leg_id, checked_at DESC
+         )
+       SELECT COALESCE(SUM(${readyRouteLegAmountSql()}), 0)::text AS ready_amount
          FROM funding_targets ft
          JOIN funding_intents fi ON fi.id = ft.funding_intent_id
-         JOIN funding_reconciliation_records fr ON fr.funding_intent_id = fi.id
-         JOIN funding_route_legs fl ON fl.id = fr.route_leg_id AND fl.funding_target_id = ft.id
+         JOIN funding_route_legs fl ON fl.funding_target_id = ft.id
+         JOIN latest_ready_reconciliation fr ON fl.id = fr.route_leg_id
         WHERE fi.user_id = $1
           AND ft.target_venue = $2
           AND ${venueAccountingTokenSql("ft.target_venue", "ft.target_token")} = ${venueAccountingTokenSql("$2", "$3")}
-          AND fr.target_venue = ft.target_venue
-          AND fr.ready_to_trade = true`,
+        `,
       [input.userId, input.venue, input.token]
     );
     return Number(result.rows[0]?.ready_amount ?? "0") >= Number(input.amount);
@@ -1449,6 +1462,9 @@ const venueAccountingTokenSql = (venueExpression: string, tokenExpression: strin
      WHEN ${venueExpression} = 'MYRIAD' AND UPPER(${tokenExpression}) IN ('USD1', 'USDC', 'USDT') THEN 'USD1'
      ELSE ${tokenExpression}
    END`;
+
+const readyRouteLegAmountSql = (): string =>
+  "COALESCE(NULLIF(fl.destination_amount_estimate, '')::numeric, (ft.target_amount)::numeric)";
 
 const mapWithdrawalIntent = (row: WithdrawalIntentRow): WithdrawalIntent => ({
   withdrawalIntentId: row.id,

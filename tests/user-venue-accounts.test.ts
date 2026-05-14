@@ -72,6 +72,21 @@ class InMemoryVenueAccountRepository implements UserVenueAccountRepository {
     this.auditEvents.push(input);
     return `audit-${this.auditEvents.length}`;
   }
+
+  public async findLatestAccountAuditEvent(input: {
+    userId: string;
+    venueAccountBindingId: string;
+    eventType: string;
+  }): Promise<{ eventType: string; payload: Record<string, unknown>; createdAt: string } | null> {
+    const event = [...this.auditEvents].reverse().find((candidate) =>
+      candidate.userId === input.userId &&
+      candidate.venueAccountBindingId === input.venueAccountBindingId &&
+      candidate.eventType === input.eventType
+    );
+    return event
+      ? { eventType: event.eventType, payload: event.payload, createdAt: "2026-05-03T00:00:00.000Z" }
+      : null;
+  }
 }
 
 const evmWallet = (overrides: Partial<UserWallet> = {}): UserWallet => ({
@@ -105,9 +120,25 @@ const predictAccountClient = (): PredictFunAccountClient => ({
 
 const limitlessPartnerAccountClient = (): LimitlessPartnerAccountClient => ({
   configured: () => true,
+  eoaPartnerAccountRegistrationEnabled: () => true,
+  getEoaPartnerAccount: async () => null,
   getSigningMessage: async () => "Please sign this Limitless ownership message",
   createEoaPartnerAccount: async (input) => ({
-    profileId: "limitless-profile-123",
+    profileId: "12345",
+    account: input.account
+  })
+});
+
+const limitlessPartnerAccountDiscoveryClient = (): LimitlessPartnerAccountClient => ({
+  configured: () => true,
+  eoaPartnerAccountRegistrationEnabled: () => true,
+  getEoaPartnerAccount: async (account) => ({
+    profileId: "67890",
+    account
+  }),
+  getSigningMessage: async () => "Please sign this Limitless ownership message",
+  createEoaPartnerAccount: async (input) => ({
+    profileId: "67890",
     account: input.account
   })
 });
@@ -354,10 +385,10 @@ describe("user venue account service", () => {
           calls.push(input.allowDeploy === undefined ? {} : { allowDeploy: input.allowDeploy });
           return {
             walletAddress: "0x5555555555555555555555555555555555555555",
-            deploymentStatus: input.allowDeploy === false ? "DERIVED_NOT_DEPLOYED" : "DEPLOY_SUBMITTED",
-            relayerTransactionId: input.allowDeploy === false ? undefined : "relayer-tx-123",
-            relayerState: input.allowDeploy === false ? undefined : "STATE_NEW",
-            transactionHash: input.allowDeploy === false ? undefined : "0xabc123"
+            deploymentStatus: "DEPLOY_SUBMITTED",
+            relayerTransactionId: "relayer-tx-123",
+            relayerState: "STATE_NEW",
+            transactionHash: "0xabc123"
           };
         }
       }
@@ -378,10 +409,10 @@ describe("user venue account service", () => {
     expect(repository.auditEvents.at(-1)).toMatchObject({
       eventType: "POLYMARKET_DEPOSIT_WALLET_PENDING",
       payload: {
-        deploymentStatus: "DERIVED_NOT_DEPLOYED",
-        relayerTransactionId: null,
-        relayerState: null,
-        transactionHash: null
+        deploymentStatus: "DEPLOY_SUBMITTED",
+        relayerTransactionId: "relayer-tx-123",
+        relayerState: "STATE_NEW",
+        transactionHash: "0xabc123"
       }
     });
     expect(repository.auditEvents.at(-2)).toMatchObject({
@@ -394,7 +425,7 @@ describe("user venue account service", () => {
       }
     });
     expect(retried.account.status).toBe("PENDING");
-    expect(calls).toEqual([{ allowDeploy: true }, { allowDeploy: false }]);
+    expect(calls).toEqual([{ allowDeploy: true }, { allowDeploy: true }]);
   });
 
   it("marks Myriad as an active wallet-address account without manual linking", async () => {
@@ -663,12 +694,50 @@ describe("user venue account service", () => {
       setupMode: "NO_USER_SETUP_REQUIRED",
       account: {
         status: "ACTIVE",
-        venueAccountId: "limitless-profile-123",
+        venueAccountId: "12345",
         venueAccountAddress: "0x1111111111111111111111111111111111111111",
         venueAccountType: "EOA"
       }
     });
     expect(JSON.stringify(repository.auditEvents)).not.toContain("signature");
+  });
+
+  it("discovers a numeric Limitless EOA profile instead of treating the wallet address as a relay-ready profile id", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    await repository.upsertAccount({
+      userId: "user-1",
+      venue: "LIMITLESS",
+      userWalletId: "wallet-evm",
+      walletAddress: "0x1111111111111111111111111111111111111111",
+      venueAccountId: "0x1111111111111111111111111111111111111111",
+      venueAccountAddress: "0x1111111111111111111111111111111111111111",
+      venueAccountType: "EOA",
+      status: "ACTIVE"
+    });
+    const service = new UserVenueAccountService(
+      repository,
+      {
+        async resolveUserTurnkeyEvmFundingWallet() {
+          return evmWallet();
+        }
+      },
+      predictAccountClient(),
+      limitlessPartnerAccountDiscoveryClient(),
+      polymarketDepositWalletClient()
+    );
+
+    const ensured = await service.ensureAccount({ userId: "user-1", venue: "LIMITLESS" });
+
+    expect(ensured).toMatchObject({
+      account: {
+        status: "ACTIVE",
+        venueAccountId: "67890",
+        venueAccountAddress: "0x1111111111111111111111111111111111111111",
+        venueAccountType: "EOA"
+      },
+      readinessBlockers: []
+    });
+    expect(JSON.stringify(repository.auditEvents)).toContain("LIMITLESS_PARTNER_ACCOUNT_DISCOVERED");
   });
 
   it("automatically creates a Limitless delegated server-wallet account with safe metadata only", async () => {

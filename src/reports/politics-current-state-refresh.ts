@@ -400,9 +400,10 @@ const inferOfficeExitDirectPageTargetSpec = (input: {
   rulesText: string | null;
   html?: string;
 }): OfficeExitDirectPageTargetSpec | null => {
+  const url = input.url.toLowerCase();
   const combined = [input.url, input.title ?? "", input.rulesText ?? "", input.html ?? ""].join(" ");
 
-  if (/\btrump-out-as-president-before-2027\b/i.test(combined) || /\btrump\b.*\bout as president\b.*\b2027\b/i.test(combined)) {
+  if (url.includes("trump-out-as-president-before-2027") || (!url.includes("starmer-out-in-2025") && /\btrump\b.*\bout as president\b.*\b2027\b/i.test(combined))) {
     const fallbackRulesText = "This market resolves to Yes if Donald Trump ceases to be President of the United States for any period of time by December 31, 2026. Otherwise it resolves to No.";
     return {
       canonicalTitle: "Trump out as President before 2027?",

@@ -18,6 +18,9 @@ const market: MarketCatalogMarket = {
   eventTitle: "Republican Presidential Nominee 2028",
   canonicalEventId: "11111111-1111-5111-8111-111111111111",
   canonicalMarketIds: ["NOMINEE|US_PRESIDENT|2028|REPUBLICAN"],
+  displayTopic: "Republican Presidential Nominee 2028",
+  displayOutcome: "JD Vance",
+  displayOutcomeKey: "candidate:JD_VANCE",
   title: "Republican Presidential Nominee 2028",
   normalizedTitle: "2028 republican presidential nomination",
   category: "POLITICS",
@@ -301,6 +304,38 @@ describe("market catalog routes", () => {
             unified: "0.52",
             venues: { POLYMARKET: "0.52" }
           }]
+        }),
+        getBatchQuotes: async (input) => ({
+          generatedAt: "2026-05-10T00:00:00.000Z",
+          quotes: input.items.map((item) => ({
+            marketId: item.marketId,
+            outcomeId: item.outcomeId,
+            side: item.side ?? "buy",
+            generatedAt: "2026-05-10T00:00:00.000Z",
+            status: "live" as const,
+            bestVenue: "POLYMARKET",
+            bestVenuePrice: "0.53",
+            unifiedAveragePrice: "0.53",
+            liquidity: "47.7",
+            spread: "0.02",
+            freshnessMs: 500,
+            venues: [{
+              venue: "POLYMARKET",
+              venueMarketId: "poly-1",
+              venueOutcomeId: "yes",
+              price: "0.53",
+              bid: "0.51",
+              ask: "0.53",
+              availableSize: "90",
+              liquidity: "47.7",
+              spread: "0.02",
+              source: "REST" as const,
+              quoteQuality: "FULL_DEPTH_REST",
+              freshnessMs: 500,
+              blockers: []
+            }],
+            blockers: []
+          }))
         })
       }
     });
@@ -327,6 +362,30 @@ describe("market catalog routes", () => {
       historyStatus: "accumulating",
       points: [{ unified: "0.52" }]
     });
+
+    const batchQuotes = await app.inject({
+      method: "POST",
+      url: "/markets/quotes/batch",
+      payload: {
+        items: [{
+          marketId: market.canonicalEventId,
+          outcomeId: "yes",
+          side: "buy",
+          amount: "1"
+        }]
+      }
+    });
+    expect(batchQuotes.statusCode).toBe(200);
+    expect(batchQuotes.json()).toMatchObject({
+      quotes: [{
+        marketId: market.canonicalEventId,
+        outcomeId: "yes",
+        bestVenue: "POLYMARKET",
+        bestVenuePrice: "0.53",
+        venues: [{ venue: "POLYMARKET", ask: "0.53" }]
+      }]
+    });
+    expect(batchQuotes.body).not.toContain("apiKey");
 
     await app.close();
   });

@@ -1,15 +1,19 @@
 import { createHash, createHmac } from "node:crypto";
 import { Wallet } from "@ethersproject/wallet";
 import {
+  AssetType,
   Chain,
   ClobClient,
+  COLLATERAL_TOKEN_DECIMALS,
   OrderType,
   Side,
   SignatureTypeV2,
   type ApiKeyCreds,
+  type BalanceAllowanceResponse,
   type ClobClientOptions,
   type OpenOrder,
   type OrderResponse,
+  type SignedOrder,
   type TickSize,
   type Trade
 } from "@polymarket/clob-client-v2";
@@ -382,7 +386,10 @@ export interface PolymarketClobV2SdkClient {
     options?: { tickSize?: TickSize; negRisk?: boolean },
     orderType?: OrderType
   ): Promise<unknown>;
-  getOrder(orderId: string): Promise<OpenOrder>;
+  postOrder?(order: SignedOrder, orderType?: OrderType, postOnly?: boolean, deferExec?: boolean): Promise<unknown>;
+  updateBalanceAllowance?(params: { asset_type: AssetType; token_id?: string }): Promise<unknown>;
+  getBalanceAllowance?(params: { asset_type: AssetType; token_id?: string }): Promise<BalanceAllowanceResponse>;
+  getOrder(orderId: string): Promise<OpenOrder | null>;
   getTrades(params?: { id?: string; maker_address?: string; market?: string; asset_id?: string }): Promise<Trade[]>;
   cancelOrder(payload: { orderID: string }): Promise<unknown>;
 }
@@ -451,6 +458,26 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
 
   public async submitOrder(order: PreparedVenueOrder): Promise<VenueSubmitResult> {
     const payload = parsePreparedPolymarketPayload(order);
+    const signedOrder = parseUserSignedPolymarketOrder(order);
+    if (signedOrder) {
+      const authPayload = parsePolymarketClobAuthPayload(order);
+      const sdkClient = authPayload
+        ? await this.createUserScopedSdkClient(authPayload)
+        : this.sdkClient;
+      const postOrder = sdkClient.postOrder?.bind(sdkClient);
+      if (!postOrder) {
+        throw new PolymarketExecutionNotConfiguredError(
+          "POLYMARKET_SIGNED_ORDER_SUBMIT_UNAVAILABLE",
+          "Polymarket CLOB signed-order submit is not available in the configured SDK client."
+        );
+      }
+      const extraSensitiveValues = authPayload?.creds
+        ? [authPayload.creds.key, authPayload.creds.secret, authPayload.creds.passphrase]
+        : [];
+      await this.assertSignedOrderHasSpendableBalanceAllowance(sdkClient, signedOrder, extraSensitiveValues);
+      const response = await this.callSdkSafely(() => postOrder(signedOrder, OrderType.GTC), extraSensitiveValues);
+      return mapPolymarketOrderResponse(response);
+    }
     const userOrder: {
       tokenID: string;
       price: number;
@@ -480,7 +507,11 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
 
   public async fetchFillState(venueOrderId: string): Promise<VenueFillState> {
     const order = await this.callSdkSafely(() => this.sdkClient.getOrder(venueOrderId));
-    return mapPolymarketOpenOrderToFillState(order);
+    if (order) {
+      return mapPolymarketOpenOrderToFillState(order);
+    }
+    const trades = await this.callSdkSafely(() => this.sdkClient.getTrades({ id: venueOrderId }));
+    return mapPolymarketTradesToFillState(trades);
   }
 
   public async cancelOrder(venueOrderId: string): Promise<{ cancelled: boolean }> {
@@ -510,17 +541,125 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
     });
   }
 
-  private async callSdkSafely<T>(operation: () => Promise<T>): Promise<T> {
+  private async createUserScopedSdkClient(authPayload: PolymarketClobAuthPayload): Promise<PolymarketClobV2SdkClient> {
+    const creds = authPayload.creds ?? await createOrDerivePolymarketApiKey(this.config, authPayload);
+    authPayload.creds = creds;
+    const options: ClobClientOptions = {
+      host: this.config.clobHost!,
+      chain: parseChain(this.config.chainId),
+      signer: addressOnlySigner(authPayload.address),
+      creds,
+      signatureType: parseSignatureType(this.config.signatureType),
+      ...(authPayload.funderAddress ? { funderAddress: authPayload.funderAddress } : {}),
+      builderConfig: { builderCode: this.config.builderCode! },
+      retryOnError: false,
+      throwOnError: true
+    };
+    return new ClobClient(options);
+  }
+
+  private async callSdkSafely<T>(operation: () => Promise<T>, extraSensitiveValues: readonly string[] = []): Promise<T> {
+    const sensitiveValues = [...this.sensitiveValues, ...extraSensitiveValues].filter((value): value is string => nonEmpty(value));
     const originalError = console.error;
     console.error = (...args: unknown[]) => {
-      originalError(...args.map((arg) => redactPolymarketSdkLog(arg, this.sensitiveValues)));
+      originalError(...args.map((arg) => redactPolymarketSdkLog(arg, sensitiveValues)));
     };
     try {
       return await operation();
     } catch (error) {
-      throw sanitizePolymarketSdkError(error, this.sensitiveValues);
+      throw sanitizePolymarketSdkError(error, sensitiveValues);
     } finally {
       console.error = originalError;
+    }
+  }
+
+  private async assertSignedOrderHasSpendableBalanceAllowance(
+    sdkClient: PolymarketClobV2SdkClient,
+    signedOrder: SignedOrder,
+    extraSensitiveValues: readonly string[]
+  ): Promise<void> {
+    const required = requiredBalanceAllowanceForSignedOrder(signedOrder);
+    if (required?.assetType === AssetType.CONDITIONAL) {
+      await this.assertSignedOrderHasSpendableConditionalTokens(sdkClient, {
+        tokenId: required.tokenId!,
+        requiredAtomic: required.requiredAtomic
+      }, extraSensitiveValues);
+      return;
+    }
+    const requiredAtomic = required?.requiredAtomic ?? null;
+    if (requiredAtomic === null) {
+      return;
+    }
+    const updateBalanceAllowance = sdkClient.updateBalanceAllowance?.bind(sdkClient);
+    const getBalanceAllowance = sdkClient.getBalanceAllowance?.bind(sdkClient);
+    if (!getBalanceAllowance) {
+      throw new PolymarketExecutionNotConfiguredError(
+        "POLYMARKET_CLOB_BALANCE_CHECK_UNAVAILABLE",
+        "Polymarket CLOB balance readiness could not be checked before submit."
+      );
+    }
+    if (updateBalanceAllowance) {
+      await this.callSdkSafely(
+        () => updateBalanceAllowance({ asset_type: AssetType.COLLATERAL }),
+        extraSensitiveValues
+      );
+    }
+    const response = await this.callSdkSafely(
+      () => getBalanceAllowance({ asset_type: AssetType.COLLATERAL }),
+      extraSensitiveValues
+    );
+    const { spendableAtomic, balanceAtomic, allowanceAtomic } = collateralSpendableAtomicUnits(response);
+    if (spendableAtomic < requiredAtomic) {
+      throw new PolymarketExecutionNotConfiguredError(
+        "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
+        [
+          "Polymarket CLOB collateral is not ready for this order.",
+          `Spendable balance: ${formatCollateralAtomicUnits(spendableAtomic)} USDC.`,
+          `Required: ${formatCollateralAtomicUnits(requiredAtomic)} USDC.`,
+          `CLOB balance: ${formatCollateralAtomicUnits(balanceAtomic)} USDC.`,
+          `CLOB allowance: ${formatCollateralAtomicUnits(allowanceAtomic)} USDC.`,
+          "If funds were just bridged, activate/wrap/approve them before trading."
+        ].join(" ")
+      );
+    }
+  }
+
+  private async assertSignedOrderHasSpendableConditionalTokens(
+    sdkClient: PolymarketClobV2SdkClient,
+    required: { tokenId: string; requiredAtomic: bigint },
+    extraSensitiveValues: readonly string[]
+  ): Promise<void> {
+    const updateBalanceAllowance = sdkClient.updateBalanceAllowance?.bind(sdkClient);
+    const getBalanceAllowance = sdkClient.getBalanceAllowance?.bind(sdkClient);
+    if (!getBalanceAllowance) {
+      throw new PolymarketExecutionNotConfiguredError(
+        "POLYMARKET_CLOB_BALANCE_CHECK_UNAVAILABLE",
+        "Polymarket CLOB share readiness could not be checked before submit."
+      );
+    }
+    if (updateBalanceAllowance) {
+      await this.callSdkSafely(
+        () => updateBalanceAllowance({ asset_type: AssetType.CONDITIONAL, token_id: required.tokenId }),
+        extraSensitiveValues
+      );
+    }
+    const response = await this.callSdkSafely(
+      () => getBalanceAllowance({ asset_type: AssetType.CONDITIONAL, token_id: required.tokenId }),
+      extraSensitiveValues
+    );
+    const { spendableAtomic, balanceAtomic, allowanceAtomic } = collateralSpendableAtomicUnits(response);
+    if (spendableAtomic < required.requiredAtomic) {
+      throw new PolymarketExecutionNotConfiguredError(
+        "POLYMARKET_CLOB_CONDITIONAL_TOKEN_NOT_READY",
+        [
+          "Polymarket outcome shares are not approved for selling.",
+          `Spendable shares: ${formatCollateralAtomicUnits(spendableAtomic)}.`,
+          `Required: ${formatCollateralAtomicUnits(required.requiredAtomic)}.`,
+          `CLOB share balance: ${formatCollateralAtomicUnits(balanceAtomic)}.`,
+          `CLOB share allowance: ${formatCollateralAtomicUnits(allowanceAtomic)}.`,
+          "Approve Polymarket shares before selling this position."
+        ].join(" ")
+      );
     }
   }
 }
@@ -780,6 +919,280 @@ const parsePreparedPolymarketPayload = (order: PreparedVenueOrder): {
   return { venueMarketId, venueOutcomeId, side, size, price };
 };
 
+const parseUserSignedPolymarketOrder = (order: PreparedVenueOrder): SignedOrder | null => {
+  const signedPayload = isRecord(order.payload.signedPayload) ? order.payload.signedPayload : null;
+  const data = signedPayload && isRecord(signedPayload.data) ? signedPayload.data : null;
+  const orderPayload = data && isRecord(data.order) ? data.order : null;
+  const signature = signedPayload && typeof signedPayload.signature === "string" ? signedPayload.signature : null;
+  if (!orderPayload || !signature) {
+    return null;
+  }
+  const requiredStringFields = ["maker", "signer", "tokenId", "makerAmount", "takerAmount", "timestamp", "metadata", "builder", "expiration"];
+  const missing = requiredStringFields.filter((field) => typeof orderPayload[field] !== "string" && typeof orderPayload[field] !== "number");
+  if (missing.length > 0) {
+    throw new PolymarketExecutionNotConfiguredError(
+      "POLYMARKET_SIGNED_ORDER_INVALID",
+      `Polymarket signed order is missing required fields: ${missing.join(", ")}.`
+    );
+  }
+  if (!/^0x[a-fA-F0-9]{130}$/.test(signature)) {
+    throw new PolymarketExecutionNotConfiguredError(
+      "POLYMARKET_SIGNED_ORDER_SIGNATURE_INVALID",
+      "Polymarket signed order is missing a valid EVM signature."
+    );
+  }
+  const signatureType = Number(orderPayload.signatureType);
+  const suffix = typeof data?.polymarketSignatureSuffix === "string" ? data.polymarketSignatureSuffix : null;
+  const finalSignature = signatureType === Number(SignatureTypeV2.POLY_1271)
+    ? appendPolymarket1271SignatureSuffix(signature, suffix)
+    : signature;
+  return {
+    ...orderPayload,
+    signature: finalSignature
+  } as unknown as SignedOrder;
+};
+
+const parseNonNegativeAtomicUnits = (value: unknown, fieldName: string): bigint => {
+  const normalized = typeof value === "number"
+    ? value.toString()
+    : typeof value === "bigint"
+      ? value.toString()
+      : typeof value === "string"
+        ? value.trim()
+        : "";
+  if (!/^\d+$/.test(normalized)) {
+    throw new PolymarketExecutionNotConfiguredError(
+      "POLYMARKET_CLOB_BALANCE_PAYLOAD_INVALID",
+      `Polymarket CLOB balance response included an invalid ${fieldName}.`
+    );
+  }
+  return BigInt(normalized);
+};
+
+const collateralAllowanceAtomicUnits = (response: BalanceAllowanceResponse): bigint => {
+  if (nonEmpty(response.allowance)) {
+    return parseNonNegativeAtomicUnits(response.allowance, "allowance");
+  }
+  const allowances = (response as unknown as { allowances?: unknown }).allowances;
+  if (!allowances || typeof allowances !== "object" || Array.isArray(allowances)) {
+    throw new PolymarketExecutionNotConfiguredError(
+      "POLYMARKET_CLOB_BALANCE_PAYLOAD_INVALID",
+      "Polymarket CLOB balance response did not include an allowance."
+    );
+  }
+  const parsedAllowances = Object.values(allowances).map((value) =>
+    parseNonNegativeAtomicUnits(value, "allowance")
+  );
+  if (parsedAllowances.length === 0) {
+    throw new PolymarketExecutionNotConfiguredError(
+      "POLYMARKET_CLOB_BALANCE_PAYLOAD_INVALID",
+      "Polymarket CLOB balance response included an empty allowance set."
+    );
+  }
+  return parsedAllowances.reduce((minimum, value) => value < minimum ? value : minimum);
+};
+
+const collateralSpendableAtomicUnits = (response: BalanceAllowanceResponse): {
+  balanceAtomic: bigint;
+  allowanceAtomic: bigint;
+  spendableAtomic: bigint;
+} => {
+  const balanceAtomic = parseNonNegativeAtomicUnits(response.balance, "balance");
+  const allowanceAtomic = collateralAllowanceAtomicUnits(response);
+  return {
+    balanceAtomic,
+    allowanceAtomic,
+    spendableAtomic: balanceAtomic < allowanceAtomic ? balanceAtomic : allowanceAtomic
+  };
+};
+
+const requiredBalanceAllowanceForSignedOrder = (signedOrder: SignedOrder): {
+  assetType: AssetType;
+  tokenId?: string;
+  requiredAtomic: bigint;
+} | null => {
+  const record = signedOrder as unknown as Record<string, unknown>;
+  const side = `${record.side ?? ""}`.trim().toUpperCase();
+  if (side === "BUY" || side === "0") {
+    return {
+      assetType: AssetType.COLLATERAL,
+      requiredAtomic: parseNonNegativeAtomicUnits(record.makerAmount, "makerAmount")
+    };
+  }
+  if (side === "SELL" || side === "1") {
+    const tokenId = typeof record.tokenId === "string" && /^\d+$/.test(record.tokenId) ? record.tokenId : null;
+    if (!tokenId) {
+      throw new PolymarketExecutionNotConfiguredError(
+        "POLYMARKET_SIGNED_ORDER_INVALID",
+        "Polymarket signed sell order is missing tokenId for share allowance preflight."
+      );
+    }
+    return {
+      assetType: AssetType.CONDITIONAL,
+      tokenId,
+      requiredAtomic: parseNonNegativeAtomicUnits(record.makerAmount, "makerAmount")
+    };
+  }
+  return null;
+};
+
+const formatCollateralAtomicUnits = (atomic: bigint): string => {
+  const scale = 10n ** BigInt(COLLATERAL_TOKEN_DECIMALS);
+  const whole = atomic / scale;
+  const fraction = atomic % scale;
+  const trimmedFraction = fraction.toString().padStart(COLLATERAL_TOKEN_DECIMALS, "0").replace(/0+$/, "");
+  return trimmedFraction.length > 0 ? `${whole.toString()}.${trimmedFraction}` : whole.toString();
+};
+
+interface PolymarketClobAuthPayload {
+  address: string;
+  signature: string;
+  timestamp: number;
+  nonce: number;
+  funderAddress?: string | undefined;
+  creds?: ApiKeyCreds | undefined;
+}
+
+const parsePolymarketClobAuthPayload = (order: PreparedVenueOrder): PolymarketClobAuthPayload | null => {
+  const payload = isRecord(order.payload.polymarketClobAuth) ? order.payload.polymarketClobAuth : null;
+  const data = payload && isRecord(payload.data) ? payload.data : {};
+  const address = typeof data.address === "string"
+    ? data.address
+    : payload && typeof payload.signer === "string"
+      ? payload.signer
+      : null;
+  const funderAddress = typeof data.funderAddress === "string"
+    ? data.funderAddress
+    : payload && typeof payload.account === "string"
+      ? payload.account
+      : undefined;
+  const signature = payload && typeof payload.signature === "string" ? payload.signature : null;
+  const timestamp = typeof data.timestamp === "number" ? data.timestamp : Number(data.timestamp);
+  const nonce = typeof data.nonce === "number" ? data.nonce : Number(data.nonce ?? 0);
+  if (!payload) {
+    return null;
+  }
+  if (
+    typeof address !== "string" ||
+    !/^0x[a-fA-F0-9]{40}$/.test(address) ||
+    !signature ||
+    !/^0x[a-fA-F0-9]{130}$/.test(signature) ||
+    !Number.isInteger(timestamp) ||
+    timestamp <= 0 ||
+    !Number.isInteger(nonce) ||
+    nonce < 0
+  ) {
+    throw new PolymarketExecutionNotConfiguredError(
+      "POLYMARKET_CLOB_AUTH_PAYLOAD_INVALID",
+      "Polymarket signed order is missing a valid Turnkey CLOB auth signature."
+    );
+  }
+  return { address, signature, timestamp, nonce, funderAddress };
+};
+
+const createOrDerivePolymarketApiKey = async (
+  config: PolymarketExecutionAdapterV2Config,
+  auth: PolymarketClobAuthPayload
+): Promise<ApiKeyCreds> => {
+  let deriveError: unknown = null;
+  try {
+    const derived = await requestPolymarketApiKey(config, auth, "derive");
+    if (nonEmpty(derived.key) && nonEmpty(derived.secret) && nonEmpty(derived.passphrase)) {
+      return derived;
+    }
+  } catch (error) {
+    deriveError = error;
+  }
+  const created = await requestPolymarketApiKey(config, auth, "create").catch((createError: unknown) => {
+    const message = createError instanceof Error
+      ? createError.message
+      : deriveError instanceof Error
+        ? deriveError.message
+        : "Polymarket CLOB API-key creation failed.";
+    throw new PolymarketExecutionNotConfiguredError(
+      "POLYMARKET_USER_CLOB_API_KEY_UNAVAILABLE",
+      message
+    );
+  });
+  if (!nonEmpty(created.key) || !nonEmpty(created.secret) || !nonEmpty(created.passphrase)) {
+    throw new PolymarketExecutionNotConfiguredError(
+      "POLYMARKET_USER_CLOB_API_KEY_INVALID",
+      "Polymarket did not return usable user-scoped CLOB API credentials."
+    );
+  }
+  return created;
+};
+
+const requestPolymarketApiKey = async (
+  config: PolymarketExecutionAdapterV2Config,
+  auth: PolymarketClobAuthPayload,
+  mode: "create" | "derive"
+): Promise<ApiKeyCreds> => {
+  const host = config.clobHost?.replace(/\/+$/, "");
+  if (!host) {
+    throw new PolymarketExecutionNotConfiguredError(
+      "POLYMARKET_CLOB_HOST_MISSING",
+      "Polymarket CLOB host is required before user CLOB credentials can be derived."
+    );
+  }
+  const path = mode === "create" ? "/auth/api-key" : "/auth/derive-api-key";
+  const response = await fetch(`${host}${path}`, {
+    method: mode === "create" ? "POST" : "GET",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      POLY_ADDRESS: auth.address,
+      POLY_SIGNATURE: auth.signature,
+      POLY_TIMESTAMP: String(auth.timestamp),
+      POLY_NONCE: String(auth.nonce)
+    }
+  });
+  const payload = await response.json().catch(() => null) as unknown;
+  if (!response.ok) {
+    const message = isRecord(payload) && typeof payload.error === "string"
+      ? payload.error
+      : isRecord(payload) && typeof payload.message === "string"
+        ? payload.message
+        : `Polymarket CLOB API-key ${mode} failed with status ${response.status}.`;
+    throw new PolymarketExecutionNotConfiguredError(
+      response.status === 401 || response.status === 403
+        ? "POLYMARKET_USER_CLOB_API_KEY_UNAUTHORIZED"
+        : "POLYMARKET_USER_CLOB_API_KEY_ERROR",
+      message
+    );
+  }
+  const record = isRecord(payload) ? payload : {};
+  const key = typeof record.apiKey === "string" ? record.apiKey : typeof record.key === "string" ? record.key : "";
+  const secret = typeof record.secret === "string" ? record.secret : "";
+  const passphrase = typeof record.passphrase === "string" ? record.passphrase : "";
+  return { key, secret, passphrase };
+};
+
+const addressOnlySigner = (address: string): {
+  getAddress(): Promise<string>;
+  _signTypedData(): Promise<string>;
+} => ({
+  async getAddress() {
+    return address;
+  },
+  async _signTypedData() {
+    throw new PolymarketExecutionNotConfiguredError(
+      "POLYMARKET_ADDRESS_ONLY_SIGNER_CANNOT_SIGN",
+      "Polymarket address-only signer is only valid for L2 HMAC requests."
+    );
+  }
+});
+
+const appendPolymarket1271SignatureSuffix = (signature: string, suffix: string | null): string => {
+  if (!suffix || !/^0x[a-fA-F0-9]+$/.test(suffix) || suffix.length <= 2) {
+    throw new PolymarketExecutionNotConfiguredError(
+      "POLYMARKET_1271_SIGNATURE_SUFFIX_MISSING",
+      "Polymarket POLY_1271 signed order is missing the required CLOB signature wrapper."
+    );
+  }
+  return `0x${signature.slice(2)}${suffix.slice(2)}`;
+};
+
 const mapPolymarketOrderResponse = (response: unknown): VenueSubmitResult => {
   const record = isRecord(response) ? response : {};
   const orderID = record.orderID ?? record.orderId ?? record.id;
@@ -825,6 +1238,30 @@ const mapPolymarketOpenOrderToFillState = (order: OpenOrder): VenueFillState => 
     filledSize,
     averagePrice: Number(order.price) || 0,
     offchainFilled: Number(filledSize) > 0
+  };
+};
+
+const mapPolymarketTradesToFillState = (trades: Trade[]): VenueFillState => {
+  const filledTrades = trades.filter((trade) => Number(trade.size) > 0);
+  if (filledTrades.length === 0) {
+    return {
+      status: "OPEN",
+      filledSize: "0",
+      averagePrice: 0,
+      offchainFilled: false
+    };
+  }
+  const filledSize = filledTrades.reduce((sum, trade) => sum + Number(trade.size), 0);
+  const notional = filledTrades.reduce((sum, trade) => sum + Number(trade.size) * (Number(trade.price) || 0), 0);
+  const confirmed = filledTrades.some((trade) => {
+    const status = `${trade.status ?? ""}`.trim().toLowerCase();
+    return status === "confirmed" || status === "matched" || status === "filled";
+  });
+  return {
+    status: confirmed ? "FILLED" : "PARTIAL_FILL",
+    filledSize: String(filledSize),
+    averagePrice: filledSize > 0 ? notional / filledSize : 0,
+    offchainFilled: true
   };
 };
 

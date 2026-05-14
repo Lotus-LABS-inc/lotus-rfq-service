@@ -43,6 +43,11 @@ export interface UserVenueAccountRepository {
     eventType: string;
     payload: Record<string, unknown>;
   }): Promise<string>;
+  findLatestAccountAuditEvent(input: {
+    userId: string;
+    venueAccountBindingId: string;
+    eventType: string;
+  }): Promise<{ eventType: string; payload: Record<string, unknown>; createdAt: string } | null>;
 }
 
 export interface PredictFunAccountClient {
@@ -55,7 +60,9 @@ export interface PredictFunAccountClient {
 export interface LimitlessPartnerAccountClient {
   configured(): boolean;
   serverWalletDelegationEnabled?(): boolean;
+  eoaPartnerAccountRegistrationEnabled?(): boolean;
   getSigningMessage(): Promise<string>;
+  getEoaPartnerAccount?(account: string): Promise<{ profileId: string; account: string } | null>;
   createServerWalletPartnerAccount?(input?: {
     displayName?: string | null;
   }): Promise<{ profileId: string; account: string }>;
@@ -178,6 +185,48 @@ export class UserVenueAccountService {
     return (await this.ensureWalletAddressVenueAccount(userId, normalizedVenue, wallet, account)).account;
   }
 
+  public async recordPolymarketBalanceActivation(input: {
+    userId: string;
+    ownerAddress: string;
+    depositWalletAddress: string;
+    relayerTransactionId?: string | undefined;
+    relayerState?: string | undefined;
+    transactionHash?: string | null | undefined;
+  }): Promise<void> {
+    const account = await this.repository.findAccount({ userId: input.userId, venue: "POLYMARKET" });
+    if (!account) {
+      return;
+    }
+    await this.repository.appendAccountAuditEvent({
+      userId: input.userId,
+      venueAccountBindingId: account.venueAccountBindingId,
+      eventType: "POLYMARKET_BALANCE_ACTIVATION_SUBMITTED",
+      payload: {
+        venue: "POLYMARKET",
+        ownerAddressMatches: equalsAddress(account.walletAddress, input.ownerAddress),
+        depositWalletMatches: equalsAddress(account.venueAccountAddress, input.depositWalletAddress),
+        relayerTransactionId: input.relayerTransactionId ?? null,
+        relayerState: input.relayerState ?? null,
+        transactionHash: input.transactionHash ?? null,
+        transactionHashPresent: Boolean(input.transactionHash),
+        executed: input.relayerState === "STATE_EXECUTED" || Boolean(input.transactionHash)
+      }
+    });
+  }
+
+  public async hasExecutedPolymarketBalanceActivation(userId: string): Promise<boolean> {
+    const account = await this.repository.findAccount({ userId, venue: "POLYMARKET" });
+    if (!account || account.status !== "ACTIVE") {
+      return false;
+    }
+    const event = await this.repository.findLatestAccountAuditEvent({
+      userId,
+      venueAccountBindingId: account.venueAccountBindingId,
+      eventType: "POLYMARKET_BALANCE_ACTIVATION_SUBMITTED"
+    });
+    return event?.payload.executed === true;
+  }
+
   public async ensureAccount(input: EnsureUserVenueAccountInput): Promise<{
     account: UserVenueAccount;
     readinessBlockers: string[];
@@ -191,6 +240,22 @@ export class UserVenueAccountService {
     }
     if (venue === "LIMITLESS" && !input.venueAccountId && !input.venueAccountAddress && this.limitlessPartnerAccountClient?.serverWalletDelegationEnabled?.() === true) {
       return this.ensureLimitlessServerWalletAccount(input.userId, wallet, existing);
+    }
+    if (
+      venue === "LIMITLESS"
+      && !input.venueAccountId
+      && !input.venueAccountAddress
+      && this.limitlessPartnerAccountClient?.eoaPartnerAccountRegistrationEnabled?.() === true
+    ) {
+      return this.ensureLimitlessEoaPartnerAccount(input.userId, wallet, existing);
+    }
+    if (
+      venue === "LIMITLESS"
+      && !input.venueAccountId
+      && !input.venueAccountAddress
+      && this.limitlessPartnerAccountClient?.eoaPartnerAccountRegistrationEnabled?.() !== true
+    ) {
+      return this.ensureWalletAddressVenueAccount(input.userId, venue, wallet, existing, "EOA");
     }
     if ((venue === "MYRIAD" || venue === "PREDICT_FUN") && !input.venueAccountId && !input.venueAccountAddress) {
       return this.ensureWalletAddressVenueAccount(input.userId, venue, wallet, existing);
@@ -383,7 +448,10 @@ export class UserVenueAccountService {
           });
           continue;
         }
-        if (this.limitlessPartnerAccountClient?.configured()) {
+        if (
+          this.limitlessPartnerAccountClient?.eoaPartnerAccountRegistrationEnabled?.() === true
+          && this.limitlessPartnerAccountClient.configured()
+        ) {
           const wallet = await this.resolveRequiredTurnkeyEvmWallet(userId);
           const message = await this.withLimitlessPartnerAccountFailureBoundary(() => this.limitlessPartnerAccountClient!.getSigningMessage());
           await this.repository.appendAccountAuditEvent({
@@ -779,7 +847,7 @@ export class UserVenueAccountService {
     try {
       derived = await this.polymarketDepositWalletClient.deriveOrCreateDepositWallet({
         ownerAddress: wallet.address,
-        allowDeploy: !existing?.venueAccountAddress
+        allowDeploy: existing?.status !== "ACTIVE"
       });
     } catch {
       throw new UserVenueAccountError(
@@ -933,11 +1001,106 @@ export class UserVenueAccountService {
     return ensured;
   }
 
+  private async ensureLimitlessEoaPartnerAccount(
+    userId: string,
+    wallet: UserWallet,
+    existing: UserVenueAccount | null
+  ): Promise<{
+    account: UserVenueAccount;
+    readinessBlockers: string[];
+    setupInstructions: string[];
+  }> {
+    const existingProfileId = nonEmpty(existing?.venueAccountId);
+    if (
+      existing?.status === "ACTIVE" &&
+      existing.venueAccountType === "EOA" &&
+      equalsAddress(existing.walletAddress, wallet.address) &&
+      equalsAddress(existing.venueAccountAddress, wallet.address) &&
+      isPositiveIntegerString(existingProfileId)
+    ) {
+      return {
+        account: existing,
+        readinessBlockers: readinessBlockersForAccount(existing),
+        setupInstructions: setupInstructionsForVenue("LIMITLESS", existing)
+      };
+    }
+
+    if (this.limitlessPartnerAccountClient?.configured() && this.limitlessPartnerAccountClient.getEoaPartnerAccount) {
+      try {
+        const linked = await this.limitlessPartnerAccountClient.getEoaPartnerAccount(wallet.address);
+        if (linked && equalsAddress(linked.account, wallet.address) && isPositiveIntegerString(linked.profileId)) {
+          const ensured = await this.ensureAccount({
+            userId,
+            venue: "LIMITLESS",
+            venueAccountId: linked.profileId,
+            venueAccountAddress: linked.account,
+            venueAccountType: "EOA"
+          });
+          await this.repository.appendAccountAuditEvent({
+            userId,
+            venueAccountBindingId: ensured.account.venueAccountBindingId,
+            eventType: "LIMITLESS_PARTNER_ACCOUNT_DISCOVERED",
+            payload: {
+              venue: "LIMITLESS",
+              accountType: "EOA",
+              venueAccountAddress: linked.account,
+              profileIdPresent: true,
+              ownerWalletAddress: wallet.address
+            }
+          });
+          return ensured;
+        }
+      } catch {
+        await this.repository.appendAccountAuditEvent({
+          userId,
+          venueAccountBindingId: existing?.venueAccountBindingId ?? null,
+          eventType: "LIMITLESS_PARTNER_ACCOUNT_DISCOVERY_FAILED",
+          payload: {
+            venue: "LIMITLESS",
+            accountType: "EOA",
+            ownerWalletAddress: wallet.address
+          }
+        });
+      }
+    }
+
+    const pending = await this.repository.upsertAccount({
+      ...(existing?.venueAccountBindingId ? { venueAccountBindingId: existing.venueAccountBindingId } : {}),
+      userId,
+      venue: "LIMITLESS",
+      userWalletId: wallet.walletId,
+      walletAddress: wallet.address,
+      venueAccountId: isPositiveIntegerString(existingProfileId) ? existingProfileId : null,
+      venueAccountAddress: wallet.address,
+      venueAccountType: "EOA",
+      status: isPositiveIntegerString(existingProfileId) ? "ACTIVE" : "PENDING",
+      lastVerifiedAt: isPositiveIntegerString(existingProfileId) ? existing?.lastVerifiedAt ?? new Date().toISOString() : null
+    });
+    await this.repository.appendAccountAuditEvent({
+      userId,
+      venueAccountBindingId: pending.venueAccountBindingId,
+      eventType: "LIMITLESS_EOA_PARTNER_ACCOUNT_SETUP_REQUIRED",
+      payload: {
+        venue: "LIMITLESS",
+        accountType: "EOA",
+        status: pending.status,
+        profileIdPresent: isPositiveIntegerString(pending.venueAccountId),
+        walletAddressMatches: equalsAddress(pending.walletAddress, wallet.address)
+      }
+    });
+    return {
+      account: pending,
+      readinessBlockers: readinessBlockersForAccount(pending),
+      setupInstructions: setupInstructionsForVenue("LIMITLESS", pending)
+    };
+  }
+
   private async ensureWalletAddressVenueAccount(
     userId: string,
     venue: UserVenueAccountVenue,
     wallet: UserWallet,
-    existing: UserVenueAccount | null
+    existing: UserVenueAccount | null,
+    venueAccountType: UserVenueAccountType = defaultAccountTypeForVenue(venue)
   ): Promise<{
     account: UserVenueAccount;
     readinessBlockers: string[];
@@ -951,7 +1114,7 @@ export class UserVenueAccountService {
       walletAddress: wallet.address,
       venueAccountId: wallet.address,
       venueAccountAddress: wallet.address,
-      venueAccountType: defaultAccountTypeForVenue(venue),
+      venueAccountType,
       status: "ACTIVE",
       lastVerifiedAt: new Date().toISOString()
     });
@@ -1036,7 +1199,7 @@ const defaultAccountTypeForVenue = (venue: UserVenueAccountVenue): UserVenueAcco
     return "DEPOSIT_WALLET";
   }
   if (venue === "LIMITLESS") {
-    return "SERVER_WALLET";
+    return "EOA";
   }
   return "EOA";
 };
@@ -1048,6 +1211,9 @@ const readinessBlockersForAccount = (account: UserVenueAccount): string[] => {
   }
   if (!account.venueAccountId && !account.venueAccountAddress) {
     blockers.push(`${account.venue} venue account id/address is not linked yet.`);
+  }
+  if (account.venue === "LIMITLESS" && account.venueAccountType === "EOA" && !isPositiveIntegerString(account.venueAccountId)) {
+    blockers.push("Limitless trading requires a linked Limitless profile id before live relay.");
   }
   return blockers;
 };
@@ -1072,6 +1238,9 @@ const setupInstructionsForVenue = (venue: UserVenueAccountVenue, account: UserVe
     return ["Polymarket deposit-wallet automation is not configured. Configure the Polymarket relayer, builder credentials, factory, and implementation addresses so Lotus can deploy the user's deposit wallet from their Turnkey EVM owner address."];
   }
   if (venue === "LIMITLESS") {
+    if (account.venueAccountType === "EOA") {
+      return ["Sign the Limitless ownership message with your Turnkey EVM wallet so Lotus can link the Limitless profile required for live relay."];
+    }
     return ["Limitless delegated server-wallet automation is not configured or has not completed. Configure the partner HMAC account-creation/delegated-signing credentials, then retry account setup."];
   }
   return [`Link the ${venue} account created from the displayed Turnkey EVM wallet.`];
@@ -1120,6 +1289,9 @@ const parsePositiveInt = (value: string | null): number | null => {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
+
+const isPositiveIntegerString = (value: string | null | undefined): boolean =>
+  typeof value === "string" && /^[1-9]\d*$/.test(value.trim());
 
 const decimalToBaseUnits = (amount: string, decimals: number): string => {
   const [whole = "0", fraction = ""] = amount.trim().split(".");

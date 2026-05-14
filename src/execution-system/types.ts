@@ -127,7 +127,8 @@ export const ExecutionLegSchema = z.object({
   settlementStatus: z.enum(settlementStatuses),
   venueOrderId: z.string().min(1).optional(),
   fillId: z.string().min(1).optional(),
-  errorCode: z.string().min(1).optional()
+  errorCode: z.string().min(1).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional()
 });
 
 export type ExecutionLegV0 = z.infer<typeof ExecutionLegSchema>;

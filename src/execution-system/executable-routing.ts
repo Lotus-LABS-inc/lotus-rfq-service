@@ -49,6 +49,7 @@ export interface TradeRouteCandidate {
   confidencePenaltyBps?: number | undefined;
   quoteBlockers?: readonly string[] | undefined;
   missingFactors?: readonly string[] | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 export interface TradeQuoteRequest {
@@ -70,6 +71,7 @@ export interface ExecutableRouteLeg {
   effectiveFeeBps?: number | undefined;
   feeConfidence?: string | undefined;
   requiresUserSignature: boolean;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 export interface SavingsBreakdown {
@@ -540,6 +542,14 @@ const evaluateCandidate = (
       adminReason: `${candidate.venue} quote evidence blocked: ${candidate.quoteBlockers!.join("; ")}`
     };
   }
+  if (candidate.venue.toUpperCase() === "LIMITLESS" && candidate.requiresUserSignature === true && !hasLimitlessExchangeAddress(candidate)) {
+    return {
+      executable: false,
+      status: "BLOCKED",
+      blockerCategory: "LIMITLESS_EXCHANGE_ADDRESS_MISSING",
+      adminReason: "Limitless signature preparation requires the market exchange address. Refresh the route before signing."
+    };
+  }
   if (candidate.recoveryRequired) {
     return { executable: false, status: "RECOVERY_REQUIRED", blockerCategory: "RECOVERY_REQUIRED", adminReason: `${candidate.venue} has unresolved recovery state.` };
   }
@@ -571,6 +581,11 @@ const evaluateCandidate = (
     blockerCategory: "NONE",
     adminReason: "executable"
   };
+};
+
+const hasLimitlessExchangeAddress = (candidate: TradeRouteCandidate): boolean => {
+  const metadata = candidate.metadata ?? {};
+  return typeof metadata.limitlessExchangeAddress === "string" && metadata.limitlessExchangeAddress.trim().length > 0;
 };
 
 const isQuotePreviewableEvaluation = (evaluation: {
@@ -731,6 +746,7 @@ const toLeg = (candidate: TradeRouteCandidate, size: number): ExecutableRouteLeg
   ...(candidate.feeAmount !== undefined ? { feeAmount: prorateFee(candidate, size) } : {}),
   ...(candidate.effectiveFeeBps !== undefined ? { effectiveFeeBps: candidate.effectiveFeeBps } : {}),
   ...(candidate.feeConfidence ? { feeConfidence: candidate.feeConfidence } : {}),
+  ...(candidate.metadata ? { metadata: { ...candidate.metadata } } : {}),
   requiresUserSignature: candidate.requiresUserSignature === true
 });
 

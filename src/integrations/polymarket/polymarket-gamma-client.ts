@@ -28,6 +28,15 @@ export class PolymarketGammaClient {
     if (!trimmed) {
       return [];
     }
+    const eventScoped = parseEventScopedIdentifier(trimmed);
+    if (eventScoped) {
+      try {
+        const markets = await this.getEventMarketsBySlug(eventScoped.eventSlug);
+        return markets.filter((market) => marketMatchesScopedDate(market, eventScoped.dateSlug));
+      } catch {
+        return [];
+      }
+    }
     if (/^\d+$/.test(trimmed)) {
       const market = await this.getJson(`/markets/${encodeURIComponent(trimmed)}`);
       return normalizeGammaMarketList(market);
@@ -153,4 +162,54 @@ const firstString = (...values: readonly unknown[]): string | null => {
     }
   }
   return null;
+};
+
+const parseEventScopedIdentifier = (value: string): { eventSlug: string; dateSlug: string } | null => {
+  const [eventSlug, dateSlug, ...rest] = value.split(":");
+  if (!eventSlug || !dateSlug || rest.length > 0) {
+    return null;
+  }
+  if (!/^[a-z0-9-]+$/i.test(eventSlug) || !/^[a-z]+-\d{1,2}-\d{4}$/i.test(dateSlug)) {
+    return null;
+  }
+  return { eventSlug, dateSlug };
+};
+
+const marketMatchesScopedDate = (market: PolymarketGammaMarket, dateSlug: string): boolean => {
+  const normalizedDate = normalizeDateSlug(dateSlug);
+  const slug = market.marketSlug?.toLowerCase() ?? "";
+  if (slug.includes(dateSlug.toLowerCase())) {
+    return true;
+  }
+  return normalizeDateSlug(market.title) === normalizedDate;
+};
+
+const normalizeDateSlug = (value: string): string | null => {
+  const match = value.toLowerCase().match(/\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)[\s-]+(\d{1,2})(?:st|nd|rd|th)?(?:[\s,-]+(20\d{2}))?\b/);
+  if (!match) {
+    return null;
+  }
+  const month = monthNumber(match[1]!);
+  const day = Number.parseInt(match[2]!, 10);
+  const year = match[3] ?? "2026";
+  return month && day > 0 ? `${year}-${month}-${String(day).padStart(2, "0")}` : null;
+};
+
+const monthNumber = (value: string): string | null => {
+  const key = value.slice(0, 3).toLowerCase();
+  const months: Record<string, string> = {
+    jan: "01",
+    feb: "02",
+    mar: "03",
+    apr: "04",
+    may: "05",
+    jun: "06",
+    jul: "07",
+    aug: "08",
+    sep: "09",
+    oct: "10",
+    nov: "11",
+    dec: "12"
+  };
+  return months[key] ?? null;
 };

@@ -23,6 +23,7 @@ export interface PolymarketDepositWalletClientConfig {
   pUsdAddress: string | null;
   usdcAddress: string | null;
   collateralOnrampAddress: string | null;
+  conditionalTokensAddress: string | null;
   ctfSpenderAddress: string | null;
   negRiskSpenderAddress: string | null;
 }
@@ -65,7 +66,9 @@ export interface PolymarketDepositWalletActivationPreparation {
   typedData: PolymarketDepositWalletActivationTypedData;
   wrapsUsdc: boolean;
   usdcBalance: string;
+  pUsdBalance: string;
   approvalSpenders: string[];
+  conditionalApprovalSpenders: string[];
   instructions: string[];
 }
 
@@ -94,6 +97,9 @@ export const buildPolymarketDepositWalletClientConfigFromEnv = (
   pUsdAddress: nonEmpty(env.POLYMARKET_BALANCE_ACTIVATION_TOKEN_ADDRESS) ?? "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB",
   usdcAddress: nonEmpty(env.POLYMARKET_USDCE_ADDRESS) ?? "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
   collateralOnrampAddress: nonEmpty(env.POLYMARKET_COLLATERAL_ONRAMP_ADDRESS) ?? "0x93070a847efEf7F70739046A929D47a521F5B8ee",
+  conditionalTokensAddress: nonEmpty(env.POLYMARKET_CONDITIONAL_TOKENS_ADDRESS) ??
+    nonEmpty(env.POLYMARKET_CTF_CONTRACT_ADDRESS) ??
+    "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
   ctfSpenderAddress: nonEmpty(env.POLYMARKET_BALANCE_ACTIVATION_SPENDER_ADDRESS) ?? null,
   negRiskSpenderAddress: nonEmpty(env.POLYMARKET_NEG_RISK_BALANCE_ACTIVATION_SPENDER_ADDRESS) ?? null
 });
@@ -165,24 +171,43 @@ export class PolymarketDepositWalletClient {
   public async prepareActivation(input: {
     ownerAddress: string;
     depositWalletAddress: string;
+    approvalSpenders?: string[] | undefined;
+    conditionalApprovalSpenders?: string[] | undefined;
     deadlineSeconds?: number | undefined;
   }): Promise<PolymarketDepositWalletActivationPreparation> {
     this.assertActivationConfigured();
     this.assertOwnerAndWallet(input.ownerAddress, input.depositWalletAddress);
+    const approvalSpenders = resolveApprovalSpenders({
+      discoveredSpenders: input.approvalSpenders,
+      fallbackSpenders: [this.config.ctfSpenderAddress, this.config.negRiskSpenderAddress]
+    });
+    if (approvalSpenders.length === 0) {
+      throw new Error("Polymarket activation is not configured: no CLOB pUSD approval spenders were discovered.");
+    }
+    const conditionalApprovalSpenders = resolveApprovalSpenders({
+      discoveredSpenders: input.conditionalApprovalSpenders,
+      fallbackSpenders: []
+    });
 
     const relayer = this.buildRelayerClient();
     const noncePayload = await relayer.getNonce(input.ownerAddress, TransactionType.WALLET);
     const nonce = `${noncePayload.nonce}`;
     const deadline = `${Math.floor(Date.now() / 1000) + (input.deadlineSeconds ?? 1800)}`;
     const usdcBalance = await readErc20Balance(this.config.rpcUrl, this.config.usdcAddress!, input.depositWalletAddress);
+    const pUsdBalance = await readErc20Balance(this.config.rpcUrl, this.config.pUsdAddress!, input.depositWalletAddress);
+    if (BigInt(usdcBalance) === 0n && BigInt(pUsdBalance) === 0n && conditionalApprovalSpenders.length === 0) {
+      throw new Error("Polymarket deposit wallet has no USDC.e or pUSD balance to activate.");
+    }
     const calls = buildActivationCalls({
       depositWalletAddress: input.depositWalletAddress,
       pUsdAddress: this.config.pUsdAddress!,
       usdcAddress: this.config.usdcAddress!,
       collateralOnrampAddress: this.config.collateralOnrampAddress!,
-      ctfSpenderAddress: this.config.ctfSpenderAddress!,
-      negRiskSpenderAddress: this.config.negRiskSpenderAddress,
-      usdcBalance
+      conditionalTokensAddress: this.config.conditionalTokensAddress!,
+      approvalSpenders,
+      conditionalApprovalSpenders,
+      usdcBalance,
+      pUsdBalance
     });
     if (calls.length === 0) {
       throw new Error("Polymarket deposit-wallet activation has no safe calls to submit.");
@@ -203,14 +228,15 @@ export class PolymarketDepositWalletClient {
       }),
       wrapsUsdc: BigInt(usdcBalance) > 0n,
       usdcBalance,
-      approvalSpenders: [
-        this.config.ctfSpenderAddress!,
-        ...(this.config.negRiskSpenderAddress ? [this.config.negRiskSpenderAddress] : [])
-      ],
+      pUsdBalance,
+      approvalSpenders,
+      conditionalApprovalSpenders,
       instructions: [
-        BigInt(usdcBalance) > 0n
-          ? "Sign once to wrap the deposit wallet USDC.e into pUSD and approve Polymarket trading spenders."
-          : "Sign once to approve Polymarket pUSD trading spenders from the deposit wallet."
+        conditionalApprovalSpenders.length > 0
+          ? "Sign once to approve Polymarket outcome-token selling from the deposit wallet. This is required before verified shares can be sold."
+          : BigInt(usdcBalance) > 0n
+            ? "Sign once to wrap the deposit wallet USDC.e into pUSD and approve the current Polymarket CLOB trading spenders."
+            : "Sign once to approve the current Polymarket CLOB pUSD trading spenders from the deposit wallet. A previous activation may have approved a legacy spender that CLOB no longer accepts."
       ]
     };
   }
@@ -222,17 +248,31 @@ export class PolymarketDepositWalletClient {
     deadline: string;
     calls: DepositWalletCall[];
     signature: string;
+    approvalSpenders?: string[] | undefined;
+    conditionalApprovalSpenders?: string[] | undefined;
   }): Promise<PolymarketDepositWalletActivationSubmission> {
     this.assertActivationConfigured();
     this.assertOwnerAndWallet(input.ownerAddress, input.depositWalletAddress);
+    const approvalSpenders = resolveApprovalSpenders({
+      discoveredSpenders: input.approvalSpenders,
+      fallbackSpenders: [this.config.ctfSpenderAddress, this.config.negRiskSpenderAddress]
+    });
+    if (approvalSpenders.length === 0) {
+      throw new Error("Polymarket activation is not configured: no CLOB pUSD approval spenders were discovered.");
+    }
+    const conditionalApprovalSpenders = resolveApprovalSpenders({
+      discoveredSpenders: input.conditionalApprovalSpenders,
+      fallbackSpenders: []
+    });
     validateActivationCalls({
       calls: input.calls,
       depositWalletAddress: input.depositWalletAddress,
       pUsdAddress: this.config.pUsdAddress!,
       usdcAddress: this.config.usdcAddress!,
       collateralOnrampAddress: this.config.collateralOnrampAddress!,
-      ctfSpenderAddress: this.config.ctfSpenderAddress!,
-      negRiskSpenderAddress: this.config.negRiskSpenderAddress
+      conditionalTokensAddress: this.config.conditionalTokensAddress!,
+      approvalSpenders,
+      conditionalApprovalSpenders
     });
     if (!/^\d+$/.test(input.nonce) || !/^\d+$/.test(input.deadline)) {
       throw new Error("Polymarket activation nonce/deadline is malformed.");
@@ -272,7 +312,7 @@ export class PolymarketDepositWalletClient {
       !isEvmAddress(this.config.pUsdAddress) ? "POLYMARKET_BALANCE_ACTIVATION_TOKEN_ADDRESS" : null,
       !isEvmAddress(this.config.usdcAddress) ? "POLYMARKET_USDCE_ADDRESS" : null,
       !isEvmAddress(this.config.collateralOnrampAddress) ? "POLYMARKET_COLLATERAL_ONRAMP_ADDRESS" : null,
-      !isEvmAddress(this.config.ctfSpenderAddress) ? "POLYMARKET_BALANCE_ACTIVATION_SPENDER_ADDRESS" : null
+      !isEvmAddress(this.config.conditionalTokensAddress) ? "POLYMARKET_CONDITIONAL_TOKENS_ADDRESS" : null
     ].filter((value): value is string => value !== null);
     if (missing.length > 0) {
       throw new Error(`Polymarket activation is not configured: ${missing.join(", ")}.`);
@@ -384,9 +424,11 @@ const buildActivationCalls = (input: {
   pUsdAddress: string;
   usdcAddress: string;
   collateralOnrampAddress: string;
-  ctfSpenderAddress: string;
-  negRiskSpenderAddress: string | null;
+  conditionalTokensAddress: string;
+  approvalSpenders: string[];
+  conditionalApprovalSpenders: string[];
   usdcBalance: string;
+  pUsdBalance: string;
 }): DepositWalletCall[] => {
   const calls: DepositWalletCall[] = [];
   if (BigInt(input.usdcBalance) > 0n) {
@@ -401,16 +443,20 @@ const buildActivationCalls = (input: {
       data: encodeWrap(input.usdcAddress, input.depositWalletAddress, input.usdcBalance)
     });
   }
-  calls.push({
-    target: input.pUsdAddress,
-    value: "0",
-    data: encodeApprove(input.ctfSpenderAddress, maxUint256)
-  });
-  if (input.negRiskSpenderAddress) {
+  if (BigInt(input.usdcBalance) > 0n || BigInt(input.pUsdBalance) > 0n) {
+    for (const spenderAddress of input.approvalSpenders) {
+      calls.push({
+        target: input.pUsdAddress,
+        value: "0",
+        data: encodeApprove(spenderAddress, maxUint256)
+      });
+    }
+  }
+  for (const spenderAddress of input.conditionalApprovalSpenders) {
     calls.push({
-      target: input.pUsdAddress,
+      target: input.conditionalTokensAddress,
       value: "0",
-      data: encodeApprove(input.negRiskSpenderAddress, maxUint256)
+      data: encodeSetApprovalForAll(spenderAddress, true)
     });
   }
   return calls;
@@ -422,16 +468,18 @@ const validateActivationCalls = (input: {
   pUsdAddress: string;
   usdcAddress: string;
   collateralOnrampAddress: string;
-  ctfSpenderAddress: string;
-  negRiskSpenderAddress: string | null;
+  conditionalTokensAddress: string;
+  approvalSpenders: string[];
+  conditionalApprovalSpenders: string[];
 }): void => {
-  if (!Array.isArray(input.calls) || input.calls.length === 0 || input.calls.length > 4) {
+  if (!Array.isArray(input.calls) || input.calls.length === 0 || input.calls.length > 12) {
     throw new Error("Polymarket activation calls are malformed.");
   }
-  const allowedSpenders = new Set([
-    input.ctfSpenderAddress.toLowerCase(),
-    ...(input.negRiskSpenderAddress ? [input.negRiskSpenderAddress.toLowerCase()] : [])
-  ]);
+  const allowedSpenders = new Set(input.approvalSpenders.map((spenderAddress) => spenderAddress.toLowerCase()));
+  const allowedConditionalSpenders = new Set(input.conditionalApprovalSpenders.map((spenderAddress) => spenderAddress.toLowerCase()));
+  if (allowedSpenders.size === 0) {
+    throw new Error("Polymarket activation pUSD approval spender set is empty.");
+  }
   let wrappedAmount: string | null = null;
   for (const call of input.calls) {
     if (call.value !== "0" || !isEvmAddress(call.target) || typeof call.data !== "string") {
@@ -465,12 +513,45 @@ const validateActivationCalls = (input: {
       }
       continue;
     }
+    if (target === input.conditionalTokensAddress.toLowerCase()) {
+      const decoded = decodeSetApprovalForAll(call.data);
+      if (!allowedConditionalSpenders.has(decoded.operator.toLowerCase()) || decoded.approved !== true) {
+        throw new Error("Polymarket activation outcome-token approval is not allowed.");
+      }
+      continue;
+    }
     throw new Error("Polymarket activation includes an unsupported call target.");
   }
 };
 
+const resolveApprovalSpenders = (input: {
+  discoveredSpenders?: string[] | undefined;
+  fallbackSpenders: Array<string | null>;
+}): string[] => {
+  const candidates = input.discoveredSpenders && input.discoveredSpenders.length > 0
+    ? input.discoveredSpenders
+    : input.fallbackSpenders;
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const candidate of candidates) {
+    if (!isEvmAddress(candidate)) {
+      continue;
+    }
+    const normalized = candidate.trim();
+    const key = normalized.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(normalized);
+    }
+  }
+  return result;
+};
+
 const encodeApprove = (spender: string, amount: string): string =>
   `0x095ea7b3${encodeAddress(spender)}${encodeUint(amount)}`;
+
+const encodeSetApprovalForAll = (operator: string, approved: boolean): string =>
+  `0xa22cb465${encodeAddress(operator)}${encodeUint(approved ? "1" : "0")}`;
 
 const encodeWrap = (asset: string, to: string, amount: string): string =>
   `0x62355638${encodeAddress(asset)}${encodeAddress(to)}${encodeUint(amount)}`;
@@ -489,6 +570,18 @@ const decodeWrap = (data: string): { asset: string; to: string; amount: string }
     asset: decodeAddress(clean.slice(0, 64)),
     to: decodeAddress(clean.slice(64, 128)),
     amount: BigInt(`0x${clean.slice(128, 192)}`).toString()
+  };
+};
+
+const decodeSetApprovalForAll = (data: string): { operator: string; approved: boolean } => {
+  const clean = cleanHexData(data, "a22cb465", 2);
+  const approved = BigInt(`0x${clean.slice(64, 128)}`);
+  if (approved !== 0n && approved !== 1n) {
+    throw new Error("Polymarket activation outcome-token approval flag is malformed.");
+  }
+  return {
+    operator: decodeAddress(clean.slice(0, 64)),
+    approved: approved === 1n
   };
 };
 

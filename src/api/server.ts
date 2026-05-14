@@ -274,7 +274,7 @@ import {
 } from "../execution-system/index.js";
 import { MonetizationRepository } from "../repositories/monetization.repository.js";
 import { FundingReadinessChecker, FundingService } from "../core/funding/funding-service.js";
-import { FundingError } from "../core/funding/types.js";
+import { FundingError, type VenueBalanceView } from "../core/funding/types.js";
 import {
   PolymarketFundingBalanceReadService,
   buildPolymarketFundingBalanceReadConfigFromEnv
@@ -317,6 +317,7 @@ import {
   PolymarketDepositWalletClient
 } from "../integrations/polymarket/polymarket-deposit-wallet-client.js";
 import { UserWalletService } from "../core/funding/user-wallets.js";
+import { buildUserWalletBalanceReaderFromEnv } from "../core/funding/user-wallet-balances.js";
 import { UserVenueAccountService } from "../core/execution/user-venue-accounts.js";
 import {
   ExecutableRouteService,
@@ -518,6 +519,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     defaultSolanaWalletEnabled: turnkeyWalletConfig.defaultSolanaWalletEnabled,
     defaultEvmWalletEnabled: turnkeyWalletConfig.defaultEvmWalletEnabled
   }, turnkeyWalletProvisioner);
+  const userWalletBalanceReader = buildUserWalletBalanceReaderFromEnv(process.env);
   const polymarketDepositWalletClient = new PolymarketDepositWalletClient(
     buildPolymarketDepositWalletClientConfigFromEnv(process.env)
   );
@@ -865,7 +867,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     new OpinionQuoteReader({
       client: new OpinionClient({
         baseUrl: process.env.OPINION_CLOB_BASE_URL ?? process.env.OPINION_OPENAPI_BASE_URL ?? "https://proxy.opinion.trade:8443/openapi",
-        apiKey: process.env.OPINION_API_KEY ?? ""
+        apiKey: process.env.OPINION_API_KEY ?? process.env.OPINION_BUILDER_API_KEY ?? "",
+        requestTimeoutMs: parseOptionalNumber(process.env.OPINION_QUOTE_TIMEOUT_MS) ?? 8_000
       }),
       streamCache: opinionQuoteCache,
       topicRate: parseOptionalNumber(process.env.OPINION_QUOTE_TOPIC_RATE),
@@ -1481,23 +1484,141 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     getIntent: (userId, fundingIntentId) => fundingService.getIntent(userId, fundingIntentId),
     quoteIntent: (userId, fundingIntentId) => fundingService.quoteIntent(userId, fundingIntentId),
     submitRouteLeg: (userId, fundingIntentId, request) => fundingService.submitRouteLeg(userId, fundingIntentId, request),
+    submitSignedSolanaRouteLeg: (userId, fundingIntentId, request) => fundingService.submitSignedSolanaRouteLeg(userId, fundingIntentId, request),
     refreshIntentStatus: (userId, fundingIntentId) => fundingService.refreshIntentStatus(userId, fundingIntentId),
     listVenueCapabilities: async () => fundingService.listVenueCapabilities(),
-    listVenueBalances: (userId) => fundingService.listVenueBalances(userId),
-    listVenueActivations: async (userId) => buildVenueBalanceActivationActions({
-      balances: await fundingService.listVenueBalances(userId),
-      venueAccounts: await userVenueAccountService.listAccounts(userId),
-      env: process.env
-    }),
-    preparePolymarketActivation: async (userId) => {
+    listVenueBalances: async (userId) => {
+      const balances = await fundingService.listVenueBalances(userId);
+      try {
+        const polymarket = await polymarketFundingBalanceReadService.readUsableBalance({
+          userId,
+          fundingIntentId: "venue-balance",
+          routeLegId: "venue-balance"
+        });
+        const usableAmount = polymarket.usableBalance;
+        const pendingWithdrawalAmount = balances.find((balance) =>
+          balance.venue === "POLYMARKET" && balance.token.toUpperCase() === "USDC"
+        )?.pendingWithdrawalAmount ?? "0";
+        const usable = Number(usableAmount);
+        const pending = Number(pendingWithdrawalAmount);
+        const availableAmount = Number.isFinite(usable) && Number.isFinite(pending)
+          ? String(Math.max(usable - pending, 0))
+          : usableAmount;
+        const spendableBalance: VenueBalanceView = {
+          venue: "POLYMARKET",
+          token: "USDC",
+          readyAmount: usableAmount,
+          pendingWithdrawalAmount,
+          availableAmount,
+          updatedAt: new Date().toISOString()
+        };
+        const withoutPolymarket = balances.filter((balance) =>
+          !(balance.venue === "POLYMARKET" && balance.token.toUpperCase() === "USDC")
+        );
+        return [spendableBalance, ...withoutPolymarket];
+      } catch {
+        return balances;
+      }
+    },
+    listVenueActivations: async (userId) => {
+      const activations = buildVenueBalanceActivationActions({
+        balances: await fundingService.listVenueBalances(userId),
+        venueAccounts: await userVenueAccountService.listAccounts(userId),
+        polymarketActivationExecuted: await userVenueAccountService.hasExecutedPolymarketBalanceActivation(userId),
+        env: process.env
+      });
+      const polymarket = activations.find((activation) => activation.venue === "POLYMARKET");
+      if (polymarket) {
+        try {
+          const balance = await polymarketFundingBalanceReadService.readUsableBalance({
+            userId,
+            fundingIntentId: "activation-status",
+            routeLegId: "activation-status"
+          });
+          polymarket.clobCollateralBalance = balance.collateralBalance;
+          polymarket.clobCollateralAllowance = balance.collateralAllowance;
+          polymarket.onchainPusdBalance = balance.onchainPusdBalance;
+          polymarket.onchainPusdAllowance = balance.onchainPusdAllowance;
+          polymarket.bridgedUsdcBalance = balance.bridgedUsdcBalance;
+          polymarket.clobAllowanceSpenders = balance.clobAllowanceSpenders;
+          polymarket.approvalSpenderSource = balance.approvalSpenderSource;
+          const bridgedUsdc = Number(balance.bridgedUsdcBalance ?? "0");
+          const onchainPusd = Number(balance.onchainPusdBalance ?? "0");
+          const usable = Number(balance.usableBalance);
+          if (Number.isFinite(usable) && usable > 0) {
+            polymarket.activationRequired = false;
+            polymarket.mode = "NOT_REQUIRED";
+            polymarket.status = "NOT_REQUIRED";
+            polymarket.readinessReason = "POLYMARKET_CLOB_COLLATERAL_CONFIRMED";
+            polymarket.instructions = ["Polymarket CLOB collateral is confirmed and available for live routes."];
+            polymarket.blockers = [];
+          } else if (Number.isFinite(bridgedUsdc) && bridgedUsdc > 0) {
+            polymarket.activationRequired = true;
+            polymarket.mode = "VENUE_UI_OR_RELAYER";
+            polymarket.status = polymarket.status === "ACCOUNT_REQUIRED" ? polymarket.status : "READY";
+            polymarket.tokenSymbol = "pUSD";
+            polymarket.readinessReason = "POLYMARKET_USDCE_ACTIVATION_REQUIRED";
+            polymarket.instructions = [
+              "USDC.e has arrived in the Polymarket deposit wallet, but it must be activated into Polymarket spendable pUSD/CLOB collateral before trading."
+            ];
+          } else if (Number.isFinite(onchainPusd) && onchainPusd > 0) {
+            polymarket.activationRequired = true;
+            polymarket.mode = "VENUE_UI_OR_RELAYER";
+            polymarket.status = polymarket.status === "ACCOUNT_REQUIRED" ? polymarket.status : "READY";
+            polymarket.tokenSymbol = "pUSD";
+            polymarket.readinessReason = "POLYMARKET_CLOB_APPROVAL_REQUIRED";
+            polymarket.instructions = [
+              balance.approvalSpenderSource === "CLOB_ALLOWANCE_MAP"
+                ? "pUSD is present in the Polymarket deposit wallet, but current Polymarket CLOB allowance is not ready. Activate again to approve the current CLOB trading spenders; a previous activation may have approved a legacy spender."
+                : "pUSD is present in the Polymarket deposit wallet, but Lotus could not discover current CLOB spenders. Activate will use the operator-reviewed fallback spender config."
+            ];
+          }
+        } catch {
+          // Activation listing remains durable even when live balance reads are temporarily unavailable.
+        }
+      }
+      return activations;
+    },
+    preparePolymarketActivation: async (userId, input) => {
       const account = await userVenueAccountService.getAccount(userId, "POLYMARKET");
       if (account?.status !== "ACTIVE" || !account.venueAccountAddress) {
         throw new FundingError("BALANCE_ACTIVATION_UNAVAILABLE", "An active Polymarket deposit wallet is required before activation.", 409);
       }
-      return polymarketDepositWalletClient.prepareActivation({
-        ownerAddress: account.walletAddress,
-        depositWalletAddress: account.venueAccountAddress
-      });
+      try {
+        let approvalSpenders: string[] = [];
+        let conditionalApprovalSpenders: string[] = [];
+        try {
+          const activationBalance = await polymarketFundingBalanceReadService.readUsableBalance({
+            userId,
+            fundingIntentId: "activation-prepare",
+            routeLegId: "activation-prepare"
+          });
+          approvalSpenders = activationBalance.clobAllowanceSpenders.map((spender) => spender.spenderAddress);
+          if (input?.tokenId) {
+            const conditional = await polymarketFundingBalanceReadService.readConditionalTokenApproval({
+              userId,
+              fundingIntentId: "activation-prepare",
+              routeLegId: "activation-prepare",
+              tokenId: input.tokenId
+            });
+            conditionalApprovalSpenders = conditional.clobAllowanceSpenders.map((spender) => spender.spenderAddress);
+          }
+        } catch {
+          approvalSpenders = [];
+          conditionalApprovalSpenders = [];
+        }
+        return await polymarketDepositWalletClient.prepareActivation({
+          ownerAddress: account.walletAddress,
+          depositWalletAddress: account.venueAccountAddress,
+          approvalSpenders,
+          conditionalApprovalSpenders
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("no USDC.e or pUSD balance")) {
+          throw new FundingError("BALANCE_ACTIVATION_UNAVAILABLE", "Polymarket deposit wallet has no USDC.e or pUSD balance to activate.", 409);
+        }
+        throw error;
+      }
     },
     submitPolymarketActivation: async (userId, request) => {
       const account = await userVenueAccountService.getAccount(userId, "POLYMARKET");
@@ -1510,7 +1631,42 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       ) {
         throw new FundingError("BALANCE_ACTIVATION_UNAVAILABLE", "Polymarket activation request does not match the user's active deposit wallet.", 403);
       }
-      return polymarketDepositWalletClient.submitActivation(request);
+      let approvalSpenders: string[] = [];
+      let conditionalApprovalSpenders: string[] = [];
+      try {
+        const activationBalance = await polymarketFundingBalanceReadService.readUsableBalance({
+          userId,
+          fundingIntentId: "activation-submit",
+          routeLegId: "activation-submit"
+        });
+        approvalSpenders = activationBalance.clobAllowanceSpenders.map((spender) => spender.spenderAddress);
+      } catch {
+        approvalSpenders = [];
+      }
+      for (const call of request.calls) {
+        const conditionalAddress = (process.env.POLYMARKET_CONDITIONAL_TOKENS_ADDRESS ??
+          process.env.POLYMARKET_CTF_CONTRACT_ADDRESS ??
+          "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045").toLowerCase();
+        if (call.target.toLowerCase() === conditionalAddress && call.data.toLowerCase().startsWith("0xa22cb465")) {
+          const clean = call.data.slice(10);
+          const operator = `0x${clean.slice(24, 64)}`;
+          if (/^0x[a-fA-F0-9]{40}$/.test(operator)) conditionalApprovalSpenders.push(operator);
+        }
+      }
+      const activation = await polymarketDepositWalletClient.submitActivation({
+        ...request,
+        approvalSpenders,
+        conditionalApprovalSpenders
+      });
+      await userVenueAccountService.recordPolymarketBalanceActivation({
+        userId,
+        ownerAddress: request.ownerAddress,
+        depositWalletAddress: request.depositWalletAddress,
+        relayerTransactionId: activation.relayerTransactionId,
+        relayerState: activation.relayerState,
+        transactionHash: activation.transactionHash
+      });
+      return activation;
     },
     listFundingHistory: (userId, input) => fundingService.listFundingHistory(userId, input),
     createWithdrawalIntent: (userId, request) => fundingService.createWithdrawalIntent(userId, request),
@@ -1557,8 +1713,11 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   });
   await registerUserWalletRoutes(app, userAuthMiddleware, {
     listWallets: (userId) => userWalletService.listWallets(userId),
+    readWalletBalances: (wallet) => userWalletBalanceReader.readWalletBalances(wallet),
     ensureDefaultWallets: (userId, email, turnkeyOrganizationId) =>
-      userWalletService.ensureDefaultWallets(userId, email, turnkeyOrganizationId)
+      userWalletService.ensureDefaultWallets(userId, email, turnkeyOrganizationId),
+    registerTurnkeyDefaultWallets: (userId, turnkeyOrganizationId, accounts) =>
+      userWalletService.registerTurnkeyDefaultWallets(userId, turnkeyOrganizationId, accounts)
   });
   await registerUserVenueAccountRoutes(app, userAuthMiddleware, {
     listAccounts: (userId) => userVenueAccountService.listAccounts(userId),

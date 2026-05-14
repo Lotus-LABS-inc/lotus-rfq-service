@@ -37,13 +37,21 @@ export class LimitlessQuoteReader implements VenueQuoteSnapshotReader {
       venueMarketId: input.venueMarketId,
       venueOutcomeId: input.venueOutcomeId
     });
-    if (cached?.source === "STREAM") {
-      return cached;
-    }
-
     const marketDetail = await this.config.client.getMarketDetail?.(input.venueMarketId).catch(() => null);
     const executableMarketId = resolveLimitlessExecutableMarketId(input.venueMarketId, input.canonicalMarketId, marketDetail);
+    const venueAddresses = resolveLimitlessVenueAddresses(marketDetail, executableMarketId);
     const outcomeResolution = resolveLimitlessOutcome(input.venueOutcomeId, input.canonicalOutcomeId, marketDetail);
+    if (cached?.source === "STREAM") {
+      return enrichLimitlessCachedSnapshot({
+        snapshot: cached,
+        executableMarketId,
+        approvedVenueMarketId: input.venueMarketId,
+        venueOutcomeId: outcomeResolution.venueOutcomeId ?? cached.venueOutcomeId,
+        outcomeSide: outcomeResolution.outcomeSide,
+        venueAddresses
+      });
+    }
+
     const payload = await this.config.client.getOrderbook({
       marketId: executableMarketId,
       ...(outcomeResolution.venueOutcomeId ? { outcomeId: outcomeResolution.venueOutcomeId } : {})
@@ -58,7 +66,8 @@ export class LimitlessQuoteReader implements VenueQuoteSnapshotReader {
       outcomeSide: outcomeResolution.outcomeSide,
       receivedAt: this.now(),
       feeBps: resolvedFeeBps ?? undefined,
-      approvedVenueMarketId: input.venueMarketId
+      approvedVenueMarketId: input.venueMarketId,
+      venueAddresses
     });
   }
 }
@@ -103,6 +112,7 @@ export const normalizeLimitlessOrderbook = (input: {
   outcomeSide?: "YES" | "NO" | undefined;
   receivedAt: Date;
   feeBps?: number | undefined;
+  venueAddresses?: { exchange?: string | undefined; adapter?: string | undefined } | undefined;
 }): NormalizedVenueQuoteSnapshot => {
   const record = unwrapOrderbookRecord(input.payload);
   const venueOutcomeId = input.venueOutcomeId ?? firstString(record.tokenId, record.token_id);
@@ -131,9 +141,85 @@ export const normalizeLimitlessOrderbook = (input: {
       approvedVenueMarketId: input.approvedVenueMarketId ?? input.venueMarketId,
       venueMarketId: input.venueMarketId,
       venueOutcomeId: venueOutcomeId ?? null,
+      ...(input.venueAddresses?.exchange ? { limitlessExchangeAddress: input.venueAddresses.exchange } : {}),
+      ...(input.venueAddresses?.adapter ? { limitlessAdapterAddress: input.venueAddresses.adapter } : {}),
       ...(input.outcomeSide ? { outcomeSide: input.outcomeSide } : {})
     }
   };
+};
+
+const enrichLimitlessCachedSnapshot = (input: {
+  snapshot: NormalizedVenueQuoteSnapshot;
+  executableMarketId: string;
+  approvedVenueMarketId: string;
+  venueOutcomeId?: string | undefined;
+  outcomeSide?: "YES" | "NO" | undefined;
+  venueAddresses: { exchange?: string | undefined; adapter?: string | undefined };
+}): NormalizedVenueQuoteSnapshot => ({
+  ...input.snapshot,
+  venueMarketId: input.executableMarketId,
+  ...(input.venueOutcomeId ? { venueOutcomeId: input.venueOutcomeId } : {}),
+  metadata: {
+    ...(input.snapshot.metadata ?? {}),
+    approvedVenueMarketId: input.approvedVenueMarketId,
+    venueMarketId: input.executableMarketId,
+    ...(input.venueOutcomeId ? { venueOutcomeId: input.venueOutcomeId } : {}),
+    ...(input.venueAddresses.exchange ? { limitlessExchangeAddress: input.venueAddresses.exchange } : {}),
+    ...(input.venueAddresses.adapter ? { limitlessAdapterAddress: input.venueAddresses.adapter } : {}),
+    ...(input.outcomeSide ? { outcomeSide: input.outcomeSide } : {})
+  }
+});
+
+const resolveLimitlessVenueAddresses = (
+  marketDetail: unknown,
+  executableMarketId: string
+): { exchange?: string | undefined; adapter?: string | undefined } => {
+  const detail = asRecord(marketDetail);
+  const match = findLimitlessMarketRecord(detail, executableMarketId) ?? detail;
+  const venue = asRecord(match.venue);
+  const exchange = firstEvmAddress(venue.exchange, match.exchange, asRecord(match.market).exchange);
+  const adapter = firstEvmAddress(venue.adapter, match.adapter, asRecord(match.market).adapter);
+  return {
+    ...(exchange ? { exchange } : {}),
+    ...(adapter ? { adapter } : {})
+  };
+};
+
+const findLimitlessMarketRecord = (
+  root: Record<string, unknown>,
+  executableMarketId: string
+): Record<string, unknown> | null => {
+  const target = executableMarketId.trim().toLowerCase();
+  const stack: Record<string, unknown>[] = [root];
+  const seen = new Set<Record<string, unknown>>();
+  while (stack.length > 0) {
+    const record = stack.pop()!;
+    if (seen.has(record)) {
+      continue;
+    }
+    seen.add(record);
+    const ids = [
+      record.slug,
+      record.id,
+      record.conditionId,
+      record.marketSlug,
+      record.marketId
+    ].flatMap((value) => firstString(value) ? [firstString(value)!.toLowerCase()] : []);
+    if (ids.includes(target)) {
+      return record;
+    }
+    for (const value of Object.values(record)) {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          const child = asRecord(item);
+          if (Object.keys(child).length > 0) {
+            stack.push(child);
+          }
+        }
+      }
+    }
+  }
+  return null;
 };
 
 const inferLimitlessMarketType = (record: Record<string, unknown>): "amm" | "clob" => {
@@ -293,6 +379,11 @@ const firstString = (...values: readonly unknown[]): string | undefined => {
     }
   }
   return undefined;
+};
+
+const firstEvmAddress = (...values: readonly unknown[]): string | undefined => {
+  const value = firstString(...values);
+  return value && /^0x[a-fA-F0-9]{40}$/.test(value) ? value : undefined;
 };
 
 const asRecord = (value: unknown): Record<string, unknown> =>

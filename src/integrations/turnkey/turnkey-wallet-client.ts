@@ -5,7 +5,12 @@ import {
   type TurnkeyApiClient,
   type TurnkeySDKApiTypes
 } from "@turnkey/sdk-server";
-import type { ProvisionedUserWallet, TurnkeyWalletProvisioner } from "../../core/funding/user-wallets.js";
+import { createHash } from "node:crypto";
+import type {
+  ProvisionedUserWallet,
+  TurnkeyWalletAccountRegistration,
+  TurnkeyWalletProvisioner
+} from "../../core/funding/user-wallets.js";
 
 const LOTUS_WALLET_NAME = "Lotus Wallet";
 
@@ -66,59 +71,73 @@ export class TurnkeyUserWalletProvisioner implements TurnkeyWalletProvisioner {
     }
     const existingOrganizationId = input.turnkeyOrganizationId?.trim();
     if (existingOrganizationId) {
-      return this.provisionDefaultWalletsInExistingOrganization({
+      return this.provisionDefaultWalletsInOrganization({
         organizationId: existingOrganizationId,
+        walletName: LOTUS_WALLET_NAME,
         accounts,
         includeSolana: input.includeSolana,
         includeEvm: input.includeEvm
       });
     }
 
-    const response = await this.client.createSubOrganization({
-      subOrganizationName: `lotus-user-${input.userId}`,
-      rootQuorumThreshold: 1,
-      rootUsers: [{
-        userName: input.email ?? input.userId,
-        ...(input.email ? { userEmail: input.email } : {}),
-        apiKeys: [],
-        authenticators: [],
-        oauthProviders: []
-      }],
-      wallet: {
-        walletName: LOTUS_WALLET_NAME,
-        accounts
-      }
-    } satisfies TurnkeySDKApiTypes.TCreateSubOrganizationBody);
-
-    const subOrganizationId = response.subOrganizationId;
-    const walletId = response.wallet?.walletId;
-    if (!subOrganizationId || !walletId) {
-      throw new Error("Turnkey did not return a sub-organization wallet.");
-    }
-    const accountResponse = await this.client.getWalletAccounts({
-      organizationId: subOrganizationId,
-      walletId
+    return this.provisionDefaultWalletsInOrganization({
+      organizationId: this.config.organizationId!,
+      walletName: lotusManagedWalletName(input.userId),
+      accounts,
+      includeSolana: input.includeSolana,
+      includeEvm: input.includeEvm
     });
-    return accountResponse.accounts
-      .filter((account) => account.walletId === walletId)
-      .map((account) => toProvisionedWallet(subOrganizationId, walletId, account))
-      .filter((wallet): wallet is ProvisionedUserWallet => wallet !== null);
   }
 
-  private async provisionDefaultWalletsInExistingOrganization(input: {
+  public async verifyDefaultWalletAccounts(input: {
+    turnkeyOrganizationId: string;
+    accounts: TurnkeyWalletAccountRegistration[];
+  }): Promise<ProvisionedUserWallet[]> {
+    const organizationId = input.turnkeyOrganizationId.trim();
+    if (!organizationId || input.accounts.length === 0) {
+      return [];
+    }
+
+    const requestedByAccountId = new Map(input.accounts.map((account) => [account.providerWalletAccountId, account]));
+    const walletIds = [...new Set(input.accounts.map((account) => account.providerWalletId))];
+    const verified: ProvisionedUserWallet[] = [];
+    for (const walletId of walletIds) {
+      const accountResponse = await this.client.getWalletAccounts({ organizationId, walletId });
+      for (const account of accountResponse.accounts) {
+        const requested = requestedByAccountId.get(account.walletAccountId);
+        if (!requested || account.walletId !== walletId) {
+          continue;
+        }
+        if (
+          account.addressFormat !== requested.addressFormat
+          || account.address.toLowerCase() !== requested.address.toLowerCase()
+        ) {
+          continue;
+        }
+        const wallet = toProvisionedWallet(organizationId, walletId, account);
+        if (wallet) {
+          verified.push(wallet);
+        }
+      }
+    }
+    return verified;
+  }
+
+  private async provisionDefaultWalletsInOrganization(input: {
     organizationId: string;
+    walletName: string;
     accounts: TurnkeySDKApiTypes.TCreateWalletBody["accounts"];
     includeSolana: boolean;
     includeEvm: boolean;
   }): Promise<ProvisionedUserWallet[]> {
     const walletResponse = await this.client.getWallets({ organizationId: input.organizationId });
-    const wallet = walletResponse.wallets.find((entry) => entry.walletName === LOTUS_WALLET_NAME)
-      ?? walletResponse.wallets[0];
+    const wallet = walletResponse.wallets.find((entry) => entry.walletName === input.walletName)
+      ?? null;
 
     const walletId = wallet?.walletId
       ?? (await this.client.createWallet({
         organizationId: input.organizationId,
-        walletName: LOTUS_WALLET_NAME,
+        walletName: input.walletName,
         accounts: input.accounts
       })).walletId;
 
@@ -134,7 +153,7 @@ export class TurnkeyUserWalletProvisioner implements TurnkeyWalletProvisioner {
       )
     );
 
-    if (wallet && missingAccounts.length > 0) {
+    if (missingAccounts.length > 0) {
       await this.client.createWalletAccounts({
         organizationId: input.organizationId,
         walletId,
@@ -156,6 +175,11 @@ export class TurnkeyUserWalletProvisioner implements TurnkeyWalletProvisioner {
       .filter((wallet): wallet is ProvisionedUserWallet => wallet !== null);
   }
 }
+
+const lotusManagedWalletName = (userId: string): string => {
+  const stableId = createHash("sha256").update(userId).digest("hex").slice(0, 16);
+  return `Lotus ${stableId}`;
+};
 
 const toProvisionedWallet = (
   organizationId: string,

@@ -3,6 +3,7 @@ import {
   HttpClient,
   OrderType,
   Side,
+  SignatureType,
   type OrderResponse
 } from "@limitless-exchange/sdk";
 import { verifyTypedData } from "@ethersproject/wallet";
@@ -95,7 +96,7 @@ export interface LimitlessUserSignedRelayClient {
   submitSignedOrder(input: {
     onBehalfOf: number;
     ownerId: number;
-    signedPayload: Record<string, unknown>;
+    signedPayload: LimitlessRelayOrderSubmission;
   }): Promise<unknown>;
   getOrderStatus?(orderId: string, onBehalfOf?: number | undefined): Promise<unknown>;
   getFillState?(orderId: string, onBehalfOf?: number | undefined): Promise<VenueFillState>;
@@ -108,6 +109,11 @@ export class LimitlessExecutionNotConfiguredError extends Error {
     this.name = "LimitlessExecutionNotConfiguredError";
   }
 }
+
+const limitlessExchangeAddressFromLeg = (leg: ExecutionLegV0): string | null => {
+  const metadata = asRecord(leg.metadata);
+  return normalizeAddress(metadata.limitlessExchangeAddress ?? metadata.exchange ?? metadata.venueExchange);
+};
 
 const nonEmpty = (value: string | undefined): value is string =>
   typeof value === "string" && value.trim().length > 0;
@@ -258,7 +264,9 @@ const createLimitlessUserSignedRelayClient = (config: LimitlessExecutionAdapterC
   });
   return {
     submitSignedOrder: (input) => httpClient.post("/orders", {
-      ...input.signedPayload,
+      order: input.signedPayload.order,
+      orderType: input.signedPayload.orderType,
+      marketSlug: input.signedPayload.marketSlug,
       onBehalfOf: input.onBehalfOf,
       ownerId: input.ownerId
     }),
@@ -272,6 +280,29 @@ const createLimitlessUserSignedRelayClient = (config: LimitlessExecutionAdapterC
       orderId
     )
   };
+};
+
+type LimitlessRelayOrder = {
+  salt: number | string;
+  maker: string;
+  signer: string;
+  taker: string;
+  tokenId: string;
+  makerAmount: number | string;
+  takerAmount: number | string;
+  expiration: string | number;
+  nonce: number | string;
+  feeRateBps: number | string;
+  side: Side | number;
+  signatureType: SignatureType | number;
+  price?: number | string | undefined;
+  signature: string;
+};
+
+type LimitlessRelayOrderSubmission = {
+  order: LimitlessRelayOrder;
+  orderType: OrderType;
+  marketSlug: string;
 };
 
 const parseExecutionMode = (value: string | undefined): LimitlessExecutionMode =>
@@ -294,7 +325,18 @@ const parseSize = (value: string): number => {
   if (!Number.isFinite(parsed) || parsed <= 0) {
     throw new LimitlessExecutionNotConfiguredError("LIMITLESS_INVALID_ORDER_SIZE", "Limitless order size must be positive.");
   }
-  return parsed;
+  return roundLimitlessSize(parsed);
+};
+
+const roundLimitlessSize = (value: number): number => {
+  const scaled = Math.floor((value + Number.EPSILON) * 1_000);
+  if (scaled <= 0) {
+    throw new LimitlessExecutionNotConfiguredError(
+      "LIMITLESS_INVALID_ORDER_SIZE",
+      "Limitless order size is below the minimum 0.001 share precision."
+    );
+  }
+  return Number((scaled / 1_000).toFixed(3));
 };
 
 const parsePrice = (value: number): number => {
@@ -636,13 +678,14 @@ const validateLimitlessUserSignedRelayPayload = (
 ): {
   onBehalfOf: number;
   ownerId: number;
-  signedPayload: Record<string, unknown>;
+  signedPayload: LimitlessRelayOrderSubmission;
 } => {
   parsePreparedExpiry(preparedPayload);
   const relayPayload = asRecord(preparedPayload.relayPayload);
   const expectedBinding = asRecord(relayPayload.expectedBinding);
   const signedPayload = asRecord(relayPayload.signedPayload);
-  const signedOrder = asRecord(firstPresent(signedPayload.order, signedPayload.data, signedPayload.args, signedPayload));
+  const data = asRecord(signedPayload.data);
+  const signedOrder = asRecord(firstPresent(data.order, signedPayload.order, signedPayload.args, signedPayload));
   const signer = normalizeAddress(firstPresent(signedPayload.signer, signedPayload.signerAddress, signedPayload.account, signedPayload.owner, signedOrder.signer, signedOrder.maker));
   const expectedSigner = normalizeAddress(firstPresent(expectedBinding.signerAddress, expectedBinding.walletAddress, expectedBinding.venueAccountAddress));
   const expectedAccount = normalizeAddress(firstPresent(expectedBinding.venueAccountAddress, expectedBinding.walletAddress, expectedBinding.account));
@@ -674,10 +717,20 @@ const validateLimitlessUserSignedRelayPayload = (
       "Limitless signed order relay requires a valid EVM signature."
     );
   }
+  const preparedExchange = normalizeAddress(preparedPayload.exchange);
+  if (preparedExchange) {
+    const signedExchange = normalizeAddress(nestedValue(signedPayload, "typedData", "domain", "verifyingContract"));
+    if (!signedExchange || signedExchange !== preparedExchange) {
+      throw new LimitlessExecutionNotConfiguredError(
+        "LIMITLESS_RELAY_EXCHANGE_MISMATCH",
+        "Limitless signed order exchange address does not match the prepared market."
+      );
+    }
+  }
   verifyLimitlessTypedSignature(signedPayload, signature, expectedSigner);
 
   assertEqualString(
-    firstPresent(signedPayload.marketSlug, signedPayload.market, signedOrder.marketSlug, signedOrder.market),
+    firstPresent(data.marketSlug, signedPayload.marketSlug, signedPayload.market, signedOrder.marketSlug, signedOrder.market),
     preparedPayload.marketSlug,
     "LIMITLESS_RELAY_MARKET_MISMATCH",
     "Limitless signed order market does not match the prepared route leg."
@@ -694,22 +747,83 @@ const validateLimitlessUserSignedRelayPayload = (
       "Limitless signed order side does not match the prepared route leg."
     );
   }
-  assertEqualNumber(
-    firstPresent(signedPayload.price, signedOrder.price, nestedValue(signedOrder, "args", "price")),
-    preparedPayload.price,
-    "LIMITLESS_RELAY_PRICE_MISMATCH",
-    "Limitless signed order price does not match the prepared route leg."
-  );
-  assertEqualNumber(
-    firstPresent(signedPayload.size, signedOrder.size, nestedValue(signedOrder, "args", "size")),
-    preparedPayload.size,
-    "LIMITLESS_RELAY_SIZE_MISMATCH",
-    "Limitless signed order size does not match the prepared route leg."
-  );
+  const signedPrice = firstPresent(signedPayload.price, signedOrder.price, nestedValue(signedOrder, "args", "price"));
+  if (signedPrice !== undefined && signedPrice !== null) {
+    assertEqualNumber(
+      signedPrice,
+      preparedPayload.price,
+      "LIMITLESS_RELAY_PRICE_MISMATCH",
+      "Limitless signed order price does not match the prepared route leg."
+    );
+  }
+  const marketSlug = stringOrNull(firstPresent(data.marketSlug, signedPayload.marketSlug, signedOrder.marketSlug, signedOrder.market));
+  const orderType = normalizeLimitlessOrderType(firstPresent(data.orderType, signedPayload.orderType, preparedPayload.orderType));
+  const relayOrder = sanitizeLimitlessRelayOrder(signedOrder, signature);
+  if (!marketSlug) {
+    throw new LimitlessExecutionNotConfiguredError(
+      "LIMITLESS_RELAY_MARKET_REQUIRED",
+      "Limitless signed order relay requires a market slug."
+    );
+  }
   return {
     onBehalfOf: profileId,
     ownerId: profileId,
-    signedPayload
+    signedPayload: {
+      order: relayOrder,
+      orderType,
+      marketSlug
+    }
+  };
+};
+
+const normalizeLimitlessOrderType = (value: unknown): OrderType => {
+  const normalized = String(value ?? OrderType.GTC).toUpperCase();
+  if (normalized === OrderType.FOK) return OrderType.FOK;
+  if (normalized === OrderType.GTC) return OrderType.GTC;
+  return OrderType.GTC;
+};
+
+const sanitizeLimitlessRelayOrder = (
+  order: Record<string, unknown>,
+  signature: string
+): LimitlessRelayOrder => {
+  const required = [
+    "salt",
+    "maker",
+    "signer",
+    "taker",
+    "tokenId",
+    "makerAmount",
+    "takerAmount",
+    "expiration",
+    "nonce",
+    "feeRateBps",
+    "side",
+    "signatureType"
+  ] as const;
+  for (const key of required) {
+    if (order[key] === undefined || order[key] === null || order[key] === "") {
+      throw new LimitlessExecutionNotConfiguredError(
+        "LIMITLESS_RELAY_ORDER_FIELD_MISSING",
+        `Limitless signed order relay is missing order.${key}.`
+      );
+    }
+  }
+  return {
+    salt: order.salt as number | string,
+    maker: String(order.maker),
+    signer: String(order.signer),
+    taker: String(order.taker),
+    tokenId: String(order.tokenId),
+    makerAmount: order.makerAmount as number | string,
+    takerAmount: order.takerAmount as number | string,
+    expiration: order.expiration as string | number,
+    nonce: order.nonce as number | string,
+    feeRateBps: order.feeRateBps as number | string,
+    side: order.side as Side | number,
+    signatureType: order.signatureType as SignatureType | number,
+    ...(order.price !== undefined ? { price: order.price as number | string } : {}),
+    signature
   };
 };
 
@@ -783,6 +897,7 @@ export class LimitlessExecutionAdapter implements ExecutionVenueAdapter {
         side: mapSide(leg.side),
         size,
         price,
+        ...(limitlessExchangeAddressFromLeg(leg) ? { exchange: limitlessExchangeAddressFromLeg(leg)! } : {}),
         orderType: OrderType.GTC,
         ...(status.executionMode === "delegated_partner_server_wallet" && this.config.delegatedProfileId
           ? { delegatedProfileId: this.config.delegatedProfileId }

@@ -4,7 +4,8 @@ import {
   CompositeVenueQuoteSource,
   QuoteSnapshotCache,
   SharedCoreVenueQuoteMappingResolver,
-  type NormalizedVenueQuoteSnapshot
+  type NormalizedVenueQuoteSnapshot,
+  type VenueQuoteSnapshotReader
 } from "../src/core/sor/quote-snapshot.js";
 import { LimitlessQuoteReader } from "../src/integrations/limitless/limitless-quote-reader.js";
 import { parseProfileFeeBps } from "../src/integrations/limitless/limitless-fee-reader.js";
@@ -343,6 +344,7 @@ describe("venue quote readers", () => {
       {
         venue: "PREDICT_FUN",
         reason: "QUOTE_READER_FAILED",
+        detailsCode: "Predict_market_orderbook_payload_validation_failed.",
         venueMarketId: "predict-1",
         venueOutcomeId: "yes"
       }
@@ -464,5 +466,102 @@ describe("venue quote mapping resolvers", () => {
         venueOutcomeId: "no-token"
       }
     ]);
+  });
+
+  it("extracts Opinion quote token ids from outcome arrays in shared-core payloads", async () => {
+    const resolver = new SharedCoreVenueQuoteMappingResolver({
+      async loadApprovedVenueMappings() {
+        return [
+          {
+            venue: "OPINION",
+            venue_market_id: "OPINION:market-123:canonical",
+            normalized_payload: {
+              venueMarketId: "market-123",
+              outcomes: [
+                { label: "Yes", tokenId: "opinion-yes-token" },
+                { label: "No", token_id: "opinion-no-token" }
+              ]
+            },
+            raw_source_payload: {}
+          }
+        ];
+      },
+      async listApprovedVenueMappings() {
+        return [];
+      }
+    });
+
+    await expect(resolver.resolve({
+      canonicalMarketId: "canonical",
+      canonicalOutcomeId: "YES"
+    })).resolves.toEqual([{
+      venue: "OPINION",
+      venueMarketId: "market-123",
+      venueOutcomeId: "opinion-yes-token"
+    }]);
+  });
+
+  it("returns typed quote-reader blockers for known provider failures", async () => {
+    const timeoutReader: VenueQuoteSnapshotReader = {
+      venue: "LIMITLESS",
+      async getQuoteSnapshot() {
+        throw new Error("request timeout while reading orderbook");
+      }
+    };
+    const httpReader: VenueQuoteSnapshotReader = {
+      venue: "POLYMARKET",
+      async getQuoteSnapshot() {
+        const error = new Error("provider unavailable");
+        (error as Error & { status: number }).status = 503;
+        throw error;
+      }
+    };
+    const messageStatusReader: VenueQuoteSnapshotReader = {
+      venue: "PREDICT",
+      async getQuoteSnapshot() {
+        throw new Error("Predict request failed with status 404.");
+      }
+    };
+    const source = new CompositeVenueQuoteSource([timeoutReader, httpReader, messageStatusReader], new SharedCoreVenueQuoteMappingResolver({
+      async loadApprovedVenueMappings() {
+        return [
+          {
+            venue: "LIMITLESS",
+            venue_market_id: "LIMITLESS:market-1:canonical",
+            normalized_payload: { venueMarketId: "market-1", quoteTokenId: "yes-token" },
+            raw_source_payload: {}
+          },
+          {
+            venue: "POLYMARKET",
+            venue_market_id: "POLYMARKET:market-2:canonical",
+            normalized_payload: { venueMarketId: "market-2", quoteTokenId: "yes-token" },
+            raw_source_payload: {}
+          },
+          {
+            venue: "PREDICT",
+            venue_market_id: "PREDICT:market-3:canonical",
+            normalized_payload: { venueMarketId: "market-3", quoteTokenId: "yes-token" },
+            raw_source_payload: {}
+          }
+        ];
+      },
+      async listApprovedVenueMappings() {
+        return [];
+      }
+    }));
+
+    const report = await source.getQuoteSnapshotReport({
+      canonicalMarketId: "canonical",
+      canonicalOutcomeId: "YES",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(report.blocked.map((blocker) => blocker.reason).sort()).toEqual([
+      "QUOTE_PROVIDER_HTTP_404",
+      "QUOTE_PROVIDER_HTTP_503",
+      "QUOTE_PROVIDER_TIMEOUT"
+    ]);
+    expect(report.blocked.every((blocker) => blocker.reason !== "QUOTE_READER_FAILED")).toBe(true);
   });
 });

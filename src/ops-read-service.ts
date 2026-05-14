@@ -58,6 +58,21 @@ interface WithdrawalEvidenceReader {
   readEvidence(input: InternalWithdrawalEvidenceReadInput): Promise<InternalWithdrawalEvidenceReadOutput>;
 }
 
+const fundingBalanceOutputFromUsableBalance = (
+  usableBalance: string,
+  usableBalanceSource: PolymarketFundingBalanceReadOutput["usableBalanceSource"] = "CLOB_COLLATERAL_ALLOWANCE"
+): PolymarketFundingBalanceReadOutput => ({
+  usableBalance,
+  collateralBalance: usableBalance,
+  collateralAllowance: usableBalance,
+  clobAllowanceSpenders: [],
+  approvalSpenderSource: "UNAVAILABLE",
+  onchainPusdBalance: null,
+  onchainPusdAllowance: null,
+  bridgedUsdcBalance: null,
+  usableBalanceSource
+});
+
 export interface OpsReadServerDeps {
   env?: NodeJS.ProcessEnv | undefined;
   fetchImpl?: typeof fetch | undefined;
@@ -334,12 +349,12 @@ const readDirectHttpFundingBalance = async (
     if (!response.ok) {
       throw new OpsFundingBalanceUnavailableError(`${venue} direct funding balance read returned HTTP ${response.status}.`);
     }
-    return {
-      usableBalance: normalizeDirectBalance(
+    return fundingBalanceOutputFromUsableBalance(
+      normalizeDirectBalance(
         await response.json(),
         env[`${venue}_OPS_FUNDING_BALANCE_RESPONSE_FIELD`]
       )
-    };
+    );
   } catch (error) {
     if (error instanceof OpsFundingBalanceNotConfiguredError || error instanceof OpsFundingBalanceMalformedError) {
       throw error;
@@ -394,9 +409,10 @@ const readOnchainErc20FundingBalance = async (
     if (raw.error) {
       throw new OpsFundingBalanceUnavailableError(`${venue} ERC20 balance read returned a JSON-RPC error.`);
     }
-    return {
-      usableBalance: formatAtomicUnits(parseJsonRpcHexQuantity(raw.result), decimals)
-    };
+    return fundingBalanceOutputFromUsableBalance(
+      formatAtomicUnits(parseJsonRpcHexQuantity(raw.result), decimals),
+      "ONCHAIN_BRIDGED_USDC"
+    );
   } catch (error) {
     if (
       error instanceof OpsFundingBalanceNotConfiguredError ||

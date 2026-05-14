@@ -69,11 +69,25 @@ export class LifiRestClient implements LifiRouteProvider {
     if (input.bridge) {
       url.searchParams.set("bridge", input.bridge);
     }
-    const response = await this.fetchJson(url);
+    const response = await this.fetchStatusJson(url);
     return {
       status: normalizeLifiStatus(response),
       raw: redactProviderPayload(response)
     };
+  }
+
+  private async fetchStatusJson(url: URL): Promise<Record<string, unknown>> {
+    try {
+      return await this.fetchJson(url);
+    } catch (error) {
+      if (error instanceof FundingError && /transaction hash is not found|not found/i.test(error.message)) {
+        return {
+          status: "NOT_FOUND",
+          message: "Transaction hash is not indexed by LI.FI yet."
+        };
+      }
+      throw error;
+    }
   }
 
   private async fetchJson(url: URL): Promise<Record<string, unknown>> {
@@ -211,7 +225,12 @@ const safeTransactionRequest = (value: Record<string, unknown>) => ({
   ...(typeof value.value === "string" || typeof value.value === "number" ? { value: String(value.value) } : {}),
   ...(typeof value.chainId === "number" ? { chainId: value.chainId } : {}),
   ...(typeof value.gasLimit === "string" || typeof value.gasLimit === "number" ? { gasLimit: String(value.gasLimit) } : {}),
-  ...(typeof value.gasPrice === "string" || typeof value.gasPrice === "number" ? { gasPrice: String(value.gasPrice) } : {})
+  ...(typeof value.gasPrice === "string" || typeof value.gasPrice === "number" ? { gasPrice: String(value.gasPrice) } : {}),
+  ...(typeof value.maxFeePerGas === "string" || typeof value.maxFeePerGas === "number" ? { maxFeePerGas: String(value.maxFeePerGas) } : {}),
+  ...(typeof value.maxPriorityFeePerGas === "string" || typeof value.maxPriorityFeePerGas === "number" ? { maxPriorityFeePerGas: String(value.maxPriorityFeePerGas) } : {}),
+  ...(typeof value.unsignedTransaction === "string" ? { unsignedTransaction: value.unsignedTransaction } : {}),
+  ...(typeof value.signWith === "string" ? { signWith: value.signWith } : {}),
+  ...(typeof value.recentBlockhash === "string" ? { recentBlockhash: value.recentBlockhash } : {})
 });
 
 const redactProviderPayload = (value: Record<string, unknown>): Record<string, unknown> => {

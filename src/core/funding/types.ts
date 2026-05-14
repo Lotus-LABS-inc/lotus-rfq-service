@@ -191,7 +191,12 @@ const SafeTransactionRequestSchema = z.object({
   value: z.string().optional(),
   chainId: z.number().int().positive().optional(),
   gasLimit: z.string().optional(),
-  gasPrice: z.string().optional()
+  gasPrice: z.string().optional(),
+  maxFeePerGas: z.string().optional(),
+  maxPriorityFeePerGas: z.string().optional(),
+  unsignedTransaction: z.string().optional(),
+  signWith: z.string().optional(),
+  recentBlockhash: z.string().optional()
 });
 
 export type SafeTransactionRequest = z.infer<typeof SafeTransactionRequestSchema>;
@@ -256,6 +261,14 @@ const VenueCapabilitySchema = z.object({
   requiresFinalizationStep: z.boolean(),
   supportsDirectDeposit: z.boolean(),
   supportsWithdrawal: z.boolean(),
+  withdrawalDestinations: z.array(z.object({
+    chain: z.string().min(1),
+    chainId: z.number().int().positive(),
+    token: z.string().min(1),
+    tokenAddress: z.string().min(1),
+    supported: z.boolean(),
+    notes: z.string().optional()
+  })).optional(),
   withdrawalMode: z.enum(withdrawalCapabilityModes),
   userSignedWithdrawalSupported: z.boolean(),
   partnerManagedWithdrawal: z.object({
@@ -460,6 +473,7 @@ export type FundingFailureCode =
   | "WITHDRAWAL_PROVIDER_UNAVAILABLE"
   | "WITHDRAWAL_SUBMISSION_FAILED"
   | "WITHDRAWAL_DESTINATION_INVALID"
+  | "WITHDRAWAL_DESTINATION_UNSUPPORTED"
   | "WITHDRAWAL_COMPLETION_PERSISTENCE_BLOCKED";
 
 export class FundingError extends Error {

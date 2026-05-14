@@ -178,6 +178,7 @@ const buildApp = async (options: { rateLimiter?: RateLimiter } = {}) => {
       },
       wrapsUsdc: false,
       usdcBalance: "0",
+      pUsdBalance: "1000000",
       approvalSpenders: ["0x3333333333333333333333333333333333333333"],
       instructions: ["Sign once."]
     }),
@@ -434,7 +435,7 @@ describe("Funding routes", () => {
     expect(fundingReceipt.json()).toMatchObject({
       receipt: {
         fundingIntentId: "funding-1",
-        currentStatus: "INTENT_CREATED",
+        currentStatus: "BRIDGING",
         sourceChain: "SOLANA",
         userSafeMessage: "Funding intent created. Route quote is pending."
       }

@@ -27,12 +27,22 @@ export interface VenueBalanceActivationAction {
   transactionRequest: VenueBalanceActivationTransactionRequest | null;
   instructions: string[];
   blockers: string[];
+  lastSubmitted?: boolean;
+  bridgedUsdcBalance?: string | null;
+  onchainPusdBalance?: string | null;
+  onchainPusdAllowance?: string | null;
+  clobCollateralBalance?: string | null;
+  clobCollateralAllowance?: string | null;
+  clobAllowanceSpenders?: Array<{ spenderAddress: string; allowance: string }>;
+  approvalSpenderSource?: "CLOB_ALLOWANCE_MAP" | "CONFIG_FALLBACK" | "UNAVAILABLE";
+  readinessReason?: string | null;
 }
 
 export interface VenueBalanceActivationInput {
   balances: readonly VenueBalanceView[];
   venueAccounts: readonly UserVenueAccount[];
   env?: NodeJS.ProcessEnv | undefined;
+  polymarketActivationExecuted?: boolean | undefined;
 }
 
 const activationVenues: readonly FundingVenue[] = ["POLYMARKET", "PREDICT_FUN"];
@@ -197,7 +207,8 @@ const buildRelayerAction = (
   venue: FundingVenue,
   account: UserVenueAccount | null,
   balance: VenueBalanceView | null,
-  env: NodeJS.ProcessEnv
+  env: NodeJS.ProcessEnv,
+  activationExecuted = false
 ): VenueBalanceActivationAction => {
   if (venue === "POLYMARKET" && hasAvailableReadyBalance(balance)) {
     return buildNotRequiredAction(venue, account, balance);
@@ -223,14 +234,19 @@ const buildRelayerAction = (
     amount: null,
     transactionRequest: null,
     instructions: polymarketReady
-      ? ["Use the Polymarket activation button. Lotus will prepare a safe deposit-wallet relayer batch for your Turnkey wallet to sign."]
+      ? [
+          activationExecuted
+            ? "Polymarket activation was submitted before, but Lotus still needs confirmed CLOB collateral before marking this venue ready. Use Activate again if USDC.e is still delivered but not spendable."
+            : "Use the Polymarket activation button. Lotus will prepare a safe deposit-wallet relayer batch for your Turnkey wallet to sign."
+        ]
       : [
           `${venue} activation requires the official venue relayer/UI path or an operator-reviewed activation endpoint.`,
           "Lotus will not guess or accept arbitrary spender addresses from the frontend."
         ],
     blockers: account
       ? polymarketReady ? [] : [`${venue} activation transaction is not configured for backend-safe preparation.`]
-      : [`${venue} active venue account is required before activation.`]
+      : [`${venue} active venue account is required before activation.`],
+    ...(venue === "POLYMARKET" ? { lastSubmitted: activationExecuted } : {})
   };
 };
 
@@ -267,7 +283,7 @@ export const buildVenueBalanceActivationActions = (
       return buildErc20ApprovalAction(venue, input, account, balance);
     }
     if (mode === "VENUE_UI_OR_RELAYER") {
-      return buildRelayerAction(venue, account, balance, env);
+      return buildRelayerAction(venue, account, balance, env, input.polymarketActivationExecuted);
     }
     return buildNotRequiredAction(venue, account, balance);
   });

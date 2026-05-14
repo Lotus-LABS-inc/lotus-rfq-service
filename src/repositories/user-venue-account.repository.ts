@@ -22,6 +22,12 @@ interface UserVenueAccountRow {
   last_verified_at: Date | null;
 }
 
+interface UserVenueAccountAuditEventRow {
+  event_type: string;
+  payload: Record<string, unknown>;
+  created_at: Date;
+}
+
 export class UserVenueAccountRepository implements UserVenueAccountRepositoryContract {
   public constructor(private readonly pool: Pool) {}
 
@@ -117,6 +123,27 @@ export class UserVenueAccountRepository implements UserVenueAccountRepositoryCon
       [input.userId, input.venueAccountBindingId ?? null, input.eventType, input.payload]
     );
     return result.rows[0]!.id;
+  }
+
+  public async findLatestAccountAuditEvent(input: {
+    userId: string;
+    venueAccountBindingId: string;
+    eventType: string;
+  }): Promise<{ eventType: string; payload: Record<string, unknown>; createdAt: string } | null> {
+    const result = await this.pool.query<UserVenueAccountAuditEventRow>(
+      `SELECT event_type, payload, created_at
+         FROM user_venue_account_audit_events
+        WHERE user_id = $1
+          AND venue_account_id = $2::uuid
+          AND event_type = $3
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [input.userId, input.venueAccountBindingId, input.eventType]
+    );
+    const row = result.rows[0];
+    return row
+      ? { eventType: row.event_type, payload: row.payload, createdAt: row.created_at.toISOString() }
+      : null;
   }
 
   private async upsertAccountWithClient(

@@ -1,4 +1,5 @@
 import type { FundingVenue, VenueCapability } from "./types.js";
+import { resolvePolymarketBridgeDestinationAsset } from "./polymarket-bridge-withdrawal-adapter.js";
 
 export interface VenueCapabilityConfig {
   env?: NodeJS.ProcessEnv | undefined;
@@ -51,7 +52,14 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
   const solanaUsdcAddress = envValue(env, "SOLANA_USDC_TOKEN_ADDRESS") ?? "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
   const solanaUsdtAddress = envValue(env, "SOLANA_USDT_TOKEN_ADDRESS") ?? "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY1p8ARw5ygP2Z7n";
   const polygonUsdcAddress = envValue(env, "POLYGON_USDC_TOKEN_ADDRESS") ?? "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
+  const baseUsdcAddress = envValue(env, "BASE_USDC_TOKEN_ADDRESS")
+    ?? envValue(env, "LIMITLESS_USDC_TOKEN_ADDRESS")
+    ?? "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
   const bscUsdtAddress = envValue(env, "BSC_USDT_TOKEN_ADDRESS") ?? "0x55d398326f99059fF775485246999027B3197955";
+  const baseUsdcSourceTokenAddressByChain = {
+    BASE: baseUsdcAddress,
+    "8453": baseUsdcAddress
+  };
   const limitlessPreferredChain = envValue(env, "LIMITLESS_FUNDING_PREFERRED_CHAIN") ?? "BASE";
   const limitlessPreferredChainId = Number.parseInt(envValue(env, "LIMITLESS_FUNDING_PREFERRED_CHAIN_ID") ?? "8453", 10);
   const limitlessUsdcAddress = envValue(env, "LIMITLESS_USDC_TOKEN_ADDRESS") ?? "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
@@ -66,6 +74,7 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
   const opinionSourceTokenAddress = opinionPreferredToken === "USDT" ? solanaUsdtAddress : solanaUsdcAddress;
   const opinionSourceTokenAddressByChain = {
     SOLANA: opinionSourceTokenAddress,
+    ...(opinionPreferredToken === "USDC" ? baseUsdcSourceTokenAddressByChain : {}),
     ...(opinionPreferredToken === "USDT" && (opinionPreferredChainKey === "BNB" || opinionPreferredChainId === 56)
       ? {
         BNB: opinionPreferredTokenAddress,
@@ -86,6 +95,7 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       : myriadUsdcAddress;
   const myriadSourceTokenAddressByChain = {
     SOLANA: solanaUsdcAddress,
+    ...(myriadPreferredToken === "USDC" ? baseUsdcSourceTokenAddressByChain : {}),
     ...(myriadPreferredToken === "USDC" && (myriadPreferredChainKey === "POLYGON" || myriadPreferredChainId === 137)
       ? {
         POLYGON: myriadPreferredTokenAddress,
@@ -100,9 +110,9 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       }
       : {})
   };
-  const predictFunPreferredChain = envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_CHAIN") ?? "POLYGON";
-  const predictFunPreferredChainId = Number.parseInt(envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_CHAIN_ID") ?? "137", 10);
-  const predictFunPreferredToken = envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_TOKEN") ?? "USDC";
+  const predictFunPreferredChain = envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_CHAIN") ?? "BSC";
+  const predictFunPreferredChainId = Number.parseInt(envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_CHAIN_ID") ?? "56", 10);
+  const predictFunPreferredToken = envValue(env, "PREDICT_FUN_FUNDING_PREFERRED_TOKEN") ?? "USDT";
   const predictFunPreferredChainKey = normalizeChainKey(predictFunPreferredChain);
   const predictFunPreferredTokenAddress = predictFunPreferredToken === "USDT"
     ? envValue(env, "PREDICT_FUN_USDT_TOKEN_ADDRESS") ?? bscUsdtAddress
@@ -110,6 +120,7 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
   const predictFunSourceTokenAddress = predictFunPreferredToken === "USDT" ? solanaUsdtAddress : solanaUsdcAddress;
   const predictFunSourceTokenAddressByChain = {
     SOLANA: predictFunSourceTokenAddress,
+    ...(predictFunPreferredToken === "USDC" ? baseUsdcSourceTokenAddressByChain : {}),
     ...(predictFunPreferredToken === "USDT" && (predictFunPreferredChainKey === "BNB" || predictFunPreferredChainId === 56)
       ? {
         BNB: predictFunPreferredTokenAddress,
@@ -120,23 +131,28 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
   };
   const supportsWithdrawal = (venue: FundingVenue): boolean => envValue(env, `${venue}_FUNDING_WITHDRAWALS_ENABLED`) === "true";
   const limitlessBridgeBackEnabled = supportsWithdrawal("LIMITLESS") && envValue(env, "LIMITLESS_WITHDRAWAL_BRIDGE_BACK_ENABLED") === "true";
+  const polymarketWithdrawalDestinations = ["POLYGON", "BASE"].map((chain) =>
+    toWithdrawalDestination(resolvePolymarketBridgeDestinationAsset(chain, "USDC"), supportsWithdrawal("POLYMARKET"))
+  );
 
   return {
     POLYMARKET: {
       venue: "POLYMARKET",
-      supportedChains: ["SOLANA"],
+      supportedChains: ["SOLANA", "BASE", "8453"],
       supportedTokens: ["USDC"],
       preferredChain: "POLYGON",
       preferredToken: "USDC",
       preferredChainId: 137,
       preferredTokenAddress: polygonUsdcAddress,
       sourceTokenAddressByChain: {
-        SOLANA: solanaUsdcAddress
+        SOLANA: solanaUsdcAddress,
+        ...baseUsdcSourceTokenAddressByChain
       },
       autoCreditSupported: false,
       requiresFinalizationStep: true,
       supportsDirectDeposit: true,
       supportsWithdrawal: supportsWithdrawal("POLYMARKET"),
+      withdrawalDestinations: polymarketWithdrawalDestinations,
       withdrawalMode: "USER_SIGNED",
       userSignedWithdrawalSupported: true,
       partnerManagedWithdrawal: null,
@@ -150,19 +166,27 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
     },
     LIMITLESS: {
       venue: "LIMITLESS",
-      supportedChains: ["SOLANA"],
+      supportedChains: ["SOLANA", "BASE", "8453"],
       supportedTokens: ["USDC"],
       preferredChain: limitlessPreferredChain,
       preferredToken: "USDC",
       preferredChainId: Number.isFinite(limitlessPreferredChainId) && limitlessPreferredChainId > 0 ? limitlessPreferredChainId : 8453,
       preferredTokenAddress: limitlessUsdcAddress,
       sourceTokenAddressByChain: {
-        SOLANA: solanaUsdcAddress
+        SOLANA: solanaUsdcAddress,
+        ...baseUsdcSourceTokenAddressByChain
       },
       autoCreditSupported: false,
       requiresFinalizationStep: true,
       supportsDirectDeposit: true,
       supportsWithdrawal: limitlessBridgeBackEnabled,
+      withdrawalDestinations: [toWithdrawalDestination({
+        chain: "SOLANA",
+        chainId: 101,
+        token: "USDC",
+        tokenAddress: solanaUsdcAddress,
+        decimals: 6
+      }, limitlessBridgeBackEnabled, "Limitless beta withdrawals bridge venue-ready Base USDC back to Solana USDC.")],
       withdrawalMode: "AUTO_RESOLUTION_ONLY",
       userSignedWithdrawalSupported: false,
       partnerManagedWithdrawal: {
@@ -279,12 +303,32 @@ const configurableCapability = (input: {
   requiresFinalizationStep: true,
   supportsDirectDeposit: true,
   supportsWithdrawal: input.supportsWithdrawal,
+  withdrawalDestinations: [toWithdrawalDestination({
+    chain: input.preferredChain,
+    chainId: Number.isFinite(input.preferredChainId) && input.preferredChainId > 0 ? input.preferredChainId : 137,
+    token: input.preferredToken ?? "USDC",
+    tokenAddress: input.preferredTokenAddress,
+    decimals: 6
+  }, input.supportsWithdrawal)],
   withdrawalMode: "USER_SIGNED",
   userSignedWithdrawalSupported: true,
   partnerManagedWithdrawal: null,
   readinessStatus: input.depositAddress ? "READY" : "DISABLED",
   depositAddressConfigured: Boolean(input.depositAddress),
   notes: input.depositAddress ? input.configuredNote : input.missingNote
+});
+
+const toWithdrawalDestination = (
+  input: { chain: string; chainId: string | number; token: string; tokenAddress: string; decimals?: number },
+  supported: boolean,
+  notes?: string
+): NonNullable<VenueCapability["withdrawalDestinations"]>[number] => ({
+  chain: normalizeChainKey(input.chain),
+  chainId: typeof input.chainId === "number" ? input.chainId : Number.parseInt(input.chainId, 10),
+  token: input.token,
+  tokenAddress: input.tokenAddress,
+  supported,
+  ...(notes ? { notes } : {})
 });
 
 const normalizeChainKey = (value: string): string => {

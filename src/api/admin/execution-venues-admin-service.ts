@@ -121,10 +121,13 @@ export class ExecutionVenuesAdminService {
     const adapterStatus = getPolymarketExecutionAdapterV2EnvStatus(this.env);
     const lastHarnessAttempt = await this.readPolymarketHarnessArtifact();
     const operationalStatus = this.resolveOperationalStatus(adapterStatus, lastHarnessAttempt.errorCode);
+    const userScopedPolymarketExecution = `${this.env.POLYMARKET_EXECUTION_ACCOUNT_SCOPE ?? "user_venue_account"}`
+      .trim()
+      .toLowerCase() !== "backend_signer";
     return this.withVenueAccountReadiness({
       venue: "POLYMARKET",
       adapter: "PolymarketExecutionAdapterV2",
-      executionSigningModel: "BACKEND_SIGNER",
+      executionSigningModel: userScopedPolymarketExecution ? "USER_SIGNED_BACKEND_RELAY" : "BACKEND_SIGNER",
       structuralReadiness: adapterStatus.readinessState,
       operationalStatus,
       marketRoutingCoverage: "COVERED_BY_MATCHING",
@@ -142,7 +145,9 @@ export class ExecutionVenuesAdminService {
       missingDryRunEnv: adapterStatus.missingDryRunEnv,
       credentialsServerSideOnly: true,
       lastHarnessAttempt,
-      operatorMessage: this.operatorMessage(adapterStatus, operationalStatus, lastHarnessAttempt.errorCode),
+      operatorMessage: userScopedPolymarketExecution
+        ? "Polymarket routes use the user's venue deposit wallet. Lotus must collect a Turnkey-backed user signature before live submit; backend signer funds are not used for user orders."
+        : this.operatorMessage(adapterStatus, operationalStatus, lastHarnessAttempt.errorCode),
       venueAccountRequired: false,
       venueAccountConfigured: false,
       activeLinkedAccounts: 0,

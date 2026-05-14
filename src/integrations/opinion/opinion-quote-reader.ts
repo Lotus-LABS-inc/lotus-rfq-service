@@ -24,7 +24,7 @@ export class OpinionQuoteReader implements VenueQuoteSnapshotReader {
   }
 
   public async getQuoteSnapshot(input: VenueQuoteSnapshotReaderInput): Promise<NormalizedVenueQuoteSnapshot | null> {
-    const tokenId = input.venueOutcomeId ?? input.venueMarketId;
+    const tokenId = input.venueOutcomeId ?? opinionExecutableTokenId(input.venueMarketId);
     const cached = this.config.streamCache.get({
       venue: this.venue,
       venueMarketId: input.venueMarketId,
@@ -47,6 +47,11 @@ export class OpinionQuoteReader implements VenueQuoteSnapshotReader {
   }
 }
 
+const opinionExecutableTokenId = (venueMarketId: string): string => {
+  const numericPrefix = venueMarketId.match(/^(\d+)(?=[:_-])/);
+  return numericPrefix?.[1] ?? venueMarketId;
+};
+
 export const normalizeOpinionOrderbook = (input: {
   payload: unknown;
   venueMarketId: string;
@@ -58,6 +63,7 @@ export const normalizeOpinionOrderbook = (input: {
   const record = unwrapRecord(input.payload);
   const bids = normalizeLevels(record.bids);
   const asks = normalizeLevels(record.asks);
+  const blockers = bids.length === 0 || asks.length === 0 ? ["QUOTE_PROVIDER_EMPTY_BOOK"] : [];
   return {
     venue: "OPINION",
     venueMarketId: input.venueMarketId,
@@ -72,7 +78,7 @@ export const normalizeOpinionOrderbook = (input: {
     ...(input.feeBps === undefined && input.topicRate !== undefined ? { opinionTopicRate: input.topicRate } : {}),
     settlementEvidenceSupported: true,
     missingFactors: input.feeBps === undefined && input.topicRate === undefined ? ["FEE_DISCOVERY"] : [],
-    blockers: [],
+    blockers,
     streamResynced: true,
     metadata: {
       venueMarketId: input.venueMarketId,

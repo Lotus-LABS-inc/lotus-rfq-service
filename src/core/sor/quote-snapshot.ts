@@ -160,6 +160,7 @@ export interface VenueQuoteSnapshotBlocker {
   reason: string;
   venueMarketId?: string | undefined;
   venueOutcomeId?: string | undefined;
+  detailsCode?: string | undefined;
 }
 
 export interface CalculatedVenueQuoteSnapshotReport {
@@ -343,14 +344,16 @@ export class CompositeVenueQuoteSource {
           };
         }
         return { snapshot, blocker: null };
-      } catch {
+      } catch (error) {
+        const classified = classifyQuoteReaderError(error);
         return {
           snapshot: null,
           blocker: {
             venue: mapping.venue.toUpperCase(),
-            reason: "QUOTE_READER_FAILED",
+            reason: classified.reason,
             venueMarketId: mapping.venueMarketId,
-            ...(mapping.venueOutcomeId ? { venueOutcomeId: mapping.venueOutcomeId } : {})
+            ...(mapping.venueOutcomeId ? { venueOutcomeId: mapping.venueOutcomeId } : {}),
+            ...(classified.detailsCode ? { detailsCode: classified.detailsCode } : {})
           }
         };
       }
@@ -552,8 +555,12 @@ const normalizeSharedCoreMappingReadiness = (
     const venueOutcomeId = firstString(
       tokenForCanonicalOutcome(normalizedPayload.quoteOutcomeTokenIds, canonicalOutcomeId),
       tokenForCanonicalOutcome(normalizedPayload.quote_outcome_token_ids, canonicalOutcomeId),
+      tokenForCanonicalOutcome(normalizedPayload.outcomes, canonicalOutcomeId),
+      tokenForCanonicalOutcome(normalizedPayload.tokens, canonicalOutcomeId),
       tokenForCanonicalOutcome(rawPayload.quoteOutcomeTokenIds, canonicalOutcomeId),
       tokenForCanonicalOutcome(rawPayload.quote_outcome_token_ids, canonicalOutcomeId),
+      tokenForCanonicalOutcome(rawPayload.outcomes, canonicalOutcomeId),
+      tokenForCanonicalOutcome(rawPayload.tokens, canonicalOutcomeId),
       normalizedPayload.quoteTokenId,
       normalizedPayload.quote_token_id,
       normalizedPayload.quoteOutcomeId,
@@ -571,7 +578,17 @@ const normalizeSharedCoreMappingReadiness = (
       rawPayload.venueOutcomeId,
       rawPayload.venue_outcome_id
     );
-    const blockers = quoteMappingBlockers({ venue, venueMarketId, venueOutcomeId });
+    const blockers = quoteMappingBlockers({
+      venue,
+      venueMarketId,
+      venueOutcomeId,
+      providerBlockers: [
+        ...stringArray(normalizedPayload.quoteVerificationBlockers),
+        ...stringArray(normalizedPayload.quote_verification_blockers),
+        ...stringArray(rawPayload.quoteVerificationBlockers),
+        ...stringArray(rawPayload.quote_verification_blockers)
+      ]
+    });
     return [{
       venue,
       approvedVenueMarketId: row.venue_market_id,
@@ -620,6 +637,7 @@ const quoteMappingBlockers = (input: {
   venue: string;
   venueMarketId: string | null;
   venueOutcomeId: string | null;
+  providerBlockers?: readonly string[] | undefined;
 }): readonly string[] => {
   const blockers: string[] = [];
   if (!supportedQuoteVenues.has(input.venue)) {
@@ -631,17 +649,96 @@ const quoteMappingBlockers = (input: {
   // Some official venue APIs can resolve executable outcome tokens from the approved
   // shared-core market id at quote time. Keep routing fail-closed in the reader instead
   // of blocking before that source-backed lookup runs.
-  if (input.venue === "OPINION" && !input.venueOutcomeId && !looksLikeNumericId(input.venueMarketId)) {
+  if (input.venue === "OPINION" && !input.venueOutcomeId && !looksLikeOpinionExecutableId(input.venueMarketId)) {
     blockers.push("OPINION_TOKEN_ID_MISSING");
   }
+  blockers.push(...(input.providerBlockers ?? []));
   return [...new Set(blockers)];
+};
+
+const classifyQuoteReaderError = (error: unknown): { reason: string; detailsCode?: string | undefined } => {
+  const record = asRecord(error);
+  const status = typeof record.status === "number" && Number.isInteger(record.status) ? record.status : null;
+  const name = firstString(record.name);
+  const message = error instanceof Error ? error.message : firstString(record.message) ?? String(error);
+  const normalized = `${name ?? ""} ${message}`.toUpperCase();
+  const messageStatus = message.match(/\bstatus\s+(\d{3})\b/i)?.[1] ?? null;
+
+  if (status !== null || messageStatus !== null) {
+    return { reason: `QUOTE_PROVIDER_HTTP_${status ?? messageStatus}`, detailsCode: safeDetailsCode(message) };
+  }
+  if (normalized.includes("TIMEOUT") || normalized.includes("ABORT")) {
+    return { reason: "QUOTE_PROVIDER_TIMEOUT", detailsCode: safeDetailsCode(message) };
+  }
+  if (normalized.includes("TOKEN_ID_MISSING") || normalized.includes("OPINION_TOKEN_ID_MISSING")) {
+    return { reason: "OPINION_TOKEN_ID_MISSING", detailsCode: safeDetailsCode(message) };
+  }
+  if (normalized.includes("VENUE_OUTCOME_ID_MISSING") || normalized.includes("OUTCOME_ID_MISSING")) {
+    return { reason: "VENUE_OUTCOME_ID_MISSING", detailsCode: safeDetailsCode(message) };
+  }
+  if (
+    normalized.includes("BAD_PAYLOAD") ||
+    normalized.includes("INVALID_PAYLOAD") ||
+    normalized.includes("ZOD") ||
+    normalized.includes("PARSE") ||
+    normalized.includes("JSON")
+  ) {
+    return { reason: "QUOTE_PROVIDER_BAD_PAYLOAD", detailsCode: safeDetailsCode(message) };
+  }
+  if (normalized.includes("EMPTY_BOOK") || normalized.includes("ORDERBOOK_EMPTY") || normalized.includes("NO_ORDERBOOK")) {
+    return { reason: "QUOTE_PROVIDER_EMPTY_BOOK", detailsCode: safeDetailsCode(message) };
+  }
+  return { reason: "QUOTE_READER_FAILED", detailsCode: safeDetailsCode(message) };
+};
+
+const safeDetailsCode = (value: string | null): string | undefined => {
+  if (!value) return undefined;
+  const normalized = value
+    .replace(/0x[a-f0-9]{16,}/gi, "0xREDACTED")
+    .replace(/[A-Za-z0-9_-]{24,}/g, "REDACTED")
+    .replace(/[^A-Za-z0-9_:.-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 96);
+  return normalized || undefined;
 };
 
 const looksLikeNumericId = (value: string | null): boolean =>
   typeof value === "string" && /^\d+$/.test(value);
 
+const looksLikeOpinionExecutableId = (value: string | null): boolean =>
+  looksLikeNumericId(value) || (typeof value === "string" && /^\d{5,}(?=[:_-])/.test(value));
+
 const tokenForCanonicalOutcome = (value: unknown, canonicalOutcomeId?: string | undefined): string | null => {
   if (!canonicalOutcomeId) {
+    return null;
+  }
+  if (Array.isArray(value)) {
+    const normalizedOutcomeId = canonicalOutcomeId.trim().toUpperCase();
+    for (const item of value) {
+      const record = asRecord(item);
+      const labels = [
+        firstString(record.id),
+        firstString(record.label),
+        firstString(record.name),
+        firstString(record.outcome),
+        firstString(record.outcomeId),
+        firstString(record.outcome_id)
+      ]
+        .filter((entry): entry is string => entry !== null)
+        .map((entry) => entry.trim().toUpperCase().replace(/\s+/g, "_"));
+      if (!labels.includes(normalizedOutcomeId) && !(normalizedOutcomeId === "YES" && labels.includes("Y")) && !(normalizedOutcomeId === "NO" && labels.includes("N"))) {
+        continue;
+      }
+      const token = firstString(
+        record.tokenId,
+        record.token_id,
+        record.quoteTokenId,
+        record.quote_token_id,
+        record.venueOutcomeId,
+        record.venue_outcome_id
+      );
+      if (token) return token;
+    }
     return null;
   }
   const record = asRecord(value);
@@ -667,6 +764,11 @@ const firstString = (...values: readonly unknown[]): string | null => {
   }
   return null;
 };
+
+const stringArray = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((item) => item.trim())
+    : [];
 
 const stripCuratedVenueMarketId = (
   venueMarketId: string,

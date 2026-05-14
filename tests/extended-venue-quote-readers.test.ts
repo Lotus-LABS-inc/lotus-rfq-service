@@ -255,7 +255,14 @@ describe("extended venue quote readers", () => {
             marketType: "group",
             markets: [
               { slug: "jon-ossoff-1768927395480", title: "Jon Ossoff" },
-              { slug: "gavin-newsom-1768927395479", title: "Gavin Newsom" }
+              {
+                slug: "gavin-newsom-1768927395479",
+                title: "Gavin Newsom",
+                venue: {
+                  exchange: "0xe3E00BA3a9888d1DE4834269f62ac008b4BB5C47",
+                  adapter: "0x0000000000000000000000000000000000000002"
+                }
+              }
             ]
           };
         },
@@ -293,7 +300,61 @@ describe("extended venue quote readers", () => {
       approvedVenueMarketId: "democratic-presidential-nominee-2028-1768929458278",
       venueMarketId: "gavin-newsom-1768927395479",
       venueOutcomeId: "gavin-token",
-      outcomeSide: "NO"
+      outcomeSide: "NO",
+      limitlessExchangeAddress: "0xe3E00BA3a9888d1DE4834269f62ac008b4BB5C47",
+      limitlessAdapterAddress: "0x0000000000000000000000000000000000000002"
+    });
+  });
+
+  it("Limitless reader enriches stream cache snapshots with market exchange metadata", async () => {
+    const streamCache = new QuoteSnapshotCache();
+    streamCache.put({
+      venue: "LIMITLESS",
+      venueMarketId: "alexandria-ocasio-cortez-1768927395488",
+      venueOutcomeId: "yes-token",
+      source: "STREAM",
+      quoteQuality: "FULL_DEPTH_STREAM",
+      sourceTimestamp: now,
+      receivedAt: now,
+      bids: [{ price: "0.08", size: "10" }],
+      asks: [{ price: "0.09", size: "10" }],
+      metadata: {
+        venueMarketId: "alexandria-ocasio-cortez-1768927395488",
+        venueOutcomeId: "yes-token"
+      }
+    });
+    const reader = new LimitlessQuoteReader({
+      streamCache,
+      now: () => now,
+      client: {
+        async getMarketDetail() {
+          return {
+            slug: "alexandria-ocasio-cortez-1768927395488",
+            venue: {
+              exchange: "0xe3E00BA3a9888d1DE4834269f62ac008b4BB5C47",
+              adapter: "0x6151EF8368b6316c1aa3C68453EF083ad31E712D"
+            }
+          };
+        },
+        async getOrderbook() {
+          throw new Error("stream cache should avoid orderbook reads");
+        }
+      }
+    });
+
+    const snapshot = await reader.getQuoteSnapshot({
+      canonicalMarketId: "FRONTEND_CURATED:NOMINEE|US_PRESIDENT|2028|DEMOCRATIC|ALEXANDRIA_OCASIO_CORTEZ:LIMITLESS",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "alexandria-ocasio-cortez-1768927395488",
+      venueOutcomeId: "yes-token",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(snapshot?.source).toBe("STREAM");
+    expect(snapshot?.metadata).toMatchObject({
+      limitlessExchangeAddress: "0xe3E00BA3a9888d1DE4834269f62ac008b4BB5C47",
+      limitlessAdapterAddress: "0x6151EF8368b6316c1aa3C68453EF083ad31E712D"
     });
   });
 
@@ -509,5 +570,55 @@ describe("extended venue quote readers", () => {
 
     expect(requestedTokenId).toBe("no-token");
     expect(snapshot?.venueOutcomeId).toBe("no-token");
+  });
+
+  it("Polymarket reader returns display-only metadata prices when CLOB book is disabled", async () => {
+    const reader = new PolymarketQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      now: () => now,
+      client: {
+        async getOrderbook() {
+          throw new Error("Polymarket orderbook request failed with status 404.");
+        }
+      },
+      metadataClient: {
+        async getMarketByIdentifier() {
+          return [{
+            conditionId: "0xcondition",
+            marketId: "123",
+            marketSlug: "will-barcelona-win-la-liga",
+            title: "Will Barcelona win La Liga?",
+            raw: {
+              active: true,
+              closed: true,
+              accepting_orders: false,
+              enable_order_book: false,
+              outcomes: "[\"Yes\", \"No\"]",
+              clobTokenIds: "[\"yes-token\", \"no-token\"]",
+              outcomePrices: "[\"1\", \"0\"]"
+            }
+          }];
+        }
+      }
+    });
+
+    const snapshot = await reader.getQuoteSnapshot({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "0xcondition",
+      venueOutcomeId: "yes-token",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(snapshot?.quoteQuality).toBe("INDICATIVE_DEPTH");
+    expect(snapshot?.asks[0]).toEqual({ price: "1", size: "0" });
+    expect(snapshot?.blockers).toContain("ORDERBOOK_UNAVAILABLE_DISPLAY_ONLY");
+    expect(calculateVenueQuote({
+      snapshot: snapshot!,
+      side: "buy",
+      amount: 1,
+      now
+    }).ok).toBe(false);
   });
 });

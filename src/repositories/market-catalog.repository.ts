@@ -1,6 +1,29 @@
 import type { Pool } from "pg";
 import type { SharedCoreQuoteMappingLoader, SharedCoreVenueQuoteMappingRow } from "../core/sor/quote-snapshot.js";
 
+const FRONTEND_CATALOG_EXCLUDED_TOPIC_PREFIXES = [
+  "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026"
+] as const;
+
+const addFrontendCatalogExclusionCondition = (conditions: string[], params: unknown[]): void => {
+  params.push([...FRONTEND_CATALOG_EXCLUDED_TOPIC_PREFIXES]);
+  conditions.push(`NOT EXISTS (
+    SELECT 1
+      FROM unnest($${params.length}::text[]) excluded(prefix)
+     WHERE upper(ce.proposition_key) = upper(excluded.prefix)
+        OR upper(ce.proposition_key) LIKE '%' || upper(excluded.prefix) || '%'
+        OR EXISTS (
+          SELECT 1
+            FROM canonical_executable_markets cem_excluded
+           WHERE cem_excluded.canonical_event_id = ce.id
+             AND (
+               upper(cem_excluded.id) = upper(excluded.prefix)
+               OR upper(cem_excluded.id) LIKE '%' || upper(excluded.prefix) || '%'
+             )
+        )
+  )`);
+};
+
 export interface MarketCatalogFilter {
   category?: string;
   search?: string;
@@ -46,6 +69,9 @@ export interface MarketCatalogMarket {
   eventTitle?: string;
   canonicalEventId: string;
   canonicalMarketIds: string[];
+  displayTopic: string;
+  displayOutcome: string;
+  displayOutcomeKey: string;
   title: string;
   normalizedTitle: string;
   category: string;
@@ -101,6 +127,13 @@ export interface MarketCatalogEvent {
   buyCount: string | null;
   sellCount: string | null;
   updatedAt: string;
+}
+
+export interface MarketDisplayMetadataInput {
+  canonical_market_ids: string[];
+  title: string;
+  proposition_key: string;
+  frontend_display_title: string | null;
 }
 
 interface MarketRow {
@@ -181,8 +214,24 @@ export class MarketCatalogRepository {
          LEFT JOIN venue_market_profiles vmp
            ON vmp.canonical_event_id = ce.id
         WHERE cem.id IS NOT NULL OR vmp.id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1
+             FROM unnest($1::text[]) excluded(prefix)
+             WHERE upper(ce.proposition_key) = upper(excluded.prefix)
+                OR upper(ce.proposition_key) LIKE '%' || upper(excluded.prefix) || '%'
+                OR EXISTS (
+                  SELECT 1
+                    FROM canonical_executable_markets cem_excluded
+                   WHERE cem_excluded.canonical_event_id = ce.id
+                     AND (
+                       upper(cem_excluded.id) = upper(excluded.prefix)
+                       OR upper(cem_excluded.id) LIKE '%' || upper(excluded.prefix) || '%'
+                     )
+                )
+          )
         GROUP BY ce.canonical_category
-        ORDER BY ce.canonical_category`
+        ORDER BY ce.canonical_category`,
+      [[...FRONTEND_CATALOG_EXCLUDED_TOPIC_PREFIXES]]
     );
     return result.rows.map((row) => ({
       category: row.category,
@@ -198,6 +247,7 @@ export class MarketCatalogRepository {
       conditions.push(`fma.status = 'APPROVED'`);
       conditions.push(`fma.metadata->>'source' = '${FRONTEND_SHARED_CORE_APPROVAL_SOURCE}'`);
     }
+    addFrontendCatalogExclusionCondition(conditions, params);
     if (filter.category?.trim()) {
       params.push(filter.category.trim().toUpperCase());
       conditions.push(`ce.canonical_category = $${params.length}`);
@@ -312,10 +362,25 @@ export class MarketCatalogRepository {
            ON mem.canonical_executable_market_id = cem.id
          LEFT JOIN venue_market_profiles vmp
            ON vmp.id = mem.venue_market_profile_id OR vmp.canonical_event_id = ce.id
-        WHERE ce.id::text = $1 OR cem.id = $1 OR ce.proposition_key = $1
+        WHERE (ce.id::text = $1 OR cem.id = $1 OR ce.proposition_key = $1)
+          AND NOT EXISTS (
+            SELECT 1
+             FROM unnest($2::text[]) excluded(prefix)
+             WHERE upper(ce.proposition_key) = upper(excluded.prefix)
+                OR upper(ce.proposition_key) LIKE '%' || upper(excluded.prefix) || '%'
+                OR EXISTS (
+                  SELECT 1
+                    FROM canonical_executable_markets cem_excluded
+                   WHERE cem_excluded.canonical_event_id = ce.id
+                     AND (
+                       upper(cem_excluded.id) = upper(excluded.prefix)
+                       OR upper(cem_excluded.id) LIKE '%' || upper(excluded.prefix) || '%'
+                     )
+                )
+          )
         GROUP BY ce.id
         LIMIT 1`,
-      [marketId]
+      [marketId, [...FRONTEND_CATALOG_EXCLUDED_TOPIC_PREFIXES]]
     );
     const [market] = await this.hydrateMarkets(result.rows);
     return market ?? null;
@@ -380,10 +445,25 @@ export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingL
            FROM canonical_events ce
            LEFT JOIN canonical_executable_markets cem
              ON cem.canonical_event_id = ce.id
-          WHERE ce.id::text = $1
+          WHERE (ce.id::text = $1
              OR ce.proposition_key = $1
              OR cem.id = $1
-             OR regexp_replace(cem.id, ':(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$', '') = $1
+             OR regexp_replace(cem.id, ':(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$', '') = $1)
+            AND NOT EXISTS (
+              SELECT 1
+               FROM unnest($3::text[]) excluded(prefix)
+               WHERE upper(ce.proposition_key) = upper(excluded.prefix)
+                  OR upper(ce.proposition_key) LIKE '%' || upper(excluded.prefix) || '%'
+                  OR EXISTS (
+                    SELECT 1
+                      FROM canonical_executable_markets cem_excluded
+                     WHERE cem_excluded.canonical_event_id = ce.id
+                       AND (
+                         upper(cem_excluded.id) = upper(excluded.prefix)
+                         OR upper(cem_excluded.id) LIKE '%' || upper(excluded.prefix) || '%'
+                       )
+                  )
+            )
           LIMIT 1
        )
        SELECT
@@ -396,10 +476,14 @@ export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingL
           ON fma.canonical_event_id = se.id
          AND fma.status = 'APPROVED'
          AND fma.metadata->>'source' = $2
-        JOIN venue_market_profiles vmp
+       JOIN venue_market_profiles vmp
           ON vmp.canonical_event_id = se.id
        ORDER BY vmp.venue`,
-      [input.canonicalMarketId, this.options.approvalSource ?? FRONTEND_SHARED_CORE_APPROVAL_SOURCE]
+      [
+        input.canonicalMarketId,
+        this.options.approvalSource ?? FRONTEND_SHARED_CORE_APPROVAL_SOURCE,
+        [...FRONTEND_CATALOG_EXCLUDED_TOPIC_PREFIXES]
+      ]
     );
     return result.rows;
   }
@@ -415,6 +499,21 @@ export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingL
              ON fma.canonical_event_id = ce.id
             AND fma.status = 'APPROVED'
             AND fma.metadata->>'source' = $2
+          WHERE NOT EXISTS (
+            SELECT 1
+             FROM unnest($3::text[]) excluded(prefix)
+             WHERE upper(ce.proposition_key) = upper(excluded.prefix)
+                OR upper(ce.proposition_key) LIKE '%' || upper(excluded.prefix) || '%'
+                OR EXISTS (
+                  SELECT 1
+                    FROM canonical_executable_markets cem_excluded
+                   WHERE cem_excluded.canonical_event_id = ce.id
+                     AND (
+                       upper(cem_excluded.id) = upper(excluded.prefix)
+                       OR upper(cem_excluded.id) LIKE '%' || upper(excluded.prefix) || '%'
+                     )
+                )
+          )
           ORDER BY COALESCE(fma.sort_priority, 1000), ce.updated_at DESC
           LIMIT $1
        )
@@ -437,7 +536,8 @@ export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingL
        ORDER BY ce.title, vmp.venue`,
       [
         Math.max(1, Math.min(1000, Math.floor(input.limit))),
-        this.options.approvalSource ?? FRONTEND_SHARED_CORE_APPROVAL_SOURCE
+        this.options.approvalSource ?? FRONTEND_SHARED_CORE_APPROVAL_SOURCE,
+        [...FRONTEND_CATALOG_EXCLUDED_TOPIC_PREFIXES]
       ]
     );
     return result.rows;
@@ -449,6 +549,7 @@ const toMarket = (row: MarketRow, venueRows: VenueMarketRow[]): MarketCatalogMar
   const venueMarkets = venueRows.map(toVenueMarket);
   const outcomeLabels = new Set(venueMarkets.flatMap((market) => market.outcomes.map((outcome) => outcome.label)));
   const eventGroup = deriveEventGroup(row);
+  const display = deriveMarketDisplayMetadata(row);
   const media = chooseMarketMedia(venueMarkets);
   const metrics = aggregateVenueMetrics(venueMarkets);
   const expiresAt = row.expires_at ?? venueMarkets.find((market) => market.expiresAt !== null)?.expiresAt ?? null;
@@ -458,6 +559,9 @@ const toMarket = (row: MarketRow, venueRows: VenueMarketRow[]): MarketCatalogMar
     eventTitle: eventGroup.title,
     canonicalEventId: row.canonical_event_id,
     canonicalMarketIds: normalizeStringArray(row.canonical_market_ids),
+    displayTopic: display.displayTopic,
+    displayOutcome: display.displayOutcome,
+    displayOutcomeKey: display.displayOutcomeKey,
     title: row.frontend_display_title?.trim() || displayTitle(row.title, row.proposition_key),
     normalizedTitle: row.normalized_proposition_text,
     category: row.canonical_category,
@@ -486,6 +590,124 @@ const toMarket = (row: MarketRow, venueRows: VenueMarketRow[]): MarketCatalogMar
     sellCount: metrics.sellCount,
     venueMarkets,
     updatedAt: row.updated_at
+  };
+};
+
+export const deriveMarketDisplayMetadata = (row: MarketDisplayMetadataInput): {
+  displayTopic: string;
+  displayOutcome: string;
+  displayOutcomeKey: string;
+} => {
+  const canonicalId = normalizeStringArray(row.canonical_market_ids)[0] ?? row.proposition_key;
+  const parts = canonicalIdParts(canonicalId);
+  const fallbackTitle = row.frontend_display_title?.trim() || displayTitle(row.title, row.proposition_key);
+  const fallbackOutcome = deriveFallbackOutcomeLabel(fallbackTitle);
+  const fallbackTopic = deriveFallbackTopicLabel(fallbackTitle);
+
+  if (parts[0] === "CRYPTO" && parts[1] === "ATH_BY_DATE" && parts[2] && parts[3]) {
+    const date = normalizeDateToken(parts[3]) ?? normalizeDateToken(parts[4]);
+    if (date) {
+      return {
+        displayTopic: `${assetLabel(parts[2])} ATH by ____`,
+        displayOutcome: formatDisplayDate(date),
+        displayOutcomeKey: `date:${date}`
+      };
+    }
+  }
+
+  if (parts[0] === "GEOPOLITICAL_EVENT_BY_DATE" && parts[2] && parts[3]) {
+    const date = normalizeDateToken(parts[3]);
+    if (date) {
+      return {
+        displayTopic: `${toTitleCase(parts[2])} by ____`,
+        displayOutcome: formatDisplayDate(date),
+        displayOutcomeKey: `date:${date}`
+      };
+    }
+  }
+
+  if (parts[0] === "OFFICE_EXIT_BY_DATE" && parts[3] && parts[4]) {
+    const date = normalizeDateToken(parts[4]);
+    if (date) {
+      return {
+        displayTopic: `${toTitleCase(parts[3])} out by ____`,
+        displayOutcome: formatDisplayDate(date),
+        displayOutcomeKey: `date:${date}`
+      };
+    }
+  }
+
+  if (parts[0] === "NOMINEE" && parts[1] === "US_PRESIDENT" && parts[2] && parts[3] && parts[4]) {
+    return {
+      displayTopic: `${toTitleCase(parts[3])} Presidential Nominee ${parts[2]}`,
+      displayOutcome: toTitleCase(parts[4]),
+      displayOutcomeKey: `candidate:${parts[4].toUpperCase()}`
+    };
+  }
+
+  if (parts[0] === "OFFICE_WINNER" && parts.length >= 5) {
+    const candidate = parts[parts.length - 1];
+    return {
+      displayTopic: `${toTitleCase(parts.slice(1, -1).join(" "))} Winner`,
+      displayOutcome: toTitleCase(candidate ?? fallbackOutcome),
+      displayOutcomeKey: `candidate:${(candidate ?? fallbackOutcome).toUpperCase().replace(/\s+/g, "_")}`
+    };
+  }
+
+  if (parts[0] === "SPORTS" && parts[1] === "TOURNAMENT_WINNER" && parts[2] && parts[3] && parts[4]) {
+    const tournament = parts[2].toUpperCase() === "FIFA_WORLD_CUP" ? "FIFA World Cup" : toTitleCase(parts[2]);
+    return {
+      displayTopic: `${tournament} ${parts[3]} Winner`,
+      displayOutcome: toTitleCase(parts[4]),
+      displayOutcomeKey: `candidate:${parts[4].toUpperCase().replace(/\s+/g, "_")}`
+    };
+  }
+
+  if (parts[0] === "CRYPTO" && parts[1] === "FDV_THRESHOLD_AFTER_LAUNCH" && parts[2]) {
+    const amount = parts[parts.length - 1] ?? fallbackOutcome;
+    const numeric = parts.find((part) => /^\d{5,}$/.test(part));
+    return {
+      displayTopic: `${toTitleCase(parts[2])} FDV One Day After Launch`,
+      displayOutcome: formatMoneyCandidate(amount),
+      displayOutcomeKey: `threshold:${numeric ?? amount.toUpperCase()}`
+    };
+  }
+
+  if (parts[0] === "CRYPTO" && parts[1] === "TOKEN_LAUNCH_BY_DATE" && parts[2] && parts[3]) {
+    const date = normalizeDateToken(parts[3]) ?? normalizeDateToken(parts[4]);
+    if (date) {
+      return {
+        displayTopic: `${assetProjectLabel(parts[2])} to launch a token by ____`,
+        displayOutcome: formatDisplayDate(date),
+        displayOutcomeKey: `date:${date}`
+      };
+    }
+  }
+
+  if (parts[0] === "CRYPTO" && parts[1] === "THRESHOLD_BY_DATE" && parts[2] && parts[3] && parts[4] && parts[5]) {
+    const date = normalizeDateToken(parts[3]);
+    if (date) {
+      return {
+        displayTopic: `What price will ${assetProjectLabel(parts[2])} hit in ${formatMonthYear(date)}?`,
+        displayOutcome: `${parts[4].toUpperCase() === "BELOW" ? "↓" : "↑"} ${formatPriceCandidate(parts[5])}`,
+        displayOutcomeKey: `threshold:${parts[4].toUpperCase()}:${parts[5].replace(/[,_]/g, "")}`
+      };
+    }
+  }
+
+  if (parts[0] === "CRYPTO" && parts[1] === "FIRST_TO_THRESHOLD_BY_DATE" && parts[2] && parts[3] && parts[4]) {
+    return {
+      displayTopic: `${assetLabel(parts[2])} first to hit ____`,
+      displayOutcome: `${formatPriceCandidate(parts[3])} or ${formatPriceCandidate(parts[4])} first`,
+      displayOutcomeKey: `first-threshold:${parts[3].replace(/[,_]/g, "")}:${parts[4].replace(/[,_]/g, "")}`
+    };
+  }
+
+  const fallbackDate = normalizeDateToken(fallbackOutcome);
+  return {
+    displayTopic: fallbackTopic,
+    displayOutcome: fallbackDate ? formatDisplayDate(fallbackDate) : fallbackOutcome,
+    displayOutcomeKey: fallbackDate ? `date:${fallbackDate}` : `label:${fallbackOutcome.toUpperCase().replace(/\s+/g, "_")}`
   };
 };
 
@@ -619,9 +841,10 @@ const deriveCuratedEventGroup = (key: string): { eventId: string; title: string 
   }
   if (parts[0] === "CRYPTO" && parts[1] === "THRESHOLD_BY_DATE" && parts[2] && parts[3]) {
     const eventKey = parts.slice(0, 4).join("|");
+    const date = normalizeDateToken(parts[3]);
     return {
       eventId: `event:${eventKey}`,
-      title: `${toTitleCase(parts[2])} Threshold By ${parts[3]}`
+      title: date ? `What price will ${assetProjectLabel(parts[2])} hit in ${formatMonthYear(date)}?` : `${toTitleCase(parts[2])} Threshold By ${parts[3]}`
     };
   }
   if (parts[0] === "CRYPTO" && parts[1] === "FDV_THRESHOLD_AFTER_LAUNCH" && parts[2]) {
@@ -635,14 +858,14 @@ const deriveCuratedEventGroup = (key: string): { eventId: string; title: string 
     const eventKey = parts.slice(0, 3).join("|");
     return {
       eventId: `event:${eventKey}`,
-      title: `${toTitleCase(parts[2])} Token Launch By Date`
+      title: `${assetProjectLabel(parts[2])} to launch a token by ____`
     };
   }
   if (parts[0] === "CRYPTO" && parts[1] === "FIRST_TO_THRESHOLD_BY_DATE" && parts[2]) {
     const eventKey = parts.slice(0, 3).join("|");
     return {
       eventId: `event:${eventKey}`,
-      title: `${toTitleCase(parts[2])} First To Threshold By Date`
+      title: `${assetLabel(parts[2])} first to hit ____`
     };
   }
   return null;
@@ -1013,6 +1236,100 @@ const displayTitle = (title: string, fallbackKey: string): string => {
   return toTitleCase(source.replace(/[_|]+/g, " "));
 };
 
+const canonicalIdParts = (value: string): string[] => {
+  const withoutPrefix = value.replace(/^FRONTEND_CURATED:/i, "");
+  const withoutVenue = withoutPrefix.replace(/:[A-Z_]+$/i, "");
+  return withoutVenue.split("|").filter(Boolean);
+};
+
+const normalizeDateToken = (value: string | undefined): string | null => {
+  if (!value) return null;
+  const trimmed = value.trim().replace(/_/g, "-");
+  const compact = trimmed.match(/\b(20\d{2})[-\s](\d{2})[-\s](\d{2})\b/);
+  if (compact) {
+    return `${compact[1]}-${compact[2]}-${compact[3]}`;
+  }
+  const natural = Date.parse(trimmed);
+  if (Number.isFinite(natural) && /\b20\d{2}\b/.test(trimmed) && /[A-Za-z]/.test(trimmed)) {
+    return new Date(natural).toISOString().slice(0, 10);
+  }
+  return null;
+};
+
+const formatDisplayDate = (date: string): string =>
+  new Date(`${date}T12:00:00.000Z`).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric"
+  });
+
+const formatMonthYear = (date: string): string =>
+  new Date(`${date}T12:00:00.000Z`).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric"
+  });
+
+const assetLabel = (value: string): string => {
+  const normalized = value.toUpperCase();
+  if (["BTC", "ETH", "SOL", "XRP"].includes(normalized)) {
+    return normalized;
+  }
+  return toTitleCase(value);
+};
+
+const assetProjectLabel = (value: string): string => {
+  const normalized = value.toUpperCase();
+  const labels: Record<string, string> = {
+    BASE: "Base",
+    BNB: "BNB",
+    BTC: "Bitcoin",
+    ETH: "Ethereum",
+    SOL: "Solana",
+    XRP: "XRP"
+  };
+  return labels[normalized] ?? toTitleCase(value);
+};
+
+const formatPriceCandidate = (value: string): string => {
+  const normalized = value.trim().replace(/_/g, "").toUpperCase();
+  if (/^\$/.test(normalized)) return normalized;
+  const numeric = Number(normalized.replace(/,/g, ""));
+  if (!Number.isFinite(numeric)) return normalized;
+  return `$${numeric.toLocaleString("en-US", {
+    maximumFractionDigits: 2
+  })}`;
+};
+
+const formatMoneyCandidate = (value: string): string => {
+  const normalized = value.trim().replace(/_/g, "").toUpperCase();
+  if (/^\$/.test(normalized)) return normalized;
+  if (/^\d+(?:\.\d+)?[KMBT]$/.test(normalized)) return `$${normalized}`;
+  const numeric = Number(normalized.replace(/,/g, ""));
+  if (!Number.isFinite(numeric)) return normalized;
+  if (numeric >= 1_000_000_000_000) return `$${formatCompactNumber(numeric / 1_000_000_000_000)}T`;
+  if (numeric >= 1_000_000_000) return `$${formatCompactNumber(numeric / 1_000_000_000)}B`;
+  if (numeric >= 1_000_000) return `$${formatCompactNumber(numeric / 1_000_000)}M`;
+  if (numeric >= 1_000) return `$${formatCompactNumber(numeric / 1_000)}K`;
+  return `$${formatCompactNumber(numeric)}`;
+};
+
+const formatCompactNumber = (value: number): string =>
+  Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, "");
+
+const deriveFallbackOutcomeLabel = (title: string): string => {
+  const suffix = title.match(/:\s*(.+)$/)?.[1]?.trim();
+  if (suffix) return suffix;
+  const datePhrase = title.match(/\b(?:by|before|after|on)\s+(.+?)(?:\?|$)/i)?.[1]?.trim();
+  if (datePhrase) return datePhrase;
+  return title.replace(/\?$/, "").trim();
+};
+
+const deriveFallbackTopicLabel = (title: string): string => {
+  const withoutSuffix = title.replace(/\s*:\s*.+$/, "").trim();
+  const dated = withoutSuffix.match(/^(.+?)\s+(?:by|before|after|on)\s+.+$/i);
+  return (dated?.[1] ?? withoutSuffix).replace(/\?$/, "").trim();
+};
+
 const humanizeTopicKey = (key: string): string | null => {
   const parts = key.split("|").filter(Boolean);
   if (parts[0] === "NOMINEE" && parts[1] === "US_PRESIDENT" && parts[2] && parts[3]) {
@@ -1042,3 +1359,4 @@ const toTitleCase = (value: string): string =>
       return `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`;
     })
     .join(" ");
+

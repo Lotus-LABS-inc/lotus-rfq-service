@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { OrderType, Side, type OrderResponse } from "@limitless-exchange/sdk";
+import {
+  getContractAddress,
+  OrderBuilder,
+  OrderType,
+  Side,
+  type OrderResponse,
+  type UnsignedOrder
+} from "@limitless-exchange/sdk";
 import { Wallet } from "@ethersproject/wallet";
 import {
   getLimitlessExecutionAdapterEnvStatus,
@@ -16,12 +23,14 @@ import {
 } from "../src/execution-system/limitless-live-submit-harness.js";
 import type { ExecutionLegV0 } from "../src/execution-system/types.js";
 
+const limitlessTokenId = "123456789";
+
 const leg = (): ExecutionLegV0 => ({
   executionLegId: "execution-1-leg-1",
   parentExecutionId: "execution-1",
   venue: "LIMITLESS",
   venueMarketId: "limitless-market-slug",
-  venueOutcomeId: "limitless-token-id",
+  venueOutcomeId: limitlessTokenId,
   side: "buy",
   size: "1",
   price: 0.42,
@@ -58,38 +67,57 @@ const userSignedRelayLiveConfig = {
 
 const signerWallet = new Wallet("0x59c6995e998f97a5a004497e5daae82f0e6d4d6e773f8f5a11a95d2218e14e4f");
 const evmAddress = signerWallet.address;
-const typedDataForLimitlessOrder = (overrides: Record<string, unknown> = {}) => ({
+const typedDataForLimitlessOrder = (order: UnsignedOrder) => ({
   domain: {
-    name: "Limitless Exchange",
+    name: "Limitless CTF Exchange",
     version: "1",
     chainId: 8453,
-    verifyingContract: "0x0000000000000000000000000000000000000001"
+    verifyingContract: getContractAddress("CTF")
   },
   types: {
     Order: [
-      { name: "marketSlug", type: "string" },
-      { name: "tokenId", type: "string" },
-      { name: "side", type: "string" },
-      { name: "size", type: "string" },
-      { name: "price", type: "string" }
+      { name: "salt", type: "uint256" },
+      { name: "maker", type: "address" },
+      { name: "signer", type: "address" },
+      { name: "taker", type: "address" },
+      { name: "tokenId", type: "uint256" },
+      { name: "makerAmount", type: "uint256" },
+      { name: "takerAmount", type: "uint256" },
+      { name: "expiration", type: "uint256" },
+      { name: "nonce", type: "uint256" },
+      { name: "feeRateBps", type: "uint256" },
+      { name: "side", type: "uint8" },
+      { name: "signatureType", type: "uint8" }
     ]
   },
   message: {
-    marketSlug: "limitless-market-slug",
-    tokenId: "limitless-token-id",
-    side: "BUY",
-    size: "1",
-    price: "0.42",
-    ...Object.fromEntries(
-      Object.entries(overrides)
-        .filter(([key]) => ["marketSlug", "tokenId", "side", "size", "price"].includes(key))
-        .map(([key, value]) => [key, String(value)])
-    )
+    salt: order.salt,
+    maker: order.maker,
+    signer: order.signer,
+    taker: order.taker,
+    tokenId: order.tokenId,
+    makerAmount: order.makerAmount,
+    takerAmount: order.takerAmount,
+    expiration: order.expiration,
+    nonce: order.nonce,
+    feeRateBps: order.feeRateBps,
+    side: order.side,
+    signatureType: order.signatureType
   }
 });
 
 const limitlessRelayPayload = async (overrides: Record<string, unknown> = {}) => {
-  const typedData = typedDataForLimitlessOrder(overrides);
+  const builder = new OrderBuilder(evmAddress, 300);
+  const order = {
+    ...builder.buildOrder({
+      tokenId: String(overrides.tokenId ?? limitlessTokenId),
+      side: overrides.side === Side.SELL ? Side.SELL : Side.BUY,
+      size: Number(overrides.size ?? 1),
+      price: Number(overrides.price ?? 0.42)
+    }),
+    ...((overrides.orderOverrides as Record<string, unknown> | undefined) ?? {})
+  } as UnsignedOrder;
+  const typedData = typedDataForLimitlessOrder(order);
   const signature = await signerWallet._signTypedData(typedData.domain, typedData.types, typedData.message);
   return {
   expectedBinding: {
@@ -99,16 +127,16 @@ const limitlessRelayPayload = async (overrides: Record<string, unknown> = {}) =>
     venueAccountAddress: evmAddress
   },
   signedPayload: {
-    signer: evmAddress,
-    account: evmAddress,
+    signer: String(overrides.signer ?? evmAddress),
+    account: String(overrides.account ?? evmAddress),
     signature,
     typedData,
-    marketSlug: "limitless-market-slug",
-    tokenId: "limitless-token-id",
-    side: Side.BUY,
-    size: 1,
-    price: 0.42,
-    ...overrides
+    data: {
+      order,
+      orderType: OrderType.GTC,
+      marketSlug: String(overrides.marketSlug ?? "limitless-market-slug"),
+      ownerId: "12345"
+    }
   }
   };
 };
@@ -125,7 +153,7 @@ const mockOrderResponse = (): OrderResponse => ({
     maker: "0x0000000000000000000000000000000000000001",
     signer: "0x0000000000000000000000000000000000000001",
     taker: "0x0000000000000000000000000000000000000000",
-    tokenId: "limitless-token-id",
+    tokenId: limitlessTokenId,
     side: Side.BUY,
     feeRateBps: 0,
     nonce: 0,
@@ -284,7 +312,7 @@ describe("LimitlessExecutionAdapter", () => {
       clientOrderId: "execution-1-leg-1",
       payload: {
         marketSlug: "limitless-market-slug",
-        tokenId: "limitless-token-id",
+        tokenId: limitlessTokenId,
         side: Side.BUY,
         size: 1,
         price: 0.42,
@@ -293,6 +321,43 @@ describe("LimitlessExecutionAdapter", () => {
     });
     expect(JSON.stringify(prepared)).not.toContain("private");
     expect(JSON.stringify(prepared)).not.toContain("api-key");
+  });
+
+  it("rounds Limitless sizes down to venue contract precision before signing", async () => {
+    const adapter = new LimitlessExecutionAdapter({
+      executionMode: "user_signed_backend_relay",
+      baseUrl: "https://api.limitless.exchange",
+      liveExecutionEnabled: false
+    });
+
+    const prepared = await adapter.prepareOrder({
+      ...leg(),
+      size: "14.20454545"
+    });
+
+    expect(prepared.payload).toMatchObject({
+      size: 14.204
+    });
+  });
+
+  it("uses market venue exchange metadata for Limitless signing", async () => {
+    const adapter = new LimitlessExecutionAdapter({
+      executionMode: "user_signed_backend_relay",
+      baseUrl: "https://api.limitless.exchange",
+      liveExecutionEnabled: false
+    });
+    const marketExchange = "0xe3E00BA3a9888d1DE4834269f62ac008b4BB5C47";
+
+    const prepared = await adapter.prepareOrder({
+      ...leg(),
+      metadata: {
+        limitlessExchangeAddress: marketExchange
+      }
+    });
+
+    expect(prepared.payload).toMatchObject({
+      exchange: marketExchange.toLowerCase()
+    });
   });
 
   it("prepares user-signed relay instructions without letting the backend sign", async () => {
@@ -310,7 +375,7 @@ describe("LimitlessExecutionAdapter", () => {
       backendMayRelaySignedPayload: true,
       backendMaySign: false,
       marketSlug: "limitless-market-slug",
-      tokenId: "limitless-token-id",
+      tokenId: limitlessTokenId,
       metadata: {
         executionSigningModel: "USER_SIGNED_BACKEND_RELAY"
       }
@@ -347,7 +412,7 @@ describe("LimitlessExecutionAdapter", () => {
       async createOrder(input) {
         expect(input).toMatchObject({
           marketSlug: "limitless-market-slug",
-          tokenId: "limitless-token-id",
+          tokenId: limitlessTokenId,
           side: Side.BUY,
           price: 0.42,
           size: 1,
@@ -375,7 +440,7 @@ describe("LimitlessExecutionAdapter", () => {
       async createOrder(input) {
         expect(input).toMatchObject({
           marketSlug: "limitless-market-slug",
-          tokenId: "limitless-token-id",
+          tokenId: limitlessTokenId,
           side: Side.BUY,
           price: 0.42,
           size: 1,
@@ -426,15 +491,21 @@ describe("LimitlessExecutionAdapter", () => {
           onBehalfOf: 12345,
           ownerId: 12345,
           signedPayload: {
-            signer: evmAddress,
-            account: evmAddress,
             marketSlug: "limitless-market-slug",
-            tokenId: "limitless-token-id",
-            side: Side.BUY,
-            size: 1,
-            price: 0.42
+            orderType: OrderType.GTC,
+            order: {
+              maker: evmAddress,
+              signer: evmAddress,
+              tokenId: limitlessTokenId,
+              side: Side.BUY,
+              price: 0.42,
+              signature: expect.stringMatching(/^0x/)
+            }
           }
         });
+        expect(input.signedPayload).not.toHaveProperty("signer");
+        expect(input.signedPayload).not.toHaveProperty("account");
+        expect(input.signedPayload).not.toHaveProperty("tokenId");
         return { order: { id: "limitless-relay-order-1", price: 0.42 } };
       },
       async getOrderStatus(orderId, onBehalfOf) {
@@ -471,10 +542,9 @@ describe("LimitlessExecutionAdapter", () => {
   it.each([
     ["LIMITLESS_RELAY_SIGNER_MISMATCH", { signer: "0x2222222222222222222222222222222222222222" }],
     ["LIMITLESS_RELAY_ACCOUNT_MISMATCH", { account: "0x2222222222222222222222222222222222222222" }],
-    ["LIMITLESS_RELAY_TOKEN_MISMATCH", { tokenId: "wrong-token" }],
+    ["LIMITLESS_RELAY_TOKEN_MISMATCH", { tokenId: "987654321" }],
     ["LIMITLESS_RELAY_SIDE_MISMATCH", { side: Side.SELL }],
-    ["LIMITLESS_RELAY_PRICE_MISMATCH", { price: 0.43 }],
-    ["LIMITLESS_RELAY_SIZE_MISMATCH", { size: 2 }]
+    ["LIMITLESS_RELAY_PRICE_MISMATCH", { price: 0.43 }]
   ])("rejects user-signed relay payload drift: %s", async (reasonCode, signedOverrides) => {
     const adapter = new LimitlessExecutionAdapter(userSignedRelayLiveConfig, undefined, {
       async submitSignedOrder() {

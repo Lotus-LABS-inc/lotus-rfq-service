@@ -7,6 +7,18 @@ import type {
 
 const balanceUrl = "/lotus/polymarket/funding-balance?userId=user-1&fundingIntentId=funding-1&routeLegId=leg-1";
 
+const polymarketBalanceOutput = (usableBalance: string) => ({
+  usableBalance,
+  collateralBalance: usableBalance,
+  collateralAllowance: usableBalance,
+  clobAllowanceSpenders: [],
+  approvalSpenderSource: "UNAVAILABLE" as const,
+  onchainPusdBalance: null,
+  onchainPusdAllowance: null,
+  bridgedUsdcBalance: null,
+  usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE" as const
+});
+
 const evidenceQuery = new URLSearchParams({
   userId: "user-1",
   withdrawalIntentId: "withdrawal-1",
@@ -64,7 +76,7 @@ describe("ops read service", () => {
         POLYMARKET_FUNDING_READ_API_KEY: "read-token"
       } as NodeJS.ProcessEnv,
       polymarketFundingBalanceReader: {
-        readUsableBalance: async () => ({ usableBalance: "10" })
+        readUsableBalance: async () => polymarketBalanceOutput("10")
       }
     });
 
@@ -87,7 +99,7 @@ describe("ops read service", () => {
         POLYMARKET_FUNDING_READ_API_KEY: "read-token"
       } as NodeJS.ProcessEnv,
       polymarketFundingBalanceReader: {
-        readUsableBalance: async () => ({ usableBalance: "42.5" })
+        readUsableBalance: async () => polymarketBalanceOutput("42.5")
       }
     });
 

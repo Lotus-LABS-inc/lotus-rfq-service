@@ -1,11 +1,12 @@
 import { createHmac } from "node:crypto";
-import { Client } from "@limitless-exchange/sdk";
+import { Client, HttpClient, PortfolioFetcher } from "@limitless-exchange/sdk";
 
 export const LIMITLESS_PARTNER_ACCOUNT_DEFAULT_BASE_URL = "https://api.limitless.exchange";
 
 export interface LimitlessPartnerAccountClientConfig {
   enabled?: boolean | undefined;
   serverWalletDelegationEnabled?: boolean | undefined;
+  eoaPartnerAccountRegistrationEnabled?: boolean | undefined;
   baseUrl?: string | undefined;
   hmacTokenId?: string | undefined;
   hmacSecret?: string | undefined;
@@ -47,6 +48,10 @@ export class LimitlessPartnerAccountClient {
 
   public serverWalletDelegationEnabled(): boolean {
     return this.config.serverWalletDelegationEnabled === true;
+  }
+
+  public eoaPartnerAccountRegistrationEnabled(): boolean {
+    return this.config.eoaPartnerAccountRegistrationEnabled === true;
   }
 
   public async getSigningMessage(): Promise<string> {
@@ -108,6 +113,30 @@ export class LimitlessPartnerAccountClient {
       );
     }
     return parsePartnerAccountResponse(payload);
+  }
+
+  public async getEoaPartnerAccount(account: string): Promise<LimitlessPartnerAccount | null> {
+    if (!isEvmAddress(account)) {
+      return null;
+    }
+    try {
+      const httpClient = new HttpClient({
+        baseURL: this.baseUrl,
+        timeout: this.timeoutMs,
+        ...(this.config.hmacTokenId?.trim() && this.config.hmacSecret?.trim()
+          ? {
+              hmacCredentials: {
+                tokenId: this.config.hmacTokenId.trim(),
+                secret: this.config.hmacSecret.trim()
+              }
+            }
+          : {})
+      });
+      const profile = await new PortfolioFetcher(httpClient).getProfile(account);
+      return parseProfilePartnerAccountResponse(profile, account);
+    } catch {
+      return null;
+    }
   }
 
   public async createServerWalletPartnerAccount(input: {
@@ -184,6 +213,7 @@ export const buildLimitlessPartnerAccountClientFromEnv = (
   new LimitlessPartnerAccountClient({
     enabled: env.LIMITLESS_PARTNER_ACCOUNT_ENABLED === "true",
     serverWalletDelegationEnabled: env.LIMITLESS_EXECUTION_MODE === "delegated_partner_server_wallet",
+    eoaPartnerAccountRegistrationEnabled: env.LIMITLESS_EXECUTION_MODE === "user_signed_backend_relay" || env.LIMITLESS_EXECUTION_MODE === "partner_eoa_account",
     baseUrl: env.LIMITLESS_PARTNER_ACCOUNT_BASE_URL ?? env.LIMITLESS_BASE_URL,
     hmacTokenId: env.LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID ?? env.LIMITLESS_WITHDRAWAL_ADAPTER_API_KEY,
     hmacSecret: env.LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET ?? env.LIMITLESS_WITHDRAWAL_ADAPTER_HMAC_SECRET,
@@ -220,6 +250,21 @@ const parsePartnerAccountResponse = (payload: Record<string, unknown>): Limitles
   };
 };
 
+const parseProfilePartnerAccountResponse = (payload: unknown, fallbackAccount: string): LimitlessPartnerAccount | null => {
+  if (!isRecord(payload)) {
+    return null;
+  }
+  const profileId = firstPresent(payload.profileId, payload.id, payload.userId, payload.ownerId);
+  const account = firstPresent(payload.account, payload.address, payload.walletAddress) ?? fallbackAccount;
+  if ((typeof profileId !== "number" && typeof profileId !== "string") || typeof account !== "string" || !isEvmAddress(account)) {
+    return null;
+  }
+  return {
+    profileId: String(profileId),
+    account
+  };
+};
+
 const safeLimitlessPartnerAccountErrorMessage = (payload: Record<string, unknown>, status: number): string => {
   const message = typeof payload.message === "string" && payload.message.length > 0
     ? payload.message
@@ -235,3 +280,9 @@ const safeLimitlessSdkErrorMessage = (error: unknown): string => {
     : "Limitless server-wallet partner account request failed.";
   return message.slice(0, 240);
 };
+
+const firstPresent = (...values: unknown[]): unknown =>
+  values.find((value) => (typeof value === "string" && value.trim().length > 0) || typeof value === "number");
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;

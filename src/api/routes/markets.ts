@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { MarketCatalogRepository } from "../../repositories/market-catalog.repository.js";
-import type { LiveMarketDataViewService, MarketChartTimeframe } from "../../services/market-data-view.service.js";
+import type { LiveMarketDataViewService, MarketBatchQuoteResponse, MarketChartTimeframe } from "../../services/market-data-view.service.js";
 
 const listQuerySchema = z.object({
   category: z.string().min(1).optional(),
@@ -22,9 +22,20 @@ const chartQuerySchema = z.object({
   timeframe: chartTimeframeSchema.default("1H")
 });
 
+const batchQuotesRequestSchema = z.object({
+  items: z.array(z.object({
+    marketId: z.string().min(1),
+    outcomeId: z.string().min(1),
+    side: z.enum(["buy", "sell"]).optional(),
+    amount: z.union([z.string().regex(/^\d+(\.\d+)?$/), z.number().positive()]).optional()
+  })).min(1).max(60)
+});
+
 export interface MarketCatalogRouteDeps {
   marketCatalogRepository: Pick<MarketCatalogRepository, "listCategories" | "listMarkets" | "listEvents" | "getMarket" | "getEvent">;
-  marketDataViewService?: Pick<LiveMarketDataViewService, "getOrderbook" | "getChart"> | undefined;
+  marketDataViewService?: Pick<LiveMarketDataViewService, "getOrderbook" | "getChart"> & {
+    getBatchQuotes?(input: { items: readonly { marketId: string; outcomeId: string; side?: "buy" | "sell"; amount?: string | number }[] }): Promise<MarketBatchQuoteResponse>;
+  } | undefined;
 }
 
 export const registerMarketCatalogRoutes = async (
@@ -161,6 +172,31 @@ export const registerMarketCatalogRoutes = async (
       title: market.title,
       outcomes: [...outcomes.values()].sort((left, right) => left.label.localeCompare(right.label))
     });
+  });
+
+  app.post("/markets/quotes/batch", async (request, reply) => {
+    if (!deps.marketDataViewService?.getBatchQuotes) {
+      return reply.status(503).send({
+        code: "MARKET_BATCH_QUOTES_UNAVAILABLE",
+        message: "Live market batch quotes are not configured."
+      });
+    }
+    const parsed = batchQuotesRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_MARKET_BATCH_QUOTE_REQUEST",
+        message: "Market batch quote request validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    return reply.send(await deps.marketDataViewService.getBatchQuotes({
+      items: parsed.data.items.map((item) => ({
+        marketId: item.marketId,
+        outcomeId: item.outcomeId,
+        ...(item.side ? { side: item.side } : {}),
+        ...(item.amount !== undefined ? { amount: item.amount } : {})
+      }))
+    }));
   });
 
   app.get("/markets/:marketId/orderbook", async (request, reply) => {

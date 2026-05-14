@@ -17,6 +17,11 @@ const submitFundingRouteLegSchema = z.object({
   txHash: z.string().min(1)
 });
 
+const submitSignedSolanaFundingRouteLegSchema = z.object({
+  routeLegId: z.string().min(1),
+  signedTransaction: z.string().min(1)
+});
+
 const submitWithdrawalRouteLegSchema = z.object({
   withdrawalRouteLegId: z.string().min(1),
   txHash: z.string().min(1)
@@ -39,8 +44,13 @@ const submitPolymarketActivationSchema = z.object({
   depositWalletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
   nonce: z.string().regex(/^\d+$/),
   deadline: z.string().regex(/^\d+$/),
-  calls: z.array(depositWalletCallSchema).min(1).max(4),
-  signature: z.string().regex(/^0x[a-fA-F0-9]{130}$/)
+  calls: z.array(depositWalletCallSchema).min(1).max(12),
+  signature: z.string().regex(/^0x[a-fA-F0-9]{130}$/),
+  tokenId: z.string().regex(/^\d+$/).optional()
+});
+
+const preparePolymarketActivationSchema = z.object({
+  tokenId: z.string().regex(/^\d+$/).optional()
 });
 
 export interface FundingRouteHandlers {
@@ -48,11 +58,12 @@ export interface FundingRouteHandlers {
   getIntent(userId: string, fundingIntentId: string): Promise<FundingIntentView>;
   quoteIntent(userId: string, fundingIntentId: string): Promise<FundingIntentView>;
   submitRouteLeg(userId: string, fundingIntentId: string, request: z.infer<typeof submitFundingRouteLegSchema>): Promise<FundingIntentView>;
+  submitSignedSolanaRouteLeg?(userId: string, fundingIntentId: string, request: z.infer<typeof submitSignedSolanaFundingRouteLegSchema>): Promise<FundingIntentView>;
   refreshIntentStatus(userId: string, fundingIntentId: string): Promise<FundingIntentView>;
   listVenueCapabilities(): Promise<unknown>;
   listVenueBalances(userId: string): Promise<VenueBalanceView[]>;
   listVenueActivations(userId: string): Promise<VenueBalanceActivationAction[]>;
-  preparePolymarketActivation?(userId: string): Promise<unknown>;
+  preparePolymarketActivation?(userId: string, input?: z.infer<typeof preparePolymarketActivationSchema>): Promise<unknown>;
   submitPolymarketActivation?(userId: string, request: z.infer<typeof submitPolymarketActivationSchema>): Promise<unknown>;
   listFundingHistory(userId: string, input?: { page?: number; pageSize?: number; limit?: number }): Promise<FundingHistoryPage>;
   createWithdrawalIntent(userId: string, request: z.infer<typeof CreateWithdrawalIntentSchema>): Promise<WithdrawalIntentView>;
@@ -138,6 +149,30 @@ export const registerFundingRoutes = async (
     }
   });
 
+  app.post("/funding/intents/:id/submit-signed-solana", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!handlers.submitSignedSolanaRouteLeg) {
+      return reply.status(503).send({
+        code: "SOLANA_BROADCAST_UNAVAILABLE",
+        message: "Solana funding broadcast is not available."
+      });
+    }
+    const { id } = request.params as { id: string };
+    const parsed = submitSignedSolanaFundingRouteLegSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "Signed Solana funding route submission request validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    try {
+      const result = await handlers.submitSignedSolanaRouteLeg(request.user.userId, id, parsed.data);
+      return reply.status(202).send(toFundingResponse(result));
+    } catch (error) {
+      return handleFundingError(error, reply);
+    }
+  });
+
   app.get("/funding/intents/:id/status", { preHandler: authMiddleware }, async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
@@ -151,7 +186,7 @@ export const registerFundingRoutes = async (
   app.get("/funding/intents/:id/receipt", { preHandler: authMiddleware }, async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      const result = await handlers.getIntent(request.user.userId, id);
+      const result = await handlers.refreshIntentStatus(request.user.userId, id);
       return reply.status(200).send({
         generatedAt: new Date().toISOString(),
         receipt: toFundingReceipt(result)
@@ -184,7 +219,15 @@ export const registerFundingRoutes = async (
       });
     }
     try {
-      const activation = await handlers.preparePolymarketActivation(request.user.userId);
+      const parsed = preparePolymarketActivationSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply.status(400).send({
+          code: "INVALID_REQUEST",
+          message: "Polymarket activation preparation validation failed.",
+          details: parsed.error.flatten()
+        });
+      }
+      const activation = await handlers.preparePolymarketActivation(request.user.userId, parsed.data);
       return reply.status(200).send({ activation });
     } catch (error) {
       return handleFundingError(error, reply);

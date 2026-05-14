@@ -6,6 +6,8 @@ import type {
   FundingVenue
 } from "./types.js";
 
+type DecimalValue = InstanceType<typeof Decimal>;
+
 export type VenueFundingReadinessStatus =
   | "DESTINATION_RECEIVED"
   | "VENUE_CREDIT_PENDING"
@@ -129,6 +131,48 @@ const safeDecimal = (value: string) => {
   } catch {
     return null;
   }
+};
+
+const safeDecimalFromUnknown = (value: unknown): DecimalValue | null =>
+  typeof value === "string" ? safeDecimal(value) : null;
+
+const polymarketReadinessEvidence = (raw: Record<string, unknown> | undefined): Record<string, string> => {
+  if (!raw) {
+    return {};
+  }
+  const evidence = Object.fromEntries(
+    [
+      "usableBalanceSource",
+      "approvalSpenderSource",
+      "collateralBalance",
+      "collateralAllowance",
+      "onchainPusdAllowance",
+      "onchainPusdBalance",
+      "bridgedUsdcBalance"
+    ].flatMap((key) => typeof raw[key] === "string" ? [[key, raw[key] as string]] : [])
+  );
+  if (Array.isArray(raw.clobAllowanceSpenders)) {
+    evidence.clobAllowanceSpenders = JSON.stringify(raw.clobAllowanceSpenders);
+  }
+  return evidence;
+};
+
+const polymarketPendingReason = (raw: Record<string, unknown> | undefined): string | null => {
+  if (!raw) {
+    return null;
+  }
+  const bridgedUsdcBalance = safeDecimalFromUnknown(raw.bridgedUsdcBalance);
+  const onchainPusdBalance = safeDecimalFromUnknown(raw.onchainPusdBalance);
+  const onchainPusdAllowance = safeDecimalFromUnknown(raw.onchainPusdAllowance);
+  const collateralBalance = safeDecimalFromUnknown(raw.collateralBalance);
+  const collateralAllowance = safeDecimalFromUnknown(raw.collateralAllowance);
+  if (bridgedUsdcBalance?.greaterThan(0) && (collateralBalance?.isZero() ?? true)) {
+    return "POLYMARKET_USDCE_ACTIVATION_REQUIRED";
+  }
+  if (onchainPusdBalance?.greaterThan(0) && (collateralAllowance?.isZero() ?? true) && (onchainPusdAllowance?.isZero() ?? true)) {
+    return "POLYMARKET_CLOB_APPROVAL_REQUIRED";
+  }
+  return null;
 };
 
 const parseBalanceTolerance = (value: string | undefined): string => {
@@ -327,7 +371,8 @@ export class ConfigurableVenueFundingReadinessChecker implements VenueFundingRea
         requiredAmount: requiredAmount.toString(),
         usableBalance: usableBalance.toString(),
         balanceTolerance: balanceTolerance.toString(),
-        effectiveRequiredAmount: effectiveRequiredAmount.toString()
+        effectiveRequiredAmount: effectiveRequiredAmount.toString(),
+        ...(this.venue === "POLYMARKET" ? polymarketReadinessEvidence(balance.raw) : {})
       };
       if (usableBalance.greaterThanOrEqualTo(effectiveRequiredAmount)) {
         return this.result({
@@ -346,7 +391,9 @@ export class ConfigurableVenueFundingReadinessChecker implements VenueFundingRea
         venueCreditConfirmed: false,
         readyToTrade: false,
         usableBalance: usableBalance.toString(),
-        reason: `${this.venue}_USABLE_BALANCE_BELOW_REQUIRED_AMOUNT`,
+        reason: this.venue === "POLYMARKET"
+          ? polymarketPendingReason(balance.raw) ?? `${this.venue}_USABLE_BALANCE_BELOW_REQUIRED_AMOUNT`
+          : `${this.venue}_USABLE_BALANCE_BELOW_REQUIRED_AMOUNT`,
         evidence: this.safeEvidence(comparisonEvidence)
       });
     } catch (error) {

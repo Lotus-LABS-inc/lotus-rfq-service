@@ -3,6 +3,7 @@ import { parseOpinionMarketList } from "./opinion-schemas.js";
 export interface OpinionClientConfig {
   baseUrl: string;
   apiKey: string;
+  requestTimeoutMs?: number | undefined;
 }
 
 export class OpinionClientError extends Error {
@@ -28,7 +29,8 @@ export class OpinionClient {
     const response = await fetch(url, {
       headers: {
         apikey: this.config.apiKey
-      }
+      },
+      signal: AbortSignal.timeout(this.config.requestTimeoutMs ?? 8_000)
     });
     const payload = await response.json();
 
@@ -47,7 +49,8 @@ export class OpinionClient {
     const response = await fetch(url, {
       headers: {
         apikey: this.config.apiKey
-      }
+      },
+      signal: AbortSignal.timeout(this.config.requestTimeoutMs ?? 8_000)
     });
     const payload = await response.json();
 

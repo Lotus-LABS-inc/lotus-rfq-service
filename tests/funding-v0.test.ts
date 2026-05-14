@@ -85,7 +85,8 @@ const env = {
   LIMITLESS_FUNDING_DESTINATION_ADDRESS: "0x3333333333333333333333333333333333333333",
   OPINION_FUNDING_DESTINATION_ADDRESS: "0x4444444444444444444444444444444444444444",
   MYRIAD_FUNDING_DESTINATION_ADDRESS: "0x5555555555555555555555555555555555555555",
-  PREDICT_FUN_FUNDING_DESTINATION_ADDRESS: "0x6666666666666666666666666666666666666666"
+  PREDICT_FUN_FUNDING_DESTINATION_ADDRESS: "0x6666666666666666666666666666666666666666",
+  SOLANA_FUNDING_ROUTE_BLOCKHASH_REFRESH_ENABLED: "false"
 } as NodeJS.ProcessEnv;
 
 const withdrawalEnv = {
@@ -502,13 +503,14 @@ class StubPolymarketWithdrawalEvidenceReadClient implements PolymarketWithdrawal
 
 class StubPolymarketBalanceReadClient implements PolymarketFundingBalanceReadClient {
   public usableBalance = "0";
+  public raw: Record<string, unknown> = { source: "stub" };
   public shouldThrow = false;
 
   public async fetchUsableUsdcBalance(): Promise<{ usableBalance: string; raw?: Record<string, unknown> }> {
     if (this.shouldThrow) {
       throw new Error("read unavailable");
     }
-    return { usableBalance: this.usableBalance, raw: { source: "stub" } };
+    return { usableBalance: this.usableBalance, raw: this.raw };
   }
 }
 
@@ -661,10 +663,17 @@ describe("Funding v0 domain", () => {
     expect(matrix.MYRIAD.readinessStatus).toBe("READY");
     expect(matrix.PREDICT_FUN.readinessStatus).toBe("READY");
     expect(matrix.POLYMARKET).toMatchObject({
+      supportedChains: expect.arrayContaining(["SOLANA", "BASE", "8453"]),
       withdrawalMode: "USER_SIGNED",
       userSignedWithdrawalSupported: true,
       partnerManagedWithdrawal: null
     });
+    expect(matrix.LIMITLESS).toMatchObject({
+      supportedChains: expect.arrayContaining(["SOLANA", "BASE", "8453"])
+    });
+    expect(matrix.OPINION.supportedChains).toEqual(expect.arrayContaining(["SOLANA", "BASE", "8453"]));
+    expect(matrix.MYRIAD.supportedChains).toEqual(expect.arrayContaining(["SOLANA", "BASE", "8453"]));
+    expect(matrix.PREDICT_FUN.supportedChains).toEqual(expect.arrayContaining(["SOLANA", "BSC", "BNB", "56"]));
     expect(matrix.OPINION).toMatchObject({
       withdrawalMode: "USER_SIGNED",
       userSignedWithdrawalSupported: true,
@@ -851,6 +860,178 @@ describe("Funding v0 domain", () => {
     expect(created.intent.sourceWalletId).toBe("wallet-sol");
     expect(created.intent.sourceWalletAddress).toBe(solanaWallet.address);
     expect(repository.ready).toBe(false);
+  });
+
+  it("resolves default Turnkey EVM source wallets for Base route funding", async () => {
+    const repository = new InMemoryFundingRepository();
+    const evmWallet = userWallet({
+      walletId: "wallet-evm",
+      userId: "user-1",
+      chainFamily: "EVM",
+      chain: "EVM",
+      address: "0xD1059eC5F635712f6dcEAd569a41dFD7970DAffa"
+    });
+    const lifi = new StubLifiProvider();
+    const service = new FundingService(
+      repository,
+      lifi,
+      {
+        lifiQuotesEnabled: false,
+        liveSubmitEnabled: false,
+        env
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {
+        resolveFundingSourceWallet: async (input) => input.userId === "user-1" ? evmWallet : null,
+        resolveUserTurnkeyEvmFundingWallet: async () => evmWallet,
+        resolveVenueTargetWallet: async () => null
+      }
+    );
+    const created = await service.createIntent("user-1", {
+      sourceChain: "Base",
+      sourceToken: "USDC",
+      sourceAmount: "3",
+      idempotencyKey: "turnkey-evm-source",
+      targets: [{ targetVenue: "LIMITLESS", targetPercentage: 100 }]
+    });
+    const quoted = await service.quoteIntent("user-1", created.intent.fundingIntentId);
+
+    expect(created.intent.sourceWalletId).toBe("wallet-evm");
+    expect(created.intent.sourceWalletAddress).toBe(evmWallet.address);
+    expect(lifi.quoteInputs).toHaveLength(0);
+    expect(quoted.routeLegs[0]).toMatchObject({
+      targetVenue: "LIMITLESS",
+      routeProvider: "DIRECT_TRANSFER"
+    });
+    expect(quoted.routeLegs[0]!.routeQuote.transactionRequest).toMatchObject({
+      from: evmWallet.address,
+      chainId: 8453
+    });
+  });
+
+  it("uses the default EVM Base USDC wallet balance as Limitless venue cash", async () => {
+    const evmWallet = userWallet({
+      walletId: "wallet-evm",
+      userId: "user-1",
+      chainFamily: "EVM",
+      chain: "EVM",
+      address: "0xD1059eC5F635712f6dcEAd569a41dFD7970DAffa"
+    });
+    const service = new FundingService(
+      new InMemoryFundingRepository(),
+      new StubLifiProvider(),
+      {
+        lifiQuotesEnabled: false,
+        liveSubmitEnabled: false,
+        env
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {
+        resolveFundingSourceWallet: async () => evmWallet,
+        resolveUserTurnkeyEvmFundingWallet: async () => evmWallet,
+        resolveVenueTargetWallet: async () => null
+      },
+      null,
+      {
+        readWalletBalances: async () => ({
+          balanceStatus: "synced",
+          balanceBlocker: null,
+          balances: [{
+            token: "USDC",
+            amount: "8.96",
+            chain: "BASE",
+            chainFamily: "EVM" as const,
+            updatedAt: "2026-05-10T00:00:00.000Z",
+            status: "available" as const
+          }]
+        })
+      }
+    );
+
+    await expect(service.listVenueBalances("user-1")).resolves.toContainEqual({
+      venue: "LIMITLESS",
+      token: "USDC",
+      readyAmount: "8.96",
+      pendingWithdrawalAmount: "0",
+      availableAmount: "8.96",
+      updatedAt: "2026-05-10T00:00:00.000Z"
+    });
+  });
+
+  it("uses the default EVM BSC USDT wallet balance as Predict.fun venue cash", async () => {
+    const evmWallet = userWallet({
+      walletId: "wallet-evm",
+      userId: "user-1",
+      chainFamily: "EVM",
+      chain: "EVM",
+      address: "0xD1059eC5F635712f6dcEAd569a41dFD7970DAffa"
+    });
+    const service = new FundingService(
+      new InMemoryFundingRepository(),
+      new StubLifiProvider(),
+      {
+        lifiQuotesEnabled: false,
+        liveSubmitEnabled: false,
+        env: {
+          ...env,
+          PREDICT_FUN_FUNDING_DESTINATION_MODE: "USER_TURNKEY_EVM_WALLET",
+          PREDICT_FUN_FUNDING_PREFERRED_CHAIN: "BSC",
+          PREDICT_FUN_FUNDING_PREFERRED_TOKEN: "USDT",
+          PREDICT_FUN_FUNDING_PREFERRED_CHAIN_ID: "56"
+        } as NodeJS.ProcessEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {
+        resolveFundingSourceWallet: async () => evmWallet,
+        resolveUserTurnkeyEvmFundingWallet: async () => evmWallet,
+        resolveVenueTargetWallet: async () => null
+      },
+      null,
+      {
+        readWalletBalances: async () => ({
+          balanceStatus: "synced",
+          balanceBlocker: null,
+          balances: [{
+            token: "USDT",
+            amount: "12.5",
+            chain: "BSC",
+            chainFamily: "EVM" as const,
+            updatedAt: "2026-05-10T00:00:00.000Z",
+            status: "available" as const
+          }]
+        })
+      }
+    );
+
+    await expect(service.listVenueBalances("user-1")).resolves.toContainEqual({
+      venue: "PREDICT_FUN",
+      token: "USDT",
+      readyAmount: "12.5",
+      pendingWithdrawalAmount: "0",
+      availableAmount: "12.5",
+      updatedAt: "2026-05-10T00:00:00.000Z"
+    });
   });
 
   it("rejects missing Turnkey EVM target wallets when a venue opts into user wallet destinations", async () => {
@@ -1943,6 +2124,59 @@ describe("Funding v0 domain", () => {
     expect(refreshed.reconciliations).toEqual([]);
   });
 
+  it("quotes Polymarket Bridge withdrawals to Base USDC when provider assets support the destination", async () => {
+    const repository = new InMemoryFundingRepository();
+    repository.ready = true;
+    const bridgeAdapter = new PolymarketBridgeWithdrawalAdapter(
+      new MockPolymarketBridgeWithdrawalClient(),
+      {
+        enabled: true,
+        mode: "DRY_RUN",
+        apiBaseUrl: "https://bridge.operator.example",
+        authMode: "NONE",
+        timeoutMs: 5000,
+        dryRunOnly: true,
+        configured: true
+      },
+      { now: () => new Date("2026-04-26T00:00:00.000Z") }
+    );
+    const service = new FundingService(
+      repository,
+      new StubLifiProvider(),
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env: withdrawalEnv
+      },
+      new Map(),
+      null,
+      null,
+      bridgeAdapter
+    );
+
+    const created = await service.createWithdrawalIntent("user-1", {
+      token: "USDC",
+      amount: "40",
+      destinationChain: "BASE",
+      destinationWalletAddress: "0x1111111111111111111111111111111111111111",
+      idempotencyKey: "withdraw-bridge-base",
+      sources: [{ sourceVenue: "POLYMARKET", sourcePercentage: 100 }]
+    });
+    const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
+
+    expect(quoted.routeLegs[0]!.routeQuote).toMatchObject({
+      destinationChain: "BASE",
+      provider: "LOTUS_WITHDRAWAL_V0"
+    });
+    expect(quoted.routeLegs[0]!.providerStatus).toMatchObject({
+      provider: "POLYMARKET_BRIDGE",
+      quote: {
+        toChainId: "8453",
+        toTokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+      }
+    });
+  });
+
   it("keeps default withdrawal quote behavior when Bridge sandbox is not wired", async () => {
     const repository = new InMemoryFundingRepository();
     repository.ready = true;
@@ -2873,10 +3107,28 @@ describe("Funding v0 domain", () => {
       txHash: "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     });
 
-    balanceClient.usableBalance = "99.99";
+    balanceClient.usableBalance = "0";
+    balanceClient.raw = {
+      source: "stub",
+      collateralBalance: "0",
+      collateralAllowance: "0",
+      onchainPusdBalance: "0",
+      bridgedUsdcBalance: "99.99",
+      usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE"
+    };
     const pending = await service.refreshIntentStatus("user-1", created.intent.fundingIntentId);
     expect(pending.intent.status).toBe("ROUTES_SUBMITTED");
     expect(pending.routeLegs[0]!.status).toBe("LEG_VENUE_CREDIT_PENDING");
+    expect(pending.reconciliations[0]?.notes).toBe("POLYMARKET_USDCE_ACTIVATION_REQUIRED");
+    expect(pending.routeLegs[0]?.providerStatus).toMatchObject({
+      readiness: {
+        reason: "POLYMARKET_USDCE_ACTIVATION_REQUIRED",
+        evidence: {
+          bridgedUsdcBalance: "99.99",
+          collateralBalance: "0"
+        }
+      }
+    });
     expect(pending.reconciliations[0]).toMatchObject({
       destinationReceived: true,
       venueCreditConfirmed: false,
@@ -2885,6 +3137,14 @@ describe("Funding v0 domain", () => {
     expect(repository.auditEvents.map((event) => event.eventType)).toContain("FUNDING_LEG_VENUE_CREDIT_PENDING");
 
     balanceClient.usableBalance = "100";
+    balanceClient.raw = {
+      source: "stub",
+      collateralBalance: "100",
+      collateralAllowance: "100",
+      onchainPusdBalance: "0",
+      bridgedUsdcBalance: "0",
+      usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE"
+    };
     const ready = await service.verifyVenueReadiness("user-1", created.intent.fundingIntentId, routeLegId);
     expect(ready.intent.status).toBe("READY_TO_TRADE");
     expect(ready.routeLegs[0]!.status).toBe("LEG_READY_TO_TRADE");
@@ -2894,6 +3154,20 @@ describe("Funding v0 domain", () => {
       readyToTrade: true
     });
     expect(repository.auditEvents.map((event) => event.eventType)).toContain("FUNDING_READY_TO_TRADE");
+
+    balanceClient.usableBalance = "0";
+    balanceClient.raw = {
+      source: "stub",
+      collateralBalance: "0",
+      collateralAllowance: "0",
+      onchainPusdBalance: "0",
+      bridgedUsdcBalance: "100",
+      usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE"
+    };
+    const demoted = await service.refreshIntentStatus("user-1", created.intent.fundingIntentId);
+    expect(demoted.intent.status).toBe("ROUTES_SUBMITTED");
+    expect(demoted.routeLegs[0]!.status).toBe("LEG_VENUE_CREDIT_PENDING");
+    expect(demoted.reconciliations.at(-1)?.notes).toBe("POLYMARKET_USDCE_ACTIVATION_REQUIRED");
   });
 
   it("keeps Polymarket readiness fail-closed when disabled or read response is unavailable", async () => {

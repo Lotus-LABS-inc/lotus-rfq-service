@@ -176,6 +176,37 @@ describe("executable route selection", () => {
     });
   });
 
+  it("blocks user-signed Limitless candidates that are missing market exchange metadata", async () => {
+    const service = new ExecutableRouteService({
+      async listVenues() {
+        return [
+          readyVenue("LIMITLESS", { executionSigningModel: "USER_SIGNED_BACKEND_RELAY" }),
+          readyVenue("POLYMARKET")
+        ];
+      }
+    });
+
+    const result = await service.quote({
+      userId: "user-1",
+      side: "buy",
+      marketId: "market-1",
+      outcomeId: "yes",
+      amount: "1",
+      candidates: [
+        { venue: "LIMITLESS", price: 0.4, availableSize: "1", requiresUserSignature: true },
+        { venue: "POLYMARKET", price: 0.5, availableSize: "1" }
+      ]
+    });
+
+    expect(result.quote?.venuePath).toEqual(["POLYMARKET"]);
+    expect(result.rejectedCandidates).toEqual([
+      expect.objectContaining({
+        venue: "LIMITLESS",
+        blockerCategory: "LIMITLESS_EXCHANGE_ADDRESS_MISSING"
+      })
+    ]);
+  });
+
   it("still prepares a quote-only route when live submit readiness is not configured", async () => {
     const service = new ExecutableRouteService({
       async listVenues() {

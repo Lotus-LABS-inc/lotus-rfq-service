@@ -1,5 +1,6 @@
 import Decimal from "decimal.js";
 import { randomUUID } from "node:crypto";
+import { VersionedTransaction } from "@solana/web3.js";
 import type { ExecutionRequestV0 } from "../../execution-system/types.js";
 import type { LifiRouteProvider } from "../../integrations/lifi/lifi-client.js";
 import { isQuoteExpired } from "../../integrations/lifi/lifi-client.js";
@@ -10,6 +11,7 @@ import {
   type CreateFundingIntentInput,
   type CreateWithdrawalIntentInput,
   type FundingAuditEventType,
+  type FundingHistoryItem,
   type FundingHistoryPage,
   type FundingIntent,
   type FundingIntentView,
@@ -42,6 +44,10 @@ import type {
   PolymarketBridgeUserAction
 } from "./polymarket-bridge-withdrawal-adapter.js";
 import {
+  polymarketBridgeAssetMatchesDestination,
+  resolvePolymarketBridgeDestinationAsset
+} from "./polymarket-bridge-withdrawal-adapter.js";
+import {
   buildPredictFunUserWalletProviderStatus,
   type PredictFunUserWalletAction,
   type PredictFunWithdrawalAdapter,
@@ -60,6 +66,7 @@ import {
   type OpinionWithdrawalQuote
 } from "./opinion-withdrawal-adapter.js";
 import { UserWalletError, type UserWallet, type UserWalletService } from "./user-wallets.js";
+import { buildUserWalletBalanceReaderFromEnv, type UserWalletBalanceReader } from "./user-wallet-balances.js";
 
 export interface FundingRepository {
   findIntentById(id: string): Promise<FundingIntent | null>;
@@ -216,7 +223,8 @@ export class FundingService {
     private readonly myriadWithdrawalAdapter: MyriadWalletWithdrawalAdapter | null = null,
     private readonly opinionWithdrawalAdapter: OpinionSafeWithdrawalAdapter | null = null,
     private readonly userWalletService: Pick<UserWalletService, "resolveFundingSourceWallet" | "resolveUserTurnkeyEvmFundingWallet" | "resolveVenueTargetWallet"> | null = null,
-    private readonly userVenueAccountReader: UserVenueFundingAccountReader | null = null
+    private readonly userVenueAccountReader: UserVenueFundingAccountReader | null = null,
+    private readonly userWalletBalanceReader: Pick<UserWalletBalanceReader, "readWalletBalances"> | null = null
   ) {}
 
   public listVenueCapabilities(): VenueCapability[] {
@@ -230,17 +238,43 @@ export class FundingService {
   }
 
   public async listVenueBalances(userId: string): Promise<VenueBalanceView[]> {
-    return this.repository.listVenueBalances(userId);
+    const balances = await this.repository.listVenueBalances(userId);
+    const [limitlessBalance, predictFunBalance] = await Promise.all([
+      this.readUserWalletVenueBalance(userId, balances, "LIMITLESS"),
+      this.readUserWalletVenueBalance(userId, balances, "PREDICT_FUN")
+    ]);
+    const walletBalances = [limitlessBalance, predictFunBalance].filter((balance): balance is VenueBalanceView => balance !== null);
+    if (walletBalances.length === 0) {
+      return balances;
+    }
+    return [
+      ...balances.filter((balance) => !walletBalances.some((walletBalance) =>
+        walletBalance.venue === balance.venue && walletBalance.token === balance.token
+      )),
+      ...walletBalances
+    ].sort((a, b) => a.venue.localeCompare(b.venue) || a.token.localeCompare(b.token));
   }
 
   public async listFundingHistory(userId: string, input: { page?: number; pageSize?: number; limit?: number } = {}): Promise<FundingHistoryPage> {
     const page = normalizeHistoryPage(input.page);
     const pageSize = normalizeHistoryPageSize(input.pageSize ?? input.limit);
-    return this.repository.listFundingHistory(userId, {
+    const pageInput = {
       page,
       pageSize,
       offset: (page - 1) * pageSize
-    });
+    };
+    const history = await this.repository.listFundingHistory(userId, pageInput);
+    const refreshableIntentIds = Array.from(new Set(
+      history.items
+        .filter(isRefreshableFundingHistoryItem)
+        .map((item) => item.intentId)
+    ));
+    if (refreshableIntentIds.length === 0) {
+      return history;
+    }
+
+    await Promise.allSettled(refreshableIntentIds.map((intentId) => this.refreshIntentStatus(userId, intentId)));
+    return this.repository.listFundingHistory(userId, pageInput);
   }
 
   public async createIntent(userId: string, input: CreateFundingIntentInput): Promise<FundingIntentView> {
@@ -319,7 +353,7 @@ export class FundingService {
       if (!depositAddress) {
         throw new FundingError("TARGET_DESTINATION_NOT_CONFIGURED", `${target.targetVenue} funding destination is not configured.`, 409);
       }
-      const sourceTokenAddress = capability.sourceTokenAddressByChain[view.intent.sourceChain];
+      const sourceTokenAddress = sourceTokenAddressForChain(capability, view.intent.sourceChain);
       if (!sourceTokenAddress) {
         throw new FundingError("SOURCE_CHAIN_UNSUPPORTED", "Source chain is not supported for this venue.", 409);
       }
@@ -332,7 +366,11 @@ export class FundingService {
         ...(this.config.env ? { env: this.config.env } : {})
       });
       const quote = directQuote ?? await this.quoteLifiRoute(view.intent, target, capability, sourceTokenAddress, depositAddress);
-      routeLegs.push(buildRouteLeg(view.intent, target, quote));
+      const normalizedQuote = await normalizeSolanaFundingRouteQuoteForBroadcastRpc({
+        quote,
+        ...(this.config.env ? { env: this.config.env } : {})
+      });
+      routeLegs.push(buildRouteLeg(view.intent, target, normalizedQuote));
     }
     await this.repository.replaceRouteLegs(fundingIntentId, routeLegs);
     await this.repository.updateIntentStatus(fundingIntentId, "USER_SIGNATURE_REQUIRED", {
@@ -436,13 +474,50 @@ export class FundingService {
     return this.getIntent(userId, fundingIntentId);
   }
 
+  public async submitSignedSolanaRouteLeg(
+    userId: string,
+    fundingIntentId: string,
+    input: { routeLegId: string; signedTransaction: string }
+  ): Promise<FundingIntentView> {
+    const view = await this.getIntent(userId, fundingIntentId);
+    const leg = view.routeLegs.find((candidate) => candidate.routeLegId === input.routeLegId);
+    if (!leg) {
+      throw new FundingError("FUNDING_INTENT_NOT_FOUND", "Funding route leg was not found.", 404);
+    }
+    if (isQuoteExpired(leg)) {
+      throw new FundingError("ROUTE_QUOTE_STALE", "Funding quote is stale. Request a new quote before submitting.", 409);
+    }
+    const sourceChain = leg.sourceChain.trim().toUpperCase();
+    if (sourceChain !== "SOLANA" && sourceChain !== "SOL") {
+      throw new FundingError("ROUTE_SUBMISSION_FAILED", "Signed Solana submission is only available for Solana funding legs.", 400);
+    }
+    const broadcastInput: { signedTransaction: string; env?: NodeJS.ProcessEnv } = {
+      signedTransaction: input.signedTransaction,
+      ...(this.config.env ? { env: this.config.env } : {})
+    };
+    const txHash = await broadcastSignedSolanaTransaction(broadcastInput);
+    return this.submitRouteLeg(userId, fundingIntentId, {
+      routeLegId: input.routeLegId,
+      txHash
+    });
+  }
+
   public async refreshIntentStatus(userId: string, fundingIntentId: string): Promise<FundingIntentView> {
     const view = await this.getIntent(userId, fundingIntentId);
     const refreshedStates: FundingLegState[] = [];
     for (const leg of view.routeLegs) {
       const latestTxHash = leg.txHashes.at(-1);
-      if (!latestTxHash || leg.status === "LEG_READY_TO_TRADE" || leg.status === "LEG_FAILED") {
+      if (!latestTxHash || leg.status === "LEG_FAILED") {
         refreshedStates.push(leg.status);
+        continue;
+      }
+      if (leg.status === "LEG_READY_TO_TRADE") {
+        if (this.config.venueReadinessChecksEnabled && leg.targetVenue === "POLYMARKET") {
+          const verified = await this.verifyVenueReadiness(userId, fundingIntentId, leg.routeLegId);
+          refreshedStates.push(verified.routeLegs.find((candidate) => candidate.routeLegId === leg.routeLegId)?.status ?? leg.status);
+        } else {
+          refreshedStates.push(leg.status);
+        }
         continue;
       }
       if (leg.routeProvider === "DIRECT_TRANSFER") {
@@ -559,7 +634,15 @@ export class FundingService {
       bridgeStatus: result.destinationReceived ? "DONE" : leg.bridgeStatus,
       destinationStatus: result.destinationReceived ? "CONFIRMED" : leg.destinationStatus,
       venueCreditStatus: result.venueCreditConfirmed ? "CONFIRMED" : result.status === "UNKNOWN" ? "UNKNOWN" : "PENDING",
-      providerStatus: leg.providerStatus,
+      providerStatus: {
+        ...leg.providerStatus,
+        readiness: {
+          status: result.status,
+          reason: result.reason,
+          checkedAt: result.checkedAt,
+          evidence: result.evidence
+        }
+      },
       errorReason: result.status === "UNKNOWN" || result.status === "FAILED" ? result.reason : leg.errorReason
     });
 
@@ -1125,6 +1208,22 @@ export class FundingService {
     }
     try {
       const supportedAssets = await this.polymarketBridgeWithdrawalAdapter.getSupportedBridgeAssets();
+      const destination = resolvePolymarketBridgeDestinationAsset(intent.destinationChain, intent.token);
+      if (!isEvmAddress(intent.destinationWalletAddress)) {
+        throw new FundingError(
+          "WITHDRAWAL_DESTINATION_INVALID",
+          "Polymarket Bridge withdrawals require an EVM recipient address.",
+          400
+        );
+      }
+      const destinationSupported = supportedAssets.some((asset) => polymarketBridgeAssetMatchesDestination(asset, destination));
+      if (!destinationSupported) {
+        throw new FundingError(
+          "WITHDRAWAL_DESTINATION_UNSUPPORTED",
+          `Polymarket Bridge does not currently support ${destination.chain} ${destination.token} withdrawals for this route.`,
+          409
+        );
+      }
       const quote = await this.polymarketBridgeWithdrawalAdapter.prepareWithdrawalQuote({
         destinationChain: intent.destinationChain,
         destinationToken: intent.token,
@@ -1134,6 +1233,9 @@ export class FundingService {
       const userAction = await this.polymarketBridgeWithdrawalAdapter.prepareUserAction(quote);
       return buildPolymarketBridgeWithdrawalRouteLeg(intent, source, quote, userAction, supportedAssets.length);
     } catch (error) {
+      if (error instanceof FundingError) {
+        throw error;
+      }
       const normalized = this.polymarketBridgeWithdrawalAdapter.normalizeWithdrawalError(error);
       throw new FundingError(
         "WITHDRAWAL_PROVIDER_UNAVAILABLE",
@@ -1547,7 +1649,7 @@ export class FundingService {
     if (capability.readinessStatus !== "READY") {
       throw new FundingError("VENUE_CAPABILITY_DISABLED", `${capability.venue} funding is not enabled.`, 409);
     }
-    if (!capability.supportedChains.includes(intent.sourceChain)) {
+    if (!isSourceChainSupported(capability, intent.sourceChain)) {
       throw new FundingError("SOURCE_CHAIN_UNSUPPORTED", "Source chain is not supported for this venue.", 409);
     }
     if (!capability.supportedTokens.includes(intent.sourceToken)) {
@@ -1582,6 +1684,48 @@ export class FundingService {
       }
       throw error;
     }
+  }
+
+  private async readUserWalletVenueBalance(
+    userId: string,
+    persistedBalances: readonly VenueBalanceView[],
+    venue: "LIMITLESS" | "PREDICT_FUN"
+  ): Promise<VenueBalanceView | null> {
+    if (!this.userWalletService) {
+      return null;
+    }
+    const capability = buildVenueCapabilityMatrix({ env: this.config.env })[venue];
+    if (capability.readinessStatus !== "READY" || !["BASE", "BSC", "BNB"].includes(normalizeFundingChain(capability.preferredChain))) {
+      return null;
+    }
+    const wallet = await this.userWalletService.resolveUserTurnkeyEvmFundingWallet(userId);
+    if (!wallet || wallet.status !== "ACTIVE" || wallet.chainFamily !== "EVM") {
+      return null;
+    }
+
+    const reader = this.userWalletBalanceReader ?? buildUserWalletBalanceReaderFromEnv(this.config.env);
+    const result = await reader.readWalletBalances(wallet);
+    const preferredChain = normalizeFundingChain(capability.preferredChain);
+    const preferredToken = capability.preferredToken.toUpperCase();
+    const walletBalance = result.balances.find((balance) =>
+      normalizeFundingChain(balance.chain) === preferredChain && balance.token.toUpperCase() === preferredToken
+    );
+    if (!walletBalance) {
+      return null;
+    }
+
+    const readyAmount = new Decimal(walletBalance.amount);
+    const persisted = persistedBalances.find((balance) => balance.venue === venue && balance.token.toUpperCase() === preferredToken);
+    const pendingWithdrawalAmount = persisted?.pendingWithdrawalAmount ?? "0";
+    const availableAmount = Decimal.max(readyAmount.minus(new Decimal(pendingWithdrawalAmount)), 0);
+    return {
+      venue,
+      token: preferredToken,
+      readyAmount: decimalToPlainString(readyAmount),
+      pendingWithdrawalAmount,
+      availableAmount: decimalToPlainString(availableAmount),
+      updatedAt: walletBalance.updatedAt
+    };
   }
 
   private async resolveFundingDestinationAddress(userId: string, venue: FundingVenue, destinationChain: string): Promise<string | null> {
@@ -1768,6 +1912,24 @@ const summarizeQuotes = (routeLegs: readonly FundingRouteLeg[]): Record<string, 
   totalEstimatedFees: routeLegs.reduce((sum, leg) => sum.plus(leg.routeQuote.estimatedFees), new Decimal(0)).toString()
 });
 
+const decimalToPlainString = (value: InstanceType<typeof Decimal>): string => value.toFixed();
+
+const sourceTokenAddressForChain = (capability: VenueCapability, sourceChain: string): string | undefined => {
+  const direct = capability.sourceTokenAddressByChain[sourceChain];
+  if (direct) {
+    return direct;
+  }
+  const normalized = normalizeFundingChain(sourceChain);
+  return Object.entries(capability.sourceTokenAddressByChain).find(([chain]) =>
+    normalizeFundingChain(chain) === normalized
+  )?.[1];
+};
+
+const isSourceChainSupported = (capability: VenueCapability, sourceChain: string): boolean => {
+  const normalized = normalizeFundingChain(sourceChain);
+  return capability.supportedChains.some((chain) => normalizeFundingChain(chain) === normalized);
+};
+
 const normalizeFundingChain = (value: string): string => {
   const normalized = value.trim().toUpperCase();
   if (normalized === "SOL" || normalized === "SOLANA" || normalized === "1151111081099710") {
@@ -1795,6 +1957,170 @@ const isEvmAddress = (value: string): boolean => /^0x[a-fA-F0-9]{40}$/.test(valu
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isSolanaFundingChain = (value: string): boolean => {
+  const normalized = value.trim().toUpperCase();
+  return normalized === "SOLANA" || normalized === "SOL";
+};
+
+const decodeSerializedSolanaTransaction = (value: string): Buffer => {
+  const trimmed = value.trim();
+  const cleanHex = trimmed.startsWith("0x") ? trimmed.slice(2) : trimmed;
+  if (/^[a-fA-F0-9]+$/.test(cleanHex) && cleanHex.length % 2 === 0) {
+    return Buffer.from(cleanHex, "hex");
+  }
+  return Buffer.from(trimmed, "base64");
+};
+
+const encodeSerializedSolanaTransactionHex = (value: Uint8Array): string => Buffer.from(value).toString("hex");
+
+const hexToBase64 = (value: string): string => {
+  const cleanHex = value.startsWith("0x") ? value.slice(2) : value;
+  if (!/^[a-fA-F0-9]+$/.test(cleanHex) || cleanHex.length % 2 !== 0) {
+    throw new FundingError("ROUTE_SUBMISSION_FAILED", "Signed Solana transaction must be hex encoded.", 400);
+  }
+  return Buffer.from(cleanHex, "hex").toString("base64");
+};
+
+const firstNonEmpty = (...values: Array<string | undefined>): string | null => {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+};
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isSolanaBlockhashError = (message: string): boolean =>
+  /blockhash not found|expired blockhash|block height exceeded|recent blockhash/i.test(message);
+
+const getSolanaRpcUrl = (env?: NodeJS.ProcessEnv): string =>
+  firstNonEmpty(env?.SOLANA_RPC_URL, env?.VITE_SOLANA_RPC_URL) ?? "https://api.mainnet-beta.solana.com";
+
+const readLatestSolanaBlockhash = async (rpcUrl: string): Promise<string> => {
+  const response = await fetch(rpcUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: `lotus-funding-blockhash-${Date.now()}`,
+      method: "getLatestBlockhash",
+      params: [{ commitment: "confirmed" }]
+    })
+  });
+  const payload: unknown = await response.json().catch(() => null);
+  if (!response.ok || !isRecord(payload)) {
+    throw new FundingError("ROUTE_QUOTE_FAILED", "Solana RPC did not return a usable latest blockhash.", 502);
+  }
+  const error = isRecord(payload.error) ? payload.error : null;
+  if (error) {
+    const message = typeof error.message === "string" ? error.message : "Solana RPC latest blockhash read failed.";
+    throw new FundingError("ROUTE_QUOTE_FAILED", message, 502);
+  }
+  const result = isRecord(payload.result) ? payload.result : null;
+  const value = isRecord(result?.value) ? result.value : null;
+  if (!value || typeof value.blockhash !== "string") {
+    throw new FundingError("ROUTE_QUOTE_FAILED", "Solana RPC latest blockhash response was malformed.", 502);
+  }
+  return value.blockhash;
+};
+
+const normalizeSolanaFundingRouteQuoteForBroadcastRpc = async (input: {
+  quote: FundingRouteQuote;
+  env?: NodeJS.ProcessEnv;
+}): Promise<FundingRouteQuote> => {
+  if (input.env?.SOLANA_FUNDING_ROUTE_BLOCKHASH_REFRESH_ENABLED === "false") {
+    return input.quote;
+  }
+  if (!isSolanaFundingChain(input.quote.sourceChain) || !input.quote.transactionRequest) {
+    return input.quote;
+  }
+  const transactionRequest = input.quote.transactionRequest;
+  const serializedTransaction = transactionRequest.unsignedTransaction ?? transactionRequest.data;
+  if (!serializedTransaction) {
+    return input.quote;
+  }
+  try {
+    const latestBlockhash = await readLatestSolanaBlockhash(getSolanaRpcUrl(input.env));
+    const transaction = VersionedTransaction.deserialize(decodeSerializedSolanaTransaction(serializedTransaction));
+    transaction.message.recentBlockhash = latestBlockhash;
+    return {
+      ...input.quote,
+      transactionRequest: {
+        ...transactionRequest,
+        unsignedTransaction: encodeSerializedSolanaTransactionHex(transaction.serialize()),
+        recentBlockhash: latestBlockhash
+      }
+    };
+  } catch (error) {
+    if (error instanceof FundingError) {
+      throw error;
+    }
+    throw new FundingError(
+      "ROUTE_QUOTE_FAILED",
+      error instanceof Error
+        ? `Solana funding transaction could not be refreshed against the configured broadcast RPC: ${error.message}`
+        : "Solana funding transaction could not be refreshed against the configured broadcast RPC.",
+      502
+    );
+  }
+};
+
+const broadcastSignedSolanaTransaction = async (input: {
+  signedTransaction: string;
+  env?: NodeJS.ProcessEnv;
+}): Promise<string> => {
+  const rpcUrl = getSolanaRpcUrl(input.env);
+  const signedTransactionBase64 = hexToBase64(input.signedTransaction);
+  let lastBlockhashMessage: string | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: `lotus-funding-${Date.now()}-${attempt}`,
+        method: "sendTransaction",
+        params: [
+          signedTransactionBase64,
+          {
+            encoding: "base64",
+            preflightCommitment: "confirmed",
+            skipPreflight: false,
+            maxRetries: 3
+          }
+        ]
+      })
+    });
+    const payload: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new FundingError("ROUTE_SUBMISSION_FAILED", "Solana RPC rejected the funding transaction broadcast.", 502);
+    }
+    if (!isRecord(payload)) {
+      throw new FundingError("ROUTE_SUBMISSION_FAILED", "Solana RPC returned an invalid broadcast response.", 502);
+    }
+    const error = isRecord(payload.error) ? payload.error : null;
+    if (error) {
+      const message = typeof error.message === "string" ? error.message : "Solana RPC rejected the funding transaction.";
+      if (isSolanaBlockhashError(message)) {
+        lastBlockhashMessage = message;
+        await sleep(500);
+        continue;
+      }
+      throw new FundingError("ROUTE_SUBMISSION_FAILED", message, 502);
+    }
+    if (typeof payload.result !== "string" || payload.result.length < 32) {
+      throw new FundingError("ROUTE_SUBMISSION_FAILED", "Solana RPC did not return a transaction signature.", 502);
+    }
+    return payload.result;
+  }
+  throw new FundingError(
+    "ROUTE_QUOTE_STALE",
+    lastBlockhashMessage ?? "Solana funding transaction expired before broadcast. Refresh the route quote and sign again.",
+    409
+  );
+};
 
 const fromBaseUnits = (amount: string, decimals: number): string => {
   const normalized = amount.replace(/^0+(?=\d)/, "") || "0";
@@ -2266,6 +2592,10 @@ const buildPolymarketBridgeProviderStatus = (input: {
       quote: {
         provider: input.quote.provider,
         providerQuoteId: input.quote.providerQuoteId,
+        fromChainId: input.quote.fromChainId,
+        fromTokenAddress: input.quote.fromTokenAddress,
+        toChainId: input.quote.toChainId,
+        toTokenAddress: input.quote.toTokenAddress,
         destinationChain: input.quote.destinationChain,
         destinationToken: input.quote.destinationToken,
         destinationAddress: input.quote.destinationAddress,
@@ -2522,6 +2852,23 @@ const normalizeHistoryPageSize = (value: number | undefined): number => {
   return Math.min(Math.max(Math.trunc(value), 1), 200);
 };
 
+const isRefreshableFundingHistoryItem = (item: FundingHistoryItem): boolean => {
+  if (item.direction !== "FUNDING" || item.txHashes.length === 0) {
+    return false;
+  }
+  if (item.venue === "POLYMARKET" && (item.status === "READY_TO_TRADE" || item.status === "LEG_READY_TO_TRADE")) {
+    return true;
+  }
+  return [
+    "BRIDGING",
+    "PARTIALLY_READY_TO_TRADE",
+    "LEG_SUBMITTED",
+    "LEG_BRIDGE_PENDING",
+    "LEG_DESTINATION_RECEIVED",
+    "LEG_VENUE_CREDIT_PENDING"
+  ].includes(item.status);
+};
+
 const expectedWithdrawalResultToken = (leg: WithdrawalRouteLeg): string => {
   const destinationTokenSymbol = leg.providerStatus.destinationTokenSymbol;
   return typeof destinationTokenSymbol === "string" ? destinationTokenSymbol : leg.sourceToken;
@@ -2605,8 +2952,9 @@ const userSafeFundingMessage = (status: FundingIntent["status"]): string => {
     case "ROUTES_QUOTED":
       return "Funding route is ready for wallet review.";
     case "BRIDGING":
+      return "Bridge transaction is still being tracked.";
     case "ROUTES_SUBMITTED":
-      return "Funding route is in progress.";
+      return "Funds reached the destination chain. Venue credit/readiness is still pending.";
     case "PARTIALLY_READY_TO_TRADE":
       return "Some venue funds are ready to trade.";
     case "READY_TO_TRADE":
@@ -2679,9 +3027,10 @@ const mapLifiStatusToFundingLeg = (status: Awaited<ReturnType<LifiRouteProvider[
         auditEvent: "FUNDING_LEG_FAILED"
       };
     case "PENDING":
+    case "NOT_FOUND":
       return {
         status: "LEG_BRIDGE_PENDING",
-        bridgeStatus: "PENDING",
+        bridgeStatus: status === "NOT_FOUND" ? "INDEXING_PENDING" : "PENDING",
         destinationStatus: "NOT_CONFIRMED",
         venueCreditStatus: "NOT_CONFIRMED",
         errorReason: null

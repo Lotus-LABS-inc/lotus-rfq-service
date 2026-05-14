@@ -6,6 +6,82 @@ import {
 } from "../src/api/routes/execution.js";
 
 describe("execution signed bundle routes", () => {
+  it("preserves live candidate metadata when creating execution quotes", async () => {
+    const app = Fastify();
+    const quote = vi.fn(async () => ({
+      quote: {
+        quoteId: "exec_quote_limitless_metadata",
+        userId: "user-1",
+        side: "buy",
+        marketId: "canonical-market",
+        outcomeId: "YES",
+        routeType: "SINGLE_VENUE",
+        venuePath: ["LIMITLESS"],
+        executableAmount: "1",
+        skippedAmount: "0",
+        expectedPrice: 0.1,
+        effectivePrice: 0.1,
+        requiredUserSignatureSteps: ["LIMITLESS user signature required"],
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        legs: [{
+          venue: "LIMITLESS",
+          venueMarketId: "limitless-market",
+          venueOutcomeId: "limitless-token",
+          size: "10",
+          price: 0.1,
+          requiresUserSignature: true,
+          metadata: {
+            limitlessExchangeAddress: "0xe3E00BA3a9888d1DE4834269f62ac008b4BB5C47"
+          }
+        }]
+      },
+      rejectedCandidates: [],
+      internalCandidateCount: 1
+    }));
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: {
+        quote,
+        getQuote: vi.fn()
+      } as never,
+      sellQuoteService: {
+        prepareExit: vi.fn()
+      } as never
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/execution/quote",
+      payload: {
+        side: "buy",
+        marketId: "canonical-market",
+        outcomeId: "YES",
+        amount: "1",
+        candidates: [{
+          venue: "LIMITLESS",
+          venueMarketId: "limitless-market",
+          venueOutcomeId: "limitless-token",
+          price: 0.1,
+          availableSize: "10",
+          requiresUserSignature: true,
+          metadata: {
+            limitlessExchangeAddress: "0xe3E00BA3a9888d1DE4834269f62ac008b4BB5C47"
+          }
+        }]
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(quote).toHaveBeenCalledWith(expect.objectContaining({
+      candidates: [expect.objectContaining({
+        metadata: {
+          limitlessExchangeAddress: "0xe3E00BA3a9888d1DE4834269f62ac008b4BB5C47"
+        }
+      })]
+    }));
+  });
+
   it("wires prepare-signatures and submit-signed-bundle through the signed bundle service", async () => {
     const app = Fastify();
     const signedTradeBundleService = {
@@ -194,6 +270,19 @@ describe("execution signed bundle routes", () => {
         lastSettlementEvidenceId: "order-1",
         status: "VERIFIED" as const,
         metadata: {}
+      }, {
+        positionId: "position-closed",
+        userId: "user-1",
+        venue: "POLYMARKET",
+        marketId: "market-closed",
+        outcomeId: "YES",
+        venueAccountAddress: null,
+        verifiedSize: "0",
+        averageEntryPrice: 0.4,
+        sellableSize: "0",
+        lastSettlementEvidenceId: "order-closed",
+        status: "VERIFIED" as const,
+        metadata: {}
       }]))
     };
     await registerExecutionRoutes(app, async (request) => {
@@ -212,6 +301,7 @@ describe("execution signed bundle routes", () => {
       outcomeId: null,
       positions: [{ positionId: "position-1", venue: "POLYMARKET" }]
     });
+    expect(response.json().positions).toHaveLength(1);
     expect(positionRepository.listUserVerifiedPositions).toHaveBeenCalledWith({
       userId: "user-1",
       limit: 25

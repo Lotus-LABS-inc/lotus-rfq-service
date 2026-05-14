@@ -71,7 +71,7 @@ export interface MarketOrderbookResponse {
   bestAsk: string | null;
   midpoint: string | null;
   spread: string | null;
-  status: "live" | "partial" | "unavailable";
+  status: "live" | "partial" | "stale" | "unavailable";
   blockers: VenueQuoteSnapshotBlocker[];
 }
 
@@ -93,6 +93,50 @@ export interface MarketChartResponse {
   blockers: VenueQuoteSnapshotBlocker[];
 }
 
+export interface MarketBatchQuoteRequestItem {
+  marketId: string;
+  outcomeId: string;
+  side?: "buy" | "sell";
+  amount?: string | number;
+}
+
+export interface MarketBatchQuoteVenueEvidence {
+  venue: string;
+  venueMarketId: string;
+  venueOutcomeId: string | null;
+  price: string | null;
+  bid: string | null;
+  ask: string | null;
+  availableSize: string;
+  liquidity: string;
+  spread: string | null;
+  source: "STREAM" | "REST";
+  quoteQuality: string;
+  freshnessMs: number | null;
+  blockers: string[];
+}
+
+export interface MarketBatchQuoteItem {
+  marketId: string;
+  outcomeId: string;
+  side: "buy" | "sell";
+  generatedAt: string;
+  status: "live" | "partial" | "stale" | "unavailable";
+  bestVenue: string | null;
+  bestVenuePrice: string | null;
+  unifiedAveragePrice: string | null;
+  liquidity: string;
+  spread: string | null;
+  freshnessMs: number | null;
+  venues: MarketBatchQuoteVenueEvidence[];
+  blockers: VenueQuoteSnapshotBlocker[];
+}
+
+export interface MarketBatchQuoteResponse {
+  generatedAt: string;
+  quotes: MarketBatchQuoteItem[];
+}
+
 interface StoredChartPoint {
   marketId: string;
   outcomeId: string | null;
@@ -103,15 +147,21 @@ interface StoredChartPoint {
 
 const MAX_STORED_POINTS = 20_000;
 const MAX_HISTORY_MS = 31 * 24 * 60 * 60 * 1000;
+const BATCH_QUOTE_CACHE_MS = 3_000;
 const VENUE_COLORS = ["#3B82F6", "#10B981", "#8B5CF6", "#F59E0B", "#EC4899", "#22D3EE"];
 
 export class LiveMarketDataViewService {
   private readonly chartPoints: StoredChartPoint[] = [];
+  private readonly batchQuoteCache = new Map<string, { expiresAt: number; item?: MarketBatchQuoteItem; promise?: Promise<MarketBatchQuoteItem> }>();
+  private readonly lastGoodBatchQuotes = new Map<string, MarketBatchQuoteItem>();
   private readonly now: () => Date;
 
   public constructor(
     private readonly quoteSource: MarketDataQuoteSource,
-    options: { now?: () => Date; historicalChartSource?: MarketHistoricalChartSource | undefined } = {}
+    options: {
+      now?: () => Date;
+      historicalChartSource?: MarketHistoricalChartSource | undefined;
+    } = {}
   ) {
     this.now = options.now ?? (() => new Date());
     this.historicalChartSource = options.historicalChartSource;
@@ -172,6 +222,98 @@ export class LiveMarketDataViewService {
       status,
       blockers: [...blockers]
     };
+  }
+
+  public async getBatchQuotes(input: {
+    items: readonly MarketBatchQuoteRequestItem[];
+  }): Promise<MarketBatchQuoteResponse> {
+    const generatedAt = this.now();
+    const quotes = await Promise.all(input.items.map(async (item) => {
+      const side = item.side ?? "buy";
+      const quantity = normalizeQuoteAmount(item.amount);
+      const key = batchQuoteCacheKey(item.marketId, item.outcomeId, side, quantity);
+      const cached = this.batchQuoteCache.get(key);
+      if (cached && cached.expiresAt > generatedAt.getTime()) {
+        if (cached.item) return cached.item;
+        if (cached.promise) return cached.promise;
+      }
+      const promise = this.loadBatchQuoteItem({ item, side, quantity, generatedAt });
+      this.batchQuoteCache.set(key, { expiresAt: generatedAt.getTime() + BATCH_QUOTE_CACHE_MS, promise });
+      const quote = await promise;
+      const output = quote.status === "unavailable"
+        ? this.staleBatchQuoteFromLastGood(key, quote, generatedAt) ?? quote
+        : quote;
+      if (output.status === "live" || output.status === "partial") {
+        this.lastGoodBatchQuotes.set(key, output);
+      }
+      this.batchQuoteCache.set(key, { expiresAt: generatedAt.getTime() + BATCH_QUOTE_CACHE_MS, item: output });
+      return output;
+    }));
+    return {
+      generatedAt: generatedAt.toISOString(),
+      quotes
+    };
+  }
+
+  private staleBatchQuoteFromLastGood(key: string, current: MarketBatchQuoteItem, generatedAt: Date): MarketBatchQuoteItem | null {
+    const lastGood = this.lastGoodBatchQuotes.get(key);
+    if (!lastGood) return null;
+    return {
+      ...lastGood,
+      generatedAt: generatedAt.toISOString(),
+      status: "stale",
+      blockers: [
+        ...current.blockers,
+        {
+          venue: "LOTUS",
+          reason: "LAST_GOOD_QUOTE_USED",
+          detailsCode: lastGood.generatedAt
+        }
+      ]
+    };
+  }
+
+  private async loadBatchQuoteItem(input: {
+    item: MarketBatchQuoteRequestItem;
+    side: "buy" | "sell";
+    quantity: number;
+    generatedAt: Date;
+  }): Promise<MarketBatchQuoteItem> {
+    try {
+      const report = await this.quoteSource.getQuoteSnapshotReport({
+        canonicalMarketId: input.item.marketId,
+        canonicalOutcomeId: input.item.outcomeId,
+        side: input.side,
+        quantity: input.quantity
+      });
+      return buildBatchQuoteItem({
+        marketId: input.item.marketId,
+        outcomeId: input.item.outcomeId,
+        side: input.side,
+        generatedAt: input.generatedAt,
+        report,
+        now: input.generatedAt
+      });
+    } catch (error) {
+      return {
+        marketId: input.item.marketId,
+        outcomeId: input.item.outcomeId,
+        side: input.side,
+        generatedAt: input.generatedAt.toISOString(),
+        status: "unavailable" as const,
+        bestVenue: null,
+        bestVenuePrice: null,
+        unifiedAveragePrice: null,
+        liquidity: "0",
+        spread: null,
+        freshnessMs: null,
+        venues: [],
+        blockers: [{
+          venue: "LOTUS",
+          reason: error instanceof Error ? error.message : "MARKET_BATCH_QUOTE_UNAVAILABLE"
+        }]
+      };
+    }
   }
 
   public async getChart(input: {
@@ -329,6 +471,100 @@ const sanitizeVenueOrderbook = (snapshot: NormalizedVenueQuoteSnapshot, depth: n
   };
 };
 
+const buildBatchQuoteItem = (input: {
+  marketId: string;
+  outcomeId: string;
+  side: "buy" | "sell";
+  generatedAt: Date;
+  report: VenueQuoteSnapshotReport;
+  now: Date;
+}): MarketBatchQuoteItem => {
+  const venues = input.report.snapshots.map((snapshot) => {
+    const bid = bestLevel(snapshot.bids, "bid");
+    const ask = bestLevel(snapshot.asks, "ask");
+    const price = input.side === "buy" ? ask : bid;
+    const availableSize = input.side === "buy"
+      ? sumLevelSizes(snapshot.asks)
+      : sumLevelSizes(snapshot.bids);
+    const liquidity = price && availableSize
+      ? new Decimal(price).times(availableSize).toDecimalPlaces(8).toString()
+      : "0";
+    const freshnessMs = snapshot.sourceTimestamp
+      ? Math.max(0, input.now.getTime() - snapshot.sourceTimestamp.getTime())
+      : Math.max(0, input.now.getTime() - snapshot.receivedAt.getTime());
+    return {
+      venue: snapshot.venue.toUpperCase(),
+      venueMarketId: snapshot.venueMarketId,
+      venueOutcomeId: snapshot.venueOutcomeId ?? null,
+      price,
+      bid,
+      ask,
+      availableSize: availableSize?.toDecimalPlaces(8).toString() ?? "0",
+      liquidity,
+      spread: spreadFromBest(bid, ask),
+      source: snapshot.source,
+      quoteQuality: snapshot.quoteQuality,
+      freshnessMs,
+      blockers: [...new Set([...(snapshot.blockers ?? []), ...(snapshot.missingFactors ?? [])])]
+    };
+  });
+  const pricedVenues = venues.filter((venue) => venue.price !== null);
+  const best = pricedVenues.sort((left, right) => input.side === "buy"
+    ? Number(left.price) - Number(right.price)
+    : Number(right.price) - Number(left.price)
+  )[0];
+  const prices = pricedVenues.map((venue) => venue.price).filter((value): value is string => value !== null);
+  const liquidity = venues.reduce((sum, venue) => sum.plus(venue.liquidity), new Decimal(0)).toDecimalPlaces(8).toString();
+  const freshnessValues = venues.map((venue) => venue.freshnessMs).filter((value): value is number => value !== null);
+  const blockers = input.report.blocked;
+  const hasVenueBlockers = venues.some((venue) => venue.blockers.length > 0);
+  const status = venues.length > 0 && blockers.length === 0 && !hasVenueBlockers ? "live" : venues.length > 0 ? "partial" : "unavailable";
+  return {
+    marketId: input.marketId,
+    outcomeId: input.outcomeId,
+    side: input.side,
+    generatedAt: input.generatedAt.toISOString(),
+    status,
+    bestVenue: best?.venue ?? null,
+    bestVenuePrice: best?.price ?? null,
+    unifiedAveragePrice: averageDecimalStrings(prices),
+    liquidity,
+    spread: averageDecimalStrings(venues.map((venue) => venue.spread)),
+    freshnessMs: freshnessValues.length ? Math.max(...freshnessValues) : null,
+    venues,
+    blockers: [...blockers]
+  };
+};
+
+const batchQuoteCacheKey = (
+  marketId: string,
+  outcomeId: string,
+  side: "buy" | "sell",
+  quantity: number
+): string => `${marketId}\u0000${outcomeId}\u0000${side}\u0000${quantity}`;
+
+const bestLevel = (
+  levels: readonly NormalizedQuoteLevel[],
+  side: "bid" | "ask"
+): string | null => {
+  const values = levels
+    .map((level) => decimal(level.price))
+    .filter((value): value is InstanceType<typeof Decimal> => Boolean(value));
+  if (values.length === 0) return null;
+  return values
+    .sort((left, right) => side === "bid" ? right.comparedTo(left) : left.comparedTo(right))[0]!
+    .toDecimalPlaces(12)
+    .toString();
+};
+
+const sumLevelSizes = (levels: readonly NormalizedQuoteLevel[]): InstanceType<typeof Decimal> | null => {
+  if (levels.length === 0) return null;
+  return levels.reduce((sum, level) => {
+    const size = decimal(level.size);
+    return size ? sum.plus(size) : sum;
+  }, new Decimal(0));
+};
+
 const cumulativeLevels = (
   venue: string,
   venueMarketId: string,
@@ -434,6 +670,11 @@ const decimal = (value: string | number | null | undefined): InstanceType<typeof
 
 const clampDepth = (value: number | undefined): number =>
   Math.max(1, Math.min(50, typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : 20));
+
+const normalizeQuoteAmount = (value: string | number | undefined): number => {
+  const parsed = typeof value === "number" ? value : Number(value ?? 1);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+};
 
 const timeframeCutoff = (timeframe: MarketChartTimeframe, now: Date): Date | null => {
   const hours = timeframe === "1H" ? 1

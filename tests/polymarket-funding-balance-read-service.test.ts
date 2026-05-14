@@ -11,12 +11,18 @@ import {
 
 class StubBalanceAllowanceClient implements PolymarketBalanceAllowanceClient {
   public lastAssetType: AssetType | null = null;
+  public updateCalls = 0;
 
   public constructor(private readonly response: BalanceAllowanceResponse) {}
 
   public async getBalanceAllowance(params: { asset_type: AssetType }): Promise<BalanceAllowanceResponse> {
     this.lastAssetType = params.asset_type;
     return this.response;
+  }
+
+  public async updateBalanceAllowance(_params: { asset_type: AssetType }): Promise<unknown> {
+    this.updateCalls += 1;
+    return {};
   }
 }
 
@@ -49,8 +55,14 @@ describe("Polymarket internal funding balance read service", () => {
       routeLegId: "leg-1"
     });
 
-    expect(result).toEqual({ usableBalance: "100" });
+    expect(result).toMatchObject({
+      usableBalance: "100",
+      collateralBalance: "125",
+      collateralAllowance: "100",
+      usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE"
+    });
     expect(client.lastAssetType).toBe(AssetType.COLLATERAL);
+    expect(client.updateCalls).toBe(1);
   });
 
   it("reads CLOB v2 collateral balance with an allowances map", async () => {
@@ -72,7 +84,17 @@ describe("Polymarket internal funding balance read service", () => {
       routeLegId: "leg-1"
     });
 
-    expect(result).toEqual({ usableBalance: "90" });
+    expect(result).toMatchObject({
+      usableBalance: "90",
+      collateralBalance: "125",
+      collateralAllowance: "90",
+      approvalSpenderSource: "CLOB_ALLOWANCE_MAP",
+      clobAllowanceSpenders: [
+        { spenderAddress: "0x1111111111111111111111111111111111111111", allowance: "120" },
+        { spenderAddress: "0x2222222222222222222222222222222222222222", allowance: "90" }
+      ],
+      usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE"
+    });
     expect(client.lastAssetType).toBe(AssetType.COLLATERAL);
   });
 
@@ -86,11 +108,14 @@ describe("Polymarket internal funding balance read service", () => {
   it("falls back to default pUSD token and Polygon RPC when optional envs are blank", () => {
     expect(buildPolymarketFundingBalanceReadConfigFromEnv({
       POLYMARKET_BALANCE_ACTIVATION_TOKEN_ADDRESS: "",
+      POLYMARKET_BRIDGED_USDC_TOKEN_ADDRESS: "",
+      POLYGON_USDC_TOKEN_ADDRESS: "",
       POLYMARKET_POLYGON_RPC_URL: "",
       POLYGON_RPC_URL: ""
     } as NodeJS.ProcessEnv)).toMatchObject({
       polygonRpcUrl: "https://polygon-bor-rpc.publicnode.com",
-      pusdTokenAddress: "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB"
+      pusdTokenAddress: "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB",
+      bridgedUsdcTokenAddress: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
     });
   });
 
@@ -114,20 +139,21 @@ describe("Polymarket internal funding balance read service", () => {
       userId: "user-1",
       fundingIntentId: "intent-1",
       routeLegId: "leg-1"
-    })).resolves.toEqual({ usableBalance: "100" });
+    })).resolves.toMatchObject({ usableBalance: "100" });
 
     expect(capturedConfigs[0]).toMatchObject({
       funderAddress: "0x6867bD6B5fd147af7B7AFc7b4aee0bABb140e0cB"
     });
   });
 
-  it("falls back to on-chain pUSD balance for active deposit wallets when CLOB usable balance is zero", async () => {
+  it("reports on-chain pUSD for active deposit wallets without treating it as CLOB-usable balance", async () => {
     const rpcCalls: unknown[] = [];
     const service = new PolymarketFundingBalanceReadService(
       {
         ...completeConfig,
         polygonRpcUrl: "https://polygon-rpc.example",
-        pusdTokenAddress: "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB"
+        pusdTokenAddress: "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB",
+        recognizeBridgedUsdcAsUsable: false
       },
       () => new StubBalanceAllowanceClient({ balance: "0", allowance: "0" }),
       {
@@ -149,10 +175,212 @@ describe("Polymarket internal funding balance read service", () => {
       userId: "user-1",
       fundingIntentId: "intent-1",
       routeLegId: "leg-1"
-    })).resolves.toEqual({ usableBalance: "2.687474" });
+    })).resolves.toMatchObject({
+      usableBalance: "0",
+      onchainPusdBalance: "2.687474",
+      bridgedUsdcBalance: null,
+      usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE"
+    });
 
     expect(rpcCalls).toHaveLength(1);
     expect(JSON.stringify(rpcCalls[0])).toContain("70a08231");
+  });
+
+  it("uses verified on-chain pUSD allowance as a readiness fallback while CLOB allowance cache lags", async () => {
+    const rpcCalls: unknown[] = [];
+    const service = new PolymarketFundingBalanceReadService(
+      {
+        ...completeConfig,
+        polygonRpcUrl: "https://polygon-rpc.example",
+        pusdTokenAddress: "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB",
+        pusdApprovalSpenderAddress: "0x4d97dcd97ec945f40cf65f87097ace5ea0476045",
+        recognizeBridgedUsdcAsUsable: false
+      },
+      () => new StubBalanceAllowanceClient({ balance: "8957410", allowance: "0" }),
+      {
+        findAccount: async () => ({
+          status: "ACTIVE",
+          venueAccountAddress: "0x6867bD6B5fd147af7B7AFc7b4aee0bABb140e0cB"
+        })
+      },
+      (async (_url, init) => {
+        const payload = JSON.parse(`${init?.body ?? "{}"}`);
+        rpcCalls.push(payload);
+        const data = String(payload.params?.[0]?.data ?? "");
+        const result = data.startsWith("0xdd62ed3e") ? "0x895440" : "0x895741";
+        return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }) as typeof fetch
+    );
+
+    await expect(service.readUsableBalance({
+      userId: "user-1",
+      fundingIntentId: "intent-1",
+      routeLegId: "leg-1"
+    })).resolves.toMatchObject({
+      usableBalance: "9",
+      onchainPusdBalance: "9.000769",
+      onchainPusdAllowance: "9",
+      usableBalanceSource: "ONCHAIN_PUSD_ALLOWANCE"
+    });
+
+    expect(rpcCalls).toHaveLength(2);
+    expect(JSON.stringify(rpcCalls[1])).toContain("dd62ed3e");
+  });
+
+  it("does not treat legacy env pUSD approval as ready when CLOB reports a different spender set", async () => {
+    const rpcCalls: unknown[] = [];
+    const legacySpender = "0x4d97dcd97ec945f40cf65f87097ace5ea0476045";
+    const clobSpender = "0xE111180000d2663C0091e4f400237545B87B996B";
+    const service = new PolymarketFundingBalanceReadService(
+      {
+        ...completeConfig,
+        polygonRpcUrl: "https://polygon-rpc.example",
+        pusdTokenAddress: "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB",
+        pusdApprovalSpenderAddress: legacySpender,
+        recognizeBridgedUsdcAsUsable: false
+      },
+      () => new StubBalanceAllowanceClient({
+        balance: "8957410",
+        allowances: { [clobSpender]: "0" }
+      } as unknown as BalanceAllowanceResponse),
+      {
+        findAccount: async () => ({
+          status: "ACTIVE",
+          venueAccountAddress: "0x6867bD6B5fd147af7B7AFc7b4aee0bABb140e0cB"
+        })
+      },
+      (async (_url, init) => {
+        const payload = JSON.parse(`${init?.body ?? "{}"}`);
+        rpcCalls.push(payload);
+        const data = String(payload.params?.[0]?.data ?? "").toLowerCase();
+        const result = data.startsWith("0xdd62ed3e")
+          ? data.includes(legacySpender.toLowerCase().replace(/^0x/, ""))
+            ? "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+            : "0x0"
+          : "0x895741";
+        return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }) as typeof fetch
+    );
+
+    await expect(service.readUsableBalance({
+      userId: "user-1",
+      fundingIntentId: "intent-1",
+      routeLegId: "leg-1"
+    })).resolves.toMatchObject({
+      usableBalance: "0",
+      onchainPusdBalance: "9.000769",
+      onchainPusdAllowance: "0",
+      approvalSpenderSource: "CLOB_ALLOWANCE_MAP",
+      clobAllowanceSpenders: [{ spenderAddress: clobSpender, allowance: "0" }],
+      usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE"
+    });
+
+    expect(rpcCalls).toHaveLength(2);
+    expect(JSON.stringify(rpcCalls[1]).toLowerCase()).toContain(clobSpender.toLowerCase().replace(/^0x/, ""));
+    expect(JSON.stringify(rpcCalls[1]).toLowerCase()).not.toContain(legacySpender.toLowerCase().replace(/^0x/, ""));
+  });
+
+  it("uses verified on-chain allowances for every CLOB spender when the CLOB cache lags", async () => {
+    const clobSpenders = [
+      "0xE111180000d2663C0091e4f400237545B87B996B",
+      "0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296",
+      "0xe2222d279d744050d28e00520010520000310F59"
+    ];
+    const rpcCalls: unknown[] = [];
+    const service = new PolymarketFundingBalanceReadService(
+      {
+        ...completeConfig,
+        polygonRpcUrl: "https://polygon-rpc.example",
+        pusdTokenAddress: "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB",
+        recognizeBridgedUsdcAsUsable: false
+      },
+      () => new StubBalanceAllowanceClient({
+        balance: "8957410",
+        allowances: Object.fromEntries(clobSpenders.map((spender) => [spender, "0"]))
+      } as unknown as BalanceAllowanceResponse),
+      {
+        findAccount: async () => ({
+          status: "ACTIVE",
+          venueAccountAddress: "0x6867bD6B5fd147af7B7AFc7b4aee0bABb140e0cB"
+        })
+      },
+      (async (_url, init) => {
+        const payload = JSON.parse(`${init?.body ?? "{}"}`);
+        rpcCalls.push(payload);
+        const data = String(payload.params?.[0]?.data ?? "");
+        const result = data.startsWith("0xdd62ed3e") ? "0x895440" : "0x895741";
+        return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }) as typeof fetch
+    );
+
+    await expect(service.readUsableBalance({
+      userId: "user-1",
+      fundingIntentId: "intent-1",
+      routeLegId: "leg-1"
+    })).resolves.toMatchObject({
+      usableBalance: "9",
+      onchainPusdBalance: "9.000769",
+      onchainPusdAllowance: "9",
+      approvalSpenderSource: "CLOB_ALLOWANCE_MAP",
+      usableBalanceSource: "ONCHAIN_PUSD_ALLOWANCE"
+    });
+
+    expect(rpcCalls).toHaveLength(4);
+    const serializedAllowanceCalls = rpcCalls.slice(1).map((call) => JSON.stringify(call).toLowerCase()).join("\n");
+    for (const spender of clobSpenders) {
+      expect(serializedAllowanceCalls).toContain(spender.toLowerCase().replace(/^0x/, ""));
+    }
+  });
+
+  it("reports bridged Polygon USDC.e on the active deposit wallet without marking it ready to trade", async () => {
+    const rpcCalls: unknown[] = [];
+    const service = new PolymarketFundingBalanceReadService(
+      {
+        ...completeConfig,
+        polygonRpcUrl: "https://polygon-rpc.example",
+        pusdTokenAddress: "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB",
+        bridgedUsdcTokenAddress: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+      },
+      () => new StubBalanceAllowanceClient({ balance: "0", allowance: "0" }),
+      {
+        findAccount: async () => ({
+          status: "ACTIVE",
+          venueAccountAddress: "0x6867bD6B5fd147af7B7AFc7b4aee0bABb140e0cB"
+        })
+      },
+      (async (_url, init) => {
+        rpcCalls.push(JSON.parse(`${init?.body ?? "{}"}`));
+        const result = rpcCalls.length === 1 ? "0x0" : "0x895440";
+        return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }) as typeof fetch
+    );
+
+    await expect(service.readUsableBalance({
+      userId: "user-1",
+      fundingIntentId: "intent-1",
+      routeLegId: "leg-1"
+    })).resolves.toMatchObject({
+      usableBalance: "0",
+      onchainPusdBalance: "0",
+      bridgedUsdcBalance: "9",
+      usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE"
+    });
+
+    expect(rpcCalls).toHaveLength(2);
+    const secondRpcCall = rpcCalls[1] as { params: Array<{ to: string }> } | undefined;
+    expect(secondRpcCall?.params[0]?.to.toLowerCase()).toBe("0x2791bca1f2de4661ed88a30c99a7a9449aa84174");
   });
 
   it("fails closed when user-scoped balance reads do not have an active deposit wallet", async () => {

@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   getPolymarketBridgeWithdrawalConfigFromEnv,
+  HttpPolymarketBridgeWithdrawalClient,
   MockPolymarketBridgeWithdrawalClient,
   normalizeSupportedAssets,
-  PolymarketBridgeWithdrawalAdapter
+  PolymarketBridgeWithdrawalAdapter,
+  resolvePolymarketBridgeDestinationAsset
 } from "../src/core/funding/polymarket-bridge-withdrawal-adapter.js";
 
 const enabledConfig = {
@@ -100,6 +102,60 @@ describe("Polymarket Bridge withdrawal adapter dry-run", () => {
     expect(serialized).not.toContain("authorization");
     expect(serialized).not.toContain("apiKey");
     expect(serialized).not.toContain("privateKey");
+  });
+
+  it("maps Base USDC withdrawals into the provider quote request", async () => {
+    const bodies: unknown[] = [];
+    const client = new HttpPolymarketBridgeWithdrawalClient({
+      apiBaseUrl: "https://bridge.example",
+      timeoutMs: 5_000,
+      authMode: "NONE",
+      fetchImpl: (async (_url: URL | RequestInfo, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body ?? "{}")));
+        return new Response(JSON.stringify({
+          quoteId: "base-quote",
+          amount: "12",
+          estimatedFees: "0",
+          expiresAt: "2026-04-26T00:01:00.000Z"
+        }), { status: 200 });
+      }) as typeof fetch
+    });
+
+    const raw = await client.fetchQuote({
+      destinationChain: "BASE",
+      destinationToken: "USDC",
+      destinationAddress: "0x1111111111111111111111111111111111111111",
+      amount: "12"
+    });
+    const quote = await new PolymarketBridgeWithdrawalAdapter({
+      fetchSupportedAssets: async () => ({ assets: [] }),
+      fetchQuote: async () => raw,
+      createWithdrawalAddress: async () => ({ bridgeAddress: "0x2222222222222222222222222222222222222222" }),
+      fetchStatus: async () => ({ status: "PENDING" })
+    }, enabledConfig, { now: () => new Date("2026-04-26T00:00:00.000Z") }).prepareWithdrawalQuote({
+      destinationChain: "BASE",
+      destinationToken: "USDC",
+      destinationAddress: "0x1111111111111111111111111111111111111111",
+      amount: "12"
+    });
+
+    expect(bodies[0]).toMatchObject({
+      fromChainId: "137",
+      toChainId: "8453",
+      toTokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      recipientAddress: "0x1111111111111111111111111111111111111111",
+      fromAmountBaseUnit: "12000000"
+    });
+    expect(quote).toMatchObject({
+      toChainId: "8453",
+      toTokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      destinationChain: "BASE",
+      destinationToken: "USDC"
+    });
+    expect(resolvePolymarketBridgeDestinationAsset("8453", "USDC")).toMatchObject({
+      chain: "BASE",
+      chainId: "8453"
+    });
   });
 
   it("normalizes completion evidence and validates exact destination scope", async () => {

@@ -66,6 +66,32 @@ describe("venue balance activation actions", () => {
     });
   });
 
+  it("keeps Polymarket activation required after relayer execution until venue-ready cash is confirmed", () => {
+    const activations = buildVenueBalanceActivationActions({
+      balances: [balance("PREDICT_FUN", "USDT")],
+      venueAccounts: [account("POLYMARKET"), account("PREDICT_FUN")],
+      polymarketActivationExecuted: true,
+      env: {
+        POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED: "true",
+        POLYMARKET_RELAYER_URL: "https://relayer.example",
+        POLYMARKET_BUILDER_API_KEY: "key",
+        POLYMARKET_BUILDER_API_SECRET: "secret",
+        POLYMARKET_BUILDER_API_PASSPHRASE: "passphrase"
+      }
+    });
+
+    expect(activations[0]).toMatchObject({
+      venue: "POLYMARKET",
+      activationRequired: true,
+      mode: "VENUE_UI_OR_RELAYER",
+      status: "READY",
+      tokenSymbol: "pUSD",
+      transactionRequest: null,
+      lastSubmitted: true
+    });
+    expect(activations[0]?.instructions.join(" ")).toContain("CLOB collateral");
+  });
+
   it("builds an ERC20 approval only when operator-approved spender config is present", () => {
     const activations = buildVenueBalanceActivationActions({
       balances: [balance("PREDICT_FUN", "USDT")],

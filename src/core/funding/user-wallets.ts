@@ -36,6 +36,13 @@ export interface ProvisionedUserWallet {
   exportable: boolean;
 }
 
+export interface TurnkeyWalletAccountRegistration {
+  providerWalletId: string;
+  providerWalletAccountId: string;
+  address: string;
+  addressFormat: "ADDRESS_FORMAT_SOLANA" | "ADDRESS_FORMAT_ETHEREUM";
+}
+
 export interface UserWalletRepository {
   listWallets(userId: string): Promise<UserWallet[]>;
   findWalletById(walletId: string): Promise<UserWallet | null>;
@@ -61,6 +68,10 @@ export interface TurnkeyWalletProvisioner {
     turnkeyOrganizationId?: string | null;
     includeSolana: boolean;
     includeEvm: boolean;
+  }): Promise<ProvisionedUserWallet[]>;
+  verifyDefaultWalletAccounts(input: {
+    turnkeyOrganizationId: string;
+    accounts: TurnkeyWalletAccountRegistration[];
   }): Promise<ProvisionedUserWallet[]>;
 }
 
@@ -97,8 +108,8 @@ export class UserWalletService {
     turnkeyOrganizationId?: string | null
   ): Promise<UserWallet[]> {
     const existing = await this.repository.listWallets(userId);
-    const hasSolana = existing.some((wallet) => isActiveDefault(wallet, "SOLANA"));
-    const hasEvm = existing.some((wallet) => isActiveDefault(wallet, "EVM"));
+    const hasSolana = existing.some((wallet) => isActiveDefault(wallet, "SOLANA", turnkeyOrganizationId));
+    const hasEvm = existing.some((wallet) => isActiveDefault(wallet, "EVM", turnkeyOrganizationId));
     const needsSolana = this.config.defaultSolanaWalletEnabled && !hasSolana;
     const needsEvm = this.config.defaultEvmWalletEnabled && !hasEvm;
     if (!needsSolana && !needsEvm) {
@@ -152,6 +163,79 @@ export class UserWalletService {
     return this.repository.listWallets(userId);
   }
 
+  public async registerTurnkeyDefaultWallets(
+    userId: string,
+    turnkeyOrganizationId: string | null | undefined,
+    accounts: TurnkeyWalletAccountRegistration[]
+  ): Promise<UserWallet[]> {
+    const organizationId = turnkeyOrganizationId?.trim();
+    if (!organizationId) {
+      throw new UserWalletError("USER_WALLET_UNAVAILABLE", "Turnkey wallet session is missing an organization.", 409);
+    }
+    if (!this.config.turnkeyEnabled || !this.turnkeyProvisioner) {
+      throw new UserWalletError("TURNKEY_DISABLED", "Turnkey wallet provisioning is disabled.", 503);
+    }
+
+    let verified: ProvisionedUserWallet[];
+    try {
+      verified = await this.turnkeyProvisioner.verifyDefaultWalletAccounts({
+        turnkeyOrganizationId: organizationId,
+        accounts
+      });
+    } catch (error) {
+      await this.repository.appendWalletAuditEvent({
+        userId,
+        eventType: "USER_WALLET_SESSION_REGISTRATION_FAILED",
+        payload: {
+          provider: "TURNKEY",
+          requestedAccounts: accounts.length,
+          turnkeyOrganizationProvided: true,
+          ...safeProvisioningError(error)
+        }
+      });
+      throw new UserWalletError(
+        "USER_WALLET_UNAVAILABLE",
+        "Turnkey wallet registration is temporarily unavailable.",
+        503
+      );
+    }
+    if (verified.length === 0) {
+      throw new UserWalletError("USER_WALLET_UNAVAILABLE", "Turnkey wallet session did not include a usable funding wallet.", 409);
+    }
+
+    for (const wallet of verified) {
+      const stored = await this.repository.upsertWallet({
+        userId,
+        provider: wallet.provider,
+        providerSubOrgId: wallet.providerSubOrgId,
+        providerWalletId: wallet.providerWalletId,
+        providerWalletAccountId: wallet.providerWalletAccountId,
+        chainFamily: wallet.chainFamily,
+        chain: wallet.chain,
+        address: wallet.address,
+        purpose: wallet.purpose,
+        venue: wallet.venue ?? null,
+        exportable: wallet.exportable,
+        status: "ACTIVE"
+      });
+      await this.repository.appendWalletAuditEvent({
+        userId,
+        walletId: stored.walletId,
+        eventType: "USER_WALLET_REGISTERED_FROM_TURNKEY_SESSION",
+        payload: {
+          provider: stored.provider,
+          chainFamily: stored.chainFamily,
+          chain: stored.chain,
+          purpose: stored.purpose,
+          exportable: stored.exportable,
+          turnkeyOrganizationMatched: stored.providerSubOrgId === organizationId
+        }
+      });
+    }
+
+    return this.repository.listWallets(userId);
+  }
+
   private async provisionDefaultWallets(input: {
     userId: string;
     email?: string | null;
@@ -175,7 +259,8 @@ export class UserWalletService {
           provider: "TURNKEY",
           needsSolana: input.needsSolana,
           needsEvm: input.needsEvm,
-          errorName: error instanceof Error ? error.name : "UnknownError"
+          turnkeyOrganizationProvided: Boolean(input.turnkeyOrganizationId?.trim()),
+          ...safeProvisioningError(error)
         }
       });
       throw new UserWalletError(
@@ -244,14 +329,21 @@ export class UserWalletService {
       }
       return wallet;
     }
-    if (input.sourceChain.toUpperCase() !== "SOLANA") {
-      return null;
+    if (isSolanaFundingChain(input.sourceChain)) {
+      return this.repository.findActiveWallet({
+        userId: input.userId,
+        chainFamily: "SOLANA",
+        purpose: "DEFAULT_FUNDING"
+      });
     }
-    return this.repository.findActiveWallet({
-      userId: input.userId,
-      chainFamily: "SOLANA",
-      purpose: "DEFAULT_FUNDING"
-    });
+    if (isEvmFundingChain(input.sourceChain)) {
+      return this.repository.findActiveWallet({
+        userId: input.userId,
+        chainFamily: "EVM",
+        purpose: "DEFAULT_FUNDING"
+      });
+    }
+    return null;
   }
 
   public async resolveUserTurnkeyEvmFundingWallet(userId: string): Promise<UserWallet | null> {
@@ -272,13 +364,79 @@ export class UserWalletService {
   }
 }
 
-const isActiveDefault = (wallet: UserWallet, chainFamily: UserWalletChainFamily): boolean =>
-  wallet.status === "ACTIVE" && wallet.purpose === "DEFAULT_FUNDING" && wallet.chainFamily === chainFamily;
+const isActiveDefault = (
+  wallet: UserWallet,
+  chainFamily: UserWalletChainFamily,
+  turnkeyOrganizationId?: string | null
+): boolean => {
+  if (wallet.status !== "ACTIVE" || wallet.purpose !== "DEFAULT_FUNDING" || wallet.chainFamily !== chainFamily) {
+    return false;
+  }
+  const expectedOrganizationId = turnkeyOrganizationId?.trim();
+  if (wallet.provider === "TURNKEY" && expectedOrganizationId) {
+    return wallet.providerSubOrgId === expectedOrganizationId;
+  }
+  return true;
+};
 
 const chainMatches = (wallet: UserWallet, sourceChain: string): boolean => {
   const normalized = sourceChain.toUpperCase();
   if (wallet.chainFamily === "SOLANA") {
-    return normalized === "SOLANA" || wallet.chain.toUpperCase() === normalized;
+    return isSolanaFundingChain(normalized) || wallet.chain.toUpperCase() === normalized;
   }
-  return wallet.chainFamily === "EVM" && (wallet.chain.toUpperCase() === normalized || wallet.chain === "EVM");
+  return wallet.chainFamily === "EVM" && (wallet.chain.toUpperCase() === normalized || wallet.chain === "EVM" || isEvmFundingChain(normalized));
 };
+
+const isSolanaFundingChain = (value: string): boolean => {
+  const normalized = value.trim().toUpperCase();
+  return normalized === "SOL" || normalized === "SOLANA" || normalized === "1151111081099710";
+};
+
+const isEvmFundingChain = (value: string): boolean => {
+  const normalized = value.trim().toUpperCase();
+  if (normalized === "1151111081099710") {
+    return false;
+  }
+  return [
+    "EVM",
+    "ETH",
+    "ETHEREUM",
+    "POLYGON",
+    "MATIC",
+    "BASE",
+    "BSC",
+    "BNB",
+    "BNB_SMART_CHAIN"
+  ].includes(normalized) || /^\d+$/.test(normalized);
+};
+
+const safeProvisioningError = (error: unknown): Record<string, unknown> => {
+  if (!(error instanceof Error)) {
+    return { errorName: "UnknownError" };
+  }
+
+  const record = error as Error & {
+    code?: unknown;
+    status?: unknown;
+    statusCode?: unknown;
+    cause?: unknown;
+  };
+  return {
+    errorName: error.name,
+    errorMessage: safeErrorMessage(error.message),
+    ...(isPrimitiveErrorValue(record.code) ? { errorCode: record.code } : {}),
+    ...(isPrimitiveErrorValue(record.status) ? { errorStatus: record.status } : {}),
+    ...(isPrimitiveErrorValue(record.statusCode) ? { errorStatusCode: record.statusCode } : {}),
+    ...(record.cause instanceof Error ? { causeName: record.cause.name, causeMessage: safeErrorMessage(record.cause.message) } : {})
+  };
+};
+
+const isPrimitiveErrorValue = (value: unknown): value is string | number | boolean =>
+  typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+
+const safeErrorMessage = (message: string): string =>
+  message
+    .replace(/credential:\s*[^)\]\s,]+/gi, "credential: [redacted]")
+    .replace(/0x[a-fA-F0-9]{32,}/g, "[hex]")
+    .replace(/[A-Za-z0-9_-]{48,}/g, "[token]")
+    .slice(0, 500);

@@ -27,6 +27,14 @@ export interface PolymarketBridgeSupportedAsset {
   enabled: boolean;
 }
 
+export interface PolymarketBridgeDestinationAsset {
+  chain: string;
+  chainId: string;
+  token: string;
+  tokenAddress: string;
+  decimals: number;
+}
+
 export interface PolymarketBridgeWithdrawalQuote {
   provider: "POLYMARKET_BRIDGE";
   providerQuoteId: string | null;
@@ -187,7 +195,8 @@ export class PolymarketBridgeWithdrawalAdapter {
     assertSafeString(input.destinationChain, "destinationChain");
     assertSafeString(input.destinationToken, "destinationToken");
     assertSafeString(input.destinationAddress, "destinationAddress");
-    return normalizeQuote(await this.client.fetchQuote(input), input, this.now());
+    const destination = resolvePolymarketBridgeDestinationAsset(input.destinationChain, input.destinationToken);
+    return normalizeQuote(await this.client.fetchQuote(input), input, this.now(), destination);
   }
 
   public async prepareUserAction(input: PolymarketBridgeWithdrawalQuote): Promise<PolymarketBridgeUserAction> {
@@ -296,7 +305,8 @@ export class MockPolymarketBridgeWithdrawalClient implements PolymarketBridgeWit
   public async fetchSupportedAssets(): Promise<unknown> {
     return {
       assets: [
-        { chain: "POLYGON", token: "USDC", tokenAddress: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", enabled: true }
+        { chain: "POLYGON", chainId: "137", token: "USDC", tokenAddress: POLYGON_USDC_TOKEN_ADDRESS, enabled: true },
+        { chain: "BASE", chainId: "8453", token: "USDC", tokenAddress: BASE_USDC_TOKEN_ADDRESS, enabled: true }
       ]
     };
   }
@@ -307,13 +317,14 @@ export class MockPolymarketBridgeWithdrawalClient implements PolymarketBridgeWit
     destinationAddress: string;
     amount: string;
   }): Promise<unknown> {
+    const destination = resolvePolymarketBridgeDestinationAsset(input.destinationChain, input.destinationToken);
     return {
       quoteId: "mock-polymarket-bridge-quote",
       fromChainId: "137",
       fromTokenAddress: POLYMARKET_PUSD_TOKEN_ADDRESS,
       fromAmountBaseUnit: amountToBaseUnit(input.amount, 6),
-      toChainId: "137",
-      toTokenAddress: POLYGON_USDC_TOKEN_ADDRESS,
+      toChainId: destination.chainId,
+      toTokenAddress: destination.tokenAddress,
       destinationChain: input.destinationChain,
       destinationToken: input.destinationToken,
       destinationAddress: input.destinationAddress,
@@ -459,7 +470,8 @@ export const normalizeSupportedAssets = (rawInput: unknown): PolymarketBridgeSup
 export const normalizeQuote = (
   rawInput: unknown,
   request: { destinationChain: string; destinationToken: string; destinationAddress: string; amount: string },
-  now: Date
+  now: Date,
+  destination: PolymarketBridgeDestinationAsset = resolvePolymarketBridgeDestinationAsset(request.destinationChain, request.destinationToken)
 ): PolymarketBridgeWithdrawalQuote => {
   const raw = asRecord(rawInput);
   const expiresAt = stringValue(raw.expiresAt) ?? new Date(now.getTime() + 60_000).toISOString();
@@ -470,10 +482,10 @@ export const normalizeQuote = (
     fromChainId: stringValue(raw.fromChainId) ?? "137",
     fromTokenAddress: stringValue(raw.fromTokenAddress) ?? POLYMARKET_PUSD_TOKEN_ADDRESS,
     fromAmountBaseUnit: stringValue(raw.fromAmountBaseUnit) ?? amountToBaseUnit(request.amount, 6),
-    toChainId: stringValue(raw.toChainId) ?? "137",
-    toTokenAddress: stringValue(raw.toTokenAddress) ?? POLYGON_USDC_TOKEN_ADDRESS,
-    destinationChain: stringValue(raw.destinationChain) ?? request.destinationChain,
-    destinationToken: stringValue(raw.destinationToken) ?? request.destinationToken,
+    toChainId: stringValue(raw.toChainId) ?? destination.chainId,
+    toTokenAddress: stringValue(raw.toTokenAddress) ?? destination.tokenAddress,
+    destinationChain: stringValue(raw.destinationChain) ?? destination.chain,
+    destinationToken: stringValue(raw.destinationToken) ?? destination.token,
     destinationAddress: stringValue(raw.destinationAddress) ?? request.destinationAddress,
     amount: stringValue(raw.amount) ?? request.amount,
     estimatedFees: stringValue(raw.estimatedFees) ?? "0",
@@ -556,19 +568,81 @@ const normalizeBridgeStatus = (status: string | null): PolymarketBridgeStatus =>
 
 const POLYMARKET_PUSD_TOKEN_ADDRESS = "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB";
 const POLYGON_USDC_TOKEN_ADDRESS = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
+const BASE_USDC_TOKEN_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const POLYMARKET_WITHDRAWAL_SOURCE_WALLET_PLACEHOLDER = "0x9156dd10bea4c8d7e2d591b633d1694b1d764756";
 
 const toOfficialQuoteRequest = (input: {
+  destinationChain: string;
+  destinationToken: string;
   destinationAddress: string;
   amount: string;
-}): Record<string, string> => ({
-  fromAmountBaseUnit: amountToBaseUnit(input.amount, 6),
-  fromChainId: "137",
-  fromTokenAddress: POLYMARKET_PUSD_TOKEN_ADDRESS,
-  recipientAddress: input.destinationAddress,
-  toChainId: "137",
-  toTokenAddress: POLYGON_USDC_TOKEN_ADDRESS
-});
+}): Record<string, string> => {
+  const destination = resolvePolymarketBridgeDestinationAsset(input.destinationChain, input.destinationToken);
+  return {
+    fromAmountBaseUnit: amountToBaseUnit(input.amount, 6),
+    fromChainId: "137",
+    fromTokenAddress: POLYMARKET_PUSD_TOKEN_ADDRESS,
+    recipientAddress: input.destinationAddress,
+    toChainId: destination.chainId,
+    toTokenAddress: destination.tokenAddress
+  };
+};
+
+export const resolvePolymarketBridgeDestinationAsset = (
+  destinationChain: string,
+  destinationToken: string
+): PolymarketBridgeDestinationAsset => {
+  const chain = normalizeDestinationChain(destinationChain);
+  const token = destinationToken.trim().toUpperCase();
+  if (token !== "USDC") {
+    throw new Error("POLYMARKET_BRIDGE_DESTINATION_TOKEN_UNSUPPORTED");
+  }
+  if (chain === "POLYGON") {
+    return {
+      chain,
+      chainId: "137",
+      token,
+      tokenAddress: POLYGON_USDC_TOKEN_ADDRESS,
+      decimals: 6
+    };
+  }
+  if (chain === "BASE") {
+    return {
+      chain,
+      chainId: "8453",
+      token,
+      tokenAddress: BASE_USDC_TOKEN_ADDRESS,
+      decimals: 6
+    };
+  }
+  throw new Error("POLYMARKET_BRIDGE_DESTINATION_CHAIN_UNSUPPORTED");
+};
+
+export const polymarketBridgeAssetMatchesDestination = (
+  asset: PolymarketBridgeSupportedAsset,
+  destination: PolymarketBridgeDestinationAsset
+): boolean => {
+  if (!asset.enabled) {
+    return false;
+  }
+  const assetChain = normalizeDestinationChain(asset.chainId ?? asset.chain);
+  const assetToken = asset.token.trim().toUpperCase();
+  const assetTokenAddress = asset.tokenAddress?.trim().toLowerCase();
+  return assetChain === destination.chain &&
+    assetToken === destination.token &&
+    (!assetTokenAddress || assetTokenAddress === destination.tokenAddress.toLowerCase());
+};
+
+const normalizeDestinationChain = (value: string): "POLYGON" | "BASE" => {
+  const normalized = value.trim().toUpperCase();
+  if (normalized === "POLYGON" || normalized === "MATIC" || normalized === "137") {
+    return "POLYGON";
+  }
+  if (normalized === "BASE" || normalized === "8453") {
+    return "BASE";
+  }
+  throw new Error("POLYMARKET_BRIDGE_DESTINATION_CHAIN_UNSUPPORTED");
+};
 
 const amountToBaseUnit = (amount: string, decimals: number): string =>
   new Decimal(amount).times(new Decimal(10).pow(decimals)).toFixed(0);

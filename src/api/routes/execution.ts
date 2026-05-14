@@ -41,7 +41,8 @@ const candidateSchema = z.object({
   freshnessMs: z.number().nonnegative().optional(),
   confidencePenaltyBps: z.number().nonnegative().optional(),
   quoteBlockers: z.array(z.string()).optional(),
-  missingFactors: z.array(z.string()).optional()
+  missingFactors: z.array(z.string()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional()
 });
 
 const quoteRequestSchema = z.object({
@@ -68,6 +69,7 @@ const signedBundleSubmitSchema = z.object({
   signedLegs: z.array(z.object({
     legIndex: z.number().int().nonnegative(),
     venue: z.string().min(1),
+    requestType: z.string().min(1).optional(),
     signedPayload: z.record(z.string(), z.unknown())
   })),
   dryRun: z.boolean().optional()
@@ -164,6 +166,7 @@ export interface LiveExecutionCandidateBlocker {
   reason: string;
   venueMarketId?: string | undefined;
   venueOutcomeId?: string | undefined;
+  detailsCode?: string | undefined;
 }
 
 export type MarkFreshness = "live" | "unavailable";
@@ -351,8 +354,9 @@ export const registerExecutionRoutes = async (
         userId: request.user.userId,
         limit: 500
       });
+      const activePositions = positions.filter(isActiveVerifiedPosition);
       const markedPositions = await markPositions({
-        positions,
+        positions: activePositions,
         generatedAt,
         liveCandidateProvider: deps.liveCandidateProvider,
         userId: request.user.userId
@@ -390,8 +394,9 @@ export const registerExecutionRoutes = async (
         userId: request.user.userId,
         limit: 500
       });
+      const activePositions = positions.filter(isActiveVerifiedPosition);
       const markedPositions = await markPositions({
-        positions,
+        positions: activePositions,
         generatedAt,
         liveCandidateProvider: deps.liveCandidateProvider,
         userId: request.user.userId
@@ -581,11 +586,12 @@ export const registerExecutionRoutes = async (
               ...(query.limit ? { limit: query.limit } : {})
             })
           : [];
+      const activePositions = positions.filter(isActiveVerifiedPosition);
       return reply.send({
         generatedAt: new Date().toISOString(),
         marketId: query.marketId ?? null,
         outcomeId: query.outcomeId ?? null,
-        positions
+        positions: activePositions
       });
     } catch (error) {
       return sendExecutionDataUnavailable(app, reply, error, "execution positions");
@@ -722,6 +728,9 @@ const markPositions = async (input: {
   }
 }));
 
+const isActiveVerifiedPosition = (position: VerifiedExecutionPosition): boolean =>
+  Number(position.verifiedSize) > 0;
+
 const unavailableMarkedPosition = (
   position: VerifiedExecutionPosition,
   generatedAt: string,
@@ -834,7 +843,8 @@ export const buildLiveExecutionCandidatesResponse = (input: {
       venue,
       reason: blocker.reason,
       ...(blocker.venueMarketId ? { venueMarketId: blocker.venueMarketId } : {}),
-      ...(blocker.venueOutcomeId ? { venueOutcomeId: blocker.venueOutcomeId } : {})
+      ...(blocker.venueOutcomeId ? { venueOutcomeId: blocker.venueOutcomeId } : {}),
+      ...(blocker.detailsCode ? { detailsCode: blocker.detailsCode } : {})
     });
   }
 
@@ -883,7 +893,11 @@ export const buildLiveExecutionCandidatesResponse = (input: {
       ...(asNumber(metadata.freshnessMs) !== undefined ? { freshnessMs: asNumber(metadata.freshnessMs) } : {}),
       ...(asNumber(metadata.confidencePenaltyBps) !== undefined ? { confidencePenaltyBps: asNumber(metadata.confidencePenaltyBps) } : {}),
       missingFactors: asStringArray(metadata.missingFactors),
-      quoteBlockers
+      quoteBlockers,
+      metadata: {
+        ...(asString(metadata.limitlessExchangeAddress) ? { limitlessExchangeAddress: asString(metadata.limitlessExchangeAddress) } : {}),
+        ...(asString(metadata.limitlessAdapterAddress) ? { limitlessAdapterAddress: asString(metadata.limitlessAdapterAddress) } : {})
+      }
     });
   }
 
