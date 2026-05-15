@@ -453,7 +453,24 @@ export class UserVenueAccountService {
           && this.limitlessPartnerAccountClient.configured()
         ) {
           const wallet = await this.resolveRequiredTurnkeyEvmWallet(userId);
-          const message = await this.withLimitlessPartnerAccountFailureBoundary(() => this.limitlessPartnerAccountClient!.getSigningMessage());
+          const message = await this.prepareLimitlessPartnerSigningMessage({
+            userId,
+            signer: wallet.address,
+            venueAccountBindingId: ensured.account.venueAccountBindingId
+          });
+          if (!message) {
+            venueAccounts.push({
+              venue,
+              account: ensured.account,
+              readinessBlockers: [
+                ...ensured.readinessBlockers,
+                "LIMITLESS_PARTNER_ACCOUNT_REQUEST_FAILED"
+              ],
+              setupInstructions: ["Limitless partner account setup is temporarily unavailable. Lotus will retry this venue setup; other venues remain usable."],
+              setupMode: "MANUAL_LINK_REQUIRED"
+            });
+            continue;
+          }
           await this.repository.appendAccountAuditEvent({
             userId,
             venueAccountBindingId: ensured.account.venueAccountBindingId,
@@ -617,12 +634,13 @@ export class UserVenueAccountService {
         400
       );
     }
-    const linked = await this.withLimitlessPartnerAccountFailureBoundary(() => client.createEoaPartnerAccount({
-      account: wallet.address,
+    const linked = await this.createOrRecoverLimitlessPartnerAccount({
+      userId: input.userId,
+      walletAddress: wallet.address,
       signingMessage: input.message,
       signature: input.signature,
-      displayName: `Lotus ${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`
-    }));
+      client
+    });
     if (!equalsAddress(linked.account, wallet.address)) {
       throw new UserVenueAccountError(
         "USER_VENUE_ACCOUNT_MISMATCH",
@@ -1160,6 +1178,86 @@ export class UserVenueAccountService {
       );
     }
   }
+
+  private async prepareLimitlessPartnerSigningMessage(input: {
+    userId: string;
+    signer: string;
+    venueAccountBindingId: string;
+  }): Promise<string | null> {
+    try {
+      return await this.limitlessPartnerAccountClient!.getSigningMessage();
+    } catch (error) {
+      await this.repository.appendAccountAuditEvent({
+        userId: input.userId,
+        venueAccountBindingId: input.venueAccountBindingId,
+        eventType: "LIMITLESS_PARTNER_ACCOUNT_SIGNING_MESSAGE_FAILED",
+        payload: {
+          venue: "LIMITLESS",
+          signer: input.signer,
+          source: "BATCH_SETUP",
+          failure: safeLimitlessPartnerAccountFailureCode(error)
+        }
+      });
+      return null;
+    }
+  }
+
+  private async createOrRecoverLimitlessPartnerAccount(input: {
+    userId: string;
+    walletAddress: string;
+    signingMessage: string;
+    signature: string;
+    client: LimitlessPartnerAccountClient;
+  }): Promise<{ profileId: string; account: string }> {
+    try {
+      return await input.client.createEoaPartnerAccount({
+        account: input.walletAddress,
+        signingMessage: input.signingMessage,
+        signature: input.signature,
+        displayName: `Lotus ${input.walletAddress.slice(0, 6)}...${input.walletAddress.slice(-4)}`
+      });
+    } catch (error) {
+      const discovered = await this.tryDiscoverLimitlessPartnerAccount(input.client, input.walletAddress);
+      if (discovered) {
+        await this.repository.appendAccountAuditEvent({
+          userId: input.userId,
+          venueAccountBindingId: null,
+          eventType: "LIMITLESS_PARTNER_ACCOUNT_CREATE_RECOVERED_BY_DISCOVERY",
+          payload: {
+            venue: "LIMITLESS",
+            signer: input.walletAddress,
+            venueAccountAddress: discovered.account,
+            profileIdPresent: discovered.profileId.length > 0,
+            failure: safeLimitlessPartnerAccountFailureCode(error)
+          }
+        });
+        return discovered;
+      }
+      throw new UserVenueAccountError(
+        "LIMITLESS_PARTNER_ACCOUNT_AUTH_FAILED",
+        safeLimitlessPartnerAccountFailureMessage(error),
+        502
+      );
+    }
+  }
+
+  private async tryDiscoverLimitlessPartnerAccount(
+    client: LimitlessPartnerAccountClient,
+    walletAddress: string
+  ): Promise<{ profileId: string; account: string } | null> {
+    if (!client.getEoaPartnerAccount) {
+      return null;
+    }
+    try {
+      const linked = await client.getEoaPartnerAccount(walletAddress);
+      if (linked && equalsAddress(linked.account, walletAddress) && isPositiveIntegerString(linked.profileId)) {
+        return linked;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
 }
 
 export const toSafeVenueAccount = (
@@ -1274,6 +1372,20 @@ const isEvmSignature = (value: string): boolean =>
 
 const isEvmAddress = (value: string): boolean =>
   /^0x[a-fA-F0-9]{40}$/.test(value.trim());
+
+const safeLimitlessPartnerAccountFailureCode = (error: unknown): string => {
+  if (error instanceof Error && error.name.trim().length > 0) {
+    return error.name.slice(0, 80);
+  }
+  return "LIMITLESS_PARTNER_ACCOUNT_REQUEST_FAILED";
+};
+
+const safeLimitlessPartnerAccountFailureMessage = (error: unknown): string => {
+  if (error instanceof Error && error.message.includes("timed out")) {
+    return "Limitless partner account request timed out. Try again shortly; other venues remain usable.";
+  }
+  return "Limitless partner account request failed. Try again shortly; other venues remain usable.";
+};
 
 const defaultSetupApprovalAmount = "100000";
 

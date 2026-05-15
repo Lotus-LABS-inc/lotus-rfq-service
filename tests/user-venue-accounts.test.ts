@@ -143,6 +143,32 @@ const limitlessPartnerAccountDiscoveryClient = (): LimitlessPartnerAccountClient
   })
 });
 
+const failingLimitlessEoaSigningMessageClient = (): LimitlessPartnerAccountClient => ({
+  configured: () => true,
+  eoaPartnerAccountRegistrationEnabled: () => true,
+  getEoaPartnerAccount: async () => null,
+  getSigningMessage: async () => {
+    throw new Error("provider unavailable");
+  },
+  createEoaPartnerAccount: async (input) => ({
+    profileId: "12345",
+    account: input.account
+  })
+});
+
+const recoveringLimitlessEoaPartnerAccountClient = (): LimitlessPartnerAccountClient => ({
+  configured: () => true,
+  eoaPartnerAccountRegistrationEnabled: () => true,
+  getEoaPartnerAccount: async (account) => ({
+    profileId: "67890",
+    account
+  }),
+  getSigningMessage: async () => "Please sign this Limitless ownership message",
+  createEoaPartnerAccount: async () => {
+    throw new Error("partner account already exists");
+  }
+});
+
 const limitlessServerWalletPartnerAccountClient = (): LimitlessPartnerAccountClient => ({
   configured: () => true,
   serverWalletDelegationEnabled: () => true,
@@ -700,6 +726,75 @@ describe("user venue account service", () => {
       }
     });
     expect(JSON.stringify(repository.auditEvents)).not.toContain("signature");
+  });
+
+  it("keeps setup batch usable when Limitless signing-message preparation fails", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    const service = new UserVenueAccountService(
+      repository,
+      {
+        async resolveUserTurnkeyEvmFundingWallet() {
+          return evmWallet();
+        }
+      },
+      predictAccountClient(),
+      failingLimitlessEoaSigningMessageClient(),
+      polymarketDepositWalletClient()
+    );
+
+    const prepared = await service.prepareAccountSetupBatch("user-1");
+    const limitless = prepared.venueAccounts.find((item) => item.venue === "LIMITLESS");
+
+    expect(prepared.signatureRequests.map((request) => request.requestType)).toEqual(["PREDICT_FUN_AUTH_MESSAGE"]);
+    expect(limitless).toMatchObject({
+      setupMode: "MANUAL_LINK_REQUIRED",
+      account: {
+        venue: "LIMITLESS",
+        venueAccountAddress: "0x1111111111111111111111111111111111111111",
+        venueAccountType: "EOA",
+        status: "PENDING"
+      }
+    });
+    expect(limitless?.readinessBlockers).toContain("LIMITLESS_PARTNER_ACCOUNT_REQUEST_FAILED");
+    const serialized = JSON.stringify(repository.auditEvents);
+    expect(serialized).toContain("LIMITLESS_PARTNER_ACCOUNT_SIGNING_MESSAGE_FAILED");
+    expect(serialized).not.toContain("provider unavailable");
+    expect(serialized).not.toContain("signature");
+    expect(serialized).not.toContain("hmac");
+  });
+
+  it("recovers Limitless partner completion by rediscovering an existing profile", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    const service = new UserVenueAccountService(
+      repository,
+      {
+        async resolveUserTurnkeyEvmFundingWallet() {
+          return evmWallet();
+        }
+      },
+      predictAccountClient(),
+      recoveringLimitlessEoaPartnerAccountClient(),
+      polymarketDepositWalletClient()
+    );
+
+    const completed = await service.completeLimitlessPartnerAccountAuth({
+      userId: "user-1",
+      signer: "0x1111111111111111111111111111111111111111",
+      signature: `0x${"d".repeat(130)}`,
+      message: "Please sign this Limitless ownership message"
+    });
+
+    expect(completed.account).toMatchObject({
+      venue: "LIMITLESS",
+      venueAccountId: "67890",
+      venueAccountAddress: "0x1111111111111111111111111111111111111111",
+      venueAccountType: "EOA",
+      status: "ACTIVE"
+    });
+    const serialized = JSON.stringify(repository.auditEvents);
+    expect(serialized).toContain("LIMITLESS_PARTNER_ACCOUNT_CREATE_RECOVERED_BY_DISCOVERY");
+    expect(serialized).not.toContain("partner account already exists");
+    expect(serialized).not.toContain("signature");
   });
 
   it("discovers a numeric Limitless EOA profile instead of treating the wallet address as a relay-ready profile id", async () => {

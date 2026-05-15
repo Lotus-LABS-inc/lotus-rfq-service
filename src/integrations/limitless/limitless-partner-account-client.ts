@@ -10,6 +10,7 @@ export interface LimitlessPartnerAccountClientConfig {
   baseUrl?: string | undefined;
   hmacTokenId?: string | undefined;
   hmacSecret?: string | undefined;
+  hmacTimestampFormat?: "ISO" | "UNIX_MS" | undefined;
   timeoutMs?: number | undefined;
 }
 
@@ -197,7 +198,9 @@ export class LimitlessPartnerAccountClient {
     if (!tokenId || !secret) {
       throw new LimitlessPartnerAccountClientError("Limitless partner HMAC credentials are not configured.", 503, "LIMITLESS_PARTNER_ACCOUNT_HMAC_MISSING");
     }
-    const timestamp = new Date().toISOString();
+    const timestamp = this.config.hmacTimestampFormat === "UNIX_MS"
+      ? String(Date.now())
+      : new Date().toISOString();
     const payload = `${timestamp}\n${method.toUpperCase()}\n${pathWithSearch}\n${body}`;
     return {
       "lmts-api-key": tokenId,
@@ -217,6 +220,7 @@ export const buildLimitlessPartnerAccountClientFromEnv = (
     baseUrl: env.LIMITLESS_PARTNER_ACCOUNT_BASE_URL ?? env.LIMITLESS_BASE_URL,
     hmacTokenId: env.LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID ?? env.LIMITLESS_WITHDRAWAL_ADAPTER_API_KEY,
     hmacSecret: env.LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET ?? env.LIMITLESS_WITHDRAWAL_ADAPTER_HMAC_SECRET,
+    hmacTimestampFormat: parseTimestampFormat(env.LIMITLESS_PARTNER_ACCOUNT_TIMESTAMP_FORMAT ?? env.LIMITLESS_WITHDRAWAL_ADAPTER_TIMESTAMP_FORMAT),
     timeoutMs: parseTimeoutMs(env.LIMITLESS_PARTNER_ACCOUNT_TIMEOUT_MS)
   });
 
@@ -224,6 +228,15 @@ const parseTimeoutMs = (value: string | undefined): number | undefined => {
   if (!value) return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+};
+
+const parseTimestampFormat = (value: string | undefined): "ISO" | "UNIX_MS" | undefined => {
+  if (!value) return undefined;
+  const normalized = value.trim().toUpperCase();
+  if (normalized === "UNIX_MS" || normalized === "ISO") {
+    return normalized;
+  }
+  return undefined;
 };
 
 const decodeBase64Secret = (secret: string): Buffer => {
