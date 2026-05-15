@@ -293,7 +293,7 @@ describe("user wallet service", () => {
     expect(repository.auditEvents.map((event) => event.eventType)).toContain("USER_WALLET_REGISTERED_FROM_TURNKEY_SESSION");
   });
 
-  it("reads Base USDC funding wallet balances with the configured Base RPC", async () => {
+  it("reads EVM funding wallet balances across configured and fallback chains", async () => {
     const wallet: UserWallet = {
       walletId: "wallet-1",
       userId: "user-1",
@@ -327,16 +327,18 @@ describe("user wallet service", () => {
       }) as typeof fetch
     });
 
-    await expect(reader.readWalletBalances(wallet)).resolves.toMatchObject({
-      balanceStatus: "synced",
-      balances: [{
+    const result = await reader.readWalletBalances(wallet);
+    expect(result.balanceStatus).toBe("synced");
+    expect(result.balances).toEqual(expect.arrayContaining([expect.objectContaining({
         chain: "BASE",
         token: "USDC",
         amount: "3"
-      }]
-    });
-    expect(rpcCalls).toHaveLength(1);
-    expect(rpcCalls[0]?.url).toBe("https://base-rpc.example");
+      })]));
+    expect(rpcCalls.map((call) => call.url)).toEqual(expect.arrayContaining([
+      "https://polygon-rpc.com",
+      "https://base-rpc.example",
+      "https://bsc-dataseed.binance.org"
+    ]));
   });
 
   it("uses the public Solana RPC fallback for funding wallet balances when no usable Solana RPC env is configured", async () => {

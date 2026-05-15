@@ -242,7 +242,7 @@ export const buildUserWalletBalanceReaderFromEnv = (env: NodeJS.ProcessEnv = pro
   new UserWalletBalanceReader({ env });
 
 const buildEvmTargets = (env: NodeJS.ProcessEnv): EvmTokenBalanceTarget[] => {
-  const polygonRpcUrl = firstNonEmpty(env.POLYGON_RPC_URL, env.POLYMARKET_POLYGON_RPC_URL);
+  const polygonRpcUrl = firstNonEmpty(env.POLYGON_RPC_URL, env.POLYMARKET_POLYGON_RPC_URL) ?? "https://polygon-rpc.com";
   const baseRpcUrl = firstNonEmpty(env.BASE_RPC_URL, env.LIMITLESS_BASE_RPC_URL) ?? "https://mainnet.base.org";
   const bscRpcUrl = firstNonEmpty(
     env.BSC_RPC_URL,
@@ -250,7 +250,7 @@ const buildEvmTargets = (env: NodeJS.ProcessEnv): EvmTokenBalanceTarget[] => {
     env.PREDICT_FUN_INTERNAL_WITHDRAWAL_EVIDENCE_BSC_RPC_URL,
     env.MYRIAD_INTERNAL_WITHDRAWAL_EVIDENCE_BSC_RPC_URL,
     env.OPINION_INTERNAL_WITHDRAWAL_EVIDENCE_BSC_RPC_URL
-  );
+  ) ?? "https://bsc-dataseed.binance.org";
   const targets: EvmTokenBalanceTarget[] = [];
   if (polygonRpcUrl) {
     targets.push({
@@ -260,7 +260,7 @@ const buildEvmTargets = (env: NodeJS.ProcessEnv): EvmTokenBalanceTarget[] => {
       tokenAddress: firstNonEmpty(env.POLYGON_USDC_TOKEN_ADDRESS) ?? "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
       decimals: 6
     });
-    const polygonUsdt = firstNonEmpty(env.POLYGON_USDT_TOKEN_ADDRESS);
+    const polygonUsdt = firstNonEmpty(env.POLYGON_USDT_TOKEN_ADDRESS) ?? "0xc2132D05D31c914a87C6611C10748AEb04B58e8F";
     if (polygonUsdt) {
       targets.push({
         chain: "POLYGON",
@@ -281,16 +281,13 @@ const buildEvmTargets = (env: NodeJS.ProcessEnv): EvmTokenBalanceTarget[] => {
     });
   }
   if (bscRpcUrl) {
-    const bscUsdc = firstNonEmpty(env.BSC_USDC_TOKEN_ADDRESS);
-    if (bscUsdc) {
-      targets.push({
-        chain: "BSC",
-        rpcUrl: bscRpcUrl,
-        token: "USDC",
-        tokenAddress: bscUsdc,
-        decimals: 18
-      });
-    }
+    targets.push({
+      chain: "BSC",
+      rpcUrl: bscRpcUrl,
+      token: "USDC",
+      tokenAddress: firstNonEmpty(env.BSC_USDC_TOKEN_ADDRESS) ?? "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+      decimals: 18
+    });
     targets.push({
       chain: "BSC",
       rpcUrl: bscRpcUrl,
