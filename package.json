@@ -351,5 +351,9 @@
     "supertest": "^7.1.4",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
+  },
+  "optionalDependencies": {
+    "bufferutil": "4.1.0",
+    "utf-8-validate": "6.0.6"
   }
 }
