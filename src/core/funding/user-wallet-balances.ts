@@ -24,11 +24,13 @@ export interface UserWalletBalanceReaderConfig {
 
 interface EvmTokenBalanceTarget {
   chain: string;
-  rpcUrl: string;
+  rpcUrls: string[];
   token: string;
   tokenAddress: string;
   decimals: number;
 }
+
+type EvmTokenBalanceReadTarget = Omit<EvmTokenBalanceTarget, "rpcUrls"> & { rpcUrl: string };
 
 interface SolanaTokenBalanceTarget {
   token: string;
@@ -96,7 +98,7 @@ export class UserWalletBalanceReader {
 
     const settled = await Promise.allSettled(
       targets.map(async (target): Promise<UserWalletTokenBalance> => {
-        const atomic = await this.readErc20Balance(target, wallet.address);
+        const atomic = await this.readErc20BalanceWithFallback(target, wallet.address);
         return {
           token: target.token,
           amount: formatBaseUnits(atomic, target.decimals),
@@ -116,6 +118,18 @@ export class UserWalletBalanceReader {
       balanceStatus: balances.length > 0 ? "synced" : "unavailable",
       balanceBlocker: balances.length > 0 ? null : "EVM token balance reads did not return usable data."
     };
+  }
+
+  private async readErc20BalanceWithFallback(target: EvmTokenBalanceTarget, walletAddress: string): Promise<bigint> {
+    let lastError: unknown = null;
+    for (const rpcUrl of target.rpcUrls) {
+      try {
+        return await this.readErc20Balance({ ...target, rpcUrl }, walletAddress);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error("EVM balance read failed.");
   }
 
   private async readSolanaWalletBalances(wallet: UserWallet): Promise<UserWalletBalanceResult> {
@@ -171,7 +185,7 @@ export class UserWalletBalanceReader {
     };
   }
 
-  private async readErc20Balance(target: EvmTokenBalanceTarget, ownerAddress: string): Promise<bigint> {
+  private async readErc20Balance(target: EvmTokenBalanceReadTarget, ownerAddress: string): Promise<bigint> {
     const data = `0x70a08231${ownerAddress.toLowerCase().replace(/^0x/, "").padStart(64, "0")}`;
     const payload = await this.rpc(target.rpcUrl, {
       jsonrpc: "2.0",
@@ -242,20 +256,29 @@ export const buildUserWalletBalanceReaderFromEnv = (env: NodeJS.ProcessEnv = pro
   new UserWalletBalanceReader({ env });
 
 const buildEvmTargets = (env: NodeJS.ProcessEnv): EvmTokenBalanceTarget[] => {
-  const polygonRpcUrl = firstNonEmpty(env.POLYGON_RPC_URL, env.POLYMARKET_POLYGON_RPC_URL) ?? "https://polygon-rpc.com";
-  const baseRpcUrl = firstNonEmpty(env.BASE_RPC_URL, env.LIMITLESS_BASE_RPC_URL) ?? "https://mainnet.base.org";
-  const bscRpcUrl = firstNonEmpty(
-    env.BSC_RPC_URL,
-    env.BNB_RPC_URL,
-    env.PREDICT_FUN_INTERNAL_WITHDRAWAL_EVIDENCE_BSC_RPC_URL,
-    env.MYRIAD_INTERNAL_WITHDRAWAL_EVIDENCE_BSC_RPC_URL,
-    env.OPINION_INTERNAL_WITHDRAWAL_EVIDENCE_BSC_RPC_URL
-  ) ?? "https://bsc-dataseed.binance.org";
+  const polygonRpcUrls = uniqueNonEmpty([
+    firstNonEmpty(env.POLYGON_RPC_URL, env.POLYMARKET_POLYGON_RPC_URL),
+    "https://polygon-rpc.com"
+  ]);
+  const baseRpcUrls = uniqueNonEmpty([
+    firstNonEmpty(env.BASE_RPC_URL, env.LIMITLESS_BASE_RPC_URL),
+    "https://mainnet.base.org"
+  ]);
+  const bscRpcUrls = uniqueNonEmpty([
+    firstNonEmpty(
+      env.BSC_RPC_URL,
+      env.BNB_RPC_URL,
+      env.PREDICT_FUN_INTERNAL_WITHDRAWAL_EVIDENCE_BSC_RPC_URL,
+      env.MYRIAD_INTERNAL_WITHDRAWAL_EVIDENCE_BSC_RPC_URL,
+      env.OPINION_INTERNAL_WITHDRAWAL_EVIDENCE_BSC_RPC_URL
+    ),
+    "https://bsc-dataseed.binance.org"
+  ]);
   const targets: EvmTokenBalanceTarget[] = [];
-  if (polygonRpcUrl) {
+  if (polygonRpcUrls.length > 0) {
     targets.push({
       chain: "POLYGON",
-      rpcUrl: polygonRpcUrl,
+      rpcUrls: polygonRpcUrls,
       token: "USDC",
       tokenAddress: firstNonEmpty(env.POLYGON_USDC_TOKEN_ADDRESS) ?? "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
       decimals: 6
@@ -264,33 +287,33 @@ const buildEvmTargets = (env: NodeJS.ProcessEnv): EvmTokenBalanceTarget[] => {
     if (polygonUsdt) {
       targets.push({
         chain: "POLYGON",
-        rpcUrl: polygonRpcUrl,
+        rpcUrls: polygonRpcUrls,
         token: "USDT",
         tokenAddress: polygonUsdt,
         decimals: 6
       });
     }
   }
-  if (baseRpcUrl) {
+  if (baseRpcUrls.length > 0) {
     targets.push({
       chain: "BASE",
-      rpcUrl: baseRpcUrl,
+      rpcUrls: baseRpcUrls,
       token: "USDC",
       tokenAddress: firstNonEmpty(env.BASE_USDC_TOKEN_ADDRESS, env.LIMITLESS_USDC_TOKEN_ADDRESS) ?? "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
       decimals: 6
     });
   }
-  if (bscRpcUrl) {
+  if (bscRpcUrls.length > 0) {
     targets.push({
       chain: "BSC",
-      rpcUrl: bscRpcUrl,
+      rpcUrls: bscRpcUrls,
       token: "USDC",
       tokenAddress: firstNonEmpty(env.BSC_USDC_TOKEN_ADDRESS) ?? "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
       decimals: 18
     });
     targets.push({
       chain: "BSC",
-      rpcUrl: bscRpcUrl,
+      rpcUrls: bscRpcUrls,
       token: "USDT",
       tokenAddress: firstNonEmpty(env.BSC_USDT_TOKEN_ADDRESS) ?? "0x55d398326f99059fF775485246999027B3197955",
       decimals: 18

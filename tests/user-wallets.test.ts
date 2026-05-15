@@ -341,6 +341,60 @@ describe("user wallet service", () => {
     ]));
   });
 
+  it("falls back to public EVM RPCs when a configured funding wallet RPC fails", async () => {
+    const wallet: UserWallet = {
+      walletId: "wallet-1",
+      userId: "user-1",
+      provider: "TURNKEY",
+      providerSubOrgId: "suborg-1",
+      providerWalletId: "turnkey-wallet-1",
+      providerWalletAccountId: "evm-account-1",
+      chainFamily: "EVM",
+      chain: "EVM",
+      address: "0x1111111111111111111111111111111111111111",
+      purpose: "DEFAULT_FUNDING",
+      venue: null,
+      exportable: true,
+      status: "ACTIVE",
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z"
+    };
+    const rpcCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const reader = new UserWalletBalanceReader({
+      env: {
+        BASE_RPC_URL: "https://blocked-base-rpc.example",
+        LIMITLESS_USDC_TOKEN_ADDRESS: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+      } as NodeJS.ProcessEnv,
+      fetchImpl: (async (url, init) => {
+        rpcCalls.push({ url: `${url}`, body: JSON.parse(`${init?.body ?? "{}"}`) });
+        if (`${url}` === "https://blocked-base-rpc.example") {
+          return new Response(JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            error: { message: "Access forbidden" }
+          }), { status: 403, headers: { "content-type": "application/json" } });
+        }
+        return new Response(JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: "0x2dc6c0"
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }) as typeof fetch
+    });
+
+    const result = await reader.readWalletBalances(wallet);
+    expect(result.balanceStatus).toBe("synced");
+    expect(result.balances).toEqual(expect.arrayContaining([expect.objectContaining({
+      chain: "BASE",
+      token: "USDC",
+      amount: "3"
+    })]));
+    expect(rpcCalls.map((call) => call.url)).toEqual(expect.arrayContaining([
+      "https://blocked-base-rpc.example",
+      "https://mainnet.base.org"
+    ]));
+  });
+
   it("uses the public Solana RPC fallback for funding wallet balances when no usable Solana RPC env is configured", async () => {
     const wallet: UserWallet = {
       walletId: "wallet-1",
