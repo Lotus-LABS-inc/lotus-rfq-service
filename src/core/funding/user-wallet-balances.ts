@@ -119,48 +119,55 @@ export class UserWalletBalanceReader {
   }
 
   private async readSolanaWalletBalances(wallet: UserWallet): Promise<UserWalletBalanceResult> {
-    const rpcUrl = firstNonEmpty(this.env.SOLANA_RPC_URL, this.env.VITE_SOLANA_RPC_URL);
-    if (!rpcUrl) {
-      return {
-        balances: [],
-        balanceStatus: "unavailable",
-        balanceBlocker: "No Solana RPC balance reader is configured."
-      };
-    }
+    const rpcUrls = uniqueNonEmpty([
+      firstNonEmpty(this.env.SOLANA_RPC_URL, this.env.VITE_SOLANA_RPC_URL),
+      "https://api.mainnet-beta.solana.com"
+    ]);
 
     const updatedAt = new Date().toISOString();
     const targets = buildSolanaTargets(this.env);
-    const balanceReadPromises: Array<Promise<UserWalletTokenBalance>> = [
-      this.readSolanaNativeBalance(rpcUrl, wallet.address).then((atomic) => ({
-        token: "SOL",
-        amount: formatBaseUnits(atomic, 9),
-        chain: "SOLANA",
-        chainFamily: "SOLANA" as const,
-        updatedAt,
-        status: "available" as const
-      })),
-      ...targets.map(async (target): Promise<UserWalletTokenBalance> => {
-        const atomic = await this.readSolanaSplTokenBalance(rpcUrl, wallet.address, target.mint);
-        return {
-          token: target.token,
-          amount: formatBaseUnits(atomic, 6),
+
+    for (const rpcUrl of rpcUrls) {
+      const balanceReadPromises: Array<Promise<UserWalletTokenBalance>> = [
+        this.readSolanaNativeBalance(rpcUrl, wallet.address).then((atomic) => ({
+          token: "SOL",
+          amount: formatBaseUnits(atomic, 9),
           chain: "SOLANA",
           chainFamily: "SOLANA" as const,
           updatedAt,
           status: "available" as const
-        };
-      })
-    ];
-    const balanceReads = await Promise.allSettled(balanceReadPromises);
+        })),
+        ...targets.map(async (target): Promise<UserWalletTokenBalance> => {
+          const atomic = await this.readSolanaSplTokenBalance(rpcUrl, wallet.address, target.mint);
+          return {
+            token: target.token,
+            amount: formatBaseUnits(atomic, 6),
+            chain: "SOLANA",
+            chainFamily: "SOLANA" as const,
+            updatedAt,
+            status: "available" as const
+          };
+        })
+      ];
+      const balanceReads = await Promise.allSettled(balanceReadPromises);
 
-    const balances = balanceReads
-      .filter((result): result is PromiseFulfilledResult<UserWalletTokenBalance> => result.status === "fulfilled")
-      .map((result) => result.value);
+      const balances = balanceReads
+        .filter((result): result is PromiseFulfilledResult<UserWalletTokenBalance> => result.status === "fulfilled")
+        .map((result) => result.value);
+
+      if (balances.length > 0) {
+        return {
+          balances,
+          balanceStatus: "synced",
+          balanceBlocker: null
+        };
+      }
+    }
 
     return {
-      balances,
-      balanceStatus: balances.length > 0 ? "synced" : "unavailable",
-      balanceBlocker: balances.length > 0 ? null : "Solana balance reads did not return usable data."
+      balances: [],
+      balanceStatus: "unavailable",
+      balanceBlocker: "Solana balance reads did not return usable data."
     };
   }
 
@@ -330,6 +337,11 @@ const formatBaseUnits = (atomic: bigint, decimals: number): string => {
 
 const firstNonEmpty = (...values: Array<string | undefined>): string | null =>
   values.find((value) => typeof value === "string" && value.trim().length > 0)?.trim() ?? null;
+
+const uniqueNonEmpty = (values: Array<string | null | undefined>): string[] =>
+  [...new Set(values
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.trim()))];
 
 const isEvmAddress = (value: string): boolean =>
   /^0x[a-fA-F0-9]{40}$/.test(value.trim());

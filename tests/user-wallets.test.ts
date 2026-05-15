@@ -338,6 +338,72 @@ describe("user wallet service", () => {
     expect(rpcCalls).toHaveLength(1);
     expect(rpcCalls[0]?.url).toBe("https://base-rpc.example");
   });
+
+  it("uses the public Solana RPC fallback for funding wallet balances when no usable Solana RPC env is configured", async () => {
+    const wallet: UserWallet = {
+      walletId: "wallet-1",
+      userId: "user-1",
+      provider: "TURNKEY",
+      providerSubOrgId: "suborg-1",
+      providerWalletId: "turnkey-wallet-1",
+      providerWalletAccountId: "sol-account-1",
+      chainFamily: "SOLANA",
+      chain: "SOLANA",
+      address: "7SwycE9L3gjK1LLg59GmEL18t3BC83BqexnNNPDUfkW",
+      purpose: "DEFAULT_FUNDING",
+      venue: null,
+      exportable: true,
+      status: "ACTIVE",
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z"
+    };
+    const rpcCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const reader = new UserWalletBalanceReader({
+      env: {
+        SOLANA_RPC_URL: "https://blocked-solana-rpc.example"
+      } as NodeJS.ProcessEnv,
+      fetchImpl: (async (url, init) => {
+        const body = JSON.parse(`${init?.body ?? "{}"}`) as Record<string, unknown>;
+        rpcCalls.push({ url: `${url}`, body });
+        if (`${url}` === "https://blocked-solana-rpc.example") {
+          return new Response(JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            error: { message: "Access forbidden" }
+          }), { status: 403, headers: { "content-type": "application/json" } });
+        }
+        const method = body.method;
+        if (method === "getBalance") {
+          return new Response(JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            result: { value: 23538373 }
+          }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        return new Response(JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: { value: [] }
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }) as typeof fetch
+    });
+
+    const result = await reader.readWalletBalances(wallet);
+    expect(result.balanceStatus).toBe("synced");
+    expect(result.balances).toEqual(expect.arrayContaining([expect.objectContaining({
+      chain: "SOLANA",
+      token: "SOL",
+      amount: "0.023538373"
+    })]));
+    expect(rpcCalls.map((call) => call.url)).toEqual([
+      "https://blocked-solana-rpc.example",
+      "https://blocked-solana-rpc.example",
+      "https://blocked-solana-rpc.example",
+      "https://api.mainnet-beta.solana.com",
+      "https://api.mainnet-beta.solana.com",
+      "https://api.mainnet-beta.solana.com"
+    ]);
+  });
 });
 
 describe("user wallet routes", () => {
