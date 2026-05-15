@@ -58,7 +58,10 @@ const routePolicy = (mode: SmartRoutePolicy["mode"]): SmartRoutePolicy => ({
   productionLowNotionalMinBps: 10,
   stagingHighNotionalMinBps: 0,
   stagingLowNotionalMinBps: 1,
-  minimumPositiveImprovement: 0.000001
+  minimumPositiveImprovement: 0.000001,
+  stagingForcePairNotionalUsd: 49.95,
+  stagingForceExpandedRouteNotionalUsd: 500,
+  stagingForcedRouteMinLegNotionalUsd: 1
 });
 
 class MemoryQuoteRepository implements ExecutionQuoteRepository {
@@ -481,9 +484,65 @@ describe("executable route selection", () => {
     expect(result.quote).toMatchObject({
       routeType: "CROSS_VENUE",
       venuePath: ["LIMITLESS", "POLYMARKET"],
-      routeDecisionReason: "multi_venue_selected_best_net_execution"
+      routeDecisionReason: "staging_multi_venue_selected_for_route_coverage"
     });
     expect(result.routeDiagnostics?.improvementThreshold).toBeLessThan(0.001);
+  });
+
+  it("uses staging route coverage policy to force a pair route above the demo notional threshold when venues can fill", async () => {
+    const service = new ExecutableRouteService({
+      async listVenues() {
+        return [readyVenue("POLYMARKET"), readyVenue("LIMITLESS")];
+      }
+    }, undefined, () => new Date("2026-05-03T00:00:00.000Z"), routePolicy("STAGING"));
+
+    const result = await service.quote({
+      userId: "user-1",
+      side: "buy",
+      marketId: "market-1",
+      outcomeId: "yes",
+      amount: "100",
+      candidates: [
+        { venue: "POLYMARKET", price: 0.5, availableSize: "100" },
+        { venue: "LIMITLESS", price: 0.51, availableSize: "100" }
+      ]
+    });
+
+    expect(result.quote).toMatchObject({
+      routeType: "CROSS_VENUE",
+      venuePath: ["POLYMARKET", "LIMITLESS"],
+      routeDecisionReason: "staging_multi_venue_selected_for_route_coverage"
+    });
+    expect(Number(result.quote?.legs.find((leg) => leg.venue === "LIMITLESS")?.size ?? 0)).toBeGreaterThan(0);
+  });
+
+  it("uses staging route coverage policy to expand to tri or strict-all routes above the larger demo threshold", async () => {
+    const service = new ExecutableRouteService({
+      async listVenues() {
+        return [readyVenue("POLYMARKET"), readyVenue("LIMITLESS"), readyVenue("PREDICT_FUN"), readyVenue("OPINION")];
+      }
+    }, undefined, () => new Date("2026-05-03T00:00:00.000Z"), routePolicy("STAGING"));
+
+    const result = await service.quote({
+      userId: "user-1",
+      side: "buy",
+      marketId: "market-1",
+      outcomeId: "yes",
+      amount: "1000",
+      candidates: [
+        { venue: "POLYMARKET", price: 0.5, availableSize: "1000" },
+        { venue: "LIMITLESS", price: 0.51, availableSize: "1000" },
+        { venue: "PREDICT_FUN", price: 0.52, availableSize: "1000" },
+        { venue: "OPINION", price: 0.53, availableSize: "1000" }
+      ]
+    });
+
+    expect(result.quote).toMatchObject({
+      routeType: "CROSS_VENUE",
+      venuePath: ["POLYMARKET", "LIMITLESS", "PREDICT_FUN", "OPINION"],
+      routeDecisionReason: "staging_multi_venue_selected_for_route_coverage"
+    });
+    expect(result.quote?.legs).toHaveLength(4);
   });
 
   it("uses multi-venue when no single venue can fill but combined venues can", async () => {

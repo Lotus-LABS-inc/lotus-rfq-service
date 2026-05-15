@@ -136,6 +136,9 @@ export interface SmartRoutePolicy {
   stagingHighNotionalMinBps: number;
   stagingLowNotionalMinBps: number;
   minimumPositiveImprovement: number;
+  stagingForcePairNotionalUsd: number;
+  stagingForceExpandedRouteNotionalUsd: number;
+  stagingForcedRouteMinLegNotionalUsd: number;
 }
 
 interface ScoredRoute {
@@ -148,6 +151,7 @@ interface ScoredRoute {
   effectiveNotional: number;
   score: number;
   skippedDustVenues: string[];
+  stagingForced?: boolean | undefined;
 }
 
 export interface VerifiedExecutionPosition {
@@ -338,6 +342,10 @@ export class ExecutableRouteService {
     if (executable.length < 2) {
       return null;
     }
+    const stagingPreferredRoute = this.buildStagingPreferredMultiVenueRoute(input, executable, amount);
+    if (stagingPreferredRoute) {
+      return stagingPreferredRoute;
+    }
     let remaining = amount;
     const legs: ExecutableRouteLeg[] = [];
     const skippedDust: TradeRouteCandidate[] = [];
@@ -377,6 +385,54 @@ export class ExecutableRouteService {
       return null;
     }
     return scoreRoute(input.side, "CROSS_VENUE", legs, executable, skippedDustVenues);
+  }
+
+  private buildStagingPreferredMultiVenueRoute(
+    input: TradeQuoteRequest,
+    executable: readonly TradeRouteCandidate[],
+    amount: number
+  ): ScoredRoute | null {
+    if (this.smartRoutePolicy.mode !== "STAGING") {
+      return null;
+    }
+    const bestCandidatesByVenue = bestExecutableCandidateByVenue(input.side, executable);
+    if (bestCandidatesByVenue.length < 2) {
+      return null;
+    }
+    const bestReferencePrice = effectiveCandidatePrice(input.side, bestCandidatesByVenue[0]!);
+    const estimatedNotional = amount * bestReferencePrice;
+    if (estimatedNotional < this.smartRoutePolicy.stagingForcePairNotionalUsd) {
+      return null;
+    }
+    const desiredVenueCount = estimatedNotional >= this.smartRoutePolicy.stagingForceExpandedRouteNotionalUsd
+      ? Math.min(bestCandidatesByVenue.length, 4)
+      : 2;
+    const selectedCandidates = bestCandidatesByVenue.slice(0, desiredVenueCount);
+    const minLegSize = this.stagingForcedMinimumLegSize(input.side, selectedCandidates, amount);
+    if (selectedCandidates.some((candidate) => parseNonNegativeNumber(candidate.availableSize, "availableSize") < minLegSize)) {
+      return null;
+    }
+    const legs = allocateForcedSplit(input.side, selectedCandidates, amount, minLegSize);
+    if (!legs || new Set(legs.map((leg) => leg.venue)).size < desiredVenueCount) {
+      return null;
+    }
+    return {
+      ...scoreRoute(input.side, "CROSS_VENUE", legs, executable, []),
+      stagingForced: true
+    };
+  }
+
+  private stagingForcedMinimumLegSize(
+    side: TradeSide,
+    candidates: readonly TradeRouteCandidate[],
+    amount: number
+  ): number {
+    const bestPrice = Math.max(
+      0.000001,
+      Math.min(...candidates.map((candidate) => effectiveCandidatePrice(side, candidate)))
+    );
+    const minByNotional = this.smartRoutePolicy.stagingForcedRouteMinLegNotionalUsd / bestPrice;
+    return Math.max(0.000001, Math.min(amount * 0.02, minByNotional));
   }
 
   private buildSingleVenueRoute(
@@ -656,6 +712,84 @@ const requireVenue = (venue: string | undefined): string => {
   return venue.trim().toUpperCase();
 };
 
+const bestExecutableCandidateByVenue = (
+  side: TradeSide,
+  candidates: readonly TradeRouteCandidate[]
+): TradeRouteCandidate[] => {
+  const byVenue = new Map<string, TradeRouteCandidate>();
+  for (const candidate of candidates) {
+    const venue = candidate.venue.toUpperCase();
+    const current = byVenue.get(venue);
+    if (!current || compareCandidatesByEffectivePrice(side, candidate, current) < 0) {
+      byVenue.set(venue, candidate);
+    }
+  }
+  return [...byVenue.values()].sort((left, right) => compareCandidatesByEffectivePrice(side, left, right));
+};
+
+const allocateForcedSplit = (
+  side: TradeSide,
+  candidates: readonly TradeRouteCandidate[],
+  amount: number,
+  minLegSize: number
+): ExecutableRouteLeg[] | null => {
+  if (candidates.length < 2) {
+    return null;
+  }
+  const capacities = new Map(candidates.map((candidate) => [
+    candidate.venue.toUpperCase(),
+    parseNonNegativeNumber(candidate.availableSize, "availableSize")
+  ]));
+  const totalCapacity = [...capacities.values()].reduce((sum, value) => sum + value, 0);
+  if (totalCapacity + routeDustTolerance < amount) {
+    return null;
+  }
+
+  const allocations = new Map<string, number>();
+  const baseLegSize = Math.min(minLegSize, amount / candidates.length);
+  let remaining = amount;
+  for (const candidate of candidates) {
+    const venue = candidate.venue.toUpperCase();
+    const capacity = capacities.get(venue) ?? 0;
+    if (capacity + routeDustTolerance < baseLegSize) {
+      return null;
+    }
+    allocations.set(venue, baseLegSize);
+    remaining -= baseLegSize;
+  }
+
+  const sorted = [...candidates].sort((left, right) => compareCandidatesByEffectivePrice(side, left, right));
+  while (remaining > routeDustTolerance) {
+    let progressed = false;
+    for (const candidate of sorted) {
+      if (remaining <= routeDustTolerance) {
+        break;
+      }
+      const venue = candidate.venue.toUpperCase();
+      const used = allocations.get(venue) ?? 0;
+      const capacity = capacities.get(venue) ?? 0;
+      const available = Math.max(0, capacity - used);
+      if (available <= routeDustTolerance) {
+        continue;
+      }
+      const fill = Math.min(available, remaining);
+      allocations.set(venue, used + fill);
+      remaining -= fill;
+      progressed = true;
+    }
+    if (!progressed) {
+      return null;
+    }
+  }
+
+  return sorted
+    .map((candidate) => {
+      const size = allocations.get(candidate.venue.toUpperCase()) ?? 0;
+      return size > routeDustTolerance ? toLeg(candidate, size) : null;
+    })
+    .filter((leg): leg is ExecutableRouteLeg => leg !== null);
+};
+
 const chooseRoute = (
   side: TradeSide,
   singleRoute: ScoredRoute | null,
@@ -673,6 +807,9 @@ const chooseRoute = (
   }
   const single = singleRoute!;
   const multi = multiRoute!;
+  if (multi.stagingForced === true) {
+    return { route: multi, reason: "staging_multi_venue_selected_for_route_coverage" };
+  }
   const improvement = routeSavings(side, multi, single);
   if (improvement >= threshold) {
     return { route: multi, reason: "multi_venue_selected_best_net_execution" };
@@ -707,7 +844,10 @@ const defaultSmartRoutePolicy: SmartRoutePolicy = {
   productionLowNotionalMinBps: 10,
   stagingHighNotionalMinBps: 0,
   stagingLowNotionalMinBps: 1,
-  minimumPositiveImprovement: 0.000001
+  minimumPositiveImprovement: 0.000001,
+  stagingForcePairNotionalUsd: 49.95,
+  stagingForceExpandedRouteNotionalUsd: 500,
+  stagingForcedRouteMinLegNotionalUsd: 1
 };
 
 const smartRoutePolicyFromEnv = (): SmartRoutePolicy => {
