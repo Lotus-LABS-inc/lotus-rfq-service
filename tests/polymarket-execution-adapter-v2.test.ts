@@ -294,6 +294,31 @@ describe("PolymarketExecutionAdapterV2", () => {
     expect(JSON.stringify(requests[0]?.body)).not.toContain("server-side-secret");
   });
 
+  it("relay client maps raw CLOB balance failures to a safe readiness blocker", async () => {
+    const client = new RelayPolymarketClobV2LiveClient({
+      relayUrl: "https://relay.example",
+      relaySecret: "relay-secret",
+      fetchImpl: (async () => new Response(JSON.stringify({
+        message: "not enough balance / allowance: the balance is not enough -> balance: 0, order amount: 1274970"
+      }), { status: 502, headers: { "content-type": "application/json" } })) as typeof fetch
+    });
+
+    await expect(client.submitOrder({
+      venue: "POLYMARKET",
+      clientOrderId: "execution-1-leg-1",
+      payload: {
+        venueMarketId: "pm-market-1",
+        venueOutcomeId: "pm-outcome-yes",
+        side: "buy",
+        size: "1.25",
+        price: 0.99
+      }
+    })).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
+      message: "Polymarket CLOB collateral is not ready for this order. Refresh balances, activate or approve Polymarket funds, then retry."
+    });
+  });
+
   it("relay routes reject missing authentication before reaching the CLOB client", async () => {
     const previousSecret = process.env.POLYMARKET_EXECUTION_RELAY_SECRET;
     process.env.POLYMARKET_EXECUTION_RELAY_SECRET = "relay-secret";

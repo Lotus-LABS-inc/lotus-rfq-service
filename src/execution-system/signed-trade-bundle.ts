@@ -58,6 +58,7 @@ export interface SignedTradeBundleSubmitResult {
     venue: string;
     status: string;
     venueOrderId?: string | undefined;
+    reasonCode?: string | undefined;
     reason?: string | undefined;
     fillState?: VenueFillState | undefined;
   }>;
@@ -77,6 +78,7 @@ export interface SignedTradeExecutionStatus {
     venue: string;
     status: string;
     venueOrderId?: string | undefined;
+    reasonCode?: string | undefined;
     reason?: string | undefined;
     fillState?: VenueFillState | undefined;
     settlementState?: VenueSettlementState | undefined;
@@ -137,7 +139,10 @@ export interface LiveSubmitVenueReadiness {
     tokenAddress: string | null;
     spenderAddress: string | null;
     chainId: number | null;
-    approvalMethod?: "ERC20_APPROVE" | "ERC1155_SET_APPROVAL_FOR_ALL" | undefined;
+    approvalMethod?: "CLOB_PUSD_APPROVAL" | "ERC20_APPROVE" | "ERC1155_SET_APPROVAL_FOR_ALL" | undefined;
+    usableBalance?: string | null | undefined;
+    usableBalanceSource?: string | null | undefined;
+    approvalSpenderSource?: string | null | undefined;
   };
 }
 
@@ -153,6 +158,21 @@ export interface LiveSubmitReadinessSnapshot {
 export interface SignedTradeBundleVenueAccountProvider {
   getAccount(userId: string, venue: string): Promise<UserVenueAccount | null>;
   getPredictFunJwt?(userId: string): string | null;
+}
+
+export interface SignedTradeBundlePolymarketBalanceReader {
+  readUsableBalance(input: { userId: string }): Promise<{
+    usableBalance: string;
+    collateralBalance: string;
+    collateralAllowance: string;
+    usableBalanceSource: string;
+    approvalSpenderSource: string;
+  }>;
+  readConditionalTokenApproval(input: { userId: string; tokenId: string }): Promise<{
+    tokenId: string;
+    tokenBalance: string;
+    tokenAllowance: string;
+  }>;
 }
 
 export class SignedTradeBundleError extends Error {
@@ -176,7 +196,8 @@ export class SignedTradeBundleService {
     private readonly now: () => Date = () => new Date(),
     private readonly env: NodeJS.ProcessEnv = process.env,
     private readonly statusRepository?: SignedTradeExecutionStatusRepository | undefined,
-    private readonly positionRecorder?: SignedTradePositionRecorder | undefined
+    private readonly positionRecorder?: SignedTradePositionRecorder | undefined,
+    private readonly polymarketBalanceReader?: SignedTradeBundlePolymarketBalanceReader | undefined
   ) {}
 
   public async prepare(input: { userId: string; quoteId: string }): Promise<PreparedTradeSignatureBundle> {
@@ -259,6 +280,7 @@ export class SignedTradeBundleService {
           legIndex: index,
           venue: leg.venue,
           status: "FAILED",
+          reasonCode: normalized.code,
           reason: normalized.message
         });
         const result: SignedTradeBundleSubmitResult = {
@@ -461,6 +483,12 @@ export class SignedTradeBundleService {
     if (leg.venue.toUpperCase() === "LIMITLESS" && quote.side === "sell") {
       return this.limitlessConditionalTokenReadiness(base, binding.venueAccountAddress, leg);
     }
+    if (leg.venue.toUpperCase() === "POLYMARKET" && quote.side === "buy") {
+      return this.polymarketCollateralReadiness(base, quote.userId, requiredNotional);
+    }
+    if (leg.venue.toUpperCase() === "POLYMARKET" && quote.side === "sell") {
+      return this.polymarketConditionalTokenReadiness(base, quote.userId, leg);
+    }
     if (leg.venue.toUpperCase() === "PREDICT_FUN" && quote.side === "sell") {
       const executionLeg = this.toExecutionLeg(quote, leg, index);
       const prepared = await this.adapters.get(leg.venue).prepareOrder(executionLeg);
@@ -480,6 +508,117 @@ export class SignedTradeBundleService {
       };
     }
     return readiness;
+  }
+
+  private async polymarketCollateralReadiness(
+    base: LiveSubmitVenueReadiness,
+    userId: string,
+    requiredNotional: string | null
+  ): Promise<LiveSubmitVenueReadiness> {
+    const next: LiveSubmitVenueReadiness = {
+      ...base,
+      collateral: {
+        ...base.collateral,
+        tokenSymbol: "pUSD",
+        chainId: parsePositiveInteger(this.env.POLYMARKET_CHAIN_ID) ?? 137,
+        approvalMethod: "CLOB_PUSD_APPROVAL"
+      }
+    };
+    const configBlockers = [
+      !this.polymarketBalanceReader ? "Polymarket CLOB balance reader is not configured." : null,
+      !requiredNotional ? "Polymarket live preflight could not derive required collateral." : null
+    ].filter((blocker): blocker is string => Boolean(blocker));
+    if (configBlockers.length > 0 || !this.polymarketBalanceReader || !requiredNotional) {
+      return { ...next, status: "blocked", blockers: configBlockers };
+    }
+    try {
+      const balance = await this.polymarketBalanceReader.readUsableBalance({ userId });
+      const collateralBlockers = [
+        compareDecimalStrings(balance.collateralBalance, requiredNotional) < 0
+          ? "Polymarket CLOB collateral balance is below the order amount. Activate or fund Polymarket before trading."
+          : null,
+        compareDecimalStrings(balance.collateralAllowance, requiredNotional) < 0
+          ? "Polymarket CLOB collateral allowance is below the order amount. Activate Polymarket funds to approve trading spenders."
+          : null,
+        compareDecimalStrings(balance.usableBalance, requiredNotional) < 0
+          ? `Polymarket CLOB collateral is not ready for this order. Spendable balance: ${balance.usableBalance} pUSD. Required: ${requiredNotional} pUSD.`
+          : null
+      ].filter((blocker): blocker is string => Boolean(blocker));
+      return {
+        ...next,
+        status: collateralBlockers.length > 0 ? "blocked" : "fresh",
+        blockers: collateralBlockers,
+        collateral: {
+          ...next.collateral,
+          requiredNotional,
+          balance: balance.collateralBalance,
+          allowance: balance.collateralAllowance,
+          usableBalance: balance.usableBalance,
+          usableBalanceSource: balance.usableBalanceSource,
+          approvalSpenderSource: balance.approvalSpenderSource
+        }
+      };
+    } catch {
+      return {
+        ...next,
+        status: "stale",
+        blockers: ["Polymarket CLOB collateral balance/allowance read is unavailable."]
+      };
+    }
+  }
+
+  private async polymarketConditionalTokenReadiness(
+    base: LiveSubmitVenueReadiness,
+    userId: string,
+    leg: ExecutableRouteLeg
+  ): Promise<LiveSubmitVenueReadiness> {
+    const next: LiveSubmitVenueReadiness = {
+      ...base,
+      collateral: {
+        ...base.collateral,
+        requiredNotional: leg.size,
+        tokenSymbol: "Polymarket shares",
+        chainId: parsePositiveInteger(this.env.POLYMARKET_CHAIN_ID) ?? 137,
+        approvalMethod: "ERC1155_SET_APPROVAL_FOR_ALL"
+      }
+    };
+    const configBlockers = [
+      !this.polymarketBalanceReader ? "Polymarket CLOB balance reader is not configured." : null,
+      !leg.venueOutcomeId ? "Polymarket sell preflight could not derive the conditional token id." : null
+    ].filter((blocker): blocker is string => Boolean(blocker));
+    if (configBlockers.length > 0 || !this.polymarketBalanceReader || !leg.venueOutcomeId) {
+      return { ...next, status: "blocked", blockers: configBlockers };
+    }
+    try {
+      const approval = await this.polymarketBalanceReader.readConditionalTokenApproval({
+        userId,
+        tokenId: leg.venueOutcomeId
+      });
+      const blockers = [
+        compareDecimalStrings(approval.tokenBalance, leg.size) < 0
+          ? `Polymarket share balance is below the sell amount. Sellable balance: ${approval.tokenBalance} shares.`
+          : null,
+        compareDecimalStrings(approval.tokenAllowance, leg.size) < 0
+          ? "Polymarket conditional-token allowance is not ready. Activate Polymarket shares before selling."
+          : null
+      ].filter((blocker): blocker is string => Boolean(blocker));
+      return {
+        ...next,
+        status: blockers.length > 0 ? "blocked" : "fresh",
+        blockers,
+        collateral: {
+          ...next.collateral,
+          balance: approval.tokenBalance,
+          allowance: approval.tokenAllowance
+        }
+      };
+    } catch {
+      return {
+        ...next,
+        status: "stale",
+        blockers: ["Polymarket conditional-token balance/allowance read is unavailable."]
+      };
+    }
   }
 
   private async predictFunCollateralReadiness(
@@ -1709,7 +1848,11 @@ const requiredUsdNotional = (side: string, leg: ExecutableRouteLeg): string | nu
   if (!Number.isFinite(size) || size <= 0 || !Number.isFinite(price) || price <= 0) {
     return null;
   }
-  return multiplyDecimalStrings(leg.size, String(leg.price));
+  const notional = multiplyDecimalStrings(leg.size, String(leg.price));
+  if (leg.feeAmount === undefined || leg.feeAmount === null || leg.feeAmount <= 0) {
+    return notional;
+  }
+  return addDecimalStrings(notional, String(leg.feeAmount));
 };
 
 const parsePositiveInteger = (value: string | undefined): number | null => {
@@ -1810,6 +1953,18 @@ const multiplyDecimalStrings = (left: string, right: string): string => {
   const product = (leftAtomic * rightAtomic).toString().padStart(scale + 1, "0");
   const whole = scale === 0 ? product : product.slice(0, -scale);
   const fraction = scale === 0 ? "" : product.slice(-scale);
+  return trimDecimal(fraction ? `${whole}.${fraction}` : whole);
+};
+
+const addDecimalStrings = (left: string, right: string): string => {
+  const [leftWhole = "0", leftFraction = ""] = left.split(".");
+  const [rightWhole = "0", rightFraction = ""] = right.split(".");
+  const scale = Math.max(leftFraction.length, rightFraction.length);
+  const leftAtomic = BigInt(leftWhole) * 10n ** BigInt(scale) + BigInt(leftFraction.padEnd(scale, "0") || "0");
+  const rightAtomic = BigInt(rightWhole) * 10n ** BigInt(scale) + BigInt(rightFraction.padEnd(scale, "0") || "0");
+  const sum = (leftAtomic + rightAtomic).toString().padStart(scale + 1, "0");
+  const whole = scale === 0 ? sum : sum.slice(0, -scale);
+  const fraction = scale === 0 ? "" : sum.slice(-scale);
   return trimDecimal(fraction ? `${whole}.${fraction}` : whole);
 };
 

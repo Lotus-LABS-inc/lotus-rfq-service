@@ -16,6 +16,7 @@ import type {
   VenueSettlementState,
   VenueSubmitResult
 } from "./venue-adapter.js";
+import { normalizeLiveVenueErrorMessage } from "./live-venue-error-normalizer.js";
 
 export const LIMITLESS_DEFAULT_BASE_URL = "https://api.limitless.exchange";
 
@@ -1049,6 +1050,21 @@ export class LimitlessExecutionAdapter implements ExecutionVenueAdapter {
   }
 
   public normalizeVenueError(error: unknown): NormalizedVenueError {
+    const normalized = normalizeLiveVenueErrorMessage(error, {
+      venue: "LIMITLESS",
+      fallbackCode: error instanceof LimitlessExecutionNotConfiguredError
+        ? error.reasonCode === "LIMITLESS_LIVE_EXECUTION_DISABLED"
+          ? "LIMITLESS_LIVE_EXECUTION_DISABLED"
+          : "VENUE_EXECUTION_NOT_CONFIGURED"
+        : "LIMITLESS_EXECUTION_ADAPTER_ERROR",
+      fallbackMessage: error instanceof Error ? error.message : "Unknown Limitless execution adapter error."
+    });
+    if (
+      normalized.code === "LIMITLESS_COLLATERAL_NOT_READY" ||
+      normalized.code === "LIMITLESS_SHARES_NOT_READY"
+    ) {
+      return normalized;
+    }
     if (error instanceof LimitlessExecutionNotConfiguredError) {
       return {
         code: error.reasonCode === "LIMITLESS_LIVE_EXECUTION_DISABLED"
@@ -1058,10 +1074,6 @@ export class LimitlessExecutionAdapter implements ExecutionVenueAdapter {
         retryable: false
       };
     }
-    return {
-      code: "LIMITLESS_EXECUTION_ADAPTER_ERROR",
-      message: error instanceof Error ? error.message : "Unknown Limitless execution adapter error.",
-      retryable: false
-    };
+    return normalized;
   }
 }

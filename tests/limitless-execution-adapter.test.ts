@@ -407,6 +407,24 @@ describe("LimitlessExecutionAdapter", () => {
     await expect(adapter.submitOrder(prepared)).rejects.toBeInstanceOf(LimitlessExecutionNotConfiguredError);
   });
 
+  it("normalizes Limitless collateral and share readiness failures", () => {
+    const adapter = new LimitlessExecutionAdapter(liveConfig);
+
+    expect(adapter.normalizeVenueError(
+      new Error("Insufficient collateral allowance for this order.")
+    )).toMatchObject({
+      code: "LIMITLESS_COLLATERAL_NOT_READY",
+      message: "Limitless collateral is not ready for this order. Refresh balances, approve Limitless collateral, then retry."
+    });
+
+    expect(adapter.normalizeVenueError(
+      new Error("Conditional token allowance not set.")
+    )).toMatchObject({
+      code: "LIMITLESS_SHARES_NOT_READY",
+      message: "Limitless shares are not spendable for this sell order. Refresh positions, approve Limitless shares, then retry."
+    });
+  });
+
   it("maps mocked live order creation to a submitted venue result", async () => {
     const client: LimitlessOrderClient = {
       async createOrder(input) {

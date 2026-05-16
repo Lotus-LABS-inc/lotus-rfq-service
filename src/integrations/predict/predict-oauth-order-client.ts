@@ -3,6 +3,7 @@ import {
   predictfunRelayHeaders,
   signPredictfunRelayRequest
 } from "../../execution-system/predictfun-execution-relay-auth.js";
+import { normalizeLiveVenueErrorMessage } from "../../execution-system/live-venue-error-normalizer.js";
 
 export interface PredictOauthOrderClientConfig {
   baseUrl?: string | undefined;
@@ -135,7 +136,12 @@ export class PredictOauthOrderClient {
       });
       const body = await response.json().catch(() => ({})) as PredictEnvelope<T>;
       if (!response.ok || body.success === false) {
-        throw new PredictOauthOrderClientError(safePredictOauthErrorMessage(body, response.status), response.status, "PREDICT_OAUTH_ORDER_REQUEST_FAILED");
+        const normalized = normalizeLiveVenueErrorMessage(safePredictOauthErrorMessage(body, response.status), {
+          venue: "PREDICT_FUN",
+          fallbackCode: "PREDICT_OAUTH_ORDER_REQUEST_FAILED",
+          fallbackMessage: `Predict OAuth order request failed with status ${response.status}.`
+        });
+        throw new PredictOauthOrderClientError(normalized.message, response.status, normalized.code);
       }
       return body;
     } catch (error) {
@@ -215,12 +221,17 @@ export class RelayPredictOauthOrderClient {
       const message = isRecord(responseBody) && typeof responseBody.message === "string"
         ? responseBody.message
         : `Predict.fun execution relay request failed with status ${response.status}.`;
-      throw new PredictOauthOrderClientError(
-        message,
-        response.status,
-        response.status === 401 || response.status === 403
+      const normalized = normalizeLiveVenueErrorMessage(message, {
+        venue: "PREDICT_FUN",
+        fallbackCode: response.status === 401 || response.status === 403
           ? "PREDICT_FUN_RELAY_UNAUTHORIZED"
-          : "PREDICT_FUN_RELAY_ERROR"
+          : "PREDICT_FUN_RELAY_ERROR",
+        fallbackMessage: message
+      });
+      throw new PredictOauthOrderClientError(
+        normalized.message,
+        response.status,
+        normalized.code
       );
     }
     return responseBody as T;

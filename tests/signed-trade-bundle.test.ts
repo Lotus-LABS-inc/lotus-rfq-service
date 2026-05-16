@@ -3,10 +3,12 @@ import { Wallet } from "@ethersproject/wallet";
 import {
   ExecutionVenueAdapterRegistry,
   LimitlessExecutionAdapter,
+  OpinionExecutionAdapter,
   PredictFunExecutionAdapter,
   SignedTradeBundleService,
   TestExecutionAdapter,
   type ExecutableTradeQuote,
+  type NormalizedVenueError,
   type PreparedVenueOrder,
   type VenueFillState,
   type VenueSubmitResult
@@ -15,7 +17,8 @@ import type { UserVenueAccount } from "../src/core/execution/user-venue-accounts
 import type {
   SignedTradeExecutionStatus,
   SignedTradeExecutionStatusRepository,
-  SignedTradePositionRecorder
+  SignedTradePositionRecorder,
+  SignedTradeBundlePolymarketBalanceReader
 } from "../src/execution-system/signed-trade-bundle.js";
 
 const wallet = new Wallet("0x59c6995e998f97a5a004497e5daae82f0e6d4d6e773f8f5a11a95d2218e14e4f");
@@ -161,6 +164,24 @@ class FilledRouteSizeAdapter extends TestExecutionAdapter {
   }
 }
 
+class FailingPolymarketBalanceAdapter extends TestExecutionAdapter {
+  public readonly venue = "POLYMARKET";
+  public submitCalls = 0;
+
+  public async submitOrder(): Promise<VenueSubmitResult> {
+    this.submitCalls += 1;
+    throw new Error("not enough balance / allowance: the balance is not enough -> balance: 0, order amount: 1274970");
+  }
+
+  public normalizeVenueError(): NormalizedVenueError {
+    return {
+      code: "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
+      message: "Polymarket CLOB collateral is not ready for this order. Refresh balances, activate or approve Polymarket funds, then retry.",
+      retryable: false
+    };
+  }
+}
+
 const registryWithPredict = (): ExecutionVenueAdapterRegistry => {
   const registry = new ExecutionVenueAdapterRegistry();
   registry.register(new PredictFunExecutionAdapter({
@@ -208,6 +229,65 @@ const registryWithLimitless = (liveExecutionEnabled = false): ExecutionVenueAdap
   }));
   return registry;
 };
+
+const polymarketBuyQuote = (legOverrides: Partial<ExecutableTradeQuote["legs"][number]> = {}): ExecutableTradeQuote => ({
+  ...quote(),
+  quoteId: "exec_quote_polymarket_buy",
+  venuePath: ["POLYMARKET"],
+  executableAmount: "1.25",
+  expectedPrice: 0.99,
+  requiredUserSignatureSteps: [],
+  legs: [{
+    venue: "POLYMARKET",
+    venueMarketId: "pm-market",
+    venueOutcomeId: "123456789",
+    size: "1.25",
+    price: 0.99,
+    requiresUserSignature: false,
+    ...legOverrides
+  }]
+});
+
+const polymarketSellQuote = (legOverrides: Partial<ExecutableTradeQuote["legs"][number]> = {}): ExecutableTradeQuote => ({
+  ...polymarketBuyQuote(legOverrides),
+  quoteId: "exec_quote_polymarket_sell",
+  side: "sell",
+  executableAmount: "10",
+  expectedPrice: 0.25,
+  legs: [{
+    venue: "POLYMARKET",
+    venueMarketId: "pm-market",
+    venueOutcomeId: "123456789",
+    size: "10",
+    price: 0.25,
+    requiresUserSignature: false,
+    ...legOverrides
+  }]
+});
+
+const polymarketBalanceReader = (
+  buy: Partial<Awaited<ReturnType<SignedTradeBundlePolymarketBalanceReader["readUsableBalance"]>>> = {},
+  sell: Partial<Awaited<ReturnType<SignedTradeBundlePolymarketBalanceReader["readConditionalTokenApproval"]>>> = {}
+): SignedTradeBundlePolymarketBalanceReader => ({
+  async readUsableBalance() {
+    return {
+      usableBalance: "10",
+      collateralBalance: "10",
+      collateralAllowance: "10",
+      usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE",
+      approvalSpenderSource: "CLOB_ALLOWANCE_MAP",
+      ...buy
+    };
+  },
+  async readConditionalTokenApproval() {
+    return {
+      tokenId: "123456789",
+      tokenBalance: "10",
+      tokenAllowance: "10",
+      ...sell
+    };
+  }
+});
 
 describe("SignedTradeBundleService", () => {
   afterEach(() => {
@@ -458,6 +538,186 @@ describe("SignedTradeBundleService", () => {
           averagePrice: 0.51
         }
       }]
+    });
+  });
+
+  it("stores safe failure reason codes instead of raw venue balance text", async () => {
+    const registry = new ExecutionVenueAdapterRegistry();
+    const adapter = new FailingPolymarketBalanceAdapter();
+    registry.register(adapter);
+    const liveQuote: ExecutableTradeQuote = {
+      ...polymarketBuyQuote(),
+      quoteId: "exec_quote_polymarket_failed"
+    };
+    const repository = new MemorySignedTradeStatusRepository();
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => liveQuote } as never,
+      registry,
+      { getAccount: async () => account("POLYMARKET") },
+      () => new Date("2026-05-07T00:00:00.000Z"),
+      {} as NodeJS.ProcessEnv,
+      repository,
+      undefined,
+      polymarketBalanceReader()
+    );
+
+    const submitted = await sut.submit({
+      userId: "user-1",
+      quoteId: "exec_quote_polymarket_failed",
+      dryRun: false,
+      signedLegs: []
+    });
+
+    expect(adapter.submitCalls).toBe(1);
+    expect(submitted.submittedLegs[0]).toMatchObject({
+      status: "FAILED",
+      reasonCode: "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
+      reason: "Polymarket CLOB collateral is not ready for this order. Refresh balances, activate or approve Polymarket funds, then retry."
+    });
+    expect(JSON.stringify(submitted)).not.toContain("balance is not enough");
+    expect(JSON.stringify([...repository.rows.values()])).not.toContain("balance is not enough");
+  });
+
+  it("blocks Polymarket buy before venue submit when CLOB balance is zero", async () => {
+    const registry = new ExecutionVenueAdapterRegistry();
+    const adapter = new FailingPolymarketBalanceAdapter();
+    registry.register(adapter);
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => polymarketBuyQuote() } as never,
+      registry,
+      { getAccount: async () => account("POLYMARKET") },
+      () => new Date("2026-05-07T00:00:00.000Z"),
+      { POLYMARKET_CHAIN_ID: "137" } as NodeJS.ProcessEnv,
+      undefined,
+      undefined,
+      polymarketBalanceReader({
+        usableBalance: "0",
+        collateralBalance: "0",
+        collateralAllowance: "9999999"
+      })
+    );
+
+    await expect(sut.submit({
+      userId: "user-1",
+      quoteId: "exec_quote_polymarket_buy",
+      dryRun: false,
+      signedLegs: []
+    })).rejects.toMatchObject({
+      code: "LIVE_SUBMIT_READINESS_BLOCKED",
+      message: "POLYMARKET: Polymarket CLOB collateral balance is below the order amount. Activate or fund Polymarket before trading."
+    });
+    expect(adapter.submitCalls).toBe(0);
+  });
+
+  it("blocks Polymarket buy when pUSD exists but CLOB allowance is zero", async () => {
+    const registry = new ExecutionVenueAdapterRegistry();
+    registry.register(new FailingPolymarketBalanceAdapter());
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => polymarketBuyQuote() } as never,
+      registry,
+      { getAccount: async () => account("POLYMARKET") },
+      () => new Date("2026-05-07T00:00:00.000Z"),
+      {} as NodeJS.ProcessEnv,
+      undefined,
+      undefined,
+      polymarketBalanceReader({
+        usableBalance: "0",
+        collateralBalance: "8.95741",
+        collateralAllowance: "0",
+        usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE"
+      })
+    );
+
+    const readiness = await sut.getLiveReadiness({ userId: "user-1", quoteId: "exec_quote_polymarket_buy" });
+
+    expect(readiness.status).toBe("blocked");
+    expect(readiness.blockers).toContain("POLYMARKET: Polymarket CLOB collateral allowance is below the order amount. Activate Polymarket funds to approve trading spenders.");
+    expect(readiness.venues[0]?.collateral).toMatchObject({
+      requiredNotional: "1.2375",
+      balance: "8.95741",
+      allowance: "0",
+      usableBalance: "0",
+      tokenSymbol: "pUSD",
+      approvalMethod: "CLOB_PUSD_APPROVAL",
+      usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE",
+      approvalSpenderSource: "CLOB_ALLOWANCE_MAP"
+    });
+  });
+
+  it("includes Polymarket leg fee when checking required CLOB collateral", async () => {
+    const registry = new ExecutionVenueAdapterRegistry();
+    registry.register(new FailingPolymarketBalanceAdapter());
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => polymarketBuyQuote({ size: "1", price: 1, feeAmount: 0.1 }) } as never,
+      registry,
+      { getAccount: async () => account("POLYMARKET") },
+      () => new Date("2026-05-07T00:00:00.000Z"),
+      {} as NodeJS.ProcessEnv,
+      undefined,
+      undefined,
+      polymarketBalanceReader({
+        usableBalance: "1.05",
+        collateralBalance: "1.05",
+        collateralAllowance: "9999999"
+      })
+    );
+
+    const readiness = await sut.getLiveReadiness({ userId: "user-1", quoteId: "exec_quote_polymarket_buy" });
+
+    expect(readiness.status).toBe("blocked");
+    expect(readiness.venues[0]?.collateral.requiredNotional).toBe("1.1");
+  });
+
+  it("passes Polymarket buy readiness only when CLOB balance and allowance cover the order", async () => {
+    const registry = new ExecutionVenueAdapterRegistry();
+    registry.register(new FailingPolymarketBalanceAdapter());
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => polymarketBuyQuote({ size: "1", price: 1, feeAmount: 0.1 }) } as never,
+      registry,
+      { getAccount: async () => account("POLYMARKET") },
+      () => new Date("2026-05-07T00:00:00.000Z"),
+      {} as NodeJS.ProcessEnv,
+      undefined,
+      undefined,
+      polymarketBalanceReader({
+        usableBalance: "1.1",
+        collateralBalance: "1.1",
+        collateralAllowance: "9999999"
+      })
+    );
+
+    const readiness = await sut.getLiveReadiness({ userId: "user-1", quoteId: "exec_quote_polymarket_buy" });
+
+    expect(readiness.status).toBe("fresh");
+  });
+
+  it("blocks Polymarket sell when conditional-token allowance is missing", async () => {
+    const registry = new ExecutionVenueAdapterRegistry();
+    registry.register(new FailingPolymarketBalanceAdapter());
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => polymarketSellQuote() } as never,
+      registry,
+      { getAccount: async () => account("POLYMARKET") },
+      () => new Date("2026-05-07T00:00:00.000Z"),
+      {} as NodeJS.ProcessEnv,
+      undefined,
+      undefined,
+      polymarketBalanceReader({}, {
+        tokenBalance: "10",
+        tokenAllowance: "0"
+      })
+    );
+
+    const readiness = await sut.getLiveReadiness({ userId: "user-1", quoteId: "exec_quote_polymarket_sell" });
+
+    expect(readiness.status).toBe("blocked");
+    expect(readiness.blockers).toContain("POLYMARKET: Polymarket conditional-token allowance is not ready. Activate Polymarket shares before selling.");
+    expect(readiness.venues[0]?.collateral).toMatchObject({
+      requiredNotional: "10",
+      balance: "10",
+      allowance: "0",
+      tokenSymbol: "Polymarket shares",
+      approvalMethod: "ERC1155_SET_APPROVAL_FOR_ALL"
     });
   });
 
@@ -765,6 +1025,53 @@ describe("SignedTradeBundleService", () => {
       allowance: "0",
       requiredNotional: "1.26"
     });
+  });
+
+  it("normalizes Predict.fun submit auth and allowance failures", () => {
+    const adapter = new PredictFunExecutionAdapter({
+      executionMode: "user_signed_backend_relay",
+      baseUrl: "https://api.predict.fun",
+      apiKey: "predict-api-key",
+      liveExecutionEnabled: true,
+      orderCreatePath: "/v1/orders",
+      docsUrl: "https://dev.predict.fun",
+      predictOrderMetadataClient
+    });
+
+    expect(adapter.normalizeVenueError(new Error("Predict.fun collateral USDT allowance is less than the total bid amount.")))
+      .toMatchObject({
+        code: "PREDICT_FUN_COLLATERAL_NOT_READY",
+        message: "Predict.fun collateral is not ready for this order. Refresh balances, approve Predict.fun USDT, then retry."
+      });
+
+    expect(adapter.normalizeVenueError(new Error("Predict.fun requires a fresh user auth JWT for live order submit.")))
+      .toMatchObject({
+        code: "PREDICT_FUN_AUTH_REFRESH_REQUIRED",
+        message: "Predict.fun requires a fresh user auth signature before live submit. Refresh the Predict.fun venue setup, then retry."
+      });
+
+    expect(adapter.normalizeVenueError(new Error("Insufficient shares: token balance is less than the total ask amount.")))
+      .toMatchObject({
+        code: "PREDICT_FUN_SHARES_NOT_READY",
+        message: "Predict.fun shares are not spendable for this sell order. Refresh positions, approve Predict.fun shares, then retry."
+      });
+  });
+
+  it("keeps Opinion live submit fail-closed", () => {
+    const adapter = new OpinionExecutionAdapter({
+      executionMode: "user_signed_backend_relay",
+      baseUrl: "https://api.opinion.trade",
+      apiKey: "opinion-api-key",
+      liveExecutionEnabled: true,
+      orderCreatePath: "/orders",
+      docsUrl: "https://docs.opinion.trade"
+    });
+
+    expect(adapter.normalizeVenueError(new Error("provider returned an unexpected live submit error")))
+      .toMatchObject({
+        code: "OPINION_LIVE_SUBMIT_NOT_ENABLED",
+        message: "Opinion live order submission is not enabled. Lotus can quote Opinion markets, but live submit remains disabled."
+      });
   });
 
   it("blocks live submit before venue calls when Predict.fun readiness is stale", async () => {

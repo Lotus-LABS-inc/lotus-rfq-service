@@ -315,6 +315,7 @@ export class PolymarketFundingBalanceReadService {
     const balance = collateralAtomicUnitsToUsdc(response.balance);
     const clobAllowanceSpenders = clobAllowanceSpendersFromResponse(response);
     const allowance = collateralAtomicUnitsToUsdc(collateralAllowanceAtomicUnits(response));
+    const hasClobAllowanceMap = clobAllowanceSpenders.length > 0;
     const clobApprovalSpenders = clobAllowanceSpenders.map((spender) => spender.spenderAddress);
     const fallbackApprovalSpenders = configuredApprovalSpenders(this.config);
     const allowanceReadSpenders = clobApprovalSpenders.length > 0 ? clobApprovalSpenders : fallbackApprovalSpenders;
@@ -336,7 +337,7 @@ export class PolymarketFundingBalanceReadService {
         this.config.pusdTokenAddress ?? defaultPusdTokenAddress,
         allowanceReadSpenders
       );
-      if (onchainPusdBalance.greaterThan(0) && onchainPusdAllowance && onchainPusdAllowance.greaterThan(0)) {
+      if (!hasClobAllowanceMap && onchainPusdBalance.greaterThan(0) && onchainPusdAllowance && onchainPusdAllowance.greaterThan(0)) {
         usableBalance = Decimal.min(onchainPusdBalance, onchainPusdAllowance);
         usableBalanceSource = "ONCHAIN_PUSD_ALLOWANCE";
       }

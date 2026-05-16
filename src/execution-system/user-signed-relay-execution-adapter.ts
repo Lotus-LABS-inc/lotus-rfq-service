@@ -13,6 +13,7 @@ import type {
   VenueSettlementState,
   VenueSubmitResult
 } from "./venue-adapter.js";
+import { normalizeLiveVenueErrorMessage } from "./live-venue-error-normalizer.js";
 
 export type UserSignedRelayVenue = "OPINION" | "PREDICT_FUN";
 export type UserSignedRelayAdapterName = "OpinionExecutionAdapter" | "PredictFunExecutionAdapter";
@@ -421,6 +422,20 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
   }
 
   public normalizeVenueError(error: unknown): NormalizedVenueError {
+    const normalized = normalizeLiveVenueErrorMessage(error, {
+      venue: this.venue,
+      fallbackCode: error instanceof UserSignedRelayExecutionNotConfiguredError
+        ? error.reasonCode
+        : `${this.venue}_USER_SIGNED_RELAY_ERROR`,
+      fallbackMessage: error instanceof Error ? error.message : `Unknown ${this.venue} user-signed relay error.`
+    });
+    if (
+      normalized.code !== (error instanceof UserSignedRelayExecutionNotConfiguredError
+        ? error.reasonCode
+        : `${this.venue}_USER_SIGNED_RELAY_ERROR`)
+    ) {
+      return normalized;
+    }
     if (error instanceof UserSignedRelayExecutionNotConfiguredError) {
       return {
         code: error.reasonCode,
@@ -428,11 +443,7 @@ export class UserSignedRelayExecutionAdapter implements ExecutionVenueAdapter {
         retryable: false
       };
     }
-    return {
-      code: `${this.venue}_USER_SIGNED_RELAY_ERROR`,
-      message: error instanceof Error ? error.message : `Unknown ${this.venue} user-signed relay error.`,
-      retryable: false
-    };
+    return normalized;
   }
 
   private async submitPredictFunSignedOrder(order: PreparedVenueOrder): Promise<VenueSubmitResult> {

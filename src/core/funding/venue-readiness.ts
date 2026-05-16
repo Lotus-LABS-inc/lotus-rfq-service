@@ -169,7 +169,7 @@ const polymarketPendingReason = (raw: Record<string, unknown> | undefined): stri
   if (bridgedUsdcBalance?.greaterThan(0) && (collateralBalance?.isZero() ?? true)) {
     return "POLYMARKET_USDCE_ACTIVATION_REQUIRED";
   }
-  if (onchainPusdBalance?.greaterThan(0) && (collateralAllowance?.isZero() ?? true) && (onchainPusdAllowance?.isZero() ?? true)) {
+  if (onchainPusdBalance?.greaterThan(0) && (collateralAllowance?.isZero() ?? true)) {
     return "POLYMARKET_CLOB_APPROVAL_REQUIRED";
   }
   return null;

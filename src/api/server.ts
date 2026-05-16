@@ -1303,7 +1303,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     undefined,
     process.env,
     signedTradeExecutionStatusRepository,
-    signedTradePositionRecorder
+    signedTradePositionRecorder,
+    polymarketFundingBalanceReadService
   );
   if (dependencies.executionSystemSandboxEnabled) {
     const laneGate = new ApprovedLaneExecutionGate(new ScopeAuthorityLaneResolver(executionScopeAuthorities));

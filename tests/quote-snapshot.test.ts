@@ -564,4 +564,41 @@ describe("venue quote mapping resolvers", () => {
     ]);
     expect(report.blocked.every((blocker) => blocker.reason !== "QUOTE_READER_FAILED")).toBe(true);
   });
+
+  it("keeps Predict 401 quote failures typed with an operator-safe auth details code", async () => {
+    const predictReader: VenueQuoteSnapshotReader = {
+      venue: "PREDICT_FUN",
+      async getQuoteSnapshot() {
+        throw new Error("Predict request failed with status 401.");
+      }
+    };
+    const source = new CompositeVenueQuoteSource([predictReader], new SharedCoreVenueQuoteMappingResolver({
+      async loadApprovedVenueMappings() {
+        return [{
+          venue: "PREDICT",
+          venue_market_id: "PREDICT:58416:canonical",
+          normalized_payload: { venueMarketId: "58416", quoteTokenId: "yes-token" },
+          raw_source_payload: {}
+        }];
+      },
+      async listApprovedVenueMappings() {
+        return [];
+      }
+    }));
+
+    const report = await source.getQuoteSnapshotReport({
+      canonicalMarketId: "canonical",
+      canonicalOutcomeId: "YES",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(report.blocked).toEqual([{
+      venue: "PREDICT",
+      reason: "QUOTE_PROVIDER_HTTP_401",
+      venueMarketId: "58416",
+      venueOutcomeId: "yes-token",
+      detailsCode: "PREDICT_PROVIDER_AUTH_INVALID"
+    }]);
+  });
 });

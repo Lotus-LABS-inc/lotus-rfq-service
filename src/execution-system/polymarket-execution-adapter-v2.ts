@@ -34,6 +34,7 @@ import {
   polymarketRelayHeaders,
   signPolymarketRelayRequest
 } from "./polymarket-execution-relay-auth.js";
+import { normalizeLiveVenueErrorMessage } from "./live-venue-error-normalizer.js";
 
 export const polymarketV2RequiredEnvKeys = [
   "POLYMARKET_CLOB_HOST",
@@ -707,11 +708,16 @@ export class RelayPolymarketClobV2LiveClient implements PolymarketClobV2LiveClie
       const message = isRecord(payload) && typeof payload.message === "string"
         ? payload.message
         : `Polymarket execution relay request failed with status ${response.status}.`;
-      throw new PolymarketExecutionNotConfiguredError(
-        response.status === 401 || response.status === 403
+      const normalized = normalizeLiveVenueErrorMessage(message, {
+        venue: "POLYMARKET",
+        fallbackCode: response.status === 401 || response.status === 403
           ? "POLYMARKET_V2_RELAY_UNAUTHORIZED"
           : "POLYMARKET_V2_RELAY_ERROR",
-        message
+        fallbackMessage: message
+      });
+      throw new PolymarketExecutionNotConfiguredError(
+        normalized.code,
+        normalized.message
       );
     }
     return payload as T;
@@ -1305,10 +1311,15 @@ const sanitizePolymarketSdkError = (error: unknown, sensitiveValues: readonly st
   const status = isRecord(error) && typeof error.status === "number" ? error.status : undefined;
   const rawMessage = error instanceof Error ? error.message : "Polymarket CLOB SDK error.";
   const message = redactStringValues(rawMessage, sensitiveValues);
-  if (/not enough balance|balance is not enough|not enough allowance|allowance is not enough/i.test(message)) {
+  const normalized = normalizeLiveVenueErrorMessage(message, {
+    venue: "POLYMARKET",
+    fallbackCode: status === 401 ? "POLYMARKET_V2_UNAUTHORIZED" : "POLYMARKET_V2_SDK_ERROR",
+    fallbackMessage: message
+  });
+  if (normalized.code !== (status === 401 ? "POLYMARKET_V2_UNAUTHORIZED" : "POLYMARKET_V2_SDK_ERROR")) {
     return new PolymarketExecutionNotConfiguredError(
-      "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
-      "Polymarket CLOB collateral is not ready for this order. Refresh balances, activate or approve Polymarket funds, then retry."
+      normalized.code,
+      normalized.message
     );
   }
   const sanitized = new PolymarketExecutionNotConfiguredError(
@@ -1478,11 +1489,11 @@ export class PolymarketExecutionAdapterV2 implements ExecutionVenueAdapter {
         retryable: false
       };
     }
-    return {
-      code: "POLYMARKET_V2_ADAPTER_ERROR",
-      message: error instanceof Error ? error.message : "Unknown Polymarket V2 adapter error.",
-      retryable: false
-    };
+    return normalizeLiveVenueErrorMessage(error, {
+      venue: "POLYMARKET",
+      fallbackCode: "POLYMARKET_V2_ADAPTER_ERROR",
+      fallbackMessage: "Unknown Polymarket V2 adapter error."
+    });
   }
 
   private assertPreparedPathConfigured(): void {

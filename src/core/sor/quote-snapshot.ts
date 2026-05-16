@@ -346,14 +346,18 @@ export class CompositeVenueQuoteSource {
         return { snapshot, blocker: null };
       } catch (error) {
         const classified = classifyQuoteReaderError(error);
+        const venue = mapping.venue.toUpperCase();
+        const detailsCode = (venue === "PREDICT_FUN" || venue === "PREDICT") && classified.reason === "QUOTE_PROVIDER_HTTP_401"
+          ? "PREDICT_PROVIDER_AUTH_INVALID"
+          : classified.detailsCode;
         return {
           snapshot: null,
           blocker: {
-            venue: mapping.venue.toUpperCase(),
+            venue,
             reason: classified.reason,
             venueMarketId: mapping.venueMarketId,
             ...(mapping.venueOutcomeId ? { venueOutcomeId: mapping.venueOutcomeId } : {}),
-            ...(classified.detailsCode ? { detailsCode: classified.detailsCode } : {})
+            ...(detailsCode ? { detailsCode } : {})
           }
         };
       }
