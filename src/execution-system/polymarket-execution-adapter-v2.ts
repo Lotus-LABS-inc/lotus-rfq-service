@@ -1,4 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
+import Decimal from "decimal.js";
 import { Wallet } from "@ethersproject/wallet";
 import {
   AssetType,
@@ -967,13 +968,24 @@ const parseNonNegativeAtomicUnits = (value: unknown, fieldName: string): bigint 
       : typeof value === "string"
         ? value.trim()
         : "";
-  if (!/^\d+$/.test(normalized)) {
+  if (normalized.length === 0) {
     throw new PolymarketExecutionNotConfiguredError(
       "POLYMARKET_CLOB_BALANCE_PAYLOAD_INVALID",
       `Polymarket CLOB balance response included an invalid ${fieldName}.`
     );
   }
-  return BigInt(normalized);
+  try {
+    const parsed = new Decimal(normalized);
+    if (!parsed.isFinite() || parsed.isNegative()) {
+      throw new Error("invalid atomic amount");
+    }
+    return BigInt(parsed.toDecimalPlaces(0, Decimal.ROUND_DOWN).toFixed(0));
+  } catch {
+    throw new PolymarketExecutionNotConfiguredError(
+      "POLYMARKET_CLOB_BALANCE_PAYLOAD_INVALID",
+      `Polymarket CLOB balance response included an invalid ${fieldName}.`
+    );
+  }
 };
 
 const collateralAllowanceAtomicUnits = (response: BalanceAllowanceResponse): bigint => {
