@@ -175,8 +175,10 @@ describe("executable route selection", () => {
     expect(result.quote).toMatchObject({
       routeType: "SINGLE_VENUE",
       venuePath: ["POLYMARKET"],
-      executableAmount: "2"
+      executableAmount: "2",
+      requiredUserSignatureSteps: ["POLYMARKET user signature required"]
     });
+    expect(result.quote?.legs[0]?.requiresUserSignature).toBe(true);
   });
 
   it("blocks user-signed Limitless candidates that are missing market exchange metadata", async () => {

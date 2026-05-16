@@ -744,7 +744,10 @@ describe("SignedTradeBundleService", () => {
     const sut = new SignedTradeBundleService(
       { getQuote: async () => quote() } as never,
       registryWithPredict(),
-      { getAccount: async (_userId, venue) => account(venue.toUpperCase() as UserVenueAccount["venue"]) },
+      {
+        getAccount: async (_userId, venue) => account(venue.toUpperCase() as UserVenueAccount["venue"]),
+        getPredictFunJwt: () => "predict-user-jwt"
+      },
       () => new Date("2026-05-07T00:00:00.000Z"),
       {
         PREDICT_FUN_BALANCE_PREFLIGHT_RPC_URL: "https://bsc-rpc.example",
@@ -795,7 +798,10 @@ describe("SignedTradeBundleService", () => {
     const sut = new SignedTradeBundleService(
       { getQuote: async () => quote() } as never,
       registryWithPredict(),
-      { getAccount: async (_userId, venue) => account(venue.toUpperCase() as UserVenueAccount["venue"]) },
+      {
+        getAccount: async (_userId, venue) => account(venue.toUpperCase() as UserVenueAccount["venue"]),
+        getPredictFunJwt: () => "predict-user-jwt"
+      },
       () => new Date("2026-05-07T00:00:00.000Z"),
       {
         PREDICT_FUN_BALANCE_PREFLIGHT_RPC_URL: "https://bsc-rpc.example",

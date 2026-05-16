@@ -633,11 +633,14 @@ const evaluateCandidate = (
   }
   return {
     executable: true,
-    status: candidate.requiresUserSignature ? "USER_SIGNATURE_REQUIRED" : "EXECUTION_READY",
+    status: requiresUserSignature(candidate) ? "USER_SIGNATURE_REQUIRED" : "EXECUTION_READY",
     blockerCategory: "NONE",
     adminReason: "executable"
   };
 };
+
+const requiresUserSignature = (candidate: TradeRouteCandidate): boolean =>
+  candidate.requiresUserSignature === true || candidate.venue.toUpperCase() === "POLYMARKET";
 
 const hasLimitlessExchangeAddress = (candidate: TradeRouteCandidate): boolean => {
   const metadata = candidate.metadata ?? {};
@@ -887,7 +890,7 @@ const toLeg = (candidate: TradeRouteCandidate, size: number): ExecutableRouteLeg
   ...(candidate.effectiveFeeBps !== undefined ? { effectiveFeeBps: candidate.effectiveFeeBps } : {}),
   ...(candidate.feeConfidence ? { feeConfidence: candidate.feeConfidence } : {}),
   ...(candidate.metadata ? { metadata: { ...candidate.metadata } } : {}),
-  requiresUserSignature: candidate.requiresUserSignature === true
+  requiresUserSignature: requiresUserSignature(candidate)
 });
 
 const scoreRoute = (
