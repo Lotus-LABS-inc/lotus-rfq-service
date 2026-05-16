@@ -457,7 +457,7 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
   }
 
   public async submitOrder(order: PreparedVenueOrder): Promise<VenueSubmitResult> {
-    const payload = parsePreparedPolymarketPayload(order);
+    parsePreparedPolymarketPayload(order);
     const signedOrder = parseUserSignedPolymarketOrder(order);
     if (signedOrder) {
       const authPayload = parsePolymarketClobAuthPayload(order);
@@ -478,31 +478,10 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
       const response = await this.callSdkSafely(() => postOrder(signedOrder, OrderType.GTC), extraSensitiveValues);
       return mapPolymarketOrderResponse(response);
     }
-    const userOrder: {
-      tokenID: string;
-      price: number;
-      size: number;
-      side: Side;
-      builderCode?: string;
-    } = {
-      tokenID: payload.venueOutcomeId,
-      price: payload.price,
-      size: Number(payload.size),
-      side: payload.side === "buy" ? Side.BUY : Side.SELL
-    };
-    if (nonEmpty(this.config.builderCode)) {
-      const builderCode = this.config.builderCode!;
-      userOrder.builderCode = builderCode;
-    }
-    const response = await this.callSdkSafely(() => this.sdkClient.createAndPostOrder(
-      userOrder,
-      {
-        ...(this.config.tickSize ? { tickSize: this.config.tickSize } : {}),
-        ...(this.config.negRisk !== undefined ? { negRisk: this.config.negRisk } : {})
-      },
-      OrderType.GTC
-    ));
-    return mapPolymarketOrderResponse(response);
+    throw new PolymarketExecutionNotConfiguredError(
+      "POLYMARKET_USER_SIGNATURE_REQUIRED",
+      "Polymarket live execution requires a user-signed CLOB order. Refresh the route and sign the order before submit."
+    );
   }
 
   public async fetchFillState(venueOrderId: string): Promise<VenueFillState> {

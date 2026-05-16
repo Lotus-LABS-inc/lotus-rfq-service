@@ -505,18 +505,11 @@ describe("PolymarketExecutionAdapterV2", () => {
     });
   });
 
-  it("SDK live client maps submit, fill, cancel, and settlement through the CLOB V2 contract", async () => {
+  it("SDK live client blocks unsigned user-funded submit and maps fill, cancel, and settlement through CLOB V2", async () => {
     const calls: Array<{ method: string; args: unknown[] }> = [];
     const sdkClient: PolymarketClobV2SdkClient = {
-      async createAndPostOrder(userOrder, options, orderType) {
-        calls.push({ method: "createAndPostOrder", args: [userOrder, options, orderType] });
-        return {
-          orderID: "pm-order-1",
-          status: "MATCHED",
-          takingAmount: "1",
-          price: "0.51",
-          transactionsHashes: ["0xsettlement"]
-        };
+      async createAndPostOrder() {
+        throw new Error("unsigned createAndPostOrder must not be used");
       },
       async getOrder(orderID) {
         calls.push({ method: "getOrder", args: [orderID] });
@@ -580,7 +573,7 @@ describe("PolymarketExecutionAdapterV2", () => {
       negRisk: false
     }, () => sdkClient);
 
-    const submitResult = await client.submitOrder({
+    await expect(client.submitOrder({
       venue: "POLYMARKET",
       clientOrderId: "execution-1-leg-1",
       payload: {
@@ -590,29 +583,8 @@ describe("PolymarketExecutionAdapterV2", () => {
         size: "1",
         price: 0.51
       }
-    });
-    expect(submitResult).toMatchObject({
-      venueOrderId: "pm-order-1",
-      fillId: "0xsettlement",
-      status: "FILLED",
-      filledSize: "1"
-    });
-    expect(calls[0]?.method).toBe("createAndPostOrder");
-    expect(calls[0]?.args[0]).toEqual({
-      tokenID: "pm-outcome-yes",
-      price: 0.51,
-      size: 1,
-      side: Side.BUY,
-      builderCode: "lotus-builder"
-    });
-    expect(calls[0]?.args[0]).not.toHaveProperty("feeRateBps");
-    expect(calls[0]?.args[0]).not.toHaveProperty("nonce");
-    expect(calls[0]?.args[0]).not.toHaveProperty("taker");
-    expect(calls[0]?.args[1]).toEqual({
-      tickSize: "0.01",
-      negRisk: false
-    });
-    expect(calls[0]?.args[2]).toBe(OrderType.GTC);
+    })).rejects.toMatchObject({ reasonCode: "POLYMARKET_USER_SIGNATURE_REQUIRED" });
+    expect(calls).toEqual([]);
 
     await expect(client.fetchFillState("pm-order-1")).resolves.toMatchObject({
       status: "PARTIAL_FILL",
@@ -934,6 +906,9 @@ describe("PolymarketExecutionAdapterV2", () => {
     try {
       const sdkClient: PolymarketClobV2SdkClient = {
         async createAndPostOrder() {
+          throw new Error("unsigned createAndPostOrder must not be used");
+        },
+        async postOrder() {
           console.error("[CLOB Client] request error", {
             headers: {
               POLY_API_KEY: completeEnv.POLY_API_KEY,
@@ -950,6 +925,12 @@ describe("PolymarketExecutionAdapterV2", () => {
           const error = new Error("Unauthorized/Invalid api key");
           Object.assign(error, { status: 401 });
           throw error;
+        },
+        async updateBalanceAllowance() {
+          return {};
+        },
+        async getBalanceAllowance() {
+          return { balance: "2000000", allowance: "2000000" };
         },
         async getOrder() {
           throw new Error("not used");
@@ -976,8 +957,28 @@ describe("PolymarketExecutionAdapterV2", () => {
         venue: "POLYMARKET",
         clientOrderId: "execution-1-leg-1",
         payload: {
+          signedPayload: {
+            signature: `0x${"aa".repeat(65)}`,
+            data: {
+              polymarketSignatureSuffix: `0x${"bb".repeat(96)}`,
+              order: {
+                salt: "1",
+                maker: "0x1111111111111111111111111111111111111111",
+                signer: "0x1111111111111111111111111111111111111111",
+                tokenId: "123",
+                makerAmount: "1000000",
+                takerAmount: "100000000",
+                side: "BUY",
+                signatureType: 3,
+                timestamp: "1",
+                expiration: "0",
+                metadata: `0x${"00".repeat(32)}`,
+                builder: `0x${"11".repeat(32)}`
+              }
+            }
+          },
           venueMarketId: "pm-market-1",
-          venueOutcomeId: "pm-outcome-yes",
+          venueOutcomeId: "123",
           side: "buy",
           size: "1",
           price: 0.51
