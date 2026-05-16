@@ -578,17 +578,28 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
         "Polymarket CLOB balance readiness could not be checked before submit."
       );
     }
-    if (updateBalanceAllowance) {
-      await this.callSdkSafely(
-        () => updateBalanceAllowance({ asset_type: AssetType.COLLATERAL }),
+    let spendableAtomic = 0n;
+    let balanceAtomic = 0n;
+    let allowanceAtomic = 0n;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (updateBalanceAllowance) {
+        await this.callSdkSafely(
+          () => updateBalanceAllowance({ asset_type: AssetType.COLLATERAL }),
+          extraSensitiveValues
+        );
+      }
+      const response = await this.callSdkSafely(
+        () => getBalanceAllowance({ asset_type: AssetType.COLLATERAL }),
         extraSensitiveValues
       );
+      ({ spendableAtomic, balanceAtomic, allowanceAtomic } = collateralSpendableAtomicUnits(response));
+      if (spendableAtomic >= requiredAtomic) {
+        break;
+      }
+      if (attempt < 2 && updateBalanceAllowance) {
+        await delay(500);
+      }
     }
-    const response = await this.callSdkSafely(
-      () => getBalanceAllowance({ asset_type: AssetType.COLLATERAL }),
-      extraSensitiveValues
-    );
-    const { spendableAtomic, balanceAtomic, allowanceAtomic } = collateralSpendableAtomicUnits(response);
     if (spendableAtomic < requiredAtomic) {
       throw new PolymarketExecutionNotConfiguredError(
         "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
@@ -617,17 +628,28 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
         "Polymarket CLOB share readiness could not be checked before submit."
       );
     }
-    if (updateBalanceAllowance) {
-      await this.callSdkSafely(
-        () => updateBalanceAllowance({ asset_type: AssetType.CONDITIONAL, token_id: required.tokenId }),
+    let spendableAtomic = 0n;
+    let balanceAtomic = 0n;
+    let allowanceAtomic = 0n;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (updateBalanceAllowance) {
+        await this.callSdkSafely(
+          () => updateBalanceAllowance({ asset_type: AssetType.CONDITIONAL, token_id: required.tokenId }),
+          extraSensitiveValues
+        );
+      }
+      const response = await this.callSdkSafely(
+        () => getBalanceAllowance({ asset_type: AssetType.CONDITIONAL, token_id: required.tokenId }),
         extraSensitiveValues
       );
+      ({ spendableAtomic, balanceAtomic, allowanceAtomic } = collateralSpendableAtomicUnits(response));
+      if (spendableAtomic >= required.requiredAtomic) {
+        break;
+      }
+      if (attempt < 2 && updateBalanceAllowance) {
+        await delay(500);
+      }
     }
-    const response = await this.callSdkSafely(
-      () => getBalanceAllowance({ asset_type: AssetType.CONDITIONAL, token_id: required.tokenId }),
-      extraSensitiveValues
-    );
-    const { spendableAtomic, balanceAtomic, allowanceAtomic } = collateralSpendableAtomicUnits(response);
     if (spendableAtomic < required.requiredAtomic) {
       throw new PolymarketExecutionNotConfiguredError(
         "POLYMARKET_CLOB_CONDITIONAL_TOKEN_NOT_READY",
@@ -1177,6 +1199,8 @@ const appendPolymarket1271SignatureSuffix = (signature: string, suffix: string |
   }
   return `0x${signature.slice(2)}${suffix.slice(2)}`;
 };
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 const mapPolymarketOrderResponse = (response: unknown): VenueSubmitResult => {
   const record = isRecord(response) ? response : {};

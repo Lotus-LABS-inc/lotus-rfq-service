@@ -28,7 +28,12 @@ export interface PolymarketFundingBalanceReadOutput {
   onchainPusdBalance: string | null;
   onchainPusdAllowance: string | null;
   bridgedUsdcBalance: string | null;
-  usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE" | "ONCHAIN_PUSD_ALLOWANCE" | "ONCHAIN_PUSD" | "ONCHAIN_BRIDGED_USDC";
+  usableBalanceSource:
+    | "CLOB_COLLATERAL_ALLOWANCE"
+    | "ONCHAIN_CLOB_SPENDER_ALLOWANCE"
+    | "ONCHAIN_PUSD_ALLOWANCE"
+    | "ONCHAIN_PUSD"
+    | "ONCHAIN_BRIDGED_USDC";
 }
 
 export interface PolymarketClobAllowanceSpender {
@@ -325,7 +330,9 @@ export class PolymarketFundingBalanceReadService {
         : fallbackApprovalSpenders.length > 0
           ? "CONFIG_FALLBACK"
           : "UNAVAILABLE";
-    let usableBalance = Decimal.min(balance, allowance);
+    let effectiveBalance = balance;
+    let effectiveAllowance = allowance;
+    let usableBalance = Decimal.min(effectiveBalance, effectiveAllowance);
     let usableBalanceSource: PolymarketFundingBalanceReadOutput["usableBalanceSource"] = "CLOB_COLLATERAL_ALLOWANCE";
     let onchainPusdBalance: DecimalValue | null = null;
     let onchainPusdAllowance: DecimalValue | null = null;
@@ -337,9 +344,18 @@ export class PolymarketFundingBalanceReadService {
         this.config.pusdTokenAddress ?? defaultPusdTokenAddress,
         allowanceReadSpenders
       );
-      if (!hasClobAllowanceMap && onchainPusdBalance.greaterThan(0) && onchainPusdAllowance && onchainPusdAllowance.greaterThan(0)) {
-        usableBalance = Decimal.min(onchainPusdBalance, onchainPusdAllowance);
-        usableBalanceSource = "ONCHAIN_PUSD_ALLOWANCE";
+      if (onchainPusdBalance.greaterThan(0) && onchainPusdAllowance && onchainPusdAllowance.greaterThan(0)) {
+        if (hasClobAllowanceMap) {
+          effectiveBalance = onchainPusdBalance;
+          effectiveAllowance = onchainPusdAllowance;
+          usableBalance = Decimal.min(effectiveBalance, effectiveAllowance);
+          usableBalanceSource = "ONCHAIN_CLOB_SPENDER_ALLOWANCE";
+        } else {
+          effectiveBalance = onchainPusdBalance;
+          effectiveAllowance = onchainPusdAllowance;
+          usableBalance = Decimal.min(effectiveBalance, effectiveAllowance);
+          usableBalanceSource = "ONCHAIN_PUSD_ALLOWANCE";
+        }
       }
       if (this.config.recognizeBridgedUsdcAsUsable !== false) {
         bridgedUsdcBalance = await this.readOnchainErc20Balance(funderAddress, this.config.bridgedUsdcTokenAddress ?? defaultPolygonBridgedUsdcTokenAddress);
@@ -347,8 +363,8 @@ export class PolymarketFundingBalanceReadService {
     }
     return {
       usableBalance: decimalToPlainString(usableBalance),
-      collateralBalance: decimalToPlainString(balance),
-      collateralAllowance: decimalToPlainString(allowance),
+      collateralBalance: decimalToPlainString(effectiveBalance),
+      collateralAllowance: decimalToPlainString(effectiveAllowance),
       clobAllowanceSpenders: clobAllowanceSpenders.map((spender) => ({
         spenderAddress: spender.spenderAddress,
         allowance: decimalToPlainString(spender.allowance)

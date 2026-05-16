@@ -286,7 +286,7 @@ describe("Polymarket internal funding balance read service", () => {
     expect(JSON.stringify(rpcCalls[1]).toLowerCase()).not.toContain(legacySpender.toLowerCase().replace(/^0x/, ""));
   });
 
-  it("does not mark CLOB ready from on-chain allowance evidence when CLOB spender allowances are zero", async () => {
+  it("uses verified on-chain CLOB spender approvals when the server-side CLOB cache is stale", async () => {
     const clobSpenders = [
       "0xE111180000d2663C0091e4f400237545B87B996B",
       "0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296",
@@ -327,12 +327,14 @@ describe("Polymarket internal funding balance read service", () => {
       fundingIntentId: "intent-1",
       routeLegId: "leg-1"
     })).resolves.toMatchObject({
-      usableBalance: "0",
+      usableBalance: "9",
+      collateralBalance: "9.000769",
+      collateralAllowance: "9",
       onchainPusdBalance: "9.000769",
       onchainPusdAllowance: "9",
       approvalSpenderSource: "CLOB_ALLOWANCE_MAP",
       clobAllowanceSpenders: clobSpenders.map((spender) => ({ spenderAddress: spender, allowance: "0" })),
-      usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE"
+      usableBalanceSource: "ONCHAIN_CLOB_SPENDER_ALLOWANCE"
     });
 
     expect(rpcCalls).toHaveLength(4);

@@ -836,6 +836,10 @@ describe("PolymarketExecutionAdapterV2", () => {
 
     expect(calls.map((call) => call.method)).toEqual([
       "updateBalanceAllowance",
+      "getBalanceAllowance",
+      "updateBalanceAllowance",
+      "getBalanceAllowance",
+      "updateBalanceAllowance",
       "getBalanceAllowance"
     ]);
   });
@@ -915,6 +919,10 @@ describe("PolymarketExecutionAdapterV2", () => {
     });
 
     expect(calls.map((call) => call.method)).toEqual([
+      "updateBalanceAllowance",
+      "getBalanceAllowance",
+      "updateBalanceAllowance",
+      "getBalanceAllowance",
       "updateBalanceAllowance",
       "getBalanceAllowance"
     ]);
