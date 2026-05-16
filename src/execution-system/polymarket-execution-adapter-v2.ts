@@ -1305,6 +1305,12 @@ const sanitizePolymarketSdkError = (error: unknown, sensitiveValues: readonly st
   const status = isRecord(error) && typeof error.status === "number" ? error.status : undefined;
   const rawMessage = error instanceof Error ? error.message : "Polymarket CLOB SDK error.";
   const message = redactStringValues(rawMessage, sensitiveValues);
+  if (/not enough balance|balance is not enough|not enough allowance|allowance is not enough/i.test(message)) {
+    return new PolymarketExecutionNotConfiguredError(
+      "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
+      "Polymarket CLOB collateral is not ready for this order. Refresh balances, activate or approve Polymarket funds, then retry."
+    );
+  }
   const sanitized = new PolymarketExecutionNotConfiguredError(
     status === 401 ? "POLYMARKET_V2_UNAUTHORIZED" : "POLYMARKET_V2_SDK_ERROR",
     message
