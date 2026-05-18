@@ -178,6 +178,15 @@ const parseSignatureType = (value: string | undefined): SignatureTypeV2 => {
   return SignatureTypeV2.POLY_PROXY;
 };
 
+const signatureTypeForSignedOrder = (signedOrder: SignedOrder): SignatureTypeV2 | null => {
+  const value = Number((signedOrder as unknown as Record<string, unknown>).signatureType);
+  if (value === Number(SignatureTypeV2.EOA)) return SignatureTypeV2.EOA;
+  if (value === Number(SignatureTypeV2.POLY_GNOSIS_SAFE)) return SignatureTypeV2.POLY_GNOSIS_SAFE;
+  if (value === Number(SignatureTypeV2.POLY_1271)) return SignatureTypeV2.POLY_1271;
+  if (value === Number(SignatureTypeV2.POLY_PROXY)) return SignatureTypeV2.POLY_PROXY;
+  return null;
+};
+
 const parseChain = (value: string | undefined): Chain => {
   if (value === String(Chain.AMOY)) {
     return Chain.AMOY;
@@ -475,7 +484,7 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
     if (signedOrder) {
       const authPayload = parsePolymarketClobAuthPayload(order);
       const sdkClient = authPayload
-        ? await this.createUserScopedSdkClient(authPayload)
+        ? await this.createUserScopedSdkClient(authPayload, signedOrder)
         : this.sdkClient;
       const postOrder = sdkClient.postOrder?.bind(sdkClient);
       if (!postOrder) {
@@ -538,7 +547,10 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
     });
   }
 
-  private async createUserScopedSdkClient(authPayload: PolymarketClobAuthPayload): Promise<PolymarketClobV2SdkClient> {
+  private async createUserScopedSdkClient(
+    authPayload: PolymarketClobAuthPayload,
+    signedOrder: SignedOrder
+  ): Promise<PolymarketClobV2SdkClient> {
     const creds = authPayload.creds ?? await createOrDerivePolymarketApiKey(this.config, authPayload);
     authPayload.creds = creds;
     const options: ClobClientOptions = {
@@ -546,7 +558,7 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
       chain: parseChain(this.config.chainId),
       signer: addressOnlySigner(authPayload.address),
       creds,
-      signatureType: parseSignatureType(this.config.signatureType),
+      signatureType: signatureTypeForSignedOrder(signedOrder) ?? parseSignatureType(this.config.signatureType),
       ...(authPayload.funderAddress ? { funderAddress: authPayload.funderAddress } : {}),
       builderConfig: { builderCode: this.config.builderCode! },
       retryOnError: false,
