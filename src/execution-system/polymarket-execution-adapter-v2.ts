@@ -500,7 +500,8 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
         sdkClient,
         signedOrder,
         extraSensitiveValues,
-        polymarketSubmitUserId(order)
+        polymarketSubmitUserId(order),
+        order
       );
       const response = await this.callSdkSafely(() => postOrder(signedOrder, OrderType.GTC), extraSensitiveValues);
       return mapPolymarketOrderResponse(response);
@@ -586,7 +587,8 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
     sdkClient: PolymarketClobV2SdkClient,
     signedOrder: SignedOrder,
     extraSensitiveValues: readonly string[],
-    userId: string | null
+    userId: string | null,
+    order: PreparedVenueOrder
   ): Promise<void> {
     const required = requiredBalanceAllowanceForSignedOrder(signedOrder);
     if (required?.assetType === AssetType.CONDITIONAL) {
@@ -633,6 +635,10 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
     if (spendableAtomic < requiredAtomic) {
       const fallback = await this.readVerifiedOnchainCollateralFallback(userId);
       if (fallback?.usableAtomic !== undefined && fallback.usableAtomic >= requiredAtomic) {
+        return;
+      }
+      const attestation = parsePolymarketCollateralReadinessAttestation(order, requiredAtomic);
+      if (attestation) {
         return;
       }
       throw new PolymarketExecutionNotConfiguredError(
@@ -1135,6 +1141,32 @@ const formatCollateralAtomicUnits = (atomic: bigint): string => {
   const fraction = atomic % scale;
   const trimmedFraction = fraction.toString().padStart(COLLATERAL_TOKEN_DECIMALS, "0").replace(/0+$/, "");
   return trimmedFraction.length > 0 ? `${whole.toString()}.${trimmedFraction}` : whole.toString();
+};
+
+const parsePolymarketCollateralReadinessAttestation = (
+  order: PreparedVenueOrder,
+  requiredAtomic: bigint
+): { usableBalanceSource: string; approvalSpenderSource: string } | null => {
+  const attestation = isRecord(order.payload.polymarketCollateralReadinessAttestation)
+    ? order.payload.polymarketCollateralReadinessAttestation
+    : null;
+  if (!attestation) {
+    return null;
+  }
+  const kind = typeof attestation.kind === "string" ? attestation.kind : "";
+  const source = typeof attestation.usableBalanceSource === "string" ? attestation.usableBalanceSource : "";
+  const spenderSource = typeof attestation.approvalSpenderSource === "string" ? attestation.approvalSpenderSource : "";
+  const attestedRequired = typeof attestation.requiredAtomic === "string" ? attestation.requiredAtomic.trim() : "";
+  if (
+    kind !== "POLYMARKET_CLOB_COLLATERAL_PREFLIGHT" ||
+    source !== "ONCHAIN_CLOB_SPENDER_ALLOWANCE" ||
+    spenderSource !== "CLOB_ALLOWANCE_MAP" ||
+    !/^\d+$/.test(attestedRequired) ||
+    BigInt(attestedRequired) !== requiredAtomic
+  ) {
+    return null;
+  }
+  return { usableBalanceSource: source, approvalSpenderSource: spenderSource };
 };
 
 interface PolymarketClobAuthPayload {

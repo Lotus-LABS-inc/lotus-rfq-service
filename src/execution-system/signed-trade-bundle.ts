@@ -226,12 +226,13 @@ export class SignedTradeBundleService {
     dryRun?: boolean | undefined;
   }): Promise<SignedTradeBundleSubmitResult> {
     const quote = await this.requireFreshQuote(input.userId, input.quoteId);
+    let liveReadiness: LiveSubmitReadinessSnapshot | null = null;
     if (input.dryRun !== true) {
-      const readiness = await this.getLiveReadiness({ userId: input.userId, quoteId: input.quoteId });
-      if (readiness.status !== "fresh") {
+      liveReadiness = await this.getLiveReadiness({ userId: input.userId, quoteId: input.quoteId });
+      if (liveReadiness.status !== "fresh") {
         throw new SignedTradeBundleError(
           "LIVE_SUBMIT_READINESS_BLOCKED",
-          readiness.blockers[0] ?? "Live submit readiness is blocked or stale."
+          liveReadiness.blockers[0] ?? "Live submit readiness is blocked or stale."
         );
       }
     }
@@ -268,6 +269,7 @@ export class SignedTradeBundleService {
         this.verifySignedPayload(prepared, binding, signedPayload);
         order = this.attachSignedPayload(prepared, binding, signedPayload);
       }
+      order = this.attachLiveReadinessAttestation(order, quote, leg, index, liveReadiness?.venues[index] ?? null);
       if (input.dryRun === true) {
         submittedLegs.push({ legIndex: index, venue: leg.venue, status: "DRY_RUN_VERIFIED" });
         continue;
@@ -1065,6 +1067,48 @@ export class SignedTradeBundleService {
         ...prepared.payload,
         expectedBinding: binding,
         signedPayload
+      }
+    };
+  }
+
+  private attachLiveReadinessAttestation(
+    prepared: PreparedVenueOrder,
+    quote: ExecutableTradeQuote,
+    leg: ExecutableRouteLeg,
+    legIndex: number,
+    readiness: LiveSubmitVenueReadiness | null
+  ): PreparedVenueOrder {
+    if (
+      prepared.venue.toUpperCase() !== "POLYMARKET" ||
+      quote.side !== "buy" ||
+      readiness?.status !== "fresh" ||
+      readiness.collateral.usableBalanceSource !== "ONCHAIN_CLOB_SPENDER_ALLOWANCE"
+    ) {
+      return prepared;
+    }
+    const signedPayload = recordField(prepared.payload, "signedPayload");
+    const data = signedPayload ? recordField(signedPayload, "data") : null;
+    const order = data ? recordField(data, "order") : null;
+    const requiredAtomic = order ? numericStringField(order, "makerAmount") : null;
+    if (!requiredAtomic || !/^\d+$/.test(requiredAtomic)) {
+      return prepared;
+    }
+    return {
+      ...prepared,
+      payload: {
+        ...prepared.payload,
+        polymarketCollateralReadinessAttestation: {
+          kind: "POLYMARKET_CLOB_COLLATERAL_PREFLIGHT",
+          quoteId: quote.quoteId,
+          legIndex,
+          venue: prepared.venue,
+          checkedAt: readiness.checkedAt,
+          requiredAtomic,
+          requiredNotional: readiness.collateral.requiredNotional,
+          usableBalance: readiness.collateral.usableBalance,
+          usableBalanceSource: readiness.collateral.usableBalanceSource,
+          approvalSpenderSource: readiness.collateral.approvalSpenderSource
+        }
       }
     };
   }
