@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import Decimal from "decimal.js";
 import {
   Chain as PolymarketChain,
   ClobClient as PolymarketClobClient,
@@ -1933,39 +1934,27 @@ const formatBaseUnits = (value: bigint, decimals: number): string => {
 const trimDecimal = (value: string): string =>
   value.includes(".") ? value.replace(/0+$/, "").replace(/\.$/, "") : value;
 
+const decimalFromString = (value: string): InstanceType<typeof Decimal> => {
+  const parsed = new Decimal(value.trim());
+  if (!parsed.isFinite() || parsed.isNegative()) {
+    throw new Error("Invalid non-negative decimal amount.");
+  }
+  return parsed;
+};
+
+const plainDecimalString = (value: InstanceType<typeof Decimal>): string =>
+  trimDecimal(value.toFixed());
+
 const compareDecimalStrings = (left: string, right: string): number => {
-  const [leftWhole = "0", leftFraction = ""] = left.split(".");
-  const [rightWhole = "0", rightFraction = ""] = right.split(".");
-  const scale = Math.max(leftFraction.length, rightFraction.length);
-  const leftAtomic = BigInt(leftWhole) * 10n ** BigInt(scale) + BigInt(leftFraction.padEnd(scale, "0") || "0");
-  const rightAtomic = BigInt(rightWhole) * 10n ** BigInt(scale) + BigInt(rightFraction.padEnd(scale, "0") || "0");
-  return leftAtomic === rightAtomic ? 0 : leftAtomic > rightAtomic ? 1 : -1;
+  return decimalFromString(left).cmp(decimalFromString(right));
 };
 
 const multiplyDecimalStrings = (left: string, right: string): string => {
-  const [leftWhole = "0", leftFraction = ""] = left.split(".");
-  const [rightWhole = "0", rightFraction = ""] = right.split(".");
-  const leftScale = leftFraction.length;
-  const rightScale = rightFraction.length;
-  const leftAtomic = BigInt(`${leftWhole}${leftFraction}`.replace(/^0+(?=\d)/, "") || "0");
-  const rightAtomic = BigInt(`${rightWhole}${rightFraction}`.replace(/^0+(?=\d)/, "") || "0");
-  const scale = leftScale + rightScale;
-  const product = (leftAtomic * rightAtomic).toString().padStart(scale + 1, "0");
-  const whole = scale === 0 ? product : product.slice(0, -scale);
-  const fraction = scale === 0 ? "" : product.slice(-scale);
-  return trimDecimal(fraction ? `${whole}.${fraction}` : whole);
+  return plainDecimalString(decimalFromString(left).times(decimalFromString(right)));
 };
 
 const addDecimalStrings = (left: string, right: string): string => {
-  const [leftWhole = "0", leftFraction = ""] = left.split(".");
-  const [rightWhole = "0", rightFraction = ""] = right.split(".");
-  const scale = Math.max(leftFraction.length, rightFraction.length);
-  const leftAtomic = BigInt(leftWhole) * 10n ** BigInt(scale) + BigInt(leftFraction.padEnd(scale, "0") || "0");
-  const rightAtomic = BigInt(rightWhole) * 10n ** BigInt(scale) + BigInt(rightFraction.padEnd(scale, "0") || "0");
-  const sum = (leftAtomic + rightAtomic).toString().padStart(scale + 1, "0");
-  const whole = scale === 0 ? sum : sum.slice(0, -scale);
-  const fraction = scale === 0 ? "" : sum.slice(-scale);
-  return trimDecimal(fraction ? `${whole}.${fraction}` : whole);
+  return plainDecimalString(decimalFromString(left).plus(decimalFromString(right)));
 };
 
 const predictAddressesForChain = (chainId: number): Record<string, string> | null => {

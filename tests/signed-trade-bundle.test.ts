@@ -691,6 +691,29 @@ describe("SignedTradeBundleService", () => {
     expect(readiness.status).toBe("fresh");
   });
 
+  it("handles scientific-notation balances in live readiness checks", async () => {
+    const registry = new ExecutionVenueAdapterRegistry();
+    registry.register(new FailingPolymarketBalanceAdapter());
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => polymarketBuyQuote({ size: "1", price: 1, feeAmount: 0.1 }) } as never,
+      registry,
+      { getAccount: async () => account("POLYMARKET") },
+      () => new Date("2026-05-07T00:00:00.000Z"),
+      {} as NodeJS.ProcessEnv,
+      undefined,
+      undefined,
+      polymarketBalanceReader({
+        usableBalance: "91564896837611e-9",
+        collateralBalance: "91564896837611e-9",
+        collateralAllowance: "9999999"
+      })
+    );
+
+    const readiness = await sut.getLiveReadiness({ userId: "user-1", quoteId: "exec_quote_polymarket_buy" });
+
+    expect(readiness.status).toBe("fresh");
+  });
+
   it("blocks Polymarket sell when conditional-token allowance is missing", async () => {
     const registry = new ExecutionVenueAdapterRegistry();
     registry.register(new FailingPolymarketBalanceAdapter());
