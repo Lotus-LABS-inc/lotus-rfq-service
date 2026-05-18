@@ -534,11 +534,14 @@ export class SignedTradeBundleService {
     }
     try {
       const balance = await this.polymarketBalanceReader.readUsableBalance({ userId });
+      const verifiedOnchainFallbackReady =
+        balance.usableBalanceSource === "ONCHAIN_CLOB_SPENDER_ALLOWANCE" &&
+        compareDecimalStrings(balance.usableBalance, requiredNotional) >= 0;
       const collateralBlockers = [
-        compareDecimalStrings(balance.collateralBalance, requiredNotional) < 0
+        !verifiedOnchainFallbackReady && compareDecimalStrings(balance.collateralBalance, requiredNotional) < 0
           ? "Polymarket CLOB collateral balance is below the order amount. Activate or fund Polymarket before trading."
           : null,
-        compareDecimalStrings(balance.collateralAllowance, requiredNotional) < 0
+        !verifiedOnchainFallbackReady && compareDecimalStrings(balance.collateralAllowance, requiredNotional) < 0
           ? "Polymarket CLOB collateral allowance is below the order amount. Activate Polymarket funds to approve trading spenders."
           : null,
         compareDecimalStrings(balance.usableBalance, requiredNotional) < 0

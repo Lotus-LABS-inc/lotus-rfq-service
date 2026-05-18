@@ -316,6 +316,11 @@ export interface VenueBalanceView {
   pendingWithdrawalAmount: string;
   availableAmount: string;
   updatedAt: string | null;
+  balanceSource?: string | null;
+  balanceFreshness?: "live" | "stale" | "unavailable" | null;
+  readinessReason?: string | null;
+  usableBalanceSource?: string | null;
+  approvalSpenderSource?: string | null;
 }
 
 export interface FundingHistoryItem {
