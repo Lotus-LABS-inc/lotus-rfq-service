@@ -1082,7 +1082,7 @@ export class SignedTradeBundleService {
       prepared.venue.toUpperCase() !== "POLYMARKET" ||
       quote.side !== "buy" ||
       readiness?.status !== "fresh" ||
-      readiness.collateral.usableBalanceSource !== "ONCHAIN_CLOB_SPENDER_ALLOWANCE"
+      !isPolymarketTradeReadySource(readiness.collateral.usableBalanceSource)
     ) {
       return prepared;
     }
@@ -1995,6 +1995,9 @@ const plainDecimalString = (value: InstanceType<typeof Decimal>): string =>
 const compareDecimalStrings = (left: string, right: string): number => {
   return decimalFromString(left).cmp(decimalFromString(right));
 };
+
+const isPolymarketTradeReadySource = (source: string | null | undefined): boolean =>
+  source === "CLOB_COLLATERAL_ALLOWANCE" || source === "ONCHAIN_CLOB_SPENDER_ALLOWANCE";
 
 const multiplyDecimalStrings = (left: string, right: string): string => {
   return plainDecimalString(decimalFromString(left).times(decimalFromString(right)));

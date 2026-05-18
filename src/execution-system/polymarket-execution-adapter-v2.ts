@@ -1159,7 +1159,7 @@ const parsePolymarketCollateralReadinessAttestation = (
   const attestedRequired = typeof attestation.requiredAtomic === "string" ? attestation.requiredAtomic.trim() : "";
   if (
     kind !== "POLYMARKET_CLOB_COLLATERAL_PREFLIGHT" ||
-    source !== "ONCHAIN_CLOB_SPENDER_ALLOWANCE" ||
+    !isPolymarketTradeReadyAttestationSource(source) ||
     spenderSource !== "CLOB_ALLOWANCE_MAP" ||
     !/^\d+$/.test(attestedRequired) ||
     BigInt(attestedRequired) !== requiredAtomic
@@ -1168,6 +1168,9 @@ const parsePolymarketCollateralReadinessAttestation = (
   }
   return { usableBalanceSource: source, approvalSpenderSource: spenderSource };
 };
+
+const isPolymarketTradeReadyAttestationSource = (source: string): boolean =>
+  source === "CLOB_COLLATERAL_ALLOWANCE" || source === "ONCHAIN_CLOB_SPENDER_ALLOWANCE";
 
 interface PolymarketClobAuthPayload {
   address: string;

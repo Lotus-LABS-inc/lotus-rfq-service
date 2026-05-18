@@ -23,7 +23,7 @@ This is not acceptable user-facing behavior. Lotus should block earlier with a s
 - When CLOB returns an `allowances` spender map, that spender map is the source of truth for which spenders must be approved. A max approval to the legacy/configured pUSD spender must not mark the wallet ready if the current CLOB spenders are not approved.
 - If the server-side CLOB balance cache reports zero but the active deposit wallet has pUSD and on-chain max approvals for every CLOB-discovered spender, readiness may use `ONCHAIN_CLOB_SPENDER_ALLOWANCE` until the user-scoped submit client refreshes CLOB. This is not a legacy-spender override; every CLOB spender must be verified on-chain.
 - Polymarket buy submit may also use `ONCHAIN_CLOB_SPENDER_ALLOWANCE` as a cache-lag fallback after the user-scoped CLOB `updateBalanceAllowance` retry loop fails. This fallback is allowed only for buy collateral on the active deposit wallet; `ONCHAIN_PUSD_ALLOWANCE`, legacy/config fallback spender approval, USDC.e delivery, or missing fallback evidence must still block submit.
-- When Polymarket submit is routed through an internal relay that cannot access the user database, the API backend must attach a server-only readiness attestation after `getLiveReadiness` succeeds. The relay may trust that attestation only when it matches the signed order maker amount and proves `ONCHAIN_CLOB_SPENDER_ALLOWANCE` from the current CLOB spender map.
+- When Polymarket submit is routed through an internal relay that cannot access the user database, the API backend must attach a server-only readiness attestation after `getLiveReadiness` succeeds. The relay may trust that attestation only when it matches the signed order maker amount and proves either direct `CLOB_COLLATERAL_ALLOWANCE` or verified `ONCHAIN_CLOB_SPENDER_ALLOWANCE` from the current CLOB spender map.
 - Sell-side Polymarket readiness must read conditional-token balance/allowance for the selected outcome token before submit.
 - Raw Polymarket CLOB balance/allowance failures are mapped to `POLYMARKET_CLOB_COLLATERAL_NOT_READY`.
 - Raw Polymarket conditional-token/share failures are mapped to `POLYMARKET_CLOB_SHARES_NOT_READY`.
@@ -65,7 +65,7 @@ The deployed backend commit must include:
 6. Confirm a Polymarket buy with pUSD balance, max legacy spender allowance, and zero CLOB spender allowances is blocked before `adapter.submitOrder` is called.
 7. Confirm a Polymarket buy with pUSD balance and max on-chain approvals for every CLOB-discovered spender reports `ONCHAIN_CLOB_SPENDER_ALLOWANCE` when the server-side CLOB cache lags.
 8. Confirm the live submit adapter retries user-scoped `updateBalanceAllowance` before posting a signed Polymarket order.
-9. Confirm relay-mode Polymarket buy submit accepts the API readiness attestation only when `requiredAtomic` exactly matches the signed order `makerAmount`.
+9. Confirm relay-mode Polymarket buy submit accepts the API readiness attestation only when `requiredAtomic` exactly matches the signed order `makerAmount` and the source is `CLOB_COLLATERAL_ALLOWANCE` or `ONCHAIN_CLOB_SPENDER_ALLOWANCE`.
 10. Confirm a Polymarket sell with missing conditional-token allowance is blocked before venue submit.
 11. Submit or normalize a Limitless collateral failure and expect `LIMITLESS_COLLATERAL_NOT_READY`.
 12. Submit or normalize a Predict.fun collateral/share failure and expect a typed `PREDICT_FUN_*_NOT_READY` blocker.
