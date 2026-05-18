@@ -1606,6 +1606,18 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   app.get("/account/snapshot", { preHandler: userAuthMiddleware }, async (request, reply) => {
     const generatedAt = new Date().toISOString();
     const userId = request.user.userId;
+    const fallbackSection = async <T>(section: string, read: Promise<T>, fallback: T): Promise<T> => {
+      try {
+        return await read;
+      } catch (error) {
+        app.log.warn({
+          section,
+          userId,
+          errorName: error instanceof Error ? error.name : "UnknownError"
+        }, "Account snapshot section unavailable; returning partial snapshot");
+        return fallback;
+      }
+    };
     const [
       balances,
       activations,
@@ -1615,16 +1627,39 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       history,
       fundingHistory
     ] = await Promise.all([
-      listVenueBalancesForUser(userId),
-      listVenueActivationsForUser(userId),
-      userWalletService.listWallets(userId),
-      userVenueAccountService.prepareAccountSetupBatch(userId),
-      signedTradeExecutionStatusRepository.listOpenExecutionStatusesForUser({ userId, limit: 51 }),
-      signedTradeExecutionStatusRepository.listExecutionStatusesForUser({ userId, limit: 51 }),
-      fundingService.listFundingHistory(userId, { pageSize: 50 })
+      fallbackSection("venueBalances", listVenueBalancesForUser(userId), []),
+      fallbackSection("venueActivations", listVenueActivationsForUser(userId), []),
+      fallbackSection("wallets", userWalletService.listWallets(userId), []),
+      fallbackSection("venueAccounts", userVenueAccountService.prepareAccountSetupBatch(userId), {
+        venueAccounts: [],
+        signatureRequests: []
+      }),
+      fallbackSection("openOrders", signedTradeExecutionStatusRepository.listOpenExecutionStatusesForUser({ userId, limit: 51 }), []),
+      fallbackSection("history", signedTradeExecutionStatusRepository.listExecutionStatusesForUser({ userId, limit: 51 }), []),
+      fallbackSection("fundingHistory", fundingService.listFundingHistory(userId, { pageSize: 50 }), {
+        items: [],
+        page: 1,
+        pageSize: 50,
+        totalItems: 0,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPreviousPage: false
+      })
     ]);
-    const walletSnapshots = await Promise.all(wallets.map(async (wallet) =>
-      toSafeWallet(wallet, await userWalletBalanceReader.readWalletBalances(wallet))));
+    const walletSnapshots = await Promise.all(wallets.map(async (wallet) => {
+      try {
+        return toSafeWallet(wallet, await userWalletBalanceReader.readWalletBalances(wallet));
+      } catch (error) {
+        app.log.warn({
+          section: "walletBalance",
+          userId,
+          walletId: wallet.walletId,
+          chainFamily: wallet.chainFamily,
+          errorName: error instanceof Error ? error.name : "UnknownError"
+        }, "Wallet balance unavailable; returning wallet identity with unavailable balance");
+        return toSafeWallet(wallet, null);
+      }
+    }));
     return reply.status(200).send({
       generatedAt,
       balances,
