@@ -110,6 +110,16 @@ export interface PolymarketExecutionAdapterV2EnvStatus {
   relayConfigured: boolean;
 }
 
+export interface PolymarketSubmitBalanceReader {
+  readUsableBalance(input: { userId: string }): Promise<{
+    usableBalance: string;
+    collateralBalance: string;
+    collateralAllowance: string;
+    usableBalanceSource: string;
+    approvalSpenderSource: string;
+  }>;
+}
+
 export class PolymarketExecutionNotConfiguredError extends Error {
   public constructor(public readonly reasonCode: string, message: string) {
     super(message);
@@ -445,7 +455,8 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
 
   public constructor(
     private readonly config: PolymarketExecutionAdapterV2Config,
-    sdkFactory: PolymarketClobV2SdkFactory = createPolymarketClobV2SdkClient
+    sdkFactory: PolymarketClobV2SdkFactory = createPolymarketClobV2SdkClient,
+    private readonly balanceReader?: PolymarketSubmitBalanceReader | undefined
   ) {
     assertLiveClientConfig(config);
     this.sdkClient = sdkFactory(config);
@@ -476,7 +487,12 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
       const extraSensitiveValues = authPayload?.creds
         ? [authPayload.creds.key, authPayload.creds.secret, authPayload.creds.passphrase]
         : [];
-      await this.assertSignedOrderHasSpendableBalanceAllowance(sdkClient, signedOrder, extraSensitiveValues);
+      await this.assertSignedOrderHasSpendableBalanceAllowance(
+        sdkClient,
+        signedOrder,
+        extraSensitiveValues,
+        polymarketSubmitUserId(order)
+      );
       const response = await this.callSdkSafely(() => postOrder(signedOrder, OrderType.GTC), extraSensitiveValues);
       return mapPolymarketOrderResponse(response);
     }
@@ -557,7 +573,8 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
   private async assertSignedOrderHasSpendableBalanceAllowance(
     sdkClient: PolymarketClobV2SdkClient,
     signedOrder: SignedOrder,
-    extraSensitiveValues: readonly string[]
+    extraSensitiveValues: readonly string[],
+    userId: string | null
   ): Promise<void> {
     const required = requiredBalanceAllowanceForSignedOrder(signedOrder);
     if (required?.assetType === AssetType.CONDITIONAL) {
@@ -602,6 +619,10 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
       }
     }
     if (spendableAtomic < requiredAtomic) {
+      const fallback = await this.readVerifiedOnchainCollateralFallback(userId);
+      if (fallback?.usableAtomic !== undefined && fallback.usableAtomic >= requiredAtomic) {
+        return;
+      }
       throw new PolymarketExecutionNotConfiguredError(
         "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
         [
@@ -613,6 +634,27 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
           "If funds were just bridged, activate/wrap/approve them before trading."
         ].join(" ")
       );
+    }
+  }
+
+  private async readVerifiedOnchainCollateralFallback(userId: string | null): Promise<{
+    usableAtomic: bigint;
+    usableBalanceSource: string;
+  } | null> {
+    if (!userId || !this.balanceReader) {
+      return null;
+    }
+    try {
+      const balance = await this.balanceReader.readUsableBalance({ userId });
+      if (balance.usableBalanceSource !== "ONCHAIN_CLOB_SPENDER_ALLOWANCE") {
+        return null;
+      }
+      return {
+        usableAtomic: collateralDecimalUnitsToAtomic(balance.usableBalance, "fallback usableBalance"),
+        usableBalanceSource: balance.usableBalanceSource
+      };
+    } catch {
+      return null;
     }
   }
 
@@ -988,6 +1030,26 @@ const parseNonNegativeAtomicUnits = (value: unknown, fieldName: string): bigint 
   }
 };
 
+const collateralDecimalUnitsToAtomic = (value: string, fieldName: string): bigint => {
+  try {
+    const parsed = new Decimal(value.trim());
+    if (!parsed.isFinite() || parsed.isNegative()) {
+      throw new Error("invalid collateral amount");
+    }
+    return BigInt(
+      parsed
+        .times(new Decimal(10).pow(COLLATERAL_TOKEN_DECIMALS))
+        .toDecimalPlaces(0, Decimal.ROUND_DOWN)
+        .toFixed(0)
+    );
+  } catch {
+    throw new PolymarketExecutionNotConfiguredError(
+      "POLYMARKET_CLOB_BALANCE_PAYLOAD_INVALID",
+      `Polymarket on-chain fallback response included an invalid ${fieldName}.`
+    );
+  }
+};
+
 const collateralAllowanceAtomicUnits = (response: BalanceAllowanceResponse): bigint => {
   if (nonEmpty(response.allowance)) {
     return parseNonNegativeAtomicUnits(response.allowance, "allowance");
@@ -1107,6 +1169,12 @@ const parsePolymarketClobAuthPayload = (order: PreparedVenueOrder): PolymarketCl
     );
   }
   return { address, signature, timestamp, nonce, funderAddress };
+};
+
+const polymarketSubmitUserId = (order: PreparedVenueOrder): string | null => {
+  const binding = isRecord(order.payload.expectedBinding) ? order.payload.expectedBinding : null;
+  const userId = binding && typeof binding.userId === "string" ? binding.userId.trim() : "";
+  return userId.length > 0 ? userId : null;
 };
 
 const createOrDerivePolymarketApiKey = async (
@@ -1370,7 +1438,8 @@ const sanitizePolymarketSdkError = (error: unknown, sensitiveValues: readonly st
 
 export const createPolymarketClobV2LiveClient = (
   config: PolymarketExecutionAdapterV2Config,
-  sdkFactory?: PolymarketClobV2SdkFactory
+  sdkFactory?: PolymarketClobV2SdkFactory,
+  balanceReader?: PolymarketSubmitBalanceReader | undefined
 ): PolymarketClobV2LiveClient => {
   try {
     if (config.executionSubmitMode === "relay") {
@@ -1379,7 +1448,7 @@ export const createPolymarketClobV2LiveClient = (
         relaySecret: config.executionRelaySecret ?? ""
       });
     }
-    return new SdkPolymarketClobV2LiveClient(config, sdkFactory);
+    return new SdkPolymarketClobV2LiveClient(config, sdkFactory, balanceReader);
   } catch {
     return new DisabledPolymarketClobV2LiveClient();
   }
@@ -1389,11 +1458,14 @@ export class PolymarketExecutionAdapterV2 implements ExecutionVenueAdapter {
   public readonly venue = "POLYMARKET";
   private readonly dryRunClient: PolymarketClobV2DryRunClient;
   private readonly now: () => Date;
+  private readonly liveClient: PolymarketClobV2LiveClient;
 
   public constructor(
     private readonly config: PolymarketExecutionAdapterV2Config,
-    private readonly liveClient: PolymarketClobV2LiveClient = createPolymarketClobV2LiveClient(config)
+    liveClient?: PolymarketClobV2LiveClient,
+    balanceReader?: PolymarketSubmitBalanceReader | undefined
   ) {
+    this.liveClient = liveClient ?? createPolymarketClobV2LiveClient(config, undefined, balanceReader);
     this.dryRunClient = new PolymarketClobV2DryRunClient(config);
     this.now = () => new Date();
   }

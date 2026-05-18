@@ -1271,7 +1271,16 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   }
   if (process.env.POLYMARKET_EXECUTION_MODE === "v2") {
     adapterRegistry.register(new PolymarketExecutionAdapterV2(
-      buildPolymarketExecutionAdapterV2ConfigFromEnv(process.env)
+      buildPolymarketExecutionAdapterV2ConfigFromEnv(process.env),
+      undefined,
+      {
+        readUsableBalance: ({ userId }) =>
+          polymarketFundingBalanceReadService.readUsableBalance({
+            userId,
+            fundingIntentId: "execution-submit",
+            routeLegId: "execution-submit"
+          })
+      }
     ));
   }
   if (

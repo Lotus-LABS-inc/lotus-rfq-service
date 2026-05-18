@@ -22,6 +22,7 @@ This is not acceptable user-facing behavior. Lotus should block earlier with a s
 - Buy-side Polymarket readiness must read the active user deposit wallet through the CLOB balance/allowance path and compare `size * price + fee` against CLOB collateral balance, CLOB allowance, and derived spendable balance.
 - When CLOB returns an `allowances` spender map, that spender map is the source of truth for which spenders must be approved. A max approval to the legacy/configured pUSD spender must not mark the wallet ready if the current CLOB spenders are not approved.
 - If the server-side CLOB balance cache reports zero but the active deposit wallet has pUSD and on-chain max approvals for every CLOB-discovered spender, readiness may use `ONCHAIN_CLOB_SPENDER_ALLOWANCE` until the user-scoped submit client refreshes CLOB. This is not a legacy-spender override; every CLOB spender must be verified on-chain.
+- Polymarket buy submit may also use `ONCHAIN_CLOB_SPENDER_ALLOWANCE` as a cache-lag fallback after the user-scoped CLOB `updateBalanceAllowance` retry loop fails. This fallback is allowed only for buy collateral on the active deposit wallet; `ONCHAIN_PUSD_ALLOWANCE`, legacy/config fallback spender approval, USDC.e delivery, or missing fallback evidence must still block submit.
 - Sell-side Polymarket readiness must read conditional-token balance/allowance for the selected outcome token before submit.
 - Raw Polymarket CLOB balance/allowance failures are mapped to `POLYMARKET_CLOB_COLLATERAL_NOT_READY`.
 - Raw Polymarket conditional-token/share failures are mapped to `POLYMARKET_CLOB_SHARES_NOT_READY`.
@@ -85,6 +86,7 @@ When this issue happens after a deploy:
 2. Refresh portfolio and funding balances.
 3. If Polymarket pUSD or USDC.e is present but CLOB allowance is not spendable, run the Polymarket activation flow. Lotus prepares max approvals for CLOB-discovered spenders, but the user must sign the activation with Turnkey. A prior activation that only approved the legacy/configured spender is not enough.
 4. If pUSD and all CLOB-discovered approvals are confirmed on-chain but the CLOB cache still reports zero, use a fresh route/signature so the user-scoped submit path can refresh CLOB balance/allowance before post.
+   - If CLOB cache still lags after refresh, the backend may proceed only when the on-chain fallback source is `ONCHAIN_CLOB_SPENDER_ALLOWANCE`.
 5. If Limitless or Predict.fun collateral is present but allowance is not ready, run the relevant venue approval flow.
 6. If Predict.fun reports provider auth invalid, check backend Predict.fun credentials and user venue auth state before retrying.
 7. Retry only after backend readiness reports spendable collateral and allowance for the selected venue.
