@@ -42,7 +42,7 @@ const signedPayload = (overrides: Partial<PredictOauthCreateOrderPayload> = {}):
     pricePerShare: "450000000000000000",
     strategy: "LIMIT",
     slippageBps: "0",
-    isFillOrKill: false,
+    isFillOrKill: true,
     order: {
       hash: `0x${"b".repeat(64)}`,
       salt: "1",
@@ -69,7 +69,7 @@ const signedPayloadWithOrderOverrides = (orderOverrides: Record<string, unknown>
     pricePerShare: "450000000000000000",
     strategy: "LIMIT",
     slippageBps: "0",
-    isFillOrKill: false,
+    isFillOrKill: true,
     order: {
       hash: `0x${"b".repeat(64)}`,
       salt: "1",

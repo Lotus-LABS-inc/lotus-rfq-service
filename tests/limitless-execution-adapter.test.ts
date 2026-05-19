@@ -133,7 +133,7 @@ const limitlessRelayPayload = async (overrides: Record<string, unknown> = {}) =>
     typedData,
     data: {
       order,
-      orderType: OrderType.GTC,
+      orderType: OrderType.FOK,
       marketSlug: String(overrides.marketSlug ?? "limitless-market-slug"),
       ownerId: "12345"
     }
@@ -158,7 +158,7 @@ const mockOrderResponse = (): OrderResponse => ({
     feeRateBps: 0,
     nonce: 0,
     signature: "0xsig",
-    orderType: "GTC",
+    orderType: "FOK",
     price: 0.42,
     marketId: 100
   }
@@ -316,7 +316,7 @@ describe("LimitlessExecutionAdapter", () => {
         side: Side.BUY,
         size: 1,
         price: 0.42,
-        orderType: OrderType.GTC
+        orderType: OrderType.FOK
       }
     });
     expect(JSON.stringify(prepared)).not.toContain("private");
@@ -434,7 +434,7 @@ describe("LimitlessExecutionAdapter", () => {
           side: Side.BUY,
           price: 0.42,
           size: 1,
-          orderType: OrderType.GTC
+          orderType: OrderType.FOK
         });
         return mockOrderResponse();
       },
@@ -462,7 +462,7 @@ describe("LimitlessExecutionAdapter", () => {
           side: Side.BUY,
           price: 0.42,
           size: 1,
-          orderType: OrderType.GTC,
+          orderType: OrderType.FOK,
           onBehalfOf: 12345
         });
         return mockOrderResponse();
@@ -510,7 +510,7 @@ describe("LimitlessExecutionAdapter", () => {
           ownerId: 12345,
           signedPayload: {
             marketSlug: "limitless-market-slug",
-            orderType: OrderType.GTC,
+            orderType: OrderType.FOK,
             order: {
               maker: evmAddress,
               signer: evmAddress,

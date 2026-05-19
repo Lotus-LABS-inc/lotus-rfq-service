@@ -778,10 +778,9 @@ const validateLimitlessUserSignedRelayPayload = (
 };
 
 const normalizeLimitlessOrderType = (value: unknown): OrderType => {
-  const normalized = String(value ?? OrderType.GTC).toUpperCase();
+  const normalized = String(value ?? OrderType.FOK).toUpperCase();
   if (normalized === OrderType.FOK) return OrderType.FOK;
-  if (normalized === OrderType.GTC) return OrderType.GTC;
-  return OrderType.GTC;
+  return OrderType.FOK;
 };
 
 const sanitizeLimitlessRelayOrder = (
@@ -899,7 +898,7 @@ export class LimitlessExecutionAdapter implements ExecutionVenueAdapter {
         size,
         price,
         ...(limitlessExchangeAddressFromLeg(leg) ? { exchange: limitlessExchangeAddressFromLeg(leg)! } : {}),
-        orderType: OrderType.GTC,
+        orderType: OrderType.FOK,
         ...(status.executionMode === "delegated_partner_server_wallet" && this.config.delegatedProfileId
           ? { delegatedProfileId: this.config.delegatedProfileId }
           : {}),
@@ -960,7 +959,7 @@ export class LimitlessExecutionAdapter implements ExecutionVenueAdapter {
       side: payload.side === Side.SELL ? Side.SELL : Side.BUY,
       price,
       size,
-      orderType: OrderType.GTC,
+      orderType: normalizeLimitlessOrderType(payload.orderType),
       onBehalfOf
     });
     const orderRecord = response.order;

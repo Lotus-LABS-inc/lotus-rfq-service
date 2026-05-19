@@ -536,14 +536,15 @@ export class SignedTradeBundleService {
     }
     try {
       const balance = await this.polymarketBalanceReader.readUsableBalance({ userId });
-      const verifiedOnchainFallbackReady =
-        balance.usableBalanceSource === "ONCHAIN_CLOB_SPENDER_ALLOWANCE" &&
-        compareDecimalStrings(balance.usableBalance, requiredNotional) >= 0;
+      const clobConfirmed = balance.usableBalanceSource === "CLOB_COLLATERAL_ALLOWANCE";
       const collateralBlockers = [
-        !verifiedOnchainFallbackReady && compareDecimalStrings(balance.collateralBalance, requiredNotional) < 0
+        !clobConfirmed && balance.usableBalanceSource === "ONCHAIN_CLOB_SPENDER_ALLOWANCE"
+          ? "Polymarket pUSD approval is confirmed on-chain, but Polymarket CLOB spendable collateral has not synced yet. Lotus refreshed CLOB readiness; retry after sync confirms."
+          : null,
+        compareDecimalStrings(balance.collateralBalance, requiredNotional) < 0
           ? "Polymarket CLOB collateral balance is below the order amount. Activate or fund Polymarket before trading."
           : null,
-        !verifiedOnchainFallbackReady && compareDecimalStrings(balance.collateralAllowance, requiredNotional) < 0
+        compareDecimalStrings(balance.collateralAllowance, requiredNotional) < 0
           ? "Polymarket CLOB collateral allowance is below the order amount. Activate Polymarket funds to approve trading spenders."
           : null,
         compareDecimalStrings(balance.usableBalance, requiredNotional) < 0
@@ -1475,7 +1476,7 @@ const buildLimitlessOrderPayload = (
   };
   return {
     order,
-    orderType: LimitlessOrderType.GTC,
+    orderType: LimitlessOrderType.FOK,
     marketSlug,
     typedData: {
       domain,
@@ -1560,7 +1561,7 @@ const buildPredictOrderPayload = (
     pricePerShare: String(amounts.pricePerShare),
     strategy: "MARKET",
     slippageBps: "0",
-    isFillOrKill: false,
+    isFillOrKill: true,
     isPostOnly: false,
     isMinAmountOut: false,
     amount: String(amounts.amount),
@@ -1728,7 +1729,7 @@ const buildPolymarketOrderPayload = async (
     typedData: capturedTypedData,
     data: {
       order: orderWithoutSignature,
-      orderType: "GTC",
+      orderType: "FOK",
       postOnly: false,
       deferExec: false,
       ...(polymarketSignatureSuffix ? { polymarketSignatureSuffix } : {})
@@ -1997,7 +1998,7 @@ const compareDecimalStrings = (left: string, right: string): number => {
 };
 
 const isPolymarketTradeReadySource = (source: string | null | undefined): boolean =>
-  source === "CLOB_COLLATERAL_ALLOWANCE" || source === "ONCHAIN_CLOB_SPENDER_ALLOWANCE";
+  source === "CLOB_COLLATERAL_ALLOWANCE";
 
 const multiplyDecimalStrings = (left: string, right: string): string => {
   return plainDecimalString(decimalFromString(left).times(decimalFromString(right)));

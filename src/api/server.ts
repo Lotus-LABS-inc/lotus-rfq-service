@@ -357,7 +357,7 @@ import {
 } from "../core/funding/funding-intent-cleanup.js";
 
 const isPolymarketCLOBTradeReadySource = (source: string | null | undefined): boolean =>
-  source === "CLOB_COLLATERAL_ALLOWANCE" || source === "ONCHAIN_CLOB_SPENDER_ALLOWANCE";
+  source === "CLOB_COLLATERAL_ALLOWANCE";
 
 export interface ServerDependencies {
   logger: Logger;
@@ -1522,7 +1522,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         balanceFreshness: "live",
         readinessReason: sourceReady
           ? "POLYMARKET_CLOB_COLLATERAL_CONFIRMED"
-          : polymarket.usableBalanceSource === "ONCHAIN_PUSD_ALLOWANCE"
+          : polymarket.usableBalanceSource === "ONCHAIN_CLOB_SPENDER_ALLOWANCE"
+            ? "POLYMARKET_CLOB_SYNC_PENDING"
+            : polymarket.usableBalanceSource === "ONCHAIN_PUSD_ALLOWANCE"
             ? "POLYMARKET_CLOB_APPROVAL_REQUIRED"
             : "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
         usableBalanceSource: polymarket.usableBalanceSource,
@@ -1585,6 +1587,20 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           polymarket.instructions = [
             "USDC.e has arrived in the Polymarket deposit wallet, but it must be activated into Polymarket spendable pUSD/CLOB collateral before trading."
           ];
+        } else if (
+          balance.usableBalanceSource === "ONCHAIN_CLOB_SPENDER_ALLOWANCE" &&
+          Number.isFinite(onchainPusd) &&
+          onchainPusd > 0
+        ) {
+          polymarket.activationRequired = false;
+          polymarket.mode = "NOT_REQUIRED";
+          polymarket.status = "READY";
+          polymarket.tokenSymbol = "pUSD";
+          polymarket.readinessReason = "POLYMARKET_CLOB_SYNC_PENDING";
+          polymarket.instructions = [
+            "pUSD is approved on-chain for the current Polymarket CLOB spenders. Lotus is polling until Polymarket CLOB sync confirms spendable collateral."
+          ];
+          polymarket.blockers = [];
         } else if (Number.isFinite(onchainPusd) && onchainPusd > 0) {
           polymarket.activationRequired = true;
           polymarket.mode = "VENUE_UI_OR_RELAYER";

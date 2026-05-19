@@ -465,7 +465,7 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
   public constructor(
     private readonly config: PolymarketExecutionAdapterV2Config,
     sdkFactory: PolymarketClobV2SdkFactory = createPolymarketClobV2SdkClient,
-    private readonly balanceReader?: PolymarketSubmitBalanceReader | undefined
+    _balanceReader?: PolymarketSubmitBalanceReader | undefined
   ) {
     assertLiveClientConfig(config);
     this.sdkClient = sdkFactory(config);
@@ -499,11 +499,9 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
       await this.assertSignedOrderHasSpendableBalanceAllowance(
         sdkClient,
         signedOrder,
-        extraSensitiveValues,
-        polymarketSubmitUserId(order),
-        order
+        extraSensitiveValues
       );
-      const response = await this.callSdkSafely(() => postOrder(signedOrder, OrderType.GTC), extraSensitiveValues);
+      const response = await this.callSdkSafely(() => postOrder(signedOrder, OrderType.FOK), extraSensitiveValues);
       return mapPolymarketOrderResponse(response);
     }
     throw new PolymarketExecutionNotConfiguredError(
@@ -586,9 +584,7 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
   private async assertSignedOrderHasSpendableBalanceAllowance(
     sdkClient: PolymarketClobV2SdkClient,
     signedOrder: SignedOrder,
-    extraSensitiveValues: readonly string[],
-    userId: string | null,
-    order: PreparedVenueOrder
+    extraSensitiveValues: readonly string[]
   ): Promise<void> {
     const required = requiredBalanceAllowanceForSignedOrder(signedOrder);
     if (required?.assetType === AssetType.CONDITIONAL) {
@@ -613,15 +609,19 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
     let spendableAtomic = 0n;
     let balanceAtomic = 0n;
     let allowanceAtomic = 0n;
+    const collateralParams = {
+      asset_type: AssetType.COLLATERAL,
+      signature_type: SignatureTypeV2.POLY_1271
+    } as unknown as { asset_type: AssetType; token_id?: string };
     for (let attempt = 0; attempt < 3; attempt += 1) {
       if (updateBalanceAllowance) {
         await this.callSdkSafely(
-          () => updateBalanceAllowance({ asset_type: AssetType.COLLATERAL }),
+          () => updateBalanceAllowance(collateralParams),
           extraSensitiveValues
         );
       }
       const response = await this.callSdkSafely(
-        () => getBalanceAllowance({ asset_type: AssetType.COLLATERAL }),
+        () => getBalanceAllowance(collateralParams),
         extraSensitiveValues
       );
       ({ spendableAtomic, balanceAtomic, allowanceAtomic } = collateralSpendableAtomicUnits(response));
@@ -633,14 +633,6 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
       }
     }
     if (spendableAtomic < requiredAtomic) {
-      const fallback = await this.readVerifiedOnchainCollateralFallback(userId);
-      if (fallback?.usableAtomic !== undefined && fallback.usableAtomic >= requiredAtomic) {
-        return;
-      }
-      const attestation = parsePolymarketCollateralReadinessAttestation(order, requiredAtomic);
-      if (attestation) {
-        return;
-      }
       throw new PolymarketExecutionNotConfiguredError(
         "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
         [
@@ -652,27 +644,6 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
           "If funds were just bridged, activate/wrap/approve them before trading."
         ].join(" ")
       );
-    }
-  }
-
-  private async readVerifiedOnchainCollateralFallback(userId: string | null): Promise<{
-    usableAtomic: bigint;
-    usableBalanceSource: string;
-  } | null> {
-    if (!userId || !this.balanceReader) {
-      return null;
-    }
-    try {
-      const balance = await this.balanceReader.readUsableBalance({ userId });
-      if (balance.usableBalanceSource !== "ONCHAIN_CLOB_SPENDER_ALLOWANCE") {
-        return null;
-      }
-      return {
-        usableAtomic: collateralDecimalUnitsToAtomic(balance.usableBalance, "fallback usableBalance"),
-        usableBalanceSource: balance.usableBalanceSource
-      };
-    } catch {
-      return null;
     }
   }
 
@@ -1048,26 +1019,6 @@ const parseNonNegativeAtomicUnits = (value: unknown, fieldName: string): bigint 
   }
 };
 
-const collateralDecimalUnitsToAtomic = (value: string, fieldName: string): bigint => {
-  try {
-    const parsed = new Decimal(value.trim());
-    if (!parsed.isFinite() || parsed.isNegative()) {
-      throw new Error("invalid collateral amount");
-    }
-    return BigInt(
-      parsed
-        .times(new Decimal(10).pow(COLLATERAL_TOKEN_DECIMALS))
-        .toDecimalPlaces(0, Decimal.ROUND_DOWN)
-        .toFixed(0)
-    );
-  } catch {
-    throw new PolymarketExecutionNotConfiguredError(
-      "POLYMARKET_CLOB_BALANCE_PAYLOAD_INVALID",
-      `Polymarket on-chain fallback response included an invalid ${fieldName}.`
-    );
-  }
-};
-
 const collateralAllowanceAtomicUnits = (response: BalanceAllowanceResponse): bigint => {
   if (nonEmpty(response.allowance)) {
     return parseNonNegativeAtomicUnits(response.allowance, "allowance");
@@ -1143,35 +1094,6 @@ const formatCollateralAtomicUnits = (atomic: bigint): string => {
   return trimmedFraction.length > 0 ? `${whole.toString()}.${trimmedFraction}` : whole.toString();
 };
 
-const parsePolymarketCollateralReadinessAttestation = (
-  order: PreparedVenueOrder,
-  requiredAtomic: bigint
-): { usableBalanceSource: string; approvalSpenderSource: string } | null => {
-  const attestation = isRecord(order.payload.polymarketCollateralReadinessAttestation)
-    ? order.payload.polymarketCollateralReadinessAttestation
-    : null;
-  if (!attestation) {
-    return null;
-  }
-  const kind = typeof attestation.kind === "string" ? attestation.kind : "";
-  const source = typeof attestation.usableBalanceSource === "string" ? attestation.usableBalanceSource : "";
-  const spenderSource = typeof attestation.approvalSpenderSource === "string" ? attestation.approvalSpenderSource : "";
-  const attestedRequired = typeof attestation.requiredAtomic === "string" ? attestation.requiredAtomic.trim() : "";
-  if (
-    kind !== "POLYMARKET_CLOB_COLLATERAL_PREFLIGHT" ||
-    !isPolymarketTradeReadyAttestationSource(source) ||
-    spenderSource !== "CLOB_ALLOWANCE_MAP" ||
-    !/^\d+$/.test(attestedRequired) ||
-    BigInt(attestedRequired) !== requiredAtomic
-  ) {
-    return null;
-  }
-  return { usableBalanceSource: source, approvalSpenderSource: spenderSource };
-};
-
-const isPolymarketTradeReadyAttestationSource = (source: string): boolean =>
-  source === "CLOB_COLLATERAL_ALLOWANCE" || source === "ONCHAIN_CLOB_SPENDER_ALLOWANCE";
-
 interface PolymarketClobAuthPayload {
   address: string;
   signature: string;
@@ -1216,12 +1138,6 @@ const parsePolymarketClobAuthPayload = (order: PreparedVenueOrder): PolymarketCl
     );
   }
   return { address, signature, timestamp, nonce, funderAddress };
-};
-
-const polymarketSubmitUserId = (order: PreparedVenueOrder): string | null => {
-  const binding = isRecord(order.payload.expectedBinding) ? order.payload.expectedBinding : null;
-  const userId = binding && typeof binding.userId === "string" ? binding.userId.trim() : "";
-  return userId.length > 0 ? userId : null;
 };
 
 const createOrDerivePolymarketApiKey = async (

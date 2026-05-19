@@ -21,9 +21,12 @@ This is not acceptable user-facing behavior. Lotus should block earlier with a s
 - Signed Polymarket submits run CLOB collateral readiness checks before posting.
 - Buy-side Polymarket readiness must read the active user deposit wallet through the CLOB balance/allowance path and compare `size * price + fee` against CLOB collateral balance, CLOB allowance, and derived spendable balance.
 - When CLOB returns an `allowances` spender map, that spender map is the source of truth for which spenders must be approved. A max approval to the legacy/configured pUSD spender must not mark the wallet ready if the current CLOB spenders are not approved.
-- If the server-side CLOB balance cache reports zero but the active deposit wallet has pUSD and on-chain max approvals for every CLOB-discovered spender, readiness may use `ONCHAIN_CLOB_SPENDER_ALLOWANCE` until the user-scoped submit client refreshes CLOB. This is not a legacy-spender override; every CLOB spender must be verified on-chain.
-- Polymarket buy submit may also use `ONCHAIN_CLOB_SPENDER_ALLOWANCE` as a cache-lag fallback after the user-scoped CLOB `updateBalanceAllowance` retry loop fails. This fallback is allowed only for buy collateral on the active deposit wallet; `ONCHAIN_PUSD_ALLOWANCE`, legacy/config fallback spender approval, USDC.e delivery, or missing fallback evidence must still block submit.
-- When Polymarket submit is routed through an internal relay that cannot access the user database, the API backend must attach a server-only readiness attestation after `getLiveReadiness` succeeds. The relay may trust that attestation only when it matches the signed order maker amount and proves either direct `CLOB_COLLATERAL_ALLOWANCE` or verified `ONCHAIN_CLOB_SPENDER_ALLOWANCE` from the current CLOB spender map.
+- If the server-side CLOB balance cache reports zero but the active deposit wallet has pUSD and on-chain max approvals for every CLOB-discovered spender, portfolio/funding may show `POLYMARKET_CLOB_SYNC_PENDING`. This means pUSD is approved on-chain, but it is not yet trade-ready.
+- Polymarket buy submit must force a user-scoped `updateBalanceAllowance({ asset_type: COLLATERAL, signature_type: 3 })`, then require `getBalanceAllowance({ asset_type: COLLATERAL, signature_type: 3 })` to return spendable collateral. `ONCHAIN_CLOB_SPENDER_ALLOWANCE`, `ONCHAIN_PUSD_ALLOWANCE`, legacy/config fallback spender approval, USDC.e delivery, or missing fallback evidence must still block submit.
+- Lotus market-trade orders must post to Polymarket as `FOK`, not `GTC`. `GTC` orders can rest on the book and reserve collateral, causing later small market orders to fail with CLOB available balance `0` even when the deposit wallet still has pUSD on-chain.
+- Lotus market-trade orders must post to Limitless as `FOK` as well. Limitless market flow must not create a resting `GTC` order from the terminal, delegated server-wallet path, or user-signed relay path.
+- Predict.fun terminal flow must keep using venue `MARKET` orders with `isFillOrKill: true`; this keeps Lotus market trades aligned with non-resting execution while still relying on Predict.fun's live orderbook amount builder.
+- When Polymarket submit is routed through an internal relay, the relay must run the same user-scoped CLOB `updateBalanceAllowance` and `getBalanceAllowance` check. Server-side on-chain fallback evidence is not sufficient to post a live buy order.
 - Sell-side Polymarket readiness must read conditional-token balance/allowance for the selected outcome token before submit.
 - Raw Polymarket CLOB balance/allowance failures are mapped to `POLYMARKET_CLOB_COLLATERAL_NOT_READY`.
 - Raw Polymarket conditional-token/share failures are mapped to `POLYMARKET_CLOB_SHARES_NOT_READY`.
@@ -38,6 +41,8 @@ This is not acceptable user-facing behavior. Lotus should block earlier with a s
 ## Common Cause
 
 The staging frontend can point at a Render backend service that tracks `main`, while fixes were pushed only to `staging`. In that case the deployed backend may still run an older path that can submit with operator or incomplete CLOB state and return raw provider errors.
+
+Another concrete cause is old Lotus-created Polymarket `GTC` orders. Lotus does not expose limit orders in production, so a market-flow `GTC` order can accidentally remain open and reserve the user deposit wallet's collateral. Polymarket CLOB then reports available collateral as zero even though portfolio reads still see pUSD on-chain.
 
 Check Render service branch and deployed commit before debugging user balances:
 
@@ -54,6 +59,7 @@ The deployed backend commit must include:
 - `Map Polymarket CLOB balance errors to readiness blockers`
 - `Normalize live venue submit failures`
 - `Preflight Polymarket CLOB collateral before live submit`
+- `Submit Polymarket market trades as FOK`
 
 ## Verification
 
@@ -63,21 +69,24 @@ The deployed backend commit must include:
 4. Submit without signed payload in a controlled test and expect `POLYMARKET_USER_SIGNATURE_REQUIRED`.
 5. Submit with signed payload but unavailable collateral in a controlled test and expect `POLYMARKET_CLOB_COLLATERAL_NOT_READY`.
 6. Confirm a Polymarket buy with pUSD balance, max legacy spender allowance, and zero CLOB spender allowances is blocked before `adapter.submitOrder` is called.
-7. Confirm a Polymarket buy with pUSD balance and max on-chain approvals for every CLOB-discovered spender reports `ONCHAIN_CLOB_SPENDER_ALLOWANCE` when the server-side CLOB cache lags.
-8. Confirm the live submit adapter retries user-scoped `updateBalanceAllowance` before posting a signed Polymarket order.
-9. Confirm relay-mode Polymarket buy submit accepts the API readiness attestation only when `requiredAtomic` exactly matches the signed order `makerAmount` and the source is `CLOB_COLLATERAL_ALLOWANCE` or `ONCHAIN_CLOB_SPENDER_ALLOWANCE`.
-10. Confirm a Polymarket sell with missing conditional-token allowance is blocked before venue submit.
-11. Submit or normalize a Limitless collateral failure and expect `LIMITLESS_COLLATERAL_NOT_READY`.
-12. Submit or normalize a Predict.fun collateral/share failure and expect a typed `PREDICT_FUN_*_NOT_READY` blocker.
-13. Force a Predict.fun quote 401 and confirm quote output keeps `reason: QUOTE_PROVIDER_HTTP_401` with `detailsCode: PREDICT_PROVIDER_AUTH_INVALID`.
-14. Confirm no response exposes raw API keys, headers, signatures, JWTs, private payloads, or raw provider balance/allowance text.
+7. Confirm a Polymarket buy with pUSD balance and max on-chain approvals for every CLOB-discovered spender reports `POLYMARKET_CLOB_SYNC_PENDING` / `ONCHAIN_CLOB_SPENDER_ALLOWANCE` only as a portfolio/funding state, not as trade-ready.
+8. Confirm the live submit adapter retries user-scoped `updateBalanceAllowance({ asset_type: COLLATERAL, signature_type: 3 })` and requires `getBalanceAllowance` spendable collateral before posting a signed Polymarket order.
+9. Confirm signed Polymarket market-flow orders are posted with `OrderType.FOK`, not `OrderType.GTC`.
+10. Confirm signed and delegated Limitless market-flow orders are posted with `OrderType.FOK`, not `OrderType.GTC`.
+11. Confirm Predict.fun signed market-flow payloads use `strategy: MARKET` and `isFillOrKill: true`.
+12. Confirm relay-mode Polymarket buy submit does not accept API on-chain readiness attestation alone; the relay must refresh and verify CLOB spendable collateral.
+13. Confirm a Polymarket sell with missing conditional-token allowance is blocked before venue submit.
+14. Submit or normalize a Limitless collateral failure and expect `LIMITLESS_COLLATERAL_NOT_READY`.
+15. Submit or normalize a Predict.fun collateral/share failure and expect a typed `PREDICT_FUN_*_NOT_READY` blocker.
+16. Force a Predict.fun quote 401 and confirm quote output keeps `reason: QUOTE_PROVIDER_HTTP_401` with `detailsCode: PREDICT_PROVIDER_AUTH_INVALID`.
+17. Confirm no response exposes raw API keys, headers, signatures, JWTs, private payloads, or raw provider balance/allowance text.
 
 ## Test Commands
 
 ```bash
 npm run typecheck
 npm run build
-npx vitest run tests/polymarket-execution-adapter-v2.test.ts tests/signed-trade-bundle.test.ts tests/limitless-execution-adapter.test.ts tests/extended-venue-quote-readers.test.ts tests/quote-snapshot.test.ts --maxWorkers=1
+npx vitest run tests/polymarket-execution-adapter-v2.test.ts tests/signed-trade-bundle.test.ts tests/limitless-execution-adapter.test.ts tests/user-signed-relay-execution-adapter.test.ts tests/extended-venue-quote-readers.test.ts tests/quote-snapshot.test.ts --maxWorkers=1
 ```
 
 ## User Recovery Steps
@@ -87,11 +96,11 @@ When this issue happens after a deploy:
 1. Refresh the route quote so the frontend receives the latest user-signature requirement.
 2. Refresh portfolio and funding balances.
 3. If Polymarket pUSD or USDC.e is present but CLOB allowance is not spendable, run the Polymarket activation flow. Lotus prepares max approvals for CLOB-discovered spenders, but the user must sign the activation with Turnkey. A prior activation that only approved the legacy/configured spender is not enough.
-4. If pUSD and all CLOB-discovered approvals are confirmed on-chain but the CLOB cache still reports zero, use a fresh route/signature so the user-scoped submit path can refresh CLOB balance/allowance before post.
-   - If CLOB cache still lags after refresh, the backend may proceed only when the on-chain fallback source is `ONCHAIN_CLOB_SPENDER_ALLOWANCE`.
-5. If Limitless or Predict.fun collateral is present but allowance is not ready, run the relevant venue approval flow.
-6. If Predict.fun reports provider auth invalid, check backend Predict.fun credentials and user venue auth state before retrying.
-7. Retry only after backend readiness reports spendable collateral and allowance for the selected venue.
+4. If pUSD and all CLOB-discovered approvals are confirmed on-chain but the CLOB cache still reports zero, use a fresh route/signature so the user-scoped submit path can refresh CLOB balance/allowance before post. If CLOB still reports zero after refresh, keep the order blocked and show the user `pUSD approved, CLOB sync pending`.
+5. If pUSD is present and approvals are confirmed but CLOB available balance remains zero, inspect Polymarket open orders for the active deposit wallet. Cancel only Lotus-created/stale market-flow orders that are reserving collateral; do not cancel user-created venue orders without explicit user action.
+6. If Limitless or Predict.fun collateral is present but allowance is not ready, run the relevant venue approval flow.
+7. If Predict.fun reports provider auth invalid, check backend Predict.fun credentials and user venue auth state before retrying.
+8. Retry only after backend readiness reports spendable collateral and allowance for the selected venue.
 
 ## Deployment Guardrail
 

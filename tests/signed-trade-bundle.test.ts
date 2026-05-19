@@ -411,9 +411,11 @@ describe("SignedTradeBundleService", () => {
     const prepared = await sut.prepare({ userId: "user-1", quoteId: "exec_quote_test" });
     const limitlessRequest = prepared.signatureRequests.find((request) => request.venue === "LIMITLESS")!;
     const order = ((limitlessRequest.signedPayloadHint as Record<string, unknown>).data as Record<string, unknown>).order as Record<string, unknown>;
+    const data = (limitlessRequest.signedPayloadHint as Record<string, unknown>).data as Record<string, unknown>;
 
     expect(Number(order.price)).toBe(0.43);
     expect(Number(order.takerAmount) / 1_000_000).toBeCloseTo(14.204, 6);
+    expect(data.orderType).toBe("FOK");
   });
 
   it("signs Limitless orders against the market venue exchange address", async () => {
@@ -482,6 +484,7 @@ describe("SignedTradeBundleService", () => {
     };
 
     expect(hint.data?.strategy).toBe("MARKET");
+    expect(hint.data?.isFillOrKill).toBe(true);
     expect(hint.data).not.toHaveProperty("reservedBalancePolicy");
   });
 
@@ -644,7 +647,7 @@ describe("SignedTradeBundleService", () => {
     });
   });
 
-  it("accepts verified on-chain CLOB spender allowance when Polymarket CLOB cache lags", async () => {
+  it("keeps Polymarket buy readiness blocked when only on-chain CLOB spender allowance is confirmed", async () => {
     const registry = new ExecutionVenueAdapterRegistry();
     registry.register(new FailingPolymarketBalanceAdapter());
     const sut = new SignedTradeBundleService(
@@ -665,8 +668,10 @@ describe("SignedTradeBundleService", () => {
 
     const readiness = await sut.getLiveReadiness({ userId: "user-1", quoteId: "exec_quote_polymarket_buy" });
 
-    expect(readiness.status).toBe("fresh");
-    expect(readiness.blockers).toEqual([]);
+    expect(readiness.status).toBe("blocked");
+    expect(readiness.blockers).toContain(
+      "POLYMARKET: Polymarket pUSD approval is confirmed on-chain, but Polymarket CLOB spendable collateral has not synced yet. Lotus refreshed CLOB readiness; retry after sync confirms."
+    );
     expect(readiness.venues[0]?.collateral).toMatchObject({
       requiredNotional: "1.2375",
       balance: "0",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { AssetType, OrderType, Side } from "@polymarket/clob-client-v2";
+import { AssetType, OrderType, Side, SignatureTypeV2 } from "@polymarket/clob-client-v2";
 
 import type { ExecutionScopeBinding } from "../src/execution-control/execution-scope-token.js";
 import {
@@ -755,7 +755,7 @@ describe("PolymarketExecutionAdapterV2", () => {
       "postOrder"
     ]);
     const [postedOrder, orderType] = calls[2]!.args as [Record<string, unknown>, OrderType];
-    expect(orderType).toBe(OrderType.GTC);
+    expect(orderType).toBe(OrderType.FOK);
     expect(postedOrder.signature).toBe(`0x${"aa".repeat(65)}${"bb".repeat(96)}`);
     expect(postedOrder.signature).not.toBe(`0x${"aa".repeat(65)}`);
   });
@@ -921,9 +921,17 @@ describe("PolymarketExecutionAdapterV2", () => {
       "updateBalanceAllowance",
       "getBalanceAllowance"
     ]);
+    expect(calls[0]!.args[0]).toMatchObject({
+      asset_type: AssetType.COLLATERAL,
+      signature_type: SignatureTypeV2.POLY_1271
+    });
+    expect(calls[1]!.args[0]).toMatchObject({
+      asset_type: AssetType.COLLATERAL,
+      signature_type: SignatureTypeV2.POLY_1271
+    });
   });
 
-  it("allows user-signed Polymarket buy submit through verified on-chain CLOB spender allowance fallback", async () => {
+  it("blocks user-signed Polymarket buy submit until CLOB confirms spendable collateral", async () => {
     const calls: Array<{ method: string; args: unknown[] }> = [];
     const sdkClient: PolymarketClobV2SdkClient = {
       async createAndPostOrder() {
@@ -951,7 +959,6 @@ describe("PolymarketExecutionAdapterV2", () => {
         return { success: true };
       }
     };
-    const fallbackReads: string[] = [];
     const client = new SdkPolymarketClobV2LiveClient({
       executionMode: "v2",
       liveExecutionEnabled: true,
@@ -964,7 +971,7 @@ describe("PolymarketExecutionAdapterV2", () => {
       privateKey: completeEnv.POLY_PRIVATE_KEY
     }, () => sdkClient, {
       async readUsableBalance({ userId }) {
-        fallbackReads.push(userId);
+        expect(userId).toBe("user-1");
         return {
           usableBalance: "2",
           collateralBalance: "2",
@@ -1006,21 +1013,19 @@ describe("PolymarketExecutionAdapterV2", () => {
         size: "1.25",
         price: 0.99
       }
-    })).resolves.toMatchObject({ venueOrderId: "pm-order-onchain-fallback", status: "FILLED" });
+    })).rejects.toMatchObject({ reasonCode: "POLYMARKET_CLOB_COLLATERAL_NOT_READY" });
 
-    expect(fallbackReads).toEqual(["user-1"]);
     expect(calls.map((call) => call.method)).toEqual([
       "updateBalanceAllowance",
       "getBalanceAllowance",
       "updateBalanceAllowance",
       "getBalanceAllowance",
       "updateBalanceAllowance",
-      "getBalanceAllowance",
-      "postOrder"
+      "getBalanceAllowance"
     ]);
   });
 
-  it("allows relay-side submit through API-attested on-chain CLOB spender readiness when CLOB cache lags", async () => {
+  it("blocks relay-side submit when only API-attested on-chain CLOB spender readiness is present", async () => {
     const calls: Array<{ method: string; args: unknown[] }> = [];
     const sdkClient: PolymarketClobV2SdkClient = {
       async createAndPostOrder() {
@@ -1096,7 +1101,7 @@ describe("PolymarketExecutionAdapterV2", () => {
         size: "1.25",
         price: 0.99
       }
-    })).resolves.toMatchObject({ venueOrderId: "pm-order-attested-readiness", status: "FILLED" });
+    })).rejects.toMatchObject({ reasonCode: "POLYMARKET_CLOB_COLLATERAL_NOT_READY" });
 
     expect(calls.map((call) => call.method)).toEqual([
       "updateBalanceAllowance",
@@ -1104,12 +1109,11 @@ describe("PolymarketExecutionAdapterV2", () => {
       "updateBalanceAllowance",
       "getBalanceAllowance",
       "updateBalanceAllowance",
-      "getBalanceAllowance",
-      "postOrder"
+      "getBalanceAllowance"
     ]);
   });
 
-  it("allows relay-side submit through API-attested direct CLOB collateral readiness when relay CLOB cache lags", async () => {
+  it("blocks relay-side submit through API-attested direct readiness when live CLOB cache still lags", async () => {
     const calls: string[] = [];
     const sdkClient: PolymarketClobV2SdkClient = {
       async createAndPostOrder() {
@@ -1185,7 +1189,7 @@ describe("PolymarketExecutionAdapterV2", () => {
         size: "1.25",
         price: 0.99
       }
-    })).resolves.toMatchObject({ venueOrderId: "pm-order-direct-clob-attested", status: "FILLED" });
+    })).rejects.toMatchObject({ reasonCode: "POLYMARKET_CLOB_COLLATERAL_NOT_READY" });
 
     expect(calls).toEqual([
       "updateBalanceAllowance",
@@ -1193,8 +1197,7 @@ describe("PolymarketExecutionAdapterV2", () => {
       "updateBalanceAllowance",
       "getBalanceAllowance",
       "updateBalanceAllowance",
-      "getBalanceAllowance",
-      "postOrder"
+      "getBalanceAllowance"
     ]);
   });
 
