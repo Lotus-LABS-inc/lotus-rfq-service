@@ -70,8 +70,16 @@ export interface PolymarketFundingBalanceReadServiceConfig {
 }
 
 export interface PolymarketBalanceAllowanceClient {
-  getBalanceAllowance(params: { asset_type: AssetType; token_id?: string }): Promise<BalanceAllowanceResponse>;
-  updateBalanceAllowance?(params: { asset_type: AssetType; token_id?: string }): Promise<unknown>;
+  getBalanceAllowance(params: {
+    asset_type: AssetType;
+    token_id?: string;
+    signature_type?: SignatureTypeV2;
+  }): Promise<BalanceAllowanceResponse>;
+  updateBalanceAllowance?(params: {
+    asset_type: AssetType;
+    token_id?: string;
+    signature_type?: SignatureTypeV2;
+  }): Promise<unknown>;
 }
 
 export type PolymarketBalanceAllowanceClientFactory = (
@@ -315,8 +323,15 @@ export class PolymarketFundingBalanceReadService {
 
     const funderAddress = await this.resolveUserDepositWalletAddress(input);
     const client = this.clientFactory(funderAddress ? { ...this.config, funderAddress } : this.config);
-    await client.updateBalanceAllowance?.({ asset_type: AssetType.COLLATERAL });
-    const response = await client.getBalanceAllowance({ asset_type: AssetType.COLLATERAL });
+    const signatureType = funderAddress
+      ? SignatureTypeV2.POLY_1271
+      : parseSignatureType(this.config.signatureType);
+    const collateralParams = {
+      asset_type: AssetType.COLLATERAL,
+      signature_type: signatureType
+    };
+    await client.updateBalanceAllowance?.(collateralParams);
+    const response = await client.getBalanceAllowance(collateralParams);
     const balance = collateralAtomicUnitsToUsdc(response.balance);
     const clobAllowanceSpenders = clobAllowanceSpendersFromResponse(response);
     const allowance = collateralAtomicUnitsToUsdc(collateralAllowanceAtomicUnits(response));
@@ -363,8 +378,8 @@ export class PolymarketFundingBalanceReadService {
     }
     return {
       usableBalance: decimalToPlainString(usableBalance),
-      collateralBalance: decimalToPlainString(effectiveBalance),
-      collateralAllowance: decimalToPlainString(effectiveAllowance),
+      collateralBalance: decimalToPlainString(balance),
+      collateralAllowance: decimalToPlainString(allowance),
       clobAllowanceSpenders: clobAllowanceSpenders.map((spender) => ({
         spenderAddress: spender.spenderAddress,
         allowance: decimalToPlainString(spender.allowance)
@@ -394,8 +409,16 @@ export class PolymarketFundingBalanceReadService {
     }
     const funderAddress = await this.resolveUserDepositWalletAddress(input);
     const client = this.clientFactory(funderAddress ? { ...this.config, funderAddress } : this.config);
-    await client.updateBalanceAllowance?.({ asset_type: AssetType.CONDITIONAL, token_id: input.tokenId });
-    const response = await client.getBalanceAllowance({ asset_type: AssetType.CONDITIONAL, token_id: input.tokenId });
+    const signatureType = funderAddress
+      ? SignatureTypeV2.POLY_1271
+      : parseSignatureType(this.config.signatureType);
+    const params = {
+      asset_type: AssetType.CONDITIONAL,
+      token_id: input.tokenId,
+      signature_type: signatureType
+    };
+    await client.updateBalanceAllowance?.(params);
+    const response = await client.getBalanceAllowance(params);
     const allowanceSpenders = clobAllowanceSpendersFromResponse(response);
     return {
       tokenId: input.tokenId,

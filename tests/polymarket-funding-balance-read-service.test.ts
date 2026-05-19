@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { AssetType, type BalanceAllowanceResponse } from "@polymarket/clob-client-v2";
+import { AssetType, SignatureTypeV2, type BalanceAllowanceResponse } from "@polymarket/clob-client-v2";
 import { describe, expect, it } from "vitest";
 import { registerInternalPolymarketFundingBalanceRoute } from "../src/api/routes/internal-polymarket-funding-balance.js";
 import {
@@ -11,16 +11,18 @@ import {
 
 class StubBalanceAllowanceClient implements PolymarketBalanceAllowanceClient {
   public lastAssetType: AssetType | null = null;
+  public lastSignatureType: SignatureTypeV2 | null = null;
   public updateCalls = 0;
 
   public constructor(private readonly response: BalanceAllowanceResponse) {}
 
-  public async getBalanceAllowance(params: { asset_type: AssetType }): Promise<BalanceAllowanceResponse> {
+  public async getBalanceAllowance(params: { asset_type: AssetType; signature_type?: SignatureTypeV2 }): Promise<BalanceAllowanceResponse> {
     this.lastAssetType = params.asset_type;
+    this.lastSignatureType = params.signature_type ?? null;
     return this.response;
   }
 
-  public async updateBalanceAllowance(_params: { asset_type: AssetType }): Promise<unknown> {
+  public async updateBalanceAllowance(_params: { asset_type: AssetType; signature_type?: SignatureTypeV2 }): Promise<unknown> {
     this.updateCalls += 1;
     return {};
   }
@@ -62,6 +64,7 @@ describe("Polymarket internal funding balance read service", () => {
       usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE"
     });
     expect(client.lastAssetType).toBe(AssetType.COLLATERAL);
+    expect(client.lastSignatureType).toBe(SignatureTypeV2.POLY_PROXY);
     expect(client.updateCalls).toBe(1);
   });
 
@@ -328,8 +331,8 @@ describe("Polymarket internal funding balance read service", () => {
       routeLegId: "leg-1"
     })).resolves.toMatchObject({
       usableBalance: "9",
-      collateralBalance: "9.000769",
-      collateralAllowance: "9",
+      collateralBalance: "8.95741",
+      collateralAllowance: "0",
       onchainPusdBalance: "9.000769",
       onchainPusdAllowance: "9",
       approvalSpenderSource: "CLOB_ALLOWANCE_MAP",
