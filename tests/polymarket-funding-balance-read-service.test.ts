@@ -145,7 +145,8 @@ describe("Polymarket internal funding balance read service", () => {
     })).resolves.toMatchObject({ usableBalance: "100" });
 
     expect(capturedConfigs[0]).toMatchObject({
-      funderAddress: "0x6867bD6B5fd147af7B7AFc7b4aee0bABb140e0cB"
+      funderAddress: "0x6867bD6B5fd147af7B7AFc7b4aee0bABb140e0cB",
+      signatureType: String(SignatureTypeV2.POLY_1271)
     });
   });
 

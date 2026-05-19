@@ -303,6 +303,19 @@ export const createPolymarketBalanceAllowanceClient: PolymarketBalanceAllowanceC
   return new ClobClient(options);
 };
 
+const userDepositWalletClobConfig = (
+  config: PolymarketFundingBalanceReadServiceConfig,
+  funderAddress: string | null
+): PolymarketFundingBalanceReadServiceConfig => funderAddress
+  ? {
+      ...config,
+      funderAddress,
+      // The SDK ignores per-call signature_type params for balance endpoints and
+      // uses the client-level OrderBuilder signature type instead.
+      signatureType: String(SignatureTypeV2.POLY_1271)
+    }
+  : config;
+
 export class PolymarketFundingBalanceReadService {
   public constructor(
     private readonly config: PolymarketFundingBalanceReadServiceConfig,
@@ -322,7 +335,7 @@ export class PolymarketFundingBalanceReadService {
     }
 
     const funderAddress = await this.resolveUserDepositWalletAddress(input);
-    const client = this.clientFactory(funderAddress ? { ...this.config, funderAddress } : this.config);
+    const client = this.clientFactory(userDepositWalletClobConfig(this.config, funderAddress));
     const signatureType = funderAddress
       ? SignatureTypeV2.POLY_1271
       : parseSignatureType(this.config.signatureType);
@@ -408,7 +421,7 @@ export class PolymarketFundingBalanceReadService {
       throw new PolymarketFundingBalanceReadNotConfiguredError("Polymarket conditional token id is invalid.");
     }
     const funderAddress = await this.resolveUserDepositWalletAddress(input);
-    const client = this.clientFactory(funderAddress ? { ...this.config, funderAddress } : this.config);
+    const client = this.clientFactory(userDepositWalletClobConfig(this.config, funderAddress));
     const signatureType = funderAddress
       ? SignatureTypeV2.POLY_1271
       : parseSignatureType(this.config.signatureType);
