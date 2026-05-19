@@ -280,6 +280,11 @@ import {
   buildPolymarketFundingBalanceReadConfigFromEnv
 } from "../core/funding/polymarket-balance-read-service.js";
 import {
+  PolymarketClobReadinessSyncService,
+  buildPolymarketClobReadinessPreparation,
+  buildPolymarketClobReadinessSyncConfigFromEnv
+} from "../core/funding/polymarket-clob-readiness-sync.js";
+import {
   InternalWithdrawalEvidenceReadService
 } from "../core/funding/limitless-withdrawal-evidence-read-service.js";
 import { buildFundingVenueReadinessCheckersFromEnv } from "../core/funding/venue-readiness.js";
@@ -639,6 +644,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     undefined,
     userVenueAccountRepository
   );
+  const polymarketClobReadinessSyncConfig = buildPolymarketClobReadinessSyncConfigFromEnv(process.env);
+  const polymarketClobReadinessSyncService = new PolymarketClobReadinessSyncService(polymarketClobReadinessSyncConfig);
   const internalWithdrawalEvidenceReadService = new InternalWithdrawalEvidenceReadService({ env: process.env });
   const failureRecoveryManager = new FailureRecoveryManager(dependencies.pgPool);
   const executionControlRepository = new ExecutionControlRepository(dependencies.pgPool);
@@ -1790,6 +1797,42 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         transactionHash: activation.transactionHash
       });
       return activation;
+    },
+    preparePolymarketClobSync: async (userId) => {
+      const account = await userVenueAccountService.getAccount(userId, "POLYMARKET");
+      if (account?.status !== "ACTIVE" || !account.walletAddress || !account.venueAccountAddress) {
+        throw new FundingError("POLYMARKET_CLOB_SYNC_UNAVAILABLE", "An active Polymarket deposit wallet is required before CLOB readiness sync.", 409);
+      }
+      return buildPolymarketClobReadinessPreparation({
+        signerAddress: account.walletAddress,
+        depositWalletAddress: account.venueAccountAddress
+      }, polymarketClobReadinessSyncConfig);
+    },
+    submitPolymarketClobSync: async (userId, request) => {
+      const account = await userVenueAccountService.getAccount(userId, "POLYMARKET");
+      if (account?.status !== "ACTIVE" || !account.walletAddress || !account.venueAccountAddress) {
+        throw new FundingError("POLYMARKET_CLOB_SYNC_UNAVAILABLE", "An active Polymarket deposit wallet is required before CLOB readiness sync.", 409);
+      }
+      if (
+        account.walletAddress.toLowerCase() !== request.signedPayload.signer.toLowerCase() ||
+        account.venueAccountAddress.toLowerCase() !== request.signedPayload.account.toLowerCase()
+      ) {
+        throw new FundingError("POLYMARKET_CLOB_SYNC_FORBIDDEN", "Polymarket CLOB readiness sync request does not match the user's active deposit wallet.", 403);
+      }
+      try {
+        return await polymarketClobReadinessSyncService.sync({
+          account: {
+            signerAddress: account.walletAddress,
+            depositWalletAddress: account.venueAccountAddress
+          },
+          signedPayload: request.signedPayload
+        });
+      } catch (error) {
+        const message = error instanceof Error
+          ? error.message
+          : "Polymarket CLOB readiness sync failed.";
+        throw new FundingError("POLYMARKET_CLOB_SYNC_FAILED", message, 409);
+      }
     },
     listFundingHistory: (userId, input) => fundingService.listFundingHistory(userId, input),
     createWithdrawalIntent: (userId, request) => fundingService.createWithdrawalIntent(userId, request),

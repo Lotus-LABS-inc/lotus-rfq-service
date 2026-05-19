@@ -3131,6 +3131,57 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/VenueActivations" }
         "401": { $ref: "#/components/responses/Error" }
+  /funding/venue-activations/polymarket/clob-sync/prepare:
+    post:
+      tags: [Funding]
+      summary: Prepare user-scoped Polymarket CLOB readiness sync.
+      description: Returns frontend-safe EIP-712 ClobAuth typed data for the authenticated user's linked Turnkey signer and Polymarket deposit wallet. The frontend signs this with Turnkey before Lotus calls Polymarket CLOB balance refresh. No provider secrets are returned.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: none
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/GenericObject" }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /funding/venue-activations/polymarket/clob-sync/submit:
+    post:
+      tags: [Funding]
+      summary: Submit signed Polymarket CLOB readiness sync.
+      description: Accepts the authenticated user's signed ClobAuth payload, derives user-scoped Polymarket CLOB API credentials, runs updateBalanceAllowance for POLY_1271 collateral, then reads spendable CLOB collateral. Returns READY only when CLOB confirms balance and allowance. Signatures are never echoed back.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: external-read
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [signedPayload]
+              properties:
+                signedPayload:
+                  type: object
+                  required: [signer, account, signature, typedData]
+                  properties:
+                    signer: { type: string }
+                    account: { type: string }
+                    signature: { type: string }
+                    typedData: { type: object, additionalProperties: true }
+                    data: { type: object, additionalProperties: true }
+      responses:
+        "202": { $ref: "#/components/responses/GenericObject" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /funding/history:
     get:
       tags: [Funding]

@@ -187,6 +187,56 @@ const buildApp = async (options: { rateLimiter?: RateLimiter } = {}) => {
       relayerState: "STATE_NEW",
       transactionHash: null
     }),
+    preparePolymarketClobSync: async () => ({
+      signer: "0x2222222222222222222222222222222222222222",
+      account: "0x1111111111111111111111111111111111111111",
+      expiresAt: "2026-04-25T00:01:00.000Z",
+      typedData: {
+        domain: { name: "ClobAuthDomain", version: "1", chainId: 137 },
+        types: {
+          EIP712Domain: [
+            { name: "name", type: "string" },
+            { name: "version", type: "string" },
+            { name: "chainId", type: "uint256" }
+          ],
+          ClobAuth: [
+            { name: "address", type: "address" },
+            { name: "timestamp", type: "string" },
+            { name: "nonce", type: "uint256" },
+            { name: "message", type: "string" }
+          ]
+        },
+        primaryType: "ClobAuth",
+        message: {
+          address: "0x2222222222222222222222222222222222222222",
+          timestamp: "1770000000",
+          nonce: 0,
+          message: "This message attests that I control the given wallet"
+        }
+      },
+      signedPayloadHint: {
+        purpose: "POLYMARKET_CLOB_AUTH",
+        signer: "0x2222222222222222222222222222222222222222",
+        account: "0x1111111111111111111111111111111111111111",
+        data: {
+          address: "0x2222222222222222222222222222222222222222",
+          timestamp: 1770000000,
+          nonce: 0,
+          chainId: 137,
+          funderAddress: "0x1111111111111111111111111111111111111111"
+        }
+      }
+    }),
+    submitPolymarketClobSync: async () => ({
+      status: "READY",
+      readinessReason: "POLYMARKET_CLOB_COLLATERAL_CONFIRMED",
+      clobCollateralBalance: "100",
+      clobCollateralAllowance: "100",
+      readyAmount: "100",
+      ownerAddress: "0x1111111111111111111111111111111111111111",
+      signerAddress: "0x2222222222222222222222222222222222222222",
+      clobAllowanceSpenders: []
+    }),
     listFundingHistory: async (_userId, input) => ({
       items: [{
         id: "funding:funding-1:leg-1",
@@ -410,6 +460,46 @@ describe("Funding routes", () => {
       }
     });
     expect(submittedActivation.body).not.toContain("signature");
+
+    const preparedClobSync = await app.inject({
+      method: "POST",
+      url: "/funding/venue-activations/polymarket/clob-sync/prepare",
+      headers,
+      payload: {}
+    });
+    expect(preparedClobSync.statusCode).toBe(200);
+    expect(preparedClobSync.json()).toMatchObject({
+      sync: {
+        signer: "0x2222222222222222222222222222222222222222",
+        account: "0x1111111111111111111111111111111111111111",
+        typedData: { primaryType: "ClobAuth" }
+      }
+    });
+    expect(preparedClobSync.body).not.toContain("secret");
+
+    const submittedClobSync = await app.inject({
+      method: "POST",
+      url: "/funding/venue-activations/polymarket/clob-sync/submit",
+      headers,
+      payload: {
+        signedPayload: {
+          signer: "0x2222222222222222222222222222222222222222",
+          account: "0x1111111111111111111111111111111111111111",
+          signature: `0x${"1".repeat(130)}`,
+          typedData: preparedClobSync.json().sync.typedData,
+          data: preparedClobSync.json().sync.signedPayloadHint.data
+        }
+      }
+    });
+    expect(submittedClobSync.statusCode).toBe(202);
+    expect(submittedClobSync.json()).toMatchObject({
+      sync: {
+        status: "READY",
+        readinessReason: "POLYMARKET_CLOB_COLLATERAL_CONFIRMED",
+        readyAmount: "100"
+      }
+    });
+    expect(submittedClobSync.body).not.toContain("signature");
 
     const history = await app.inject({ method: "GET", url: "/funding/history?page=1&pageSize=5", headers });
     expect(history.statusCode).toBe(200);

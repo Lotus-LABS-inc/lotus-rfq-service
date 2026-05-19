@@ -53,6 +53,18 @@ const preparePolymarketActivationSchema = z.object({
   tokenId: z.string().regex(/^\d+$/).optional()
 });
 
+const polymarketClobSyncSignedPayloadSchema = z.object({
+  signer: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  account: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  signature: z.string().regex(/^0x[a-fA-F0-9]{130}$/),
+  typedData: z.record(z.string(), z.unknown()),
+  data: z.record(z.string(), z.unknown()).optional()
+});
+
+const submitPolymarketClobSyncSchema = z.object({
+  signedPayload: polymarketClobSyncSignedPayloadSchema
+});
+
 export interface FundingRouteHandlers {
   createIntent(userId: string, request: z.infer<typeof CreateFundingIntentSchema>): Promise<FundingIntentView>;
   getIntent(userId: string, fundingIntentId: string): Promise<FundingIntentView>;
@@ -65,6 +77,8 @@ export interface FundingRouteHandlers {
   listVenueActivations(userId: string): Promise<VenueBalanceActivationAction[]>;
   preparePolymarketActivation?(userId: string, input?: z.infer<typeof preparePolymarketActivationSchema>): Promise<unknown>;
   submitPolymarketActivation?(userId: string, request: z.infer<typeof submitPolymarketActivationSchema>): Promise<unknown>;
+  preparePolymarketClobSync?(userId: string): Promise<unknown>;
+  submitPolymarketClobSync?(userId: string, request: z.infer<typeof submitPolymarketClobSyncSchema>): Promise<unknown>;
   listFundingHistory(userId: string, input?: { page?: number; pageSize?: number; limit?: number }): Promise<FundingHistoryPage>;
   createWithdrawalIntent(userId: string, request: z.infer<typeof CreateWithdrawalIntentSchema>): Promise<WithdrawalIntentView>;
   getWithdrawalIntent(userId: string, withdrawalIntentId: string): Promise<WithdrawalIntentView>;
@@ -252,6 +266,44 @@ export const registerFundingRoutes = async (
     try {
       const activation = await handlers.submitPolymarketActivation(request.user.userId, parsed.data);
       return reply.status(202).send({ activation });
+    } catch (error) {
+      return handleFundingError(error, reply);
+    }
+  });
+
+  app.post("/funding/venue-activations/polymarket/clob-sync/prepare", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!handlers.preparePolymarketClobSync) {
+      return reply.status(503).send({
+        code: "POLYMARKET_CLOB_SYNC_UNAVAILABLE",
+        message: "Polymarket CLOB readiness sync is not available."
+      });
+    }
+    try {
+      const sync = await handlers.preparePolymarketClobSync(request.user.userId);
+      return reply.status(200).send({ sync });
+    } catch (error) {
+      return handleFundingError(error, reply);
+    }
+  });
+
+  app.post("/funding/venue-activations/polymarket/clob-sync/submit", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!handlers.submitPolymarketClobSync) {
+      return reply.status(503).send({
+        code: "POLYMARKET_CLOB_SYNC_UNAVAILABLE",
+        message: "Polymarket CLOB readiness sync is not available."
+      });
+    }
+    const parsed = submitPolymarketClobSyncSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "Polymarket CLOB readiness sync submission validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    try {
+      const sync = await handlers.submitPolymarketClobSync(request.user.userId, parsed.data);
+      return reply.status(202).send({ sync });
     } catch (error) {
       return handleFundingError(error, reply);
     }
