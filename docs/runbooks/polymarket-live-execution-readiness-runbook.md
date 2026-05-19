@@ -22,6 +22,7 @@ This is not acceptable user-facing behavior. Lotus should block earlier with a s
 - Buy-side Polymarket readiness must read the active user deposit wallet through the CLOB balance/allowance path and compare `size * price + fee` against CLOB collateral balance, CLOB allowance, and derived spendable balance.
 - When CLOB returns an `allowances` spender map, that spender map is the source of truth for which spenders must be approved. A max approval to the legacy/configured pUSD spender must not mark the wallet ready if the current CLOB spenders are not approved.
 - If the server-side CLOB balance cache reports zero but the active deposit wallet has pUSD and on-chain max approvals for every CLOB-discovered spender, portfolio/funding may show `POLYMARKET_CLOB_SYNC_PENDING`. This means pUSD is approved on-chain, but it is not yet trade-ready.
+- `POLYMARKET_CLOB_SYNC_PENDING` must not be returned as activation `READY`. It is a non-actionable waiting state: pUSD and on-chain approvals exist, but the CLOB balance/allowance endpoint has not confirmed spendable collateral.
 - Polymarket buy submit must force a user-scoped `updateBalanceAllowance({ asset_type: COLLATERAL, signature_type: 3 })`, then require `getBalanceAllowance({ asset_type: COLLATERAL, signature_type: 3 })` to return spendable collateral. `ONCHAIN_CLOB_SPENDER_ALLOWANCE`, `ONCHAIN_PUSD_ALLOWANCE`, legacy/config fallback spender approval, USDC.e delivery, or missing fallback evidence must still block submit.
 - Portfolio/funding balance sync must also refresh CLOB with the deposit-wallet signature type. For active deposit wallets, use `signature_type: 3` on both `updateBalanceAllowance` and `getBalanceAllowance`; otherwise staging can show on-chain pUSD approval while CLOB spendable balance remains `0`.
 - The Polymarket TypeScript SDK currently overwrites per-call `signature_type` balance params with the `ClobClient` constructor's `signatureType` / OrderBuilder signature type. For user deposit-wallet balance reads, construct the CLOB client itself with `signatureType: POLY_1271`; passing `signature_type: 3` only to `getBalanceAllowance` or `updateBalanceAllowance` is not sufficient.
@@ -46,6 +47,13 @@ This is not acceptable user-facing behavior. Lotus should block earlier with a s
 The staging frontend can point at a Render backend service that tracks `main`, while fixes were pushed only to `staging`. In that case the deployed backend may still run an older path that can submit with operator or incomplete CLOB state and return raw provider errors.
 
 Another concrete cause is old Lotus-created Polymarket `GTC` orders. Lotus does not expose limit orders in production, so a market-flow `GTC` order can accidentally remain open and reserve the user deposit wallet's collateral. Polymarket CLOB then reports available collateral as zero even though portfolio reads still see pUSD on-chain.
+
+Current blocker diagnosis:
+
+1. Wrong CLOB auth context/API credentials can cause server-side portfolio reads to see on-chain pUSD approvals but not CLOB spendable collateral. The Polymarket SDK signs balance refresh headers as the SDK signer address and does not pass the deposit wallet as an explicit `funderAddress` query param for `getBalanceAllowance` / `updateBalanceAllowance`.
+2. The deposit wallet can remain unsynced in CLOB even when pUSD and spender approvals are visible on-chain. Lotus must keep this as `POLYMARKET_CLOB_SYNC_PENDING` until user-scoped CLOB refresh confirms spendable collateral.
+3. The CLOB spender addresses currently used by Lotus are the Polymarket CLOB V2 spender set returned by the SDK (`exchangeV2`, `negRiskAdapter`, `negRiskExchangeV2`). Do not replace them with collateral ramp contracts; those contracts are pUSD/bridge plumbing, not the live order spenders.
+4. Server-side portfolio sync is not enough to unlock live trading. Submit readiness must be proven through the user-scoped CLOB context that signs the order, then CLOB must return spendable collateral before `postOrder`.
 
 Check Render service branch and deployed commit before debugging user balances:
 

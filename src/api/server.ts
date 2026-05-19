@@ -1594,11 +1594,11 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         ) {
           polymarket.activationRequired = false;
           polymarket.mode = "NOT_REQUIRED";
-          polymarket.status = "READY";
+          polymarket.status = "SYNC_PENDING";
           polymarket.tokenSymbol = "pUSD";
           polymarket.readinessReason = "POLYMARKET_CLOB_SYNC_PENDING";
           polymarket.instructions = [
-            "pUSD is approved on-chain for the current Polymarket CLOB spenders. Lotus is polling until Polymarket CLOB sync confirms spendable collateral."
+            "pUSD is approved on-chain for the current Polymarket CLOB spenders, but Polymarket CLOB has not confirmed spendable collateral yet. Lotus will not submit Polymarket orders until CLOB confirms readiness."
           ];
           polymarket.blockers = [];
         } else if (Number.isFinite(onchainPusd) && onchainPusd > 0) {

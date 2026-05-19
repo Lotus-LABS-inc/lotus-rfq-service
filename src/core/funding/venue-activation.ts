@@ -2,7 +2,12 @@ import type { FundingVenue, VenueBalanceView } from "./types.js";
 import type { UserVenueAccount } from "../execution/user-venue-accounts.js";
 
 export type VenueBalanceActivationMode = "NOT_REQUIRED" | "VENUE_UI_OR_RELAYER" | "ERC20_APPROVAL";
-export type VenueBalanceActivationStatus = "NOT_REQUIRED" | "READY" | "CONFIG_REQUIRED" | "ACCOUNT_REQUIRED";
+export type VenueBalanceActivationStatus =
+  | "NOT_REQUIRED"
+  | "READY"
+  | "SYNC_PENDING"
+  | "CONFIG_REQUIRED"
+  | "ACCOUNT_REQUIRED";
 
 export interface VenueBalanceActivationTransactionRequest {
   to: string;

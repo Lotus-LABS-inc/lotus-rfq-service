@@ -5141,7 +5141,7 @@ components:
           enum: [NOT_REQUIRED, VENUE_UI_OR_RELAYER, ERC20_APPROVAL]
         status:
           type: string
-          enum: [NOT_REQUIRED, READY, CONFIG_REQUIRED, ACCOUNT_REQUIRED]
+          enum: [NOT_REQUIRED, READY, SYNC_PENDING, CONFIG_REQUIRED, ACCOUNT_REQUIRED]
         tokenSymbol:
           type: string
           nullable: true
