@@ -683,6 +683,40 @@ describe("SignedTradeBundleService", () => {
     });
   });
 
+  it("allows Polymarket buy readiness after user CLOB sync confirmation is persisted", async () => {
+    const registry = new ExecutionVenueAdapterRegistry();
+    registry.register(new FailingPolymarketBalanceAdapter());
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => polymarketBuyQuote() } as never,
+      registry,
+      { getAccount: async () => account("POLYMARKET") },
+      () => new Date("2026-05-07T00:00:00.000Z"),
+      {} as NodeJS.ProcessEnv,
+      undefined,
+      undefined,
+      polymarketBalanceReader({
+        usableBalance: "7.85565",
+        collateralBalance: "7.85565",
+        collateralAllowance: "115792089237316195420000000000000000000000000000000000000000000000000000",
+        usableBalanceSource: "USER_CLOB_SYNC_CONFIRMED"
+      })
+    );
+
+    const readiness = await sut.getLiveReadiness({ userId: "user-1", quoteId: "exec_quote_polymarket_buy" });
+
+    expect(readiness.status).toBe("fresh");
+    expect(readiness.blockers).toEqual([]);
+    expect(readiness.venues[0]?.collateral).toMatchObject({
+      requiredNotional: "1.2375",
+      balance: "7.85565",
+      allowance: "115792089237316195420000000000000000000000000000000000000000000000000000",
+      usableBalance: "7.85565",
+      tokenSymbol: "pUSD",
+      approvalMethod: "CLOB_PUSD_APPROVAL",
+      usableBalanceSource: "USER_CLOB_SYNC_CONFIRMED"
+    });
+  });
+
   it("includes Polymarket leg fee when checking required CLOB collateral", async () => {
     const registry = new ExecutionVenueAdapterRegistry();
     registry.register(new FailingPolymarketBalanceAdapter());

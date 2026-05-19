@@ -277,7 +277,8 @@ import { FundingReadinessChecker, FundingService } from "../core/funding/funding
 import { FundingError, type VenueBalanceView } from "../core/funding/types.js";
 import {
   PolymarketFundingBalanceReadService,
-  buildPolymarketFundingBalanceReadConfigFromEnv
+  buildPolymarketFundingBalanceReadConfigFromEnv,
+  type PolymarketFundingBalanceReadOutput
 } from "../core/funding/polymarket-balance-read-service.js";
 import {
   PolymarketClobReadinessSyncService,
@@ -362,7 +363,24 @@ import {
 } from "../core/funding/funding-intent-cleanup.js";
 
 const isPolymarketCLOBTradeReadySource = (source: string | null | undefined): boolean =>
-  source === "CLOB_COLLATERAL_ALLOWANCE";
+  source === "CLOB_COLLATERAL_ALLOWANCE" || source === "USER_CLOB_SYNC_CONFIRMED";
+
+const isPositiveAmount = (value: string | null | undefined): boolean => {
+  if (typeof value !== "string" || !/^\d+(?:\.\d+)?$/.test(value.trim())) {
+    return false;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0;
+};
+
+const minAmountString = (left: string, right: string): string => {
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  if (!Number.isFinite(leftNumber) || !Number.isFinite(rightNumber)) {
+    return left;
+  }
+  return String(Math.min(leftNumber, rightNumber));
+};
 
 export interface ServerDependencies {
   logger: Logger;
@@ -646,6 +664,38 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   );
   const polymarketClobReadinessSyncConfig = buildPolymarketClobReadinessSyncConfigFromEnv(process.env);
   const polymarketClobReadinessSyncService = new PolymarketClobReadinessSyncService(polymarketClobReadinessSyncConfig);
+  const readPolymarketUsableBalanceForUser = async (input: {
+    userId: string;
+    fundingIntentId: string;
+    routeLegId: string;
+  }): Promise<PolymarketFundingBalanceReadOutput> => {
+    const balance = await polymarketFundingBalanceReadService.readUsableBalance(input);
+    if (
+      isPolymarketCLOBTradeReadySource(balance.usableBalanceSource) ||
+      balance.usableBalanceSource !== "ONCHAIN_CLOB_SPENDER_ALLOWANCE" ||
+      !isPositiveAmount(balance.usableBalance)
+    ) {
+      return balance;
+    }
+    const confirmation = await userVenueAccountService.getLatestPolymarketClobReadinessConfirmation(input.userId);
+    if (!confirmation || !isPositiveAmount(confirmation.readyAmount)) {
+      return balance;
+    }
+    const usableBalance = minAmountString(balance.usableBalance, confirmation.readyAmount);
+    if (!isPositiveAmount(usableBalance)) {
+      return balance;
+    }
+    return {
+      ...balance,
+      usableBalance,
+      collateralBalance: confirmation.clobCollateralBalance,
+      collateralAllowance: confirmation.clobCollateralAllowance,
+      clobAllowanceSpenders: confirmation.clobAllowanceSpenders.length > 0
+        ? confirmation.clobAllowanceSpenders
+        : balance.clobAllowanceSpenders,
+      usableBalanceSource: "USER_CLOB_SYNC_CONFIRMED"
+    };
+  };
   const internalWithdrawalEvidenceReadService = new InternalWithdrawalEvidenceReadService({ env: process.env });
   const failureRecoveryManager = new FailureRecoveryManager(dependencies.pgPool);
   const executionControlRepository = new ExecutionControlRepository(dependencies.pgPool);
@@ -1286,7 +1336,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       undefined,
       {
         readUsableBalance: ({ userId }) =>
-          polymarketFundingBalanceReadService.readUsableBalance({
+          readPolymarketUsableBalanceForUser({
             userId,
             fundingIntentId: "execution-submit",
             routeLegId: "execution-submit"
@@ -1324,7 +1374,20 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     process.env,
     signedTradeExecutionStatusRepository,
     signedTradePositionRecorder,
-    polymarketFundingBalanceReadService
+    {
+      readUsableBalance: ({ userId }) =>
+        readPolymarketUsableBalanceForUser({
+          userId,
+          fundingIntentId: "signed-bundle-readiness",
+          routeLegId: "signed-bundle-readiness"
+        }),
+      readConditionalTokenApproval: (input) =>
+        polymarketFundingBalanceReadService.readConditionalTokenApproval({
+          ...input,
+          fundingIntentId: "signed-bundle-readiness",
+          routeLegId: "signed-bundle-readiness"
+        })
+    }
   );
   if (dependencies.executionSystemSandboxEnabled) {
     const laneGate = new ApprovedLaneExecutionGate(new ScopeAuthorityLaneResolver(executionScopeAuthorities));
@@ -1503,7 +1566,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const listVenueBalancesForUser = async (userId: string): Promise<VenueBalanceView[]> => {
     const balances = await fundingService.listVenueBalances(userId);
     try {
-      const polymarket = await polymarketFundingBalanceReadService.readUsableBalance({
+      const polymarket = await readPolymarketUsableBalanceForUser({
         userId,
         fundingIntentId: "venue-balance",
         routeLegId: "venue-balance"
@@ -1525,7 +1588,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         pendingWithdrawalAmount,
         availableAmount,
         updatedAt: new Date().toISOString(),
-        balanceSource: "POLYMARKET_CLOB_READ",
+        balanceSource: polymarket.usableBalanceSource === "USER_CLOB_SYNC_CONFIRMED"
+          ? "POLYMARKET_CLOB_SYNC_CONFIRMED"
+          : "POLYMARKET_CLOB_READ",
         balanceFreshness: "live",
         readinessReason: sourceReady
           ? "POLYMARKET_CLOB_COLLATERAL_CONFIRMED"
@@ -1562,7 +1627,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     const polymarket = activations.find((activation) => activation.venue === "POLYMARKET");
     if (polymarket) {
       try {
-        const balance = await polymarketFundingBalanceReadService.readUsableBalance({
+        const balance = await readPolymarketUsableBalanceForUser({
           userId,
           fundingIntentId: "activation-status",
           routeLegId: "activation-status"
@@ -1820,13 +1885,25 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         throw new FundingError("POLYMARKET_CLOB_SYNC_FORBIDDEN", "Polymarket CLOB readiness sync request does not match the user's active deposit wallet.", 403);
       }
       try {
-        return await polymarketClobReadinessSyncService.sync({
+        const sync = await polymarketClobReadinessSyncService.sync({
           account: {
             signerAddress: account.walletAddress,
             depositWalletAddress: account.venueAccountAddress
           },
           signedPayload: request.signedPayload
         });
+        await userVenueAccountService.recordPolymarketClobReadinessSync({
+          userId,
+          status: sync.status,
+          readinessReason: sync.readinessReason,
+          readyAmount: sync.readyAmount,
+          clobCollateralBalance: sync.clobCollateralBalance,
+          clobCollateralAllowance: sync.clobCollateralAllowance,
+          clobAllowanceSpenders: sync.clobAllowanceSpenders,
+          ownerAddress: sync.ownerAddress,
+          signerAddress: sync.signerAddress
+        });
+        return sync;
       } catch (error) {
         const message = error instanceof Error
           ? error.message

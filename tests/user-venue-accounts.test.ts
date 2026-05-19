@@ -393,6 +393,63 @@ describe("user venue account service", () => {
     expect(JSON.stringify(repository.auditEvents)).not.toContain("signature");
   });
 
+  it("records and returns user-scoped Polymarket CLOB readiness confirmations", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    const service = new UserVenueAccountService(
+      repository,
+      {
+        async resolveUserTurnkeyEvmFundingWallet() {
+          return evmWallet();
+        }
+      },
+      undefined,
+      undefined,
+      polymarketDepositWalletClient()
+    );
+
+    await service.ensureAccount({ userId: "user-1", venue: "POLYMARKET" });
+    await service.recordPolymarketClobReadinessSync({
+      userId: "user-1",
+      status: "READY",
+      readinessReason: "POLYMARKET_CLOB_COLLATERAL_CONFIRMED",
+      readyAmount: "7.85565",
+      clobCollateralBalance: "7.85565",
+      clobCollateralAllowance: "115792089237316195420000000000000000000000000000000000000000000000000000",
+      clobAllowanceSpenders: [
+        {
+          spenderAddress: "0xE111180000d2663C0091e4f400237545B87B996B",
+          allowance: "115792089237316195420000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      ownerAddress: "0x5555555555555555555555555555555555555555",
+      signerAddress: "0x1111111111111111111111111111111111111111"
+    });
+
+    await service.recordPolymarketClobReadinessSync({
+      userId: "user-1",
+      status: "SYNC_PENDING",
+      readinessReason: "POLYMARKET_CLOB_SYNC_PENDING",
+      readyAmount: "0",
+      clobCollateralBalance: "0",
+      clobCollateralAllowance: "0",
+      clobAllowanceSpenders: [],
+      ownerAddress: "0x5555555555555555555555555555555555555555",
+      signerAddress: "0x1111111111111111111111111111111111111111"
+    });
+
+    const confirmation = await service.getLatestPolymarketClobReadinessConfirmation("user-1");
+
+    expect(confirmation).toMatchObject({
+      status: "READY",
+      readinessReason: "POLYMARKET_CLOB_COLLATERAL_CONFIRMED",
+      readyAmount: "7.85565",
+      ownerAddress: "0x5555555555555555555555555555555555555555",
+      signerAddress: "0x1111111111111111111111111111111111111111"
+    });
+    expect(repository.auditEvents.filter((event) => event.eventType === "POLYMARKET_CLOB_READINESS_SYNC_CONFIRMED")).toHaveLength(1);
+    expect(JSON.stringify(repository.auditEvents)).not.toContain("signature");
+  });
+
   it("does not mark a Polymarket deposit wallet active until deployment is confirmed", async () => {
     const repository = new InMemoryVenueAccountRepository();
     const calls: Array<{ allowDeploy?: boolean }> = [];

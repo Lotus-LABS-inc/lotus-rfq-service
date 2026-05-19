@@ -30,6 +30,7 @@ export interface PolymarketFundingBalanceReadOutput {
   bridgedUsdcBalance: string | null;
   usableBalanceSource:
     | "CLOB_COLLATERAL_ALLOWANCE"
+    | "USER_CLOB_SYNC_CONFIRMED"
     | "ONCHAIN_CLOB_SPENDER_ALLOWANCE"
     | "ONCHAIN_PUSD_ALLOWANCE"
     | "ONCHAIN_PUSD"

@@ -20,6 +20,18 @@ export interface UserVenueAccount {
   lastVerifiedAt: string | null;
 }
 
+export interface PolymarketClobReadinessConfirmation {
+  status: "READY";
+  readinessReason: "POLYMARKET_CLOB_COLLATERAL_CONFIRMED";
+  readyAmount: string;
+  clobCollateralBalance: string;
+  clobCollateralAllowance: string;
+  clobAllowanceSpenders: Array<{ spenderAddress: string; allowance: string }>;
+  ownerAddress: string;
+  signerAddress: string;
+  confirmedAt: string;
+}
+
 export interface EnsureUserVenueAccountInput {
   userId: string;
   venue: UserVenueAccountVenue;
@@ -225,6 +237,93 @@ export class UserVenueAccountService {
       eventType: "POLYMARKET_BALANCE_ACTIVATION_SUBMITTED"
     });
     return event?.payload.executed === true;
+  }
+
+  public async recordPolymarketClobReadinessSync(input: {
+    userId: string;
+    status: "READY" | "SYNC_PENDING";
+    readinessReason: "POLYMARKET_CLOB_COLLATERAL_CONFIRMED" | "POLYMARKET_CLOB_SYNC_PENDING";
+    readyAmount: string;
+    clobCollateralBalance: string;
+    clobCollateralAllowance: string;
+    clobAllowanceSpenders: Array<{ spenderAddress: string; allowance: string }>;
+    ownerAddress: string;
+    signerAddress: string;
+  }): Promise<void> {
+    if (input.status !== "READY" || input.readinessReason !== "POLYMARKET_CLOB_COLLATERAL_CONFIRMED") {
+      return;
+    }
+    const account = await this.repository.findAccount({ userId: input.userId, venue: "POLYMARKET" });
+    if (!account || account.status !== "ACTIVE") {
+      return;
+    }
+    if (!equalsAddress(account.walletAddress, input.signerAddress) || !equalsAddress(account.venueAccountAddress, input.ownerAddress)) {
+      return;
+    }
+    await this.repository.appendAccountAuditEvent({
+      userId: input.userId,
+      venueAccountBindingId: account.venueAccountBindingId,
+      eventType: "POLYMARKET_CLOB_READINESS_SYNC_CONFIRMED",
+      payload: {
+        venue: "POLYMARKET",
+        status: input.status,
+        readinessReason: input.readinessReason,
+        readyAmount: input.readyAmount,
+        clobCollateralBalance: input.clobCollateralBalance,
+        clobCollateralAllowance: input.clobCollateralAllowance,
+        clobAllowanceSpenders: input.clobAllowanceSpenders.map((spender) => ({
+          spenderAddress: spender.spenderAddress,
+          allowance: spender.allowance
+        })),
+        ownerAddress: input.ownerAddress,
+        signerAddress: input.signerAddress
+      }
+    });
+  }
+
+  public async getLatestPolymarketClobReadinessConfirmation(
+    userId: string
+  ): Promise<PolymarketClobReadinessConfirmation | null> {
+    const account = await this.repository.findAccount({ userId, venue: "POLYMARKET" });
+    if (!account || account.status !== "ACTIVE") {
+      return null;
+    }
+    const event = await this.repository.findLatestAccountAuditEvent({
+      userId,
+      venueAccountBindingId: account.venueAccountBindingId,
+      eventType: "POLYMARKET_CLOB_READINESS_SYNC_CONFIRMED"
+    });
+    if (!event) {
+      return null;
+    }
+    const payload = event.payload;
+    const readyAmount = safeString(payload.readyAmount);
+    const clobCollateralBalance = safeString(payload.clobCollateralBalance);
+    const clobCollateralAllowance = safeString(payload.clobCollateralAllowance);
+    const ownerAddress = safeString(payload.ownerAddress);
+    const signerAddress = safeString(payload.signerAddress);
+    if (
+      payload.status !== "READY" ||
+      payload.readinessReason !== "POLYMARKET_CLOB_COLLATERAL_CONFIRMED" ||
+      !isPositiveDecimalString(readyAmount) ||
+      !isPositiveDecimalString(clobCollateralBalance) ||
+      !isPositiveDecimalString(clobCollateralAllowance) ||
+      !equalsAddress(account.venueAccountAddress, ownerAddress) ||
+      !equalsAddress(account.walletAddress, signerAddress)
+    ) {
+      return null;
+    }
+    return {
+      status: "READY",
+      readinessReason: "POLYMARKET_CLOB_COLLATERAL_CONFIRMED",
+      readyAmount,
+      clobCollateralBalance,
+      clobCollateralAllowance,
+      clobAllowanceSpenders: safeClobAllowanceSpenders(payload.clobAllowanceSpenders),
+      ownerAddress,
+      signerAddress,
+      confirmedAt: event.createdAt
+    };
   }
 
   public async ensureAccount(input: EnsureUserVenueAccountInput): Promise<{
@@ -1366,6 +1465,35 @@ const equalsAddress = (left: string | null | undefined, right: string | null | u
   typeof left === "string" &&
   typeof right === "string" &&
   left.toLowerCase() === right.toLowerCase();
+
+const safeString = (value: unknown): string =>
+  typeof value === "string" ? value.trim() : "";
+
+const isPositiveDecimalString = (value: string | null | undefined): boolean => {
+  if (typeof value !== "string" || !/^\d+(?:\.\d+)?$/.test(value.trim())) {
+    return false;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0;
+};
+
+const safeClobAllowanceSpenders = (value: unknown): Array<{ spenderAddress: string; allowance: string }> => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+    const record = item as Record<string, unknown>;
+    const spenderAddress = safeString(record.spenderAddress);
+    const allowance = safeString(record.allowance);
+    if (!isEvmAddress(spenderAddress) || !/^\d+(?:\.\d+)?$/.test(allowance)) {
+      return [];
+    }
+    return [{ spenderAddress, allowance }];
+  });
+};
 
 const isEvmSignature = (value: string): boolean =>
   /^0x[a-fA-F0-9]{130}$/.test(value.trim());
