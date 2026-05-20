@@ -208,12 +208,26 @@ describe("market catalog routes", () => {
     expect(detail.json().market.title).toBe("Republican Presidential Nominee 2028");
     expect(detail.json().market.venueMarkets[0].imageUrl).toBe("https://polymarket-upload.s3.us-east-2.amazonaws.com/republican-nominee.png");
 
+    const suffixedDetail = await app.inject({
+      method: "GET",
+      url: `/markets/${encodeURIComponent(`${market.canonicalMarketIds[0]!}:POLYMARKET`)}`
+    });
+    expect(suffixedDetail.statusCode).toBe(200);
+    expect(suffixedDetail.json().market.title).toBe("Republican Presidential Nominee 2028");
+
     const outcomes = await app.inject({
       method: "GET",
       url: `/markets/${market.canonicalEventId}/outcomes`
     });
     expect(outcomes.statusCode).toBe(200);
     expect(outcomes.json().outcomes.map((entry: { label: string }) => entry.label)).toEqual(["Donald Trump", "JD Vance"]);
+
+    const suffixedOutcomes = await app.inject({
+      method: "GET",
+      url: `/markets/${encodeURIComponent(`${market.canonicalMarketIds[0]!}:POLYMARKET`)}/outcomes`
+    });
+    expect(suffixedOutcomes.statusCode).toBe(200);
+    expect(suffixedOutcomes.json().outcomes.map((entry: { label: string }) => entry.label)).toEqual(["Donald Trump", "JD Vance"]);
 
     const missing = await app.inject({ method: "GET", url: "/markets/missing" });
     expect(missing.statusCode).toBe(404);
@@ -353,12 +367,32 @@ describe("market catalog routes", () => {
     expect(orderbook.body).not.toContain("apiKey");
     expect(orderbook.body).not.toContain("raw_source_payload");
 
+    const suffixedOrderbook = await app.inject({
+      method: "GET",
+      url: `/markets/${encodeURIComponent(`${market.canonicalMarketIds[0]!}:LIMITLESS`)}/orderbook?outcomeId=yes&depth=10`
+    });
+    expect(suffixedOrderbook.statusCode).toBe(200);
+    expect(suffixedOrderbook.json()).toMatchObject({
+      status: "live",
+      bestBid: "0.51"
+    });
+
     const chart = await app.inject({
       method: "GET",
       url: `/markets/${market.canonicalEventId}/chart?outcomeId=yes&timeframe=1H`
     });
     expect(chart.statusCode).toBe(200);
     expect(chart.json()).toMatchObject({
+      historyStatus: "accumulating",
+      points: [{ unified: "0.52" }]
+    });
+
+    const suffixedChart = await app.inject({
+      method: "GET",
+      url: `/markets/${encodeURIComponent(`${market.canonicalMarketIds[0]!}:POLYMARKET`)}/chart?outcomeId=yes&timeframe=1H`
+    });
+    expect(suffixedChart.statusCode).toBe(200);
+    expect(suffixedChart.json()).toMatchObject({
       historyStatus: "accumulating",
       points: [{ unified: "0.52" }]
     });

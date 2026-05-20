@@ -31,6 +31,8 @@ const batchQuotesRequestSchema = z.object({
   })).min(1).max(60)
 });
 
+const VENUE_SUFFIX_PATTERN = /:(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$/i;
+
 export interface MarketCatalogRouteDeps {
   marketCatalogRepository: Pick<MarketCatalogRepository, "listCategories" | "listMarkets" | "listEvents" | "getMarket" | "getEvent">;
   marketDataViewService?: Pick<LiveMarketDataViewService, "getOrderbook" | "getChart"> & {
@@ -132,7 +134,7 @@ export const registerMarketCatalogRoutes = async (
 
   app.get("/markets/:marketId", async (request, reply) => {
     const { marketId } = request.params as { marketId: string };
-    const market = await deps.marketCatalogRepository.getMarket(marketId);
+    const market = await resolveCatalogMarket(deps.marketCatalogRepository, marketId);
     if (!market) {
       return reply.status(404).send({
         code: "MARKET_NOT_FOUND",
@@ -144,7 +146,7 @@ export const registerMarketCatalogRoutes = async (
 
   app.get("/markets/:marketId/outcomes", async (request, reply) => {
     const { marketId } = request.params as { marketId: string };
-    const market = await deps.marketCatalogRepository.getMarket(marketId);
+    const market = await resolveCatalogMarket(deps.marketCatalogRepository, marketId);
     if (!market) {
       return reply.status(404).send({
         code: "MARKET_NOT_FOUND",
@@ -215,7 +217,7 @@ export const registerMarketCatalogRoutes = async (
       });
     }
     const { marketId } = request.params as { marketId: string };
-    const market = await deps.marketCatalogRepository.getMarket(marketId);
+    const market = await resolveCatalogMarket(deps.marketCatalogRepository, marketId);
     if (!market) {
       return reply.status(404).send({
         code: "MARKET_NOT_FOUND",
@@ -247,7 +249,7 @@ export const registerMarketCatalogRoutes = async (
       });
     }
     const { marketId } = request.params as { marketId: string };
-    const market = await deps.marketCatalogRepository.getMarket(marketId);
+    const market = await resolveCatalogMarket(deps.marketCatalogRepository, marketId);
     if (!market) {
       return reply.status(404).send({
         code: "MARKET_NOT_FOUND",
@@ -280,4 +282,16 @@ const resolveOutcomeLabel = (
     if (outcome) return outcome.label;
   }
   return undefined;
+};
+
+const resolveCatalogMarket = async (
+  repository: Pick<MarketCatalogRepository, "getMarket">,
+  marketId: string
+) => {
+  const exact = await repository.getMarket(marketId);
+  if (exact) return exact;
+
+  const withoutVenueSuffix = marketId.replace(VENUE_SUFFIX_PATTERN, "");
+  if (withoutVenueSuffix === marketId) return null;
+  return repository.getMarket(withoutVenueSuffix);
 };

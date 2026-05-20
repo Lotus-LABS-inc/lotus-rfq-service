@@ -5,6 +5,8 @@ const FRONTEND_CATALOG_EXCLUDED_TOPIC_PREFIXES = [
   "SPORTS|LEAGUE_WINNER|LA_LIGA|2025_2026"
 ] as const;
 
+const VENUE_SUFFIX_PATTERN = /:(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$/i;
+
 const addFrontendCatalogExclusionCondition = (conditions: string[], params: unknown[]): void => {
   params.push([...FRONTEND_CATALOG_EXCLUDED_TOPIC_PREFIXES]);
   conditions.push(`NOT EXISTS (
@@ -329,6 +331,7 @@ export class MarketCatalogRepository {
   }
 
   public async getMarket(marketId: string): Promise<MarketCatalogMarket | null> {
+    const lookupIds = marketLookupCandidates(marketId);
     const result = await this.pool.query<MarketRow>(
       `SELECT
           ce.id::text AS canonical_event_id,
@@ -362,7 +365,7 @@ export class MarketCatalogRepository {
            ON mem.canonical_executable_market_id = cem.id
          LEFT JOIN venue_market_profiles vmp
            ON vmp.id = mem.venue_market_profile_id OR vmp.canonical_event_id = ce.id
-        WHERE (ce.id::text = $1 OR cem.id = $1 OR ce.proposition_key = $1)
+        WHERE (ce.id::text = ANY($1::text[]) OR cem.id = ANY($1::text[]) OR ce.proposition_key = ANY($1::text[]))
           AND NOT EXISTS (
             SELECT 1
              FROM unnest($2::text[]) excluded(prefix)
@@ -379,8 +382,14 @@ export class MarketCatalogRepository {
                 )
           )
         GROUP BY ce.id
+        ORDER BY MIN(
+          CASE
+            WHEN ce.id::text = $3 OR cem.id = $3 OR ce.proposition_key = $3 THEN 0
+            ELSE 1
+          END
+        )
         LIMIT 1`,
-      [marketId, [...FRONTEND_CATALOG_EXCLUDED_TOPIC_PREFIXES]]
+      [lookupIds, [...FRONTEND_CATALOG_EXCLUDED_TOPIC_PREFIXES], marketId]
     );
     const [market] = await this.hydrateMarkets(result.rows);
     return market ?? null;
@@ -1197,6 +1206,13 @@ const clampLimit = (value: number | undefined): number => {
     return DEFAULT_LIMIT;
   }
   return Math.max(1, Math.min(MAX_LIMIT, Math.floor(value!)));
+};
+
+const marketLookupCandidates = (marketId: string): string[] => {
+  const trimmed = marketId.trim();
+  if (!trimmed) return [marketId];
+  const withoutVenueSuffix = trimmed.replace(VENUE_SUFFIX_PATTERN, "");
+  return withoutVenueSuffix === trimmed ? [trimmed] : [trimmed, withoutVenueSuffix];
 };
 
 const marketStatus = (expiresAt: string | null, resolvesAt: string | null): MarketCatalogMarket["status"] => {
