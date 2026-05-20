@@ -102,6 +102,12 @@ const defaultModules: BootstrapModules = {
   closePgPool
 };
 
+export const POLYMARKET_RELAY_SERVICE_MODE = "polymarket-execution-relay";
+
+export const shouldRunPolymarketRelayEntrypoint = (
+  env: NodeJS.ProcessEnv = process.env
+): boolean => env.LOTUS_SERVICE_MODE === POLYMARKET_RELAY_SERVICE_MODE;
+
 const sleep = (durationMs: number): Promise<void> =>
   new Promise((resolve) => {
     setTimeout(resolve, durationMs);
@@ -316,6 +322,12 @@ const registerSignals = (runtime: ServiceRuntime): void => {
 
 export const run = async (): Promise<void> => {
   try {
+    if (shouldRunPolymarketRelayEntrypoint()) {
+      const { runPolymarketExecutionRelay } = await import("./polymarket-execution-relay.js");
+      await runPolymarketExecutionRelay();
+      return;
+    }
+
     await initializeTracing();
     const runtime = await startService();
     registerSignals(runtime);
