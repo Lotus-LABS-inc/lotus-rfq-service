@@ -668,20 +668,49 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
       const attestationEvidence = attestation && attestationCoversRequiredAtomic(attestation, requiredAtomic)
         ? attestation
         : null;
-      if (confirmedUserBalance || attestationEvidence) {
+      const confirmedEvidence = confirmedUserBalance
+        ? {
+            source: "BACKEND_USER_CLOB_SYNC" as const,
+            backendUsableAtomic: confirmedUserBalance.usableAtomic,
+            usableBalanceSource: confirmedUserBalance.usableBalanceSource,
+            approvalSpenderSource: confirmedUserBalance.approvalSpenderSource
+          }
+        : attestationEvidence
+          ? {
+              source: "SIGNED_BUNDLE_ATTESTATION" as const,
+              backendUsableAtomic: attestationEvidence.usableAtomic,
+              usableBalanceSource: attestationEvidence.usableBalanceSource,
+              approvalSpenderSource: attestationEvidence.approvalSpenderSource,
+              attestation: attestationEvidence
+            }
+          : null;
+      if (confirmedEvidence && isPolymarketSubmitReadySource(confirmedEvidence.usableBalanceSource)) {
+        return {
+          source: confirmedEvidence.source,
+          requiredAtomic,
+          sdkSpendableAtomic: spendableAtomic,
+          sdkBalanceAtomic: balanceAtomic,
+          sdkAllowanceAtomic: allowanceAtomic,
+          backendUsableAtomic: confirmedEvidence.backendUsableAtomic,
+          usableBalanceSource: confirmedEvidence.usableBalanceSource,
+          approvalSpenderSource: confirmedEvidence.approvalSpenderSource,
+          ...(confirmedEvidence.attestation ? { attestation: confirmedEvidence.attestation } : {})
+        };
+      }
+      if (confirmedEvidence) {
         logPolymarketSubmitFailure({
           order,
           signedOrder,
           readinessEvidence: {
-            source: confirmedUserBalance ? "BACKEND_USER_CLOB_SYNC" : "SIGNED_BUNDLE_ATTESTATION",
+            source: confirmedEvidence.source,
             requiredAtomic,
             sdkSpendableAtomic: spendableAtomic,
             sdkBalanceAtomic: balanceAtomic,
             sdkAllowanceAtomic: allowanceAtomic,
-            backendUsableAtomic: confirmedUserBalance?.usableAtomic ?? attestationEvidence?.usableAtomic,
-            usableBalanceSource: confirmedUserBalance?.usableBalanceSource ?? attestationEvidence?.usableBalanceSource,
-            approvalSpenderSource: confirmedUserBalance?.approvalSpenderSource ?? attestationEvidence?.approvalSpenderSource,
-            ...(attestationEvidence ? { attestation: attestationEvidence } : {})
+            backendUsableAtomic: confirmedEvidence.backendUsableAtomic,
+            usableBalanceSource: confirmedEvidence.usableBalanceSource,
+            approvalSpenderSource: confirmedEvidence.approvalSpenderSource,
+            ...(confirmedEvidence.attestation ? { attestation: confirmedEvidence.attestation } : {})
           },
           reasonCode: "POLYMARKET_CLOB_SYNC_PENDING_FOR_SUBMIT"
         });
@@ -1180,10 +1209,10 @@ const parseCollateralDecimalToAtomicUnits = (value: unknown, fieldName: string):
 };
 
 const isPolymarketSubmitReadySource = (source: string | null | undefined): boolean =>
-  source === "CLOB_COLLATERAL_ALLOWANCE";
+  source === "CLOB_COLLATERAL_ALLOWANCE" || source === "USER_CLOB_SYNC_CONFIRMED";
 
 const isPolymarketReadinessEvidenceSource = (source: string | null | undefined): boolean =>
-  isPolymarketSubmitReadySource(source) || source === "USER_CLOB_SYNC_CONFIRMED";
+  isPolymarketSubmitReadySource(source);
 
 const collateralAllowanceAtomicUnits = (response: BalanceAllowanceResponse): bigint => {
   if (nonEmpty(response.allowance)) {

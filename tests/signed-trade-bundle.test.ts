@@ -687,7 +687,7 @@ describe("SignedTradeBundleService", () => {
     });
   });
 
-  it("blocks Polymarket buy readiness when only confirmed local CLOB sync covers required collateral", async () => {
+  it("marks Polymarket buy readiness fresh when confirmed user CLOB sync covers required collateral", async () => {
     const registry = new ExecutionVenueAdapterRegistry();
     registry.register(new FailingPolymarketBalanceAdapter());
     const sut = new SignedTradeBundleService(
@@ -708,16 +708,13 @@ describe("SignedTradeBundleService", () => {
 
     const readiness = await sut.getLiveReadiness({ userId: "user-1", quoteId: "exec_quote_polymarket_buy" });
 
-    expect(readiness.status).toBe("blocked");
-    expect(readiness.blockers).toContain(
-      "POLYMARKET: Polymarket CLOB sync is confirmed locally, but Polymarket live submit has not exposed enough spendable collateral yet. Lotus will keep checking readiness automatically; no new CLOB sync is required."
-    );
+    expect(readiness.status).toBe("fresh");
+    expect(readiness.blockers).toEqual([]);
     expect(readiness.venues[0]).toMatchObject({
-      readinessCode: "POLYMARKET_CLOB_SYNC_PENDING_FOR_SUBMIT",
-      nextAction: "WAIT_FOR_POLYMARKET_LIVE_SPENDABLE",
-      retryable: true,
+      readinessCode: "POLYMARKET_CLOB_READY_FOR_SUBMIT",
+      nextAction: "SUBMIT",
       requiresUserSync: false,
-      liveSubmitSpendableBalance: null
+      liveSubmitSpendableBalance: "7.85565"
     });
     expect(readiness.venues[0]?.collateral).toMatchObject({
       requiredNotional: "1.2375",
