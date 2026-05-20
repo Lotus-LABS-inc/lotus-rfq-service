@@ -365,6 +365,11 @@ import {
 const isPolymarketCLOBTradeReadySource = (source: string | null | undefined): boolean =>
   source === "CLOB_COLLATERAL_ALLOWANCE" || source === "USER_CLOB_SYNC_CONFIRMED";
 
+const hasPolymarketCLOBTradeReadyBalance = (
+  source: string | null | undefined,
+  amount: string | null | undefined
+): boolean => isPolymarketCLOBTradeReadySource(source) && isPositiveAmount(amount);
+
 const isPositiveAmount = (value: string | null | undefined): boolean => {
   if (typeof value !== "string" || !/^\d+(?:\.\d+)?$/.test(value.trim())) {
     return false;
@@ -670,18 +675,20 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     routeLegId: string;
   }): Promise<PolymarketFundingBalanceReadOutput> => {
     const balance = await polymarketFundingBalanceReadService.readUsableBalance(input);
-    if (
-      isPolymarketCLOBTradeReadySource(balance.usableBalanceSource) ||
-      balance.usableBalanceSource !== "ONCHAIN_CLOB_SPENDER_ALLOWANCE" ||
-      !isPositiveAmount(balance.usableBalance)
-    ) {
+    if (hasPolymarketCLOBTradeReadyBalance(balance.usableBalanceSource, balance.usableBalance)) {
       return balance;
     }
     const confirmation = await userVenueAccountService.getLatestPolymarketClobReadinessConfirmation(input.userId);
     if (!confirmation || !isPositiveAmount(confirmation.readyAmount)) {
       return balance;
     }
-    const usableBalance = minAmountString(balance.usableBalance, confirmation.readyAmount);
+    const boundedLiveAmount =
+      balance.usableBalanceSource === "ONCHAIN_CLOB_SPENDER_ALLOWANCE" && isPositiveAmount(balance.usableBalance)
+        ? balance.usableBalance
+        : isPositiveAmount(balance.onchainPusdBalance) && isPositiveAmount(balance.onchainPusdAllowance)
+          ? minAmountString(balance.onchainPusdBalance ?? "0", balance.onchainPusdAllowance ?? "0")
+          : "0";
+    const usableBalance = minAmountString(boundedLiveAmount, confirmation.readyAmount);
     if (!isPositiveAmount(usableBalance)) {
       return balance;
     }
@@ -1571,7 +1578,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         fundingIntentId: "venue-balance",
         routeLegId: "venue-balance"
       });
-      const sourceReady = isPolymarketCLOBTradeReadySource(polymarket.usableBalanceSource);
+      const sourceReady = hasPolymarketCLOBTradeReadyBalance(
+        polymarket.usableBalanceSource,
+        polymarket.usableBalance
+      );
       const usableAmount = sourceReady ? polymarket.usableBalance : "0";
       const pendingWithdrawalAmount = balances.find((balance) =>
         balance.venue === "POLYMARKET" && balance.token.toUpperCase() === "USDC"
@@ -1642,7 +1652,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         const bridgedUsdc = Number(balance.bridgedUsdcBalance ?? "0");
         const onchainPusd = Number(balance.onchainPusdBalance ?? "0");
         const usable = Number(balance.usableBalance);
-        const sourceReady = isPolymarketCLOBTradeReadySource(balance.usableBalanceSource);
+        const sourceReady = hasPolymarketCLOBTradeReadyBalance(
+          balance.usableBalanceSource,
+          balance.usableBalance
+        );
         if (sourceReady && Number.isFinite(usable) && usable > 0) {
           polymarket.activationRequired = false;
           polymarket.mode = "NOT_REQUIRED";
