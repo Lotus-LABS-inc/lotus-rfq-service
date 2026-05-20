@@ -666,11 +666,7 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
         return false;
       }
       const usableAtomic = parseCollateralDecimalToAtomicUnits(balance.usableBalance, "usableBalance");
-      const balanceAtomic = parseCollateralDecimalToAtomicUnits(balance.collateralBalance, "collateralBalance");
-      const allowanceAtomic = parseCollateralDecimalToAtomicUnits(balance.collateralAllowance, "collateralAllowance");
-      return usableAtomic >= requiredAtomic
-        && balanceAtomic >= requiredAtomic
-        && allowanceAtomic >= requiredAtomic;
+      return usableAtomic >= requiredAtomic;
     } catch {
       return false;
     }

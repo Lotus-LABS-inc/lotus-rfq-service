@@ -1025,7 +1025,7 @@ describe("PolymarketExecutionAdapterV2", () => {
     ]);
   });
 
-  it("allows user-signed Polymarket buy submit when user CLOB sync confirmation covers required collateral", async () => {
+  it("allows user-signed Polymarket buy submit when confirmed user CLOB sync covers required collateral", async () => {
     const calls: Array<{ method: string; args: unknown[] }> = [];
     const sdkClient: PolymarketClobV2SdkClient = {
       async createAndPostOrder() {
@@ -1068,8 +1068,8 @@ describe("PolymarketExecutionAdapterV2", () => {
         expect(userId).toBe("user-1");
         return {
           usableBalance: "7.85565",
-          collateralBalance: "7.85565",
-          collateralAllowance: "7.85565",
+          collateralBalance: "0",
+          collateralAllowance: "0",
           usableBalanceSource: "USER_CLOB_SYNC_CONFIRMED",
           approvalSpenderSource: "CLOB_ALLOWANCE_MAP"
         };
