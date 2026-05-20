@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Wallet } from "@ethersproject/wallet";
+import { AbiCoder, hexlify, keccak256, toUtf8Bytes } from "ethers";
 import {
   ExecutionVenueAdapterRegistry,
   LimitlessExecutionAdapter,
@@ -26,6 +27,45 @@ import type {
 
 const wallet = new Wallet("0x59c6995e998f97a5a004497e5daae82f0e6d4d6e773f8f5a11a95d2218e14e4f");
 const limitlessMarketExchange = "0xe3E00BA3a9888d1DE4834269f62ac008b4BB5C47";
+const polymarketOrderTypeString = "Order(uint256 salt,address maker,address signer,uint256 tokenId,uint256 makerAmount,uint256 takerAmount,uint8 side,uint8 signatureType,uint256 timestamp,bytes32 metadata,bytes32 builder)";
+const polymarketOrderTypeHash = keccak256(toUtf8Bytes(polymarketOrderTypeString));
+const polymarketDomainTypeHash = keccak256(toUtf8Bytes("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"));
+const abiCoder = AbiCoder.defaultAbiCoder();
+
+const polymarket1271SuffixForTypedData = (typedData: {
+  domain: { name: string; version: string; chainId: number; verifyingContract: string };
+  message: { contents: Record<string, unknown> };
+}): string => {
+  const contents = typedData.message.contents;
+  const domainSeparator = keccak256(abiCoder.encode(
+    ["bytes32", "bytes32", "bytes32", "uint256", "address"],
+    [
+      polymarketDomainTypeHash,
+      keccak256(toUtf8Bytes(typedData.domain.name)),
+      keccak256(toUtf8Bytes(typedData.domain.version)),
+      BigInt(typedData.domain.chainId),
+      typedData.domain.verifyingContract
+    ]
+  ));
+  const contentsHash = keccak256(abiCoder.encode(
+    ["bytes32", "uint256", "address", "address", "uint256", "uint256", "uint256", "uint8", "uint8", "uint256", "bytes32", "bytes32"],
+    [
+      polymarketOrderTypeHash,
+      BigInt(String(contents.salt)),
+      String(contents.maker),
+      String(contents.signer),
+      BigInt(String(contents.tokenId)),
+      BigInt(String(contents.makerAmount)),
+      BigInt(String(contents.takerAmount)),
+      Number(contents.side),
+      Number(contents.signatureType),
+      BigInt(String(contents.timestamp)),
+      String(contents.metadata),
+      String(contents.builder)
+    ]
+  ));
+  return `0x${domainSeparator.slice(2)}${contentsHash.slice(2)}${hexlify(toUtf8Bytes(polymarketOrderTypeString)).slice(2)}${polymarketOrderTypeString.length.toString(16).padStart(4, "0")}`;
+};
 
 const quote = (): ExecutableTradeQuote => ({
   quoteId: "exec_quote_test",
@@ -504,7 +544,10 @@ describe("SignedTradeBundleService", () => {
       const orderRequest = prepared.signatureRequests.find((request) => request.requestType === "ORDER")!;
       const data = (orderRequest.signedPayloadHint.data as Record<string, unknown>);
       const order = data.order as Record<string, unknown>;
-      const typedData = orderRequest.typedData as { message: { contents: Record<string, unknown> } };
+      const typedData = orderRequest.typedData as {
+        domain: { name: string; version: string; chainId: number; verifyingContract: string };
+        message: { contents: Record<string, unknown> };
+      };
 
       expect(order.makerAmount).toBe("2020000");
       expect(order.takerAmount).toBe("2040000");
@@ -512,6 +555,7 @@ describe("SignedTradeBundleService", () => {
       expect(typedData.message.contents.takerAmount).toBe("2040000");
       expect(BigInt(String(order.makerAmount)) % 10_000n).toBe(0n);
       expect(BigInt(String(order.takerAmount)) % 10n).toBe(0n);
+      expect(data.polymarketSignatureSuffix).toBe(polymarket1271SuffixForTypedData(typedData));
       expect(data.orderType).toBe("FOK");
     } finally {
       await fixtureServer.close();

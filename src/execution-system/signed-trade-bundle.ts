@@ -16,7 +16,7 @@ import {
 } from "@limitless-exchange/sdk";
 import { AddressesByChainId, ChainId, OrderBuilder, Side as PredictSide, SignatureType } from "@predictdotfun/sdk";
 import { verifyTypedData } from "@ethersproject/wallet";
-import { verifyTypedData as verifyTypedDataV6 } from "ethers";
+import { AbiCoder, hexlify, keccak256, toUtf8Bytes, verifyTypedData as verifyTypedDataV6 } from "ethers";
 import type { UserVenueAccount } from "../core/execution/user-venue-accounts.js";
 import type { ExecutableRouteLeg, ExecutableRouteService, ExecutableTradeQuote } from "./executable-routing.js";
 import type { ExecutionLegV0 } from "./types.js";
@@ -1742,7 +1742,7 @@ const buildPolymarketOrderPayload = async (
     : { signedOrder: signedOrder as Record<string, unknown>, typedData: capturedTypedData };
   const { signature: dummySignature, ...orderWithoutSignature } = quantized.signedOrder;
   const polymarketSignatureSuffix = signatureType === PolymarketSignatureType.POLY_1271
-    ? polymarket1271SignatureSuffix(dummySignature)
+    ? polymarket1271SignatureSuffix(quantized.typedData, dummySignature)
     : null;
   return {
     typedData: quantized.typedData,
@@ -1758,6 +1758,12 @@ const buildPolymarketOrderPayload = async (
 
 const POLYMARKET_MARKET_BUY_COLLATERAL_QUANTUM_ATOMIC = 10_000n;
 const POLYMARKET_MARKET_BUY_SHARE_QUANTUM_ATOMIC = 10n;
+const POLYMARKET_ORDER_TYPE_STRING = "Order(uint256 salt,address maker,address signer,uint256 tokenId,uint256 makerAmount,uint256 takerAmount,uint8 side,uint8 signatureType,uint256 timestamp,bytes32 metadata,bytes32 builder)";
+const POLYMARKET_ORDER_TYPE_HASH = keccak256(toUtf8Bytes(POLYMARKET_ORDER_TYPE_STRING));
+const POLYMARKET_DOMAIN_TYPE_HASH = keccak256(
+  toUtf8Bytes("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
+);
+const ABI_CODER = AbiCoder.defaultAbiCoder();
 
 const quantizePolymarketMarketBuyOrderAmounts = (
   signedOrder: Record<string, unknown>,
@@ -1836,14 +1842,72 @@ const roundUpAtomic = (value: bigint, quantum: bigint): bigint =>
 const roundDownAtomic = (value: bigint, quantum: bigint): bigint =>
   (value / quantum) * quantum;
 
-const polymarket1271SignatureSuffix = (signature: unknown): string => {
+const polymarket1271SignatureSuffix = (typedData: Record<string, unknown>, signature: unknown): string => {
   if (typeof signature !== "string" || !/^0x[a-fA-F0-9]+$/.test(signature)) {
     throw new SignedTradeBundleError("POLYMARKET_1271_SIGNATURE_INVALID", "Polymarket CLOB SDK did not produce a valid POLY_1271 signature template.");
   }
   if (signature.length <= 132) {
     throw new SignedTradeBundleError("POLYMARKET_1271_SIGNATURE_SUFFIX_MISSING", "Polymarket CLOB SDK did not produce the POLY_1271 wrapper suffix.");
   }
-  return `0x${signature.slice(132)}`;
+  const domain = isRecord(typedData.domain) ? typedData.domain : null;
+  const message = isRecord(typedData.message) ? typedData.message : null;
+  const contents = message && isRecord(message.contents) ? message.contents : message;
+  if (!domain || !contents) {
+    throw new SignedTradeBundleError("POLYMARKET_1271_SIGNATURE_SUFFIX_MISSING", "Polymarket POLY_1271 typed data is missing the wrapper domain or order contents.");
+  }
+  const domainSeparator = keccak256(ABI_CODER.encode(
+    ["bytes32", "bytes32", "bytes32", "uint256", "address"],
+    [
+      POLYMARKET_DOMAIN_TYPE_HASH,
+      keccak256(toUtf8Bytes(requiredString(domain.name, "domain.name"))),
+      keccak256(toUtf8Bytes(requiredString(domain.version, "domain.version"))),
+      BigInt(requiredIntegerLike(domain.chainId, "domain.chainId")),
+      requireAddress(domain.verifyingContract as string | null | undefined, "domain.verifyingContract")
+    ]
+  ));
+  const contentsHash = keccak256(ABI_CODER.encode(
+    ["bytes32", "uint256", "address", "address", "uint256", "uint256", "uint256", "uint8", "uint8", "uint256", "bytes32", "bytes32"],
+    [
+      POLYMARKET_ORDER_TYPE_HASH,
+      BigInt(requiredIntegerLike(contents.salt, "contents.salt")),
+      requireAddress(contents.maker as string | null | undefined, "contents.maker"),
+      requireAddress(contents.signer as string | null | undefined, "contents.signer"),
+      BigInt(requiredIntegerLike(contents.tokenId, "contents.tokenId")),
+      BigInt(requiredIntegerLike(contents.makerAmount, "contents.makerAmount")),
+      BigInt(requiredIntegerLike(contents.takerAmount, "contents.takerAmount")),
+      Number(requiredIntegerLike(contents.side, "contents.side")),
+      Number(requiredIntegerLike(contents.signatureType, "contents.signatureType")),
+      BigInt(requiredIntegerLike(contents.timestamp, "contents.timestamp")),
+      requiredBytes32(contents.metadata, "contents.metadata"),
+      requiredBytes32(contents.builder, "contents.builder")
+    ]
+  ));
+  const orderTypeHex = hexlify(toUtf8Bytes(POLYMARKET_ORDER_TYPE_STRING)).slice(2);
+  const lengthHex = POLYMARKET_ORDER_TYPE_STRING.length.toString(16).padStart(4, "0");
+  return `0x${domainSeparator.slice(2)}${contentsHash.slice(2)}${orderTypeHex}${lengthHex}`;
+};
+
+const requiredString = (value: unknown, label: string): string => {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new SignedTradeBundleError("POLYMARKET_1271_TYPED_DATA_INVALID", `Polymarket POLY_1271 typed data ${label} is missing.`);
+  }
+  return value;
+};
+
+const requiredIntegerLike = (value: unknown, label: string): string => {
+  const text = typeof value === "bigint" ? value.toString() : String(value ?? "").trim();
+  if (!/^\d+$/.test(text)) {
+    throw new SignedTradeBundleError("POLYMARKET_1271_TYPED_DATA_INVALID", `Polymarket POLY_1271 typed data ${label} must be an unsigned integer.`);
+  }
+  return text;
+};
+
+const requiredBytes32 = (value: unknown, label: string): string => {
+  const text = requiredString(value, label);
+  if (!/^0x[a-fA-F0-9]{64}$/.test(text)) {
+    throw new SignedTradeBundleError("POLYMARKET_1271_TYPED_DATA_INVALID", `Polymarket POLY_1271 typed data ${label} must be bytes32.`);
+  }
+  return text;
 };
 
 const requireAddress = (value: string | null | undefined, label: string): string => {
