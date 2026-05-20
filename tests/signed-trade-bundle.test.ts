@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { Wallet } from "@ethersproject/wallet";
 import {
   ExecutionVenueAdapterRegistry,
   LimitlessExecutionAdapter,
   OpinionExecutionAdapter,
+  PolymarketExecutionAdapterV2,
   PredictFunExecutionAdapter,
   SignedTradeBundleService,
   TestExecutionAdapter,
@@ -248,6 +251,53 @@ const polymarketBuyQuote = (legOverrides: Partial<ExecutableTradeQuote["legs"][n
   }]
 });
 
+const polymarketSigningEnv = {
+  POLYMARKET_CLOB_HOST: "https://clob.polymarket.test",
+  POLYMARKET_CHAIN_ID: "137",
+  POLYMARKET_BUILDER_CODE: "0x6c4b67c64d2acb6381b5c8a5016495aece3d922799553ef2989254777f21c15c",
+  POLYMARKET_SIGNATURE_TYPE: "POLY_1271",
+  POLYMARKET_TICK_SIZE: "0.001"
+} as NodeJS.ProcessEnv;
+
+const polymarketDepositWalletAccount = (): UserVenueAccount => ({
+  ...account("POLYMARKET"),
+  walletAddress: wallet.address,
+  venueAccountAddress: "0x1111111111111111111111111111111111111111",
+  venueAccountType: "DEPOSIT_WALLET"
+});
+
+const startPolymarketClobFixtureServer = async (): Promise<{ host: string; close: () => Promise<void> }> => {
+  const server = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://127.0.0.1");
+    response.setHeader("content-type", "application/json");
+    if (url.pathname === "/tick-size") {
+      response.end(JSON.stringify({ minimum_tick_size: "0.001" }));
+      return;
+    }
+    if (url.pathname === "/neg-risk") {
+      response.end(JSON.stringify({ neg_risk: false }));
+      return;
+    }
+    if (url.pathname === "/version") {
+      response.end(JSON.stringify({ version: 2 }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end(JSON.stringify({ error: "not found" }));
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address() as AddressInfo;
+  return {
+    host: `http://127.0.0.1:${address.port}`,
+    close: () => new Promise<void>((resolve, reject) => {
+      server.close((error) => error ? reject(error) : resolve());
+    })
+  };
+};
+
 const polymarketSellQuote = (legOverrides: Partial<ExecutableTradeQuote["legs"][number]> = {}): ExecutableTradeQuote => ({
   ...polymarketBuyQuote(legOverrides),
   quoteId: "exec_quote_polymarket_sell",
@@ -416,6 +466,56 @@ describe("SignedTradeBundleService", () => {
     expect(Number(order.price)).toBe(0.43);
     expect(Number(order.takerAmount) / 1_000_000).toBeCloseTo(14.204, 6);
     expect(data.orderType).toBe("FOK");
+  });
+
+  it("quantizes Polymarket market-buy signature amounts before Turnkey signs", async () => {
+    const fixtureServer = await startPolymarketClobFixtureServer();
+    const env = {
+      ...polymarketSigningEnv,
+      POLYMARKET_CLOB_HOST: fixtureServer.host
+    } as NodeJS.ProcessEnv;
+    const registry = new ExecutionVenueAdapterRegistry();
+    registry.register(new PolymarketExecutionAdapterV2({
+      executionMode: "v2",
+      liveExecutionEnabled: false,
+      clobHost: env.POLYMARKET_CLOB_HOST,
+      chainId: env.POLYMARKET_CHAIN_ID,
+      builderCode: env.POLYMARKET_BUILDER_CODE,
+      signatureType: env.POLYMARKET_SIGNATURE_TYPE
+    }));
+    const liveQuote: ExecutableTradeQuote = {
+      ...polymarketBuyQuote({
+        venueOutcomeId: "9204103845295998574174644655568224547826780478747010463640756803659982305491",
+        size: "2.04081633",
+        price: 0.989,
+        requiresUserSignature: true
+      }),
+      requiredUserSignatureSteps: ["POLYMARKET user signature required"]
+    };
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => liveQuote } as never,
+      registry,
+      { getAccount: async () => polymarketDepositWalletAccount() },
+      () => new Date("2026-05-20T19:18:20.000Z"),
+      env
+    );
+    try {
+      const prepared = await sut.prepare({ userId: "user-1", quoteId: "exec_quote_polymarket_buy" });
+      const orderRequest = prepared.signatureRequests.find((request) => request.requestType === "ORDER")!;
+      const data = (orderRequest.signedPayloadHint.data as Record<string, unknown>);
+      const order = data.order as Record<string, unknown>;
+      const typedData = orderRequest.typedData as { message: { contents: Record<string, unknown> } };
+
+      expect(order.makerAmount).toBe("2020000");
+      expect(order.takerAmount).toBe("2040000");
+      expect(typedData.message.contents.makerAmount).toBe("2020000");
+      expect(typedData.message.contents.takerAmount).toBe("2040000");
+      expect(BigInt(String(order.makerAmount)) % 10_000n).toBe(0n);
+      expect(BigInt(String(order.takerAmount)) % 10n).toBe(0n);
+      expect(data.orderType).toBe("FOK");
+    } finally {
+      await fixtureServer.close();
+    }
   });
 
   it("signs Limitless orders against the market venue exchange address", async () => {

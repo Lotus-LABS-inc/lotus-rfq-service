@@ -1737,12 +1737,15 @@ const buildPolymarketOrderPayload = async (
   if (!capturedTypedData) {
     throw new SignedTradeBundleError("POLYMARKET_TYPED_DATA_NOT_CAPTURED", "Polymarket CLOB SDK did not produce typed data for signing.");
   }
-  const { signature: dummySignature, ...orderWithoutSignature } = signedOrder as Record<string, unknown>;
+  const quantized = side === "buy"
+    ? quantizePolymarketMarketBuyOrderAmounts(signedOrder as Record<string, unknown>, capturedTypedData)
+    : { signedOrder: signedOrder as Record<string, unknown>, typedData: capturedTypedData };
+  const { signature: dummySignature, ...orderWithoutSignature } = quantized.signedOrder;
   const polymarketSignatureSuffix = signatureType === PolymarketSignatureType.POLY_1271
     ? polymarket1271SignatureSuffix(dummySignature)
     : null;
   return {
-    typedData: capturedTypedData,
+    typedData: quantized.typedData,
     data: {
       order: orderWithoutSignature,
       orderType: "FOK",
@@ -1752,6 +1755,86 @@ const buildPolymarketOrderPayload = async (
     }
   };
 };
+
+const POLYMARKET_MARKET_BUY_COLLATERAL_QUANTUM_ATOMIC = 10_000n;
+const POLYMARKET_MARKET_BUY_SHARE_QUANTUM_ATOMIC = 10n;
+
+const quantizePolymarketMarketBuyOrderAmounts = (
+  signedOrder: Record<string, unknown>,
+  typedData: Record<string, unknown>
+): { signedOrder: Record<string, unknown>; typedData: Record<string, unknown> } => {
+  const makerAmount = parsePositiveAtomicAmount(signedOrder.makerAmount, "makerAmount");
+  const takerAmount = parsePositiveAtomicAmount(signedOrder.takerAmount, "takerAmount");
+  const quantizedMakerAmount = roundUpAtomic(makerAmount, POLYMARKET_MARKET_BUY_COLLATERAL_QUANTUM_ATOMIC).toString();
+  const quantizedTakerAmount = roundDownAtomic(takerAmount, POLYMARKET_MARKET_BUY_SHARE_QUANTUM_ATOMIC);
+  if (quantizedTakerAmount <= 0n) {
+    throw new SignedTradeBundleError(
+      "POLYMARKET_ORDER_SIZE_TOO_SMALL",
+      "Polymarket market-buy order size is below the minimum 0.00001 share precision."
+    );
+  }
+  const amounts = {
+    makerAmount: quantizedMakerAmount,
+    takerAmount: quantizedTakerAmount.toString()
+  };
+  return {
+    signedOrder: {
+      ...signedOrder,
+      ...amounts
+    },
+    typedData: patchPolymarketTypedDataAmounts(typedData, amounts)
+  };
+};
+
+const patchPolymarketTypedDataAmounts = (
+  typedData: Record<string, unknown>,
+  amounts: { makerAmount: string; takerAmount: string }
+): Record<string, unknown> => {
+  const message = isRecord(typedData.message) ? typedData.message : null;
+  if (!message) {
+    return typedData;
+  }
+  const contents = isRecord(message.contents) ? message.contents : null;
+  return {
+    ...typedData,
+    message: contents
+      ? {
+          ...message,
+          contents: {
+            ...contents,
+            ...amounts
+          }
+        }
+      : {
+          ...message,
+          ...amounts
+        }
+  };
+};
+
+const parsePositiveAtomicAmount = (value: unknown, field: string): bigint => {
+  const text = typeof value === "bigint" ? value.toString() : String(value ?? "").trim();
+  if (!/^\d+$/.test(text)) {
+    throw new SignedTradeBundleError(
+      "POLYMARKET_ORDER_AMOUNT_INVALID",
+      `Polymarket signed order ${field} must be a positive atomic integer.`
+    );
+  }
+  const parsed = BigInt(text);
+  if (parsed <= 0n) {
+    throw new SignedTradeBundleError(
+      "POLYMARKET_ORDER_AMOUNT_INVALID",
+      `Polymarket signed order ${field} must be greater than zero.`
+    );
+  }
+  return parsed;
+};
+
+const roundUpAtomic = (value: bigint, quantum: bigint): bigint =>
+  ((value + quantum - 1n) / quantum) * quantum;
+
+const roundDownAtomic = (value: bigint, quantum: bigint): bigint =>
+  (value / quantum) * quantum;
 
 const polymarket1271SignatureSuffix = (signature: unknown): string => {
   if (typeof signature !== "string" || !/^0x[a-fA-F0-9]+$/.test(signature)) {
