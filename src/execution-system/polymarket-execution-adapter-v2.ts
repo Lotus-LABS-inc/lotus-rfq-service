@@ -465,7 +465,7 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
   public constructor(
     private readonly config: PolymarketExecutionAdapterV2Config,
     sdkFactory: PolymarketClobV2SdkFactory = createPolymarketClobV2SdkClient,
-    _balanceReader?: PolymarketSubmitBalanceReader | undefined
+    private readonly balanceReader?: PolymarketSubmitBalanceReader | undefined
   ) {
     assertLiveClientConfig(config);
     this.sdkClient = sdkFactory(config);
@@ -499,7 +499,8 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
       await this.assertSignedOrderHasSpendableBalanceAllowance(
         sdkClient,
         signedOrder,
-        extraSensitiveValues
+        extraSensitiveValues,
+        expectedBindingUserId(order)
       );
       const response = await this.callSdkSafely(() => postOrder(signedOrder, OrderType.FOK), extraSensitiveValues);
       return mapPolymarketOrderResponse(response);
@@ -584,7 +585,8 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
   private async assertSignedOrderHasSpendableBalanceAllowance(
     sdkClient: PolymarketClobV2SdkClient,
     signedOrder: SignedOrder,
-    extraSensitiveValues: readonly string[]
+    extraSensitiveValues: readonly string[],
+    userId: string | null
   ): Promise<void> {
     const required = requiredBalanceAllowanceForSignedOrder(signedOrder);
     if (required?.assetType === AssetType.CONDITIONAL) {
@@ -633,6 +635,10 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
       }
     }
     if (spendableAtomic < requiredAtomic) {
+      const confirmedUserBalance = await this.readConfirmedUserClobSyncBalance(userId, requiredAtomic);
+      if (confirmedUserBalance) {
+        return;
+      }
       throw new PolymarketExecutionNotConfiguredError(
         "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
         [
@@ -644,6 +650,29 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
           "If funds were just bridged, activate/wrap/approve them before trading."
         ].join(" ")
       );
+    }
+  }
+
+  private async readConfirmedUserClobSyncBalance(
+    userId: string | null,
+    requiredAtomic: bigint
+  ): Promise<boolean> {
+    if (!userId || !this.balanceReader) {
+      return false;
+    }
+    try {
+      const balance = await this.balanceReader.readUsableBalance({ userId });
+      if (balance.usableBalanceSource !== "USER_CLOB_SYNC_CONFIRMED") {
+        return false;
+      }
+      const usableAtomic = parseCollateralDecimalToAtomicUnits(balance.usableBalance, "usableBalance");
+      const balanceAtomic = parseCollateralDecimalToAtomicUnits(balance.collateralBalance, "collateralBalance");
+      const allowanceAtomic = parseCollateralDecimalToAtomicUnits(balance.collateralAllowance, "collateralAllowance");
+      return usableAtomic >= requiredAtomic
+        && balanceAtomic >= requiredAtomic
+        && allowanceAtomic >= requiredAtomic;
+    } catch {
+      return false;
     }
   }
 
@@ -991,6 +1020,14 @@ const parseUserSignedPolymarketOrder = (order: PreparedVenueOrder): SignedOrder 
   } as unknown as SignedOrder;
 };
 
+const expectedBindingUserId = (order: PreparedVenueOrder): string | null => {
+  const expectedBinding = isRecord(order.payload.expectedBinding) ? order.payload.expectedBinding : null;
+  const userId = expectedBinding && typeof expectedBinding.userId === "string"
+    ? expectedBinding.userId.trim()
+    : "";
+  return userId.length > 0 ? userId : null;
+};
+
 const parseNonNegativeAtomicUnits = (value: unknown, fieldName: string): bigint => {
   const normalized = typeof value === "number"
     ? value.toString()
@@ -1015,6 +1052,37 @@ const parseNonNegativeAtomicUnits = (value: unknown, fieldName: string): bigint 
     throw new PolymarketExecutionNotConfiguredError(
       "POLYMARKET_CLOB_BALANCE_PAYLOAD_INVALID",
       `Polymarket CLOB balance response included an invalid ${fieldName}.`
+    );
+  }
+};
+
+const parseCollateralDecimalToAtomicUnits = (value: unknown, fieldName: string): bigint => {
+  const normalized = typeof value === "number"
+    ? value.toString()
+    : typeof value === "bigint"
+      ? value.toString()
+      : typeof value === "string"
+        ? value.trim()
+        : "";
+  if (normalized.length === 0) {
+    throw new PolymarketExecutionNotConfiguredError(
+      "POLYMARKET_CLOB_BALANCE_PAYLOAD_INVALID",
+      `Polymarket CLOB balance fallback included an invalid ${fieldName}.`
+    );
+  }
+  try {
+    const parsed = new Decimal(normalized);
+    if (!parsed.isFinite() || parsed.isNegative()) {
+      throw new Error("invalid decimal amount");
+    }
+    return BigInt(parsed
+      .times(new Decimal(10).pow(COLLATERAL_TOKEN_DECIMALS))
+      .toDecimalPlaces(0, Decimal.ROUND_DOWN)
+      .toFixed(0));
+  } catch {
+    throw new PolymarketExecutionNotConfiguredError(
+      "POLYMARKET_CLOB_BALANCE_PAYLOAD_INVALID",
+      `Polymarket CLOB balance fallback included an invalid ${fieldName}.`
     );
   }
 };
