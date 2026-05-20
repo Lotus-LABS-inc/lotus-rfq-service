@@ -538,6 +538,9 @@ export class SignedTradeBundleService {
       const balance = await this.polymarketBalanceReader.readUsableBalance({ userId });
       const clobConfirmed = isPolymarketTradeReadySource(balance.usableBalanceSource);
       const collateralBlockers = [
+        balance.usableBalanceSource === "USER_CLOB_SYNC_CONFIRMED"
+          ? "Polymarket CLOB sync is confirmed locally, but Polymarket live submit has not exposed enough spendable collateral yet. Lotus will keep checking readiness automatically; no new CLOB sync is required."
+          : null,
         !clobConfirmed && balance.usableBalanceSource === "ONCHAIN_CLOB_SPENDER_ALLOWANCE"
           ? "Polymarket pUSD approval is confirmed on-chain, but Polymarket CLOB spendable collateral has not synced yet. Lotus refreshed CLOB readiness; retry after sync confirms."
           : null,
@@ -2001,7 +2004,7 @@ const compareDecimalStrings = (left: string, right: string): number => {
 };
 
 const isPolymarketTradeReadySource = (source: string | null | undefined): boolean =>
-  source === "CLOB_COLLATERAL_ALLOWANCE" || source === "USER_CLOB_SYNC_CONFIRMED";
+  source === "CLOB_COLLATERAL_ALLOWANCE";
 
 const multiplyDecimalStrings = (left: string, right: string): string => {
   return plainDecimalString(decimalFromString(left).times(decimalFromString(right)));

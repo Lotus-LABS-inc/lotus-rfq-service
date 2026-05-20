@@ -519,7 +519,7 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
           });
           throw new PolymarketExecutionNotConfiguredError(
             "POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE",
-            "Polymarket rejected this order even though CLOB collateral readiness was confirmed. Refresh CLOB sync or retry after Polymarket propagation completes."
+            "Polymarket rejected this order even though live CLOB collateral readiness was confirmed. Lotus will recheck readiness automatically; retry after Polymarket propagation completes."
           );
         }
         throw error;
@@ -665,30 +665,35 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
     }
     if (spendableAtomic < requiredAtomic) {
       const confirmedUserBalance = await this.readConfirmedUserClobSyncBalance(userId, requiredAtomic);
-      if (confirmedUserBalance) {
-        return {
-          source: "BACKEND_USER_CLOB_SYNC",
-          requiredAtomic,
-          sdkSpendableAtomic: spendableAtomic,
-          sdkBalanceAtomic: balanceAtomic,
-          sdkAllowanceAtomic: allowanceAtomic,
-          backendUsableAtomic: confirmedUserBalance.usableAtomic,
-          usableBalanceSource: confirmedUserBalance.usableBalanceSource,
-          approvalSpenderSource: confirmedUserBalance.approvalSpenderSource
-        };
-      }
-      if (attestation && attestationCoversRequiredAtomic(attestation, requiredAtomic)) {
-        return {
-          source: "SIGNED_BUNDLE_ATTESTATION",
-          requiredAtomic,
-          sdkSpendableAtomic: spendableAtomic,
-          sdkBalanceAtomic: balanceAtomic,
-          sdkAllowanceAtomic: allowanceAtomic,
-          backendUsableAtomic: attestation.usableAtomic,
-          usableBalanceSource: attestation.usableBalanceSource,
-          approvalSpenderSource: attestation.approvalSpenderSource,
-          attestation
-        };
+      const attestationEvidence = attestation && attestationCoversRequiredAtomic(attestation, requiredAtomic)
+        ? attestation
+        : null;
+      if (confirmedUserBalance || attestationEvidence) {
+        logPolymarketSubmitFailure({
+          order,
+          signedOrder,
+          readinessEvidence: {
+            source: confirmedUserBalance ? "BACKEND_USER_CLOB_SYNC" : "SIGNED_BUNDLE_ATTESTATION",
+            requiredAtomic,
+            sdkSpendableAtomic: spendableAtomic,
+            sdkBalanceAtomic: balanceAtomic,
+            sdkAllowanceAtomic: allowanceAtomic,
+            backendUsableAtomic: confirmedUserBalance?.usableAtomic ?? attestationEvidence?.usableAtomic,
+            usableBalanceSource: confirmedUserBalance?.usableBalanceSource ?? attestationEvidence?.usableBalanceSource,
+            approvalSpenderSource: confirmedUserBalance?.approvalSpenderSource ?? attestationEvidence?.approvalSpenderSource,
+            ...(attestationEvidence ? { attestation: attestationEvidence } : {})
+          },
+          reasonCode: "POLYMARKET_CLOB_SYNC_PENDING_FOR_SUBMIT"
+        });
+        throw new PolymarketExecutionNotConfiguredError(
+          "POLYMARKET_CLOB_SYNC_PENDING_FOR_SUBMIT",
+          polymarketClobSyncPendingForSubmitMessage(
+            spendableAtomic,
+            requiredAtomic,
+            balanceAtomic,
+            allowanceAtomic
+          )
+        );
       }
       logPolymarketSubmitFailure({
         order,
@@ -736,7 +741,7 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
     }
     try {
       const balance = await this.balanceReader.readUsableBalance({ userId });
-      if (!isPolymarketTradeReadySource(balance.usableBalanceSource)) {
+      if (!isPolymarketReadinessEvidenceSource(balance.usableBalanceSource)) {
         return null;
       }
       const usableAtomic = parseCollateralDecimalToAtomicUnits(balance.usableBalance, "usableBalance");
@@ -882,7 +887,7 @@ export class RelayPolymarketClobV2LiveClient implements PolymarketClobV2LiveClie
       ) {
         throw new PolymarketExecutionNotConfiguredError(
           "POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE",
-          "Polymarket rejected this order even though CLOB collateral readiness was confirmed. Refresh CLOB sync or retry after Polymarket propagation completes."
+          "Polymarket rejected this order even though live CLOB collateral readiness was confirmed. Lotus will recheck readiness automatically; retry after Polymarket propagation completes."
         );
       }
       throw new PolymarketExecutionNotConfiguredError(
@@ -1174,8 +1179,11 @@ const parseCollateralDecimalToAtomicUnits = (value: unknown, fieldName: string):
   }
 };
 
-const isPolymarketTradeReadySource = (source: string | null | undefined): boolean =>
-  source === "CLOB_COLLATERAL_ALLOWANCE" || source === "USER_CLOB_SYNC_CONFIRMED";
+const isPolymarketSubmitReadySource = (source: string | null | undefined): boolean =>
+  source === "CLOB_COLLATERAL_ALLOWANCE";
+
+const isPolymarketReadinessEvidenceSource = (source: string | null | undefined): boolean =>
+  isPolymarketSubmitReadySource(source) || source === "USER_CLOB_SYNC_CONFIRMED";
 
 const collateralAllowanceAtomicUnits = (response: BalanceAllowanceResponse): bigint => {
   if (nonEmpty(response.allowance)) {
@@ -1279,6 +1287,20 @@ interface PolymarketConfirmedReadinessEvidence {
   attestation?: PolymarketCollateralReadinessAttestation | undefined;
 }
 
+const polymarketClobSyncPendingForSubmitMessage = (
+  spendableAtomic: bigint,
+  requiredAtomic: bigint,
+  balanceAtomic: bigint,
+  allowanceAtomic: bigint
+): string => [
+  "Polymarket CLOB sync is confirmed locally, but the same live CLOB submit client does not report enough spendable collateral yet.",
+  "Lotus will keep checking readiness automatically; no new CLOB sync is required.",
+  `Live spendable balance: ${formatCollateralAtomicUnits(spendableAtomic)} USDC.`,
+  `Required: ${formatCollateralAtomicUnits(requiredAtomic)} USDC.`,
+  `Live CLOB balance: ${formatCollateralAtomicUnits(balanceAtomic)} USDC.`,
+  `Live CLOB allowance: ${formatCollateralAtomicUnits(allowanceAtomic)} USDC.`
+].join(" ");
+
 const optionalString = (value: unknown): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 
@@ -1297,7 +1319,7 @@ const parsePolymarketCollateralReadinessAttestation = (
     return null;
   }
   const usableBalanceSource = optionalString(payload.usableBalanceSource);
-  if (!usableBalanceSource || !isPolymarketTradeReadySource(usableBalanceSource)) {
+  if (!usableBalanceSource || !isPolymarketReadinessEvidenceSource(usableBalanceSource)) {
     return null;
   }
   const usableBalance = optionalString(payload.usableBalance);
@@ -1328,7 +1350,7 @@ const attestationCoversRequiredAtomic = (
   attestation: PolymarketCollateralReadinessAttestation,
   requiredAtomic: bigint
 ): boolean => {
-  if (!isPolymarketTradeReadySource(attestation.usableBalanceSource)) {
+  if (!isPolymarketReadinessEvidenceSource(attestation.usableBalanceSource)) {
     return false;
   }
   if (attestation.requiredAtomic < requiredAtomic || attestation.usableAtomic < requiredAtomic) {
