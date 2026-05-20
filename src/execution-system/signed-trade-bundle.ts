@@ -1108,7 +1108,10 @@ export class SignedTradeBundleService {
           requiredNotional: readiness.collateral.requiredNotional,
           usableBalance: readiness.collateral.usableBalance,
           usableBalanceSource: readiness.collateral.usableBalanceSource,
-          approvalSpenderSource: readiness.collateral.approvalSpenderSource
+          approvalSpenderSource: readiness.collateral.approvalSpenderSource,
+          walletAddress: readiness.account.walletAddress,
+          ownerAddress: readiness.account.ownerAddress,
+          venueAccountAddress: readiness.account.venueAccountAddress
         }
       }
     };

@@ -1302,7 +1302,7 @@ describe("PolymarketExecutionAdapterV2", () => {
     ]);
   });
 
-  it("blocks relay-side submit through API-attested direct readiness when live CLOB cache still lags", async () => {
+  it("allows signed-bundle submit through fresh CLOB readiness attestation when live CLOB cache still lags", async () => {
     const calls: string[] = [];
     const sdkClient: PolymarketClobV2SdkClient = {
       async createAndPostOrder() {
@@ -1348,8 +1348,109 @@ describe("PolymarketExecutionAdapterV2", () => {
       payload: {
         polymarketCollateralReadinessAttestation: {
           kind: "POLYMARKET_CLOB_COLLATERAL_PREFLIGHT",
+          quoteId: "exec_quote_attested",
+          legIndex: 0,
+          checkedAt: new Date().toISOString(),
           requiredAtomic: "1274970",
+          requiredNotional: "1.27497",
+          usableBalance: "7.85565",
           usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE",
+          approvalSpenderSource: "CLOB_ALLOWANCE_MAP",
+          walletAddress: "0x1111111111111111111111111111111111111111",
+          ownerAddress: "0x1111111111111111111111111111111111111111",
+          venueAccountAddress: "0x2222222222222222222222222222222222222222"
+        },
+        signedPayload: {
+          signature: `0x${"aa".repeat(65)}`,
+          data: {
+            polymarketSignatureSuffix: `0x${"bb".repeat(96)}`,
+            order: {
+              salt: "1",
+              maker: "0x1111111111111111111111111111111111111111",
+              signer: "0x1111111111111111111111111111111111111111",
+              tokenId: "123",
+              makerAmount: "1274970",
+              takerAmount: "100000000",
+              side: "BUY",
+              signatureType: 3,
+              timestamp: "1",
+              expiration: "0",
+              metadata: `0x${"00".repeat(32)}`,
+              builder: `0x${"11".repeat(32)}`
+            }
+          }
+        },
+        venueMarketId: "pm-market-1",
+        venueOutcomeId: "123",
+        side: "buy",
+        size: "1.25",
+        price: 0.99
+      }
+    })).resolves.toMatchObject({
+      venueOrderId: "pm-order-direct-clob-attested",
+      status: "FILLED"
+    });
+
+    expect(calls).toEqual([
+      "updateBalanceAllowance",
+      "getBalanceAllowance",
+      "updateBalanceAllowance",
+      "getBalanceAllowance",
+      "updateBalanceAllowance",
+      "getBalanceAllowance",
+      "postOrder"
+    ]);
+  });
+
+  it("maps venue collateral rejection after confirmed readiness to CLOB sync propagation rejection", async () => {
+    const sdkClient: PolymarketClobV2SdkClient = {
+      async createAndPostOrder() {
+        throw new Error("not used");
+      },
+      async postOrder() {
+        throw new Error("not enough balance / allowance");
+      },
+      async updateBalanceAllowance() {
+        return {};
+      },
+      async getBalanceAllowance() {
+        return { balance: "0", allowance: "0" };
+      },
+      async getOrder() {
+        throw new Error("not used");
+      },
+      async getTrades() {
+        return [];
+      },
+      async cancelOrder() {
+        return { success: true };
+      }
+    };
+    const client = new SdkPolymarketClobV2LiveClient({
+      executionMode: "v2",
+      liveExecutionEnabled: true,
+      clobHost: completeEnv.POLY_CLOB_HOST,
+      chainId: completeEnv.POLY_CHAIN_ID,
+      apiKey: completeEnv.POLY_API_KEY,
+      apiSecret: completeEnv.POLY_API_SECRET,
+      apiPassphrase: completeEnv.POLY_API_PASSPHRASE,
+      builderCode: completeEnv.POLY_BUILDER_CODE,
+      privateKey: completeEnv.POLY_PRIVATE_KEY
+    }, () => sdkClient);
+
+    await expect(client.submitOrder({
+      venue: "POLYMARKET",
+      clientOrderId: "execution-1-leg-1",
+      payload: {
+        polymarketCollateralReadinessAttestation: {
+          kind: "POLYMARKET_CLOB_COLLATERAL_PREFLIGHT",
+          quoteId: "exec_quote_attested",
+          legIndex: 0,
+          checkedAt: new Date().toISOString(),
+          requiredAtomic: "1274970",
+          requiredNotional: "1.27497",
+          usableBalance: "7.85565",
+          usableBalanceSource: "USER_CLOB_SYNC_CONFIRMED",
           approvalSpenderSource: "CLOB_ALLOWANCE_MAP"
         },
         signedPayload: {
@@ -1378,16 +1479,9 @@ describe("PolymarketExecutionAdapterV2", () => {
         size: "1.25",
         price: 0.99
       }
-    })).rejects.toMatchObject({ reasonCode: "POLYMARKET_CLOB_COLLATERAL_NOT_READY" });
-
-    expect(calls).toEqual([
-      "updateBalanceAllowance",
-      "getBalanceAllowance",
-      "updateBalanceAllowance",
-      "getBalanceAllowance",
-      "updateBalanceAllowance",
-      "getBalanceAllowance"
-    ]);
+    })).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE"
+    });
   });
 
   it("does not allow Polymarket buy submit through non-CLOB on-chain allowance fallback", async () => {
@@ -1664,7 +1758,7 @@ describe("PolymarketExecutionAdapterV2", () => {
     expect(output).toContain("<redacted>");
   });
 
-  it("maps raw CLOB balance failures to a safe collateral readiness blocker", async () => {
+  it("maps raw CLOB balance failures after SDK-confirmed readiness to a sync propagation blocker", async () => {
     const sdkClient: PolymarketClobV2SdkClient = {
       async createAndPostOrder() {
         throw new Error("unsigned createAndPostOrder must not be used");
@@ -1731,8 +1825,8 @@ describe("PolymarketExecutionAdapterV2", () => {
         price: 0.99
       }
     })).rejects.toMatchObject({
-      reasonCode: "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
-      message: "Polymarket CLOB collateral is not ready for this order. Refresh balances, activate or approve Polymarket funds, then retry."
+      reasonCode: "POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE",
+      message: "Polymarket rejected this order even though CLOB collateral readiness was confirmed. Refresh CLOB sync or retry after Polymarket propagation completes."
     });
   });
 
