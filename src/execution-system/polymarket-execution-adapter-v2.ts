@@ -867,6 +867,7 @@ export class RelayPolymarketClobV2LiveClient implements PolymarketClobV2LiveClie
       const message = isRecord(payload) && typeof payload.message === "string"
         ? payload.message
         : `Polymarket execution relay request failed with status ${response.status}.`;
+      const relayCode = isRecord(payload) && typeof payload.code === "string" ? payload.code : null;
       const normalized = normalizeLiveVenueErrorMessage(message, {
         venue: "POLYMARKET",
         fallbackCode: response.status === 401 || response.status === 403
@@ -874,6 +875,16 @@ export class RelayPolymarketClobV2LiveClient implements PolymarketClobV2LiveClie
           : "POLYMARKET_V2_RELAY_ERROR",
         fallbackMessage: message
       });
+      if (
+        path === "/internal/polymarket/v2/submit-order" &&
+        (relayCode === "POLYMARKET_CLOB_COLLATERAL_NOT_READY" || normalized.code === "POLYMARKET_CLOB_COLLATERAL_NOT_READY") &&
+        relaySubmitHasConfirmedReadinessAttestation(body)
+      ) {
+        throw new PolymarketExecutionNotConfiguredError(
+          "POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE",
+          "Polymarket rejected this order even though CLOB collateral readiness was confirmed. Refresh CLOB sync or retry after Polymarket propagation completes."
+        );
+      }
       throw new PolymarketExecutionNotConfiguredError(
         normalized.code,
         normalized.message
@@ -1332,6 +1343,20 @@ const attestationCoversRequiredAtomic = (
   }
   const now = Date.now();
   return checkedAtMs <= now + 30_000 && now - checkedAtMs <= 5 * 60_000;
+};
+
+const relaySubmitHasConfirmedReadinessAttestation = (body: Record<string, unknown>): boolean => {
+  const order = isRecord(body.order) ? body.order : null;
+  const payload = order && isRecord(order.payload) ? order.payload : null;
+  if (!order || !payload) {
+    return false;
+  }
+  const attestation = parsePolymarketCollateralReadinessAttestation({
+    venue: "POLYMARKET",
+    clientOrderId: typeof order.clientOrderId === "string" ? order.clientOrderId : "relay-submit",
+    payload
+  });
+  return Boolean(attestation && attestationCoversRequiredAtomic(attestation, attestation.requiredAtomic));
 };
 
 const formatAtomicForLog = (value: bigint | undefined): string | undefined =>

@@ -319,6 +319,46 @@ describe("PolymarketExecutionAdapterV2", () => {
     });
   });
 
+  it("relay client maps collateral rejection with confirmed attestation to sync propagation blocker", async () => {
+    const client = new RelayPolymarketClobV2LiveClient({
+      relayUrl: "https://relay.example",
+      relaySecret: "relay-secret",
+      fetchImpl: (async () => new Response(JSON.stringify({
+        code: "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
+        message: "Polymarket CLOB collateral is not ready for this order. Refresh balances, activate or approve Polymarket funds, then retry."
+      }), { status: 502, headers: { "content-type": "application/json" } })) as typeof fetch
+    });
+
+    await expect(client.submitOrder({
+      venue: "POLYMARKET",
+      clientOrderId: "execution-1-leg-1",
+      payload: {
+        venueMarketId: "pm-market-1",
+        venueOutcomeId: "pm-outcome-yes",
+        side: "buy",
+        size: "1.25",
+        price: 0.99,
+        polymarketCollateralReadinessAttestation: {
+          kind: "POLYMARKET_CLOB_COLLATERAL_PREFLIGHT",
+          quoteId: "exec_quote_attested",
+          legIndex: 0,
+          checkedAt: new Date().toISOString(),
+          requiredAtomic: "1999950",
+          requiredNotional: "2.0000234320910905737",
+          usableBalance: "7.85565",
+          usableBalanceSource: "USER_CLOB_SYNC_CONFIRMED",
+          approvalSpenderSource: "CLOB_ALLOWANCE_MAP",
+          walletAddress: "0x623Bc9cDf0937c50aa0CAa0D8806412359963A20",
+          ownerAddress: "0x5A77712f558ED6bBBe162b9202E668485060EBA4",
+          venueAccountAddress: "0x5A77712f558ED6bBBe162b9202E668485060EBA4"
+        }
+      }
+    })).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE",
+      message: "Polymarket rejected this order even though CLOB collateral readiness was confirmed. Refresh CLOB sync or retry after Polymarket propagation completes."
+    });
+  });
+
   it("relay routes reject missing authentication before reaching the CLOB client", async () => {
     const previousSecret = process.env.POLYMARKET_EXECUTION_RELAY_SECRET;
     process.env.POLYMARKET_EXECUTION_RELAY_SECRET = "relay-secret";
