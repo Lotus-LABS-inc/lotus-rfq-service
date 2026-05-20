@@ -1065,7 +1065,7 @@ describe("PolymarketExecutionAdapterV2", () => {
     ]);
   });
 
-  it("allows user-signed Polymarket buy submit when confirmed user CLOB sync covers required collateral", async () => {
+  it("does not post a Polymarket buy when confirmed user CLOB sync conflicts with the submit client balance", async () => {
     const calls: Array<{ method: string; args: unknown[] }> = [];
     const sdkClient: PolymarketClobV2SdkClient = {
       async createAndPostOrder() {
@@ -1073,7 +1073,7 @@ describe("PolymarketExecutionAdapterV2", () => {
       },
       async postOrder(order, orderType) {
         calls.push({ method: "postOrder", args: [order, orderType] });
-        return { orderID: "pm-order-user-clob-confirmed", status: "MATCHED", takingAmount: "1.25", price: "0.99" };
+        throw new Error("must not submit");
       },
       async updateBalanceAllowance(params) {
         calls.push({ method: "updateBalanceAllowance", args: [params] });
@@ -1147,9 +1147,8 @@ describe("PolymarketExecutionAdapterV2", () => {
         size: "1.25",
         price: 0.99
       }
-    })).resolves.toMatchObject({
-      venueOrderId: "pm-order-user-clob-confirmed",
-      status: "FILLED"
+    })).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_SYNC_PENDING_FOR_SUBMIT"
     });
     expect(calls.map((call) => call.method)).toEqual([
       "updateBalanceAllowance",
@@ -1157,8 +1156,7 @@ describe("PolymarketExecutionAdapterV2", () => {
       "updateBalanceAllowance",
       "getBalanceAllowance",
       "updateBalanceAllowance",
-      "getBalanceAllowance",
-      "postOrder"
+      "getBalanceAllowance"
     ]);
   });
 

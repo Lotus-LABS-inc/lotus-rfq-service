@@ -675,7 +675,7 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
             usableBalanceSource: confirmedUserBalance.usableBalanceSource,
             approvalSpenderSource: confirmedUserBalance.approvalSpenderSource
           }
-        : attestationEvidence
+        : !userId && attestationEvidence
           ? {
               source: "SIGNED_BUNDLE_ATTESTATION" as const,
               backendUsableAtomic: attestationEvidence.usableAtomic,
@@ -684,7 +684,11 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
               attestation: attestationEvidence
             }
           : null;
-      if (confirmedEvidence && isPolymarketSubmitReadySource(confirmedEvidence.usableBalanceSource)) {
+      if (
+        !userId &&
+        confirmedEvidence?.source === "SIGNED_BUNDLE_ATTESTATION" &&
+        isPolymarketSubmitReadySource(confirmedEvidence.usableBalanceSource)
+      ) {
         return {
           source: confirmedEvidence.source,
           requiredAtomic,

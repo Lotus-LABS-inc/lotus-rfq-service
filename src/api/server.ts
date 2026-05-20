@@ -687,7 +687,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         ? balance.usableBalance
         : isPositiveAmount(balance.onchainPusdBalance) && isPositiveAmount(balance.onchainPusdAllowance)
           ? minAmountString(balance.onchainPusdBalance ?? "0", balance.onchainPusdAllowance ?? "0")
-          : "0";
+          : confirmation.readyAmount;
     const usableBalance = minAmountString(boundedLiveAmount, confirmation.readyAmount);
     if (!isPositiveAmount(usableBalance)) {
       return balance;
