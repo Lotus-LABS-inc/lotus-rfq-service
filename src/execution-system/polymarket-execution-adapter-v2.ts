@@ -1,4 +1,6 @@
 import { createHash, createHmac } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import Decimal from "decimal.js";
 import { Wallet } from "@ethersproject/wallet";
 import {
@@ -121,11 +123,18 @@ export interface PolymarketSubmitBalanceReader {
 }
 
 export class PolymarketExecutionNotConfiguredError extends Error {
-  public constructor(public readonly reasonCode: string, message: string) {
+  public constructor(
+    public readonly reasonCode: string,
+    message: string,
+    public readonly diagnostics?: Record<string, unknown> | undefined
+  ) {
     super(message);
     this.name = "PolymarketExecutionNotConfiguredError";
   }
 }
+
+const POLYMARKET_POSTORDER_REJECTION_DIAGNOSTIC_PATH =
+  "artifacts/execution/polymarket-postorder-rejection-diagnostic.json";
 
 const nonEmpty = (value: string | undefined): boolean =>
   typeof value === "string" && value.trim().length > 0;
@@ -504,25 +513,19 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
       );
       let response: unknown;
       try {
-        response = await this.callSdkSafely(() => postOrder(signedOrder, OrderType.FOK), extraSensitiveValues);
+        response = await this.callSdkWithRedactedConsole(
+          () => postOrder(signedOrder, OrderType.FOK),
+          extraSensitiveValues
+        );
       } catch (error) {
-        if (
-          readinessEvidence &&
-          error instanceof PolymarketExecutionNotConfiguredError &&
-          error.reasonCode === "POLYMARKET_CLOB_COLLATERAL_NOT_READY"
-        ) {
-          logPolymarketSubmitFailure({
-            order,
-            signedOrder,
-            readinessEvidence,
-            reasonCode: "POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE"
-          });
-          throw new PolymarketExecutionNotConfiguredError(
-            "POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE",
-            "Polymarket rejected this order even though live CLOB collateral readiness was confirmed. Lotus will recheck readiness automatically; retry after Polymarket propagation completes."
-          );
-        }
-        throw error;
+        throw await this.handlePostOrderRejection({
+          error,
+          order,
+          signedOrder,
+          authPayload,
+          readinessEvidence,
+          extraSensitiveValues
+        });
       }
       return mapPolymarketOrderResponse(response);
     }
@@ -590,17 +593,80 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
 
   private async callSdkSafely<T>(operation: () => Promise<T>, extraSensitiveValues: readonly string[] = []): Promise<T> {
     const sensitiveValues = [...this.sensitiveValues, ...extraSensitiveValues].filter((value): value is string => nonEmpty(value));
+    try {
+      return await this.callSdkWithRedactedConsole(operation, extraSensitiveValues);
+    } catch (error) {
+      throw sanitizePolymarketSdkError(error, sensitiveValues);
+    }
+  }
+
+  private async callSdkWithRedactedConsole<T>(
+    operation: () => Promise<T>,
+    extraSensitiveValues: readonly string[] = []
+  ): Promise<T> {
+    const sensitiveValues = [...this.sensitiveValues, ...extraSensitiveValues].filter((value): value is string => nonEmpty(value));
     const originalError = console.error;
     console.error = (...args: unknown[]) => {
       originalError(...args.map((arg) => redactPolymarketSdkLog(arg, sensitiveValues)));
     };
     try {
       return await operation();
-    } catch (error) {
-      throw sanitizePolymarketSdkError(error, sensitiveValues);
     } finally {
       console.error = originalError;
     }
+  }
+
+  private async handlePostOrderRejection(input: {
+    error: unknown;
+    order: PreparedVenueOrder;
+    signedOrder: SignedOrder;
+    authPayload: PolymarketClobAuthPayload | null;
+    readinessEvidence: PolymarketConfirmedReadinessEvidence | null;
+    extraSensitiveValues: readonly string[];
+  }): Promise<PolymarketExecutionNotConfiguredError> {
+    const sensitiveValues = [...this.sensitiveValues, ...input.extraSensitiveValues]
+      .filter((value): value is string => nonEmpty(value));
+    const rawError = capturePolymarketRawPostOrderError(input.error, sensitiveValues);
+    const classification = classifyPolymarketPostOrderRejection(
+      rawError,
+      Boolean(input.readinessEvidence)
+    );
+    const diagnostic = buildPolymarketPostOrderRejectionDiagnostic({
+      config: this.config,
+      order: input.order,
+      signedOrder: input.signedOrder,
+      authPayload: input.authPayload,
+      readinessEvidence: input.readinessEvidence,
+      rawError,
+      classification
+    });
+
+    await writePolymarketPostOrderRejectionDiagnostic(diagnostic).catch((writeError: unknown) => {
+      console.warn("[polymarket-postorder-diagnostic-write-failed]", {
+        reason: redactStringValues(
+          writeError instanceof Error ? writeError.message : String(writeError),
+          sensitiveValues
+        )
+      });
+    });
+
+    if (input.readinessEvidence) {
+      logPolymarketSubmitFailure({
+        order: input.order,
+        signedOrder: input.signedOrder,
+        readinessEvidence: input.readinessEvidence,
+        reasonCode: classification.code
+      });
+    }
+
+    return new PolymarketExecutionNotConfiguredError(
+      classification.code,
+      classification.message,
+      {
+        diagnosticArtifact: POLYMARKET_POSTORDER_REJECTION_DIAGNOSTIC_PATH,
+        rawVenueErrorCode: rawError.code ?? null
+      }
+    );
   }
 
   private async assertSignedOrderHasSpendableBalanceAllowance(
@@ -1502,6 +1568,305 @@ const parsePolymarketClobAuthPayload = (order: PreparedVenueOrder): PolymarketCl
     );
   }
   return { address, signature, timestamp, nonce, funderAddress };
+};
+
+type PolymarketPostOrderRejectionCode =
+  | "POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE"
+  | "POLYMARKET_CLOB_COLLATERAL_NOT_READY"
+  | "POLYMARKET_CLOB_SIGNATURE_REJECTED"
+  | "POLYMARKET_CLOB_AUTH_REJECTED"
+  | "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED"
+  | "POLYMARKET_CLOB_MARKET_REJECTED"
+  | "POLYMARKET_CLOB_UNKNOWN_REJECTED_BY_VENUE";
+
+interface PolymarketRawPostOrderError {
+  httpStatus?: number | undefined;
+  polymarketApiStatus?: string | undefined;
+  code?: string | undefined;
+  message?: string | undefined;
+  body?: unknown;
+  searchText: string;
+}
+
+interface PolymarketPostOrderClassification {
+  code: PolymarketPostOrderRejectionCode;
+  message: string;
+}
+
+const polymarketPostOrderRejectionMessages = {
+  POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE:
+    "Polymarket rejected this order with a collateral or sync response even though live CLOB collateral readiness was confirmed. Lotus preserved the raw redacted venue evidence for debugging.",
+  POLYMARKET_CLOB_COLLATERAL_NOT_READY:
+    "Polymarket CLOB collateral is not ready for this order. Refresh balances, activate or approve Polymarket funds, then retry.",
+  POLYMARKET_CLOB_SIGNATURE_REJECTED:
+    "Polymarket rejected the signed CLOB order signature. Refresh the route and sign again.",
+  POLYMARKET_CLOB_AUTH_REJECTED:
+    "Polymarket rejected CLOB authentication for this submit. Refresh venue authentication and retry.",
+  POLYMARKET_CLOB_ORDER_PARAMS_REJECTED:
+    "Polymarket rejected the CLOB order parameters. Refresh the route before retrying.",
+  POLYMARKET_CLOB_MARKET_REJECTED:
+    "Polymarket rejected this market or outcome for live submit. Refresh the market route before retrying.",
+  POLYMARKET_CLOB_UNKNOWN_REJECTED_BY_VENUE:
+    "Polymarket rejected this order for an unknown venue reason. Raw redacted evidence was captured for debugging."
+} as const satisfies Record<PolymarketPostOrderRejectionCode, string>;
+
+const diagnosticSecretKeyPattern =
+  /api[_-]?key|secret|passphrase|private[_-]?key|authorization|cookie|signature|poly_signature|auth|headers/i;
+const diagnosticTokenKeyPattern = /token[_-]?id|asset[_-]?id|condition[_-]?id|outcome[_-]?id/i;
+const fullDecimalTokenIdPattern = /^\d{24,}$/;
+
+const hashRedactedValue = (value: string, redacted: string): { sha256: string; redacted: string } => ({
+  sha256: sha256Hex(value),
+  redacted
+});
+
+const sanitizeDiagnosticString = (value: string, sensitiveValues: readonly string[]): string =>
+  redactStringValues(value, sensitiveValues)
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer <redacted>")
+    .replace(/(authorization|cookie|api[_-]?key|secret|passphrase|private[_-]?key|signature|poly_signature)\s*[:=]\s*["']?[^"',\s}]+/gi, "$1=<redacted>")
+    .replace(/\b\d{24,}\b/g, (match) => `<token-id-redacted:${sha256Hex(match).slice(0, 12)}>`)
+    .replace(/0x[a-fA-F0-9]{40}/g, (match) => `${match.slice(0, 6)}...${match.slice(-4)}`);
+
+const redactDiagnosticValue = (
+  value: unknown,
+  sensitiveValues: readonly string[],
+  key = ""
+): unknown => {
+  if (diagnosticSecretKeyPattern.test(key)) {
+    return "<redacted>";
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (diagnosticTokenKeyPattern.test(key) && fullDecimalTokenIdPattern.test(trimmed)) {
+      return hashRedactedValue(trimmed, "<token-id-redacted>");
+    }
+    return sanitizeDiagnosticString(value, sensitiveValues);
+  }
+  if (typeof value === "number" || typeof value === "boolean" || value === null || value === undefined) {
+    return value;
+  }
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactDiagnosticValue(entry, sensitiveValues, key));
+  }
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([entryKey]) => entryKey.toLowerCase() !== "stack")
+        .map(([entryKey, entryValue]) => [
+          entryKey,
+          redactDiagnosticValue(entryValue, sensitiveValues, entryKey)
+        ])
+    );
+  }
+  return sanitizeDiagnosticString(String(value), sensitiveValues);
+};
+
+const diagnosticStringify = (value: unknown): string => {
+  try {
+    return JSON.stringify(value, (_key, entry) =>
+      typeof entry === "bigint" ? entry.toString() : entry
+    ) ?? "";
+  } catch {
+    return String(value);
+  }
+};
+
+const firstRecord = (...values: unknown[]): Record<string, unknown> | null =>
+  values.find((value): value is Record<string, unknown> => isRecord(value)) ?? null;
+
+const firstString = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+  return undefined;
+};
+
+const firstNumber = (...values: unknown[]): number | undefined => {
+  for (const value of values) {
+    const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
+};
+
+const capturePolymarketRawPostOrderError = (
+  error: unknown,
+  sensitiveValues: readonly string[]
+): PolymarketRawPostOrderError => {
+  const errorRecord = isRecord(error) ? error : {};
+  const response = firstRecord(errorRecord.response, errorRecord.res);
+  const responseData = response?.data ?? response?.body;
+  const body = responseData ?? errorRecord.body ?? errorRecord.data ?? {
+    name: error instanceof Error ? error.name : undefined,
+    message: error instanceof Error ? error.message : String(error),
+    code: errorRecord.code,
+    status: errorRecord.status ?? response?.status
+  };
+  const redactedBody = redactDiagnosticValue(body, sensitiveValues);
+  const rawMessage = firstString(
+    error instanceof Error ? error.message : undefined,
+    isRecord(responseData) ? responseData.message ?? responseData.error : undefined,
+    isRecord(errorRecord.body) ? errorRecord.body.message ?? errorRecord.body.error : undefined
+  );
+  const rawCode = firstString(
+    errorRecord.code,
+    errorRecord.errorCode,
+    isRecord(responseData) ? responseData.code ?? responseData.errorCode : undefined,
+    isRecord(errorRecord.body) ? errorRecord.body.code ?? errorRecord.body.errorCode : undefined
+  );
+  const httpStatus = firstNumber(errorRecord.status, errorRecord.statusCode, response?.status, response?.statusCode);
+  const polymarketApiStatus = firstString(
+    isRecord(responseData) ? responseData.status ?? responseData.status_code : undefined,
+    isRecord(errorRecord.body) ? errorRecord.body.status ?? errorRecord.body.status_code : undefined
+  );
+  const code = rawCode ? sanitizeDiagnosticString(rawCode, sensitiveValues) : undefined;
+  const message = rawMessage ? sanitizeDiagnosticString(rawMessage, sensitiveValues) : undefined;
+  return {
+    ...(httpStatus !== undefined ? { httpStatus } : {}),
+    ...(polymarketApiStatus ? { polymarketApiStatus: sanitizeDiagnosticString(polymarketApiStatus, sensitiveValues) } : {}),
+    ...(code ? { code } : {}),
+    ...(message ? { message } : {}),
+    body: redactedBody,
+    searchText: [
+      rawCode,
+      rawMessage,
+      diagnosticStringify(body),
+      httpStatus
+    ].filter((value) => value !== undefined && value !== null).join(" ").toLowerCase()
+  };
+};
+
+const classifyPolymarketPostOrderRejection = (
+  rawError: PolymarketRawPostOrderError,
+  hasConfirmedReadinessEvidence: boolean
+): PolymarketPostOrderClassification => {
+  const text = rawError.searchText;
+  const collateralPattern = /balance|allowance|collateral|spendable|insufficient\s+(funds|balance)|not\s+enough|sync|funding/;
+  const signaturePattern = /signature|signer|eip-?712|1271|invalid\s+sig|isvalidsignature/;
+  const authPattern = /unauthorized|forbidden|api\s*key|hmac|credential|auth|401|403/;
+  const orderParamsPattern = /invalid\s+order|maker\s*amount|taker\s*amount|tick\s*size|price|size|side|expiration|expired|fok|gtc|min(?:imum)?\s+size/;
+  const marketPattern = /market|token\s*id|asset\s*id|closed|disabled|invalid\s+outcome|outcome/;
+  const code: PolymarketPostOrderRejectionCode = collateralPattern.test(text)
+    ? hasConfirmedReadinessEvidence
+      ? "POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE"
+      : "POLYMARKET_CLOB_COLLATERAL_NOT_READY"
+    : signaturePattern.test(text)
+      ? "POLYMARKET_CLOB_SIGNATURE_REJECTED"
+      : authPattern.test(text)
+        ? "POLYMARKET_CLOB_AUTH_REJECTED"
+        : orderParamsPattern.test(text)
+          ? "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED"
+          : marketPattern.test(text)
+            ? "POLYMARKET_CLOB_MARKET_REJECTED"
+            : "POLYMARKET_CLOB_UNKNOWN_REJECTED_BY_VENUE";
+  return {
+    code,
+    message: polymarketPostOrderRejectionMessages[code]
+  };
+};
+
+const normalizeAddress = (value: string | null | undefined): string | null =>
+  value && /^0x[a-fA-F0-9]{40}$/.test(value) ? value.toLowerCase() : null;
+
+const equalsAddress = (left: string | null | undefined, right: string | null | undefined): boolean =>
+  normalizeAddress(left) !== null && normalizeAddress(left) === normalizeAddress(right);
+
+const signatureTypeLabel = (value: SignatureTypeV2 | number | null): string | null => {
+  if (value === null) return null;
+  if (Number(value) === Number(SignatureTypeV2.EOA)) return "EOA";
+  if (Number(value) === Number(SignatureTypeV2.POLY_GNOSIS_SAFE)) return "POLY_GNOSIS_SAFE";
+  if (Number(value) === Number(SignatureTypeV2.POLY_1271)) return "POLY_1271";
+  if (Number(value) === Number(SignatureTypeV2.POLY_PROXY)) return "POLY_PROXY";
+  return String(value);
+};
+
+const buildPolymarketPostOrderRejectionDiagnostic = (input: {
+  config: PolymarketExecutionAdapterV2Config;
+  order: PreparedVenueOrder;
+  signedOrder: SignedOrder;
+  authPayload: PolymarketClobAuthPayload | null;
+  readinessEvidence: PolymarketConfirmedReadinessEvidence | null;
+  rawError: PolymarketRawPostOrderError;
+  classification: PolymarketPostOrderClassification;
+}): Record<string, unknown> => {
+  const signedRecord = input.signedOrder as unknown as Record<string, unknown>;
+  const attestation = input.readinessEvidence?.attestation ?? parsePolymarketCollateralReadinessAttestation(input.order);
+  const maker = optionalString(signedRecord.maker);
+  const signer = optionalString(signedRecord.signer);
+  const funder = input.authPayload?.funderAddress ?? input.config.funderAddress ?? attestation?.venueAccountAddress ?? null;
+  const depositWallet = funder ?? attestation?.venueAccountAddress ?? attestation?.ownerAddress ?? maker;
+  const required = requiredBalanceAllowanceForSignedOrder(input.signedOrder);
+  const constructorSignatureType = signatureTypeForSignedOrder(input.signedOrder) ?? parseSignatureType(input.config.signatureType);
+  return {
+    quoteId: attestation?.quoteId ?? optionalString(input.order.payload.quoteId) ?? null,
+    executionId: optionalString(input.order.payload.executionId)
+      ?? optionalString(input.order.payload.parentExecutionId)
+      ?? input.order.clientOrderId,
+    submitTimestamp: new Date().toISOString(),
+    httpStatus: input.rawError.httpStatus ?? null,
+    polymarketApiStatus: input.rawError.polymarketApiStatus ?? null,
+    rawVenueErrorCode: input.rawError.code ?? null,
+    rawVenueErrorMessage: input.rawError.message ?? null,
+    rawResponseBodyRedacted: input.rawError.body ?? null,
+    normalizedReasonCode: input.classification.code,
+    normalizedReason: input.classification.message,
+    signedOrderSummary: {
+      signatureType: signatureTypeLabel(signatureTypeForSignedOrder(input.signedOrder) ?? Number(signedRecord.signatureType)),
+      makerEqualsDepositWallet: equalsAddress(maker, depositWallet),
+      signerEqualsDepositWallet: equalsAddress(signer, depositWallet),
+      funderEqualsDepositWallet: equalsAddress(funder, depositWallet),
+      makerSignerFunderAllEqualDepositWallet:
+        equalsAddress(maker, depositWallet) && equalsAddress(signer, depositWallet) && equalsAddress(funder, depositWallet),
+      orderType: "FOK",
+      side: signedRecord.side ?? null,
+      makerAmountAtomic: optionalString(signedRecord.makerAmount) ?? null,
+      takerAmountAtomic: optionalString(signedRecord.takerAmount) ?? null,
+      tickSize: input.config.tickSize ?? null,
+      negRisk: input.config.negRisk ?? null,
+      builderConfigured: nonEmpty(input.config.builderCode) || !/^0x0+$/i.test(`${signedRecord.builder ?? ""}`)
+    },
+    readinessSummary: {
+      readinessCode: input.readinessEvidence ? "POLYMARKET_CLOB_READY_FOR_SUBMIT" : null,
+      usableBalanceSource: input.readinessEvidence?.usableBalanceSource
+        ?? (input.readinessEvidence?.source === "SDK_BALANCE_ALLOWANCE" ? "SDK_BALANCE_ALLOWANCE" : null)
+        ?? attestation?.usableBalanceSource
+        ?? null,
+      approvalSpenderSource: input.readinessEvidence?.approvalSpenderSource ?? attestation?.approvalSpenderSource ?? null,
+      liveSubmitSpendableBalance: input.readinessEvidence
+        ? formatCollateralAtomicUnits(input.readinessEvidence.sdkSpendableAtomic)
+        : null,
+      requiredAtomic: input.readinessEvidence?.requiredAtomic.toString()
+        ?? required?.requiredAtomic.toString()
+        ?? attestation?.requiredAtomic.toString()
+        ?? null
+    },
+    clientConstructorSummary: {
+      constructorSignatureType: signatureTypeLabel(constructorSignatureType),
+      constructorFunderEqualsDepositWallet: equalsAddress(funder, depositWallet)
+    }
+  };
+};
+
+const writePolymarketPostOrderRejectionDiagnostic = async (
+  diagnostic: Record<string, unknown>
+): Promise<void> => {
+  await mkdir(dirname(POLYMARKET_POSTORDER_REJECTION_DIAGNOSTIC_PATH), { recursive: true });
+  await writeFile(
+    POLYMARKET_POSTORDER_REJECTION_DIAGNOSTIC_PATH,
+    `${JSON.stringify(diagnostic, (_key, value) =>
+      typeof value === "bigint" ? value.toString() : value, 2)}\n`,
+    "utf8"
+  );
 };
 
 const createOrDerivePolymarketApiKey = async (
