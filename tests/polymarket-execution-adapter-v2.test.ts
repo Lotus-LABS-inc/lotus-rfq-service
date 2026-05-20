@@ -346,7 +346,7 @@ describe("PolymarketExecutionAdapterV2", () => {
           requiredAtomic: "1999950",
           requiredNotional: "2.0000234320910905737",
           usableBalance: "7.85565",
-          usableBalanceSource: "USER_CLOB_SYNC_CONFIRMED",
+          usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE",
           approvalSpenderSource: "CLOB_ALLOWANCE_MAP",
           walletAddress: "0x623Bc9cDf0937c50aa0CAa0D8806412359963A20",
           ownerAddress: "0x5A77712f558ED6bBBe162b9202E668485060EBA4",
@@ -1065,7 +1065,7 @@ describe("PolymarketExecutionAdapterV2", () => {
     ]);
   });
 
-  it("allows user-signed Polymarket buy submit when confirmed user CLOB sync covers required collateral", async () => {
+  it("blocks user-signed Polymarket buy submit when only local user CLOB sync confirmation covers required collateral", async () => {
     const calls: Array<{ method: string; args: unknown[] }> = [];
     const sdkClient: PolymarketClobV2SdkClient = {
       async createAndPostOrder() {
@@ -1116,7 +1116,7 @@ describe("PolymarketExecutionAdapterV2", () => {
       }
     });
 
-    const result = await client.submitOrder({
+    await expect(client.submitOrder({
       venue: "POLYMARKET",
       clientOrderId: "execution-1-leg-1",
       payload: {
@@ -1147,22 +1147,15 @@ describe("PolymarketExecutionAdapterV2", () => {
         size: "1.25",
         price: 0.99
       }
-    });
-
-    expect(result).toMatchObject({
-      venueOrderId: "pm-order-user-clob-confirmed",
-      status: "FILLED"
-    });
+    })).rejects.toMatchObject({ reasonCode: "POLYMARKET_CLOB_COLLATERAL_NOT_READY" });
     expect(calls.map((call) => call.method)).toEqual([
       "updateBalanceAllowance",
       "getBalanceAllowance",
       "updateBalanceAllowance",
       "getBalanceAllowance",
       "updateBalanceAllowance",
-      "getBalanceAllowance",
-      "postOrder"
+      "getBalanceAllowance"
     ]);
-    expect(calls.at(-1)?.args[1]).toBe(OrderType.FOK);
   });
 
   it("allows user-signed Polymarket buy submit when CLOB balance allowance covers required collateral", async () => {
@@ -1490,7 +1483,7 @@ describe("PolymarketExecutionAdapterV2", () => {
           requiredAtomic: "1274970",
           requiredNotional: "1.27497",
           usableBalance: "7.85565",
-          usableBalanceSource: "USER_CLOB_SYNC_CONFIRMED",
+          usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE",
           approvalSpenderSource: "CLOB_ALLOWANCE_MAP"
         },
         signedPayload: {
