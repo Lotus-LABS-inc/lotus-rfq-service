@@ -1125,6 +1125,95 @@ describe("PolymarketExecutionAdapterV2", () => {
     expect(calls.at(-1)?.args[1]).toBe(OrderType.FOK);
   });
 
+  it("allows user-signed Polymarket buy submit when CLOB balance allowance covers required collateral", async () => {
+    const calls: Array<{ method: string; args: unknown[] }> = [];
+    const sdkClient: PolymarketClobV2SdkClient = {
+      async createAndPostOrder() {
+        throw new Error("not used");
+      },
+      async postOrder(order, orderType) {
+        calls.push({ method: "postOrder", args: [order, orderType] });
+        return { orderID: "pm-order-clob-allowance-confirmed", status: "MATCHED", takingAmount: "1.25", price: "0.99" };
+      },
+      async updateBalanceAllowance(params) {
+        calls.push({ method: "updateBalanceAllowance", args: [params] });
+        return {};
+      },
+      async getBalanceAllowance(params) {
+        calls.push({ method: "getBalanceAllowance", args: [params] });
+        return { balance: "0", allowance: "0" };
+      },
+      async getOrder() {
+        throw new Error("not used");
+      },
+      async getTrades() {
+        return [];
+      },
+      async cancelOrder() {
+        return { success: true };
+      }
+    };
+    const client = new SdkPolymarketClobV2LiveClient({
+      executionMode: "v2",
+      liveExecutionEnabled: true,
+      clobHost: completeEnv.POLY_CLOB_HOST,
+      chainId: completeEnv.POLY_CHAIN_ID,
+      apiKey: completeEnv.POLY_API_KEY,
+      apiSecret: completeEnv.POLY_API_SECRET,
+      apiPassphrase: completeEnv.POLY_API_PASSPHRASE,
+      builderCode: completeEnv.POLY_BUILDER_CODE,
+      privateKey: completeEnv.POLY_PRIVATE_KEY
+    }, () => sdkClient, {
+      async readUsableBalance({ userId }) {
+        expect(userId).toBe("user-1");
+        return {
+          usableBalance: "7.85565",
+          collateralBalance: "7.85565",
+          collateralAllowance: "9999999",
+          usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE",
+          approvalSpenderSource: "CLOB_ALLOWANCE_MAP"
+        };
+      }
+    });
+
+    await expect(client.submitOrder({
+      venue: "POLYMARKET",
+      clientOrderId: "execution-1-leg-1",
+      payload: {
+        expectedBinding: { userId: "user-1" },
+        signedPayload: {
+          signature: `0x${"aa".repeat(65)}`,
+          data: {
+            polymarketSignatureSuffix: `0x${"bb".repeat(96)}`,
+            order: {
+              salt: "1",
+              maker: "0x1111111111111111111111111111111111111111",
+              signer: "0x1111111111111111111111111111111111111111",
+              tokenId: "123",
+              makerAmount: "1274970",
+              takerAmount: "100000000",
+              side: "BUY",
+              signatureType: 3,
+              timestamp: "1",
+              expiration: "0",
+              metadata: `0x${"00".repeat(32)}`,
+              builder: `0x${"11".repeat(32)}`
+            }
+          }
+        },
+        venueMarketId: "pm-market-1",
+        venueOutcomeId: "123",
+        side: "buy",
+        size: "1.25",
+        price: 0.99
+      }
+    })).resolves.toMatchObject({
+      venueOrderId: "pm-order-clob-allowance-confirmed",
+      status: "FILLED"
+    });
+    expect(calls.at(-1)?.args[1]).toBe(OrderType.FOK);
+  });
+
   it("blocks relay-side submit when only API-attested on-chain CLOB spender readiness is present", async () => {
     const calls: Array<{ method: string; args: unknown[] }> = [];
     const sdkClient: PolymarketClobV2SdkClient = {

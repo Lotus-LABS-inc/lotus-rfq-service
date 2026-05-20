@@ -662,7 +662,7 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
     }
     try {
       const balance = await this.balanceReader.readUsableBalance({ userId });
-      if (balance.usableBalanceSource !== "USER_CLOB_SYNC_CONFIRMED") {
+      if (!isPolymarketTradeReadySource(balance.usableBalanceSource)) {
         return false;
       }
       const usableAtomic = parseCollateralDecimalToAtomicUnits(balance.usableBalance, "usableBalance");
@@ -1082,6 +1082,9 @@ const parseCollateralDecimalToAtomicUnits = (value: unknown, fieldName: string):
     );
   }
 };
+
+const isPolymarketTradeReadySource = (source: string | null | undefined): boolean =>
+  source === "CLOB_COLLATERAL_ALLOWANCE" || source === "USER_CLOB_SYNC_CONFIRMED";
 
 const collateralAllowanceAtomicUnits = (response: BalanceAllowanceResponse): bigint => {
   if (nonEmpty(response.allowance)) {
