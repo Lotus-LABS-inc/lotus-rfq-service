@@ -127,6 +127,11 @@ export interface LiveSubmitVenueReadiness {
   status: "fresh" | "stale" | "blocked";
   checkedAt: string;
   blockers: string[];
+  readinessCode?: string | null | undefined;
+  nextAction?: string | null | undefined;
+  retryable?: boolean | undefined;
+  requiresUserSync?: boolean | undefined;
+  liveSubmitSpendableBalance?: string | null | undefined;
   account: {
     walletAddress: string | null;
     venueAccountAddress: string | null;
@@ -537,8 +542,9 @@ export class SignedTradeBundleService {
     try {
       const balance = await this.polymarketBalanceReader.readUsableBalance({ userId });
       const clobConfirmed = isPolymarketTradeReadySource(balance.usableBalanceSource);
+      const syncPendingForSubmit = balance.usableBalanceSource === "USER_CLOB_SYNC_CONFIRMED";
       const collateralBlockers = [
-        balance.usableBalanceSource === "USER_CLOB_SYNC_CONFIRMED"
+        syncPendingForSubmit
           ? "Polymarket CLOB sync is confirmed locally, but Polymarket live submit has not exposed enough spendable collateral yet. Lotus will keep checking readiness automatically; no new CLOB sync is required."
           : null,
         !clobConfirmed && balance.usableBalanceSource === "ONCHAIN_CLOB_SPENDER_ALLOWANCE"
@@ -558,6 +564,19 @@ export class SignedTradeBundleService {
         ...next,
         status: collateralBlockers.length > 0 ? "blocked" : "fresh",
         blockers: collateralBlockers,
+        readinessCode: syncPendingForSubmit
+          ? "POLYMARKET_CLOB_SYNC_PENDING_FOR_SUBMIT"
+          : clobConfirmed && collateralBlockers.length === 0
+            ? "POLYMARKET_CLOB_READY_FOR_SUBMIT"
+            : null,
+        nextAction: syncPendingForSubmit
+          ? "WAIT_FOR_POLYMARKET_LIVE_SPENDABLE"
+          : clobConfirmed && collateralBlockers.length === 0
+            ? "SUBMIT"
+            : null,
+        retryable: syncPendingForSubmit ? true : undefined,
+        requiresUserSync: syncPendingForSubmit || clobConfirmed ? false : undefined,
+        liveSubmitSpendableBalance: clobConfirmed ? balance.usableBalance : null,
         collateral: {
           ...next.collateral,
           requiredNotional,
