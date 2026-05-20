@@ -652,6 +652,8 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
       classification
     });
 
+    console.warn("[polymarket-postorder-rejection-diagnostic]", diagnostic);
+
     await writePolymarketPostOrderRejectionDiagnostic(diagnostic).catch((writeError: unknown) => {
       console.warn("[polymarket-postorder-diagnostic-write-failed]", {
         reason: redactStringValues(
