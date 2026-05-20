@@ -677,7 +677,8 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
       classification.message,
       {
         diagnosticArtifact: POLYMARKET_POSTORDER_REJECTION_DIAGNOSTIC_PATH,
-        rawVenueErrorCode: rawError.code ?? null
+        rawVenueErrorCode: rawError.code ?? null,
+        postOrderRejectionDiagnostic: diagnostic
       }
     );
   }
@@ -925,11 +926,13 @@ export class RelayPolymarketClobV2LiveClient implements PolymarketClobV2LiveClie
   private readonly baseUrl: string;
   private readonly secret: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly config: PolymarketExecutionAdapterV2Config;
 
   public constructor(config: {
     relayUrl: string;
     relaySecret: string;
     fetchImpl?: typeof fetch | undefined;
+    polymarketConfig?: PolymarketExecutionAdapterV2Config | undefined;
   }) {
     if (!nonEmpty(config.relayUrl) || !nonEmpty(config.relaySecret)) {
       throw new PolymarketExecutionNotConfiguredError(
@@ -940,6 +943,11 @@ export class RelayPolymarketClobV2LiveClient implements PolymarketClobV2LiveClie
     this.baseUrl = config.relayUrl.replace(/\/+$/, "");
     this.secret = config.relaySecret;
     this.fetchImpl = config.fetchImpl ?? fetch;
+    this.config = config.polymarketConfig ?? {
+      executionMode: "v2",
+      liveExecutionEnabled: true,
+      executionSubmitMode: "relay"
+    };
   }
 
   public submitOrder(order: PreparedVenueOrder): Promise<VenueSubmitResult> {
@@ -992,6 +1000,39 @@ export class RelayPolymarketClobV2LiveClient implements PolymarketClobV2LiveClie
           : "POLYMARKET_V2_RELAY_ERROR",
         fallbackMessage: message
       });
+      const forwardedPostOrderDiagnostic = extractForwardedPolymarketPostOrderDiagnostic(payload);
+      if (path === "/internal/polymarket/v2/submit-order") {
+        await this.captureRelayPostOrderRejection({
+          body,
+          payload,
+          httpStatus: response.status,
+          normalizedCode: normalized.code,
+          normalizedMessage: normalized.message
+        });
+      }
+      const relayDiagnosticCode = forwardedPostOrderDiagnostic &&
+        typeof forwardedPostOrderDiagnostic.normalizedReasonCode === "string" &&
+        isPolymarketPostOrderRejectionCode(forwardedPostOrderDiagnostic.normalizedReasonCode)
+        ? forwardedPostOrderDiagnostic.normalizedReasonCode
+        : null;
+      const relayDiagnosticMessage = forwardedPostOrderDiagnostic &&
+        typeof forwardedPostOrderDiagnostic.normalizedReason === "string"
+        ? forwardedPostOrderDiagnostic.normalizedReason
+        : null;
+      const relayRawVenueErrorCode = forwardedPostOrderDiagnostic &&
+        typeof forwardedPostOrderDiagnostic.rawVenueErrorCode === "string"
+        ? forwardedPostOrderDiagnostic.rawVenueErrorCode
+        : null;
+      if (relayDiagnosticCode) {
+        throw new PolymarketExecutionNotConfiguredError(
+          relayDiagnosticCode,
+          relayDiagnosticMessage ?? polymarketPostOrderRejectionMessages[relayDiagnosticCode],
+          {
+            diagnosticArtifact: POLYMARKET_POSTORDER_REJECTION_DIAGNOSTIC_PATH,
+            rawVenueErrorCode: relayRawVenueErrorCode
+          }
+        );
+      }
       if (
         path === "/internal/polymarket/v2/submit-order" &&
         (relayCode === "POLYMARKET_CLOB_COLLATERAL_NOT_READY" || normalized.code === "POLYMARKET_CLOB_COLLATERAL_NOT_READY") &&
@@ -1008,6 +1049,79 @@ export class RelayPolymarketClobV2LiveClient implements PolymarketClobV2LiveClie
       );
     }
     return payload as T;
+  }
+
+  private async captureRelayPostOrderRejection(input: {
+    body: Record<string, unknown>;
+    payload: unknown;
+    httpStatus: number;
+    normalizedCode: string;
+    normalizedMessage: string;
+  }): Promise<Record<string, unknown> | null> {
+    const forwardedDiagnostic = extractForwardedPolymarketPostOrderDiagnostic(input.payload);
+    const diagnostic = forwardedDiagnostic ?? this.buildRelayPostOrderRejectionDiagnostic(input);
+    if (!diagnostic) {
+      return null;
+    }
+    console.warn("[polymarket-postorder-rejection-diagnostic]", diagnostic);
+    await writePolymarketPostOrderRejectionDiagnostic(diagnostic).catch((writeError: unknown) => {
+      console.warn("[polymarket-postorder-diagnostic-write-failed]", {
+        reason: redactStringValues(
+          writeError instanceof Error ? writeError.message : String(writeError),
+          [this.secret].filter((value): value is string => nonEmpty(value))
+        )
+      });
+    });
+    return diagnostic;
+  }
+
+  private buildRelayPostOrderRejectionDiagnostic(input: {
+    body: Record<string, unknown>;
+    payload: unknown;
+    httpStatus: number;
+    normalizedCode: string;
+    normalizedMessage: string;
+  }): Record<string, unknown> | null {
+    const order = parseRelayPreparedPolymarketOrder(input.body);
+    if (!order) {
+      return null;
+    }
+    const sensitiveValues = [this.secret].filter((value): value is string => nonEmpty(value));
+    const rawError = capturePolymarketRawPostOrderError({
+      status: input.httpStatus,
+      statusCode: input.httpStatus,
+      body: input.payload,
+      data: input.payload
+    }, sensitiveValues);
+    const hasConfirmedReadinessEvidence = relaySubmitHasConfirmedReadinessAttestation(input.body);
+    const classification = classifyPolymarketPostOrderRejection(rawError, hasConfirmedReadinessEvidence);
+    const signedOrder = safeParseUserSignedPolymarketOrder(order);
+    if (!signedOrder) {
+      return {
+        quoteId: optionalString(order.payload.quoteId) ?? null,
+        executionId: optionalString(order.payload.executionId)
+          ?? optionalString(order.payload.parentExecutionId)
+          ?? order.clientOrderId,
+        submitTimestamp: new Date().toISOString(),
+        httpStatus: input.httpStatus,
+        polymarketApiStatus: rawError.polymarketApiStatus ?? null,
+        rawVenueErrorCode: rawError.code ?? null,
+        rawVenueErrorMessage: rawError.message ?? null,
+        rawResponseBodyRedacted: rawError.body ?? null,
+        normalizedReasonCode: input.normalizedCode,
+        normalizedReason: input.normalizedMessage,
+        relayDiagnosticOnly: true
+      };
+    }
+    return buildPolymarketPostOrderRejectionDiagnostic({
+      config: this.config,
+      order,
+      signedOrder,
+      authPayload: safeParsePolymarketClobAuthPayload(order),
+      readinessEvidence: null,
+      rawError,
+      classification
+    });
   }
 }
 
@@ -1222,6 +1336,31 @@ const parseUserSignedPolymarketOrder = (order: PreparedVenueOrder): SignedOrder 
     ...orderPayload,
     signature: finalSignature
   } as unknown as SignedOrder;
+};
+
+const safeParseUserSignedPolymarketOrder = (order: PreparedVenueOrder): SignedOrder | null => {
+  try {
+    return parseUserSignedPolymarketOrder(order);
+  } catch {
+    return null;
+  }
+};
+
+const parseRelayPreparedPolymarketOrder = (body: Record<string, unknown>): PreparedVenueOrder | null => {
+  const order = isRecord(body.order) ? body.order : null;
+  if (
+    !order ||
+    order.venue !== "POLYMARKET" ||
+    typeof order.clientOrderId !== "string" ||
+    !isRecord(order.payload)
+  ) {
+    return null;
+  }
+  return {
+    venue: "POLYMARKET",
+    clientOrderId: order.clientOrderId,
+    payload: order.payload
+  };
 };
 
 const expectedBindingUserId = (order: PreparedVenueOrder): string | null => {
@@ -1583,6 +1722,14 @@ const parsePolymarketClobAuthPayload = (order: PreparedVenueOrder): PolymarketCl
   return { address, signature, timestamp, nonce, funderAddress };
 };
 
+const safeParsePolymarketClobAuthPayload = (order: PreparedVenueOrder): PolymarketClobAuthPayload | null => {
+  try {
+    return parsePolymarketClobAuthPayload(order);
+  } catch {
+    return null;
+  }
+};
+
 type PolymarketPostOrderRejectionCode =
   | "POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE"
   | "POLYMARKET_CLOB_COLLATERAL_NOT_READY"
@@ -1622,6 +1769,9 @@ const polymarketPostOrderRejectionMessages = {
   POLYMARKET_CLOB_UNKNOWN_REJECTED_BY_VENUE:
     "Polymarket rejected this order for an unknown venue reason. Raw redacted evidence was captured for debugging."
 } as const satisfies Record<PolymarketPostOrderRejectionCode, string>;
+
+const isPolymarketPostOrderRejectionCode = (value: string): value is PolymarketPostOrderRejectionCode =>
+  Object.prototype.hasOwnProperty.call(polymarketPostOrderRejectionMessages, value);
 
 const diagnosticSecretKeyPattern =
   /api[_-]?key|secret|passphrase|private[_-]?key|authorization|cookie|signature|poly_signature|auth|headers/i;
@@ -1918,6 +2068,18 @@ const buildPolymarketPostOrderRejectionDiagnostic = (input: {
   };
 };
 
+const extractForwardedPolymarketPostOrderDiagnostic = (payload: unknown): Record<string, unknown> | null => {
+  const record = isRecord(payload) ? payload : null;
+  const diagnostics = record && isRecord(record.diagnostics) ? record.diagnostics : null;
+  const diagnostic = diagnostics && isRecord(diagnostics.postOrderRejectionDiagnostic)
+    ? diagnostics.postOrderRejectionDiagnostic
+    : null;
+  if (!diagnostic) {
+    return null;
+  }
+  return diagnostic;
+};
+
 const writePolymarketPostOrderRejectionDiagnostic = async (
   diagnostic: Record<string, unknown>
 ): Promise<void> => {
@@ -2198,7 +2360,8 @@ export const createPolymarketClobV2LiveClient = (
     if (config.executionSubmitMode === "relay") {
       return new RelayPolymarketClobV2LiveClient({
         relayUrl: config.executionRelayUrl ?? "",
-        relaySecret: config.executionRelaySecret ?? ""
+        relaySecret: config.executionRelaySecret ?? "",
+        polymarketConfig: config
       });
     }
     return new SdkPolymarketClobV2LiveClient(config, sdkFactory, balanceReader);

@@ -491,6 +491,72 @@ describe("PolymarketExecutionAdapterV2", () => {
     });
   });
 
+  it("relay client writes a redacted postOrder diagnostic when the relay returns a legacy rejection", async () => {
+    const client = new RelayPolymarketClobV2LiveClient({
+      relayUrl: "https://relay.example",
+      relaySecret: "relay-secret",
+      fetchImpl: (async () => new Response(JSON.stringify({
+        code: "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
+        message: "not enough balance / allowance: the balance is not enough -> balance: 0, order amount: 1274970"
+      }), { status: 502, headers: { "content-type": "application/json" } })) as typeof fetch
+    });
+
+    await expect(client.submitOrder(signedPolymarketVenueOrder())).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE"
+    });
+
+    expect(existsSync(polymarketPostOrderDiagnosticPath)).toBe(true);
+    const artifactText = readFileSync(polymarketPostOrderDiagnosticPath, "utf8");
+    expect(artifactText).toContain("POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE");
+    expect(artifactText).toContain("not enough balance");
+    expect(artifactText).not.toContain("relay-secret");
+    expect(artifactText).not.toContain(`0x${"aa".repeat(65)}`);
+    expect(artifactText).not.toContain(diagnosticLongTokenId);
+  });
+
+  it("relay client preserves forwarded postOrder diagnostic classification from the relay", async () => {
+    const forwardedDiagnostic = {
+      quoteId: "exec_quote_forwarded",
+      executionId: "exec_quote_forwarded",
+      submitTimestamp: "2026-05-20T18:00:00.000Z",
+      httpStatus: 400,
+      polymarketApiStatus: "FAILED",
+      rawVenueErrorCode: "INVALID_SIGNATURE",
+      rawVenueErrorMessage: "invalid signature",
+      rawResponseBodyRedacted: {
+        error: "invalid signature",
+        signature: "<redacted>"
+      },
+      normalizedReasonCode: "POLYMARKET_CLOB_SIGNATURE_REJECTED",
+      normalizedReason: "Polymarket rejected the signed CLOB order signature. Refresh the route and sign again.",
+      signedOrderSummary: {
+        signatureType: "POLY_1271",
+        makerSignerFunderAllEqualDepositWallet: true
+      }
+    };
+    const client = new RelayPolymarketClobV2LiveClient({
+      relayUrl: "https://relay.example",
+      relaySecret: "relay-secret",
+      fetchImpl: (async () => new Response(JSON.stringify({
+        code: "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
+        message: "Polymarket CLOB collateral is not ready for this order.",
+        diagnostics: {
+          postOrderRejectionDiagnostic: forwardedDiagnostic
+        }
+      }), { status: 502, headers: { "content-type": "application/json" } })) as typeof fetch
+    });
+
+    await expect(client.submitOrder(signedPolymarketVenueOrder())).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_SIGNATURE_REJECTED"
+    });
+
+    expect(existsSync(polymarketPostOrderDiagnosticPath)).toBe(true);
+    const artifact = JSON.parse(readFileSync(polymarketPostOrderDiagnosticPath, "utf8")) as Record<string, unknown>;
+    expect(artifact.normalizedReasonCode).toBe("POLYMARKET_CLOB_SIGNATURE_REJECTED");
+    expect(JSON.stringify(artifact)).not.toContain("relay-secret");
+    expect(JSON.stringify(artifact)).not.toContain(`0x${"aa".repeat(65)}`);
+  });
+
   it("relay routes reject missing authentication before reaching the CLOB client", async () => {
     const previousSecret = process.env.POLYMARKET_EXECUTION_RELAY_SECRET;
     process.env.POLYMARKET_EXECUTION_RELAY_SECRET = "relay-secret";

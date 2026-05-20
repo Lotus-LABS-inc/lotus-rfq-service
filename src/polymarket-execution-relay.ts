@@ -124,7 +124,10 @@ const handleRelayCall = async <T>(
     if (error instanceof PolymarketExecutionNotConfiguredError) {
       return reply.status(502).send({
         code: error.reasonCode,
-        message: error.message
+        message: error.message,
+        ...(safePolymarketRelayDiagnostics(error.diagnostics)
+          ? { diagnostics: safePolymarketRelayDiagnostics(error.diagnostics) }
+          : {})
       });
     }
     return reply.status(502).send({
@@ -168,6 +171,20 @@ const parseStringField = (body: unknown, field: string): string => {
 
 const headerValue = (value: string | string[] | undefined): string | null =>
   Array.isArray(value) ? value[0] ?? null : value ?? null;
+
+const safePolymarketRelayDiagnostics = (
+  diagnostics: Record<string, unknown> | undefined
+): Record<string, unknown> | null => {
+  const postOrderDiagnostic = asRecord(diagnostics?.postOrderRejectionDiagnostic);
+  if (Object.keys(postOrderDiagnostic).length === 0) {
+    return null;
+  }
+  return {
+    diagnosticArtifact: diagnostics?.diagnosticArtifact ?? null,
+    rawVenueErrorCode: diagnostics?.rawVenueErrorCode ?? null,
+    postOrderRejectionDiagnostic: postOrderDiagnostic
+  };
+};
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
