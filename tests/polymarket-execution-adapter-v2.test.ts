@@ -225,6 +225,30 @@ const diagnosticSdkClient = (postOrderError: unknown): PolymarketClobV2SdkClient
   }
 });
 
+const diagnosticSdkClientReturning = (postOrderResponse: unknown): PolymarketClobV2SdkClient => ({
+  async createAndPostOrder() {
+    throw new Error("unsigned createAndPostOrder must not be used");
+  },
+  async postOrder() {
+    return postOrderResponse;
+  },
+  async updateBalanceAllowance() {
+    return {};
+  },
+  async getBalanceAllowance() {
+    return { balance: "2000000", allowance: "2000000" };
+  },
+  async getOrder() {
+    throw new Error("not used");
+  },
+  async getTrades() {
+    return [];
+  },
+  async cancelOrder() {
+    return { success: false };
+  }
+});
+
 const diagnosticClient = (sdkClient: PolymarketClobV2SdkClient): SdkPolymarketClobV2LiveClient =>
   new SdkPolymarketClobV2LiveClient({
     executionMode: "v2",
@@ -1696,6 +1720,34 @@ describe("PolymarketExecutionAdapterV2", () => {
     expect(artifactText).not.toContain("should-not-leak");
     expect(artifactText).not.toContain(`0x${"aa".repeat(65)}`);
     expect(artifactText).not.toContain(`0x${"bb".repeat(96)}`);
+    expect(artifactText).not.toContain(diagnosticLongTokenId);
+    expect(artifactText).toContain("<token-id-redacted");
+  });
+
+  it("writes a redacted diagnostic artifact when Polymarket returns a FAILED postOrder body", async () => {
+    const client = diagnosticClient(diagnosticSdkClientReturning({
+      status: "FAILED",
+      code: "INVALID_ORDER",
+      message: `invalid order: maker amount violates tick size for token ${diagnosticLongTokenId}`,
+      tokenId: diagnosticLongTokenId,
+      signature: `0x${"cc".repeat(65)}`,
+      apiKey: completeEnv.POLY_API_KEY
+    }));
+
+    await expect(client.submitOrder(signedPolymarketVenueOrder())).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED"
+    });
+
+    expect(existsSync(polymarketPostOrderDiagnosticPath)).toBe(true);
+    const artifactText = readFileSync(polymarketPostOrderDiagnosticPath, "utf8");
+    const artifact = JSON.parse(artifactText) as Record<string, unknown>;
+    expect(artifact).toMatchObject({
+      polymarketApiStatus: "FAILED",
+      rawVenueErrorCode: "INVALID_ORDER",
+      normalizedReasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED"
+    });
+    expect(artifactText).not.toContain(completeEnv.POLY_API_KEY);
+    expect(artifactText).not.toContain(`0x${"cc".repeat(65)}`);
     expect(artifactText).not.toContain(diagnosticLongTokenId);
     expect(artifactText).toContain("<token-id-redacted");
   });

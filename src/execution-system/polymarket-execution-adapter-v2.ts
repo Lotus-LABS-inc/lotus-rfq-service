@@ -527,6 +527,17 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
           extraSensitiveValues
         });
       }
+      const returnedFailure = buildPolymarketReturnedPostOrderFailure(response);
+      if (returnedFailure) {
+        throw await this.handlePostOrderRejection({
+          error: returnedFailure,
+          order,
+          signedOrder,
+          authPayload,
+          readinessEvidence,
+          extraSensitiveValues
+        });
+      }
       return mapPolymarketOrderResponse(response);
     }
     throw new PolymarketExecutionNotConfiguredError(
@@ -1674,6 +1685,20 @@ const diagnosticStringify = (value: unknown): string => {
   }
 };
 
+const omitDiagnosticSecretKeys = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(omitDiagnosticSecretKeys);
+  }
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([entryKey]) => !diagnosticSecretKeyPattern.test(entryKey))
+        .map(([entryKey, entryValue]) => [entryKey, omitDiagnosticSecretKeys(entryValue)])
+    );
+  }
+  return value;
+};
+
 const firstRecord = (...values: unknown[]): Record<string, unknown> | null =>
   values.find((value): value is Record<string, unknown> => isRecord(value)) ?? null;
 
@@ -1699,6 +1724,36 @@ const firstNumber = (...values: unknown[]): number | undefined => {
   return undefined;
 };
 
+const buildPolymarketReturnedPostOrderFailure = (response: unknown): Record<string, unknown> | null => {
+  if (!isRecord(response)) {
+    return null;
+  }
+  const apiStatus = `${response.status ?? response.status_code ?? response.state ?? ""}`.trim().toUpperCase();
+  const successValue = response.success ?? response.ok;
+  const failed =
+    apiStatus === "FAILED" ||
+    apiStatus === "FAILURE" ||
+    apiStatus === "REJECTED" ||
+    apiStatus === "ERROR" ||
+    successValue === false;
+  if (!failed) {
+    return null;
+  }
+  return {
+    status: firstNumber(response.httpStatus, response.http_status, response.statusCode),
+    body: response,
+    data: response,
+    code: firstString(response.code, response.errorCode, response.reasonCode),
+    message: firstString(
+      response.message,
+      response.error,
+      response.errorMessage,
+      response.reason,
+      response.msg
+    )
+  };
+};
+
 const capturePolymarketRawPostOrderError = (
   error: unknown,
   sensitiveValues: readonly string[]
@@ -1716,13 +1771,17 @@ const capturePolymarketRawPostOrderError = (
   const rawMessage = firstString(
     error instanceof Error ? error.message : undefined,
     isRecord(responseData) ? responseData.message ?? responseData.error : undefined,
-    isRecord(errorRecord.body) ? errorRecord.body.message ?? errorRecord.body.error : undefined
+    isRecord(responseData) ? responseData.errorMessage ?? responseData.reason ?? responseData.msg : undefined,
+    isRecord(errorRecord.body) ? errorRecord.body.message ?? errorRecord.body.error : undefined,
+    isRecord(errorRecord.body) ? errorRecord.body.errorMessage ?? errorRecord.body.reason ?? errorRecord.body.msg : undefined
   );
   const rawCode = firstString(
     errorRecord.code,
     errorRecord.errorCode,
     isRecord(responseData) ? responseData.code ?? responseData.errorCode : undefined,
-    isRecord(errorRecord.body) ? errorRecord.body.code ?? errorRecord.body.errorCode : undefined
+    isRecord(responseData) ? responseData.reasonCode : undefined,
+    isRecord(errorRecord.body) ? errorRecord.body.code ?? errorRecord.body.errorCode : undefined,
+    isRecord(errorRecord.body) ? errorRecord.body.reasonCode : undefined
   );
   const httpStatus = firstNumber(errorRecord.status, errorRecord.statusCode, response?.status, response?.statusCode);
   const polymarketApiStatus = firstString(
@@ -1740,7 +1799,7 @@ const capturePolymarketRawPostOrderError = (
     searchText: [
       rawCode,
       rawMessage,
-      diagnosticStringify(body),
+      diagnosticStringify(omitDiagnosticSecretKeys(body)),
       httpStatus
     ].filter((value) => value !== undefined && value !== null).join(" ").toLowerCase()
   };
