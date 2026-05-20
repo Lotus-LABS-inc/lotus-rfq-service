@@ -635,6 +635,10 @@ describe("SignedTradeBundleService", () => {
 
     expect(readiness.status).toBe("blocked");
     expect(readiness.blockers).toContain("POLYMARKET: Polymarket CLOB collateral allowance is below the order amount. Activate Polymarket funds to approve trading spenders.");
+    expect(readiness.venues[0]).toMatchObject({
+      requiresUserSync: false,
+      liveSubmitSpendableBalance: "0"
+    });
     expect(readiness.venues[0]?.collateral).toMatchObject({
       requiredNotional: "1.2375",
       balance: "8.95741",
@@ -708,6 +712,13 @@ describe("SignedTradeBundleService", () => {
     expect(readiness.blockers).toContain(
       "POLYMARKET: Polymarket CLOB sync is confirmed locally, but Polymarket live submit has not exposed enough spendable collateral yet. Lotus will keep checking readiness automatically; no new CLOB sync is required."
     );
+    expect(readiness.venues[0]).toMatchObject({
+      readinessCode: "POLYMARKET_CLOB_SYNC_PENDING_FOR_SUBMIT",
+      nextAction: "WAIT_FOR_POLYMARKET_LIVE_SPENDABLE",
+      retryable: true,
+      requiresUserSync: false,
+      liveSubmitSpendableBalance: null
+    });
     expect(readiness.venues[0]?.collateral).toMatchObject({
       requiredNotional: "1.2375",
       balance: "7.85565",
@@ -716,6 +727,37 @@ describe("SignedTradeBundleService", () => {
       tokenSymbol: "pUSD",
       approvalMethod: "CLOB_PUSD_APPROVAL",
       usableBalanceSource: "USER_CLOB_SYNC_CONFIRMED"
+    });
+  });
+
+  it("marks Polymarket buy readiness fresh only when CLOB live submit spendable collateral is confirmed", async () => {
+    const registry = new ExecutionVenueAdapterRegistry();
+    registry.register(new FailingPolymarketBalanceAdapter());
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => polymarketBuyQuote() } as never,
+      registry,
+      { getAccount: async () => account("POLYMARKET") },
+      () => new Date("2026-05-07T00:00:00.000Z"),
+      {} as NodeJS.ProcessEnv,
+      undefined,
+      undefined,
+      polymarketBalanceReader({
+        usableBalance: "7.85565",
+        collateralBalance: "7.85565",
+        collateralAllowance: "115792089237316195420000000000000000000000000000000000000000000000000000",
+        usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE"
+      })
+    );
+
+    const readiness = await sut.getLiveReadiness({ userId: "user-1", quoteId: "exec_quote_polymarket_buy" });
+
+    expect(readiness.status).toBe("fresh");
+    expect(readiness.venues[0]).toMatchObject({
+      status: "fresh",
+      readinessCode: "POLYMARKET_CLOB_READY_FOR_SUBMIT",
+      nextAction: "SUBMIT",
+      requiresUserSync: false,
+      liveSubmitSpendableBalance: "7.85565"
     });
   });
 
