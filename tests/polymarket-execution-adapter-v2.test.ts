@@ -1065,7 +1065,7 @@ describe("PolymarketExecutionAdapterV2", () => {
     ]);
   });
 
-  it("blocks user-signed Polymarket buy submit when only confirmed local CLOB sync covers required collateral", async () => {
+  it("allows user-signed Polymarket buy submit when confirmed user CLOB sync covers required collateral", async () => {
     const calls: Array<{ method: string; args: unknown[] }> = [];
     const sdkClient: PolymarketClobV2SdkClient = {
       async createAndPostOrder() {
@@ -1147,8 +1147,9 @@ describe("PolymarketExecutionAdapterV2", () => {
         size: "1.25",
         price: 0.99
       }
-    })).rejects.toMatchObject({
-      reasonCode: "POLYMARKET_CLOB_SYNC_PENDING_FOR_SUBMIT"
+    })).resolves.toMatchObject({
+      venueOrderId: "pm-order-user-clob-confirmed",
+      status: "FILLED"
     });
     expect(calls.map((call) => call.method)).toEqual([
       "updateBalanceAllowance",
@@ -1156,7 +1157,8 @@ describe("PolymarketExecutionAdapterV2", () => {
       "updateBalanceAllowance",
       "getBalanceAllowance",
       "updateBalanceAllowance",
-      "getBalanceAllowance"
+      "getBalanceAllowance",
+      "postOrder"
     ]);
   });
 
@@ -1337,7 +1339,7 @@ describe("PolymarketExecutionAdapterV2", () => {
     ]);
   });
 
-  it("blocks signed-bundle submit through fresh user CLOB sync attestation when live CLOB submit client still lags", async () => {
+  it("allows signed-bundle submit through fresh user CLOB sync attestation when SDK balance lags", async () => {
     const calls: string[] = [];
     const sdkClient: PolymarketClobV2SdkClient = {
       async createAndPostOrder() {
@@ -1421,8 +1423,9 @@ describe("PolymarketExecutionAdapterV2", () => {
         size: "1.25",
         price: 0.99
       }
-    })).rejects.toMatchObject({
-      reasonCode: "POLYMARKET_CLOB_SYNC_PENDING_FOR_SUBMIT"
+    })).resolves.toMatchObject({
+      venueOrderId: "pm-order-direct-clob-attested",
+      status: "FILLED"
     });
 
     expect(calls).toEqual([
@@ -1431,7 +1434,8 @@ describe("PolymarketExecutionAdapterV2", () => {
       "updateBalanceAllowance",
       "getBalanceAllowance",
       "updateBalanceAllowance",
-      "getBalanceAllowance"
+      "getBalanceAllowance",
+      "postOrder"
     ]);
   });
 

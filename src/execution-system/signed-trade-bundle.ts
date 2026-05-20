@@ -542,11 +542,7 @@ export class SignedTradeBundleService {
     try {
       const balance = await this.polymarketBalanceReader.readUsableBalance({ userId });
       const clobConfirmed = isPolymarketTradeReadySource(balance.usableBalanceSource);
-      const syncPendingForSubmit = balance.usableBalanceSource === "USER_CLOB_SYNC_CONFIRMED";
       const collateralBlockers = [
-        syncPendingForSubmit
-          ? "Polymarket CLOB sync is confirmed locally, but Polymarket live submit has not exposed enough spendable collateral yet. Lotus will keep checking readiness automatically; no new CLOB sync is required."
-          : null,
         !clobConfirmed && balance.usableBalanceSource === "ONCHAIN_CLOB_SPENDER_ALLOWANCE"
           ? "Polymarket pUSD approval is confirmed on-chain, but Polymarket CLOB spendable collateral has not synced yet. Lotus refreshed CLOB readiness; retry after sync confirms."
           : null,
@@ -564,18 +560,13 @@ export class SignedTradeBundleService {
         ...next,
         status: collateralBlockers.length > 0 ? "blocked" : "fresh",
         blockers: collateralBlockers,
-        readinessCode: syncPendingForSubmit
-          ? "POLYMARKET_CLOB_SYNC_PENDING_FOR_SUBMIT"
-          : clobConfirmed && collateralBlockers.length === 0
+        readinessCode: clobConfirmed && collateralBlockers.length === 0
             ? "POLYMARKET_CLOB_READY_FOR_SUBMIT"
             : null,
-        nextAction: syncPendingForSubmit
-          ? "WAIT_FOR_POLYMARKET_LIVE_SPENDABLE"
-          : clobConfirmed && collateralBlockers.length === 0
+        nextAction: clobConfirmed && collateralBlockers.length === 0
             ? "SUBMIT"
             : null,
-        retryable: syncPendingForSubmit ? true : undefined,
-        requiresUserSync: syncPendingForSubmit || clobConfirmed ? false : undefined,
+        requiresUserSync: clobConfirmed ? false : undefined,
         liveSubmitSpendableBalance: clobConfirmed ? balance.usableBalance : null,
         collateral: {
           ...next.collateral,
@@ -2023,7 +2014,7 @@ const compareDecimalStrings = (left: string, right: string): number => {
 };
 
 const isPolymarketTradeReadySource = (source: string | null | undefined): boolean =>
-  source === "CLOB_COLLATERAL_ALLOWANCE";
+  source === "CLOB_COLLATERAL_ALLOWANCE" || source === "USER_CLOB_SYNC_CONFIRMED";
 
 const multiplyDecimalStrings = (left: string, right: string): string => {
   return plainDecimalString(decimalFromString(left).times(decimalFromString(right)));
