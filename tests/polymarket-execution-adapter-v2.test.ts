@@ -355,7 +355,7 @@ describe("PolymarketExecutionAdapterV2", () => {
       }
     })).rejects.toMatchObject({
       reasonCode: "POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE",
-      message: "Polymarket rejected this order even though CLOB collateral readiness was confirmed. Refresh CLOB sync or retry after Polymarket propagation completes."
+      message: "Polymarket rejected this order even though live CLOB collateral readiness was confirmed. Lotus will recheck readiness automatically; retry after Polymarket propagation completes."
     });
   });
 
@@ -1065,7 +1065,7 @@ describe("PolymarketExecutionAdapterV2", () => {
     ]);
   });
 
-  it("allows user-signed Polymarket buy submit when confirmed user CLOB sync covers required collateral", async () => {
+  it("blocks user-signed Polymarket buy submit when only confirmed local CLOB sync covers required collateral", async () => {
     const calls: Array<{ method: string; args: unknown[] }> = [];
     const sdkClient: PolymarketClobV2SdkClient = {
       async createAndPostOrder() {
@@ -1147,9 +1147,8 @@ describe("PolymarketExecutionAdapterV2", () => {
         size: "1.25",
         price: 0.99
       }
-    })).resolves.toMatchObject({
-      venueOrderId: "pm-order-user-clob-confirmed",
-      status: "FILLED"
+    })).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_SYNC_PENDING_FOR_SUBMIT"
     });
     expect(calls.map((call) => call.method)).toEqual([
       "updateBalanceAllowance",
@@ -1157,8 +1156,7 @@ describe("PolymarketExecutionAdapterV2", () => {
       "updateBalanceAllowance",
       "getBalanceAllowance",
       "updateBalanceAllowance",
-      "getBalanceAllowance",
-      "postOrder"
+      "getBalanceAllowance"
     ]);
   });
 
@@ -1178,7 +1176,7 @@ describe("PolymarketExecutionAdapterV2", () => {
       },
       async getBalanceAllowance(params) {
         calls.push({ method: "getBalanceAllowance", args: [params] });
-        return { balance: "0", allowance: "0" };
+        return { balance: "2000000", allowance: "2000000" };
       },
       async getOrder() {
         throw new Error("not used");
@@ -1339,7 +1337,7 @@ describe("PolymarketExecutionAdapterV2", () => {
     ]);
   });
 
-  it("allows signed-bundle submit through fresh user CLOB sync attestation when live CLOB cache still lags", async () => {
+  it("blocks signed-bundle submit through fresh user CLOB sync attestation when live CLOB submit client still lags", async () => {
     const calls: string[] = [];
     const sdkClient: PolymarketClobV2SdkClient = {
       async createAndPostOrder() {
@@ -1423,9 +1421,8 @@ describe("PolymarketExecutionAdapterV2", () => {
         size: "1.25",
         price: 0.99
       }
-    })).resolves.toMatchObject({
-      venueOrderId: "pm-order-direct-clob-attested",
-      status: "FILLED"
+    })).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_SYNC_PENDING_FOR_SUBMIT"
     });
 
     expect(calls).toEqual([
@@ -1434,8 +1431,7 @@ describe("PolymarketExecutionAdapterV2", () => {
       "updateBalanceAllowance",
       "getBalanceAllowance",
       "updateBalanceAllowance",
-      "getBalanceAllowance",
-      "postOrder"
+      "getBalanceAllowance"
     ]);
   });
 
@@ -1451,7 +1447,7 @@ describe("PolymarketExecutionAdapterV2", () => {
         return {};
       },
       async getBalanceAllowance() {
-        return { balance: "0", allowance: "0" };
+        return { balance: "2000000", allowance: "2000000" };
       },
       async getOrder() {
         throw new Error("not used");
@@ -1863,7 +1859,7 @@ describe("PolymarketExecutionAdapterV2", () => {
       }
     })).rejects.toMatchObject({
       reasonCode: "POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE",
-      message: "Polymarket rejected this order even though CLOB collateral readiness was confirmed. Refresh CLOB sync or retry after Polymarket propagation completes."
+      message: "Polymarket rejected this order even though live CLOB collateral readiness was confirmed. Lotus will recheck readiness automatically; retry after Polymarket propagation completes."
     });
   });
 
