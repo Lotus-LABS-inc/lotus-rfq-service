@@ -1065,7 +1065,7 @@ describe("PolymarketExecutionAdapterV2", () => {
     ]);
   });
 
-  it("blocks user-signed Polymarket buy submit when only local user CLOB sync confirmation covers required collateral", async () => {
+  it("allows user-signed Polymarket buy submit when confirmed user CLOB sync covers required collateral", async () => {
     const calls: Array<{ method: string; args: unknown[] }> = [];
     const sdkClient: PolymarketClobV2SdkClient = {
       async createAndPostOrder() {
@@ -1147,14 +1147,18 @@ describe("PolymarketExecutionAdapterV2", () => {
         size: "1.25",
         price: 0.99
       }
-    })).rejects.toMatchObject({ reasonCode: "POLYMARKET_CLOB_COLLATERAL_NOT_READY" });
+    })).resolves.toMatchObject({
+      venueOrderId: "pm-order-user-clob-confirmed",
+      status: "FILLED"
+    });
     expect(calls.map((call) => call.method)).toEqual([
       "updateBalanceAllowance",
       "getBalanceAllowance",
       "updateBalanceAllowance",
       "getBalanceAllowance",
       "updateBalanceAllowance",
-      "getBalanceAllowance"
+      "getBalanceAllowance",
+      "postOrder"
     ]);
   });
 
@@ -1335,7 +1339,7 @@ describe("PolymarketExecutionAdapterV2", () => {
     ]);
   });
 
-  it("allows signed-bundle submit through fresh CLOB readiness attestation when live CLOB cache still lags", async () => {
+  it("allows signed-bundle submit through fresh user CLOB sync attestation when live CLOB cache still lags", async () => {
     const calls: string[] = [];
     const sdkClient: PolymarketClobV2SdkClient = {
       async createAndPostOrder() {
@@ -1387,7 +1391,7 @@ describe("PolymarketExecutionAdapterV2", () => {
           requiredAtomic: "1274970",
           requiredNotional: "1.27497",
           usableBalance: "7.85565",
-          usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE",
+          usableBalanceSource: "USER_CLOB_SYNC_CONFIRMED",
           approvalSpenderSource: "CLOB_ALLOWANCE_MAP",
           walletAddress: "0x1111111111111111111111111111111111111111",
           ownerAddress: "0x1111111111111111111111111111111111111111",

@@ -1175,7 +1175,7 @@ const parseCollateralDecimalToAtomicUnits = (value: unknown, fieldName: string):
 };
 
 const isPolymarketTradeReadySource = (source: string | null | undefined): boolean =>
-  source === "CLOB_COLLATERAL_ALLOWANCE";
+  source === "CLOB_COLLATERAL_ALLOWANCE" || source === "USER_CLOB_SYNC_CONFIRMED";
 
 const collateralAllowanceAtomicUnits = (response: BalanceAllowanceResponse): bigint => {
   if (nonEmpty(response.allowance)) {

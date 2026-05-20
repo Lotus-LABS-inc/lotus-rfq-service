@@ -683,7 +683,7 @@ describe("SignedTradeBundleService", () => {
     });
   });
 
-  it("blocks Polymarket buy readiness when only local user CLOB sync confirmation is persisted", async () => {
+  it("passes Polymarket buy readiness when confirmed user CLOB sync covers required collateral", async () => {
     const registry = new ExecutionVenueAdapterRegistry();
     registry.register(new FailingPolymarketBalanceAdapter());
     const sut = new SignedTradeBundleService(
@@ -704,10 +704,8 @@ describe("SignedTradeBundleService", () => {
 
     const readiness = await sut.getLiveReadiness({ userId: "user-1", quoteId: "exec_quote_polymarket_buy" });
 
-    expect(readiness.status).toBe("blocked");
-    expect(readiness.blockers).toContain(
-      "POLYMARKET: Polymarket CLOB sync was confirmed locally, but live CLOB spendable collateral is not available for venue submit yet. Retry after Polymarket sync propagates."
-    );
+    expect(readiness.status).toBe("fresh");
+    expect(readiness.blockers).toEqual([]);
     expect(readiness.venues[0]?.collateral).toMatchObject({
       requiredNotional: "1.2375",
       balance: "7.85565",
