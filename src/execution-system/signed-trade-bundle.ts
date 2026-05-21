@@ -1935,7 +1935,7 @@ const buildPolymarketOrderPayload = async (
     throw new SignedTradeBundleError("POLYMARKET_TYPED_DATA_NOT_CAPTURED", "Polymarket CLOB SDK did not produce typed data for signing.");
   }
   const quantized = side === "buy"
-    ? quantizePolymarketMarketBuyOrderAmounts(signedOrder as Record<string, unknown>, capturedTypedData, tickSize)
+    ? quantizePolymarketMarketBuyOrderAmounts(signedOrder as Record<string, unknown>, capturedTypedData, tickSize, price)
     : { signedOrder: signedOrder as Record<string, unknown>, typedData: capturedTypedData };
   const { signature: dummySignature, ...orderWithoutSignature } = quantized.signedOrder;
   const polymarketSignatureSuffix = signatureType === PolymarketSignatureType.POLY_1271
@@ -1953,6 +1953,7 @@ const buildPolymarketOrderPayload = async (
   };
 };
 
+const POLYMARKET_MARKET_BUY_COLLATERAL_QUANTUM_ATOMIC = 10_000n;
 const POLYMARKET_MARKET_BUY_SHARE_QUANTUM_ATOMIC = 10n;
 const POLYMARKET_DEFAULT_MARKET_BUY_SLIPPAGE_BPS = 100;
 const POLYMARKET_MAX_MARKET_BUY_SLIPPAGE_BPS = 500;
@@ -1966,7 +1967,8 @@ const ABI_CODER = AbiCoder.defaultAbiCoder();
 const quantizePolymarketMarketBuyOrderAmounts = (
   signedOrder: Record<string, unknown>,
   typedData: Record<string, unknown>,
-  tickSize: PolymarketTickSize | undefined
+  tickSize: PolymarketTickSize | undefined,
+  quotedPrice: number
 ): { signedOrder: Record<string, unknown>; typedData: Record<string, unknown> } => {
   const makerAmount = parsePositiveAtomicAmount(signedOrder.makerAmount, "makerAmount");
   const takerAmount = parsePositiveAtomicAmount(signedOrder.takerAmount, "takerAmount");
@@ -1977,21 +1979,22 @@ const quantizePolymarketMarketBuyOrderAmounts = (
       "Polymarket market-buy order size is below the minimum 0.00001 share precision."
     );
   }
-  const quantizedMakerAmount = polymarketTickAlignedBuyMakerAmount(
+  const quantized = polymarketVenuePrecisionMarketBuyAmounts(
     makerAmount,
     takerAmount,
     quantizedTakerAmount,
-    tickSize ?? "0.001"
+    tickSize ?? "0.001",
+    quotedPrice
   );
-  if (quantizedMakerAmount <= 0n) {
+  if (!quantized) {
     throw new SignedTradeBundleError(
       "POLYMARKET_ORDER_AMOUNT_INVALID",
-      "Polymarket market-buy order amount is below the minimum tick-aligned collateral precision."
+      "Polymarket market-buy order amount cannot be represented at venue precision. Refresh route and sign again."
     );
   }
   const amounts = {
-    makerAmount: quantizedMakerAmount.toString(),
-    takerAmount: quantizedTakerAmount.toString()
+    makerAmount: quantized.makerAmount.toString(),
+    takerAmount: quantized.takerAmount.toString()
   };
   return {
     signedOrder: {
@@ -2049,17 +2052,77 @@ const parsePositiveAtomicAmount = (value: unknown, field: string): bigint => {
 const roundDownAtomic = (value: bigint, quantum: bigint): bigint =>
   (value / quantum) * quantum;
 
-const polymarketTickAlignedBuyMakerAmount = (
+const polymarketVenuePrecisionMarketBuyAmounts = (
   makerAmount: bigint,
   takerAmount: bigint,
   quantizedTakerAmount: bigint,
-  tickSize: PolymarketTickSize
-): bigint => {
+  tickSize: PolymarketTickSize,
+  quotedPrice: number
+): { makerAmount: bigint; takerAmount: bigint } | null => {
   const tick = polymarketTickFraction(tickSize);
-  const originalTicks = makerAmount * tick.denominator / (takerAmount * tick.numerator);
-  const maxMaker = quantizedTakerAmount * originalTicks * tick.numerator / tick.denominator;
-  return maxMaker > makerAmount ? makerAmount : maxMaker;
+  const maxTicks = makerAmount * tick.denominator / (takerAmount * tick.numerator);
+  const minTicks = polymarketMinimumBuyTicks(quotedPrice, tick);
+  if (maxTicks <= 0n || minTicks <= 0n || minTicks > maxTicks) {
+    return null;
+  }
+  for (let ticks = maxTicks; ticks >= minTicks; ticks -= 1n) {
+    const takerStep = polymarketTakerStepForCollateralPrecision(ticks, tick);
+    const candidateTaker = roundDownAtomic(quantizedTakerAmount, takerStep);
+    if (candidateTaker <= 0n) {
+      continue;
+    }
+    const numerator = candidateTaker * ticks * tick.numerator;
+    if (numerator % tick.denominator !== 0n) {
+      continue;
+    }
+    const candidateMaker = numerator / tick.denominator;
+    if (
+      candidateMaker > 0n &&
+      candidateMaker <= makerAmount &&
+      candidateMaker % POLYMARKET_MARKET_BUY_COLLATERAL_QUANTUM_ATOMIC === 0n
+    ) {
+      return { makerAmount: candidateMaker, takerAmount: candidateTaker };
+    }
+  }
+  return null;
 };
+
+const polymarketMinimumBuyTicks = (
+  quotedPrice: number,
+  tick: { numerator: bigint; denominator: bigint }
+): bigint => {
+  if (!Number.isFinite(quotedPrice) || quotedPrice <= 0) {
+    return 1n;
+  }
+  const scaled = new Decimal(quotedPrice)
+    .times(tick.denominator.toString())
+    .div(tick.numerator.toString())
+    .ceil();
+  return BigInt(scaled.toFixed(0));
+};
+
+const polymarketTakerStepForCollateralPrecision = (
+  ticks: bigint,
+  tick: { numerator: bigint; denominator: bigint }
+): bigint => {
+  const denominator = tick.denominator * POLYMARKET_MARKET_BUY_COLLATERAL_QUANTUM_ATOMIC;
+  const numerator = ticks * tick.numerator;
+  return lcm(POLYMARKET_MARKET_BUY_SHARE_QUANTUM_ATOMIC, denominator / gcd(denominator, numerator));
+};
+
+const gcd = (left: bigint, right: bigint): bigint => {
+  let a = left < 0n ? -left : left;
+  let b = right < 0n ? -right : right;
+  while (b !== 0n) {
+    const next = a % b;
+    a = b;
+    b = next;
+  }
+  return a;
+};
+
+const lcm = (left: bigint, right: bigint): bigint =>
+  left / gcd(left, right) * right;
 
 const polymarketTickFraction = (tickSize: PolymarketTickSize): { numerator: bigint; denominator: bigint } => {
   const [, fractional = ""] = tickSize.split(".");

@@ -631,11 +631,12 @@ describe("SignedTradeBundleService", () => {
         message: { contents: Record<string, unknown> };
       };
 
-      expect(order.makerAmount).toBe("2037960");
-      expect(order.takerAmount).toBe("2040000");
-      expect(typedData.message.contents.makerAmount).toBe("2037960");
-      expect(typedData.message.contents.takerAmount).toBe("2040000");
-      expect(BigInt(String(order.makerAmount)) * 1_000n / BigInt(String(order.takerAmount))).toBe(999n);
+      expect(order.makerAmount).toBe("1990000");
+      expect(order.takerAmount).toBe("2000000");
+      expect(typedData.message.contents.makerAmount).toBe("1990000");
+      expect(typedData.message.contents.takerAmount).toBe("2000000");
+      expect(BigInt(String(order.makerAmount)) * 1_000n / BigInt(String(order.takerAmount))).toBe(995n);
+      expect(BigInt(String(order.makerAmount)) % 10_000n).toBe(0n);
       expect(BigInt(String(order.takerAmount)) % 10n).toBe(0n);
       expect(data.polymarketSignatureSuffix).toBe(polymarket1271SuffixForTypedData(typedData));
       expect(data.orderType).toBe("FOK");
@@ -685,10 +686,20 @@ describe("SignedTradeBundleService", () => {
       const orderRequest = prepared.signatureRequests.find((request) => request.requestType === "ORDER")!;
       const data = orderRequest.signedPayloadHint.data as Record<string, unknown>;
       const order = data.order as Record<string, unknown>;
+      const typedData = orderRequest.typedData as {
+        domain: { name: string; version: string; chainId: number; verifyingContract: string };
+        message: { contents: Record<string, unknown> };
+      };
 
-      expect(order.makerAmount).toBe("2017980");
-      expect(order.takerAmount).toBe("2020000");
-      expect(BigInt(String(order.makerAmount)) * 1_000n / BigInt(String(order.takerAmount))).toBe(999n);
+      expect(order.makerAmount).toBe("1990000");
+      expect(order.takerAmount).toBe("2000000");
+      expect(order.makerAmount).not.toBe("2017980");
+      expect(typedData.message.contents.makerAmount).toBe("1990000");
+      expect(typedData.message.contents.takerAmount).toBe("2000000");
+      expect(BigInt(String(order.makerAmount)) * 1_000n / BigInt(String(order.takerAmount))).toBe(995n);
+      expect(BigInt(String(order.makerAmount)) % 10_000n).toBe(0n);
+      expect(BigInt(String(order.takerAmount)) % 10n).toBe(0n);
+      expect(data.polymarketSignatureSuffix).toBe(polymarket1271SuffixForTypedData(typedData));
       expect(data.orderType).toBe("FOK");
     } finally {
       await fixtureServer.close();

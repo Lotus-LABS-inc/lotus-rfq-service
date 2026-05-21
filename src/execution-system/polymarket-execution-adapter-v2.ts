@@ -1501,6 +1501,7 @@ const validatePolymarketSignedOrderShapeBeforeSubmit = (
     validatePositivePolymarketSignedAmounts(signedRecord);
     return;
   }
+  validatePolymarketVenuePrecisionAmounts(signedRecord, normalizedSignedSide);
   validatePolymarketTickAlignedAmounts(signedRecord, normalizedSignedSide, tickSize);
 };
 
@@ -1554,6 +1555,25 @@ const validatePolymarketTickAlignedAmounts = (
   }
 };
 
+const POLYMARKET_MARKET_BUY_COLLATERAL_QUANTUM_ATOMIC = 10_000n;
+const POLYMARKET_MARKET_BUY_SHARE_QUANTUM_ATOMIC = 10n;
+
+const validatePolymarketVenuePrecisionAmounts = (
+  signedRecord: Record<string, unknown>,
+  signedSide: "buy" | "sell"
+): void => {
+  const { makerAmount, takerAmount } = validatePositivePolymarketSignedAmounts(signedRecord);
+  if (
+    signedSide === "buy" &&
+    (
+      makerAmount % POLYMARKET_MARKET_BUY_COLLATERAL_QUANTUM_ATOMIC !== 0n ||
+      takerAmount % POLYMARKET_MARKET_BUY_SHARE_QUANTUM_ATOMIC !== 0n
+    )
+  ) {
+    throwPolymarketOrderAmountPrecisionRejected();
+  }
+};
+
 const normalizePolymarketSignedOrderSide = (value: unknown): "buy" | "sell" | null => {
   const normalized = String(value ?? "").trim().toUpperCase();
   if (normalized === "BUY" || normalized === "0") {
@@ -1569,6 +1589,13 @@ const throwPolymarketOrderParamsRejected = (): never => {
   throw new PolymarketExecutionNotConfiguredError(
     "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
     "Price moved before execution. Refresh route and retry."
+  );
+};
+
+const throwPolymarketOrderAmountPrecisionRejected = (): never => {
+  throw new PolymarketExecutionNotConfiguredError(
+    "POLYMARKET_CLOB_ORDER_AMOUNT_PRECISION_REJECTED",
+    "Polymarket rejected the order amount precision. Refresh route and sign again."
   );
 };
 
@@ -1977,6 +2004,7 @@ type PolymarketPostOrderRejectionCode =
   | "POLYMARKET_CLOB_COLLATERAL_NOT_READY"
   | "POLYMARKET_CLOB_SIGNATURE_REJECTED"
   | "POLYMARKET_CLOB_AUTH_REJECTED"
+  | "POLYMARKET_CLOB_ORDER_AMOUNT_PRECISION_REJECTED"
   | "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED"
   | "POLYMARKET_CLOB_MARKET_REJECTED"
   | "POLYMARKET_CLOB_UNKNOWN_REJECTED_BY_VENUE";
@@ -2004,6 +2032,8 @@ const polymarketPostOrderRejectionMessages = {
     "Polymarket rejected the signed CLOB order signature. Refresh the route and sign again.",
   POLYMARKET_CLOB_AUTH_REJECTED:
     "Polymarket rejected CLOB authentication for this submit. Refresh venue authentication and retry.",
+  POLYMARKET_CLOB_ORDER_AMOUNT_PRECISION_REJECTED:
+    "Polymarket rejected the order amount precision. Refresh route and sign again.",
   POLYMARKET_CLOB_ORDER_PARAMS_REJECTED:
     "Price moved before execution. Refresh route and retry.",
   POLYMARKET_CLOB_MARKET_REJECTED:
@@ -2207,6 +2237,8 @@ const classifyPolymarketPostOrderRejection = (
   const collateralPattern = /balance|allowance|collateral|spendable|insufficient\s+(funds|balance)|not\s+enough|sync|funding/;
   const signaturePattern = /signature|signer|eip-?712|1271|invalid\s+sig|isvalidsignature/;
   const authPattern = /unauthorized|forbidden|api\s*key|hmac|credential|auth|401|403/;
+  const amountPrecisionPattern =
+    /market\s+buy\s+orders?.*maker\s+amount\s+supports\s+a\s+max\s+accuracy|maker\s+amount\s+supports\s+a\s+max\s+accuracy.*taker\s+amount\s+a\s+max|amount\s+precision|max\s+accuracy/;
   const orderParamsPattern = /invalid\s+order|maker\s*amount|taker\s*amount|tick\s*size|price|size|side|expiration|expired|fok|gtc|min(?:imum)?\s+size/;
   const marketPattern = /market|token\s*id|asset\s*id|closed|disabled|invalid\s+outcome|outcome/;
   const code: PolymarketPostOrderRejectionCode = collateralPattern.test(text)
@@ -2217,11 +2249,13 @@ const classifyPolymarketPostOrderRejection = (
       ? "POLYMARKET_CLOB_SIGNATURE_REJECTED"
       : authPattern.test(text)
         ? "POLYMARKET_CLOB_AUTH_REJECTED"
-        : orderParamsPattern.test(text)
-          ? "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED"
-          : marketPattern.test(text)
-            ? "POLYMARKET_CLOB_MARKET_REJECTED"
-            : "POLYMARKET_CLOB_UNKNOWN_REJECTED_BY_VENUE";
+        : amountPrecisionPattern.test(text)
+          ? "POLYMARKET_CLOB_ORDER_AMOUNT_PRECISION_REJECTED"
+          : orderParamsPattern.test(text)
+            ? "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED"
+            : marketPattern.test(text)
+              ? "POLYMARKET_CLOB_MARKET_REJECTED"
+              : "POLYMARKET_CLOB_UNKNOWN_REJECTED_BY_VENUE";
   return {
     code,
     message: polymarketPostOrderRejectionMessages[code]

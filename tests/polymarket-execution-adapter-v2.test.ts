@@ -1236,6 +1236,67 @@ describe("PolymarketExecutionAdapterV2", () => {
     expect(calls).toEqual([]);
   });
 
+  it("blocks invalid Polymarket market-buy amount precision before CLOB readiness or submit", async () => {
+    const calls: string[] = [];
+    const sdkClient: PolymarketClobV2SdkClient = {
+      async createAndPostOrder() {
+        throw new Error("not used");
+      },
+      async postOrder() {
+        calls.push("postOrder");
+        return { orderID: "pm-order-invalid-precision", status: "MATCHED" };
+      },
+      async updateBalanceAllowance() {
+        calls.push("updateBalanceAllowance");
+        return {};
+      },
+      async getBalanceAllowance() {
+        calls.push("getBalanceAllowance");
+        return { balance: "3000000", allowance: "3000000" };
+      },
+      async getOrder() {
+        throw new Error("not used");
+      },
+      async getTrades() {
+        return [];
+      },
+      async cancelOrder() {
+        return { success: true };
+      }
+    };
+    const client = new SdkPolymarketClobV2LiveClient({
+      executionMode: "v2",
+      liveExecutionEnabled: true,
+      clobHost: completeEnv.POLY_CLOB_HOST,
+      chainId: completeEnv.POLY_CHAIN_ID,
+      apiKey: completeEnv.POLY_API_KEY,
+      apiSecret: completeEnv.POLY_API_SECRET,
+      apiPassphrase: completeEnv.POLY_API_PASSPHRASE,
+      builderCode: completeEnv.POLY_BUILDER_CODE,
+      privateKey: completeEnv.POLY_PRIVATE_KEY,
+      tickSize: "0.001"
+    }, () => sdkClient);
+
+    await expect(client.submitOrder(signedPolymarketVenueOrder({
+      size: "2.02020202",
+      price: 0.992,
+      metadata: {
+        clobV2DryRun: {
+          adapter: "PolymarketExecutionAdapterV2",
+          dryRun: true
+        }
+      }
+    }, {
+      makerAmount: "2017980",
+      takerAmount: "2020000",
+      side: "BUY"
+    }))).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_ORDER_AMOUNT_PRECISION_REJECTED",
+      message: "Polymarket rejected the order amount precision. Refresh route and sign again."
+    });
+    expect(calls).toEqual([]);
+  });
+
   it("blocks tick-misaligned signed Polymarket relay orders before calling the relay", async () => {
     const calls: string[] = [];
     const client = new RelayPolymarketClobV2LiveClient({
@@ -2097,6 +2158,10 @@ describe("PolymarketExecutionAdapterV2", () => {
   it.each([
     ["signature has invalid EIP712 1271 signature", "POLYMARKET_CLOB_SIGNATURE_REJECTED"],
     ["Unauthorized: API key HMAC credential rejected", "POLYMARKET_CLOB_AUTH_REJECTED"],
+    [
+      "invalid amounts, the market buy orders maker amount supports a max accuracy of 2 decimals, taker amount a max of 5 decimals",
+      "POLYMARKET_CLOB_ORDER_AMOUNT_PRECISION_REJECTED"
+    ],
     ["invalid order: maker amount violates tick size for FOK", "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED"],
     ["market closed for token id / invalid outcome", "POLYMARKET_CLOB_MARKET_REJECTED"],
     ["unexpected venue rejection without known category", "POLYMARKET_CLOB_UNKNOWN_REJECTED_BY_VENUE"]
