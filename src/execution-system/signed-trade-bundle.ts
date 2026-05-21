@@ -119,6 +119,7 @@ export interface SignedTradePositionRecorder {
     legIndex: number;
     venue: string;
     reason: string;
+    liveSellableSize?: string | null | undefined;
     route: ExecutableTradeQuote;
     routeLeg: ExecutableRouteLeg;
   }): Promise<void>;
@@ -668,6 +669,7 @@ export class SignedTradeBundleService {
           legIndex,
           venue: leg.venue,
           reason: `Polymarket live share balance is below the quoted sell amount. Sellable balance: ${approval.tokenBalance} shares.`,
+          liveSellableSize: approval.tokenBalance,
           route: quote,
           routeLeg: leg
         });

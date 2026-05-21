@@ -1092,6 +1092,36 @@ describe("SignedTradeBundleService", () => {
     });
   });
 
+  it("reconciles Polymarket sellable size to the nonzero live share balance instead of clearing the position", async () => {
+    const registry = new ExecutionVenueAdapterRegistry();
+    registry.register(new FailingPolymarketBalanceAdapter());
+    const positionRecorder = new MemorySignedTradePositionRecorder();
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => polymarketSellQuote({ size: "6.072426" }) } as never,
+      registry,
+      { getAccount: async () => account("POLYMARKET") },
+      () => new Date("2026-05-07T00:00:00.000Z"),
+      {} as NodeJS.ProcessEnv,
+      undefined,
+      positionRecorder,
+      polymarketBalanceReader({}, {
+        tokenBalance: "6.0724",
+        tokenAllowance: "10"
+      })
+    );
+
+    const readiness = await sut.getLiveReadiness({ userId: "user-1", quoteId: "exec_quote_polymarket_sell" });
+
+    expect(readiness.status).toBe("blocked");
+    expect(readiness.blockers).toContain("POLYMARKET: Polymarket share balance is below the sell amount. Sellable balance: 6.0724 shares.");
+    expect(positionRecorder.corrections).toHaveLength(1);
+    expect(positionRecorder.corrections[0]).toMatchObject({
+      executionId: "exec_quote_polymarket_sell",
+      liveSellableSize: "6.0724",
+      reason: "Polymarket live share balance is below the quoted sell amount. Sellable balance: 6.0724 shares."
+    });
+  });
+
   it("does not record Polymarket positions from accepted orders until settlement evidence verifies the trade", async () => {
     const registry = new ExecutionVenueAdapterRegistry();
     const adapter = new PolymarketSubmittedFillAdapter("SETTLEMENT_PENDING");

@@ -491,11 +491,13 @@ export class PgSignedTradePositionRecorder implements SignedTradePositionRecorde
   }
 
   public async reconcileFailedSell(input: NonNullable<SignedTradePositionRecorder["reconcileFailedSell"]> extends (arg: infer Arg) => Promise<void> ? Arg : never): Promise<void> {
+    const liveSellableSize = Number(input.liveSellableSize);
+    const hasLiveSellableSize = Number.isFinite(liveSellableSize) && liveSellableSize > 0;
     await this.pool.query(
       `UPDATE user_execution_positions
-       SET sellable_size = 0,
-           status = 'RECOVERY',
-           metadata = metadata || $5::jsonb,
+       SET sellable_size = $5::numeric,
+           status = $6,
+           metadata = coalesce(metadata, '{}'::jsonb) || $7::jsonb,
            updated_at = now()
        WHERE user_id = $1
          AND venue = $2
@@ -506,13 +508,16 @@ export class PgSignedTradePositionRecorder implements SignedTradePositionRecorde
         input.routeLeg.venue.toUpperCase(),
         input.route.marketId,
         input.route.outcomeId,
+        hasLiveSellableSize ? input.liveSellableSize : "0",
+        hasLiveSellableSize ? "VERIFIED" : "RECOVERY",
         JSON.stringify({
           sellableReconciliation: {
             source: "venue_reject",
             executionId: input.executionId,
             legIndex: input.legIndex,
             venue: input.venue,
-            reason: input.reason
+            reason: input.reason,
+            ...(hasLiveSellableSize ? { liveSellableSize: input.liveSellableSize } : {})
           }
         })
       ]
