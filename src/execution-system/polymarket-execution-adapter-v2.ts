@@ -2197,25 +2197,38 @@ const appendPolymarket1271SignatureSuffix = (signature: string, suffix: string |
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+const firstNonEmptyString = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+  return undefined;
+};
+
 const mapPolymarketOrderResponse = (response: unknown): VenueSubmitResult => {
   const record = isRecord(response) ? response : {};
   const orderID = record.orderID ?? record.orderId ?? record.id;
   const statusValue = `${record.status ?? ""}`.trim().toUpperCase();
-  const takingAmount = record.takingAmount;
-  const makingAmount = record.makingAmount;
-  const filledSize = typeof takingAmount === "string" && takingAmount.length > 0
-    ? takingAmount
-    : typeof makingAmount === "string" && makingAmount.length > 0
-      ? makingAmount
-      : "0";
+  const explicitFilledSize = firstNonEmptyString(
+    record.filledSize,
+    record.filledAmount,
+    record.sizeMatched,
+    record.size_matched,
+    record.matchedAmount,
+    record.matched_amount
+  );
+  const filledSize = explicitFilledSize ?? "0";
+  const numericFilledSize = Number(filledSize);
   const averagePrice = Number(record.price ?? 0);
   const result: VenueSubmitResult = {
     venueOrderId: typeof orderID === "string" && orderID.length > 0 ? orderID : `polymarket-order-${sha256Hex(stableStringify(response)).slice(0, 16)}`,
-    status: statusValue === "MATCHED" || statusValue === "FILLED"
-      ? "FILLED"
-      : Number(filledSize) > 0
-        ? "PARTIAL_FILL"
-        : "SUBMITTED",
+    status: Number.isFinite(numericFilledSize) && numericFilledSize > 0
+      ? (statusValue === "MATCHED" || statusValue === "FILLED" ? "FILLED" : "PARTIAL_FILL")
+      : "SUBMITTED",
     filledSize,
     averagePrice: Number.isFinite(averagePrice) && averagePrice > 0 ? averagePrice : 0
   };

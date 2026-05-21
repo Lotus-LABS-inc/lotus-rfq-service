@@ -244,8 +244,8 @@ class PolymarketSubmittedFillAdapter extends TestExecutionAdapter {
     return {
       venueOrderId: "pm-order-1",
       fillId: "pm-fill-1",
-      status: "FILLED",
-      filledSize: "2.02020202",
+      status: "SUBMITTED",
+      filledSize: "0",
       averagePrice: 0.993
     };
   }
@@ -1088,7 +1088,7 @@ describe("SignedTradeBundleService", () => {
     });
   });
 
-  it("does not record Polymarket positions from submitted fills until settlement evidence verifies the trade", async () => {
+  it("does not record Polymarket positions from accepted orders until settlement evidence verifies the trade", async () => {
     const registry = new ExecutionVenueAdapterRegistry();
     const adapter = new PolymarketSubmittedFillAdapter("SETTLEMENT_PENDING");
     registry.register(adapter);
@@ -1120,13 +1120,9 @@ describe("SignedTradeBundleService", () => {
       venue: "POLYMARKET",
       status: "SUBMITTED",
       venueOrderId: "pm-order-1",
-      fillId: "pm-fill-1",
-      fillState: {
-        status: "FILLED",
-        filledSize: "2.02020202",
-        averagePrice: 0.993
-      }
+      fillId: "pm-fill-1"
     });
+    expect(submitted.submittedLegs[0]?.fillState).toBeUndefined();
     expect(positionRecorder.applications.size).toBe(0);
 
     const status = await sut.getExecutionStatus({

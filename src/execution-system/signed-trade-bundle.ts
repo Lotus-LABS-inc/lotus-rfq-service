@@ -364,7 +364,10 @@ export class SignedTradeBundleService {
           this.now().getTime() - lastSettlementCheckedAt >= settlementIntervalMs;
         const settlementLookupId = leg.fillId ?? leg.venueOrderId;
         const shouldRefreshSettlement = settlementCheckDue &&
-          (effectiveFillState.status === "FILLED" || leg.settlementState?.status === "SETTLEMENT_PENDING" || (needsVerifiedSettlement && (leg.status === "FILLED" || leg.fillState?.status === "FILLED")));
+          (effectiveFillState.status === "FILLED" ||
+            leg.settlementState?.status === "SETTLEMENT_PENDING" ||
+            (needsVerifiedSettlement && Boolean(leg.fillId)) ||
+            (needsVerifiedSettlement && (leg.status === "FILLED" || leg.fillState?.status === "FILLED")));
         const settlementState = shouldRefreshSettlement
           ? await adapter.fetchSettlementState(settlementLookupId)
           : leg.settlementState;

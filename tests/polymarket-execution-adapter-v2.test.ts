@@ -985,7 +985,7 @@ describe("PolymarketExecutionAdapterV2", () => {
         size: "1",
         price: 0.51
       }
-    })).resolves.toMatchObject({ venueOrderId: "pm-order-1271", status: "FILLED" });
+    })).resolves.toMatchObject({ venueOrderId: "pm-order-1271", status: "SUBMITTED", filledSize: "0" });
 
     expect(calls.map((call) => call.method)).toEqual([
       "updateBalanceAllowance",
@@ -1068,7 +1068,7 @@ describe("PolymarketExecutionAdapterV2", () => {
         size: "1.25",
         price: 0.99
       }
-    })).resolves.toMatchObject({ venueOrderId: "pm-order-scientific-balance", status: "FILLED" });
+    })).resolves.toMatchObject({ venueOrderId: "pm-order-scientific-balance", status: "SUBMITTED", filledSize: "0" });
 
     expect(calls.map((call) => call.method)).toEqual([
       "updateBalanceAllowance",
@@ -1442,7 +1442,8 @@ describe("PolymarketExecutionAdapterV2", () => {
       }
     })).resolves.toMatchObject({
       venueOrderId: "pm-order-clob-allowance-confirmed",
-      status: "FILLED"
+      status: "SUBMITTED",
+      filledSize: "0"
     });
     expect(calls.at(-1)?.args[1]).toBe(OrderType.FOK);
   });
@@ -1621,7 +1622,8 @@ describe("PolymarketExecutionAdapterV2", () => {
       }
     })).resolves.toMatchObject({
       venueOrderId: "pm-order-direct-clob-attested",
-      status: "FILLED"
+      status: "SUBMITTED",
+      filledSize: "0"
     });
 
     expect(calls).toEqual([
