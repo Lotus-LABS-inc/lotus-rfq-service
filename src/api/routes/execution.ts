@@ -15,6 +15,7 @@ import {
   type SignedTradeBundleService
 } from "../../execution-system/signed-trade-bundle.js";
 import type { CalculatedVenueQuoteSnapshot, VenueQuoteSnapshotBlocker } from "../../core/sor/quote-snapshot.js";
+import type { SettlementStatusV0 } from "../../execution-system/types.js";
 import type { ExecutionVenueReadinessSummary } from "../admin/execution-venues-admin-service.js";
 
 const candidateSchema = z.object({
@@ -579,7 +580,7 @@ export const registerExecutionRoutes = async (
       return reply.send({
         executionId,
         userStatus: signedStatus.status,
-        settlementStatus: signedStatus.status === "FILLED" ? "SETTLEMENT_PENDING" : "SETTLEMENT_PENDING",
+        settlementStatus: deriveExecutionSettlementStatus(signedStatus),
         ghostFillStatus: "NOT_APPLICABLE",
         recoveryStatus: "none",
         dryRun: signedStatus.dryRun,
@@ -846,6 +847,7 @@ const summarizePortfolio = (positions: readonly MarkedExecutionPosition[]): Reco
 const toExecutionHistoryItem = (status: SignedTradeExecutionStatus): Record<string, unknown> => ({
   executionId: status.executionId,
   status: status.status,
+  settlementStatus: deriveExecutionSettlementStatus(status),
   dryRun: status.dryRun,
   submittedAt: status.submittedAt,
   updatedAt: status.updatedAt,
@@ -862,7 +864,7 @@ const toOpenOrderItem = (status: SignedTradeExecutionStatus): Record<string, unk
 const toExecutionReceipt = (status: SignedTradeExecutionStatus): Record<string, unknown> => ({
   executionId: status.executionId,
   userStatus: status.status,
-  settlementStatus: status.status === "FILLED" ? "SETTLEMENT_PENDING" : "SETTLEMENT_PENDING",
+  settlementStatus: deriveExecutionSettlementStatus(status),
   dryRun: status.dryRun,
   submittedAt: status.submittedAt,
   updatedAt: status.updatedAt,
@@ -885,6 +887,53 @@ const sanitizeSubmittedLegs = (
   lastSettlementCheckedAt: leg.lastSettlementCheckedAt,
   lastWatcherError: leg.lastWatcherError
 }));
+
+const deriveExecutionSettlementStatus = (status: SignedTradeExecutionStatus): SettlementStatusV0 => {
+  if (status.dryRun) {
+    return "DRY_RUN_ONLY";
+  }
+
+  const settlementStatuses = status.submittedLegs
+    .map((leg) => leg.settlementState?.status)
+    .filter((settlementStatus): settlementStatus is SettlementStatusV0 => Boolean(settlementStatus));
+
+  if (settlementStatuses.length === 0) {
+    return "SETTLEMENT_PENDING";
+  }
+  if (settlementStatuses.includes("GHOST_FILL_CONFIRMED")) {
+    return "GHOST_FILL_CONFIRMED";
+  }
+  if (settlementStatuses.includes("GHOST_FILL_SUSPECTED")) {
+    return "GHOST_FILL_SUSPECTED";
+  }
+  if (settlementStatuses.includes("SETTLEMENT_TIMEOUT")) {
+    return "SETTLEMENT_TIMEOUT";
+  }
+  if (settlementStatuses.includes("SETTLEMENT_UNKNOWN")) {
+    return "SETTLEMENT_UNKNOWN";
+  }
+
+  const terminalSettlementStatuses = new Set<SettlementStatusV0>([
+    "SETTLEMENT_VERIFIED",
+    "NOT_APPLICABLE",
+    "DRY_RUN_ONLY"
+  ]);
+  const allKnownLegsTerminal = settlementStatuses.every((settlementStatus) =>
+    terminalSettlementStatuses.has(settlementStatus));
+  const everyLegAccountedFor = settlementStatuses.length === status.submittedLegs.length;
+
+  if (allKnownLegsTerminal && everyLegAccountedFor) {
+    if (settlementStatuses.includes("SETTLEMENT_VERIFIED")) {
+      return "SETTLEMENT_VERIFIED";
+    }
+    if (settlementStatuses.every((settlementStatus) => settlementStatus === "DRY_RUN_ONLY")) {
+      return "DRY_RUN_ONLY";
+    }
+    return "NOT_APPLICABLE";
+  }
+
+  return "SETTLEMENT_PENDING";
+};
 
 const fixedDecimal = (value: number): string =>
   Number.isFinite(value) ? value.toFixed(8).replace(/\.?0+$/, "") : "0";

@@ -334,6 +334,12 @@ describe("execution signed bundle routes", () => {
             status: "FILLED",
             filledSize: "2.5",
             averagePrice: 0.388
+          },
+          settlementState: {
+            status: "SETTLEMENT_VERIFIED",
+            evidence: {
+              source: "venue_settlement_api"
+            }
           }
         }]
       }))
@@ -361,12 +367,16 @@ describe("execution signed bundle routes", () => {
     expect(response.json()).toMatchObject({
       executionId: "exec_quote_submitted",
       userStatus: "FILLED",
+      settlementStatus: "SETTLEMENT_VERIFIED",
       submittedLegs: [{
         venue: "PREDICT_FUN",
         status: "FILLED",
         fillState: {
           status: "FILLED",
           filledSize: "2.5"
+        },
+        settlementState: {
+          status: "SETTLEMENT_VERIFIED"
         }
       }]
     });
@@ -667,7 +677,13 @@ describe("execution signed bundle routes", () => {
         venue: "POLYMARKET",
         status: "FILLED",
         venueOrderId: "order-1",
-        fillState: { status: "FILLED" as const, filledSize: "2", averagePrice: 0.5 }
+        fillState: { status: "FILLED" as const, filledSize: "2", averagePrice: 0.5 },
+        settlementState: {
+          status: "SETTLEMENT_VERIFIED" as const,
+          evidence: {
+            source: "polymarket_data_api_activity"
+          }
+        }
       }]
     };
     const signedTradeBundleService = {
@@ -688,7 +704,15 @@ describe("execution signed bundle routes", () => {
     const history = await app.inject({ method: "GET", url: "/execution/history?status=FILLED&limit=10" });
     expect(history.statusCode).toBe(200);
     expect(history.json()).toMatchObject({
-      items: [{ executionId: "exec-1", status: "FILLED", submittedLegs: [{ venue: "POLYMARKET" }] }],
+      items: [{
+        executionId: "exec-1",
+        status: "FILLED",
+        settlementStatus: "SETTLEMENT_VERIFIED",
+        submittedLegs: [{
+          venue: "POLYMARKET",
+          settlementState: { status: "SETTLEMENT_VERIFIED" }
+        }]
+      }],
       nextCursor: null
     });
     expect(executionStatusRepository.listExecutionStatusesForUser).toHaveBeenCalledWith({
@@ -703,7 +727,12 @@ describe("execution signed bundle routes", () => {
       receipt: {
         executionId: "exec-1",
         userStatus: "FILLED",
-        submittedLegs: [{ venue: "POLYMARKET", fillState: { filledSize: "2" } }]
+        settlementStatus: "SETTLEMENT_VERIFIED",
+        submittedLegs: [{
+          venue: "POLYMARKET",
+          fillState: { filledSize: "2" },
+          settlementState: { status: "SETTLEMENT_VERIFIED" }
+        }]
       }
     });
   });
