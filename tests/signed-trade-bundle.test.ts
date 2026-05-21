@@ -858,7 +858,7 @@ describe("SignedTradeBundleService", () => {
     expect(JSON.stringify([...repository.rows.values()])).not.toContain("balance is not enough");
   });
 
-  it("preserves the specific Polymarket failure reason when a duplicate submit returns unknown", async () => {
+  it("returns the stored Polymarket failure without resubmitting a duplicate signed bundle", async () => {
     const registry = new ExecutionVenueAdapterRegistry();
     const adapter = new SequentialPolymarketRejectionAdapter();
     registry.register(adapter);
@@ -895,7 +895,7 @@ describe("SignedTradeBundleService", () => {
       executionId: "exec_quote_polymarket_duplicate_failure"
     });
 
-    expect(adapter.submitCalls).toBe(2);
+    expect(adapter.submitCalls).toBe(1);
     expect(first.submittedLegs[0]).toMatchObject({
       status: "FAILED",
       reasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED"

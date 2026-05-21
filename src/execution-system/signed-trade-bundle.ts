@@ -240,6 +240,12 @@ export class SignedTradeBundleService {
     dryRun?: boolean | undefined;
   }): Promise<SignedTradeBundleSubmitResult> {
     const quote = await withLatencyStage("execution_quote_load", {}, () => this.requireFreshQuote(input.userId, input.quoteId));
+    if (input.dryRun !== true) {
+      const existing = await this.findStoredExecutionStatus({ userId: input.userId, executionId: quote.quoteId });
+      if (existing && isDuplicateSubmitStatus(existing.status)) {
+        return toSubmitResultFromStoredStatus(existing);
+      }
+    }
     let liveReadiness: LiveSubmitReadinessSnapshot | null = null;
     if (input.dryRun !== true) {
       liveReadiness = await this.getLiveReadiness({ userId: input.userId, quoteId: input.quoteId });
@@ -1517,6 +1523,29 @@ const mergeSubmittedLegFailures = (
 
 const submittedLegKey = (leg: Pick<SubmittedExecutionLeg, "legIndex" | "venue">): string =>
   `${leg.legIndex}:${leg.venue.toUpperCase()}`;
+
+const isDuplicateSubmitStatus = (status: SignedTradeExecutionStatus["status"]): boolean =>
+  status === "FAILED" || status === "SUBMITTED" || status === "PARTIAL" || status === "FILLED";
+
+const toSubmitResultFromStoredStatus = (status: SignedTradeExecutionStatus): SignedTradeBundleSubmitResult => ({
+  executionId: status.executionId,
+  status: status.status === "FAILED"
+    ? "FAILED"
+    : status.status === "PARTIAL"
+      ? "PARTIAL"
+      : "SUBMITTED",
+  dryRun: status.dryRun,
+  submittedLegs: status.submittedLegs.map((leg) => ({
+    legIndex: leg.legIndex,
+    venue: leg.venue,
+    status: leg.status,
+    ...(leg.venueOrderId ? { venueOrderId: leg.venueOrderId } : {}),
+    ...(leg.fillId ? { fillId: leg.fillId } : {}),
+    ...(leg.reasonCode ? { reasonCode: leg.reasonCode } : {}),
+    ...(leg.reason ? { reason: leg.reason } : {}),
+    ...(leg.fillState ? { fillState: leg.fillState } : {})
+  }))
+});
 
 const selectPreferredSubmittedLeg = (
   existing: SubmittedExecutionLeg,

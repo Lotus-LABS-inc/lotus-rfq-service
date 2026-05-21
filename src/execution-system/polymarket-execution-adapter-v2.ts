@@ -2462,7 +2462,9 @@ const mapPolymarketOrderResponse = (response: unknown): VenueSubmitResult => {
     record.sizeMatched,
     record.size_matched,
     record.matchedAmount,
-    record.matched_amount
+    record.matched_amount,
+    record.takingAmount,
+    record.makingAmount
   );
   const filledSize = explicitFilledSize ?? "0";
   const numericFilledSize = Number(filledSize);
