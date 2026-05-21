@@ -683,13 +683,26 @@ describe("sell quote sizing", () => {
       percent: 50,
       marketId: "market-1",
       outcomeId: "yes",
-      candidates: [{ venue: "POLYMARKET", price: 0.6, availableSize: "4" }]
+      candidates: [{
+        venue: "POLYMARKET",
+        venueMarketId: "condition-1",
+        venueOutcomeId: "token-1",
+        price: 0.6,
+        availableSize: "4",
+        metadata: { tickSize: "0.01" }
+      }]
     });
 
     expect(result.allocations).toEqual([
       expect.objectContaining({ venue: "POLYMARKET", sellSize: "2", availableSize: "4" })
     ]);
     expect(result.quote).toMatchObject({ routeType: "SINGLE_VENUE", executableAmount: "2" });
+    expect(result.quote?.legs[0]).toMatchObject({
+      venue: "POLYMARKET",
+      venueMarketId: "condition-1",
+      venueOutcomeId: "token-1",
+      metadata: { tickSize: "0.01" }
+    });
   });
 
   it("allocates sell-all custom amount pro-rata across verified positions", async () => {
@@ -721,6 +734,40 @@ describe("sell quote sizing", () => {
       expect.objectContaining({ venue: "LIMITLESS", sellSize: "1" })
     ]);
     expect(result.quote).toMatchObject({ routeType: "CROSS_VENUE", executableAmount: "4" });
+  });
+
+  it("preserves venue identifiers for sell-all custom exits", async () => {
+    const routes = new ExecutableRouteService({
+      async listVenues() {
+        return [readyVenue("POLYMARKET")];
+      }
+    });
+    const service = new SellQuoteService(new MemoryPositionRepository([position("POLYMARKET", "6.072426")]), routes);
+
+    const result = await service.prepareExit({
+      userId: "user-1",
+      sellMode: "SELL_ALL",
+      sizeMode: "CUSTOM_AMOUNT",
+      amount: "6.072426",
+      marketId: "market-1",
+      outcomeId: "yes",
+      candidates: [{
+        venue: "POLYMARKET",
+        venueMarketId: "0xcondition",
+        venueOutcomeId: "15636396498081492607537245191035256780946494107835473972503944043229908184003",
+        price: 0.989,
+        availableSize: "1406335.35",
+        requiresUserSignature: true
+      }]
+    });
+
+    expect(result.quote?.legs[0]).toMatchObject({
+      venue: "POLYMARKET",
+      venueMarketId: "0xcondition",
+      venueOutcomeId: "15636396498081492607537245191035256780946494107835473972503944043229908184003",
+      size: "6.072426",
+      requiresUserSignature: true
+    });
   });
 
   it("rejects custom sell amount above verified position", async () => {

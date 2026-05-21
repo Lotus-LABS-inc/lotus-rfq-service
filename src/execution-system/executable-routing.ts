@@ -526,10 +526,10 @@ export class SellQuoteService {
       candidates: allocations.map((allocation) => {
         const source = input.candidates.find((candidate) => candidate.venue.toUpperCase() === allocation.venue);
         return {
+          ...(source ?? {}),
           venue: allocation.venue,
           price: allocation.price,
-          availableSize: allocation.sellSize,
-          ...(source?.requiresUserSignature !== undefined ? { requiresUserSignature: source.requiresUserSignature } : {})
+          availableSize: allocation.sellSize
         };
       })
     });
