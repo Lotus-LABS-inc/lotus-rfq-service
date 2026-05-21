@@ -247,7 +247,7 @@ class SequentialPolymarketRejectionAdapter extends TestExecutionAdapter {
     if (message.includes("tick size")) {
       return {
         code: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
-        message: "Polymarket rejected the CLOB order parameters. Refresh the route before retrying.",
+        message: "Price moved before execution. Refresh route and retry.",
         retryable: false
       };
     }
@@ -852,12 +852,12 @@ describe("SignedTradeBundleService", () => {
     expect(second.submittedLegs[0]).toMatchObject({
       status: "FAILED",
       reasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
-      reason: "Polymarket rejected the CLOB order parameters. Refresh the route before retrying."
+      reason: "Price moved before execution. Refresh route and retry."
     });
     expect(stored?.submittedLegs[0]).toMatchObject({
       status: "FAILED",
       reasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
-      reason: "Polymarket rejected the CLOB order parameters. Refresh the route before retrying."
+      reason: "Price moved before execution. Refresh route and retry."
     });
   });
 

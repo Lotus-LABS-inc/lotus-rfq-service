@@ -1231,7 +1231,7 @@ describe("PolymarketExecutionAdapterV2", () => {
       side: "BUY"
     }))).rejects.toMatchObject({
       reasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
-      message: "Polymarket rejected the CLOB order parameters. Refresh the route before retrying."
+      message: "Price moved before execution. Refresh route and retry."
     });
     expect(calls).toEqual([]);
   });
