@@ -10,6 +10,7 @@ import type {
 } from "../../execution-system/executable-routing.js";
 import {
   SignedTradeBundleError,
+  type LiveSubmitReadinessSnapshot,
   type SignedTradeExecutionStatus,
   type SignedTradeBundleService
 } from "../../execution-system/signed-trade-bundle.js";
@@ -223,6 +224,55 @@ export const registerExecutionRoutes = async (
         message: "Execution quote request validation failed.",
         details: parsed.error.flatten()
       });
+    }
+    if (parsed.data.side === "sell") {
+      try {
+        const result = await deps.sellQuoteService.prepareExit({
+          userId: request.user.userId,
+          sellMode: "SELL_ALL",
+          sizeMode: "CUSTOM_AMOUNT",
+          amount: parsed.data.amount,
+          marketId: parsed.data.marketId,
+          outcomeId: parsed.data.outcomeId,
+          candidates: parsed.data.candidates
+        });
+        if (!result.quote) {
+          return reply.status(409).send({
+            code: "NO_EXECUTABLE_EXIT_ROUTE",
+            message: result.userMessage ?? "No verified sellable position is available.",
+            skippedAmount: result.skippedAmount
+          });
+        }
+        const readiness = deps.signedTradeBundleService
+          ? await deps.signedTradeBundleService.getLiveReadiness({
+              userId: request.user.userId,
+              quoteId: result.quote.quoteId
+            }).catch(() => null)
+          : null;
+        if (isPolymarketSellShareBalanceBlocked(readiness)) {
+          return reply.status(409).send({
+            code: "NO_SELLABLE_SHARES",
+            message: firstLiveReadinessBlocker(readiness) ?? "No verified Polymarket shares are available to sell for this outcome.",
+            skippedAmount: result.skippedAmount,
+            readiness
+          });
+        }
+        return reply.status(201).send({
+          quote: toUserQuote(result.quote),
+          allocations: result.allocations.map((allocation) => ({
+            venue: allocation.venue,
+            positionId: allocation.positionId,
+            sellSize: allocation.sellSize,
+            availableSize: allocation.availableSize
+          })),
+          skippedAmount: result.skippedAmount
+        });
+      } catch (error) {
+        return reply.status(409).send({
+          code: "EXIT_QUOTE_REJECTED",
+          message: error instanceof Error ? error.message : "Exit quote request rejected."
+        });
+      }
     }
     const result = await deps.executableRouteService.quote({
       userId: request.user.userId,
@@ -619,6 +669,20 @@ export const registerExecutionRoutes = async (
           skippedAmount: result.skippedAmount
         });
       }
+      const readiness = deps.signedTradeBundleService
+        ? await deps.signedTradeBundleService.getLiveReadiness({
+            userId: request.user.userId,
+            quoteId: result.quote.quoteId
+          }).catch(() => null)
+        : null;
+      if (isPolymarketSellShareBalanceBlocked(readiness)) {
+        return reply.status(409).send({
+          code: "NO_SELLABLE_SHARES",
+          message: firstLiveReadinessBlocker(readiness) ?? "No verified Polymarket shares are available to sell for this outcome.",
+          skippedAmount: result.skippedAmount,
+          readiness
+        });
+      }
       return reply.status(201).send({
         quote: toUserQuote(result.quote),
         allocations: result.allocations.map((allocation) => ({
@@ -636,6 +700,22 @@ export const registerExecutionRoutes = async (
       });
     }
   });
+};
+
+const isPolymarketSellShareBalanceBlocked = (readiness: LiveSubmitReadinessSnapshot | null): boolean => {
+  const venue = readiness?.venues.find((item) => item.venue.toUpperCase() === "POLYMARKET");
+  if (!venue || venue.status !== "blocked") return false;
+  const blockerText = venue.blockers.join(" ").toUpperCase();
+  const tokenSymbol = String(venue.collateral.tokenSymbol ?? "").toUpperCase();
+  const balance = Number(venue.collateral.balance ?? NaN);
+  return /SHARE BALANCE|SELLABLE BALANCE|BELOW THE SELL AMOUNT/.test(blockerText) ||
+    (tokenSymbol.includes("SHARE") && Number.isFinite(balance) && balance <= 0);
+};
+
+const firstLiveReadinessBlocker = (readiness: LiveSubmitReadinessSnapshot | null): string | null => {
+  const venue = readiness?.venues.find((item) => item.status === "blocked" && item.blockers.length > 0);
+  if (venue) return venue.blockers[0] ?? null;
+  return readiness?.blockers[0] ?? null;
 };
 
 const toUserQuote = (quote: ExecutableTradeQuote): Record<string, unknown> => ({

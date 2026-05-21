@@ -6,6 +6,185 @@ import {
 } from "../src/api/routes/execution.js";
 
 describe("execution signed bundle routes", () => {
+  const sellQuote = () => ({
+    quoteId: "exec_quote_sell",
+    userId: "user-1",
+    side: "sell" as const,
+    marketId: "market-1",
+    outcomeId: "NO",
+    routeType: "SINGLE_VENUE" as const,
+    venuePath: ["POLYMARKET"],
+    executableAmount: "2",
+    skippedAmount: "0",
+    expectedPrice: 0.99,
+    effectivePrice: 0.99,
+    requiredUserSignatureSteps: ["POLYMARKET user signature required"],
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    legs: [{
+      venue: "POLYMARKET",
+      venueMarketId: "poly-market",
+      venueOutcomeId: "12345678901234567890",
+      size: "2",
+      price: 0.99,
+      requiresUserSignature: true
+    }]
+  });
+
+  it("routes sell quote creation through verified position exits", async () => {
+    const app = Fastify();
+    const quote = vi.fn();
+    const prepareExit = vi.fn(async () => ({
+      quote: sellQuote(),
+      allocations: [{
+        venue: "POLYMARKET",
+        positionId: "position-1",
+        sellSize: "2",
+        availableSize: "2"
+      }],
+      skippedAmount: "0",
+      rejectedCandidates: []
+    }));
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: {
+        quote,
+        getQuote: vi.fn()
+      } as never,
+      sellQuoteService: {
+        prepareExit
+      } as never
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/execution/quote",
+      payload: {
+        side: "sell",
+        marketId: "market-1",
+        outcomeId: "NO",
+        amount: "2",
+        candidates: [{
+          venue: "POLYMARKET",
+          venueMarketId: "poly-market",
+          venueOutcomeId: "12345678901234567890",
+          price: 0.99,
+          availableSize: "100",
+          requiresUserSignature: true
+        }]
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(quote).not.toHaveBeenCalled();
+    expect(prepareExit).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "user-1",
+      sellMode: "SELL_ALL",
+      sizeMode: "CUSTOM_AMOUNT",
+      amount: "2",
+      marketId: "market-1",
+      outcomeId: "NO"
+    }));
+    expect(response.json()).toMatchObject({
+      quote: {
+        side: "sell",
+        venuePath: ["POLYMARKET"]
+      },
+      allocations: [{
+        venue: "POLYMARKET",
+        positionId: "position-1",
+        sellSize: "2",
+        availableSize: "2"
+      }]
+    });
+  });
+
+  it("rejects sell quote creation when live Polymarket share balance is zero", async () => {
+    const app = Fastify();
+    const prepareExit = vi.fn(async () => ({
+      quote: sellQuote(),
+      allocations: [{
+        venue: "POLYMARKET",
+        positionId: "position-1",
+        sellSize: "2",
+        availableSize: "2"
+      }],
+      skippedAmount: "0",
+      rejectedCandidates: []
+    }));
+    const getLiveReadiness = vi.fn(async () => ({
+      quoteId: "exec_quote_sell",
+      generatedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      status: "blocked",
+      blockers: ["POLYMARKET: Polymarket share balance is below the sell amount. Sellable balance: 0 shares."],
+      venues: [{
+        venue: "POLYMARKET",
+        status: "blocked",
+        checkedAt: new Date().toISOString(),
+        blockers: ["Polymarket share balance is below the sell amount. Sellable balance: 0 shares."],
+        account: {
+          walletAddress: "0xwallet",
+          venueAccountAddress: "0xdeposit",
+          ownerAddress: "0xdeposit"
+        },
+        collateral: {
+          requiredNotional: "2",
+          balance: "0",
+          allowance: "0",
+          tokenSymbol: "Polymarket shares",
+          tokenAddress: null,
+          spenderAddress: null,
+          chainId: 137,
+          approvalMethod: "ERC1155_SET_APPROVAL_FOR_ALL"
+        }
+      }]
+    }));
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: {
+        quote: vi.fn(),
+        getQuote: vi.fn()
+      } as never,
+      sellQuoteService: {
+        prepareExit
+      } as never,
+      signedTradeBundleService: {
+        getLiveReadiness
+      } as never
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/execution/quote",
+      payload: {
+        side: "sell",
+        marketId: "market-1",
+        outcomeId: "NO",
+        amount: "2",
+        candidates: [{
+          venue: "POLYMARKET",
+          venueMarketId: "poly-market",
+          venueOutcomeId: "12345678901234567890",
+          price: 0.99,
+          availableSize: "100",
+          requiresUserSignature: true
+        }]
+      }
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      code: "NO_SELLABLE_SHARES",
+      message: "Polymarket share balance is below the sell amount. Sellable balance: 0 shares."
+    });
+    expect(getLiveReadiness).toHaveBeenCalledWith({
+      userId: "user-1",
+      quoteId: "exec_quote_sell"
+    });
+  });
+
   it("preserves live candidate metadata when creating execution quotes", async () => {
     const app = Fastify();
     const quote = vi.fn(async () => ({
