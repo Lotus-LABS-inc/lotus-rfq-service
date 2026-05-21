@@ -2108,6 +2108,15 @@ describe("PolymarketExecutionAdapterV2", () => {
     });
   });
 
+  it("maps Polymarket FOK full-fill rejection to a price-moved message", async () => {
+    const client = diagnosticClient(diagnosticSdkClient(new Error("order couldn't be fully filled. FOK orders are fully filled or killed.")));
+
+    await expect(client.submitOrder(signedPolymarketVenueOrder())).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
+      message: "Price moved before execution. Refresh route and retry."
+    });
+  });
+
   it("maps collateral postOrder rejection to sync only after confirmed submit readiness", async () => {
     const client = diagnosticClient(diagnosticSdkClient(new Error("not enough balance / allowance")));
 

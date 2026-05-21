@@ -2207,6 +2207,7 @@ const classifyPolymarketPostOrderRejection = (
   const collateralPattern = /balance|allowance|collateral|spendable|insufficient\s+(funds|balance)|not\s+enough|sync|funding/;
   const signaturePattern = /signature|signer|eip-?712|1271|invalid\s+sig|isvalidsignature/;
   const authPattern = /unauthorized|forbidden|api\s*key|hmac|credential|auth|401|403/;
+  const fillOrKillPriceMovedPattern = /(?:could(?:n't| not)|cannot|can't)\s+be\s+fully\s+filled|fully\s+filled\s+or\s+killed|fill\s+or\s+kill|fok\s+orders?\s+are\s+fully\s+filled/;
   const orderParamsPattern = /invalid\s+order|maker\s*amount|taker\s*amount|tick\s*size|price|size|side|expiration|expired|fok|gtc|min(?:imum)?\s+size/;
   const marketPattern = /market|token\s*id|asset\s*id|closed|disabled|invalid\s+outcome|outcome/;
   const code: PolymarketPostOrderRejectionCode = collateralPattern.test(text)
@@ -2224,7 +2225,9 @@ const classifyPolymarketPostOrderRejection = (
             : "POLYMARKET_CLOB_UNKNOWN_REJECTED_BY_VENUE";
   return {
     code,
-    message: polymarketPostOrderRejectionMessages[code]
+    message: code === "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED" && fillOrKillPriceMovedPattern.test(text)
+      ? "Price moved before execution. Refresh route and retry."
+      : polymarketPostOrderRejectionMessages[code]
   };
 };
 
