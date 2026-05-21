@@ -169,6 +169,22 @@ const recoveringLimitlessEoaPartnerAccountClient = (): LimitlessPartnerAccountCl
   }
 });
 
+const failingLimitlessEoaPartnerAccountClient = (): LimitlessPartnerAccountClient => ({
+  configured: () => true,
+  eoaPartnerAccountRegistrationEnabled: () => true,
+  getEoaPartnerAccount: async () => null,
+  getSigningMessage: async () => "Please sign this Limitless ownership message",
+  createEoaPartnerAccount: async () => {
+    const error = new Error("Limitless partner account request failed with status 403.") as Error & {
+      statusCode: number;
+      reasonCode: string;
+    };
+    error.statusCode = 403;
+    error.reasonCode = "LIMITLESS_PARTNER_ACCOUNT_CREATE_FAILED";
+    throw error;
+  }
+});
+
 const limitlessServerWalletPartnerAccountClient = (): LimitlessPartnerAccountClient => ({
   configured: () => true,
   serverWalletDelegationEnabled: () => true,
@@ -852,6 +868,47 @@ describe("user venue account service", () => {
     expect(serialized).toContain("LIMITLESS_PARTNER_ACCOUNT_CREATE_RECOVERED_BY_DISCOVERY");
     expect(serialized).not.toContain("partner account already exists");
     expect(serialized).not.toContain("signature");
+  });
+
+  it("records sanitized Limitless partner completion diagnostics when create and discovery fail", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    const service = new UserVenueAccountService(
+      repository,
+      {
+        async resolveUserTurnkeyEvmFundingWallet() {
+          return evmWallet();
+        }
+      },
+      predictAccountClient(),
+      failingLimitlessEoaPartnerAccountClient(),
+      polymarketDepositWalletClient()
+    );
+
+    await expect(service.completeLimitlessPartnerAccountAuth({
+      userId: "user-1",
+      signer: "0x1111111111111111111111111111111111111111",
+      signature: `0x${"d".repeat(130)}`,
+      message: "Please sign this Limitless ownership message"
+    })).rejects.toMatchObject({
+      code: "LIMITLESS_PARTNER_ACCOUNT_AUTH_FAILED",
+      statusCode: 502,
+      message: "Limitless partner account credentials were rejected. Other venues remain usable while the operator checks the Limitless account-creation scope."
+    });
+
+    const event = repository.auditEvents.find((candidate) =>
+      candidate.eventType === "LIMITLESS_PARTNER_ACCOUNT_CREATE_FAILED"
+    );
+    expect(event?.payload).toMatchObject({
+      venue: "LIMITLESS",
+      signer: "0x1111111111111111111111111111111111111111",
+      source: "BATCH_COMPLETE",
+      failure: "LIMITLESS_PARTNER_ACCOUNT_CREATE_FAILED",
+      reasonCode: "LIMITLESS_PARTNER_ACCOUNT_CREATE_FAILED",
+      statusCode: 403
+    });
+    const serialized = JSON.stringify(repository.auditEvents);
+    expect(serialized).not.toContain(`0x${"d".repeat(130)}`);
+    expect(serialized).not.toContain("hmac");
   });
 
   it("discovers a numeric Limitless EOA profile instead of treating the wallet address as a relay-ready profile id", async () => {

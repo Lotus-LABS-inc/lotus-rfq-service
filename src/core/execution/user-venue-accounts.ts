@@ -1332,6 +1332,17 @@ export class UserVenueAccountService {
         });
         return discovered;
       }
+      await this.repository.appendAccountAuditEvent({
+        userId: input.userId,
+        venueAccountBindingId: null,
+        eventType: "LIMITLESS_PARTNER_ACCOUNT_CREATE_FAILED",
+        payload: {
+          venue: "LIMITLESS",
+          signer: input.walletAddress,
+          source: "BATCH_COMPLETE",
+          ...safeLimitlessPartnerAccountFailureDetails(error)
+        }
+      });
       throw new UserVenueAccountError(
         "LIMITLESS_PARTNER_ACCOUNT_AUTH_FAILED",
         safeLimitlessPartnerAccountFailureMessage(error),
@@ -1502,6 +1513,10 @@ const isEvmAddress = (value: string): boolean =>
   /^0x[a-fA-F0-9]{40}$/.test(value.trim());
 
 const safeLimitlessPartnerAccountFailureCode = (error: unknown): string => {
+  const reasonCode = readErrorStringField(error, "reasonCode");
+  if (reasonCode) {
+    return reasonCode.slice(0, 80);
+  }
   if (error instanceof Error && error.name.trim().length > 0) {
     return error.name.slice(0, 80);
   }
@@ -1512,7 +1527,41 @@ const safeLimitlessPartnerAccountFailureMessage = (error: unknown): string => {
   if (error instanceof Error && error.message.includes("timed out")) {
     return "Limitless partner account request timed out. Try again shortly; other venues remain usable.";
   }
+  const statusCode = readErrorNumberField(error, "statusCode");
+  if (statusCode === 401 || statusCode === 403) {
+    return "Limitless partner account credentials were rejected. Other venues remain usable while the operator checks the Limitless account-creation scope.";
+  }
   return "Limitless partner account request failed. Try again shortly; other venues remain usable.";
+};
+
+const safeLimitlessPartnerAccountFailureDetails = (error: unknown): Record<string, unknown> => {
+  const statusCode = readErrorNumberField(error, "statusCode");
+  const reasonCode = readErrorStringField(error, "reasonCode");
+  const providerMessage = error instanceof Error && error.message.trim().length > 0
+    ? error.message.trim().slice(0, 240)
+    : null;
+  return {
+    failure: safeLimitlessPartnerAccountFailureCode(error),
+    ...(statusCode ? { statusCode } : {}),
+    ...(reasonCode ? { reasonCode: reasonCode.slice(0, 80) } : {}),
+    ...(providerMessage ? { providerMessage } : {})
+  };
+};
+
+const readErrorStringField = (error: unknown, field: string): string | null => {
+  if (typeof error !== "object" || error === null || !(field in error)) {
+    return null;
+  }
+  const value = (error as Record<string, unknown>)[field];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+};
+
+const readErrorNumberField = (error: unknown, field: string): number | null => {
+  if (typeof error !== "object" || error === null || !(field in error)) {
+    return null;
+  }
+  const value = (error as Record<string, unknown>)[field];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 };
 
 const defaultSetupApprovalAmount = "100000";
