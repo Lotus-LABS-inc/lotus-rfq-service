@@ -580,9 +580,37 @@ describe("SignedTradeBundleService", () => {
     const order = ((limitlessRequest.signedPayloadHint as Record<string, unknown>).data as Record<string, unknown>).order as Record<string, unknown>;
     const data = (limitlessRequest.signedPayloadHint as Record<string, unknown>).data as Record<string, unknown>;
 
-    expect(Number(order.price)).toBe(0.43);
-    expect(Number(order.takerAmount) / 1_000_000).toBeCloseTo(14.204, 6);
+    expect(order.price).toBeUndefined();
+    expect(Number(order.makerAmount) / 1_000_000).toBeCloseTo(6.10772, 6);
+    expect(order.takerAmount).toBe(1);
     expect(data.orderType).toBe("FOK");
+  });
+
+  it("prepares Limitless FOK buy orders with venue market-order amounts", async () => {
+    const liveQuote: ExecutableTradeQuote = {
+      ...limitlessOnlyQuote(),
+      legs: [{
+        ...limitlessOnlyQuote().legs[0]!,
+        size: "3.84615385",
+        price: 0.52
+      }]
+    };
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => liveQuote } as never,
+      registryWithLimitless(),
+      { getAccount: async () => account("LIMITLESS") }
+    );
+
+    const prepared = await sut.prepare({ userId: "user-1", quoteId: "exec_quote_test" });
+    const limitlessRequest = prepared.signatureRequests.find((request) => request.venue === "LIMITLESS")!;
+    const order = ((limitlessRequest.signedPayloadHint as Record<string, unknown>).data as Record<string, unknown>).order as Record<string, unknown>;
+
+    expect(order).toMatchObject({
+      makerAmount: 1999920,
+      takerAmount: 1,
+      side: 0
+    });
+    expect(order.price).toBeUndefined();
   });
 
   it("quantizes Polymarket market-buy signature amounts before Turnkey signs", async () => {
@@ -1894,6 +1922,41 @@ describe("SignedTradeBundleService", () => {
 
     expect(readiness.status).toBe("fresh");
     expect(readiness.blockers).toEqual([]);
+  });
+
+  it("falls back to the next Limitless collateral RPC when the primary read fails", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "https://primary-base-rpc.example") {
+        return new Response(JSON.stringify({ error: { message: "upstream unavailable" } }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      return new Response(JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        result: "0x0f4240"
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => limitlessOnlyQuote() } as never,
+      registryWithLimitless(),
+      { getAccount: async () => account("LIMITLESS") },
+      () => new Date("2026-05-07T00:00:00.000Z"),
+      {
+        LIMITLESS_BALANCE_PREFLIGHT_RPC_URL: "https://primary-base-rpc.example",
+        LIMITLESS_BALANCE_PREFLIGHT_RPC_FALLBACK_URLS: "https://fallback-base-rpc.example",
+        LIMITLESS_USDC_TOKEN_ADDRESS: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+      } as NodeJS.ProcessEnv
+    );
+
+    const readiness = await sut.getLiveReadiness({ userId: "user-1", quoteId: "exec_quote_test" });
+
+    expect(readiness.status).toBe("fresh");
+    expect(readiness.blockers).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledWith("https://primary-base-rpc.example", expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith("https://fallback-base-rpc.example", expect.any(Object));
   });
 
   it("rejects a Limitless signature from the wrong signer", async () => {

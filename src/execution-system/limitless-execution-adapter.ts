@@ -760,6 +760,12 @@ const validateLimitlessUserSignedRelayPayload = (
   const marketSlug = stringOrNull(firstPresent(data.marketSlug, signedPayload.marketSlug, signedOrder.marketSlug, signedOrder.market));
   const orderType = normalizeLimitlessOrderType(firstPresent(data.orderType, signedPayload.orderType, preparedPayload.orderType));
   const relayOrder = sanitizeLimitlessRelayOrder(signedOrder, signature);
+  if (orderType === OrderType.FOK && String(relayOrder.takerAmount) !== "1") {
+    throw new LimitlessExecutionNotConfiguredError(
+      "LIMITLESS_RELAY_FOK_TAKER_AMOUNT_INVALID",
+      "Limitless FOK signed order must use venue market-order amounts. Refresh route and sign again."
+    );
+  }
   if (!marketSlug) {
     throw new LimitlessExecutionNotConfiguredError(
       "LIMITLESS_RELAY_MARKET_REQUIRED",

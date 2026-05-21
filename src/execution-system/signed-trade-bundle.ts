@@ -829,10 +829,13 @@ export class SignedTradeBundleService {
       stringFromRecord(metadata, "exchange") ||
       stringFromRecord(metadata, "venueExchange") ||
       "";
-    const rpcUrl = this.env.LIMITLESS_BALANCE_PREFLIGHT_RPC_URL?.trim() ||
-      this.env.BASE_RPC_URL?.trim() ||
-      this.env.LIMITLESS_BASE_RPC_URL?.trim() ||
-      "https://mainnet.base.org";
+    const rpcUrls = uniqueNonEmptyStrings([
+      this.env.LIMITLESS_BALANCE_PREFLIGHT_RPC_URL,
+      this.env.BASE_RPC_URL,
+      this.env.LIMITLESS_BASE_RPC_URL,
+      ...splitDelimitedEnv(this.env.LIMITLESS_BALANCE_PREFLIGHT_RPC_FALLBACK_URLS),
+      "https://mainnet.base.org"
+    ]);
     const decimals = parsePositiveInteger(this.env.LIMITLESS_BALANCE_ACTIVATION_TOKEN_DECIMALS) ?? 6;
     const next: LiveSubmitVenueReadiness = {
       ...base,
@@ -850,16 +853,16 @@ export class SignedTradeBundleService {
       !isEvmAddress(ownerAddress) ? "Limitless live preflight owner account is missing or invalid." : null,
       !isEvmAddress(tokenAddress) ? "LIMITLESS_BALANCE_ACTIVATION_TOKEN_ADDRESS is missing or invalid." : null,
       !isEvmAddress(spenderAddress) ? "Limitless market exchange spender address could not be derived from the live route." : null,
-      !rpcUrl ? "Limitless live preflight RPC URL is required before live submit." : null,
+      rpcUrls.length === 0 ? "Limitless live preflight RPC URL is required before live submit." : null,
       !requiredNotional ? "Limitless live preflight could not derive required notional." : null
     ].filter((blocker): blocker is string => Boolean(blocker));
-    if (configBlockers.length > 0 || !requiredNotional || !isEvmAddress(tokenAddress) || !isEvmAddress(spenderAddress) || !rpcUrl) {
+    if (configBlockers.length > 0 || !requiredNotional || !isEvmAddress(tokenAddress) || !isEvmAddress(spenderAddress) || rpcUrls.length === 0) {
       return { ...next, status: "blocked", blockers: configBlockers };
     }
     try {
       const [balanceAtomic, allowanceAtomic] = await Promise.all([
-        readErc20Value(rpcUrl, tokenAddress, encodeErc20BalanceOf(ownerAddress)),
-        readErc20Value(rpcUrl, tokenAddress, encodeErc20Allowance(ownerAddress, spenderAddress))
+        readErc20ValueFromAnyRpc(rpcUrls, tokenAddress, encodeErc20BalanceOf(ownerAddress)),
+        readErc20ValueFromAnyRpc(rpcUrls, tokenAddress, encodeErc20Allowance(ownerAddress, spenderAddress))
       ]);
       const balance = formatBaseUnits(balanceAtomic, decimals);
       const allowance = formatBaseUnits(allowanceAtomic, decimals);
@@ -1637,13 +1640,15 @@ const buildLimitlessOrderPayload = (
   const side = String(payload.side).toLowerCase().includes("sell") || payload.side === LimitlessSide.SELL
     ? LimitlessSide.SELL
     : LimitlessSide.BUY;
+  const makerAmount = side === LimitlessSide.SELL
+    ? roundedSize
+    : limitlessFokBuyMakerAmount(roundedSize, price);
   const feeRateBps = numberField(payload, "feeRateBps") ?? 300;
   const builder = new LimitlessOrderBuilder(signerAddress, feeRateBps);
   const order = builder.buildOrder({
     tokenId,
     side,
-    size: roundedSize,
-    price
+    makerAmount
   });
   const domain = {
     name: "Limitless CTF Exchange",
@@ -1703,6 +1708,17 @@ const roundLimitlessOrderSize = (value: number): number => {
     );
   }
   return Number((scaled / 1_000).toFixed(3));
+};
+
+const limitlessFokBuyMakerAmount = (size: number, price: number): number => {
+  const amount = new Decimal(size).times(price).toDecimalPlaces(6, Decimal.ROUND_FLOOR);
+  if (!amount.isFinite() || amount.lte(0)) {
+    throw new SignedTradeBundleError(
+      "LIMITLESS_ORDER_AMOUNT_TOO_SMALL",
+      "Limitless FOK buy order amount is below venue precision."
+    );
+  }
+  return amount.toNumber();
 };
 
 const buildPredictOrderPayload = (
@@ -2448,6 +2464,18 @@ const readErc20Value = async (rpcUrl: string, tokenAddress: string, data: string
   return BigInt(body.result);
 };
 
+const readErc20ValueFromAnyRpc = async (rpcUrls: readonly string[], tokenAddress: string, data: string): Promise<bigint> => {
+  let lastError: unknown = null;
+  for (const rpcUrl of rpcUrls) {
+    try {
+      return await readErc20Value(rpcUrl, tokenAddress, data);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError ?? new Error("erc20_read_unavailable");
+};
+
 const readErc1155ApprovalForAll = async (
   rpcUrl: string,
   tokenAddress: string,
@@ -2478,6 +2506,23 @@ const formatBaseUnits = (value: bigint, decimals: number): string => {
 
 const trimDecimal = (value: string): string =>
   value.includes(".") ? value.replace(/0+$/, "").replace(/\.$/, "") : value;
+
+const splitDelimitedEnv = (value: string | undefined): string[] =>
+  (value ?? "").split(/[,\s]+/).map((item) => item.trim()).filter(Boolean);
+
+const uniqueNonEmptyStrings = (values: readonly (string | undefined)[]): string[] => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+  return result;
+};
 
 const decimalFromString = (value: string): InstanceType<typeof Decimal> => {
   const parsed = new Decimal(value.trim());
