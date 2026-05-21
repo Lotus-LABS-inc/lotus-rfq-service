@@ -533,7 +533,7 @@ export class SignedTradeBundleService {
     checkedAt: string
   ): Promise<LiveSubmitVenueReadiness> {
     const binding = await this.expectedBinding(quote.userId, leg.venue, false);
-    const requiredNotional = requiredUsdNotional(quote.side, leg);
+    const requiredNotional = requiredUsdNotional(quote.side, leg, this.env);
     const base: LiveSubmitVenueReadiness = {
       venue: leg.venue,
       status: "fresh",
@@ -1894,7 +1894,7 @@ const buildPolymarketOrderPayload = async (
   const negRisk = metadataNegRisk ?? parseOptionalEnvBoolean(env.POLYMARKET_NEG_RISK ?? env.POLY_NEG_RISK);
   const signedOrder = await client.createOrder({
     tokenID: tokenId,
-    price,
+    price: side === "buy" ? polymarketMarketBuyLimitPrice(price, tickSize, env) : price,
     size,
     side: side === "buy" ? PolymarketSide.BUY : PolymarketSide.SELL,
     builderCode
@@ -1926,6 +1926,8 @@ const buildPolymarketOrderPayload = async (
 
 const POLYMARKET_MARKET_BUY_COLLATERAL_QUANTUM_ATOMIC = 10_000n;
 const POLYMARKET_MARKET_BUY_SHARE_QUANTUM_ATOMIC = 10n;
+const POLYMARKET_DEFAULT_MARKET_BUY_SLIPPAGE_BPS = 50;
+const POLYMARKET_MAX_MARKET_BUY_SLIPPAGE_BPS = 500;
 const POLYMARKET_ORDER_TYPE_STRING = "Order(uint256 salt,address maker,address signer,uint256 tokenId,uint256 makerAmount,uint256 takerAmount,uint8 side,uint8 signatureType,uint256 timestamp,bytes32 metadata,bytes32 builder)";
 const POLYMARKET_ORDER_TYPE_HASH = keccak256(toUtf8Bytes(POLYMARKET_ORDER_TYPE_STRING));
 const POLYMARKET_DOMAIN_TYPE_HASH = keccak256(
@@ -2009,6 +2011,38 @@ const roundUpAtomic = (value: bigint, quantum: bigint): bigint =>
 
 const roundDownAtomic = (value: bigint, quantum: bigint): bigint =>
   (value / quantum) * quantum;
+
+const polymarketMarketBuyLimitPrice = (
+  quotedPrice: number,
+  tickSize: PolymarketTickSize | undefined,
+  env: NodeJS.ProcessEnv
+): number => {
+  if (!Number.isFinite(quotedPrice) || quotedPrice <= 0 || quotedPrice >= 1) {
+    return quotedPrice;
+  }
+  const bps = parseBoundedPolymarketBuySlippageBps(env);
+  if (bps <= 0) {
+    return quotedPrice;
+  }
+  const tick = new Decimal(tickSize ?? "0.001");
+  const maxPrice = Decimal.max(0, new Decimal(1).minus(tick));
+  const cushioned = new Decimal(quotedPrice).times(new Decimal(1).plus(new Decimal(bps).div(10_000)));
+  const capped = Decimal.min(maxPrice, cushioned);
+  const tickAligned = Decimal.min(maxPrice, capped.div(tick).ceil().times(tick));
+  return Number(tickAligned.toString());
+};
+
+const parseBoundedPolymarketBuySlippageBps = (env: NodeJS.ProcessEnv): number => {
+  const raw = env.POLYMARKET_MARKET_BUY_SLIPPAGE_BPS ?? env.POLY_MARKET_BUY_SLIPPAGE_BPS;
+  if (raw === undefined || raw.trim().length === 0) {
+    return POLYMARKET_DEFAULT_MARKET_BUY_SLIPPAGE_BPS;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return POLYMARKET_DEFAULT_MARKET_BUY_SLIPPAGE_BPS;
+  }
+  return Math.min(parsed, POLYMARKET_MAX_MARKET_BUY_SLIPPAGE_BPS);
+};
 
 const polymarket1271SignatureSuffix = (typedData: Record<string, unknown>, signature: unknown): string => {
   if (typeof signature !== "string" || !/^0x[a-fA-F0-9]+$/.test(signature)) {
@@ -2219,7 +2253,7 @@ const parseOptionalEnvBoolean = (value: string | undefined): boolean | undefined
   return undefined;
 };
 
-const requiredUsdNotional = (side: string, leg: ExecutableRouteLeg): string | null => {
+const requiredUsdNotional = (side: string, leg: ExecutableRouteLeg, env: NodeJS.ProcessEnv): string | null => {
   if (side !== "buy") {
     return null;
   }
@@ -2228,7 +2262,19 @@ const requiredUsdNotional = (side: string, leg: ExecutableRouteLeg): string | nu
   if (!Number.isFinite(size) || size <= 0 || !Number.isFinite(price) || price <= 0) {
     return null;
   }
-  const notional = multiplyDecimalStrings(leg.size, String(leg.price));
+  const metadata = leg.metadata ?? {};
+  const tickSize = leg.venue.toUpperCase() === "POLYMARKET"
+    ? parsePolymarketTickSize(
+        stringField(metadata, "polymarketTickSize")
+          ?? stringField(metadata, "tickSize")
+          ?? env.POLYMARKET_TICK_SIZE
+          ?? env.POLY_TICK_SIZE
+      )
+    : undefined;
+  const limitPrice = leg.venue.toUpperCase() === "POLYMARKET"
+    ? polymarketMarketBuyLimitPrice(price, tickSize, env)
+    : price;
+  const notional = multiplyDecimalStrings(leg.size, String(limitPrice));
   if (leg.feeAmount === undefined || leg.feeAmount === null || leg.feeAmount <= 0) {
     return notional;
   }
