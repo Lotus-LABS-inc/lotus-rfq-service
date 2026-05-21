@@ -1906,7 +1906,7 @@ const buildPolymarketOrderPayload = async (
     throw new SignedTradeBundleError("POLYMARKET_TYPED_DATA_NOT_CAPTURED", "Polymarket CLOB SDK did not produce typed data for signing.");
   }
   const quantized = side === "buy"
-    ? quantizePolymarketMarketBuyOrderAmounts(signedOrder as Record<string, unknown>, capturedTypedData)
+    ? quantizePolymarketMarketBuyOrderAmounts(signedOrder as Record<string, unknown>, capturedTypedData, tickSize)
     : { signedOrder: signedOrder as Record<string, unknown>, typedData: capturedTypedData };
   const { signature: dummySignature, ...orderWithoutSignature } = quantized.signedOrder;
   const polymarketSignatureSuffix = signatureType === PolymarketSignatureType.POLY_1271
@@ -1924,9 +1924,8 @@ const buildPolymarketOrderPayload = async (
   };
 };
 
-const POLYMARKET_MARKET_BUY_COLLATERAL_QUANTUM_ATOMIC = 10_000n;
 const POLYMARKET_MARKET_BUY_SHARE_QUANTUM_ATOMIC = 10n;
-const POLYMARKET_DEFAULT_MARKET_BUY_SLIPPAGE_BPS = 50;
+const POLYMARKET_DEFAULT_MARKET_BUY_SLIPPAGE_BPS = 100;
 const POLYMARKET_MAX_MARKET_BUY_SLIPPAGE_BPS = 500;
 const POLYMARKET_ORDER_TYPE_STRING = "Order(uint256 salt,address maker,address signer,uint256 tokenId,uint256 makerAmount,uint256 takerAmount,uint8 side,uint8 signatureType,uint256 timestamp,bytes32 metadata,bytes32 builder)";
 const POLYMARKET_ORDER_TYPE_HASH = keccak256(toUtf8Bytes(POLYMARKET_ORDER_TYPE_STRING));
@@ -1937,11 +1936,11 @@ const ABI_CODER = AbiCoder.defaultAbiCoder();
 
 const quantizePolymarketMarketBuyOrderAmounts = (
   signedOrder: Record<string, unknown>,
-  typedData: Record<string, unknown>
+  typedData: Record<string, unknown>,
+  tickSize: PolymarketTickSize | undefined
 ): { signedOrder: Record<string, unknown>; typedData: Record<string, unknown> } => {
   const makerAmount = parsePositiveAtomicAmount(signedOrder.makerAmount, "makerAmount");
   const takerAmount = parsePositiveAtomicAmount(signedOrder.takerAmount, "takerAmount");
-  const quantizedMakerAmount = roundUpAtomic(makerAmount, POLYMARKET_MARKET_BUY_COLLATERAL_QUANTUM_ATOMIC).toString();
   const quantizedTakerAmount = roundDownAtomic(takerAmount, POLYMARKET_MARKET_BUY_SHARE_QUANTUM_ATOMIC);
   if (quantizedTakerAmount <= 0n) {
     throw new SignedTradeBundleError(
@@ -1949,8 +1948,20 @@ const quantizePolymarketMarketBuyOrderAmounts = (
       "Polymarket market-buy order size is below the minimum 0.00001 share precision."
     );
   }
+  const quantizedMakerAmount = polymarketTickAlignedBuyMakerAmount(
+    makerAmount,
+    takerAmount,
+    quantizedTakerAmount,
+    tickSize ?? "0.001"
+  );
+  if (quantizedMakerAmount <= 0n) {
+    throw new SignedTradeBundleError(
+      "POLYMARKET_ORDER_AMOUNT_INVALID",
+      "Polymarket market-buy order amount is below the minimum tick-aligned collateral precision."
+    );
+  }
   const amounts = {
-    makerAmount: quantizedMakerAmount,
+    makerAmount: quantizedMakerAmount.toString(),
     takerAmount: quantizedTakerAmount.toString()
   };
   return {
@@ -2006,11 +2017,28 @@ const parsePositiveAtomicAmount = (value: unknown, field: string): bigint => {
   return parsed;
 };
 
-const roundUpAtomic = (value: bigint, quantum: bigint): bigint =>
-  ((value + quantum - 1n) / quantum) * quantum;
-
 const roundDownAtomic = (value: bigint, quantum: bigint): bigint =>
   (value / quantum) * quantum;
+
+const polymarketTickAlignedBuyMakerAmount = (
+  makerAmount: bigint,
+  takerAmount: bigint,
+  quantizedTakerAmount: bigint,
+  tickSize: PolymarketTickSize
+): bigint => {
+  const tick = polymarketTickFraction(tickSize);
+  const originalTicks = makerAmount * tick.denominator / (takerAmount * tick.numerator);
+  const maxMaker = quantizedTakerAmount * originalTicks * tick.numerator / tick.denominator;
+  return maxMaker > makerAmount ? makerAmount : maxMaker;
+};
+
+const polymarketTickFraction = (tickSize: PolymarketTickSize): { numerator: bigint; denominator: bigint } => {
+  const [, fractional = ""] = tickSize.split(".");
+  return {
+    numerator: BigInt(tickSize.replace(".", "")),
+    denominator: 10n ** BigInt(fractional.length)
+  };
+};
 
 const polymarketMarketBuyLimitPrice = (
   quotedPrice: number,

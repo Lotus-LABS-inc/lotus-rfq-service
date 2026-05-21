@@ -631,11 +631,11 @@ describe("SignedTradeBundleService", () => {
         message: { contents: Record<string, unknown> };
       };
 
-      expect(order.makerAmount).toBe("2030000");
+      expect(order.makerAmount).toBe("2037960");
       expect(order.takerAmount).toBe("2040000");
-      expect(typedData.message.contents.makerAmount).toBe("2030000");
+      expect(typedData.message.contents.makerAmount).toBe("2037960");
       expect(typedData.message.contents.takerAmount).toBe("2040000");
-      expect(BigInt(String(order.makerAmount)) % 10_000n).toBe(0n);
+      expect(BigInt(String(order.makerAmount)) * 1_000n / BigInt(String(order.takerAmount))).toBe(999n);
       expect(BigInt(String(order.takerAmount)) % 10n).toBe(0n);
       expect(data.polymarketSignatureSuffix).toBe(polymarket1271SuffixForTypedData(typedData));
       expect(data.orderType).toBe("FOK");
@@ -686,9 +686,9 @@ describe("SignedTradeBundleService", () => {
       const data = orderRequest.signedPayloadHint.data as Record<string, unknown>;
       const order = data.order as Record<string, unknown>;
 
-      expect(order.makerAmount).toBe("2020000");
+      expect(order.makerAmount).toBe("2017980");
       expect(order.takerAmount).toBe("2020000");
-      expect(BigInt(String(order.makerAmount)) * 1_000n / BigInt(String(order.takerAmount))).toBeGreaterThanOrEqual(999n);
+      expect(BigInt(String(order.makerAmount)) * 1_000n / BigInt(String(order.takerAmount))).toBe(999n);
       expect(data.orderType).toBe("FOK");
     } finally {
       await fixtureServer.close();
@@ -971,7 +971,7 @@ describe("SignedTradeBundleService", () => {
       liveSubmitSpendableBalance: "0"
     });
     expect(readiness.venues[0]?.collateral).toMatchObject({
-      requiredNotional: "1.24375",
+      requiredNotional: "1.24875",
       balance: "8.95741",
       allowance: "0",
       usableBalance: "0",
@@ -1008,7 +1008,7 @@ describe("SignedTradeBundleService", () => {
       "POLYMARKET: Polymarket pUSD approval is confirmed on-chain, but Polymarket CLOB spendable collateral has not synced yet. Lotus refreshed CLOB readiness; retry after sync confirms."
     );
     expect(readiness.venues[0]?.collateral).toMatchObject({
-      requiredNotional: "1.24375",
+      requiredNotional: "1.24875",
       balance: "0",
       allowance: "0",
       usableBalance: "8.95741",
@@ -1048,7 +1048,7 @@ describe("SignedTradeBundleService", () => {
       liveSubmitSpendableBalance: "7.85565"
     });
     expect(readiness.venues[0]?.collateral).toMatchObject({
-      requiredNotional: "1.24375",
+      requiredNotional: "1.24875",
       balance: "7.85565",
       allowance: "115792089237316195420000000000000000000000000000000000000000000000000000",
       usableBalance: "7.85565",
