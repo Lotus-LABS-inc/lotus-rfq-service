@@ -105,6 +105,45 @@ export class ExecutionRecordRepository {
             ]
         );
     }
+
+    public async appendStateTransitions(transitions: readonly {
+        executionRecordId: string;
+        fromState: string | null;
+        toState: string;
+        transitionMetadata: Record<string, unknown>;
+        replayEnvelopeId?: string | null;
+    }[]): Promise<void> {
+        if (transitions.length === 0) {
+            return;
+        }
+
+        const values: string[] = [];
+        const params: unknown[] = [];
+        transitions.forEach((transition, index) => {
+            const offset = index * 5;
+            values.push(
+                `($${offset + 1}::uuid, $${offset + 2}, $${offset + 3}, $${offset + 4}::jsonb, $${offset + 5}::uuid)`
+            );
+            params.push(
+                transition.executionRecordId,
+                transition.fromState,
+                transition.toState,
+                JSON.stringify(transition.transitionMetadata),
+                transition.replayEnvelopeId ?? null
+            );
+        });
+
+        await this.pool.query(
+            `INSERT INTO execution_state_transitions (
+                execution_record_id,
+                from_state,
+                to_state,
+                transition_metadata,
+                replay_envelope_id
+            ) VALUES ${values.join(", ")}`,
+            params
+        );
+    }
 }
 
 const mapExecutionRecordRow = (row: ExecutionRecordRow): ExecutionRecord => ({

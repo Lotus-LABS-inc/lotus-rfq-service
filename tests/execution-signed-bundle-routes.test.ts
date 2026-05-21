@@ -330,6 +330,8 @@ describe("execution signed bundle routes", () => {
           venue: "PREDICT_FUN",
           status: "FILLED",
           venueOrderId: `0x${"a".repeat(64)}`,
+          reasonCode: "VENUE_TEST_REASON",
+          reason: "Sanitized venue reason.",
           fillState: {
             status: "FILLED",
             filledSize: "2.5",
@@ -371,6 +373,8 @@ describe("execution signed bundle routes", () => {
       submittedLegs: [{
         venue: "PREDICT_FUN",
         status: "FILLED",
+        reasonCode: "VENUE_TEST_REASON",
+        reason: "Sanitized venue reason.",
         fillState: {
           status: "FILLED",
           filledSize: "2.5"
@@ -866,6 +870,10 @@ describe("execution signed bundle routes", () => {
             venueOutcomeId: "token-1",
             quoteQuality: "FULL_DEPTH_REST",
             freshnessMs: 40,
+            tickSize: "0.001",
+            polymarketTickSize: "0.001",
+            negRisk: false,
+            polymarketNegRisk: false,
             blockers: []
           }
         },
@@ -909,7 +917,13 @@ describe("execution signed bundle routes", () => {
       venue: "POLYMARKET",
       venueMarketId: "condition-1",
       venueOutcomeId: "token-1",
-      price: 0.51
+      price: 0.51,
+      metadata: {
+        tickSize: "0.001",
+        polymarketTickSize: "0.001",
+        negRisk: false,
+        polymarketNegRisk: false
+      }
     });
     expect(response.blocked).toEqual([{
       venue: "PREDICT_FUN",

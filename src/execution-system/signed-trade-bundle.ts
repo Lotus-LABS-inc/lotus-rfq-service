@@ -18,6 +18,7 @@ import { AddressesByChainId, ChainId, OrderBuilder, Side as PredictSide, Signatu
 import { verifyTypedData } from "@ethersproject/wallet";
 import { AbiCoder, hexlify, keccak256, toUtf8Bytes, verifyTypedData as verifyTypedDataV6 } from "ethers";
 import type { UserVenueAccount } from "../core/execution/user-venue-accounts.js";
+import { withLatencyStage } from "../observability/latency.js";
 import type { ExecutableRouteLeg, ExecutableRouteService, ExecutableTradeQuote } from "./executable-routing.js";
 import type { ExecutionLegV0 } from "./types.js";
 import type { ExecutionVenueAdapterRegistry, PreparedVenueOrder, VenueFillState, VenueOrderLookupContext, VenueSettlementState, VenueSubmitResult } from "./venue-adapter.js";
@@ -210,13 +211,18 @@ export class SignedTradeBundleService {
   ) {}
 
   public async prepare(input: { userId: string; quoteId: string }): Promise<PreparedTradeSignatureBundle> {
-    const quote = await this.requireFreshQuote(input.userId, input.quoteId);
+    const quote = await withLatencyStage("execution_quote_load", {}, () => this.requireFreshQuote(input.userId, input.quoteId));
     const requestGroups = await Promise.all(quote.legs.map(async (leg, index) => {
       if (!leg.requiresUserSignature) {
         return [];
       }
       const executionLeg = this.toExecutionLeg(quote, leg, index);
-      const prepared = await this.adapters.get(leg.venue).prepareOrder(executionLeg);
+      const prepared = await withLatencyStage("venue_adapter_prepare", {
+        canonicalMarketId: quote.marketId,
+        venue: leg.venue,
+        routeType: quote.routeType,
+        external: true
+      }, () => this.adapters.get(leg.venue).prepareOrder(executionLeg));
       const binding = await this.expectedBinding(quote.userId, leg.venue);
       return this.toSignatureRequest(index, prepared, binding);
     }));
@@ -233,7 +239,7 @@ export class SignedTradeBundleService {
     signedLegs: readonly SignedTradeLegPayload[];
     dryRun?: boolean | undefined;
   }): Promise<SignedTradeBundleSubmitResult> {
-    const quote = await this.requireFreshQuote(input.userId, input.quoteId);
+    const quote = await withLatencyStage("execution_quote_load", {}, () => this.requireFreshQuote(input.userId, input.quoteId));
     let liveReadiness: LiveSubmitReadinessSnapshot | null = null;
     if (input.dryRun !== true) {
       liveReadiness = await this.getLiveReadiness({ userId: input.userId, quoteId: input.quoteId });
@@ -254,7 +260,12 @@ export class SignedTradeBundleService {
     for (const [index, leg] of quote.legs.entries()) {
       const executionLeg = this.toExecutionLeg(quote, leg, index);
       const adapter = this.adapters.get(leg.venue);
-      const prepared = await adapter.prepareOrder(executionLeg);
+      const prepared = await withLatencyStage("venue_adapter_prepare", {
+        canonicalMarketId: quote.marketId,
+        venue: leg.venue,
+        routeType: quote.routeType,
+        external: true
+      }, () => adapter.prepareOrder(executionLeg));
       let order = prepared;
       if (leg.requiresUserSignature) {
         const signedPayloads = signedByLeg.get(`${index}:${leg.venue.toUpperCase()}`) ?? [];
@@ -283,7 +294,12 @@ export class SignedTradeBundleService {
         continue;
       }
       try {
-        const submitted = await adapter.submitOrder(order);
+        const submitted = await withLatencyStage("venue_adapter_submit", {
+          canonicalMarketId: quote.marketId,
+          venue: leg.venue,
+          routeType: quote.routeType,
+          external: true
+        }, () => adapter.submitOrder(order));
         submittedLegs.push(this.toSubmittedLeg(index, leg.venue, submitted, leg));
       } catch (error) {
         const normalized = adapter.normalizeVenueError(error);
@@ -300,8 +316,11 @@ export class SignedTradeBundleService {
           dryRun: false,
           submittedLegs
         };
-        await this.recordExecutionStatus(input.userId, result, quote);
-        return result;
+        const stored = await this.recordExecutionStatus(input.userId, result, quote);
+        return {
+          ...result,
+          submittedLegs: stored.submittedLegs
+        };
       }
     }
 
@@ -355,7 +374,13 @@ export class SignedTradeBundleService {
       try {
         const adapter = this.adapters.get(leg.venue);
         const lookupContext = await this.lookupContextForStoredLeg(stored, leg, routeLeg);
-        const fillState = await adapter.fetchFillState(leg.venueOrderId, lookupContext);
+        const venueOrderId = leg.venueOrderId;
+        const fillState = await withLatencyStage("venue_status_fetch", {
+          canonicalMarketId: stored.route?.marketId,
+          venue: leg.venue,
+          routeType: stored.route?.routeType,
+          external: true
+        }, () => adapter.fetchFillState(venueOrderId, lookupContext));
         const needsVerifiedSettlement = requiresVerifiedSettlementForPosition(leg.venue);
         let effectiveFillState = leg.status === "FILLED" && fillState.status === "OPEN" && routeLeg && !needsVerifiedSettlement
           ? inferredFilledLegState(routeLeg)
@@ -371,7 +396,12 @@ export class SignedTradeBundleService {
             (needsVerifiedSettlement && Boolean(leg.fillId)) ||
             (needsVerifiedSettlement && (leg.status === "FILLED" || leg.fillState?.status === "FILLED")));
         const settlementState = shouldRefreshSettlement
-          ? await adapter.fetchSettlementState(settlementLookupId, lookupContext)
+          ? await withLatencyStage("venue_settlement_fetch", {
+              canonicalMarketId: stored.route?.marketId,
+              venue: leg.venue,
+              routeType: stored.route?.routeType,
+              external: true
+            }, () => adapter.fetchSettlementState(settlementLookupId, lookupContext))
           : leg.settlementState;
         const hasVerifiedSettlement = hasVerifiedPositionSettlement(settlementState);
         if (needsVerifiedSettlement && hasVerifiedSettlement && routeLeg && effectiveFillState.status !== "FILLED") {
@@ -446,7 +476,7 @@ export class SignedTradeBundleService {
   }
 
   public async getLiveReadiness(input: { userId: string; quoteId: string }): Promise<LiveSubmitReadinessSnapshot> {
-    const quote = await this.requireFreshQuote(input.userId, input.quoteId);
+    const quote = await withLatencyStage("execution_quote_load", {}, () => this.requireFreshQuote(input.userId, input.quoteId));
     const generatedAt = this.now().toISOString();
     const venues = await Promise.all(quote.legs.map((leg, index) => this.liveReadinessForLeg(quote, leg, index, generatedAt)));
     const blockers = venues.flatMap((venue) => venue.blockers.map((blocker) => `${venue.venue}: ${blocker}`));
@@ -1376,21 +1406,29 @@ export class SignedTradeBundleService {
     };
   }
 
-  private async recordExecutionStatus(userId: string, result: SignedTradeBundleSubmitResult, route: ExecutableTradeQuote): Promise<void> {
+  private async recordExecutionStatus(userId: string, result: SignedTradeBundleSubmitResult, route: ExecutableTradeQuote): Promise<SignedTradeExecutionStatus> {
     const now = this.now().toISOString();
+    const existing = await this.findStoredExecutionStatus({ userId, executionId: result.executionId });
     const status: SignedTradeExecutionStatus = {
       executionId: result.executionId,
       userId,
       status: result.status,
       dryRun: result.dryRun,
-      submittedAt: now,
+      submittedAt: existing?.submittedAt ?? now,
       updatedAt: now,
-      route,
-      submittedLegs: result.submittedLegs
+      route: existing?.route ?? route,
+      submittedLegs: mergeSubmittedLegFailures(existing?.submittedLegs ?? [], result.submittedLegs)
     };
     await this.saveExecutionStatus(status);
     await this.recordFilledPositions(status);
     await this.recordFailedSellPositionCorrections(status);
+    return status;
+  }
+
+  private async findStoredExecutionStatus(input: { userId: string; executionId: string }): Promise<SignedTradeExecutionStatus | null> {
+    return this.executionStatuses.get(statusKey(input.userId, input.executionId)) ??
+      await this.statusRepository?.findExecutionStatus(input) ??
+      null;
   }
 
   private async saveExecutionStatus(status: SignedTradeExecutionStatus): Promise<void> {
@@ -1451,6 +1489,60 @@ export class SignedTradeBundleService {
 }
 
 const statusKey = (userId: string, executionId: string): string => `${userId}:${executionId}`;
+
+type SubmittedExecutionLeg = SignedTradeExecutionStatus["submittedLegs"][number];
+
+const mergeSubmittedLegFailures = (
+  existingLegs: readonly SubmittedExecutionLeg[],
+  nextLegs: readonly SubmittedExecutionLeg[]
+): SubmittedExecutionLeg[] => {
+  if (existingLegs.length === 0) {
+    return [...nextLegs];
+  }
+
+  const merged = new Map<string, SubmittedExecutionLeg>();
+  for (const leg of existingLegs) {
+    merged.set(submittedLegKey(leg), leg);
+  }
+  for (const leg of nextLegs) {
+    const key = submittedLegKey(leg);
+    const existing = merged.get(key);
+    merged.set(key, existing ? selectPreferredSubmittedLeg(existing, leg) : leg);
+  }
+
+  return [...merged.values()].sort((left, right) =>
+    left.legIndex - right.legIndex || left.venue.localeCompare(right.venue)
+  );
+};
+
+const submittedLegKey = (leg: Pick<SubmittedExecutionLeg, "legIndex" | "venue">): string =>
+  `${leg.legIndex}:${leg.venue.toUpperCase()}`;
+
+const selectPreferredSubmittedLeg = (
+  existing: SubmittedExecutionLeg,
+  next: SubmittedExecutionLeg
+): SubmittedExecutionLeg => {
+  if (existing.status !== "FAILED" && next.status === "FAILED") {
+    return existing;
+  }
+  if (existing.status === "FAILED" && next.status === "FAILED") {
+    return failureReasonSpecificityScore(existing) >= failureReasonSpecificityScore(next)
+      ? { ...next, reasonCode: existing.reasonCode, reason: existing.reason }
+      : next;
+  }
+  return next;
+};
+
+const failureReasonSpecificityScore = (leg: SubmittedExecutionLeg): number => {
+  const code = leg.reasonCode ?? "";
+  if (!code) {
+    return 0;
+  }
+  if (code.includes("UNKNOWN")) {
+    return 1;
+  }
+  return 2;
+};
 
 const isInsufficientSellBalanceReason = (reason: string): boolean =>
   /INSUFFICIENT\s+SHARES|INSUFFICIENT\s+CONDITIONAL\s+TOKEN\s+BALANCE|TOKEN\s+BALANCE\s+IS\s+LESS|BALANCE\s+IS\s+NOT\s+ENOUGH|SHARE\s+BALANCE\s+IS\s+BELOW|SELLABLE\s+BALANCE/i.test(reason);
@@ -1790,6 +1882,16 @@ const buildPolymarketOrderPayload = async (
     retryOnError: false,
     throwOnError: true
   });
+  const routeMetadata = recordField(payload, "metadata");
+  const tickSize = parsePolymarketTickSize(
+    stringField(routeMetadata ?? {}, "polymarketTickSize")
+      ?? stringField(routeMetadata ?? {}, "tickSize")
+      ?? env.POLYMARKET_TICK_SIZE
+      ?? env.POLY_TICK_SIZE
+  );
+  const metadataNegRisk = booleanField(routeMetadata ?? {}, "polymarketNegRisk") ??
+    booleanField(routeMetadata ?? {}, "negRisk");
+  const negRisk = metadataNegRisk ?? parseOptionalEnvBoolean(env.POLYMARKET_NEG_RISK ?? env.POLY_NEG_RISK);
   const signedOrder = await client.createOrder({
     tokenID: tokenId,
     price,
@@ -1797,12 +1899,8 @@ const buildPolymarketOrderPayload = async (
     side: side === "buy" ? PolymarketSide.BUY : PolymarketSide.SELL,
     builderCode
   }, {
-    ...(parsePolymarketTickSize(env.POLYMARKET_TICK_SIZE ?? env.POLY_TICK_SIZE)
-      ? { tickSize: parsePolymarketTickSize(env.POLYMARKET_TICK_SIZE ?? env.POLY_TICK_SIZE)! }
-      : {}),
-    ...(parseOptionalEnvBoolean(env.POLYMARKET_NEG_RISK ?? env.POLY_NEG_RISK) !== undefined
-      ? { negRisk: parseOptionalEnvBoolean(env.POLYMARKET_NEG_RISK ?? env.POLY_NEG_RISK)! }
-      : {})
+    ...(tickSize ? { tickSize } : {}),
+    ...(negRisk !== undefined ? { negRisk } : {})
   });
   if (!capturedTypedData) {
     throw new SignedTradeBundleError("POLYMARKET_TYPED_DATA_NOT_CAPTURED", "Polymarket CLOB SDK did not produce typed data for signing.");

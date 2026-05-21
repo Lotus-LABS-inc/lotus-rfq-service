@@ -231,6 +231,34 @@ class FailingPolymarketBalanceAdapter extends TestExecutionAdapter {
   }
 }
 
+class SequentialPolymarketRejectionAdapter extends TestExecutionAdapter {
+  public readonly venue = "POLYMARKET";
+  public submitCalls = 0;
+
+  public async submitOrder(): Promise<VenueSubmitResult> {
+    this.submitCalls += 1;
+    throw new Error(this.submitCalls === 1
+      ? "invalid order: maker amount violates tick size for FOK"
+      : "provider returned an unexpected live submit error");
+  }
+
+  public normalizeVenueError(error: unknown): NormalizedVenueError {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("tick size")) {
+      return {
+        code: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
+        message: "Polymarket rejected the CLOB order parameters. Refresh the route before retrying.",
+        retryable: false
+      };
+    }
+    return {
+      code: "POLYMARKET_CLOB_UNKNOWN_REJECTED_BY_VENUE",
+      message: "Polymarket rejected this order for an unknown venue reason. Raw redacted evidence was captured for debugging.",
+      retryable: false
+    };
+  }
+}
+
 class PolymarketSubmittedFillAdapter extends TestExecutionAdapter {
   public readonly venue = "POLYMARKET";
   public readonly fillStateLookups: string[] = [];
@@ -561,7 +589,8 @@ describe("SignedTradeBundleService", () => {
     const fixtureServer = await startPolymarketClobFixtureServer();
     const env = {
       ...polymarketSigningEnv,
-      POLYMARKET_CLOB_HOST: fixtureServer.host
+      POLYMARKET_CLOB_HOST: fixtureServer.host,
+      POLYMARKET_TICK_SIZE: undefined
     } as NodeJS.ProcessEnv;
     const registry = new ExecutionVenueAdapterRegistry();
     registry.register(new PolymarketExecutionAdapterV2({
@@ -577,7 +606,11 @@ describe("SignedTradeBundleService", () => {
         venueOutcomeId: "9204103845295998574174644655568224547826780478747010463640756803659982305491",
         size: "2.04081633",
         price: 0.989,
-        requiresUserSignature: true
+        requiresUserSignature: true,
+        metadata: {
+          tickSize: "0.001",
+          negRisk: false
+        }
       }),
       requiredUserSignatureSteps: ["POLYMARKET user signature required"]
     };
@@ -772,6 +805,60 @@ describe("SignedTradeBundleService", () => {
     });
     expect(JSON.stringify(submitted)).not.toContain("balance is not enough");
     expect(JSON.stringify([...repository.rows.values()])).not.toContain("balance is not enough");
+  });
+
+  it("preserves the specific Polymarket failure reason when a duplicate submit returns unknown", async () => {
+    const registry = new ExecutionVenueAdapterRegistry();
+    const adapter = new SequentialPolymarketRejectionAdapter();
+    registry.register(adapter);
+    const liveQuote: ExecutableTradeQuote = {
+      ...polymarketBuyQuote(),
+      quoteId: "exec_quote_polymarket_duplicate_failure"
+    };
+    const repository = new MemorySignedTradeStatusRepository();
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => liveQuote } as never,
+      registry,
+      { getAccount: async () => account("POLYMARKET") },
+      () => new Date("2026-05-07T00:00:00.000Z"),
+      {} as NodeJS.ProcessEnv,
+      repository,
+      undefined,
+      polymarketBalanceReader()
+    );
+
+    const first = await sut.submit({
+      userId: "user-1",
+      quoteId: "exec_quote_polymarket_duplicate_failure",
+      dryRun: false,
+      signedLegs: []
+    });
+    const second = await sut.submit({
+      userId: "user-1",
+      quoteId: "exec_quote_polymarket_duplicate_failure",
+      dryRun: false,
+      signedLegs: []
+    });
+    const stored = await repository.findExecutionStatus({
+      userId: "user-1",
+      executionId: "exec_quote_polymarket_duplicate_failure"
+    });
+
+    expect(adapter.submitCalls).toBe(2);
+    expect(first.submittedLegs[0]).toMatchObject({
+      status: "FAILED",
+      reasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED"
+    });
+    expect(second.submittedLegs[0]).toMatchObject({
+      status: "FAILED",
+      reasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
+      reason: "Polymarket rejected the CLOB order parameters. Refresh the route before retrying."
+    });
+    expect(stored?.submittedLegs[0]).toMatchObject({
+      status: "FAILED",
+      reasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
+      reason: "Polymarket rejected the CLOB order parameters. Refresh the route before retrying."
+    });
   });
 
   it("blocks Polymarket buy before venue submit when CLOB balance is zero", async () => {

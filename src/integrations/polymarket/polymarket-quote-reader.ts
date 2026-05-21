@@ -59,6 +59,7 @@ export class PolymarketQuoteReader implements VenueQuoteSnapshotReader {
     const feeRate = this.config.feeBps === undefined
       ? await this.config.feeReader?.getFeeRate({ conditionId: input.venueMarketId })
       : null;
+    const marketMetadata = await this.getMarketExecutionMetadata(input.venueMarketId);
     return normalizePolymarketOrderbook({
       payload,
       venueMarketId: input.venueMarketId,
@@ -67,7 +68,8 @@ export class PolymarketQuoteReader implements VenueQuoteSnapshotReader {
       feeBps: this.config.feeBps,
       polymarketFeeRate: feeRate ?? undefined,
       polymarketCategory: inferPolymarketCategory(input.canonicalMarketId),
-      outcomeLabel: resolvedOutcome.outcomeLabel
+      outcomeLabel: resolvedOutcome.outcomeLabel,
+      marketMetadata
     });
   }
 
@@ -110,8 +112,21 @@ export class PolymarketQuoteReader implements VenueQuoteSnapshotReader {
         polymarketCategory: inferPolymarketCategory(input.canonicalMarketId),
         outcomeLabel: indicative.outcomeLabel,
         price: indicative.price,
-        marketStatus: indicative.marketStatus
+        marketStatus: indicative.marketStatus,
+        marketMetadata: extractPolymarketMarketExecutionMetadata(markets)
       });
+    } catch {
+      return null;
+    }
+  }
+
+  private async getMarketExecutionMetadata(venueMarketId: string): Promise<PolymarketMarketExecutionMetadata | null> {
+    if (!this.config.metadataClient) {
+      return null;
+    }
+    try {
+      const markets = await this.config.metadataClient.getMarketByIdentifier(venueMarketId);
+      return extractPolymarketMarketExecutionMetadata(markets);
     } catch {
       return null;
     }
@@ -148,6 +163,7 @@ export const normalizePolymarketOrderbook = (input: {
   polymarketFeeRate?: number | undefined;
   polymarketCategory?: string | undefined;
   outcomeLabel?: string | undefined;
+  marketMetadata?: PolymarketMarketExecutionMetadata | null | undefined;
 }): NormalizedVenueQuoteSnapshot => {
   const record = asRecord(input.payload);
   const bids = normalizeLevels(record.bids);
@@ -173,7 +189,8 @@ export const normalizePolymarketOrderbook = (input: {
     metadata: {
       venueMarketId: input.venueMarketId,
       venueOutcomeId: input.venueOutcomeId ?? null,
-      outcomeLabel: input.outcomeLabel ?? null
+      outcomeLabel: input.outcomeLabel ?? null,
+      ...polymarketExecutionMetadataFields(input.marketMetadata)
     }
   };
 };
@@ -187,6 +204,7 @@ export const normalizePolymarketIndicativeMetadata = (input: {
   outcomeLabel?: string | undefined;
   price: string;
   marketStatus: Readonly<Record<string, unknown>>;
+  marketMetadata?: PolymarketMarketExecutionMetadata | null | undefined;
 }): NormalizedVenueQuoteSnapshot => ({
   venue: "POLYMARKET",
   venueMarketId: input.venueMarketId,
@@ -209,9 +227,83 @@ export const normalizePolymarketIndicativeMetadata = (input: {
     venueOutcomeId: input.venueOutcomeId ?? null,
     outcomeLabel: input.outcomeLabel ?? null,
     displayOnly: true,
-    marketStatus: input.marketStatus
+    marketStatus: input.marketStatus,
+    ...polymarketExecutionMetadataFields(input.marketMetadata)
   }
 });
+
+interface PolymarketMarketExecutionMetadata {
+  tickSize?: string | undefined;
+  negRisk?: boolean | undefined;
+}
+
+const polymarketExecutionMetadataFields = (
+  metadata: PolymarketMarketExecutionMetadata | null | undefined
+): Record<string, unknown> => ({
+  ...(metadata?.tickSize ? { tickSize: metadata.tickSize, polymarketTickSize: metadata.tickSize } : {}),
+  ...(metadata?.negRisk !== undefined ? { negRisk: metadata.negRisk, polymarketNegRisk: metadata.negRisk } : {})
+});
+
+const extractPolymarketMarketExecutionMetadata = (
+  markets: readonly PolymarketGammaMarket[]
+): PolymarketMarketExecutionMetadata | null => {
+  for (const market of markets) {
+    const raw = market.raw;
+    const tickSize = parsePolymarketTickSize(
+      raw.tickSize,
+      raw.tick_size,
+      raw.minimumTickSize,
+      raw.minimum_tick_size,
+      raw.orderPriceMinTickSize,
+      raw.order_price_min_tick_size
+    );
+    const negRisk = parseOptionalBoolean(
+      raw.negRisk,
+      raw.neg_risk,
+      raw.negativeRisk,
+      raw.negative_risk
+    );
+    if (tickSize || negRisk !== undefined) {
+      return {
+        ...(tickSize ? { tickSize } : {}),
+        ...(negRisk !== undefined ? { negRisk } : {})
+      };
+    }
+  }
+  return null;
+};
+
+const parsePolymarketTickSize = (...values: readonly unknown[]): string | undefined => {
+  for (const value of values) {
+    const normalized = typeof value === "number" && Number.isFinite(value)
+      ? String(value)
+      : typeof value === "string"
+        ? value.trim()
+        : "";
+    if (normalized === "0.1" || normalized === "0.01" || normalized === "0.001" || normalized === "0.0001") {
+      return normalized;
+    }
+  }
+  return undefined;
+};
+
+const parseOptionalBoolean = (...values: readonly unknown[]): boolean | undefined => {
+  for (const value of values) {
+    if (typeof value === "boolean") {
+      return value;
+    }
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === "true") {
+        return true;
+      }
+      if (normalized === "false") {
+        return false;
+      }
+    }
+  }
+  return undefined;
+};
 
 export const resolveOutcomeTokenFromGammaMarkets = (
   markets: readonly PolymarketGammaMarket[],

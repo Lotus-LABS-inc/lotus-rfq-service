@@ -162,6 +162,7 @@ import {
   sorShadowPriceDeltaBps,
   sorShadowTotal
 } from "../observability/metrics.js";
+import { withLatencyStage } from "../observability/latency.js";
 import { withSpan } from "../observability/tracing.js";
 import { LimitlessQuoteReader, LimitlessRestOrderbookClient } from "../integrations/limitless/limitless-quote-reader.js";
 import { LimitlessProfileFeeReader } from "../integrations/limitless/limitless-fee-reader.js";
@@ -2076,15 +2077,23 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       };
     },
     acceptRFQ: async (sessionId, request) => {
-      const session = await sessionRepository.findById(sessionId);
+      const session = await withLatencyStage("rfq_load", {
+        endpoint: "POST /rfq/:id/accept"
+      }, () => sessionRepository.findById(sessionId));
       if (!session) throw new Error("Session not found");
 
-      const quote = await quoteRepository.findByExternalQuoteId(sessionId, request.quoteId);
+      const quote = await withLatencyStage("rfq_quote_load", {
+        endpoint: "POST /rfq/:id/accept",
+        canonicalMarketId: session.canonical_market_id
+      }, () => quoteRepository.findByExternalQuoteId(sessionId, request.quoteId));
       if (!quote) throw new Error("Quote not found");
 
       const acceptancePolicy = readAcceptancePolicy(session.metadata);
 
-      const reservationToken = await riskEngine.validateBeforeExecution(session, quote);
+      const reservationToken = await withLatencyStage("rfq_accept_risk_reservation", {
+        endpoint: "POST /rfq/:id/accept",
+        canonicalMarketId: session.canonical_market_id
+      }, () => riskEngine.validateBeforeExecution(session, quote));
 
       const rfqInput: CanonicalRFQInput = {
         rfqId: session.id,
@@ -2165,6 +2174,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
             currency: monetizationPolicy.currency
           }))
           .digest("hex");
+        await withLatencyStage("rfq_accept_monetization_preflight", {
+          endpoint: "POST /rfq/:id/accept",
+          canonicalMarketId: session.canonical_market_id
+        }, async () => {
         await monetizationRepository.upsertPolicy(monetizationPolicy);
         await monetizationRepository.createLedgerEntry({
           idempotencyKey: `${session.id}:quote:${request.quoteId}:${monetizationPolicy.policyVersion}:PREVIEWED`,
@@ -2204,14 +2217,22 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           currency: monetizationPolicy.currency,
           metadata: { feeSummary: preview, feeDisclosureHash: disclosureHash }
         });
+        });
       }
-      const canonicalIdentity = await resolveCanonicalIdentity(
+      const canonicalIdentity = await withLatencyStage("canonical_identity_lookup", {
+        endpoint: "POST /rfq/:id/accept",
+        canonicalMarketId: session.canonical_market_id
+      }, () => resolveCanonicalIdentity(
         dependencies.pgPool,
         session.canonical_market_id
-      );
+      ));
       let buildResult;
       try {
-        buildResult = await orderRouter.buildPlan(rfqInput, selectedQuoteInput, acceptancePolicy);
+        buildResult = await withLatencyStage("route_optimization", {
+          endpoint: "POST /rfq/:id/accept",
+          canonicalMarketId: session.canonical_market_id,
+          routeType: acceptancePolicy
+        }, () => orderRouter.buildPlan(rfqInput, selectedQuoteInput, acceptancePolicy));
       } catch (error) {
         if (riskEngine.rollbackReservation) {
           await riskEngine.rollbackReservation(reservationToken).catch((rollbackError: unknown) => {
@@ -2333,8 +2354,15 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         };
       }
 
-      const rawQuotes = await quoteRepository.listBySessionId(sessionId, 100);
-      const rankedQuotes = rankQuotesByEffectiveCost(
+      const rawQuotes = await withLatencyStage("quote_source_lookup", {
+        endpoint: "POST /rfq/:id/accept",
+        canonicalMarketId: session.canonical_market_id
+      }, () => quoteRepository.listBySessionId(sessionId, 100));
+      const rankedQuotes = await withLatencyStage("route_optimization", {
+        endpoint: "POST /rfq/:id/accept",
+        canonicalMarketId: session.canonical_market_id,
+        routeType: "LEGACY_QUOTE_RANKING"
+      }, async () => rankQuotesByEffectiveCost(
         rawQuotes.map((row) => ({
           quoteId: String(row.quote_payload.quoteId ?? row.id),
           ...(typeof row.quote_payload.lpId === "string" ? { lpId: row.quote_payload.lpId } : {}),
@@ -2348,7 +2376,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           expires_at: row.valid_until.toISOString(),
           soft_refresh_flag: false
         }))
-      );
+      ));
       const shouldAwait =
         acceptancePolicy === "ALL_OR_NONE"
           ? dependencies.sorAcceptAonAwait
@@ -2394,16 +2422,20 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
               }
             };
 
-      const validatedScope = request.executionScopeToken
-        ? await executionScopeTokenService.validate({
-            token: request.executionScopeToken,
+      const executionScopeToken = request.executionScopeToken;
+      const validatedScope = executionScopeToken
+        ? await withLatencyStage("execution_scope_token_validation", {
+            endpoint: "POST /rfq/:id/accept",
+            canonicalMarketId: session.canonical_market_id
+          }, () => executionScopeTokenService.validate({
+            token: executionScopeToken,
             principalId: session.taker_id,
             sessionId,
             quoteId: request.quoteId,
             canonicalMarketId: session.canonical_market_id,
             actualVenueTargets: executionRequest.venueTargets,
             authorities: executionScopeAuthorities
-          })
+          }))
         : null;
 
       if (validatedScope) {
@@ -2418,7 +2450,11 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         };
       }
 
-      const outcome = await executionControlGateway.execute(executionRequest);
+      const outcome = await withLatencyStage("rfq_accept_preflight", {
+        endpoint: "POST /rfq/:id/accept",
+        canonicalMarketId: session.canonical_market_id,
+        routeType: executionRequest.routeType
+      }, () => executionControlGateway.execute(executionRequest));
       if (
         dependencies.executionSystemSandboxEnabled
         && validatedScope

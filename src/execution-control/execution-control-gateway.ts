@@ -2,6 +2,7 @@ import type { Logger } from "pino";
 
 import { ExecutionControlRepository } from "../repositories/execution-control.repository.js";
 import { ExecutionAuditWriter } from "./execution-audit-writer.js";
+import type { ExecutionAuditContext } from "./execution-audit-writer.js";
 import { ExecutionApprovalGate } from "./execution-approval-gate.js";
 import { ExecutionFailSafeHandler } from "./execution-fail-safe-handler.js";
 import { ExecutionFreshnessGuard } from "./execution-freshness-guard.js";
@@ -9,6 +10,7 @@ import { ExecutionIdempotencyService } from "./execution-idempotency-service.js"
 import { ExecutionPolicyValidator } from "./execution-policy-validator.js";
 import { ExecutionReplayProtector } from "./execution-replay-protector.js";
 import { ExecutionSubmissionOrchestrator } from "./execution-submission-orchestrator.js";
+import { withLatencyStage, withLatencyStageSync } from "../observability/latency.js";
 import type {
     ExecutionControlDecision,
     ExecutionControlOutcome,
@@ -32,15 +34,30 @@ export class ExecutionControlGateway {
     public constructor(private readonly deps: ExecutionControlGatewayDeps) {}
 
     public async execute(request: ExecutionControlRequest): Promise<ExecutionControlOutcome> {
-        const policyResult = this.deps.policyValidator.validate(request);
-        const freshnessResult = this.deps.freshnessGuard.evaluate(request);
-        const approvalResult = this.deps.approvalGate.evaluate(request);
-        const idempotencyResult = await this.deps.idempotencyService.reserve(request);
-        const replayResult = await this.deps.replayProtector.evaluate({
+        const policyResult = withLatencyStageSync("execution_policy_validation", {
+            canonicalMarketId: request.canonicalExecutableMarketId,
+            routeType: request.routeType
+        }, () => this.deps.policyValidator.validate(request));
+        const freshnessResult = withLatencyStageSync("execution_freshness_validation", {
+            canonicalMarketId: request.canonicalExecutableMarketId,
+            routeType: request.routeType
+        }, () => this.deps.freshnessGuard.evaluate(request));
+        const approvalResult = withLatencyStageSync("execution_approval_lookup", {
+            canonicalMarketId: request.canonicalExecutableMarketId,
+            routeType: request.routeType
+        }, () => this.deps.approvalGate.evaluate(request));
+        const idempotencyResult = await withLatencyStage("execution_idempotency_reserve", {
+            canonicalMarketId: request.canonicalExecutableMarketId,
+            routeType: request.routeType
+        }, () => this.deps.idempotencyService.reserve(request));
+        const replayResult = await withLatencyStage("execution_replay_protection", {
+            canonicalMarketId: request.canonicalExecutableMarketId,
+            routeType: request.routeType
+        }, () => this.deps.replayProtector.evaluate({
             request,
             idempotencyKey: idempotencyResult.idempotencyKey,
             approvalBindingHash: approvalResult.bindingHash
-        });
+        }));
 
         const decision = this.buildDecision({
             policyResult,
@@ -57,7 +74,10 @@ export class ExecutionControlGateway {
             replayResult.blockReasonCodes.length > 0 ||
             idempotencyResult.status === "MISMATCHED";
 
-        const audit = await this.deps.auditWriter.initialize({
+        const audit = await withLatencyStage("execution_control_audit_initialize", {
+            canonicalMarketId: request.canonicalExecutableMarketId,
+            routeType: request.routeType
+        }, () => this.deps.auditWriter.initialize({
             request,
             idempotencyKey: idempotencyResult.idempotencyKey,
             approvalState: approvalResult.status,
@@ -67,9 +87,12 @@ export class ExecutionControlGateway {
             metadata: {
                 controlSubmissionKind: request.submissionKind
             }
-        });
+        }));
 
-        await this.deps.idempotencyService.attachIntent(idempotencyResult.idempotencyKey, {
+        await withLatencyStage("execution_control_idempotency_attach", {
+            canonicalMarketId: request.canonicalExecutableMarketId,
+            routeType: request.routeType
+        }, () => this.deps.idempotencyService.attachIntent(idempotencyResult.idempotencyKey, {
             executionIntentId: audit.intent.id,
             routePlanId: request.routePlanId,
             principalId: request.userWalletReference.principalId,
@@ -78,9 +101,12 @@ export class ExecutionControlGateway {
             requestedAction: request.routeType,
             bindingHash: approvalResult.bindingHash,
             status: idempotencyResult.status
-        });
+        }));
 
-        await this.deps.executionControlRepository.upsertApprovalState({
+        await withLatencyStage("execution_control_approval_state_upsert", {
+            canonicalMarketId: request.canonicalExecutableMarketId,
+            routeType: request.routeType
+        }, () => this.deps.executionControlRepository.upsertApprovalState({
             executionIntentId: audit.intent.id,
             approvalStatus: approvalResult.status,
             approvalBindingHash: approvalResult.bindingHash,
@@ -90,11 +116,14 @@ export class ExecutionControlGateway {
             payload: {
                 required: request.approvalRequirements.required
             }
-        });
+        }));
 
         const replayProtectionRef =
             replayResult.recordId ??
-            (await this.deps.replayProtector.record({
+            (await withLatencyStage("execution_control_replay_record_write", {
+                canonicalMarketId: request.canonicalExecutableMarketId,
+                routeType: request.routeType
+            }, () => this.deps.replayProtector.record({
                 executionIntentId: audit.intent.id,
                 executionRecordId: audit.getRecord().id,
                 routePlanId: request.routePlanId,
@@ -105,9 +134,12 @@ export class ExecutionControlGateway {
                 payload: {
                     submissionKind: request.submissionKind
                 }
-            }));
+            })));
 
-        const auditRef = await this.deps.executionControlRepository.createAuditRecord({
+        const auditRef = await withLatencyStage("execution_control_gateway_audit_write", {
+            canonicalMarketId: request.canonicalExecutableMarketId,
+            routeType: request.routeType
+        }, () => this.deps.executionControlRepository.createAuditRecord({
             executionIntentId: audit.intent.id,
             executionRecordId: audit.getRecord().id,
             routePlanId: request.routePlanId,
@@ -117,9 +149,12 @@ export class ExecutionControlGateway {
             payload: {
                 decision
             }
-        });
+        }));
 
-        await this.deps.executionControlRepository.createDecision({
+        await withLatencyStage("execution_control_decision_write", {
+            canonicalMarketId: request.canonicalExecutableMarketId,
+            routeType: request.routeType
+        }, () => this.deps.executionControlRepository.createDecision({
             executionIntentId: audit.intent.id,
             executionRecordId: audit.getRecord().id,
             routePlanId: request.routePlanId,
@@ -131,7 +166,7 @@ export class ExecutionControlGateway {
             compatibilityVersionIds: request.compatibilityReferences.versionIds,
             idempotencyKey: idempotencyResult.idempotencyKey,
             decision
-        });
+        }));
 
         if (blockedByApproval) {
             await audit.transition("AWAITING_APPROVAL", "execution_awaiting_approval");
@@ -168,19 +203,37 @@ export class ExecutionControlGateway {
             };
         }
 
-        await audit.transition("CHECKED", "execution_control_checks_passed");
-        await audit.transition("QUOTED", "execution_control_quote_bound");
+        await withLatencyStage("execution_control_pre_submission_audit", {
+            canonicalMarketId: request.canonicalExecutableMarketId,
+            routeType: request.routeType
+        }, () => transitionAuditMany(audit, [
+            {
+                nextState: "CHECKED",
+                reason: "execution_control_checks_passed"
+            },
+            {
+                nextState: "QUOTED",
+                reason: "execution_control_quote_bound"
+            }
+        ]));
         if (approvalResult.status === "APPROVED" || approvalResult.status === "NOT_REQUIRED") {
-            await audit.transition("APPROVED", "execution_control_approved");
+            await withLatencyStage("execution_control_pre_submission_audit", {
+                canonicalMarketId: request.canonicalExecutableMarketId,
+                routeType: request.routeType
+            }, () => audit.transition("APPROVED", "execution_control_approved"));
         }
 
         let result;
         try {
-            result = await this.deps.submissionOrchestrator.submit({
+            result = await withLatencyStage("execution_submission_handoff", {
+                canonicalMarketId: request.canonicalExecutableMarketId,
+                routeType: request.routeType,
+                external: request.submissionKind !== "INTERNAL_CROSS"
+            }, () => this.deps.submissionOrchestrator.submit({
                 request,
                 audit,
                 idempotencyKey: idempotencyResult.idempotencyKey
-            });
+            }));
         } catch (error) {
             await audit.transition("SYNC_PENDING", "execution_submission_uncertain", {
                 payload: {
@@ -209,16 +262,26 @@ export class ExecutionControlGateway {
             : {};
 
         if (result.status === "SYNC_PENDING" || result.status === "RECONCILING") {
-            await audit.transition(result.status, "execution_submission_uncertain", {
-                syncStatus: result.status === "SYNC_PENDING" ? "sync_pending" : "reconciling",
+            const uncertainStatus = result.status;
+            await withLatencyStage("execution_control_post_submission_audit", {
+                canonicalMarketId: request.canonicalExecutableMarketId,
+                routeType: request.routeType
+            }, async () => {
+            await audit.transition(uncertainStatus, "execution_submission_uncertain", {
+                syncStatus: uncertainStatus === "SYNC_PENDING" ? "sync_pending" : "reconciling",
                 metadata: resultMetadata,
                 ...(result.payload ? { payload: result.payload } : {})
             });
             await audit.recordRecovery({
-                localSyncFailed: result.status === "SYNC_PENDING",
+                localSyncFailed: uncertainStatus === "SYNC_PENDING",
                 ...(result.duplicateRisk !== undefined ? { duplicateSubmissionRisk: result.duplicateRisk } : {})
             });
+            });
         } else if (result.status === "FAILED") {
+            await withLatencyStage("execution_control_post_submission_audit", {
+                canonicalMarketId: request.canonicalExecutableMarketId,
+                routeType: request.routeType
+            }, async () => {
             await audit.transition("FAILED", "execution_submission_failed", {
                 syncStatus: "synced",
                 metadata: resultMetadata,
@@ -227,28 +290,52 @@ export class ExecutionControlGateway {
             await audit.recordRecovery(
                 result.duplicateRisk !== undefined ? { duplicateSubmissionRisk: result.duplicateRisk } : {}
             );
-        } else {
-            await audit.transition("EXECUTING", "execution_submission_started", {
-                metadata: resultMetadata,
-                ...(result.payload ? { payload: result.payload } : {})
             });
-            if (result.status === "PARTIAL") {
-                await audit.transition("PARTIALLY_FILLED", "execution_submission_partial", {
-                    metadata: resultMetadata,
-                    ...(result.payload ? { fillDetails: result.payload } : {})
-                });
-                await audit.recordRecovery();
-            } else {
-                await audit.transition("FILLED", "execution_submission_completed", {
-                    syncStatus: "synced",
-                    metadata: resultMetadata,
-                    ...(result.payload ? { fillDetails: result.payload } : {})
-                });
-                await audit.transition("SETTLED", "execution_submission_settled", {
-                    settlementStatus: "settled",
-                    metadata: resultMetadata
-                });
-            }
+        } else {
+            await withLatencyStage("execution_control_post_submission_audit", {
+                canonicalMarketId: request.canonicalExecutableMarketId,
+                routeType: request.routeType
+            }, async () => {
+                if (result.status === "PARTIAL") {
+                    await transitionAuditMany(audit, [
+                        {
+                            nextState: "EXECUTING",
+                            reason: "execution_submission_started",
+                            metadata: resultMetadata,
+                            ...(result.payload ? { payload: result.payload } : {})
+                        },
+                        {
+                            nextState: "PARTIALLY_FILLED",
+                            reason: "execution_submission_partial",
+                            metadata: resultMetadata,
+                            ...(result.payload ? { fillDetails: result.payload } : {})
+                        }
+                    ]);
+                    await audit.recordRecovery();
+                } else {
+                    await transitionAuditMany(audit, [
+                        {
+                            nextState: "EXECUTING",
+                            reason: "execution_submission_started",
+                            metadata: resultMetadata,
+                            ...(result.payload ? { payload: result.payload } : {})
+                        },
+                        {
+                            nextState: "FILLED",
+                            reason: "execution_submission_completed",
+                            syncStatus: "synced",
+                            metadata: resultMetadata,
+                            ...(result.payload ? { fillDetails: result.payload } : {})
+                        },
+                        {
+                            nextState: "SETTLED",
+                            reason: "execution_submission_settled",
+                            settlementStatus: "settled",
+                            metadata: resultMetadata
+                        }
+                    ]);
+                }
+            });
         }
 
         return {
@@ -331,4 +418,22 @@ const mapSubmissionStatus = (status: "SUBMITTED" | "COMPLETED" | "PARTIAL" | "FA
         default:
             return "FAILED" as const;
     }
+};
+
+type AuditTransitionBatch = Parameters<ExecutionAuditContext["transitionMany"]>[0];
+
+const transitionAuditMany = async (
+    audit: ExecutionAuditContext,
+    transitions: AuditTransitionBatch
+) => {
+    if (typeof audit.transitionMany === "function") {
+        return audit.transitionMany(transitions);
+    }
+
+    let record = audit.getRecord();
+    for (const transition of transitions) {
+        const { nextState, reason, ...options } = transition;
+        record = await audit.transition(nextState, reason, options);
+    }
+    return record;
 };

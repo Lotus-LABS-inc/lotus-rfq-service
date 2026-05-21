@@ -90,6 +90,21 @@ export const executionLatencyMs = new Histogram({
   ...histogramConfig
 });
 
+export const hotPathLatencyMs = new Histogram({
+  name: "lotus_hot_path_latency_ms",
+  help: "Latency for RFQ, route preview, preflight, and execution hot-path stages in milliseconds.",
+  labelNames: ["stage", "endpoint", "route_type", "execution_mode", "external", "cache"],
+  buckets: [0.1, 0.5, 1, 2.5, 5, 10, 25, 50, 75, 100, 250, 500, 1000, 2500, 5000, 10000],
+  ...histogramConfig
+});
+
+export const hotPathBlockerTotal = new Counter({
+  name: "lotus_hot_path_blocker_total",
+  help: "Total fail-closed, preflight, quote, and route blocker observations by hot-path stage.",
+  labelNames: ["stage", "category"],
+  ...counterConfig
+});
+
 export const lockWaitTimeMs = new Histogram({
   name: "lock_wait_time_ms",
   help: "Time spent waiting for execution lock acquisition in milliseconds.",

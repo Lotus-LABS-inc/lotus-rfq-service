@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { existsSync, readFileSync, rmSync } from "node:fs";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AssetType, OrderType, Side, SignatureTypeV2 } from "@polymarket/clob-client-v2";
 
@@ -326,6 +328,37 @@ describe("PolymarketExecutionAdapterV2", () => {
     });
   });
 
+  it("exposes a cached static readiness snapshot without secrets", () => {
+    const adapter = new PolymarketExecutionAdapterV2({
+      executionMode: "v2",
+      liveExecutionEnabled: true,
+      clobHost: "https://clob.polymarket.test",
+      chainId: "137",
+      builderCode: "lotus-builder",
+      executionSubmitMode: "relay",
+      executionRelayUrl: "https://relay.example",
+      executionRelaySecret: "relay-secret",
+      signatureType: "POLY_1271",
+      funderAddress: diagnosticDepositWallet
+    });
+
+    expect(adapter.configSnapshot()).toMatchObject({
+      executionMode: "v2",
+      liveExecutionEnabled: true,
+      submitMode: "relay",
+      relayConfigured: true,
+      requiredEnvPresent: true,
+      dryRunRequiredEnvPresent: true,
+      builderCodeConfigured: true,
+      missingEnv: [],
+      missingDryRunEnv: [],
+      signatureType: "POLY_1271",
+      accountModel: "DEPOSIT_WALLET",
+      depositWalletEnabled: true
+    });
+    expect(JSON.stringify(adapter.configSnapshot())).not.toContain("relay-secret");
+  });
+
   it("treats relay URL and secret as live env in relay submit mode", () => {
     const status = getPolymarketExecutionAdapterV2EnvStatus({
       POLYMARKET_EXECUTION_MODE: "v2",
@@ -590,11 +623,19 @@ describe("PolymarketExecutionAdapterV2", () => {
       liveSubmissionStatus: "LIVE_DISABLED",
       dryRunRequiredEnvPresent: true
     });
-    const prepared = await adapter.prepareOrder(leg());
+    const prepared = await adapter.prepareOrder({
+      ...leg(),
+      metadata: {
+        tickSize: "0.001",
+        negRisk: false
+      }
+    });
     expect(prepared.payload).toMatchObject({
       venueMarketId: "pm-market-1",
       venueOutcomeId: "pm-outcome-yes",
       metadata: {
+        tickSize: "0.001",
+        negRisk: false,
         adapter: "PolymarketExecutionAdapterV2",
         readinessState: "LIVE_DISABLED",
         clobV2DryRun: {
@@ -618,6 +659,49 @@ describe("PolymarketExecutionAdapterV2", () => {
     expect(JSON.stringify(prepared.payload)).not.toContain("server-side-secret");
     expect(JSON.stringify(prepared.payload)).not.toContain("server-side-passphrase");
     expect(JSON.stringify(prepared.payload)).not.toContain("server-side-key");
+  });
+
+  it("records Polymarket prepare sub-stage latency samples", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "lotus-polymarket-latency-"));
+    const samplePath = join(dir, "samples.jsonl");
+    const previousEnabled = process.env.LATENCY_DIAGNOSTICS_ENABLED;
+    const previousPath = process.env.LATENCY_DIAGNOSTIC_LOG_PATH;
+    process.env.LATENCY_DIAGNOSTICS_ENABLED = "true";
+    process.env.LATENCY_DIAGNOSTIC_LOG_PATH = samplePath;
+
+    try {
+      const adapter = new PolymarketExecutionAdapterV2({
+        executionMode: "v2",
+        liveExecutionEnabled: false,
+        clobHost: "https://clob.polymarket.test",
+        chainId: "137",
+        builderCode: "lotus-builder",
+        apiSecret: "server-side-secret"
+      });
+      await adapter.prepareOrder(leg());
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const lines = (await readFile(samplePath, "utf8")).trim().split(/\r?\n/);
+      const stages = lines.map((line) => (JSON.parse(line) as { stage: string }).stage);
+
+      expect(stages).toEqual(expect.arrayContaining([
+        "polymarket_prepare_env_check",
+        "polymarket_prepare_account_binding",
+        "polymarket_prepare_order_shape",
+        "polymarket_prepare_builder_config",
+        "polymarket_prepare_signature_payload"
+      ]));
+    } finally {
+      if (previousEnabled === undefined) {
+        delete process.env.LATENCY_DIAGNOSTICS_ENABLED;
+      } else {
+        process.env.LATENCY_DIAGNOSTICS_ENABLED = previousEnabled;
+      }
+      if (previousPath === undefined) {
+        delete process.env.LATENCY_DIAGNOSTIC_LOG_PATH;
+      } else {
+        process.env.LATENCY_DIAGNOSTIC_LOG_PATH = previousPath;
+      }
+    }
   });
 
   it("dry-run client validates Lotus-internal signing and payload shape without exposing credentials", () => {
@@ -1089,6 +1173,103 @@ describe("PolymarketExecutionAdapterV2", () => {
     expect(orderType).toBe(OrderType.FOK);
     expect(postedOrder.signature).toBe(`0x${"aa".repeat(65)}${"bb".repeat(96)}`);
     expect(postedOrder.signature).not.toBe(`0x${"aa".repeat(65)}`);
+  });
+
+  it("blocks tick-misaligned signed Polymarket orders before CLOB readiness or submit", async () => {
+    const calls: string[] = [];
+    const sdkClient: PolymarketClobV2SdkClient = {
+      async createAndPostOrder() {
+        throw new Error("not used");
+      },
+      async postOrder() {
+        calls.push("postOrder");
+        return { orderID: "pm-order-invalid", status: "MATCHED" };
+      },
+      async updateBalanceAllowance() {
+        calls.push("updateBalanceAllowance");
+        return {};
+      },
+      async getBalanceAllowance() {
+        calls.push("getBalanceAllowance");
+        return { balance: "2000000", allowance: "2000000" };
+      },
+      async getOrder() {
+        throw new Error("not used");
+      },
+      async getTrades() {
+        return [];
+      },
+      async cancelOrder() {
+        return { success: true };
+      }
+    };
+    const client = new SdkPolymarketClobV2LiveClient({
+      executionMode: "v2",
+      liveExecutionEnabled: true,
+      clobHost: completeEnv.POLY_CLOB_HOST,
+      chainId: completeEnv.POLY_CHAIN_ID,
+      apiKey: completeEnv.POLY_API_KEY,
+      apiSecret: completeEnv.POLY_API_SECRET,
+      apiPassphrase: completeEnv.POLY_API_PASSPHRASE,
+      builderCode: completeEnv.POLY_BUILDER_CODE,
+      privateKey: completeEnv.POLY_PRIVATE_KEY,
+      tickSize: "0.001"
+    }, () => sdkClient);
+
+    await expect(client.submitOrder(signedPolymarketVenueOrder({
+      size: "90.90909091",
+      price: 0.01114277,
+      metadata: {
+        clobV2DryRun: {
+          adapter: "PolymarketExecutionAdapterV2",
+          dryRun: true
+        }
+      }
+    }, {
+      makerAmount: "1000000",
+      takerAmount: "90900000",
+      side: "BUY"
+    }))).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
+      message: "Polymarket rejected the CLOB order parameters. Refresh the route before retrying."
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it("blocks tick-misaligned signed Polymarket relay orders before calling the relay", async () => {
+    const calls: string[] = [];
+    const client = new RelayPolymarketClobV2LiveClient({
+      relayUrl: "https://relay.polymarket.test",
+      relaySecret: "relay-secret",
+      polymarketConfig: {
+        executionMode: "v2",
+        liveExecutionEnabled: true,
+        executionSubmitMode: "relay",
+        tickSize: "0.001"
+      },
+      fetchImpl: (async () => {
+        calls.push("fetch");
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }) as typeof fetch
+    });
+
+    await expect(client.submitOrder(signedPolymarketVenueOrder({
+      size: "90.90909091",
+      price: 0.01114277,
+      metadata: {
+        clobV2DryRun: {
+          adapter: "PolymarketExecutionAdapterV2",
+          dryRun: true
+        }
+      }
+    }, {
+      makerAmount: "1000000",
+      takerAmount: "90900000",
+      side: "BUY"
+    }))).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED"
+    });
+    expect(calls).toEqual([]);
   });
 
   it("accepts scientific-notation CLOB balance responses without crashing readiness", async () => {

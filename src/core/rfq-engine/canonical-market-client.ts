@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { withLatencyStage } from "../../observability/latency.js";
 
 const canonicalMarketPayloadSchema = z.object({
   id: z.string(),
@@ -54,12 +55,15 @@ export const createCanonicalMarketClient = (
 
   return {
     async fetchMarketById(marketId: string): Promise<CanonicalMarket> {
-      const response = await fetchImpl(`${config.baseUrl}/markets/${marketId}`, {
+      const response = await withLatencyStage("canonical_market_fetch", {
+        canonicalMarketId: marketId,
+        external: true
+      }, () => fetchImpl(`${config.baseUrl}/markets/${marketId}`, {
         method: "GET",
         headers: {
           Accept: "application/json"
         }
-      });
+      }));
 
       if (!response.ok) {
         throw new CanonicalMarketFetchError(

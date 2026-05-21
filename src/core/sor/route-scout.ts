@@ -176,26 +176,27 @@ export class RouteScout implements IRouteScout {
 
         const result: RouteCandidate[] = [];
         for (const leg of legs) {
-          const perLegQuotes = await this.deps.lpSource.getPerLegQuotes(parsed.rfq, leg.leg_id);
           const orderbookInput = {
             canonicalMarketId: leg.canonical_market_id,
             ...(leg.canonical_outcome_id ? { canonicalOutcomeId: leg.canonical_outcome_id } : {}),
             side: leg.side,
             quantity: leg.quantity
           };
-          const orderbookSnapshots = this.deps.canonicalClient.getOrderbookSnapshots
-            ? await this.deps.canonicalClient.getOrderbookSnapshots(orderbookInput)
-            : [
-                await this.deps.canonicalClient.getOrderbookSnapshot(orderbookInput)
-              ].filter((snapshot): snapshot is CanonicalOrderbookSnapshot => snapshot !== null);
-
-          const internalHints = this.deps.internalCrossingSource
-            ? await this.deps.internalCrossingSource.getCrossingHints({
-                rfq: parsed.rfq,
-                leg,
-                selectedQuote: parsed.selectedQuote
-              })
-            : [];
+          const [perLegQuotes, orderbookSnapshots, internalHints] = await Promise.all([
+            this.deps.lpSource.getPerLegQuotes(parsed.rfq, leg.leg_id),
+            this.deps.canonicalClient.getOrderbookSnapshots
+              ? this.deps.canonicalClient.getOrderbookSnapshots(orderbookInput)
+              : this.deps.canonicalClient.getOrderbookSnapshot(orderbookInput).then((snapshot) =>
+                  snapshot ? [snapshot] : []
+                ),
+            this.deps.internalCrossingSource
+              ? this.deps.internalCrossingSource.getCrossingHints({
+                  rfq: parsed.rfq,
+                  leg,
+                  selectedQuote: parsed.selectedQuote
+                })
+              : Promise.resolve([])
+          ]);
 
           for (const quote of wholeComboQuotes) {
             const wholeComboInputBase = {

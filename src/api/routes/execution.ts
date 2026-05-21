@@ -17,6 +17,7 @@ import {
 import type { CalculatedVenueQuoteSnapshot, VenueQuoteSnapshotBlocker } from "../../core/sor/quote-snapshot.js";
 import type { SettlementStatusV0 } from "../../execution-system/types.js";
 import type { ExecutionVenueReadinessSummary } from "../admin/execution-venues-admin-service.js";
+import { withLatencyStage } from "../../observability/latency.js";
 
 const candidateSchema = z.object({
   venue: z.string().min(1),
@@ -203,10 +204,13 @@ export const registerExecutionRoutes = async (
         details: parsed.error.flatten()
       });
     }
-    const result = await deps.liveCandidateProvider.getCandidates({
+    const result = await withLatencyStage("route_preview_live_candidates", {
+      endpoint: "POST /execution/live-candidates",
+      canonicalMarketId: parsed.data.marketId
+    }, () => deps.liveCandidateProvider!.getCandidates({
       userId: request.user.userId,
       ...parsed.data
-    });
+    }));
     if (result.candidates.length === 0) {
       return reply.status(409).send({
         code: "NO_LIVE_EXECUTION_CANDIDATES",
@@ -228,7 +232,11 @@ export const registerExecutionRoutes = async (
     }
     if (parsed.data.side === "sell") {
       try {
-        const result = await deps.sellQuoteService.prepareExit({
+        const result = await withLatencyStage("route_preview_quote", {
+          endpoint: "POST /execution/quote",
+          canonicalMarketId: parsed.data.marketId,
+          routeType: "SELL"
+        }, () => deps.sellQuoteService.prepareExit({
           userId: request.user.userId,
           sellMode: "SELL_ALL",
           sizeMode: "CUSTOM_AMOUNT",
@@ -236,7 +244,7 @@ export const registerExecutionRoutes = async (
           marketId: parsed.data.marketId,
           outcomeId: parsed.data.outcomeId,
           candidates: parsed.data.candidates
-        });
+        }));
         if (!result.quote) {
           return reply.status(409).send({
             code: "NO_EXECUTABLE_EXIT_ROUTE",
@@ -275,10 +283,14 @@ export const registerExecutionRoutes = async (
         });
       }
     }
-    const result = await deps.executableRouteService.quote({
+    const result = await withLatencyStage("route_preview_quote", {
+      endpoint: "POST /execution/quote",
+      canonicalMarketId: parsed.data.marketId,
+      routeType: "BUY"
+    }, () => deps.executableRouteService.quote({
       userId: request.user.userId,
       ...parsed.data
-    });
+    }));
     if (!result.quote) {
       return reply.status(409).send({
         code: "NO_EXECUTABLE_ROUTE",
@@ -299,7 +311,9 @@ export const registerExecutionRoutes = async (
         details: parsed.error.flatten()
       });
     }
-    const quote = await deps.executableRouteService.getQuote(request.user.userId, parsed.data.quoteId);
+    const quote = await withLatencyStage("execution_quote_load", {
+      endpoint: "POST /execution/submit"
+    }, () => deps.executableRouteService.getQuote(request.user.userId, parsed.data.quoteId));
     if (!quote) {
       return reply.status(404).send({
         code: "EXECUTION_QUOTE_NOT_FOUND",
@@ -325,10 +339,13 @@ export const registerExecutionRoutes = async (
     }
     const { executionId } = request.params as { executionId: string };
     try {
-      const bundle = await deps.signedTradeBundleService.prepare({
+      const bundle = await withLatencyStage("execution_signature_prepare", {
+        endpoint: "POST /execution/:executionId/prepare-signatures",
+        external: true
+      }, () => deps.signedTradeBundleService!.prepare({
         userId: request.user.userId,
         quoteId: executionId
-      });
+      }));
       return reply.send(bundle);
     } catch (error) {
       if (error instanceof SignedTradeBundleError) {
@@ -355,12 +372,15 @@ export const registerExecutionRoutes = async (
     }
     const { executionId } = request.params as { executionId: string };
     try {
-      const result = await deps.signedTradeBundleService.submit({
+      const result = await withLatencyStage("execution_signed_bundle_submit", {
+        endpoint: "POST /execution/:executionId/submit-signed-bundle",
+        external: parsed.data.dryRun !== true
+      }, () => deps.signedTradeBundleService!.submit({
         userId: request.user.userId,
         quoteId: executionId,
         signedLegs: parsed.data.signedLegs,
         dryRun: parsed.data.dryRun
-      });
+      }));
       return reply.status(parsed.data.dryRun === true ? 200 : 202).send(result);
     } catch (error) {
       if (error instanceof SignedTradeBundleError) {
@@ -379,10 +399,12 @@ export const registerExecutionRoutes = async (
     }
     const { executionId } = request.params as { executionId: string };
     try {
-      const readiness = await deps.signedTradeBundleService.getLiveReadiness({
+      const readiness = await withLatencyStage("funding_readiness_lookup", {
+        endpoint: "GET /execution/:executionId/live-readiness"
+      }, () => deps.signedTradeBundleService!.getLiveReadiness({
         userId: request.user.userId,
         quoteId: executionId
-      });
+      }));
       return reply.send(readiness);
     } catch (error) {
       if (error instanceof SignedTradeBundleError) {
@@ -880,6 +902,7 @@ const sanitizeSubmittedLegs = (
   status: leg.status,
   venueOrderId: leg.venueOrderId,
   fillId: leg.fillId,
+  reasonCode: leg.reasonCode,
   reason: leg.reason,
   fillState: leg.fillState,
   settlementState: leg.settlementState,
@@ -1026,7 +1049,11 @@ export const buildLiveExecutionCandidatesResponse = (input: {
       quoteBlockers,
       metadata: {
         ...(asString(metadata.limitlessExchangeAddress) ? { limitlessExchangeAddress: asString(metadata.limitlessExchangeAddress) } : {}),
-        ...(asString(metadata.limitlessAdapterAddress) ? { limitlessAdapterAddress: asString(metadata.limitlessAdapterAddress) } : {})
+        ...(asString(metadata.limitlessAdapterAddress) ? { limitlessAdapterAddress: asString(metadata.limitlessAdapterAddress) } : {}),
+        ...(venue === "POLYMARKET" && asString(metadata.tickSize) ? { tickSize: asString(metadata.tickSize) } : {}),
+        ...(venue === "POLYMARKET" && asString(metadata.polymarketTickSize) ? { polymarketTickSize: asString(metadata.polymarketTickSize) } : {}),
+        ...(venue === "POLYMARKET" && asBoolean(metadata.negRisk) !== undefined ? { negRisk: asBoolean(metadata.negRisk) } : {}),
+        ...(venue === "POLYMARKET" && asBoolean(metadata.polymarketNegRisk) !== undefined ? { polymarketNegRisk: asBoolean(metadata.polymarketNegRisk) } : {})
       }
     });
   }

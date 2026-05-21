@@ -44,6 +44,7 @@ import {
   normalizePolymarketDataApiSide,
   type PolymarketDataApiActivity
 } from "../integrations/polymarket/polymarket-data-api-client.js";
+import { withLatencyStageSync } from "../observability/latency.js";
 
 export const polymarketV2RequiredEnvKeys = [
   "POLYMARKET_CLOB_HOST",
@@ -117,6 +118,24 @@ export interface PolymarketExecutionAdapterV2EnvStatus {
   liveSubmissionStatus: "NOT_CONFIGURED" | "LIVE_DISABLED" | "ENV_INCOMPLETE" | "LIVE_READY" | "LIVE_CLIENT_DISABLED";
   submitMode: "direct" | "relay";
   relayConfigured: boolean;
+  signatureType?: string | undefined;
+  accountModel?: string | undefined;
+  depositWalletEnabled?: boolean | undefined;
+}
+
+export interface PolymarketAdapterReadinessSnapshot {
+  executionMode: string;
+  liveExecutionEnabled: boolean;
+  submitMode: "direct" | "relay";
+  relayConfigured: boolean;
+  requiredEnvPresent: boolean;
+  dryRunRequiredEnvPresent: boolean;
+  builderCodeConfigured: boolean;
+  missingEnv: readonly string[];
+  missingDryRunEnv: readonly PolymarketV2DryRunRequiredEnvKey[];
+  signatureType?: string | undefined;
+  accountModel?: string | undefined;
+  depositWalletEnabled?: boolean | undefined;
 }
 
 export interface PolymarketSubmitBalanceReader {
@@ -297,6 +316,74 @@ export const buildPolymarketExecutionAdapterV2ConfigFromEnv = (
   executionRelaySecret: env.POLYMARKET_EXECUTION_RELAY_SECRET,
   dataApiBaseUrl: env.POLYMARKET_DATA_API_BASE_URL
 });
+
+const polymarketConfigEnvLike = (config: PolymarketExecutionAdapterV2Config): NodeJS.ProcessEnv => {
+  const envLike: NodeJS.ProcessEnv = {
+    POLYMARKET_EXECUTION_MODE: config.executionMode,
+    POLYMARKET_LIVE_EXECUTION_ENABLED: String(config.liveExecutionEnabled),
+    POLYMARKET_CLOB_HOST: config.clobHost,
+    POLYMARKET_CHAIN_ID: config.chainId,
+    POLYMARKET_API_KEY: config.apiKey,
+    POLYMARKET_API_SECRET: config.apiSecret,
+    POLYMARKET_API_PASSPHRASE: config.apiPassphrase,
+    POLYMARKET_BUILDER_CODE: config.builderCode,
+    POLYMARKET_PRIVATE_KEY: config.privateKey
+  };
+  if (config.executionSubmitMode) {
+    envLike.POLYMARKET_EXECUTION_SUBMIT_MODE = config.executionSubmitMode;
+  }
+  if (config.executionRelayUrl) {
+    envLike.POLYMARKET_EXECUTION_RELAY_URL = config.executionRelayUrl;
+  }
+  if (config.executionRelaySecret) {
+    envLike.POLYMARKET_EXECUTION_RELAY_SECRET = config.executionRelaySecret;
+  }
+  return envLike;
+};
+
+const normalizeConfiguredSignatureType = (value: string | undefined): string => {
+  const parsed = parseSignatureType(value);
+  if (parsed === SignatureTypeV2.EOA) return "EOA";
+  if (parsed === SignatureTypeV2.POLY_GNOSIS_SAFE) return "POLY_GNOSIS_SAFE";
+  if (parsed === SignatureTypeV2.POLY_1271) return "POLY_1271";
+  return "POLY_PROXY";
+};
+
+const inferPolymarketAccountModel = (config: PolymarketExecutionAdapterV2Config): string => {
+  if (nonEmpty(config.funderAddress)) {
+    return "DEPOSIT_WALLET";
+  }
+  const signatureType = normalizeConfiguredSignatureType(config.signatureType);
+  if (signatureType === "POLY_1271" || signatureType === "POLY_GNOSIS_SAFE") {
+    return "CONTRACT_WALLET";
+  }
+  if (signatureType === "EOA") {
+    return "EOA";
+  }
+  return "POLY_PROXY";
+};
+
+const buildPolymarketAdapterReadinessSnapshot = (
+  config: PolymarketExecutionAdapterV2Config,
+  status: PolymarketExecutionAdapterV2EnvStatus
+): PolymarketAdapterReadinessSnapshot => {
+  const signatureType = normalizeConfiguredSignatureType(config.signatureType);
+  const depositWalletEnabled = nonEmpty(config.funderAddress);
+  return {
+    executionMode: status.executionMode,
+    liveExecutionEnabled: status.liveExecutionEnabled,
+    submitMode: status.submitMode,
+    relayConfigured: status.relayConfigured,
+    requiredEnvPresent: status.requiredEnvPresent,
+    dryRunRequiredEnvPresent: status.dryRunRequiredEnvPresent,
+    builderCodeConfigured: status.builderCodeConfigured,
+    missingEnv: status.missingEnv,
+    missingDryRunEnv: status.missingDryRunEnv,
+    signatureType,
+    accountModel: inferPolymarketAccountModel(config),
+    depositWalletEnabled
+  };
+};
 
 const assertLiveClientConfig = (config: PolymarketExecutionAdapterV2Config): void => {
   const missing: string[] = [];
@@ -505,6 +592,7 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
     parsePreparedPolymarketPayload(order);
     const signedOrder = parseUserSignedPolymarketOrder(order);
     if (signedOrder) {
+      validatePolymarketSignedOrderShapeBeforeSubmit(order, signedOrder, this.config);
       const authPayload = parsePolymarketClobAuthPayload(order);
       const sdkClient = authPayload
         ? await this.createUserScopedSdkClient(authPayload, signedOrder)
@@ -992,8 +1080,12 @@ export class RelayPolymarketClobV2LiveClient implements PolymarketClobV2LiveClie
     };
   }
 
-  public submitOrder(order: PreparedVenueOrder): Promise<VenueSubmitResult> {
-    return this.post<VenueSubmitResult>("/internal/polymarket/v2/submit-order", { order });
+  public async submitOrder(order: PreparedVenueOrder): Promise<VenueSubmitResult> {
+    const signedOrder = safeParseUserSignedPolymarketOrder(order);
+    if (signedOrder) {
+      validatePolymarketSignedOrderShapeBeforeSubmit(order, signedOrder, this.config);
+    }
+    return await this.post<VenueSubmitResult>("/internal/polymarket/v2/submit-order", { order });
   }
 
   public fetchFillState(venueOrderId: string, context?: VenueOrderLookupContext): Promise<VenueFillState> {
@@ -1388,6 +1480,98 @@ const safeParseUserSignedPolymarketOrder = (order: PreparedVenueOrder): SignedOr
   }
 };
 
+const validatePolymarketSignedOrderShapeBeforeSubmit = (
+  order: PreparedVenueOrder,
+  signedOrder: SignedOrder,
+  config: PolymarketExecutionAdapterV2Config
+): void => {
+  const prepared = parsePreparedPolymarketPayload(order);
+  const signedRecord = signedOrder as unknown as Record<string, unknown>;
+  if (String(signedRecord.tokenId ?? "") !== prepared.venueOutcomeId) {
+    throwPolymarketOrderParamsRejected();
+  }
+  const signedSide = normalizePolymarketSignedOrderSide(signedRecord.side);
+  if (!signedSide || signedSide !== prepared.side) {
+    throwPolymarketOrderParamsRejected();
+  }
+  const normalizedSignedSide = prepared.side;
+  const orderMetadata = polymarketOrderExecutionMetadata(order);
+  const tickSize = orderMetadata.tickSize ?? config.tickSize;
+  if (!tickSize || !hasLotusPreparedPolymarketShape(order)) {
+    validatePositivePolymarketSignedAmounts(signedRecord);
+    return;
+  }
+  validatePolymarketTickAlignedAmounts(signedRecord, normalizedSignedSide, tickSize);
+};
+
+const hasLotusPreparedPolymarketShape = (order: PreparedVenueOrder): boolean => {
+  const metadata = isRecord(order.payload.metadata) ? order.payload.metadata : null;
+  return Boolean(metadata && isRecord(metadata.clobV2DryRun));
+};
+
+const polymarketOrderExecutionMetadata = (order: PreparedVenueOrder): {
+  tickSize?: TickSize | undefined;
+  negRisk?: boolean | undefined;
+} => {
+  const metadata = isRecord(order.payload.metadata) ? order.payload.metadata : {};
+  const tickSize = parseTickSize(
+    optionalString(metadata.polymarketTickSize)
+      ?? optionalString(metadata.tickSize)
+      ?? undefined
+  );
+  const negRisk = parseOptionalBooleanValue(metadata.polymarketNegRisk ?? metadata.negRisk);
+  return {
+    ...(tickSize ? { tickSize } : {}),
+    ...(negRisk !== undefined ? { negRisk } : {})
+  };
+};
+
+const validatePositivePolymarketSignedAmounts = (signedRecord: Record<string, unknown>): {
+  makerAmount: bigint;
+  takerAmount: bigint;
+} => {
+  const makerAmount = parseNonNegativeAtomicUnits(signedRecord.makerAmount, "makerAmount");
+  const takerAmount = parseNonNegativeAtomicUnits(signedRecord.takerAmount, "takerAmount");
+  if (makerAmount <= 0n || takerAmount <= 0n) {
+    throwPolymarketOrderParamsRejected();
+  }
+  return { makerAmount, takerAmount };
+};
+
+const validatePolymarketTickAlignedAmounts = (
+  signedRecord: Record<string, unknown>,
+  signedSide: "buy" | "sell",
+  tickSize: TickSize
+): void => {
+  const { makerAmount, takerAmount } = validatePositivePolymarketSignedAmounts(signedRecord);
+  const collateralAtomic = signedSide === "buy" ? makerAmount : takerAmount;
+  const shareAtomic = signedSide === "buy" ? takerAmount : makerAmount;
+  const tickCount = new Decimal(collateralAtomic.toString())
+    .div(new Decimal(shareAtomic.toString()))
+    .div(new Decimal(tickSize));
+  if (!tickCount.isInteger()) {
+    throwPolymarketOrderParamsRejected();
+  }
+};
+
+const normalizePolymarketSignedOrderSide = (value: unknown): "buy" | "sell" | null => {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  if (normalized === "BUY" || normalized === "0") {
+    return "buy";
+  }
+  if (normalized === "SELL" || normalized === "1") {
+    return "sell";
+  }
+  return null;
+};
+
+const throwPolymarketOrderParamsRejected = (): never => {
+  throw new PolymarketExecutionNotConfiguredError(
+    "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
+    "Polymarket rejected the CLOB order parameters. Refresh the route before retrying."
+  );
+};
+
 const parseRelayPreparedPolymarketOrder = (body: Record<string, unknown>): PreparedVenueOrder | null => {
   const order = isRecord(body.order) ? body.order : null;
   if (
@@ -1596,6 +1780,22 @@ const polymarketClobSyncPendingForSubmitMessage = (
 
 const optionalString = (value: unknown): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+
+const parseOptionalBooleanValue = (value: unknown): boolean | undefined => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") {
+      return true;
+    }
+    if (normalized === "false") {
+      return false;
+    }
+  }
+  return undefined;
+};
 
 const optionalNumber = (value: unknown): number | null => {
   const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
@@ -2060,6 +2260,7 @@ const buildPolymarketPostOrderRejectionDiagnostic = (input: {
   const depositWallet = funder ?? attestation?.venueAccountAddress ?? attestation?.ownerAddress ?? maker;
   const required = requiredBalanceAllowanceForSignedOrder(input.signedOrder);
   const constructorSignatureType = signatureTypeForSignedOrder(input.signedOrder) ?? parseSignatureType(input.config.signatureType);
+  const orderMetadata = polymarketOrderExecutionMetadata(input.order);
   return {
     quoteId: attestation?.quoteId ?? optionalString(input.order.payload.quoteId) ?? null,
     executionId: optionalString(input.order.payload.executionId)
@@ -2084,8 +2285,8 @@ const buildPolymarketPostOrderRejectionDiagnostic = (input: {
       side: signedRecord.side ?? null,
       makerAmountAtomic: optionalString(signedRecord.makerAmount) ?? null,
       takerAmountAtomic: optionalString(signedRecord.takerAmount) ?? null,
-      tickSize: input.config.tickSize ?? null,
-      negRisk: input.config.negRisk ?? null,
+      tickSize: orderMetadata.tickSize ?? input.config.tickSize ?? null,
+      negRisk: orderMetadata.negRisk ?? input.config.negRisk ?? null,
       builderConfigured: nonEmpty(input.config.builderCode) || !/^0x0+$/i.test(`${signedRecord.builder ?? ""}`)
     },
     readinessSummary: {
@@ -2454,73 +2655,106 @@ export class PolymarketExecutionAdapterV2 implements ExecutionVenueAdapter {
   private readonly dryRunClient: PolymarketClobV2DryRunClient;
   private readonly now: () => Date;
   private readonly liveClient: PolymarketClobV2LiveClient;
+  private readonly envStatus: PolymarketExecutionAdapterV2EnvStatus;
+  private readonly readinessSnapshot: PolymarketAdapterReadinessSnapshot;
 
   public constructor(
     private readonly config: PolymarketExecutionAdapterV2Config,
     liveClient?: PolymarketClobV2LiveClient,
     balanceReader?: PolymarketSubmitBalanceReader | undefined
   ) {
+    const envStatus = getPolymarketExecutionAdapterV2EnvStatus(polymarketConfigEnvLike(config));
+    const readinessSnapshot = buildPolymarketAdapterReadinessSnapshot(config, envStatus);
+    this.envStatus = {
+      ...envStatus,
+      signatureType: readinessSnapshot.signatureType,
+      accountModel: readinessSnapshot.accountModel,
+      depositWalletEnabled: readinessSnapshot.depositWalletEnabled
+    };
+    this.readinessSnapshot = readinessSnapshot;
     this.liveClient = liveClient ?? createPolymarketClobV2LiveClient(config, undefined, balanceReader);
     this.dryRunClient = new PolymarketClobV2DryRunClient(config);
     this.now = () => new Date();
   }
 
   public status(): PolymarketExecutionAdapterV2EnvStatus {
-    const envLike: NodeJS.ProcessEnv = {
-      POLYMARKET_EXECUTION_MODE: this.config.executionMode,
-      POLYMARKET_LIVE_EXECUTION_ENABLED: String(this.config.liveExecutionEnabled),
-      POLYMARKET_CLOB_HOST: this.config.clobHost,
-      POLYMARKET_CHAIN_ID: this.config.chainId,
-      POLYMARKET_API_KEY: this.config.apiKey,
-      POLYMARKET_API_SECRET: this.config.apiSecret,
-      POLYMARKET_API_PASSPHRASE: this.config.apiPassphrase,
-      POLYMARKET_BUILDER_CODE: this.config.builderCode,
-      POLYMARKET_PRIVATE_KEY: this.config.privateKey
-    };
-    if (this.config.executionSubmitMode) {
-      envLike.POLYMARKET_EXECUTION_SUBMIT_MODE = this.config.executionSubmitMode;
-    }
-    if (this.config.executionRelayUrl) {
-      envLike.POLYMARKET_EXECUTION_RELAY_URL = this.config.executionRelayUrl;
-    }
-    if (this.config.executionRelaySecret) {
-      envLike.POLYMARKET_EXECUTION_RELAY_SECRET = this.config.executionRelaySecret;
-    }
-    return getPolymarketExecutionAdapterV2EnvStatus(envLike);
+    return this.envStatus;
+  }
+
+  public configSnapshot(): PolymarketAdapterReadinessSnapshot {
+    return this.readinessSnapshot;
   }
 
   public async prepareOrder(leg: ExecutionLegV0): Promise<PreparedVenueOrder> {
-    this.assertPreparedPathConfigured();
-    const dryRunOrder = this.dryRunClient.buildPreparedDryRunEnvelope({
-      clientOrderId: leg.executionLegId,
-      venueMarketId: leg.venueMarketId,
-      venueOutcomeId: leg.venueOutcomeId,
-      side: leg.side,
-      size: leg.size,
-      price: leg.price
-    }, this.now());
-    if (dryRunOrder.blockers.length > 0) {
-      throw new PolymarketExecutionNotConfiguredError(
-        "POLYMARKET_V2_DRY_RUN_ORDER_INVALID",
-        `Polymarket V2 dry-run order shape is invalid: ${dryRunOrder.blockers.join(", ")}.`
-      );
-    }
-    return {
+    const tags = {
+      canonicalMarketId: leg.venueMarketId,
       venue: this.venue,
-      clientOrderId: leg.executionLegId,
-      payload: {
+      executionMode: this.readinessSnapshot.executionMode,
+      external: true
+    } as const;
+    try {
+      withLatencyStageSync("polymarket_prepare_env_check", tags, () => {
+        this.assertPreparedPathConfigured();
+      });
+      withLatencyStageSync("polymarket_prepare_account_binding", tags, () => ({
+        signatureType: this.readinessSnapshot.signatureType,
+        accountModel: this.readinessSnapshot.accountModel,
+        depositWalletEnabled: this.readinessSnapshot.depositWalletEnabled
+      }));
+      const orderInput = withLatencyStageSync("polymarket_prepare_order_shape", tags, () => ({
+        clientOrderId: leg.executionLegId,
         venueMarketId: leg.venueMarketId,
         venueOutcomeId: leg.venueOutcomeId,
         side: leg.side,
         size: leg.size,
-        price: leg.price,
-        metadata: {
-          adapter: "PolymarketExecutionAdapterV2",
-          readinessState: this.status().readinessState,
-          clobV2DryRun: dryRunOrder
+        price: leg.price
+      }));
+      withLatencyStageSync("polymarket_prepare_builder_config", tags, () => {
+        if (!this.readinessSnapshot.builderCodeConfigured) {
+          throw new PolymarketExecutionNotConfiguredError(
+            "POLYMARKET_V2_DRY_RUN_ORDER_INVALID",
+            "Polymarket V2 dry-run order shape is invalid: missing_builder_code."
+          );
         }
+      });
+      const dryRunOrder = withLatencyStageSync("polymarket_prepare_signature_payload", tags, () =>
+        this.dryRunClient.buildPreparedDryRunEnvelope(orderInput, this.now()));
+      if (dryRunOrder.blockers.length > 0) {
+        throw new PolymarketExecutionNotConfiguredError(
+          "POLYMARKET_V2_DRY_RUN_ORDER_INVALID",
+          `Polymarket V2 dry-run order shape is invalid: ${dryRunOrder.blockers.join(", ")}.`
+        );
       }
-    };
+      return {
+        venue: this.venue,
+        clientOrderId: leg.executionLegId,
+        payload: {
+          venueMarketId: leg.venueMarketId,
+          venueOutcomeId: leg.venueOutcomeId,
+          side: leg.side,
+          size: leg.size,
+          price: leg.price,
+          metadata: {
+            ...(leg.metadata ?? {}),
+            adapter: "PolymarketExecutionAdapterV2",
+            readinessState: this.status().readinessState,
+            clobV2DryRun: dryRunOrder
+          }
+        }
+      };
+    } catch (error) {
+      withLatencyStageSync("polymarket_prepare_error_normalization", tags, () => {
+        if (error instanceof PolymarketExecutionNotConfiguredError) {
+          return this.normalizeVenueError(error);
+        }
+        return normalizeLiveVenueErrorMessage(error, {
+          venue: "POLYMARKET",
+          fallbackCode: "POLYMARKET_V2_ADAPTER_ERROR",
+          fallbackMessage: "Unknown Polymarket V2 adapter error."
+        });
+      });
+      throw error;
+    }
   }
 
   public async submitOrder(order: PreparedVenueOrder): Promise<VenueSubmitResult> {
@@ -2600,7 +2834,7 @@ export class PolymarketExecutionAdapterV2 implements ExecutionVenueAdapter {
   }
 
   private assertPreparedPathConfigured(): void {
-    const status = this.status();
+    const status = this.envStatus;
     if (!status.featureFlagSelected) {
       throw new PolymarketExecutionNotConfiguredError(
         "POLYMARKET_V2_MODE_NOT_SELECTED",

@@ -1,4 +1,6 @@
 import Decimal from "decimal.js";
+import { performance } from "node:perf_hooks";
+import { recordLatencyDuration, withLatencyStage, withLatencyStageSync } from "../../observability/latency.js";
 import { calculateVenueFeeQuote, type VenueFeeQuote } from "./venue-fees.js";
 
 export type QuoteQuality =
@@ -217,7 +219,9 @@ export class CompositeVenueQuoteSource {
     quantity: number;
   }): Promise<CalculatedVenueQuoteSnapshotReport> {
     const rawReport = await this.getQuoteSnapshotReport(input);
-    const calculatedResults = rawReport.snapshots.map((snapshot): {
+    const calculatedResults = withLatencyStageSync("quote_aggregation_calculation", {
+      canonicalMarketId: input.canonicalMarketId
+    }, () => rawReport.snapshots.map((snapshot): {
       snapshot: CalculatedVenueQuoteSnapshot | null;
       blocker: VenueQuoteSnapshotBlocker | null;
     } => {
@@ -270,7 +274,7 @@ export class CompositeVenueQuoteSource {
         }
       };
       return { snapshot: output, blocker: null };
-    });
+    }));
     return {
       snapshots: calculatedResults
         .map((result) => result.snapshot)
@@ -290,7 +294,9 @@ export class CompositeVenueQuoteSource {
     side: "buy" | "sell";
     quantity: number;
   }): Promise<VenueQuoteSnapshotReport> {
-    const readiness = await this.loadMappingReadiness(input);
+    const readiness = await withLatencyStage("quote_source_mapping_lookup", {
+      canonicalMarketId: input.canonicalMarketId
+    }, () => this.loadMappingReadiness(input));
     const mappingBlockers: VenueQuoteSnapshotBlocker[] = readiness
       .filter((row) => !row.quoteReady)
       .map((row) => ({
@@ -311,9 +317,16 @@ export class CompositeVenueQuoteSource {
       snapshot: NormalizedVenueQuoteSnapshot | null;
       blocker: VenueQuoteSnapshotBlocker | null;
     }> => {
+      const startedAt = performance.now();
       try {
         const reader = this.readerByVenue.get(mapping.venue.toUpperCase());
         if (!reader) {
+          recordLatencyDuration("venue_quote_fetch", performance.now() - startedAt, {
+            canonicalMarketId: input.canonicalMarketId,
+            venue: mapping.venue,
+            external: true,
+            blockerCategory: "QUOTE_READER_UNSUPPORTED"
+          });
           return {
             snapshot: null,
             blocker: {
@@ -333,6 +346,12 @@ export class CompositeVenueQuoteSource {
           quantity: input.quantity
         });
         if (!snapshot) {
+          recordLatencyDuration("venue_quote_fetch", performance.now() - startedAt, {
+            canonicalMarketId: input.canonicalMarketId,
+            venue: mapping.venue,
+            external: true,
+            blockerCategory: "QUOTE_SNAPSHOT_UNAVAILABLE"
+          });
           return {
             snapshot: null,
             blocker: {
@@ -343,10 +362,21 @@ export class CompositeVenueQuoteSource {
             }
           };
         }
+        recordLatencyDuration("venue_quote_fetch", performance.now() - startedAt, {
+          canonicalMarketId: input.canonicalMarketId,
+          venue: mapping.venue,
+          external: true
+        });
         return { snapshot, blocker: null };
       } catch (error) {
         const classified = classifyQuoteReaderError(error);
         const venue = mapping.venue.toUpperCase();
+        recordLatencyDuration("venue_quote_fetch", performance.now() - startedAt, {
+          canonicalMarketId: input.canonicalMarketId,
+          venue,
+          external: true,
+          blockerCategory: classified.reason
+        });
         const detailsCode = (venue === "PREDICT_FUN" || venue === "PREDICT") && classified.reason === "QUOTE_PROVIDER_HTTP_401"
           ? "PREDICT_PROVIDER_AUTH_INVALID"
           : classified.detailsCode;

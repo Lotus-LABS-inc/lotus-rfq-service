@@ -417,8 +417,49 @@ const createSignedHeaders = (
 
 const fundingEnv = {
   POLYMARKET_FUNDING_DESTINATION_ADDRESS: "0x1111111111111111111111111111111111111111",
-  LIMITLESS_FUNDING_DESTINATION_ADDRESS: "0x3333333333333333333333333333333333333333"
+  LIMITLESS_FUNDING_DESTINATION_ADDRESS: "0x3333333333333333333333333333333333333333",
+  SOLANA_FUNDING_ROUTE_BLOCKHASH_REFRESH_ENABLED: "false"
 } as NodeJS.ProcessEnv;
+
+const SANDBOX_EXECUTION_ENV_KEYS = [
+  "POLYMARKET_EXECUTION_MODE",
+  "LIMITLESS_EXECUTION_MODE",
+  "OPINION_EXECUTION_MODE",
+  "PREDICT_FUN_EXECUTION_MODE",
+  "POLYMARKET_LIVE_EXECUTION_ENABLED",
+  "LIMITLESS_LIVE_EXECUTION_ENABLED",
+  "OPINION_LIVE_EXECUTION_ENABLED",
+  "PREDICT_FUN_LIVE_EXECUTION_ENABLED"
+] as const;
+
+const withSandboxExecutionEnv = async <T>(
+  callback: () => Promise<T>,
+  overrides: Partial<Record<(typeof SANDBOX_EXECUTION_ENV_KEYS)[number], string>> = {}
+): Promise<T> => {
+  const originalEnv = Object.fromEntries(
+    SANDBOX_EXECUTION_ENV_KEYS.map((key) => [key, process.env[key]])
+  ) as Record<(typeof SANDBOX_EXECUTION_ENV_KEYS)[number], string | undefined>;
+  for (const key of SANDBOX_EXECUTION_ENV_KEYS) {
+    delete process.env[key];
+  }
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value !== undefined) {
+      process.env[key as (typeof SANDBOX_EXECUTION_ENV_KEYS)[number]] = value;
+    }
+  }
+  try {
+    return await callback();
+  } finally {
+    for (const key of SANDBOX_EXECUTION_ENV_KEYS) {
+      const value = originalEnv[key];
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+};
 
 class MockLifiProvider implements LifiRouteProvider {
   public nextStatus: Awaited<ReturnType<LifiRouteProvider["status"]>> = {
@@ -792,31 +833,31 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
     const redis = must(redisClient, "redisClient");
     const originalEnv = {
       FUNDING_PREFLIGHT_ENFORCEMENT_ENABLED: process.env.FUNDING_PREFLIGHT_ENFORCEMENT_ENABLED,
-      FUNDING_LIVE_SUBMIT_ENABLED: process.env.FUNDING_LIVE_SUBMIT_ENABLED,
-      POLYMARKET_EXECUTION_MODE: process.env.POLYMARKET_EXECUTION_MODE
+      FUNDING_LIVE_SUBMIT_ENABLED: process.env.FUNDING_LIVE_SUBMIT_ENABLED
     };
     process.env.FUNDING_PREFLIGHT_ENFORCEMENT_ENABLED = enabled ? "true" : "false";
     process.env.FUNDING_LIVE_SUBMIT_ENABLED = "false";
-    delete process.env.POLYMARKET_EXECUTION_MODE;
     try {
-      return await buildServer({
-        logger,
-        redisClient: redis,
-        pgPool: pg,
-        db: createDrizzleDb(pg),
-        canonicalServiceBaseUrl: "http://127.0.0.1:4101",
-        jwtSecret: "test-secret-at-least-thirty-two-chars",
-        sorEnabled: true,
-        executionSystemSandboxEnabled: true,
-        ...(executionScopeAuthorities ? { executionScopeAuthorities } : {}),
-        sorCanaryShadowEnabled: false,
-        sorCanaryPercent: 0,
-        reliabilityWeight: 0.05,
-        latencyWeight: 0.03,
-        failureWeight: 0.08,
-        sorAcceptAonAwait: true,
-        sorAcceptNonAonBackground: true
-      });
+      return await withSandboxExecutionEnv(() =>
+        buildServer({
+          logger,
+          redisClient: redis,
+          pgPool: pg,
+          db: createDrizzleDb(pg),
+          canonicalServiceBaseUrl: "http://127.0.0.1:4101",
+          jwtSecret: "test-secret-at-least-thirty-two-chars",
+          sorEnabled: true,
+          executionSystemSandboxEnabled: true,
+          ...(executionScopeAuthorities ? { executionScopeAuthorities } : {}),
+          sorCanaryShadowEnabled: false,
+          sorCanaryPercent: 0,
+          reliabilityWeight: 0.05,
+          latencyWeight: 0.03,
+          failureWeight: 0.08,
+          sorAcceptAonAwait: true,
+          sorAcceptNonAonBackground: true
+        })
+      );
     } finally {
       for (const [key, value] of Object.entries(originalEnv)) {
         if (value === undefined) {
@@ -1070,14 +1111,14 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
     await redisClient.connect();
 
     const jwtSecret = "test-secret-at-least-thirty-two-chars";
-    const originalPolymarketExecutionMode = process.env.POLYMARKET_EXECUTION_MODE;
-    delete process.env.POLYMARKET_EXECUTION_MODE;
-    try {
-      app = await buildServer({
+    const integrationRedis = redisClient;
+    const integrationPool = pool;
+    app = await withSandboxExecutionEnv(() =>
+      buildServer({
         logger,
-        redisClient,
-        pgPool: pool,
-        db: createDrizzleDb(pool),
+        redisClient: integrationRedis,
+        pgPool: integrationPool,
+        db: createDrizzleDb(integrationPool),
         canonicalServiceBaseUrl: "http://127.0.0.1:4101",
         jwtSecret,
         sorEnabled: true,
@@ -1089,14 +1130,8 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
         sorAcceptAonAwait: true,
         sorAcceptNonAonBackground: true,
         executionSystemSandboxEnabled: true
-      });
-    } finally {
-      if (originalPolymarketExecutionMode === undefined) {
-        delete process.env.POLYMARKET_EXECUTION_MODE;
-      } else {
-        process.env.POLYMARKET_EXECUTION_MODE = originalPolymarketExecutionMode;
-      }
-    }
+      })
+    );
 
     sessionRepository = new RFQSessionRepository(pool);
     quoteRepository = new RFQQuoteRepository(pool);
@@ -1819,23 +1854,29 @@ describe.skipIf(!ENV_READY)("RFQ lifecycle integration harness", () => {
     process.env.POLYMARKET_CHAIN_ID = "137";
     process.env.POLYMARKET_BUILDER_CODE = "lotus-integration-builder";
 
-    const dryRunApp = await buildServer({
-      logger,
-      redisClient: redis,
-      pgPool: pg,
-      db: createDrizzleDb(pg),
-      canonicalServiceBaseUrl: "http://127.0.0.1:4101",
-      jwtSecret: "test-secret-at-least-thirty-two-chars",
-      sorEnabled: true,
-      executionSystemSandboxEnabled: true,
-      sorCanaryShadowEnabled: false,
-      sorCanaryPercent: 0,
-      reliabilityWeight: 0.05,
-      latencyWeight: 0.03,
-      failureWeight: 0.08,
-      sorAcceptAonAwait: true,
-      sorAcceptNonAonBackground: true
-    });
+    const dryRunApp = await withSandboxExecutionEnv(() =>
+      buildServer({
+        logger,
+        redisClient: redis,
+        pgPool: pg,
+        db: createDrizzleDb(pg),
+        canonicalServiceBaseUrl: "http://127.0.0.1:4101",
+        jwtSecret: "test-secret-at-least-thirty-two-chars",
+        sorEnabled: true,
+        executionSystemSandboxEnabled: true,
+        sorCanaryShadowEnabled: false,
+        sorCanaryPercent: 0,
+        reliabilityWeight: 0.05,
+        latencyWeight: 0.03,
+        failureWeight: 0.08,
+        sorAcceptAonAwait: true,
+        sorAcceptNonAonBackground: true
+      }),
+      {
+        POLYMARKET_EXECUTION_MODE: "v2",
+        POLYMARKET_LIVE_EXECUTION_ENABLED: "false"
+      }
+    );
 
     try {
       await cryptoAdmin.recordOperatorApprovalIntent(

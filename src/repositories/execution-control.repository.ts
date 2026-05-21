@@ -356,6 +356,51 @@ export class ExecutionControlRepository {
         return result.rows[0]!.id;
     }
 
+    public async createAuditRecords(records: readonly {
+        executionIntentId?: string | null;
+        executionRecordId?: string | null;
+        routePlanId?: string | null;
+        idempotencyKey?: string | null;
+        eventType: string;
+        actorIdentity?: string | null;
+        payload?: Record<string, unknown>;
+    }[]): Promise<void> {
+        if (records.length === 0) {
+            return;
+        }
+
+        const values: string[] = [];
+        const params: unknown[] = [];
+        records.forEach((record, index) => {
+            const offset = index * 7;
+            values.push(
+                `($${offset + 1}::uuid, $${offset + 2}::uuid, $${offset + 3}::uuid, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}::jsonb)`
+            );
+            params.push(
+                record.executionIntentId ?? null,
+                record.executionRecordId ?? null,
+                record.routePlanId ?? null,
+                record.idempotencyKey ?? null,
+                record.eventType,
+                record.actorIdentity ?? null,
+                JSON.stringify(record.payload ?? {})
+            );
+        });
+
+        await this.pool.query(
+            `INSERT INTO execution_control_audit_records (
+                execution_intent_id,
+                execution_record_id,
+                route_plan_id,
+                idempotency_key,
+                event_type,
+                actor_identity,
+                payload
+            ) VALUES ${values.join(", ")}`,
+            params
+        );
+    }
+
     public async listControlAuditByRecord(recordId: string): Promise<ExecutionControlAuditRecord[]> {
         const result = await this.pool.query<{
             id: string;

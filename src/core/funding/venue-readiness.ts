@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+import { withLatencyStage } from "../../observability/latency.js";
 import type {
   FundingIntent,
   FundingReconciliationRecord,
@@ -342,7 +343,10 @@ export class ConfigurableVenueFundingReadinessChecker implements VenueFundingRea
     }
 
     try {
-      const balance = await this.client.fetchUsableUsdcBalance({
+      const balance = await withLatencyStage("funding_venue_balance_lookup", {
+        venue: this.venue,
+        external: true
+      }, () => this.client.fetchUsableUsdcBalance({
         userId: input.userId,
         fundingIntentId: input.intent.fundingIntentId,
         routeLegId: input.leg.routeLegId,
@@ -351,7 +355,7 @@ export class ConfigurableVenueFundingReadinessChecker implements VenueFundingRea
         sourceToken: input.leg.sourceToken,
         destinationChain: input.leg.destinationChain,
         destinationToken: input.leg.destinationToken
-      });
+      }));
       const usableBalance = safeDecimal(balance.usableBalance);
       const requiredAmount = safeDecimal(input.leg.destinationAmountEstimate);
       if (!usableBalance || !requiredAmount) {

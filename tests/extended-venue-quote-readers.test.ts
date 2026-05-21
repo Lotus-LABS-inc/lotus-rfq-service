@@ -553,7 +553,9 @@ describe("extended venue quote readers", () => {
               outcomes: [
                 { label: "Yes", token_id: "yes-token" },
                 { label: "No", token_id: "no-token" }
-              ]
+              ],
+              tick_size: "0.001",
+              neg_risk: true
             }
           }];
         }
@@ -570,6 +572,12 @@ describe("extended venue quote readers", () => {
 
     expect(requestedTokenId).toBe("no-token");
     expect(snapshot?.venueOutcomeId).toBe("no-token");
+    expect(snapshot?.metadata).toMatchObject({
+      tickSize: "0.001",
+      polymarketTickSize: "0.001",
+      negRisk: true,
+      polymarketNegRisk: true
+    });
   });
 
   it("Polymarket reader returns display-only metadata prices when CLOB book is disabled", async () => {
@@ -595,7 +603,9 @@ describe("extended venue quote readers", () => {
               enable_order_book: false,
               outcomes: "[\"Yes\", \"No\"]",
               clobTokenIds: "[\"yes-token\", \"no-token\"]",
-              outcomePrices: "[\"1\", \"0\"]"
+              outcomePrices: "[\"1\", \"0\"]",
+              orderPriceMinTickSize: "0.01",
+              negRisk: false
             }
           }];
         }
@@ -614,6 +624,12 @@ describe("extended venue quote readers", () => {
     expect(snapshot?.quoteQuality).toBe("INDICATIVE_DEPTH");
     expect(snapshot?.asks[0]).toEqual({ price: "1", size: "0" });
     expect(snapshot?.blockers).toContain("ORDERBOOK_UNAVAILABLE_DISPLAY_ONLY");
+    expect(snapshot?.metadata).toMatchObject({
+      tickSize: "0.01",
+      polymarketTickSize: "0.01",
+      negRisk: false,
+      polymarketNegRisk: false
+    });
     expect(calculateVenueQuote({
       snapshot: snapshot!,
       side: "buy",
