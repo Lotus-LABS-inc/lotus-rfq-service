@@ -165,7 +165,13 @@ const recoveringLimitlessEoaPartnerAccountClient = (): LimitlessPartnerAccountCl
   }),
   getSigningMessage: async () => "Please sign this Limitless ownership message",
   createEoaPartnerAccount: async () => {
-    throw new Error("partner account already exists");
+    const error = new Error("A profile already exists for this address") as Error & {
+      statusCode: number;
+      reasonCode: string;
+    };
+    error.statusCode = 409;
+    error.reasonCode = "LIMITLESS_PARTNER_ACCOUNT_CONFLICT";
+    throw error;
   }
 });
 
@@ -866,7 +872,8 @@ describe("user venue account service", () => {
     });
     const serialized = JSON.stringify(repository.auditEvents);
     expect(serialized).toContain("LIMITLESS_PARTNER_ACCOUNT_CREATE_RECOVERED_BY_DISCOVERY");
-    expect(serialized).not.toContain("partner account already exists");
+    expect(serialized).toContain("LIMITLESS_PARTNER_ACCOUNT_CONFLICT");
+    expect(serialized).not.toContain("A profile already exists for this address");
     expect(serialized).not.toContain("signature");
   });
 

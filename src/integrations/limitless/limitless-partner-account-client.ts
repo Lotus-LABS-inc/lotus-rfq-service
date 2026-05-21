@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { Client, HttpClient, PortfolioFetcher } from "@limitless-exchange/sdk";
+import { Client } from "@limitless-exchange/sdk";
 
 export const LIMITLESS_PARTNER_ACCOUNT_DEFAULT_BASE_URL = "https://api.limitless.exchange";
 
@@ -121,19 +121,13 @@ export class LimitlessPartnerAccountClient {
       return null;
     }
     try {
-      const httpClient = new HttpClient({
-        baseURL: this.baseUrl,
-        timeout: this.timeoutMs,
-        ...(this.config.hmacTokenId?.trim() && this.config.hmacSecret?.trim()
-          ? {
-              hmacCredentials: {
-                tokenId: this.config.hmacTokenId.trim(),
-                secret: this.config.hmacSecret.trim()
-              }
-            }
-          : {})
+      const response = await this.fetchWithTimeout(`/profiles/public/${account}`, {
+        method: "GET"
       });
-      const profile = await new PortfolioFetcher(httpClient).getProfile(account);
+      if (!response.ok) {
+        return null;
+      }
+      const profile = await response.json().catch(() => null);
       return parseProfilePartnerAccountResponse(profile, account);
     } catch {
       return null;
