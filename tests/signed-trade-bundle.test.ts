@@ -15,6 +15,7 @@ import {
   type NormalizedVenueError,
   type PreparedVenueOrder,
   type VenueFillState,
+  type VenueSettlementState,
   type VenueSubmitResult
 } from "../src/execution-system/index.js";
 import type { UserVenueAccount } from "../src/core/execution/user-venue-accounts.js";
@@ -176,12 +177,17 @@ class MemorySignedTradeStatusRepository implements SignedTradeExecutionStatusRep
 
 class MemorySignedTradePositionRecorder implements SignedTradePositionRecorder {
   public readonly applications = new Map<string, Parameters<SignedTradePositionRecorder["recordFilledLeg"]>[0]>();
+  public readonly corrections: Array<Parameters<NonNullable<SignedTradePositionRecorder["reconcileFailedSell"]>>[0]> = [];
 
   public async recordFilledLeg(input: Parameters<SignedTradePositionRecorder["recordFilledLeg"]>[0]): Promise<void> {
     this.applications.set(
       `${input.executionId}:${input.userId}:${input.legIndex}:${input.venueOrderId}`,
       structuredClone(input)
     );
+  }
+
+  public async reconcileFailedSell(input: Parameters<NonNullable<SignedTradePositionRecorder["reconcileFailedSell"]>>[0]): Promise<void> {
+    this.corrections.push(structuredClone(input));
   }
 }
 
@@ -221,6 +227,45 @@ class FailingPolymarketBalanceAdapter extends TestExecutionAdapter {
       code: "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
       message: "Polymarket CLOB collateral is not ready for this order. Refresh balances, activate or approve Polymarket funds, then retry.",
       retryable: false
+    };
+  }
+}
+
+class PolymarketSubmittedFillAdapter extends TestExecutionAdapter {
+  public readonly venue = "POLYMARKET";
+  public readonly fillStateLookups: string[] = [];
+  public readonly settlementLookups: string[] = [];
+
+  public constructor(private readonly settlementStatus: "SETTLEMENT_PENDING" | "SETTLEMENT_VERIFIED") {
+    super("POLYMARKET");
+  }
+
+  public async submitOrder(): Promise<VenueSubmitResult> {
+    return {
+      venueOrderId: "pm-order-1",
+      fillId: "pm-fill-1",
+      status: "FILLED",
+      filledSize: "2.02020202",
+      averagePrice: 0.993
+    };
+  }
+
+  public async fetchFillState(venueOrderId = ""): Promise<VenueFillState> {
+    this.fillStateLookups.push(venueOrderId);
+    return {
+      status: "OPEN",
+      filledSize: "0",
+      averagePrice: 0.993
+    };
+  }
+
+  public async fetchSettlementState(fillOrOrderId = ""): Promise<VenueSettlementState> {
+    this.settlementLookups.push(fillOrOrderId);
+    return {
+      status: this.settlementStatus,
+      evidence: this.settlementStatus === "SETTLEMENT_VERIFIED"
+        ? { source: "polymarket_v2_clob_sdk", fillOrOrderId, tradeId: "pm-trade-1" }
+        : { source: "polymarket_v2_clob_sdk", fillOrOrderId, reason: "no_trade_found" }
     };
   }
 }
@@ -999,6 +1044,166 @@ describe("SignedTradeBundleService", () => {
       allowance: "0",
       tokenSymbol: "Polymarket shares",
       approvalMethod: "ERC1155_SET_APPROVAL_FOR_ALL"
+    });
+  });
+
+  it("reconciles stale Polymarket sellable positions when live share balance is below the sell amount", async () => {
+    const registry = new ExecutionVenueAdapterRegistry();
+    registry.register(new FailingPolymarketBalanceAdapter());
+    const positionRecorder = new MemorySignedTradePositionRecorder();
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => polymarketSellQuote() } as never,
+      registry,
+      { getAccount: async () => account("POLYMARKET") },
+      () => new Date("2026-05-07T00:00:00.000Z"),
+      {} as NodeJS.ProcessEnv,
+      undefined,
+      positionRecorder,
+      polymarketBalanceReader({}, {
+        tokenBalance: "0",
+        tokenAllowance: "0"
+      })
+    );
+
+    const readiness = await sut.getLiveReadiness({ userId: "user-1", quoteId: "exec_quote_polymarket_sell" });
+
+    expect(readiness.status).toBe("blocked");
+    expect(readiness.blockers).toContain("POLYMARKET: Polymarket share balance is below the sell amount. Sellable balance: 0 shares.");
+    expect(positionRecorder.corrections).toHaveLength(1);
+    expect(positionRecorder.corrections[0]).toMatchObject({
+      executionId: "exec_quote_polymarket_sell",
+      userId: "user-1",
+      legIndex: 0,
+      venue: "POLYMARKET",
+      reason: "Polymarket live share balance is below the quoted sell amount. Sellable balance: 0 shares.",
+      route: {
+        side: "sell",
+        marketId: "canonical-market",
+        outcomeId: "YES"
+      },
+      routeLeg: {
+        venue: "POLYMARKET",
+        venueOutcomeId: "123456789"
+      }
+    });
+  });
+
+  it("does not record Polymarket positions from submitted fills until settlement evidence verifies the trade", async () => {
+    const registry = new ExecutionVenueAdapterRegistry();
+    const adapter = new PolymarketSubmittedFillAdapter("SETTLEMENT_PENDING");
+    registry.register(adapter);
+    const positionRecorder = new MemorySignedTradePositionRecorder();
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => polymarketBuyQuote({ size: "2.02020202", price: 0.993 }) } as never,
+      registry,
+      { getAccount: async () => account("POLYMARKET") },
+      () => new Date("2026-05-07T00:00:00.000Z"),
+      {} as NodeJS.ProcessEnv,
+      undefined,
+      positionRecorder,
+      polymarketBalanceReader({
+        usableBalance: "10",
+        collateralBalance: "10",
+        collateralAllowance: "10",
+        usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE"
+      })
+    );
+
+    const submitted = await sut.submit({
+      userId: "user-1",
+      quoteId: "exec_quote_polymarket_buy",
+      dryRun: false,
+      signedLegs: []
+    });
+
+    expect(submitted.submittedLegs[0]).toMatchObject({
+      venue: "POLYMARKET",
+      status: "SUBMITTED",
+      venueOrderId: "pm-order-1",
+      fillId: "pm-fill-1",
+      fillState: {
+        status: "FILLED",
+        filledSize: "2.02020202",
+        averagePrice: 0.993
+      }
+    });
+    expect(positionRecorder.applications.size).toBe(0);
+
+    const status = await sut.getExecutionStatus({
+      userId: "user-1",
+      executionId: "exec_quote_polymarket_buy"
+    });
+
+    expect(adapter.fillStateLookups).toEqual(["pm-order-1"]);
+    expect(adapter.settlementLookups).toEqual(["pm-fill-1"]);
+    expect(status).toMatchObject({
+      executionId: "exec_quote_polymarket_buy",
+      status: "SUBMITTED",
+      submittedLegs: [{
+        venue: "POLYMARKET",
+        status: "OPEN",
+        fillId: "pm-fill-1",
+        fillState: {
+          status: "OPEN",
+          filledSize: "0"
+        },
+        settlementState: {
+          status: "SETTLEMENT_PENDING",
+          evidence: {
+            reason: "no_trade_found"
+          }
+        }
+      }]
+    });
+    expect(positionRecorder.applications.size).toBe(0);
+  });
+
+  it("records Polymarket positions after settlement verifies using the fill id", async () => {
+    const registry = new ExecutionVenueAdapterRegistry();
+    const adapter = new PolymarketSubmittedFillAdapter("SETTLEMENT_VERIFIED");
+    registry.register(adapter);
+    const positionRecorder = new MemorySignedTradePositionRecorder();
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => polymarketBuyQuote({ size: "2.02020202", price: 0.993 }) } as never,
+      registry,
+      { getAccount: async () => account("POLYMARKET") },
+      () => new Date("2026-05-07T00:00:00.000Z"),
+      {} as NodeJS.ProcessEnv,
+      undefined,
+      positionRecorder,
+      polymarketBalanceReader({
+        usableBalance: "10",
+        collateralBalance: "10",
+        collateralAllowance: "10",
+        usableBalanceSource: "CLOB_COLLATERAL_ALLOWANCE"
+      })
+    );
+
+    await sut.submit({
+      userId: "user-1",
+      quoteId: "exec_quote_polymarket_buy",
+      dryRun: false,
+      signedLegs: []
+    });
+    const status = await sut.getExecutionStatus({
+      userId: "user-1",
+      executionId: "exec_quote_polymarket_buy"
+    });
+
+    expect(adapter.settlementLookups).toEqual(["pm-fill-1"]);
+    expect(status?.status).toBe("FILLED");
+    expect(positionRecorder.applications.size).toBe(1);
+    const [application] = Array.from(positionRecorder.applications.values());
+    expect(application).toMatchObject({
+      executionId: "exec_quote_polymarket_buy",
+      userId: "user-1",
+      legIndex: 0,
+      venueOrderId: "pm-order-1",
+      fillState: {
+        status: "FILLED",
+        filledSize: "2.02020202",
+        averagePrice: 0.993
+      }
     });
   });
 

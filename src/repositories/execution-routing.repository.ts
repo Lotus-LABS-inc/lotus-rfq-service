@@ -139,6 +139,7 @@ export class PgVerifiedPositionRepository implements VerifiedPositionRepository 
          AND market_id = $2
          AND outcome_id = $3
          AND verified_size > 0
+         AND status = 'VERIFIED'
          ${venueClause}
        ORDER BY updated_at DESC`,
       values
@@ -148,7 +149,7 @@ export class PgVerifiedPositionRepository implements VerifiedPositionRepository 
 
   public async listUserVerifiedPositions(input: ListUserVerifiedPositionsInput): Promise<VerifiedExecutionPosition[]> {
     const values: unknown[] = [input.userId];
-    const clauses = ["user_id = $1", "verified_size > 0"];
+    const clauses = ["user_id = $1", "verified_size > 0", "status = 'VERIFIED'"];
     if (input.marketId) {
       values.push(input.marketId);
       clauses.push(`market_id = $${values.length}`);
@@ -493,6 +494,7 @@ export class PgSignedTradePositionRecorder implements SignedTradePositionRecorde
     await this.pool.query(
       `UPDATE user_execution_positions
        SET sellable_size = 0,
+           status = 'RECOVERY',
            metadata = metadata || $5::jsonb,
            updated_at = now()
        WHERE user_id = $1

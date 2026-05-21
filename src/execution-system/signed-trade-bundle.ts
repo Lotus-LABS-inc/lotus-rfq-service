@@ -59,6 +59,7 @@ export interface SignedTradeBundleSubmitResult {
     venue: string;
     status: string;
     venueOrderId?: string | undefined;
+    fillId?: string | undefined;
     reasonCode?: string | undefined;
     reason?: string | undefined;
     fillState?: VenueFillState | undefined;
@@ -79,6 +80,7 @@ export interface SignedTradeExecutionStatus {
     venue: string;
     status: string;
     venueOrderId?: string | undefined;
+    fillId?: string | undefined;
     reasonCode?: string | undefined;
     reason?: string | undefined;
     fillState?: VenueFillState | undefined;
@@ -341,7 +343,7 @@ export class SignedTradeBundleService {
         return leg;
       }
       const routeLeg = stored.route?.legs[leg.legIndex];
-      if (leg.status === "FILLED" && !leg.fillState && routeLeg) {
+      if (leg.status === "FILLED" && !leg.fillState && routeLeg && !requiresVerifiedSettlementForPosition(leg.venue)) {
         return {
           ...leg,
           fillState: inferredFilledLegState(routeLeg),
@@ -352,23 +354,32 @@ export class SignedTradeBundleService {
       try {
         const adapter = this.adapters.get(leg.venue);
         const fillState = await adapter.fetchFillState(leg.venueOrderId);
-        const effectiveFillState = leg.status === "FILLED" && fillState.status === "OPEN" && routeLeg
+        const needsVerifiedSettlement = requiresVerifiedSettlementForPosition(leg.venue);
+        let effectiveFillState = leg.status === "FILLED" && fillState.status === "OPEN" && routeLeg && !needsVerifiedSettlement
           ? inferredFilledLegState(routeLeg)
           : fillState;
         const settlementIntervalMs = options.settlementIntervalMs ?? 0;
         const lastSettlementCheckedAt = leg.lastSettlementCheckedAt ? Date.parse(leg.lastSettlementCheckedAt) : 0;
         const settlementCheckDue = !lastSettlementCheckedAt ||
           this.now().getTime() - lastSettlementCheckedAt >= settlementIntervalMs;
+        const settlementLookupId = leg.fillId ?? leg.venueOrderId;
         const shouldRefreshSettlement = settlementCheckDue &&
-          (effectiveFillState.status === "FILLED" || leg.settlementState?.status === "SETTLEMENT_PENDING");
+          (effectiveFillState.status === "FILLED" || leg.settlementState?.status === "SETTLEMENT_PENDING" || (needsVerifiedSettlement && (leg.status === "FILLED" || leg.fillState?.status === "FILLED")));
         const settlementState = shouldRefreshSettlement
-          ? await adapter.fetchSettlementState(leg.venueOrderId)
+          ? await adapter.fetchSettlementState(settlementLookupId)
           : leg.settlementState;
+        const hasVerifiedSettlement = hasVerifiedPositionSettlement(settlementState);
+        if (needsVerifiedSettlement && hasVerifiedSettlement && routeLeg && effectiveFillState.status !== "FILLED") {
+          effectiveFillState = inferredFilledLegState(routeLeg);
+        }
+        const nextLegStatus = needsVerifiedSettlement && effectiveFillState.status === "FILLED" && !hasVerifiedSettlement
+          ? "SUBMITTED"
+          : effectiveFillState.status;
         return {
           ...leg,
           fillState: effectiveFillState,
           ...(settlementState ? { settlementState } : {}),
-          status: effectiveFillState.status,
+          status: nextLegStatus,
           lastStatusCheckedAt: checkedAt,
           ...(shouldRefreshSettlement ? { lastSettlementCheckedAt: checkedAt } : {}),
           lastWatcherError: undefined
@@ -495,7 +506,7 @@ export class SignedTradeBundleService {
       return this.polymarketCollateralReadiness(base, quote.userId, requiredNotional);
     }
     if (leg.venue.toUpperCase() === "POLYMARKET" && quote.side === "sell") {
-      return this.polymarketConditionalTokenReadiness(base, quote.userId, leg);
+      return this.polymarketConditionalTokenReadiness(base, quote, leg, index);
     }
     if (leg.venue.toUpperCase() === "PREDICT_FUN" && quote.side === "sell") {
       const executionLeg = this.toExecutionLeg(quote, leg, index);
@@ -589,8 +600,9 @@ export class SignedTradeBundleService {
 
   private async polymarketConditionalTokenReadiness(
     base: LiveSubmitVenueReadiness,
-    userId: string,
-    leg: ExecutableRouteLeg
+    quote: ExecutableTradeQuote,
+    leg: ExecutableRouteLeg,
+    legIndex: number
   ): Promise<LiveSubmitVenueReadiness> {
     const next: LiveSubmitVenueReadiness = {
       ...base,
@@ -611,11 +623,23 @@ export class SignedTradeBundleService {
     }
     try {
       const approval = await this.polymarketBalanceReader.readConditionalTokenApproval({
-        userId,
+        userId: quote.userId,
         tokenId: leg.venueOutcomeId
       });
+      const shareBalanceBelowSellAmount = compareDecimalStrings(approval.tokenBalance, leg.size) < 0;
+      if (shareBalanceBelowSellAmount && this.positionRecorder?.reconcileFailedSell) {
+        await this.positionRecorder.reconcileFailedSell({
+          executionId: quote.quoteId,
+          userId: quote.userId,
+          legIndex,
+          venue: leg.venue,
+          reason: `Polymarket live share balance is below the quoted sell amount. Sellable balance: ${approval.tokenBalance} shares.`,
+          route: quote,
+          routeLeg: leg
+        });
+      }
       const blockers = [
-        compareDecimalStrings(approval.tokenBalance, leg.size) < 0
+        shareBalanceBelowSellAmount
           ? `Polymarket share balance is below the sell amount. Sellable balance: ${approval.tokenBalance} shares.`
           : null,
         compareDecimalStrings(approval.tokenAllowance, leg.size) < 0
@@ -1309,8 +1333,9 @@ export class SignedTradeBundleService {
     return {
       legIndex: index,
       venue,
-      status: submitted.status,
+      status: requiresVerifiedSettlementForPosition(venue) && submitted.status === "FILLED" ? "SUBMITTED" : submitted.status,
       venueOrderId: submitted.venueOrderId,
+      ...(submitted.fillId ? { fillId: submitted.fillId } : {}),
       ...(fillState ? { fillState } : {})
     };
   }
@@ -1343,6 +1368,9 @@ export class SignedTradeBundleService {
     }
     await Promise.all(status.submittedLegs.map(async (leg) => {
       if (leg.status !== "FILLED" || !leg.venueOrderId || !leg.fillState) {
+        return;
+      }
+      if (requiresVerifiedSettlementForPosition(leg.venue) && !hasVerifiedPositionSettlement(leg.settlementState)) {
         return;
       }
       const routeLeg = status.route!.legs[leg.legIndex];
@@ -1389,7 +1417,13 @@ export class SignedTradeBundleService {
 const statusKey = (userId: string, executionId: string): string => `${userId}:${executionId}`;
 
 const isInsufficientSellBalanceReason = (reason: string): boolean =>
-  /INSUFFICIENT\s+SHARES|INSUFFICIENT\s+CONDITIONAL\s+TOKEN\s+BALANCE|TOKEN\s+BALANCE\s+IS\s+LESS|BALANCE\s+IS\s+NOT\s+ENOUGH/i.test(reason);
+  /INSUFFICIENT\s+SHARES|INSUFFICIENT\s+CONDITIONAL\s+TOKEN\s+BALANCE|TOKEN\s+BALANCE\s+IS\s+LESS|BALANCE\s+IS\s+NOT\s+ENOUGH|SHARE\s+BALANCE\s+IS\s+BELOW|SELLABLE\s+BALANCE/i.test(reason);
+
+const requiresVerifiedSettlementForPosition = (venue: string): boolean =>
+  venue.toUpperCase() === "POLYMARKET";
+
+const hasVerifiedPositionSettlement = (settlementState: VenueSettlementState | undefined): boolean =>
+  settlementState?.status === "SETTLEMENT_VERIFIED";
 
 const inferredFilledLegState = (routeLeg: ExecutableRouteLeg): VenueFillState => ({
   status: "FILLED",

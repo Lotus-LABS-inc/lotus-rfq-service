@@ -729,7 +729,7 @@ const markPositions = async (input: {
 }));
 
 const isActiveVerifiedPosition = (position: VerifiedExecutionPosition): boolean =>
-  Number(position.verifiedSize) > 0;
+  position.status === "VERIFIED" && Number(position.verifiedSize) > 0;
 
 const unavailableMarkedPosition = (
   position: VerifiedExecutionPosition,
@@ -797,6 +797,7 @@ const sanitizeSubmittedLegs = (
   venue: leg.venue,
   status: leg.status,
   venueOrderId: leg.venueOrderId,
+  fillId: leg.fillId,
   reason: leg.reason,
   fillState: leg.fillState,
   settlementState: leg.settlementState,
