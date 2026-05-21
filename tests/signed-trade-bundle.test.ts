@@ -235,6 +235,8 @@ class PolymarketSubmittedFillAdapter extends TestExecutionAdapter {
   public readonly venue = "POLYMARKET";
   public readonly fillStateLookups: string[] = [];
   public readonly settlementLookups: string[] = [];
+  public readonly fillStateLookupContexts: unknown[] = [];
+  public readonly settlementLookupContexts: unknown[] = [];
 
   public constructor(private readonly settlementStatus: "SETTLEMENT_PENDING" | "SETTLEMENT_VERIFIED") {
     super("POLYMARKET");
@@ -250,8 +252,9 @@ class PolymarketSubmittedFillAdapter extends TestExecutionAdapter {
     };
   }
 
-  public async fetchFillState(venueOrderId = ""): Promise<VenueFillState> {
+  public async fetchFillState(venueOrderId = "", context?: unknown): Promise<VenueFillState> {
     this.fillStateLookups.push(venueOrderId);
+    this.fillStateLookupContexts.push(structuredClone(context));
     return {
       status: "OPEN",
       filledSize: "0",
@@ -259,8 +262,9 @@ class PolymarketSubmittedFillAdapter extends TestExecutionAdapter {
     };
   }
 
-  public async fetchSettlementState(fillOrOrderId = ""): Promise<VenueSettlementState> {
+  public async fetchSettlementState(fillOrOrderId = "", context?: unknown): Promise<VenueSettlementState> {
     this.settlementLookups.push(fillOrOrderId);
+    this.settlementLookupContexts.push(structuredClone(context));
     return {
       status: this.settlementStatus,
       evidence: this.settlementStatus === "SETTLEMENT_VERIFIED"
@@ -1187,6 +1191,29 @@ describe("SignedTradeBundleService", () => {
     });
 
     expect(adapter.settlementLookups).toEqual(["pm-fill-1"]);
+    expect(adapter.fillStateLookupContexts[0]).toMatchObject({
+      userId: "user-1",
+      venueOrderId: "pm-order-1",
+      fillId: "pm-fill-1",
+      venueAccountAddress: wallet.address,
+      route: {
+        marketId: "canonical-market",
+        outcomeId: "YES",
+        side: "buy"
+      },
+      routeLeg: {
+        venueMarketId: "pm-market",
+        venueOutcomeId: "123456789",
+        side: "buy",
+        size: "2.02020202",
+        price: 0.993
+      }
+    });
+    expect(adapter.settlementLookupContexts[0]).toMatchObject({
+      venueOrderId: "pm-order-1",
+      fillId: "pm-fill-1",
+      venueAccountAddress: wallet.address
+    });
     expect(status?.status).toBe("FILLED");
     expect(positionRecorder.applications.size).toBe(1);
     const [application] = Array.from(positionRecorder.applications.values());

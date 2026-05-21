@@ -29,6 +29,7 @@ import type {
   NormalizedVenueError,
   PreparedVenueOrder,
   VenueFillState,
+  VenueOrderLookupContext,
   VenueSettlementState,
   VenueSubmitResult
 } from "./venue-adapter.js";
@@ -38,6 +39,11 @@ import {
   signPolymarketRelayRequest
 } from "./polymarket-execution-relay-auth.js";
 import { normalizeLiveVenueErrorMessage } from "./live-venue-error-normalizer.js";
+import {
+  PolymarketDataApiClient,
+  normalizePolymarketDataApiSide,
+  type PolymarketDataApiActivity
+} from "../integrations/polymarket/polymarket-data-api-client.js";
 
 export const polymarketV2RequiredEnvKeys = [
   "POLYMARKET_CLOB_HOST",
@@ -90,6 +96,7 @@ export interface PolymarketExecutionAdapterV2Config {
   executionSubmitMode?: string | undefined;
   executionRelayUrl?: string | undefined;
   executionRelaySecret?: string | undefined;
+  dataApiBaseUrl?: string | undefined;
   settlementStateOverride?: SettlementStatusV0 | undefined;
   fillStateOverride?: VenueFillState["status"] | undefined;
 }
@@ -287,7 +294,8 @@ export const buildPolymarketExecutionAdapterV2ConfigFromEnv = (
   relayerApiKey: env.POLYMARKET_RELAYER_API_KEY ?? env.POLY_RELAYER_API_KEY,
   executionSubmitMode: env.POLYMARKET_EXECUTION_SUBMIT_MODE,
   executionRelayUrl: env.POLYMARKET_EXECUTION_RELAY_URL,
-  executionRelaySecret: env.POLYMARKET_EXECUTION_RELAY_SECRET
+  executionRelaySecret: env.POLYMARKET_EXECUTION_RELAY_SECRET,
+  dataApiBaseUrl: env.POLYMARKET_DATA_API_BASE_URL
 });
 
 const assertLiveClientConfig = (config: PolymarketExecutionAdapterV2Config): void => {
@@ -399,9 +407,9 @@ export interface PolymarketClobV2PreparedDryRunEnvelope {
 export interface PolymarketClobV2LiveClient {
   readonly mode: "disabled" | "live" | "relay";
   submitOrder(order: PreparedVenueOrder): Promise<VenueSubmitResult>;
-  fetchFillState(venueOrderId: string): Promise<VenueFillState>;
+  fetchFillState(venueOrderId: string, context?: VenueOrderLookupContext): Promise<VenueFillState>;
   cancelOrder(venueOrderId: string): Promise<{ cancelled: boolean }>;
-  fetchSettlementState(fillOrOrderId: string): Promise<VenueSettlementState>;
+  fetchSettlementState(fillOrOrderId: string, context?: VenueOrderLookupContext): Promise<VenueSettlementState>;
 }
 
 export interface PolymarketClobV2SdkClient {
@@ -470,14 +478,20 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
   public readonly mode = "live";
   private readonly sdkClient: PolymarketClobV2SdkClient;
   private readonly sensitiveValues: readonly string[];
+  private readonly dataApiClient: PolymarketDataApiClient;
 
   public constructor(
     private readonly config: PolymarketExecutionAdapterV2Config,
     sdkFactory: PolymarketClobV2SdkFactory = createPolymarketClobV2SdkClient,
-    private readonly balanceReader?: PolymarketSubmitBalanceReader | undefined
+    private readonly balanceReader?: PolymarketSubmitBalanceReader | undefined,
+    fetchImpl: typeof fetch = fetch
   ) {
     assertLiveClientConfig(config);
     this.sdkClient = sdkFactory(config);
+    this.dataApiClient = new PolymarketDataApiClient({
+      baseUrl: config.dataApiBaseUrl,
+      fetchImpl
+    });
     this.sensitiveValues = [
       config.apiKey,
       config.apiSecret,
@@ -546,13 +560,18 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
     );
   }
 
-  public async fetchFillState(venueOrderId: string): Promise<VenueFillState> {
+  public async fetchFillState(venueOrderId: string, context?: VenueOrderLookupContext): Promise<VenueFillState> {
     const order = await this.callSdkSafely(() => this.sdkClient.getOrder(venueOrderId));
     if (order) {
       return mapPolymarketOpenOrderToFillState(order);
     }
     const trades = await this.callSdkSafely(() => this.sdkClient.getTrades({ id: venueOrderId }));
-    return mapPolymarketTradesToFillState(trades);
+    const tradeState = mapPolymarketTradesToFillState(trades);
+    if (tradeState.status !== "OPEN") {
+      return tradeState;
+    }
+    const activity = await this.findDataApiTradeActivity(context, venueOrderId).catch(() => null);
+    return activity ? mapPolymarketDataApiActivityToFillState(activity) : tradeState;
   }
 
   public async cancelOrder(venueOrderId: string): Promise<{ cancelled: boolean }> {
@@ -560,12 +579,16 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
     return { cancelled: isPolymarketCancelSuccess(response) };
   }
 
-  public async fetchSettlementState(fillOrOrderId: string): Promise<VenueSettlementState> {
+  public async fetchSettlementState(fillOrOrderId: string, context?: VenueOrderLookupContext): Promise<VenueSettlementState> {
     const order = await this.callSdkSafely(() => this.sdkClient.getOrder(fillOrOrderId)).catch(() => null);
     const tradeId = order?.associate_trades?.[0] ?? fillOrOrderId;
     const trades = await this.callSdkSafely(() => this.sdkClient.getTrades({ id: tradeId }));
     const [trade] = trades;
     if (!trade) {
+      const activity = await this.findDataApiTradeActivity(context, fillOrOrderId).catch(() => null);
+      if (activity) {
+        return mapPolymarketDataApiActivityToSettlementState(activity);
+      }
       return {
         status: "SETTLEMENT_PENDING",
         evidence: {
@@ -579,6 +602,25 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
       settlementStatus: trade.status,
       finalityStatus: trade.transaction_hash ? "verified" : trade.status,
       ...extractPolymarketBuilderFeeEvidence(trade)
+    });
+  }
+
+  private async findDataApiTradeActivity(
+    context: VenueOrderLookupContext | undefined,
+    lookupId: string
+  ): Promise<PolymarketDataApiActivity | null> {
+    if (!context?.routeLeg?.venueMarketId || !context.routeLeg.venueOutcomeId) {
+      return null;
+    }
+    const side = normalizePolymarketDataApiSide(context.route?.side);
+    return await this.dataApiClient.findTradeActivity({
+      proxyWallet: context.venueAccountAddress,
+      conditionId: context.routeLeg.venueMarketId,
+      assetId: context.routeLeg.venueOutcomeId,
+      side,
+      transactionHash: context.fillId ?? (isHexHash(lookupId) ? lookupId : null),
+      submittedAt: context.submittedAt,
+      limit: 100
     });
   }
 
@@ -954,16 +996,16 @@ export class RelayPolymarketClobV2LiveClient implements PolymarketClobV2LiveClie
     return this.post<VenueSubmitResult>("/internal/polymarket/v2/submit-order", { order });
   }
 
-  public fetchFillState(venueOrderId: string): Promise<VenueFillState> {
-    return this.post<VenueFillState>("/internal/polymarket/v2/fill-state", { venueOrderId });
+  public fetchFillState(venueOrderId: string, context?: VenueOrderLookupContext): Promise<VenueFillState> {
+    return this.post<VenueFillState>("/internal/polymarket/v2/fill-state", { venueOrderId, context });
   }
 
   public cancelOrder(venueOrderId: string): Promise<{ cancelled: boolean }> {
     return this.post<{ cancelled: boolean }>("/internal/polymarket/v2/cancel-order", { venueOrderId });
   }
 
-  public fetchSettlementState(fillOrOrderId: string): Promise<VenueSettlementState> {
-    return this.post<VenueSettlementState>("/internal/polymarket/v2/settlement-state", { fillOrOrderId });
+  public fetchSettlementState(fillOrOrderId: string, context?: VenueOrderLookupContext): Promise<VenueSettlementState> {
+    return this.post<VenueSettlementState>("/internal/polymarket/v2/settlement-state", { fillOrOrderId, context });
   }
 
   private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
@@ -2282,6 +2324,30 @@ const mapPolymarketTradesToFillState = (trades: Trade[]): VenueFillState => {
   };
 };
 
+const mapPolymarketDataApiActivityToFillState = (activity: PolymarketDataApiActivity): VenueFillState => ({
+  status: "FILLED",
+  filledSize: String(activity.size),
+  averagePrice: Number.isFinite(activity.price) ? activity.price : 0,
+  offchainFilled: true
+});
+
+const mapPolymarketDataApiActivityToSettlementState = (activity: PolymarketDataApiActivity): VenueSettlementState => ({
+  status: "SETTLEMENT_VERIFIED",
+  evidence: {
+    source: "polymarket_data_api_activity",
+    transactionHash: activity.transactionHash ?? null,
+    conditionId: activity.conditionId,
+    assetIdHash: sha256Hex(activity.asset).slice(0, 16),
+    timestamp: new Date(activity.timestamp * 1000).toISOString(),
+    side: activity.side,
+    size: String(activity.size),
+    price: activity.price
+  }
+});
+
+const isHexHash = (value: string): boolean =>
+  /^0x[a-fA-F0-9]{64}$/.test(value);
+
 const isPolymarketCancelSuccess = (response: unknown): boolean => {
   if (typeof response === "boolean") {
     return response;
@@ -2480,7 +2546,7 @@ export class PolymarketExecutionAdapterV2 implements ExecutionVenueAdapter {
     return this.liveClient.submitOrder(order);
   }
 
-  public async fetchFillState(venueOrderId: string): Promise<VenueFillState> {
+  public async fetchFillState(venueOrderId: string, context?: VenueOrderLookupContext): Promise<VenueFillState> {
     if (!venueOrderId) {
       return {
         status: this.config.fillStateOverride ?? "FAILED",
@@ -2490,7 +2556,7 @@ export class PolymarketExecutionAdapterV2 implements ExecutionVenueAdapter {
       };
     }
     if (!this.config.fillStateOverride) {
-      return this.liveClient.fetchFillState(venueOrderId);
+      return this.liveClient.fetchFillState(venueOrderId, context);
     }
     return {
       status: this.config.fillStateOverride,
@@ -2504,14 +2570,14 @@ export class PolymarketExecutionAdapterV2 implements ExecutionVenueAdapter {
     return this.liveClient.cancelOrder(venueOrderId);
   }
 
-  public async fetchSettlementState(fillOrOrderId: string): Promise<VenueSettlementState> {
+  public async fetchSettlementState(fillOrOrderId: string, context?: VenueOrderLookupContext): Promise<VenueSettlementState> {
     if (this.config.settlementStateOverride) {
       return {
         status: this.config.settlementStateOverride,
         evidence: { source: "polymarket_v2_test_override", fillOrOrderId }
       };
     }
-    return this.liveClient.fetchSettlementState(fillOrOrderId);
+    return this.liveClient.fetchSettlementState(fillOrOrderId, context);
   }
 
   public normalizeVenueError(error: unknown): NormalizedVenueError {

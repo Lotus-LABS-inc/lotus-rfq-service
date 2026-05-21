@@ -915,6 +915,99 @@ describe("PolymarketExecutionAdapterV2", () => {
     });
   });
 
+  it("falls back to public Polymarket activity when the CLOB client cannot see a user-scoped fill", async () => {
+    const sdkCalls: Array<{ method: string; args: unknown[] }> = [];
+    const sdkClient: PolymarketClobV2SdkClient = {
+      async createAndPostOrder() {
+        throw new Error("not used");
+      },
+      async getOrder(orderId) {
+        sdkCalls.push({ method: "getOrder", args: [orderId] });
+        return null;
+      },
+      async getTrades(params) {
+        sdkCalls.push({ method: "getTrades", args: [params] });
+        return [];
+      },
+      async cancelOrder() {
+        return { success: true };
+      }
+    };
+    const fetchCalls: string[] = [];
+    const fetchImpl = (async (url: string | URL) => {
+      fetchCalls.push(String(url));
+      return new Response(JSON.stringify([
+        {
+          proxyWallet: "0x1111111111111111111111111111111111111111",
+          timestamp: 1779324718,
+          conditionId: "0x384a78b847edbafb7f4542dcde7000f0042d08a43ad12f11879050fbbf06b0ee",
+          type: "TRADE",
+          size: 2.024142,
+          usdcSize: 2.010000006,
+          transactionHash: "0xe15ba68115ed1ed176ad049dc9815addf6ba37332de353ee200f96e7ab7a4fc7",
+          price: 0.992999997,
+          asset: "15636396498081492607537245191035256780946494107835473972503944043229908184003",
+          side: "BUY",
+          outcome: "No"
+        }
+      ]), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    }) as typeof fetch;
+    const client = new SdkPolymarketClobV2LiveClient({
+      executionMode: "v2",
+      liveExecutionEnabled: true,
+      clobHost: completeEnv.POLY_CLOB_HOST,
+      chainId: completeEnv.POLY_CHAIN_ID,
+      apiKey: completeEnv.POLY_API_KEY,
+      apiSecret: completeEnv.POLY_API_SECRET,
+      apiPassphrase: completeEnv.POLY_API_PASSPHRASE,
+      builderCode: completeEnv.POLY_BUILDER_CODE,
+      privateKey: completeEnv.POLY_PRIVATE_KEY,
+      dataApiBaseUrl: "https://data-api.polymarket.test"
+    }, () => sdkClient, undefined, fetchImpl);
+    const context = {
+      userId: "user-1",
+      submittedAt: "2026-05-21T00:47:00.000Z",
+      venueAccountAddress: "0x1111111111111111111111111111111111111111",
+      fillId: "0xe15ba68115ed1ed176ad049dc9815addf6ba37332de353ee200f96e7ab7a4fc7",
+      route: {
+        side: "buy"
+      },
+      routeLeg: {
+        venueMarketId: "0x384a78b847edbafb7f4542dcde7000f0042d08a43ad12f11879050fbbf06b0ee",
+        venueOutcomeId: "15636396498081492607537245191035256780946494107835473972503944043229908184003"
+      }
+    };
+
+    await expect(client.fetchFillState("0x32c7b83edf7ce47e34692cb3b46e5dcf65de7a6db8c03b706743cd3f5b4534d0", context))
+      .resolves.toMatchObject({
+        status: "FILLED",
+        filledSize: "2.024142",
+        averagePrice: 0.992999997,
+        offchainFilled: true
+      });
+    await expect(client.fetchSettlementState("0xe15ba68115ed1ed176ad049dc9815addf6ba37332de353ee200f96e7ab7a4fc7", context))
+      .resolves.toMatchObject({
+        status: "SETTLEMENT_VERIFIED",
+        evidence: {
+          source: "polymarket_data_api_activity",
+          transactionHash: "0xe15ba68115ed1ed176ad049dc9815addf6ba37332de353ee200f96e7ab7a4fc7",
+          side: "BUY",
+          size: "2.024142",
+          price: 0.992999997
+        }
+      });
+    expect(fetchCalls.every((url) => url.startsWith("https://data-api.polymarket.test/activity?"))).toBe(true);
+    expect(sdkCalls.map((call) => call.method)).toEqual([
+      "getOrder",
+      "getTrades",
+      "getOrder",
+      "getTrades"
+    ]);
+  });
+
   it("wraps user-signed POLY_1271 deposit-wallet signatures before CLOB submit", async () => {
     const calls: Array<{ method: string; args: unknown[] }> = [];
     const sdkClient: PolymarketClobV2SdkClient = {

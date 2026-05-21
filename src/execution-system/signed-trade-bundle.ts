@@ -20,7 +20,7 @@ import { AbiCoder, hexlify, keccak256, toUtf8Bytes, verifyTypedData as verifyTyp
 import type { UserVenueAccount } from "../core/execution/user-venue-accounts.js";
 import type { ExecutableRouteLeg, ExecutableRouteService, ExecutableTradeQuote } from "./executable-routing.js";
 import type { ExecutionLegV0 } from "./types.js";
-import type { ExecutionVenueAdapterRegistry, PreparedVenueOrder, VenueFillState, VenueSettlementState, VenueSubmitResult } from "./venue-adapter.js";
+import type { ExecutionVenueAdapterRegistry, PreparedVenueOrder, VenueFillState, VenueOrderLookupContext, VenueSettlementState, VenueSubmitResult } from "./venue-adapter.js";
 
 export type TradeSignatureKind = "EIP712" | "MESSAGE";
 
@@ -353,7 +353,8 @@ export class SignedTradeBundleService {
       }
       try {
         const adapter = this.adapters.get(leg.venue);
-        const fillState = await adapter.fetchFillState(leg.venueOrderId);
+        const lookupContext = await this.lookupContextForStoredLeg(stored, leg, routeLeg);
+        const fillState = await adapter.fetchFillState(leg.venueOrderId, lookupContext);
         const needsVerifiedSettlement = requiresVerifiedSettlementForPosition(leg.venue);
         let effectiveFillState = leg.status === "FILLED" && fillState.status === "OPEN" && routeLeg && !needsVerifiedSettlement
           ? inferredFilledLegState(routeLeg)
@@ -369,7 +370,7 @@ export class SignedTradeBundleService {
             (needsVerifiedSettlement && Boolean(leg.fillId)) ||
             (needsVerifiedSettlement && (leg.status === "FILLED" || leg.fillState?.status === "FILLED")));
         const settlementState = shouldRefreshSettlement
-          ? await adapter.fetchSettlementState(settlementLookupId)
+          ? await adapter.fetchSettlementState(settlementLookupId, lookupContext)
           : leg.settlementState;
         const hasVerifiedSettlement = hasVerifiedPositionSettlement(settlementState);
         if (needsVerifiedSettlement && hasVerifiedSettlement && routeLeg && effectiveFillState.status !== "FILLED") {
@@ -411,6 +412,36 @@ export class SignedTradeBundleService {
 
   public async recordFilledPositionsForStatus(status: SignedTradeExecutionStatus): Promise<void> {
     await this.recordFilledPositions(status);
+  }
+
+  private async lookupContextForStoredLeg(
+    stored: SignedTradeExecutionStatus,
+    leg: SignedTradeExecutionStatus["submittedLegs"][number],
+    routeLeg: ExecutableRouteLeg | undefined
+  ): Promise<VenueOrderLookupContext | undefined> {
+    if (!routeLeg || !stored.route) {
+      return undefined;
+    }
+    const account = await this.venueAccounts.getAccount(stored.userId, leg.venue).catch(() => null);
+    return {
+      userId: stored.userId,
+      submittedAt: stored.submittedAt,
+      venueOrderId: leg.venueOrderId,
+      fillId: leg.fillId,
+      venueAccountAddress: account?.venueAccountAddress ?? null,
+      route: {
+        marketId: stored.route.marketId,
+        outcomeId: stored.route.outcomeId,
+        side: stored.route.side
+      },
+      routeLeg: {
+        venueMarketId: routeLeg.venueMarketId,
+        venueOutcomeId: routeLeg.venueOutcomeId,
+        side: stored.route.side,
+        size: routeLeg.size,
+        price: routeLeg.price
+      }
+    };
   }
 
   public async getLiveReadiness(input: { userId: string; quoteId: string }): Promise<LiveSubmitReadinessSnapshot> {
