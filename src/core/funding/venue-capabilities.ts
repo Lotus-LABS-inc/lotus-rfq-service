@@ -46,6 +46,8 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
     || envValue(env, "POLYMARKET_FUNDING_DESTINATION_MODE") === "USER_VENUE_DEPOSIT_WALLET";
   const limitlessDepositAddress = configuredVenueDepositAddress(env, "LIMITLESS", "BASE", ["SOLANA"]);
   const opinionDepositAddress = configuredVenueDepositAddress(env, "OPINION", "BSC", ["SOLANA", "POLYGON"]);
+  const opinionUserWalletDestinationEnabled = envValue(env, "OPINION_FUNDING_DESTINATION_MODE") === "USER_TURNKEY_EVM_WALLET"
+    || envValue(env, "OPINION_FUNDING_DESTINATION_MODE") === "USER_VENUE_DEPOSIT_WALLET";
   const myriadDepositAddress = configuredVenueDepositAddress(env, "MYRIAD", "BSC", ["SOLANA", "POLYGON"]);
   const predictFunDepositAddress = configuredVenueDepositAddress(env, "PREDICT_FUN", "BSC", ["SOLANA", "POLYGON"]);
   const predictFunUserVenueDepositWalletEnabled = envValue(env, "PREDICT_FUN_FUNDING_DESTINATION_MODE") === "USER_VENUE_DEPOSIT_WALLET";
@@ -207,14 +209,16 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
     },
     OPINION: configurableCapability({
       venue: "OPINION",
-      depositAddress: opinionDepositAddress,
+      depositAddress: opinionUserWalletDestinationEnabled ? "USER_WALLET" : opinionDepositAddress,
       preferredChain: opinionPreferredChain,
       preferredChainId: opinionPreferredChainId,
       preferredToken: opinionPreferredToken,
       preferredTokenAddress: opinionPreferredTokenAddress,
       sourceTokenAddressByChain: opinionSourceTokenAddressByChain,
       supportsWithdrawal: supportsWithdrawal("OPINION"),
-      configuredNote: `Opinion funding quote path is configured for Solana ${opinionPreferredToken} to the operator-approved Opinion funding destination.`,
+      configuredNote: opinionUserWalletDestinationEnabled
+        ? `Opinion funding quote path is configured for user-specific ${opinionPreferredToken} venue balances.`
+        : `Opinion funding quote path is configured for Solana ${opinionPreferredToken} to the operator-approved Opinion funding destination.`,
       missingNote: "Set OPINION_FUNDING_DESTINATION_ADDRESS before enabling Opinion funding quotes."
     }),
     MYRIAD: configurableCapability({

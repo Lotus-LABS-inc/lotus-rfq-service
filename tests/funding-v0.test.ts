@@ -972,6 +972,70 @@ describe("Funding v0 domain", () => {
     });
   });
 
+  it("keeps persisted balances when live user-wallet venue balance reads time out", async () => {
+    const repository = new InMemoryFundingRepository();
+    repository.ready = true;
+    const evmWallet = userWallet({
+      walletId: "wallet-evm",
+      userId: "user-1",
+      chainFamily: "EVM",
+      chain: "EVM",
+      address: "0xD1059eC5F635712f6dcEAd569a41dFD7970DAffa"
+    });
+    const service = new FundingService(
+      repository,
+      new StubLifiProvider(),
+      {
+        lifiQuotesEnabled: false,
+        liveSubmitEnabled: false,
+        env: {
+          ...env,
+          FUNDING_USER_WALLET_BALANCE_READ_TIMEOUT_MS: "1",
+          LIMITLESS_FUNDING_DESTINATION_ADDRESS: "0x1111111111111111111111111111111111111111",
+          OPINION_FUNDING_DESTINATION_MODE: "USER_TURNKEY_EVM_WALLET",
+          OPINION_FUNDING_PREFERRED_CHAIN: "BSC",
+          OPINION_FUNDING_PREFERRED_TOKEN: "USDT",
+          PREDICT_FUN_FUNDING_DESTINATION_MODE: "USER_TURNKEY_EVM_WALLET"
+        } as NodeJS.ProcessEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {
+        resolveFundingSourceWallet: async () => evmWallet,
+        resolveUserTurnkeyEvmFundingWallet: async () => evmWallet,
+        resolveVenueTargetWallet: async () => null
+      },
+      null,
+      {
+        readWalletBalances: async () => new Promise(() => undefined)
+      }
+    );
+
+    const balances = await service.listVenueBalances("user-1");
+
+    expect(balances).toContainEqual(expect.objectContaining({
+      venue: "LIMITLESS",
+      token: "USDC",
+      readyAmount: "100"
+    }));
+    expect(balances).toContainEqual(expect.objectContaining({
+      venue: "OPINION",
+      token: "USDT",
+      readyAmount: "100"
+    }));
+    expect(balances).toContainEqual(expect.objectContaining({
+      venue: "PREDICT_FUN",
+      token: "USDT",
+      readyAmount: "100"
+    }));
+  });
+
   it("uses the default EVM BSC USDT wallet balance as Predict.fun venue cash", async () => {
     const evmWallet = userWallet({
       walletId: "wallet-evm",
@@ -1030,6 +1094,68 @@ describe("Funding v0 domain", () => {
       readyAmount: "12.5",
       pendingWithdrawalAmount: "0",
       availableAmount: "12.5",
+      updatedAt: "2026-05-10T00:00:00.000Z"
+    });
+  });
+
+  it("uses the default EVM wallet balance as Opinion venue cash when configured for user wallet funding", async () => {
+    const evmWallet = userWallet({
+      walletId: "wallet-evm",
+      userId: "user-1",
+      chainFamily: "EVM",
+      chain: "EVM",
+      address: "0xD1059eC5F635712f6dcEAd569a41dFD7970DAffa"
+    });
+    const service = new FundingService(
+      new InMemoryFundingRepository(),
+      new StubLifiProvider(),
+      {
+        lifiQuotesEnabled: false,
+        liveSubmitEnabled: false,
+        env: {
+          ...env,
+          OPINION_FUNDING_DESTINATION_MODE: "USER_TURNKEY_EVM_WALLET",
+          OPINION_FUNDING_PREFERRED_CHAIN: "BSC",
+          OPINION_FUNDING_PREFERRED_TOKEN: "USDT",
+          OPINION_FUNDING_PREFERRED_CHAIN_ID: "56"
+        } as NodeJS.ProcessEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {
+        resolveFundingSourceWallet: async () => evmWallet,
+        resolveUserTurnkeyEvmFundingWallet: async () => evmWallet,
+        resolveVenueTargetWallet: async () => null
+      },
+      null,
+      {
+        readWalletBalances: async () => ({
+          balanceStatus: "synced",
+          balanceBlocker: null,
+          balances: [{
+            token: "USDT",
+            amount: "7.25",
+            chain: "BSC",
+            chainFamily: "EVM" as const,
+            updatedAt: "2026-05-10T00:00:00.000Z",
+            status: "available" as const
+          }]
+        })
+      }
+    );
+
+    await expect(service.listVenueBalances("user-1")).resolves.toContainEqual({
+      venue: "OPINION",
+      token: "USDT",
+      readyAmount: "7.25",
+      pendingWithdrawalAmount: "0",
+      availableAmount: "7.25",
       updatedAt: "2026-05-10T00:00:00.000Z"
     });
   });

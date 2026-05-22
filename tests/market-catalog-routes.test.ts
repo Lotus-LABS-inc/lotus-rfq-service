@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { registerMarketCatalogRoutes } from "../src/api/routes/markets.js";
 import type {
@@ -133,6 +133,10 @@ class FakeMarketCatalogRepository implements Pick<MarketCatalogRepository, "list
 }
 
 describe("market catalog routes", () => {
+  afterEach(() => {
+    delete process.env.MARKET_QUOTE_READINESS_TIMEOUT_MS;
+  });
+
   it("lists normalized user-facing markets by category without raw venue internals", async () => {
     const app = Fastify({ logger: false });
     const repository = new FakeMarketCatalogRepository();
@@ -249,6 +253,41 @@ describe("market catalog routes", () => {
     expect(unfiltered.json()).toMatchObject({
       count: 1,
       markets: [{ quoteStatus: "unavailable", quoteReadyVenueCount: 0 }]
+    });
+
+    await app.close();
+  });
+
+  it("returns base markets when quote readiness snapshots time out", async () => {
+    process.env.MARKET_QUOTE_READINESS_TIMEOUT_MS = "1";
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: new FakeMarketCatalogRepository(),
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return new Promise(() => undefined);
+        }
+      }
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&routeCoverage=all&limit=10"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      count: 1,
+      quoteReadinessDegraded: true,
+      quoteReadinessReason: "timeout",
+      markets: [{
+        quoteStatus: "unavailable",
+        quoteReadyVenueCount: 0,
+        quoteBlockers: [{
+          venue: "SYSTEM",
+          reason: "QUOTE_READINESS_SNAPSHOT_TIMEOUT"
+        }]
+      }]
     });
 
     await app.close();

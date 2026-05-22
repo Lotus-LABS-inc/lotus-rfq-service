@@ -462,6 +462,9 @@ const parseAdminMagicLinkTtlSeconds = (value: string | undefined): number => {
   return Number.isFinite(parsed) && parsed >= 60 && parsed <= 3600 ? Math.trunc(parsed) : 900;
 };
 
+const DEFAULT_POLYMARKET_VENUE_BALANCE_READ_TIMEOUT_MS = 2_500;
+const VENUE_BALANCE_READ_TIMEOUT = Symbol("VENUE_BALANCE_READ_TIMEOUT");
+
 export const buildServer = async (dependencies: ServerDependencies): Promise<FastifyInstance> => {
   const app = Fastify({
     logger: false
@@ -1576,11 +1579,15 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const listVenueBalancesForUser = async (userId: string): Promise<VenueBalanceView[]> => {
     const balances = await fundingService.listVenueBalances(userId);
     try {
-      const polymarket = await readPolymarketUsableBalanceForUser({
-        userId,
-        fundingIntentId: "venue-balance",
-        routeLegId: "venue-balance"
-      });
+      const polymarket = await withTimeout(
+        readPolymarketUsableBalanceForUser({
+          userId,
+          fundingIntentId: "venue-balance",
+          routeLegId: "venue-balance"
+        }),
+        parseOptionalNumber(process.env.POLYMARKET_VENUE_BALANCE_READ_TIMEOUT_MS)
+          ?? DEFAULT_POLYMARKET_VENUE_BALANCE_READ_TIMEOUT_MS
+      );
       const sourceReady = hasPolymarketCLOBTradeReadyBalance(
         polymarket.usableBalanceSource,
         polymarket.usableBalance
@@ -3584,4 +3591,24 @@ const parseOptionalNumber = (value: string | undefined): number | undefined => {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+};
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+  let timeout: NodeJS.Timeout | null = null;
+  try {
+    const result = await Promise.race([
+      promise,
+      new Promise<typeof VENUE_BALANCE_READ_TIMEOUT>((resolve) => {
+        timeout = setTimeout(() => resolve(VENUE_BALANCE_READ_TIMEOUT), timeoutMs);
+      })
+    ]);
+    if (result === VENUE_BALANCE_READ_TIMEOUT) {
+      throw new Error("VENUE_BALANCE_READ_TIMEOUT");
+    }
+    return result;
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 };

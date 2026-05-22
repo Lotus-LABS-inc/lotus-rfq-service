@@ -168,7 +168,12 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
       return [];
     }
     const maxAgeMs = input.maxAgeMs ?? 5 * 60 * 1000;
-    const result = await this.pool.query<QueryResultRow & {
+    const lookbackMs = Math.max(maxAgeMs, 30 * 60 * 1000);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SET LOCAL statement_timeout = '1200ms'");
+      const result = await client.query<QueryResultRow & {
       canonical_market_id: string;
       quote_status: string;
       quote_ready_venue_count: string;
@@ -190,6 +195,7 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
                 blockers
            FROM venue_orderbook_snapshots
           WHERE canonical_market_id = ANY($1::text[])
+            AND received_at >= now() - ($3::int * interval '1 millisecond')
           ORDER BY canonical_market_id,
                    canonical_outcome_id,
                    venue,
@@ -265,16 +271,23 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
               COALESCE(quote_blockers, '[]'::jsonb) AS quote_blockers,
               last_quote_at
          FROM rolled`,
-      [canonicalMarketIds, Math.max(1, Math.floor(maxAgeMs))]
-    );
-    return result.rows.map((row) => ({
-      canonicalMarketId: row.canonical_market_id,
-      quoteStatus: parseQuoteStatus(row.quote_status),
-      quoteReadyVenueCount: Number(row.quote_ready_venue_count),
-      quoteReadyVenues: parseQuoteReadyVenues(row.quote_ready_venues),
-      quoteBlockers: parseQuoteBlockers(row.quote_blockers),
-      lastQuoteAt: row.last_quote_at?.toISOString() ?? null
-    }));
+        [canonicalMarketIds, Math.max(1, Math.floor(maxAgeMs)), Math.max(1, Math.floor(lookbackMs))]
+      );
+      await client.query("COMMIT");
+      return result.rows.map((row) => ({
+        canonicalMarketId: row.canonical_market_id,
+        quoteStatus: parseQuoteStatus(row.quote_status),
+        quoteReadyVenueCount: Number(row.quote_ready_venue_count),
+        quoteReadyVenues: parseQuoteReadyVenues(row.quote_ready_venues),
+        quoteBlockers: parseQuoteBlockers(row.quote_blockers),
+        lastQuoteAt: row.last_quote_at?.toISOString() ?? null
+      }));
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   public async cleanupSnapshots(input: {

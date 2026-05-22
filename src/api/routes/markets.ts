@@ -48,6 +48,8 @@ const batchQuotesRequestSchema = z.object({
 });
 
 const VENUE_SUFFIX_PATTERN = /:(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$/i;
+const DEFAULT_MARKET_QUOTE_READINESS_TIMEOUT_MS = 1_500;
+const MARKET_QUOTE_READINESS_TIMEOUT = Symbol("MARKET_QUOTE_READINESS_TIMEOUT");
 
 export interface MarketCatalogRouteDeps {
   marketCatalogRepository: Pick<MarketCatalogRepository, "listCategories" | "listMarkets" | "listEvents" | "getMarket" | "getEvent">;
@@ -87,14 +89,22 @@ export const registerMarketCatalogRoutes = async (
       ...(parsed.data.search !== undefined ? { search: parsed.data.search } : {}),
       ...(parsed.data.limit !== undefined ? { limit: shouldOverfetchMarkets(parsed.data) ? Math.min(parsed.data.limit * 3, 1000) : parsed.data.limit } : {})
     });
-    const enrichedMarkets = await enrichMarketsWithQuoteReadiness(markets, deps.marketQuoteReadinessSource);
-    const visibleMarkets = enrichedMarkets
-      .filter((market) => !parsed.data.quoteReadyOnly || isQuoteReadyMarket(market))
-      .filter((market) => routeCoverageMatches(market, parsed.data.routeCoverage ?? "all"))
-      .slice(0, parsed.data.limit ?? enrichedMarkets.length);
+    const enriched = await enrichMarketsWithQuoteReadiness(markets, deps.marketQuoteReadinessSource);
+    const routeCoverage = parsed.data.routeCoverage ?? "all";
+    const canApplyQuoteReadyFilter = !enriched.degraded;
+    const visibleMarkets = enriched.markets
+      .filter((market) => !parsed.data.quoteReadyOnly || !canApplyQuoteReadyFilter || isQuoteReadyMarket(market))
+      .filter((market) => enriched.degraded
+        ? routeCoverageMatchesBaseCoverage(market, routeCoverage)
+        : routeCoverageMatches(market, routeCoverage))
+      .slice(0, parsed.data.limit ?? enriched.markets.length);
     return reply.send({
       markets: visibleMarkets,
-      count: visibleMarkets.length
+      count: visibleMarkets.length,
+      ...(enriched.degraded ? {
+        quoteReadinessDegraded: true,
+        quoteReadinessReason: enriched.reason
+      } : {})
     });
   });
 
@@ -314,14 +324,41 @@ const resolveOutcomeLabel = (
 const enrichMarketsWithQuoteReadiness = async (
   markets: readonly MarketCatalogMarket[],
   source: MarketCatalogRouteDeps["marketQuoteReadinessSource"]
-): Promise<MarketCatalogMarket[]> => {
+): Promise<{
+  markets: MarketCatalogMarket[];
+  degraded: boolean;
+  reason?: "timeout" | "error";
+}> => {
   if (!source || markets.length === 0) {
-    return [...markets];
+    return { markets: [...markets], degraded: false };
   }
   const canonicalMarketIds = [...new Set(markets.flatMap((market) => market.canonicalMarketIds))];
-  const readiness = await source.listLatestMarketQuoteReadiness({ canonicalMarketIds });
+  const readinessResult = await withReadinessTimeout(
+    source.listLatestMarketQuoteReadiness({ canonicalMarketIds }),
+    resolveMarketQuoteReadinessTimeoutMs(process.env.MARKET_QUOTE_READINESS_TIMEOUT_MS)
+  );
+  if (!readinessResult.ok) {
+    return {
+      markets: markets.map((market) => ({
+        ...market,
+        quoteStatus: "unavailable",
+        quoteReadyVenueCount: 0,
+        quoteReadyVenues: [],
+        quoteBlockers: [{
+          venue: "SYSTEM",
+          reason: readinessResult.reason === "timeout"
+            ? "QUOTE_READINESS_SNAPSHOT_TIMEOUT"
+            : "QUOTE_READINESS_SNAPSHOT_UNAVAILABLE"
+        }],
+        lastQuoteAt: null
+      })),
+      degraded: true,
+      reason: readinessResult.reason
+    };
+  }
+  const readiness = readinessResult.value;
   const byCanonicalMarketId = new Map(readiness.map((item) => [item.canonicalMarketId, item]));
-  return markets.map((market) => {
+  return { markets: markets.map((market) => {
     const marketReadiness = market.canonicalMarketIds
       .map((canonicalMarketId) => byCanonicalMarketId.get(canonicalMarketId))
       .filter((item): item is MarketQuoteReadinessSnapshot => item !== undefined);
@@ -329,7 +366,40 @@ const enrichMarketsWithQuoteReadiness = async (
       ...market,
       ...aggregateMarketQuoteReadiness(marketReadiness)
     };
-  });
+  }), degraded: false };
+};
+
+const withReadinessTimeout = async <T>(
+  promise: Promise<T>,
+  timeoutMs: number
+): Promise<{ ok: true; value: T } | { ok: false; reason: "timeout" | "error" }> => {
+  let timeout: NodeJS.Timeout | null = null;
+  try {
+    const value = await Promise.race([
+      promise,
+      new Promise<typeof MARKET_QUOTE_READINESS_TIMEOUT>((resolve) => {
+        timeout = setTimeout(() => resolve(MARKET_QUOTE_READINESS_TIMEOUT), timeoutMs);
+      })
+    ]);
+    if (value === MARKET_QUOTE_READINESS_TIMEOUT) {
+      return { ok: false, reason: "timeout" };
+    }
+    return { ok: true, value };
+  } catch {
+    return { ok: false, reason: "error" };
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+};
+
+const resolveMarketQuoteReadinessTimeoutMs = (value: string | undefined): number => {
+  if (value === undefined || value.trim().length === 0) {
+    return DEFAULT_MARKET_QUOTE_READINESS_TIMEOUT_MS;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MARKET_QUOTE_READINESS_TIMEOUT_MS;
 };
 
 const aggregateMarketQuoteReadiness = (
@@ -401,6 +471,23 @@ const routeCoverageMatches = (
       return readyVenueCount >= 3;
     case "strict_all":
       return market.venueCount > 0 && readyVenueCount >= market.venueCount;
+    case "all":
+      return true;
+  }
+};
+
+const routeCoverageMatchesBaseCoverage = (
+  market: MarketCatalogMarket,
+  routeCoverage: z.infer<typeof routeCoverageSchema>
+): boolean => {
+  switch (routeCoverage) {
+    case "single":
+      return market.venueCount >= 1;
+    case "pair":
+      return market.venueCount >= 2;
+    case "tri":
+      return market.venueCount >= 3;
+    case "strict_all":
     case "all":
       return true;
   }
