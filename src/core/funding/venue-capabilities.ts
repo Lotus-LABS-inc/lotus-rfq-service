@@ -50,7 +50,9 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
     || envValue(env, "OPINION_FUNDING_DESTINATION_MODE") === "USER_VENUE_DEPOSIT_WALLET";
   const myriadDepositAddress = configuredVenueDepositAddress(env, "MYRIAD", "BSC", ["SOLANA", "POLYGON"]);
   const predictFunDepositAddress = configuredVenueDepositAddress(env, "PREDICT_FUN", "BSC", ["SOLANA", "POLYGON"]);
-  const predictFunUserVenueDepositWalletEnabled = envValue(env, "PREDICT_FUN_FUNDING_DESTINATION_MODE") === "USER_VENUE_DEPOSIT_WALLET";
+  const predictFunFundingDestinationMode = envValue(env, "PREDICT_FUN_FUNDING_DESTINATION_MODE") ?? "USER_TURNKEY_EVM_WALLET";
+  const predictFunUserWalletDestinationEnabled = predictFunFundingDestinationMode === "USER_TURNKEY_EVM_WALLET"
+    || predictFunFundingDestinationMode === "USER_VENUE_DEPOSIT_WALLET";
   const solanaUsdcAddress = envValue(env, "SOLANA_USDC_TOKEN_ADDRESS") ?? "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
   const solanaUsdtAddress = envValue(env, "SOLANA_USDT_TOKEN_ADDRESS") ?? "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY1p8ARw5ygP2Z7n";
   const polygonUsdcAddress = envValue(env, "POLYGON_USDC_TOKEN_ADDRESS") ?? "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
@@ -236,21 +238,23 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
     PREDICT_FUN: {
       ...configurableCapability({
         venue: "PREDICT_FUN",
-        depositAddress: predictFunDepositAddress,
+        depositAddress: predictFunUserWalletDestinationEnabled ? "USER_WALLET" : predictFunDepositAddress,
         preferredChain: predictFunPreferredChain,
         preferredChainId: predictFunPreferredChainId,
         preferredToken: predictFunPreferredToken,
         preferredTokenAddress: predictFunPreferredTokenAddress,
         sourceTokenAddressByChain: predictFunSourceTokenAddressByChain,
         supportsWithdrawal: supportsWithdrawal("PREDICT_FUN"),
-        configuredNote: `Predict.fun funding quote path is configured for approved ${predictFunPreferredToken} source chains to the operator-approved Predict.fun funding destination.`,
+        configuredNote: predictFunUserWalletDestinationEnabled
+          ? `Predict.fun funding quote path is configured for user-specific ${predictFunPreferredToken} venue balances.`
+          : `Predict.fun funding quote path is configured for approved ${predictFunPreferredToken} source chains to the operator-approved Predict.fun funding destination.`,
         missingNote: "Set PREDICT_FUN_FUNDING_DESTINATION_ADDRESS or PREDICT_FUN_FUNDING_DESTINATION_MODE=USER_VENUE_DEPOSIT_WALLET before enabling Predict.fun funding quotes; do not confuse Predict.fun with PredictIt."
       }),
-      ...(predictFunUserVenueDepositWalletEnabled
+      ...(predictFunUserWalletDestinationEnabled
         ? {
           readinessStatus: "READY" as const,
           depositAddressConfigured: true,
-          notes: "Predict.fun funding quote path is configured for the active user-specific Turnkey EVM venue account."
+          notes: "Predict.fun funding quote path is configured for the active user-specific Turnkey EVM wallet."
         }
         : {})
     }
@@ -276,6 +280,9 @@ export const getVenueFundingDestinationMode = (
   const value = envValue(env, `${venue}_FUNDING_DESTINATION_MODE`);
   if (value === "USER_TURNKEY_EVM_WALLET" || value === "USER_VENUE_DEPOSIT_WALLET") {
     return value;
+  }
+  if (venue === "PREDICT_FUN") {
+    return "USER_TURNKEY_EVM_WALLET";
   }
   if (venue === "POLYMARKET" && envValue(env, "POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED") === "true") {
     return "USER_VENUE_DEPOSIT_WALLET";

@@ -29,7 +29,7 @@ import {
   type WithdrawalCompletionEvidenceResult,
   type WithdrawalCompletionPersistenceGate
 } from "../src/core/funding/funding-service.js";
-import { buildVenueCapabilityMatrix } from "../src/core/funding/venue-capabilities.js";
+import { buildVenueCapabilityMatrix, getVenueFundingDestinationMode } from "../src/core/funding/venue-capabilities.js";
 import {
   ConfigurableVenueFundingReadinessChecker,
   getFundingReadinessConfigFromEnv,
@@ -712,6 +712,12 @@ describe("Funding v0 domain", () => {
       userSignedWithdrawalSupported: false
     });
     expect(buildVenueCapabilityMatrix({ env: {} as NodeJS.ProcessEnv }).OPINION.readinessStatus).toBe("DISABLED");
+    expect(buildVenueCapabilityMatrix({ env: {} as NodeJS.ProcessEnv }).PREDICT_FUN).toMatchObject({
+      readinessStatus: "READY",
+      depositAddressConfigured: true,
+      preferredChain: "BSC",
+      preferredToken: "USDT"
+    });
     const predictFunBscUsdtMatrix = buildVenueCapabilityMatrix({
       env: {
         ...env,
@@ -730,6 +736,7 @@ describe("Funding v0 domain", () => {
       BSC: "0x55d398326f99059fF775485246999027B3197955",
       "56": "0x55d398326f99059fF775485246999027B3197955"
     });
+    expect(getVenueFundingDestinationMode("PREDICT_FUN", {} as NodeJS.ProcessEnv)).toBe("USER_TURNKEY_EVM_WALLET");
     const opinionBscUsdtMatrix = buildVenueCapabilityMatrix({
       env: {
         ...env,
