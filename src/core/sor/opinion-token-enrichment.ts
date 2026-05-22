@@ -31,6 +31,10 @@ export const extractOpinionQuoteIdentifier = (profile: OpinionQuoteProfileForEnr
   const normalized = asRecord(profile.normalizedPayload);
   const raw = asRecord(profile.rawSourcePayload);
   return firstString(
+    normalized.opinionSlug,
+    normalized.opinion_slug,
+    raw.opinionSlug,
+    raw.opinion_slug,
     normalized.quoteMarketId,
     normalized.quote_market_id,
     normalized.executableMarketId,

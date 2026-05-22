@@ -56,6 +56,15 @@ describe("Opinion token enrichment", () => {
     expect(extractOpinionQuoteIdentifier(profile())).toBe("493224");
   });
 
+  it("prefers operator-provided Opinion slugs over stale numeric ids", () => {
+    expect(extractOpinionQuoteIdentifier(profile({
+      normalizedPayload: {
+        opinionSlug: "republican-presidential-nominee-2028",
+        venueMarketId: "493224"
+      }
+    }))).toBe("republican-presidential-nominee-2028");
+  });
+
   it("builds slug lookup candidates from slug-plus-outcome identifiers", () => {
     expect(opinionLookupCandidatesFromIdentifier("f1-world-drivers-champion-2026:lando-norris")).toEqual([
       "f1-world-drivers-champion-2026:lando-norris",
