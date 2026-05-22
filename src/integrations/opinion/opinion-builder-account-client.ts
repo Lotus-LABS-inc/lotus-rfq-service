@@ -10,6 +10,8 @@ export interface OpinionBuilderAccountClientConfig {
   host?: string | null | undefined;
   builderApiKey?: string | null | undefined;
   rpcUrl?: string | null | undefined;
+  serviceUrl?: string | null | undefined;
+  serviceApiKey?: string | null | undefined;
   requestTimeoutMs?: number | null | undefined;
 }
 
@@ -120,15 +122,96 @@ export class OpinionBuilderAccountClient implements OpinionBuilderAccountClientC
   }
 }
 
+export class OpinionBuilderAccountServiceClient implements OpinionBuilderAccountClientContract {
+  private readonly serviceUrl: string | null;
+  private readonly serviceApiKey: string | null;
+  private readonly requestTimeoutMs: number;
+
+  public constructor(private readonly config: OpinionBuilderAccountClientConfig) {
+    this.serviceUrl = clean(config.serviceUrl);
+    this.serviceApiKey = clean(config.serviceApiKey);
+    this.requestTimeoutMs = config.requestTimeoutMs ?? OPINION_BUILDER_DEFAULT_TIMEOUT_MS;
+  }
+
+  public configured(): boolean {
+    return this.accountSetupEnabled() && Boolean(this.serviceUrl && this.serviceApiKey);
+  }
+
+  public accountSetupEnabled(): boolean {
+    return this.config.enabled === true;
+  }
+
+  public async createOrRecoverSafe(input: { walletAddress: string }): Promise<OpinionBuilderSafeAccount> {
+    return toSafeAccountResponse(await this.postJson("safe", input));
+  }
+
+  public async buildEnableTradingRequest(input: { safeAddress: string }): Promise<OpinionEnableTradingRequest> {
+    return toEnableTradingRequestResponse(await this.postJson("enable-trading-request", input));
+  }
+
+  public async submitEnableTrading(input: {
+    safeAddress: string;
+    signature: string;
+    expectedSafeTxHash: string;
+    request: OpinionEnableTradingRequest;
+  }): Promise<{ safeTxHash: string | null }> {
+    const raw = await this.postJson("enable-trading-submit", input);
+    return { safeTxHash: stringOrNull((raw as Record<string, unknown>).safeTxHash) };
+  }
+
+  private async postJson(path: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    if (!this.serviceUrl || !this.serviceApiKey) {
+      throw new Error("Opinion builder account service is not configured.");
+    }
+    const normalizedBaseUrl = this.serviceUrl.endsWith("/") ? this.serviceUrl : `${this.serviceUrl}/`;
+    const url = new URL(`lotus/opinion/builder/${path}`, normalizedBaseUrl);
+    const abortController = new AbortController();
+    const timeout = setTimeout(() => abortController.abort(), this.requestTimeoutMs);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${this.serviceApiKey}`,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify(body),
+        signal: abortController.signal
+      });
+      const raw = await response.json().catch(() => null) as unknown;
+      if (!response.ok) {
+        throw new Error(safeRemoteErrorMessage(raw, `Opinion builder account service returned HTTP ${response.status}.`));
+      }
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        throw new Error("Opinion builder account service returned malformed data.");
+      }
+      return raw as Record<string, unknown>;
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("Opinion builder")) {
+        throw error;
+      }
+      throw sanitizeOpinionBuilderError(error, "Opinion builder account service request failed.");
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 export const buildOpinionBuilderAccountClientFromEnv = (
   env: NodeJS.ProcessEnv = process.env
-): OpinionBuilderAccountClient => new OpinionBuilderAccountClient({
-  enabled: env.OPINION_BUILDER_ACCOUNT_SETUP_ENABLED === "true",
-  host: env.OPINION_BUILDER_BASE_URL ?? null,
-  builderApiKey: env.OPINION_BUILDER_API_KEY ?? null,
-  rpcUrl: env.OPINION_BUILDER_RPC_URL ?? null,
-  requestTimeoutMs: parsePositiveInt(env.OPINION_BUILDER_ACCOUNT_SETUP_TIMEOUT_MS) ?? OPINION_BUILDER_DEFAULT_TIMEOUT_MS
-});
+): OpinionBuilderAccountClientContract => {
+  const config = {
+    enabled: env.OPINION_BUILDER_ACCOUNT_SETUP_ENABLED === "true",
+    host: env.OPINION_BUILDER_BASE_URL ?? null,
+    builderApiKey: env.OPINION_BUILDER_API_KEY ?? null,
+    rpcUrl: env.OPINION_BUILDER_RPC_URL ?? null,
+    serviceUrl: env.OPINION_BUILDER_SERVICE_URL ?? null,
+    serviceApiKey: env.OPINION_BUILDER_SERVICE_API_KEY ?? null,
+    requestTimeoutMs: parsePositiveInt(env.OPINION_BUILDER_ACCOUNT_SETUP_TIMEOUT_MS) ?? OPINION_BUILDER_DEFAULT_TIMEOUT_MS
+  };
+  return clean(config.serviceUrl)
+    ? new OpinionBuilderAccountServiceClient(config)
+    : new OpinionBuilderAccountClient(config);
+};
 
 const toSafeAccount = (
   user: Omit<UserInfo, "apikey" | "walletCreationTxHash"> | UserInfo,
@@ -146,6 +229,25 @@ const toEnableTradingRequest = (request: SafeTxResult): OpinionEnableTradingRequ
   safeTxHash: request.safeTxHash,
   typedData: jsonSafeRecord(request.eip712Data),
   safeTx: jsonSafeRecord(request.safeTx)
+});
+
+const toSafeAccountResponse = (raw: Record<string, unknown>): OpinionBuilderSafeAccount => {
+  const walletAddress = requiredString(raw.walletAddress, "walletAddress");
+  const multiSigWallet = requiredString(raw.multiSigWallet, "multiSigWallet");
+  return {
+    walletAddress,
+    multiSigWallet,
+    builderName: stringOrNull(raw.builderName),
+    enableTrading: raw.enableTrading === true,
+    userApiKeyCreated: raw.userApiKeyCreated === true,
+    walletCreationTxHashPresent: raw.walletCreationTxHashPresent === true
+  };
+};
+
+const toEnableTradingRequestResponse = (raw: Record<string, unknown>): OpinionEnableTradingRequest => ({
+  safeTxHash: requiredString(raw.safeTxHash, "safeTxHash"),
+  typedData: recordOrEmpty(raw.typedData),
+  safeTx: recordOrEmpty(raw.safeTx)
 });
 
 const fromEnableTradingRequest = (request: OpinionEnableTradingRequest): SafeTxResult => ({
@@ -178,6 +280,21 @@ const jsonSafe = (value: unknown): unknown => {
   return value;
 };
 
+const recordOrEmpty = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+
+const requiredString = (value: unknown, field: string): string => {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`Opinion builder account service response missing ${field}.`);
+  }
+  return value.trim();
+};
+
+const stringOrNull = (value: unknown): string | null =>
+  typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+
 const parsePositiveInt = (value: string | undefined): number | null => {
   if (!value) return null;
   const parsed = Number.parseInt(value, 10);
@@ -197,4 +314,15 @@ const sanitizeOpinionBuilderError = (error: unknown, fallback: string): Error =>
     ? error.message.replace(/apikey|api key|builder-apikey|authorization/gi, "credential").slice(0, 240)
     : fallback;
   return new Error(message);
+};
+
+const safeRemoteErrorMessage = (raw: unknown, fallback: string): string => {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return fallback;
+  }
+  const record = raw as Record<string, unknown>;
+  const message = typeof record.message === "string" && record.message.trim().length > 0
+    ? record.message.trim()
+    : fallback;
+  return message.replace(/apikey|api key|builder-apikey|authorization/gi, "credential").slice(0, 240);
 };

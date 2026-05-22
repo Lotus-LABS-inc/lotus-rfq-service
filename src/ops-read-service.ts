@@ -23,6 +23,11 @@ import {
 import type { FundingVenue } from "./core/funding/types.js";
 import { isWithdrawalEvidenceVenueSupported } from "./core/funding/withdrawal-evidence.js";
 import { createPgPool, closePgPool } from "./db/postgres.js";
+import {
+  buildOpinionBuilderAccountClientFromEnv,
+  type OpinionBuilderAccountClientContract,
+  type OpinionEnableTradingRequest
+} from "./integrations/opinion/opinion-builder-account-client.js";
 import { UserVenueAccountRepository } from "./repositories/user-venue-account.repository.js";
 import { createLogger } from "./utils/logger.js";
 
@@ -46,6 +51,31 @@ const evidenceQuerySchema = z.object({
   withdrawalRouteLegId: z.string().min(1),
   sourceVenue: z.string().min(1),
   withdrawalTxHash: z.string().min(1)
+});
+
+const evmAddressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/);
+
+const builderSafeBodySchema = z.object({
+  walletAddress: evmAddressSchema
+});
+
+const builderEnableTradingBodySchema = z.object({
+  safeAddress: evmAddressSchema
+});
+
+const jsonRecordSchema = z.custom<Record<string, unknown>>(
+  (value) => Boolean(value && typeof value === "object" && !Array.isArray(value))
+);
+
+const builderSubmitEnableTradingBodySchema = z.object({
+  safeAddress: evmAddressSchema,
+  signature: z.string().min(1),
+  expectedSafeTxHash: z.string().min(1),
+  request: z.object({
+    safeTxHash: z.string().min(1),
+    typedData: jsonRecordSchema,
+    safeTx: jsonRecordSchema
+  })
 });
 
 type OpsFundingBalanceInput = z.infer<typeof balanceQuerySchema>;
@@ -79,6 +109,7 @@ export interface OpsReadServerDeps {
   polymarketFundingBalanceReader?: FundingBalanceReader | undefined;
   polymarketVenueAccountReader?: PolymarketFundingVenueAccountReader | undefined;
   withdrawalEvidenceReader?: WithdrawalEvidenceReader | undefined;
+  opinionBuilderAccountClient?: OpinionBuilderAccountClientContract | undefined;
 }
 
 export interface OpsReadRuntime {
@@ -155,6 +186,9 @@ const authorizeOpsRead = (request: FastifyRequest, expectedToken: string | undef
   }
   return isLoopbackRequest(request);
 };
+
+const authorizeOpinionBuilderService = (request: FastifyRequest, env: NodeJS.ProcessEnv): boolean =>
+  authorizeOpsRead(request, env.OPINION_BUILDER_SERVICE_API_KEY, env.NODE_ENV);
 
 const parsePositiveInt = (value: string | undefined, fallback: number): number => {
   const parsed = Number.parseInt(`${value ?? ""}`, 10);
@@ -565,6 +599,36 @@ const handleWithdrawalEvidenceReadError = (venue: FundingVenue, error: unknown, 
   });
 };
 
+const handleOpinionBuilderServiceError = (error: unknown, reply: FastifyReply) => {
+  const message = safeOpinionBuilderServiceMessage(error);
+  if (/not configured|disabled|incomplete/i.test(message)) {
+    return reply.status(503).send({
+      code: "OPINION_BUILDER_ACCOUNT_NOT_CONFIGURED",
+      message: "Opinion builder account setup is disabled or incomplete."
+    });
+  }
+  if (/restricted jurisdiction|region restricted|not available to persons located/i.test(message)) {
+    return reply.status(451).send({
+      code: "OPINION_PROVIDER_REGION_RESTRICTED",
+      message: "Opinion builder account setup is not available for this service region."
+    });
+  }
+  return reply.status(502).send({
+    code: "OPINION_BUILDER_ACCOUNT_SETUP_FAILED",
+    message
+  });
+};
+
+const safeOpinionBuilderServiceMessage = (error: unknown): string => {
+  const fallback = "Opinion builder account setup failed.";
+  if (!(error instanceof Error) || error.message.trim().length === 0) {
+    return fallback;
+  }
+  return error.message
+    .replace(/apikey|api key|builder-apikey|authorization|signature/gi, "credential")
+    .slice(0, 240);
+};
+
 export const buildOpsReadServer = async (deps: OpsReadServerDeps = {}): Promise<FastifyInstance> => {
   const env = deps.env ?? process.env;
   const fetchImpl = deps.fetchImpl ?? fetch;
@@ -577,6 +641,8 @@ export const buildOpsReadServer = async (deps: OpsReadServerDeps = {}): Promise<
     );
   const withdrawalEvidenceReader = deps.withdrawalEvidenceReader ??
     new InternalWithdrawalEvidenceReadService({ env, fetchImpl });
+  const opinionBuilderAccountClient = deps.opinionBuilderAccountClient ??
+    buildOpinionBuilderAccountClientFromEnv(env);
 
   app.get("/health", async () => ({
     status: "ok",
@@ -703,6 +769,80 @@ export const buildOpsReadServer = async (deps: OpsReadServerDeps = {}): Promise<
       return reply.status(200).send(result);
     } catch (error) {
       return handleWithdrawalEvidenceReadError(venue, error, reply);
+    }
+  });
+
+  app.post("/lotus/opinion/builder/safe", async (request, reply) => {
+    if (!authorizeOpinionBuilderService(request, env)) {
+      return reply.status(401).send({
+        code: "UNAUTHORIZED",
+        message: "OPINION builder account setup is not authorized."
+      });
+    }
+    const parsed = builderSafeBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "OPINION builder Safe request validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    try {
+      const result = await opinionBuilderAccountClient.createOrRecoverSafe(parsed.data);
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleOpinionBuilderServiceError(error, reply);
+    }
+  });
+
+  app.post("/lotus/opinion/builder/enable-trading-request", async (request, reply) => {
+    if (!authorizeOpinionBuilderService(request, env)) {
+      return reply.status(401).send({
+        code: "UNAUTHORIZED",
+        message: "OPINION enable-trading request is not authorized."
+      });
+    }
+    const parsed = builderEnableTradingBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "OPINION enable-trading request validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    try {
+      const result = await opinionBuilderAccountClient.buildEnableTradingRequest(parsed.data);
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleOpinionBuilderServiceError(error, reply);
+    }
+  });
+
+  app.post("/lotus/opinion/builder/enable-trading-submit", async (request, reply) => {
+    if (!authorizeOpinionBuilderService(request, env)) {
+      return reply.status(401).send({
+        code: "UNAUTHORIZED",
+        message: "OPINION enable-trading submit is not authorized."
+      });
+    }
+    const parsed = builderSubmitEnableTradingBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "OPINION enable-trading submit validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    try {
+      const result = await opinionBuilderAccountClient.submitEnableTrading({
+        safeAddress: parsed.data.safeAddress,
+        signature: parsed.data.signature,
+        expectedSafeTxHash: parsed.data.expectedSafeTxHash,
+        request: parsed.data.request as OpinionEnableTradingRequest
+      });
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleOpinionBuilderServiceError(error, reply);
     }
   });
 

@@ -174,6 +174,121 @@ describe("ops read service", () => {
     expectNoSecrets(response.body);
   });
 
+  it("serves Opinion builder Safe setup through the internal service route", async () => {
+    const app = await buildOpsReadServer({
+      env: {
+        NODE_ENV: "production",
+        OPINION_BUILDER_SERVICE_API_KEY: "builder-service-token"
+      } as NodeJS.ProcessEnv,
+      opinionBuilderAccountClient: {
+        configured: () => true,
+        accountSetupEnabled: () => true,
+        createOrRecoverSafe: async () => ({
+          walletAddress: "0x1111111111111111111111111111111111111111",
+          multiSigWallet: "0x2222222222222222222222222222222222222222",
+          builderName: "lotus",
+          enableTrading: false,
+          userApiKeyCreated: true,
+          walletCreationTxHashPresent: true
+        }),
+        buildEnableTradingRequest: async () => ({
+          safeTxHash: "0xsafe",
+          typedData: {},
+          safeTx: {}
+        }),
+        submitEnableTrading: async () => ({ safeTxHash: "0xsafe" })
+      }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/lotus/opinion/builder/safe",
+      headers: { authorization: "Bearer builder-service-token" },
+      payload: { walletAddress: "0x1111111111111111111111111111111111111111" }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      walletAddress: "0x1111111111111111111111111111111111111111",
+      multiSigWallet: "0x2222222222222222222222222222222222222222",
+      builderName: "lotus",
+      enableTrading: false,
+      userApiKeyCreated: true,
+      walletCreationTxHashPresent: true
+    });
+    expect(response.body).not.toContain("builder-service-token");
+    expect(response.body).not.toContain("authorization");
+  });
+
+  it("requires bearer auth for Opinion builder service routes in production", async () => {
+    const app = await buildOpsReadServer({
+      env: {
+        NODE_ENV: "production",
+        OPINION_BUILDER_SERVICE_API_KEY: "builder-service-token"
+      } as NodeJS.ProcessEnv
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/lotus/opinion/builder/safe",
+      payload: { walletAddress: "0x1111111111111111111111111111111111111111" }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(401);
+    expectNoSecrets(response.body);
+  });
+
+  it("submits Opinion enable-trading without returning signatures or provider payloads", async () => {
+    const app = await buildOpsReadServer({
+      env: {
+        NODE_ENV: "production",
+        OPINION_BUILDER_SERVICE_API_KEY: "builder-service-token"
+      } as NodeJS.ProcessEnv,
+      opinionBuilderAccountClient: {
+        configured: () => true,
+        accountSetupEnabled: () => true,
+        createOrRecoverSafe: async () => ({
+          walletAddress: "0x1111111111111111111111111111111111111111",
+          multiSigWallet: "0x2222222222222222222222222222222222222222",
+          builderName: null,
+          enableTrading: false,
+          userApiKeyCreated: false,
+          walletCreationTxHashPresent: false
+        }),
+        buildEnableTradingRequest: async () => ({
+          safeTxHash: "0xsafe",
+          typedData: {},
+          safeTx: {}
+        }),
+        submitEnableTrading: async () => ({ safeTxHash: "0xsafe" })
+      }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/lotus/opinion/builder/enable-trading-submit",
+      headers: { authorization: "Bearer builder-service-token" },
+      payload: {
+        safeAddress: "0x2222222222222222222222222222222222222222",
+        signature: "0xsignature",
+        expectedSafeTxHash: "0xsafe",
+        request: {
+          safeTxHash: "0xsafe",
+          typedData: { domain: { chainId: 56 } },
+          safeTx: { to: "0x3333333333333333333333333333333333333333" }
+        }
+      }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ safeTxHash: "0xsafe" });
+    expect(response.body).not.toContain("0xsignature");
+    expectNoSecrets(response.body);
+  });
+
   it("normalizes Opinion spot balance responses with array response fields", async () => {
     const fetchImpl: typeof fetch = vi.fn(async (input, init) => {
       expect(String(input)).toContain("https://openapi.opinion.trade/openapi/user/balance?chain_id=56");
