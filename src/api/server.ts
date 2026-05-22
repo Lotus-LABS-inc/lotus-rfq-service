@@ -319,6 +319,7 @@ import {
 } from "../integrations/turnkey/turnkey-wallet-client.js";
 import { buildPredictAccountClientFromEnv } from "../integrations/predict/predict-account-client.js";
 import { buildLimitlessPartnerAccountClientFromEnv } from "../integrations/limitless/limitless-partner-account-client.js";
+import { buildOpinionBuilderAccountClientFromEnv } from "../integrations/opinion/opinion-builder-account-client.js";
 import {
   buildPolymarketDepositWalletClientConfigFromEnv,
   PolymarketDepositWalletClient
@@ -561,7 +562,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     userWalletService,
     buildPredictAccountClientFromEnv(process.env),
     buildLimitlessPartnerAccountClientFromEnv(process.env),
-    polymarketDepositWalletClient
+    polymarketDepositWalletClient,
+    buildOpinionBuilderAccountClientFromEnv(process.env)
   );
   const polymarketBridgeWithdrawalConfig = getPolymarketBridgeWithdrawalConfigFromEnv(process.env);
   const polymarketBridgeWithdrawalAdapter = polymarketBridgeWithdrawalConfig.configured && polymarketBridgeWithdrawalConfig.apiBaseUrl

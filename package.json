@@ -319,6 +319,7 @@
     "@limitless-exchange/sdk": "^1.0.4",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/sdk-node": "^0.215.0",
+    "@opinion-labs/opinion-clob-sdk": "^0.6.0",
     "@polymarket/builder-relayer-client": "^0.0.9",
     "@polymarket/builder-signing-sdk": "^0.0.8",
     "@polymarket/clob-client-v2": "^1.0.3",

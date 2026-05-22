@@ -3363,7 +3363,7 @@ paths:
     post:
       tags: [User]
       summary: Prepare batch venue-account setup.
-      description: Ensures frontend-safe account bindings for user-signed venues and returns any setup payloads that the frontend can sign with the active Turnkey EVM wallet. Predict.fun can return a signable auth message. Limitless can return a partner-account ownership message when partner-account automation is configured. Opinion remains manual Safe linking for now. Myriad is intentionally not part of account-linking; it remains a wallet-call/user-signed venue.
+      description: Ensures frontend-safe account bindings for user-signed venues and returns any setup payloads that the frontend can sign with the active Turnkey EVM wallet. Predict.fun can return a signable auth message. Limitless can return a partner-account ownership message when partner-account automation is configured. Opinion can create/recover a Builder Mode Safe and return an enable-trading Safe transaction when builder setup is enabled, with manual Safe linking as fallback. Myriad is intentionally not part of account-linking; it remains a wallet-call/user-signed venue.
       x-lotus-status: implemented
       x-lotus-callable: true
       x-lotus-auth: user
@@ -3380,7 +3380,7 @@ paths:
     post:
       tags: [User]
       summary: Complete batch venue-account setup.
-      description: Accepts signatures for setup requests returned by setup-batch and returns the refreshed safe batch state. Predict.fun signatures are exchanged server-side for temporary Predict auth only. Limitless signatures are used server-side only to create a partner account. Provider tokens, raw signatures, and auth material are never stored or returned.
+      description: Accepts signatures for setup requests returned by setup-batch and returns the refreshed safe batch state. Predict.fun signatures are exchanged server-side for temporary Predict auth only. Limitless signatures are used server-side only to create a partner account. Opinion signatures submit the user-signed Safe enable-trading transaction. Provider tokens, raw signatures, and auth material are never stored or returned.
       x-lotus-status: implemented
       x-lotus-callable: true
       x-lotus-auth: user
@@ -5464,18 +5464,29 @@ components:
       properties:
         venue:
           type: string
-          enum: [PREDICT_FUN, LIMITLESS]
+          enum: [PREDICT_FUN, LIMITLESS, OPINION, POLYMARKET, MYRIAD]
         requestType:
           type: string
-          enum: [PREDICT_FUN_AUTH_MESSAGE, LIMITLESS_PARTNER_ACCOUNT_OWNERSHIP_MESSAGE]
+          enum: [PREDICT_FUN_AUTH_MESSAGE, LIMITLESS_PARTNER_ACCOUNT_OWNERSHIP_MESSAGE, ERC20_ALLOWANCE_APPROVAL, OPINION_ENABLE_TRADING_SAFE_TX]
         signer:
           type: string
           pattern: "^0x[a-fA-F0-9]{40}$"
         message:
           type: string
-          description: Dynamic venue auth message for frontend Turnkey signing. This is not a token or secret.
+          description: Dynamic venue auth message or Safe transaction hash for frontend Turnkey signing. This is not a token or secret.
         venueAccount:
           $ref: "#/components/schemas/UserVenueAccount"
+        typedData:
+          type: object
+          additionalProperties: true
+          description: Frontend-safe EIP-712 typed data for requests such as Opinion enable-trading Safe transactions.
+        safeTxHash:
+          type: string
+          description: Frontend-safe Opinion Safe transaction hash to sign and echo during completion.
+        safeTx:
+          type: object
+          additionalProperties: true
+          description: Redacted frontend-safe Opinion Safe transaction summary.
     CompleteUserVenueAccountSetupBatchRequest:
       type: object
       additionalProperties: false
@@ -5484,6 +5495,8 @@ components:
           $ref: "#/components/schemas/PredictFunCompleteAccountAuthRequest"
         limitless:
           $ref: "#/components/schemas/LimitlessCompletePartnerAccountAuthRequest"
+        opinion:
+          $ref: "#/components/schemas/OpinionCompleteEnableTradingRequest"
     PredictFunAccountAuthMessageResponse:
       type: object
       additionalProperties: false
@@ -5531,6 +5544,21 @@ components:
         message:
           type: string
           description: Exact Limitless ownership message returned by setup-batch.
+    OpinionCompleteEnableTradingRequest:
+      type: object
+      additionalProperties: false
+      required: [signer, signature, safeTxHash]
+      properties:
+        signer:
+          type: string
+          pattern: "^0x[a-fA-F0-9]{40}$"
+        signature:
+          type: string
+          pattern: "^0x[a-fA-F0-9]{130}$"
+          description: Signature produced by the user's Turnkey EVM wallet over the Opinion Safe EIP-712 enable-trading transaction.
+        safeTxHash:
+          type: string
+          description: Exact Opinion Safe transaction hash returned by setup-batch.
     EnsureUserVenueAccountRequest:
       type: object
       additionalProperties: false

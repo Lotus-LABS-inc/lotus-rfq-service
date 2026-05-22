@@ -31,7 +31,12 @@ const opinionCompleteLinkBodySchema = z.object({
 
 const completeBatchBodySchema = z.object({
   predictFun: signedVenueMessageBodySchema.optional(),
-  limitless: signedVenueMessageBodySchema.optional()
+  limitless: signedVenueMessageBodySchema.optional(),
+  opinion: z.object({
+    signer: z.string().min(1),
+    signature: z.string().min(1),
+    safeTxHash: z.string().min(1)
+  }).optional()
 }).default({});
 
 export interface UserVenueAccountRouteHandlers {
@@ -75,6 +80,9 @@ export interface UserVenueAccountRouteHandlers {
         amount: string;
         amountDisplay: string;
       } | undefined;
+      typedData?: Record<string, unknown> | undefined;
+      safeTxHash?: string | undefined;
+      safeTx?: Record<string, unknown> | undefined;
     }>;
   }>;
   completePredictFunAccountAuth?(input: {
@@ -108,6 +116,11 @@ export interface UserVenueAccountRouteHandlers {
       signature: string;
       message: string;
     } | null;
+    opinion?: {
+      signer: string;
+      signature: string;
+      safeTxHash: string;
+    } | null;
   }): Promise<{
     venueAccounts: Array<{
       venue: string;
@@ -136,6 +149,9 @@ export interface UserVenueAccountRouteHandlers {
         amount: string;
         amountDisplay: string;
       } | undefined;
+      typedData?: Record<string, unknown> | undefined;
+      safeTxHash?: string | undefined;
+      safeTx?: Record<string, unknown> | undefined;
     }>;
   }>;
 }
@@ -248,7 +264,8 @@ export const registerUserVenueAccountRoutes = async (
       const batch = await handlers.completeAccountSetupBatch({
         userId: request.user.userId,
         predictFun: parsed.data.predictFun ?? null,
-        limitless: parsed.data.limitless ?? null
+        limitless: parsed.data.limitless ?? null,
+        opinion: parsed.data.opinion ?? null
       });
       return reply.status(200).send(toSafeBatch(batch));
     } catch (error) {
@@ -329,6 +346,9 @@ const toSafeBatch = (batch: {
       amount: string;
       amountDisplay: string;
     } | undefined;
+    typedData?: Record<string, unknown> | undefined;
+    safeTxHash?: string | undefined;
+    safeTx?: Record<string, unknown> | undefined;
   }>;
 }): Record<string, unknown> => ({
   venueAccounts: batch.venueAccounts.map((item) => ({
@@ -342,6 +362,9 @@ const toSafeBatch = (batch: {
     signer: request.signer,
     message: request.message,
     venueAccount: toSafeVenueAccount(request.venueAccount),
+    ...(request.typedData ? { typedData: request.typedData } : {}),
+    ...(request.safeTxHash ? { safeTxHash: request.safeTxHash } : {}),
+    ...(request.safeTx ? { safeTx: request.safeTx } : {}),
     ...(request.transactionRequest ? { transactionRequest: request.transactionRequest } : {}),
     ...(request.approval ? { approval: request.approval } : {})
   }))

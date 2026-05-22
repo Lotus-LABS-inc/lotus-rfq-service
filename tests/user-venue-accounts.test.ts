@@ -6,6 +6,7 @@ import {
   UserVenueAccountService,
   type UserVenueAccount,
   type LimitlessPartnerAccountClient,
+  type OpinionBuilderAccountClient,
   type PolymarketDepositWalletClient,
   type PredictFunAccountClient,
   type UserVenueAccountRepository,
@@ -191,6 +192,45 @@ const failingLimitlessEoaPartnerAccountClient = (): LimitlessPartnerAccountClien
   }
 });
 
+const opinionBuilderAccountClient = (overrides: Partial<{
+  enableTrading: boolean;
+  safeAddress: string;
+  configured: boolean;
+  staleHash: boolean;
+}> = {}): OpinionBuilderAccountClient => {
+  const safeAddress = overrides.safeAddress ?? "0x2222222222222222222222222222222222222222";
+  const safeTxHash = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  return {
+    configured: () => overrides.configured ?? true,
+    accountSetupEnabled: () => true,
+    createOrRecoverSafe: async (input) => ({
+      walletAddress: input.walletAddress,
+      multiSigWallet: safeAddress,
+      builderName: "Lotus",
+      enableTrading: overrides.enableTrading ?? false,
+      userApiKeyCreated: true,
+      walletCreationTxHashPresent: true
+    }),
+    buildEnableTradingRequest: async () => ({
+      safeTxHash: overrides.staleHash ? "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" : safeTxHash,
+      typedData: {
+        domain: { chainId: 56, verifyingContract: safeAddress },
+        types: { SafeTx: [{ name: "to", type: "address" }] },
+        primaryType: "SafeTx",
+        message: { to: "0x3333333333333333333333333333333333333333" }
+      },
+      safeTx: {
+        to: "0x3333333333333333333333333333333333333333",
+        value: "0",
+        dataOperation: 1
+      }
+    }),
+    submitEnableTrading: async (input) => ({
+      safeTxHash: input.expectedSafeTxHash
+    })
+  };
+};
+
 const limitlessServerWalletPartnerAccountClient = (): LimitlessPartnerAccountClient => ({
   configured: () => true,
   serverWalletDelegationEnabled: () => true,
@@ -346,6 +386,130 @@ describe("user venue account service", () => {
     expect(serialized).not.toContain("signature");
     expect(serialized).not.toContain("apiKey");
     expect(serialized).not.toContain("providerWalletAccountId");
+  });
+
+  it("creates an Opinion Builder Safe and returns enable-trading Safe typed data", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    const service = new UserVenueAccountService(
+      repository,
+      {
+        async resolveUserTurnkeyEvmFundingWallet() {
+          return evmWallet();
+        }
+      },
+      undefined,
+      undefined,
+      undefined,
+      opinionBuilderAccountClient()
+    );
+
+    const ensured = await service.ensureAccount({ userId: "user-1", venue: "OPINION" });
+    expect(ensured.account).toMatchObject({
+      venue: "OPINION",
+      venueAccountType: "SAFE",
+      venueAccountId: "0x2222222222222222222222222222222222222222",
+      venueAccountAddress: "0x2222222222222222222222222222222222222222",
+      status: "ACTIVE"
+    });
+
+    const prepared = await service.prepareAccountSetupBatch("user-1");
+    const opinion = prepared.venueAccounts.find((item) => item.venue === "OPINION");
+    const request = prepared.signatureRequests.find((item) => item.requestType === "OPINION_ENABLE_TRADING_SAFE_TX");
+    expect(opinion).toMatchObject({
+      setupMode: "SIGNATURE_REQUIRED",
+      readinessBlockers: []
+    });
+    expect(request).toMatchObject({
+      venue: "OPINION",
+      signer: "0x1111111111111111111111111111111111111111",
+      safeTxHash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      message: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      typedData: {
+        domain: { chainId: 56 }
+      },
+      safeTx: {
+        value: "0"
+      }
+    });
+    const serialized = JSON.stringify({ request, auditEvents: repository.auditEvents });
+    expect(serialized).not.toContain("apiKey");
+    expect(serialized).not.toContain("builder-apikey");
+    expect(serialized).not.toContain("signature");
+  });
+
+  it("completes Opinion enable-trading through complete-batch and rejects stale Safe hashes", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    const service = new UserVenueAccountService(
+      repository,
+      {
+        async resolveUserTurnkeyEvmFundingWallet() {
+          return evmWallet();
+        }
+      },
+      undefined,
+      undefined,
+      undefined,
+      opinionBuilderAccountClient()
+    );
+
+    const prepared = await service.prepareAccountSetupBatch("user-1");
+    const request = prepared.signatureRequests.find((item) => item.requestType === "OPINION_ENABLE_TRADING_SAFE_TX")!;
+    const completed = await service.completeAccountSetupBatch({
+      userId: "user-1",
+      opinion: {
+        signer: request.signer,
+        signature: `0x${"e".repeat(130)}`,
+        safeTxHash: request.safeTxHash!
+      }
+    });
+    expect(completed.venueAccounts.find((item) => item.venue === "OPINION")).toMatchObject({
+      account: {
+        status: "ACTIVE",
+        venueAccountType: "SAFE"
+      }
+    });
+    expect(repository.auditEvents).toContainEqual(expect.objectContaining({
+      eventType: "OPINION_ENABLE_TRADING_REQUEST_CREATED"
+    }));
+    expect(repository.auditEvents).toContainEqual(expect.objectContaining({
+      eventType: "OPINION_ENABLE_TRADING_SUBMITTED"
+    }));
+
+    await expect(service.completeAccountSetupBatch({
+      userId: "user-1",
+      opinion: {
+        signer: request.signer,
+        signature: `0x${"e".repeat(130)}`,
+        safeTxHash: "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    })).rejects.toMatchObject({ code: "OPINION_ENABLE_TRADING_STALE" });
+  });
+
+  it("rejects Opinion enable-trading signer mismatch", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    const service = new UserVenueAccountService(
+      repository,
+      {
+        async resolveUserTurnkeyEvmFundingWallet() {
+          return evmWallet();
+        }
+      },
+      undefined,
+      undefined,
+      undefined,
+      opinionBuilderAccountClient()
+    );
+    const prepared = await service.prepareAccountSetupBatch("user-1");
+    const request = prepared.signatureRequests.find((item) => item.requestType === "OPINION_ENABLE_TRADING_SAFE_TX")!;
+
+    await expect(service.completeAccountSetupBatch({
+      userId: "user-1",
+      opinion: {
+        signer: "0x9999999999999999999999999999999999999999",
+        signature: `0x${"e".repeat(130)}`,
+        safeTxHash: request.safeTxHash!
+      }
+    })).rejects.toMatchObject({ code: "USER_VENUE_ACCOUNT_MISMATCH" });
   });
 
   it("links Predict.fun connected account after Turnkey wallet auth signature", async () => {

@@ -86,6 +86,34 @@ export interface LimitlessPartnerAccountClient {
   }): Promise<{ profileId: string; account: string }>;
 }
 
+export interface OpinionBuilderAccountClient {
+  configured(): boolean;
+  accountSetupEnabled(): boolean;
+  createOrRecoverSafe(input: { walletAddress: string }): Promise<{
+    walletAddress: string;
+    multiSigWallet: string;
+    builderName: string | null;
+    enableTrading: boolean;
+    userApiKeyCreated: boolean;
+    walletCreationTxHashPresent: boolean;
+  }>;
+  buildEnableTradingRequest(input: { safeAddress: string }): Promise<{
+    safeTxHash: string;
+    typedData: Record<string, unknown>;
+    safeTx: Record<string, unknown>;
+  }>;
+  submitEnableTrading(input: {
+    safeAddress: string;
+    signature: string;
+    expectedSafeTxHash: string;
+    request: {
+      safeTxHash: string;
+      typedData: Record<string, unknown>;
+      safeTx: Record<string, unknown>;
+    };
+  }): Promise<{ safeTxHash: string | null }>;
+}
+
 export interface PolymarketDepositWalletClient {
   configured(): boolean;
   deriveOrCreateDepositWallet(input: { ownerAddress: string; allowDeploy?: boolean }): Promise<{
@@ -107,10 +135,13 @@ export interface UserVenueAccountSetupBatchItem {
 
 export interface UserVenueAccountSignatureRequest {
   venue: "PREDICT_FUN" | "LIMITLESS" | "POLYMARKET" | "OPINION" | "MYRIAD";
-  requestType: "PREDICT_FUN_AUTH_MESSAGE" | "LIMITLESS_PARTNER_ACCOUNT_OWNERSHIP_MESSAGE" | "ERC20_ALLOWANCE_APPROVAL";
+  requestType: "PREDICT_FUN_AUTH_MESSAGE" | "LIMITLESS_PARTNER_ACCOUNT_OWNERSHIP_MESSAGE" | "ERC20_ALLOWANCE_APPROVAL" | "OPINION_ENABLE_TRADING_SAFE_TX";
   signer: string;
   message: string;
   venueAccount: UserVenueAccount;
+  typedData?: Record<string, unknown> | undefined;
+  safeTxHash?: string | undefined;
+  safeTx?: Record<string, unknown> | undefined;
   transactionRequest?: {
     to: string;
     from: string;
@@ -144,6 +175,10 @@ export class UserVenueAccountError extends Error {
       | "PREDICT_FUN_ACCOUNT_AUTH_FAILED"
       | "LIMITLESS_PARTNER_ACCOUNT_NOT_CONFIGURED"
       | "LIMITLESS_PARTNER_ACCOUNT_AUTH_FAILED"
+      | "OPINION_BUILDER_ACCOUNT_NOT_CONFIGURED"
+      | "OPINION_BUILDER_ACCOUNT_SETUP_FAILED"
+      | "OPINION_ENABLE_TRADING_FAILED"
+      | "OPINION_ENABLE_TRADING_STALE"
       | "POLYMARKET_DEPOSIT_WALLET_NOT_CONFIGURED"
       | "POLYMARKET_DEPOSIT_WALLET_FAILED",
     message: string,
@@ -162,7 +197,8 @@ export class UserVenueAccountService {
     private readonly userWalletService: Pick<UserWalletService, "resolveUserTurnkeyEvmFundingWallet">,
     private readonly predictFunAccountClient?: PredictFunAccountClient,
     private readonly limitlessPartnerAccountClient?: LimitlessPartnerAccountClient,
-    private readonly polymarketDepositWalletClient?: PolymarketDepositWalletClient
+    private readonly polymarketDepositWalletClient?: PolymarketDepositWalletClient,
+    private readonly opinionBuilderAccountClient?: OpinionBuilderAccountClient
   ) {}
 
   public async listAccounts(userId: string): Promise<UserVenueAccount[]> {
@@ -359,6 +395,9 @@ export class UserVenueAccountService {
     if ((venue === "MYRIAD" || venue === "PREDICT_FUN") && !input.venueAccountId && !input.venueAccountAddress) {
       return this.ensureWalletAddressVenueAccount(input.userId, venue, wallet, existing);
     }
+    if (venue === "OPINION" && !input.venueAccountId && !input.venueAccountAddress && this.opinionBuilderAccountClient?.accountSetupEnabled()) {
+      return this.ensureOpinionBuilderSafeAccount(input.userId, wallet, existing);
+    }
     if (venue === "OPINION") {
       return this.ensureOpinionSafeAccount(input.userId, wallet, existing, {
         venueAccountId: input.venueAccountId ?? null,
@@ -416,6 +455,81 @@ export class UserVenueAccountService {
       venueAccountType: "SAFE",
       eventType: "OPINION_ACCOUNT_LINKED"
     });
+  }
+
+  public async completeOpinionEnableTrading(input: {
+    userId: string;
+    signer: string;
+    signature: string;
+    safeTxHash: string;
+  }): Promise<{
+    account: UserVenueAccount;
+    readinessBlockers: string[];
+    setupInstructions: string[];
+  }> {
+    const client = this.requireOpinionBuilderAccountClient();
+    const wallet = await this.resolveRequiredTurnkeyEvmWallet(input.userId);
+    if (!equalsAddress(input.signer, wallet.address)) {
+      throw new UserVenueAccountError(
+        "USER_VENUE_ACCOUNT_MISMATCH",
+        "Opinion enable-trading signer does not match the user's Turnkey EVM wallet.",
+        403
+      );
+    }
+    if (!isEvmSignature(input.signature)) {
+      throw new UserVenueAccountError(
+        "OPINION_ENABLE_TRADING_FAILED",
+        "Opinion enable-trading signature is invalid.",
+        400
+      );
+    }
+    const account = await this.repository.findAccount({ userId: input.userId, venue: "OPINION" });
+    if (!account || account.status !== "ACTIVE" || account.venueAccountType !== "SAFE" || !isEvmAddress(account.venueAccountAddress ?? "")) {
+      throw new UserVenueAccountError(
+        "USER_VENUE_ACCOUNT_INACTIVE",
+        "Opinion Safe account is not active.",
+        409
+      );
+    }
+    const request = await this.withOpinionBuilderFailureBoundary(
+      () => client.buildEnableTradingRequest({ safeAddress: account.venueAccountAddress! }),
+      "OPINION_ENABLE_TRADING_FAILED",
+      "Opinion enable-trading transaction build failed."
+    );
+    if (request.safeTxHash !== input.safeTxHash) {
+      throw new UserVenueAccountError(
+        "OPINION_ENABLE_TRADING_STALE",
+        "Opinion enable-trading transaction changed. Refresh setup and sign again.",
+        409
+      );
+    }
+    const submitted = await this.withOpinionBuilderFailureBoundary(
+      () => client.submitEnableTrading({
+        safeAddress: account.venueAccountAddress!,
+        signature: input.signature,
+        expectedSafeTxHash: input.safeTxHash,
+        request
+      }),
+      "OPINION_ENABLE_TRADING_FAILED",
+      "Opinion enable-trading submit failed."
+    );
+    await this.repository.appendAccountAuditEvent({
+      userId: input.userId,
+      venueAccountBindingId: account.venueAccountBindingId,
+      eventType: "OPINION_ENABLE_TRADING_SUBMITTED",
+      payload: {
+        venue: "OPINION",
+        signer: wallet.address,
+        safeAddress: account.venueAccountAddress,
+        safeTxHash: input.safeTxHash,
+        submittedSafeTxHashPresent: Boolean(submitted.safeTxHash)
+      }
+    });
+    return {
+      account,
+      readinessBlockers: readinessBlockersForAccount(account),
+      setupInstructions: setupInstructionsForVenue("OPINION", account)
+    };
   }
 
   public async preparePredictFunAccountAuth(userId: string): Promise<{
@@ -606,6 +720,23 @@ export class UserVenueAccountService {
         });
         continue;
       }
+      if (venue === "OPINION") {
+        const ensured = await this.ensureAccount({ userId, venue: "OPINION" });
+        const enableTradingRequest = await this.maybeBuildOpinionEnableTradingRequest(userId, ensured.account);
+        venueAccounts.push({
+          venue,
+          account: ensured.account,
+          readinessBlockers: ensured.readinessBlockers,
+          setupInstructions: enableTradingRequest
+            ? ["Sign the Opinion enable-trading Safe transaction with the displayed Turnkey EVM wallet."]
+            : setupInstructionsForVenue(venue, ensured.account),
+          setupMode: enableTradingRequest ? "SIGNATURE_REQUIRED" : setupModeForVenue(venue, ensured.account)
+        });
+        if (enableTradingRequest) {
+          signatureRequests.push(enableTradingRequest);
+        }
+        continue;
+      }
       const ensured = await this.ensureAccount({ userId, venue });
       await maybeAddApproval(venue, ensured.account);
       venueAccounts.push({
@@ -632,6 +763,11 @@ export class UserVenueAccountService {
       signature: string;
       message: string;
     } | null;
+    opinion?: {
+      signer: string;
+      signature: string;
+      safeTxHash: string;
+    } | null;
   }): Promise<UserVenueAccountSetupBatch> {
     if (input.predictFun) {
       await this.completePredictFunAccountAuth({
@@ -647,6 +783,14 @@ export class UserVenueAccountService {
         signer: input.limitless.signer,
         signature: input.limitless.signature,
         message: input.limitless.message
+      });
+    }
+    if (input.opinion) {
+      await this.completeOpinionEnableTrading({
+        userId: input.userId,
+        signer: input.opinion.signer,
+        signature: input.opinion.signature,
+        safeTxHash: input.opinion.safeTxHash
       });
     }
     return this.prepareAccountSetupBatch(input.userId);
@@ -846,6 +990,70 @@ export class UserVenueAccountService {
       );
     }
     return this.limitlessPartnerAccountClient;
+  }
+
+  private requireOpinionBuilderAccountClient(): OpinionBuilderAccountClient {
+    if (!this.opinionBuilderAccountClient?.configured()) {
+      throw new UserVenueAccountError(
+        "OPINION_BUILDER_ACCOUNT_NOT_CONFIGURED",
+        "Opinion builder account setup is not configured.",
+        503
+      );
+    }
+    return this.opinionBuilderAccountClient;
+  }
+
+  private async ensureOpinionBuilderSafeAccount(
+    userId: string,
+    wallet: UserWallet,
+    existing: UserVenueAccount | null
+  ): Promise<{
+    account: UserVenueAccount;
+    readinessBlockers: string[];
+    setupInstructions: string[];
+  }> {
+    if (existing?.status === "ACTIVE" && existing.venueAccountType === "SAFE" && isEvmAddress(existing.venueAccountAddress ?? "")) {
+      return {
+        account: existing,
+        readinessBlockers: readinessBlockersForAccount(existing),
+        setupInstructions: setupInstructionsForVenue("OPINION", existing)
+      };
+    }
+    const client = this.requireOpinionBuilderAccountClient();
+    const linked = await this.withOpinionBuilderFailureBoundary(
+      () => client.createOrRecoverSafe({ walletAddress: wallet.address }),
+      "OPINION_BUILDER_ACCOUNT_SETUP_FAILED",
+      "Opinion builder Safe setup failed."
+    );
+    if (!equalsAddress(linked.walletAddress, wallet.address) || !isEvmAddress(linked.multiSigWallet)) {
+      throw new UserVenueAccountError(
+        "OPINION_BUILDER_ACCOUNT_SETUP_FAILED",
+        "Opinion builder Safe setup returned mismatched account metadata.",
+        502
+      );
+    }
+    const ensured = await this.ensureOpinionSafeAccount(userId, wallet, existing, {
+      venueAccountId: linked.multiSigWallet,
+      venueAccountAddress: linked.multiSigWallet,
+      venueAccountType: "SAFE",
+      eventType: existing ? "OPINION_BUILDER_SAFE_RECOVERED" : "OPINION_BUILDER_SAFE_CREATED"
+    });
+    await this.repository.appendAccountAuditEvent({
+      userId,
+      venueAccountBindingId: ensured.account.venueAccountBindingId,
+      eventType: "OPINION_BUILDER_SAFE_READY",
+      payload: {
+        venue: "OPINION",
+        accountType: "SAFE",
+        venueAccountAddress: linked.multiSigWallet,
+        builderNamePresent: Boolean(linked.builderName),
+        enableTrading: linked.enableTrading,
+        userApiKeyCreated: linked.userApiKeyCreated,
+        walletCreationTxHashPresent: linked.walletCreationTxHashPresent,
+        walletAddressMatches: equalsAddress(linked.walletAddress, wallet.address)
+      }
+    });
+    return ensured;
   }
 
   private async ensureOpinionSafeAccount(
@@ -1212,6 +1420,60 @@ export class UserVenueAccountService {
     };
   }
 
+  private async maybeBuildOpinionEnableTradingRequest(
+    userId: string,
+    account: UserVenueAccount
+  ): Promise<UserVenueAccountSignatureRequest | null> {
+    if (!this.opinionBuilderAccountClient?.configured()) {
+      return null;
+    }
+    if (account.venue !== "OPINION" || account.status !== "ACTIVE" || account.venueAccountType !== "SAFE" || !isEvmAddress(account.venueAccountAddress ?? "")) {
+      return null;
+    }
+    const wallet = await this.resolveRequiredTurnkeyEvmWallet(userId);
+    const builderAccount = await this.withOpinionBuilderFailureBoundary(
+      () => this.opinionBuilderAccountClient!.createOrRecoverSafe({ walletAddress: wallet.address }),
+      "OPINION_ENABLE_TRADING_FAILED",
+      "Opinion builder Safe status lookup failed."
+    );
+    if (builderAccount.enableTrading === true) {
+      return null;
+    }
+    if (!equalsAddress(builderAccount.multiSigWallet, account.venueAccountAddress)) {
+      throw new UserVenueAccountError(
+        "OPINION_BUILDER_ACCOUNT_SETUP_FAILED",
+        "Opinion builder Safe status returned mismatched account metadata.",
+        502
+      );
+    }
+    const safeTx = await this.withOpinionBuilderFailureBoundary(
+      () => this.opinionBuilderAccountClient!.buildEnableTradingRequest({ safeAddress: account.venueAccountAddress! }),
+      "OPINION_ENABLE_TRADING_FAILED",
+      "Opinion enable-trading transaction build failed."
+    );
+    await this.repository.appendAccountAuditEvent({
+      userId,
+      venueAccountBindingId: account.venueAccountBindingId,
+      eventType: "OPINION_ENABLE_TRADING_REQUEST_CREATED",
+      payload: {
+        venue: "OPINION",
+        signer: wallet.address,
+        safeAddress: account.venueAccountAddress,
+        safeTxHash: safeTx.safeTxHash
+      }
+    });
+    return {
+      venue: "OPINION",
+      requestType: "OPINION_ENABLE_TRADING_SAFE_TX",
+      signer: wallet.address,
+      message: safeTx.safeTxHash,
+      venueAccount: account,
+      safeTxHash: safeTx.safeTxHash,
+      typedData: safeTx.typedData,
+      safeTx: safeTx.safeTx
+    };
+  }
+
   private async ensureWalletAddressVenueAccount(
     userId: string,
     venue: UserVenueAccountVenue,
@@ -1273,6 +1535,25 @@ export class UserVenueAccountService {
       throw new UserVenueAccountError(
         "LIMITLESS_PARTNER_ACCOUNT_AUTH_FAILED",
         "Limitless partner account request failed.",
+        502
+      );
+    }
+  }
+
+  private async withOpinionBuilderFailureBoundary<T>(
+    operation: () => Promise<T>,
+    code: "OPINION_BUILDER_ACCOUNT_SETUP_FAILED" | "OPINION_ENABLE_TRADING_FAILED",
+    message: string
+  ): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (error instanceof UserVenueAccountError) {
+        throw error;
+      }
+      throw new UserVenueAccountError(
+        code,
+        safeOpinionBuilderFailureMessage(error, message),
         502
       );
     }
@@ -1532,6 +1813,15 @@ const safeLimitlessPartnerAccountFailureMessage = (error: unknown): string => {
     return "Limitless partner account credentials were rejected. Other venues remain usable while the operator checks the Limitless account-creation scope.";
   }
   return "Limitless partner account request failed. Try again shortly; other venues remain usable.";
+};
+
+const safeOpinionBuilderFailureMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message
+      .replace(/builder-apikey|apikey|api key|authorization|signature/gi, "credential")
+      .slice(0, 240);
+  }
+  return fallback;
 };
 
 const safeLimitlessPartnerAccountFailureDetails = (error: unknown): Record<string, unknown> => {
