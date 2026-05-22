@@ -137,6 +137,21 @@ const safeDecimal = (value: string) => {
 const safeDecimalFromUnknown = (value: unknown): DecimalValue | null =>
   typeof value === "string" ? safeDecimal(value) : null;
 
+class FundingBalanceReadRestrictedError extends Error {
+  public constructor(public readonly code: string, message: string) {
+    super(message);
+    this.name = "FundingBalanceReadRestrictedError";
+  }
+}
+
+const isOpinionRegionRestriction = (status: number, raw: unknown): boolean => {
+  if (status !== 403) {
+    return false;
+  }
+  const serialized = typeof raw === "string" ? raw : JSON.stringify(raw);
+  return /api is not available to persons located in the united states|restricted jurisdictions|errNo"?\s*:\s*"?10403/i.test(serialized);
+};
+
 const polymarketReadinessEvidence = (raw: Record<string, unknown> | undefined): Record<string, string> => {
   if (!raw) {
     return {};
@@ -413,6 +428,19 @@ export class ConfigurableVenueFundingReadinessChecker implements VenueFundingRea
         evidence: this.safeEvidence(comparisonEvidence)
       });
     } catch (error) {
+      if (error instanceof FundingBalanceReadRestrictedError) {
+        return this.result({
+          status: "UNKNOWN",
+          destinationReceived: true,
+          venueCreditConfirmed: false,
+          readyToTrade: false,
+          usableBalance: null,
+          reason: error.code,
+          evidence: this.safeEvidence({
+            error: "PROVIDER_REGION_RESTRICTED"
+          })
+        });
+      }
       return this.result({
         status: "UNKNOWN",
         destinationReceived: true,
@@ -517,8 +545,14 @@ class OpinionOpenApiFundingBalanceReadClient implements FundingBalanceReadClient
       headers: { apikey: apiKey },
       signal: AbortSignal.timeout(Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 5_000)
     });
-    const raw = await response.json() as unknown;
+    const raw = await response.json().catch(() => null) as unknown;
     if (!response.ok) {
+      if (isOpinionRegionRestriction(response.status, raw)) {
+        throw new FundingBalanceReadRestrictedError(
+          "OPINION_PROVIDER_REGION_RESTRICTED",
+          "Opinion balance reads are not available for this region."
+        );
+      }
       throw new Error(`Opinion funding balance read returned HTTP ${response.status}.`);
     }
     const usableBalance = readDotPath(raw, "result.balances.0.availableBalance");

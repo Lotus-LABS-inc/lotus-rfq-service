@@ -266,6 +266,44 @@ describe("ops read service", () => {
     expectNoSecrets(response.body);
   });
 
+  it("classifies Opinion region restriction without returning raw provider payloads", async () => {
+    const fetchImpl: typeof fetch = vi.fn(async () =>
+      new Response(JSON.stringify({
+        errmsgs: "API is not available to persons located in the United States, China, or persons located in restricted jurisdictions. See Terms of Use(https://app.opinion.trade/terms) for more information.",
+        errNo: 10403
+      }), {
+        status: 403,
+        headers: { "content-type": "application/json" }
+      })
+    );
+    const app = await buildOpsReadServer({
+      env: {
+        NODE_ENV: "production",
+        OPINION_OPENAPI_BASE_URL: "https://openapi.opinion.trade/openapi",
+        OPINION_OPS_FUNDING_BALANCE_MODE: "DIRECT_HTTP",
+        OPINION_OPS_FUNDING_BALANCE_API_KEY: "opinion-openapi-token"
+      } as NodeJS.ProcessEnv,
+      fetchImpl
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/lotus/opinion/funding-balance?userId=user-1&fundingIntentId=funding-1&routeLegId=leg-1",
+      headers: { authorization: "Bearer opinion-openapi-token" }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(451);
+    expect(response.json()).toEqual({
+      code: "OPINION_PROVIDER_REGION_RESTRICTED",
+      message: "OPINION balance reads are not available for this region."
+    });
+    expect(response.body).not.toContain("United States");
+    expect(response.body).not.toContain("10403");
+    expect(response.body).not.toContain("app.opinion.trade/terms");
+    expectNoSecrets(response.body);
+  });
+
   it("selects Opinion multi-chain direct balance paths from the route destination chain", async () => {
     const requestedUrls: string[] = [];
     const fetchImpl: typeof fetch = vi.fn(async (input) => {

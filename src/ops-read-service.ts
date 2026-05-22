@@ -107,6 +107,13 @@ class OpsFundingBalanceUnavailableError extends Error {
   }
 }
 
+class OpsFundingBalanceRestrictedError extends Error {
+  public constructor(message: string) {
+    super(message);
+    this.name = "OpsFundingBalanceRestrictedError";
+  }
+}
+
 const isFundingVenue = (value: string): value is FundingVenue =>
   fundingVenues.includes(value as FundingVenue);
 
@@ -205,6 +212,14 @@ const normalizeDirectBalance = (raw: unknown, responseField: string | undefined)
     return configuredField;
   }
   return normalizeDirectBalanceFallback(raw);
+};
+
+const isOpinionRegionRestriction = (venue: FundingVenue, status: number, raw: unknown): boolean => {
+  if (venue !== "OPINION" || status !== 403) {
+    return false;
+  }
+  const serialized = typeof raw === "string" ? raw : JSON.stringify(raw);
+  return /api is not available to persons located in the united states|restricted jurisdictions|errNo"?\s*:\s*"?10403/i.test(serialized);
 };
 
 const normalizeChainEnvKey = (value: string | undefined): string | null => {
@@ -380,17 +395,25 @@ const readDirectHttpFundingBalance = async (
       headers: buildDirectFundingBalanceHeaders(venue, env, "GET", pathWithSearch),
       signal: abortController.signal
     });
+    const raw = await response.json().catch(() => null) as unknown;
     if (!response.ok) {
+      if (isOpinionRegionRestriction(venue, response.status, raw)) {
+        throw new OpsFundingBalanceRestrictedError("OPINION balance reads are region restricted by the provider.");
+      }
       throw new OpsFundingBalanceUnavailableError(`${venue} direct funding balance read returned HTTP ${response.status}.`);
     }
     return fundingBalanceOutputFromUsableBalance(
       normalizeDirectBalance(
-        await response.json(),
+        raw,
         directFundingBalanceResponseField(venue, env)
       )
     );
   } catch (error) {
-    if (error instanceof OpsFundingBalanceNotConfiguredError || error instanceof OpsFundingBalanceMalformedError) {
+    if (
+      error instanceof OpsFundingBalanceNotConfiguredError ||
+      error instanceof OpsFundingBalanceMalformedError ||
+      error instanceof OpsFundingBalanceRestrictedError
+    ) {
       throw error;
     }
     throw new OpsFundingBalanceUnavailableError(`${venue} direct funding balance read is unavailable.`);
@@ -503,6 +526,12 @@ const handleFundingBalanceError = (venue: FundingVenue, error: unknown, reply: F
     return reply.status(502).send({
       code: `${venue}_FUNDING_BALANCE_READ_MALFORMED`,
       message: `${venue} funding balance read returned malformed data.`
+    });
+  }
+  if (error instanceof OpsFundingBalanceRestrictedError) {
+    return reply.status(451).send({
+      code: `${venue}_PROVIDER_REGION_RESTRICTED`,
+      message: `${venue} balance reads are not available for this region.`
     });
   }
   return reply.status(502).send({
