@@ -143,6 +143,63 @@ describe("MarketOrderbookRecorder", () => {
     });
     expect(second.skippedCooldownSamples).toBe(2);
   });
+
+  it("records Opinion display snapshots as quote-ready when fee discovery is the only missing factor", async () => {
+    const inserted: VenueOrderbookSnapshotInput[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [opinionMarketFixture()]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalOutcomeId }) => ({
+          snapshots: [{
+            venue: "OPINION",
+            venueMarketId: "3062",
+            venueOutcomeId: canonicalOutcomeId === "NO" ? "token-no" : "token-yes",
+            source: "REST",
+            quoteQuality: "FULL_DEPTH_REST",
+            sourceTimestamp: new Date("2026-05-10T12:00:00.000Z"),
+            receivedAt: new Date("2026-05-10T12:00:01.000Z"),
+            bids: [{ price: "0.44", size: "10" }],
+            asks: [{ price: "0.46", size: "11" }],
+            blockers: [],
+            missingFactors: ["FEE_DISCOVERY"]
+          }],
+          blocked: []
+        })
+      },
+      {
+        insertMany: async (snapshots) => {
+          inserted.push(...snapshots);
+          return snapshots.length;
+        },
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0
+        })
+      },
+      logger,
+      {
+        enabled: true,
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.insertedSnapshots).toBe(2);
+    expect(inserted[0]).toMatchObject({
+      venue: "OPINION",
+      bestBid: "0.44",
+      bestAsk: "0.46",
+      blockers: [],
+      metadataVersion: "venue-orderbook-recorder-opinion-fee-warning-v1"
+    });
+  });
 });
 
 const marketFixture = (status: MarketCatalogMarket["status"]): MarketCatalogMarket => ({
@@ -209,4 +266,21 @@ const marketFixture = (status: MarketCatalogMarket["status"]): MarketCatalogMark
     resolvesAt: null
   }],
   updatedAt: "2026-05-10T12:00:00.000Z"
+});
+
+const opinionMarketFixture = (): MarketCatalogMarket => ({
+  ...marketFixture("OPEN"),
+  venues: ["OPINION"],
+  venueMarkets: marketFixture("OPEN").venueMarkets.map((venueMarket) => ({
+    ...venueMarket,
+    venue: "OPINION",
+    venueMarketId: "3062",
+    venueMarketProfileId: "profile-opinion",
+    network: "BNB_MAINNET",
+    chain: "BNB",
+    outcomes: [
+      { id: "YES", label: "Yes" },
+      { id: "NO", label: "No" }
+    ]
+  }))
 });

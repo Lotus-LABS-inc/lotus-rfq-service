@@ -3,12 +3,17 @@ export interface OpinionNormalizedMarket {
   venueMarketId: string;
   title: string;
   slug: string | null;
+  marketType?: number | null;
   status: string | null;
   statusCode: number | null;
   labels: readonly string[];
   rules: string | null;
   yesLabel: string | null;
   noLabel: string | null;
+  yesTokenId?: string | null;
+  noTokenId?: string | null;
+  conditionId?: string | null;
+  resultTokenId?: string | null;
   volume: string | null;
   volume24h: string | null;
   volume7d: string | null;
@@ -18,6 +23,7 @@ export interface OpinionNormalizedMarket {
   createdAt: Date | null;
   cutoffAt: Date | null;
   resolvedAt: Date | null;
+  childMarkets?: readonly OpinionNormalizedMarket[];
   sourceMetadataVersion: string;
   raw: Record<string, unknown>;
 }

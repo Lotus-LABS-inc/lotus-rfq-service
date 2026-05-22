@@ -35,12 +35,12 @@ const buildOutcomes = (market: OpinionNormalizedMarket): readonly CanonicalOutco
   {
     id: "YES",
     label: market.yesLabel ?? "Yes",
-    metadata: { venue: "OPINION" }
+    metadata: { venue: "OPINION", ...(market.yesTokenId ? { tokenId: market.yesTokenId } : {}) }
   },
   {
     id: "NO",
     label: market.noLabel ?? "No",
-    metadata: { venue: "OPINION" }
+    metadata: { venue: "OPINION", ...(market.noTokenId ? { tokenId: market.noTokenId } : {}) }
   }
 ];
 
@@ -122,7 +122,16 @@ export class OpinionMarketAdapter {
       normalizedPayload: {
         marketId: market.venueMarketId,
         slug: market.slug,
-        questionId: market.questionId
+        questionId: market.questionId,
+        ...(market.yesTokenId ? { quoteTokenId: market.yesTokenId } : {}),
+        ...(market.yesTokenId || market.noTokenId ? {
+          quoteOutcomeTokenIds: {
+            ...(market.yesTokenId ? { YES: market.yesTokenId } : {}),
+            ...(market.noTokenId ? { NO: market.noTokenId } : {})
+          }
+        } : {}),
+        ...(market.conditionId ? { conditionId: market.conditionId } : {}),
+        ...(market.resultTokenId ? { resultTokenId: market.resultTokenId } : {})
       },
       mappingLineage: ["opinion-market-adapter"],
       sourceMetadataVersion: this.config.metadataVersion,
@@ -153,12 +162,17 @@ export const normalizeOpinionMarketRecord = (
   venueMarketId: String(market.marketId),
   title: typeof market.marketTitle === "string" ? market.marketTitle : String(market.marketId),
   slug: typeof market.slug === "string" ? market.slug : null,
+  marketType: typeof market.marketType === "number" ? market.marketType : null,
   status: typeof market.statusEnum === "string" ? market.statusEnum : null,
   statusCode: typeof market.status === "number" ? market.status : null,
   labels: Array.isArray(market.labels) ? market.labels.filter((value): value is string => typeof value === "string") : [],
   rules: typeof market.rules === "string" ? market.rules : null,
   yesLabel: typeof market.yesLabel === "string" ? market.yesLabel : null,
   noLabel: typeof market.noLabel === "string" ? market.noLabel : null,
+  yesTokenId: typeof market.yesTokenId === "string" ? market.yesTokenId : null,
+  noTokenId: typeof market.noTokenId === "string" ? market.noTokenId : null,
+  conditionId: typeof market.conditionId === "string" ? market.conditionId : null,
+  resultTokenId: typeof market.resultTokenId === "string" ? market.resultTokenId : null,
   volume: toStringOrNull(market.volume),
   volume24h: toStringOrNull(market.volume24h),
   volume7d: toStringOrNull(market.volume7d),
@@ -168,6 +182,9 @@ export const normalizeOpinionMarketRecord = (
   createdAt: toDate(market.createdAt),
   cutoffAt: toDate(market.cutoffAt),
   resolvedAt: toDate(market.resolvedAt),
+  childMarkets: Array.isArray(market.childMarkets)
+    ? market.childMarkets.map((child) => normalizeOpinionMarketRecord(asRecord(child), metadataVersion))
+    : [],
   sourceMetadataVersion: metadataVersion,
   raw: market
 });

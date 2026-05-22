@@ -243,6 +243,7 @@ const toSnapshotInput = (input: {
   if (!bestBid && !bestAsk && !midpoint) {
     return [];
   }
+  const blockerSnapshot = snapshotBlockersForRecorder(input.snapshot);
   return [{
     canonicalEventId: input.canonicalEventId,
     canonicalMarketId: input.canonicalMarketId,
@@ -262,8 +263,30 @@ const toSnapshotInput = (input: {
     askDepth: sumSizes(asks),
     bids,
     asks,
-    blockers: [...(input.snapshot.blockers ?? []), ...(input.snapshot.missingFactors ?? [])]
+    blockers: blockerSnapshot.blockers,
+    ...(blockerSnapshot.metadataVersion ? { metadataVersion: blockerSnapshot.metadataVersion } : {})
   }];
+};
+
+const snapshotBlockersForRecorder = (snapshot: NormalizedVenueQuoteSnapshot): {
+  blockers: readonly string[];
+  metadataVersion?: string | undefined;
+} => {
+  const blockers = [...(snapshot.blockers ?? [])];
+  const missingFactors = [...(snapshot.missingFactors ?? [])];
+  const venue = normalizeVenue(snapshot.venue);
+
+  if (venue !== "OPINION") {
+    return { blockers: [...blockers, ...missingFactors] };
+  }
+
+  const blockingMissingFactors = missingFactors.filter((factor) => factor !== "FEE_DISCOVERY");
+  return {
+    blockers: [...blockers, ...blockingMissingFactors],
+    ...(blockingMissingFactors.length !== missingFactors.length
+      ? { metadataVersion: "venue-orderbook-recorder-opinion-fee-warning-v1" }
+      : {})
+  };
 };
 
 const toBlockedSnapshotInput = (input: {
