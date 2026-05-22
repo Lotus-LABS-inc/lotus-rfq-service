@@ -13,6 +13,7 @@ export interface MarketOrderbookRecorderConfig {
   marketBatchSize: number;
   retentionHours: number;
   levelsPerSide: number;
+  quoteProviderCooldownMs: number;
 }
 
 export interface MarketOrderbookRecorderLogger {
@@ -27,6 +28,7 @@ export interface MarketOrderbookRecorderRunResult {
   sampledOutcomes: number;
   insertedSnapshots: number;
   failedSamples: number;
+  skippedCooldownSamples: number;
   deletedOldSnapshots: number;
   deletedClosedMarketSnapshots: number;
 }
@@ -38,12 +40,14 @@ export const buildMarketOrderbookRecorderConfigFromEnv = (
   intervalMs: parseBoundedInteger(env.MARKET_ORDERBOOK_RECORDER_INTERVAL_MS, 60_000, 10_000, 3_600_000),
   marketBatchSize: parseBoundedInteger(env.MARKET_ORDERBOOK_RECORDER_MARKET_BATCH_SIZE, 100, 1, 1_000),
   retentionHours: parseBoundedInteger(env.MARKET_ORDERBOOK_RECORDER_RETENTION_HOURS, 720, 1, 8_760),
-  levelsPerSide: parseBoundedInteger(env.MARKET_ORDERBOOK_RECORDER_LEVELS_PER_SIDE, 25, 1, 50)
+  levelsPerSide: parseBoundedInteger(env.MARKET_ORDERBOOK_RECORDER_LEVELS_PER_SIDE, 25, 1, 50),
+  quoteProviderCooldownMs: parseBoundedInteger(env.MARKET_ORDERBOOK_RECORDER_PROVIDER_COOLDOWN_MS, 30_000, 1_000, 3_600_000)
 });
 
 export class MarketOrderbookRecorder {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private readonly venueCooldownUntil = new Map<string, number>();
 
   public constructor(
     private readonly marketCatalogRepository: Pick<MarketCatalogRepository, "listMarkets">,
@@ -101,6 +105,7 @@ export class MarketOrderbookRecorder {
         sampledOutcomes: 0,
         insertedSnapshots: 0,
         failedSamples: 0,
+        skippedCooldownSamples: 0,
         ...cleanup
       };
 
@@ -111,6 +116,10 @@ export class MarketOrderbookRecorder {
         }
 
         for (const sample of buildMarketSamples(market)) {
+          if (this.isSampleFullyCoolingDown(market, sample)) {
+            result.skippedCooldownSamples += 1;
+            continue;
+          }
           result.sampledOutcomes += 1;
           try {
             const report = await this.quoteSource.getQuoteSnapshotReport({
@@ -128,7 +137,22 @@ export class MarketOrderbookRecorder {
                 levelsPerSide: this.config.levelsPerSide
               })
             );
-            result.insertedSnapshots += await this.snapshotRepository.insertMany(snapshots);
+            const blockedSnapshots = report.blocked.map((blocker) =>
+              toBlockedSnapshotInput({
+                canonicalEventId: market.canonicalEventId,
+                canonicalMarketId: sample.canonicalMarketId,
+                canonicalOutcomeId: sample.outcomeId,
+                blocker,
+                receivedAt: new Date()
+              })
+            );
+            for (const blocker of report.blocked) {
+              this.applyProviderCooldown(blocker.venue, blocker.reason);
+            }
+            result.insertedSnapshots += await this.snapshotRepository.insertMany([
+              ...snapshots,
+              ...blockedSnapshots
+            ]);
           } catch (error) {
             result.failedSamples += 1;
             this.logger.warn({
@@ -153,6 +177,20 @@ export class MarketOrderbookRecorder {
     } finally {
       this.running = false;
     }
+  }
+
+  private isSampleFullyCoolingDown(market: MarketCatalogMarket, sample: { canonicalMarketId: string }): boolean {
+    const venues = [...new Set(market.venueMarkets
+      .filter((venueMarket) => venueMarket.canonicalMarketId === sample.canonicalMarketId)
+      .map((venueMarket) => normalizeVenue(venueMarket.venue)))];
+    return venues.length > 0 && venues.every((venue) => (this.venueCooldownUntil.get(venue) ?? 0) > Date.now());
+  }
+
+  private applyProviderCooldown(venue: string, reason: string): void {
+    if (!shouldCooldownProvider(reason)) {
+      return;
+    }
+    this.venueCooldownUntil.set(normalizeVenue(venue), Date.now() + this.config.quoteProviderCooldownMs);
   }
 }
 
@@ -210,6 +248,44 @@ const toSnapshotInput = (input: {
   }];
 };
 
+const toBlockedSnapshotInput = (input: {
+  canonicalEventId: string;
+  canonicalMarketId: string;
+  canonicalOutcomeId: string | null;
+  blocker: {
+    venue: string;
+    reason: string;
+    venueMarketId?: string | undefined;
+    venueOutcomeId?: string | undefined;
+    detailsCode?: string | undefined;
+  };
+  receivedAt: Date;
+}): VenueOrderbookSnapshotInput => ({
+  canonicalEventId: input.canonicalEventId,
+  canonicalMarketId: input.canonicalMarketId,
+  canonicalOutcomeId: input.canonicalOutcomeId,
+  venue: normalizeVenue(input.blocker.venue),
+  venueMarketId: input.blocker.venueMarketId ?? `${normalizeVenue(input.blocker.venue)}:unknown`,
+  venueOutcomeId: input.blocker.venueOutcomeId ?? null,
+  source: "REST",
+  quoteQuality: "DIAGNOSTIC_ONLY",
+  sourceTimestamp: input.receivedAt,
+  receivedAt: input.receivedAt,
+  bestBid: null,
+  bestAsk: null,
+  midpoint: null,
+  spread: null,
+  bidDepth: "0",
+  askDepth: "0",
+  bids: [],
+  asks: [],
+  blockers: [
+    normalizeBlockerReason(input.blocker.reason),
+    ...(input.blocker.detailsCode ? [input.blocker.detailsCode] : [])
+  ],
+  metadataVersion: "venue-orderbook-recorder-blocker-v1"
+});
+
 const normalizeLevels = (
   levels: readonly NormalizedQuoteLevel[],
   direction: "asc" | "desc"
@@ -257,9 +333,23 @@ const emptyResult = (): MarketOrderbookRecorderRunResult => ({
   sampledOutcomes: 0,
   insertedSnapshots: 0,
   failedSamples: 0,
+  skippedCooldownSamples: 0,
   deletedOldSnapshots: 0,
   deletedClosedMarketSnapshots: 0
 });
+
+const normalizeVenue = (venue: string): string =>
+  venue.trim().toUpperCase() === "PREDICT_FUN" ? "PREDICT" : venue.trim().toUpperCase();
+
+const shouldCooldownProvider = (reason: string): boolean =>
+  reason.includes("QUOTE_PROVIDER_HTTP_429") ||
+  reason.includes("QUOTE_PROVIDER_HTTP_401") ||
+  reason.includes("VENUE_OUTCOME_ID_MISSING");
+
+const normalizeBlockerReason = (reason: string): string =>
+  reason.includes("POLYMARKET_OFFICIAL_MARKET_CLOSED") || reason.includes("POLYMARKET_OFFICIAL_MARKET_NOT_ACCEPTING_ORDERS")
+    ? "closed_or_not_accepting_orders"
+    : reason;
 
 const parseBoundedInteger = (
   value: string | undefined,

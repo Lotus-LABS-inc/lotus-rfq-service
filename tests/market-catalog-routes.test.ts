@@ -163,6 +163,94 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
+  it("filters quote-ready markets and returns sanitized readiness fields", async () => {
+    const app = Fastify({ logger: false });
+    const repository = new FakeMarketCatalogRepository();
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "partial" as const,
+            quoteReadyVenueCount: 1,
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: [{
+              venue: "LIMITLESS",
+              reason: "QUOTE_PROVIDER_HTTP_429",
+              venueMarketId: "limitless-1"
+            }]
+          }];
+        }
+      }
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=10"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      count: 1,
+      markets: [{
+        quoteStatus: "partial",
+        quoteReadyVenueCount: 1,
+        lastQuoteAt: "2026-05-21T23:41:15.000Z",
+        quoteBlockers: [{
+          venue: "LIMITLESS",
+          reason: "QUOTE_PROVIDER_HTTP_429",
+          venueMarketId: "limitless-1"
+        }]
+      }]
+    });
+    expect(response.body).not.toContain("apiKey");
+    expect(response.body).not.toContain("privateKey");
+
+    await app.close();
+  });
+
+  it("hides markets with no quote-ready venue only when requested", async () => {
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: new FakeMarketCatalogRepository(),
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "unavailable" as const,
+            quoteReadyVenueCount: 0,
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: [{
+              venue: "POLYMARKET",
+              reason: "closed_or_not_accepting_orders",
+              venueMarketId: "poly-closed"
+            }]
+          }];
+        }
+      }
+    });
+
+    const filtered = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=10"
+    });
+    const unfiltered = await app.inject({
+      method: "GET",
+      url: "/markets?limit=10"
+    });
+
+    expect(filtered.statusCode).toBe(200);
+    expect(filtered.json()).toMatchObject({ count: 0, markets: [] });
+    expect(unfiltered.statusCode).toBe(200);
+    expect(unfiltered.json()).toMatchObject({
+      count: 1,
+      markets: [{ quoteStatus: "unavailable", quoteReadyVenueCount: 0 }]
+    });
+
+    await app.close();
+  });
+
   it("lists event-first market catalog while preserving child outcome markets", async () => {
     const app = Fastify({ logger: false });
     const repository = new FakeMarketCatalogRepository();

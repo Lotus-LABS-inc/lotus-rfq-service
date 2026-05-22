@@ -53,6 +53,7 @@ const envSchema = z
     MARKET_ORDERBOOK_RECORDER_MARKET_BATCH_SIZE: z.coerce.number().int().min(1).max(1000).default(100),
     MARKET_ORDERBOOK_RECORDER_RETENTION_HOURS: z.coerce.number().int().min(1).max(8760).default(720),
     MARKET_ORDERBOOK_RECORDER_LEVELS_PER_SIDE: z.coerce.number().int().min(1).max(50).default(25),
+    MARKET_ORDERBOOK_RECORDER_PROVIDER_COOLDOWN_MS: z.coerce.number().int().min(1000).max(3600000).default(30000),
     DEV_SIMULATION_PREVIEW_ENABLED: z.coerce.boolean().default(false),
     COMBO_RFQ_ENABLED: z.coerce.boolean().default(false),
     SOR_ENABLED: z.coerce.boolean().default(false),

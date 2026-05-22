@@ -1966,6 +1966,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   });
   await registerMarketCatalogRoutes(app, {
     marketCatalogRepository,
+    marketQuoteReadinessSource: venueOrderbookSnapshotRepository,
     marketDataViewService
   });
   await registerUserWalletRoutes(app, userAuthMiddleware, {

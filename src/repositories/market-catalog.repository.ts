@@ -101,6 +101,15 @@ export interface MarketCatalogMarket {
   buyCount: string | null;
   sellCount: string | null;
   venueMarkets: MarketCatalogVenueMarket[];
+  quoteStatus?: "live" | "partial" | "stale" | "unavailable" | undefined;
+  quoteReadyVenueCount?: number | undefined;
+  quoteBlockers?: Array<{
+    venue: string;
+    reason: string;
+    venueMarketId?: string | undefined;
+    venueOutcomeId?: string | undefined;
+  }> | undefined;
+  lastQuoteAt?: string | null | undefined;
   updatedAt: string;
 }
 

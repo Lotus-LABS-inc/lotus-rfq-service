@@ -1,12 +1,25 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import type { MarketCatalogRepository } from "../../repositories/market-catalog.repository.js";
+import type { MarketCatalogMarket, MarketCatalogRepository } from "../../repositories/market-catalog.repository.js";
+import type { MarketQuoteReadinessSnapshot } from "../../repositories/venue-orderbook-snapshot.repository.js";
 import type { LiveMarketDataViewService, MarketBatchQuoteResponse, MarketChartTimeframe } from "../../services/market-data-view.service.js";
 
 const listQuerySchema = z.object({
   category: z.string().min(1).optional(),
   search: z.string().min(1).optional(),
-  limit: z.coerce.number().int().positive().max(1000).optional()
+  limit: z.coerce.number().int().positive().max(1000).optional(),
+  quoteReadyOnly: z.preprocess((value) => {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (value === "true" || value === true) {
+      return true;
+    }
+    if (value === "false" || value === false) {
+      return false;
+    }
+    return value;
+  }, z.boolean()).optional()
 });
 
 const orderbookQuerySchema = z.object({
@@ -35,6 +48,12 @@ const VENUE_SUFFIX_PATTERN = /:(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION
 
 export interface MarketCatalogRouteDeps {
   marketCatalogRepository: Pick<MarketCatalogRepository, "listCategories" | "listMarkets" | "listEvents" | "getMarket" | "getEvent">;
+  marketQuoteReadinessSource?: {
+    listLatestMarketQuoteReadiness(input: {
+      canonicalMarketIds: readonly string[];
+      maxAgeMs?: number | undefined;
+    }): Promise<MarketQuoteReadinessSnapshot[]>;
+  } | undefined;
   marketDataViewService?: Pick<LiveMarketDataViewService, "getOrderbook" | "getChart"> & {
     getBatchQuotes?(input: { items: readonly { marketId: string; outcomeId: string; side?: "buy" | "sell"; amount?: string | number }[] }): Promise<MarketBatchQuoteResponse>;
   } | undefined;
@@ -63,11 +82,15 @@ export const registerMarketCatalogRoutes = async (
     const markets = await deps.marketCatalogRepository.listMarkets({
       ...(parsed.data.category !== undefined ? { category: parsed.data.category } : {}),
       ...(parsed.data.search !== undefined ? { search: parsed.data.search } : {}),
-      ...(parsed.data.limit !== undefined ? { limit: parsed.data.limit } : {})
+      ...(parsed.data.limit !== undefined ? { limit: parsed.data.quoteReadyOnly ? Math.min(parsed.data.limit * 3, 1000) : parsed.data.limit } : {})
     });
+    const enrichedMarkets = await enrichMarketsWithQuoteReadiness(markets, deps.marketQuoteReadinessSource);
+    const visibleMarkets = parsed.data.quoteReadyOnly
+      ? enrichedMarkets.filter(isQuoteReadyMarket).slice(0, parsed.data.limit ?? enrichedMarkets.length)
+      : enrichedMarkets;
     return reply.send({
-      markets,
-      count: markets.length
+      markets: visibleMarkets,
+      count: visibleMarkets.length
     });
   });
 
@@ -283,6 +306,67 @@ const resolveOutcomeLabel = (
   }
   return undefined;
 };
+
+const enrichMarketsWithQuoteReadiness = async (
+  markets: readonly MarketCatalogMarket[],
+  source: MarketCatalogRouteDeps["marketQuoteReadinessSource"]
+): Promise<MarketCatalogMarket[]> => {
+  if (!source || markets.length === 0) {
+    return [...markets];
+  }
+  const canonicalMarketIds = [...new Set(markets.flatMap((market) => market.canonicalMarketIds))];
+  const readiness = await source.listLatestMarketQuoteReadiness({ canonicalMarketIds });
+  const byCanonicalMarketId = new Map(readiness.map((item) => [item.canonicalMarketId, item]));
+  return markets.map((market) => {
+    const marketReadiness = market.canonicalMarketIds
+      .map((canonicalMarketId) => byCanonicalMarketId.get(canonicalMarketId))
+      .filter((item): item is MarketQuoteReadinessSnapshot => item !== undefined);
+    return {
+      ...market,
+      ...aggregateMarketQuoteReadiness(marketReadiness)
+    };
+  });
+};
+
+const aggregateMarketQuoteReadiness = (
+  readiness: readonly MarketQuoteReadinessSnapshot[]
+): Pick<MarketCatalogMarket, "quoteStatus" | "quoteReadyVenueCount" | "quoteBlockers" | "lastQuoteAt"> => {
+  if (readiness.length === 0) {
+    return {
+      quoteStatus: "unavailable",
+      quoteReadyVenueCount: 0,
+      quoteBlockers: [],
+      lastQuoteAt: null
+    };
+  }
+  const quoteReadyVenueCount = readiness.reduce((sum, item) => sum + item.quoteReadyVenueCount, 0);
+  return {
+    quoteStatus: pickMarketQuoteStatus(readiness),
+    quoteReadyVenueCount,
+    quoteBlockers: [...new Map(readiness
+      .flatMap((item) => item.quoteBlockers)
+      .map((blocker) => [`${blocker.venue}:${blocker.reason}:${blocker.venueMarketId ?? ""}:${blocker.venueOutcomeId ?? ""}`, blocker] as const)
+    ).values()],
+    lastQuoteAt: readiness
+      .map((item) => item.lastQuoteAt)
+      .filter((value): value is string => value !== null)
+      .sort()
+      .at(-1) ?? null
+  };
+};
+
+const pickMarketQuoteStatus = (
+  readiness: readonly MarketQuoteReadinessSnapshot[]
+): MarketCatalogMarket["quoteStatus"] => {
+  const statuses = new Set(readiness.map((item) => item.quoteStatus));
+  if (statuses.has("live")) return "live";
+  if (statuses.has("partial")) return "partial";
+  if (statuses.has("stale")) return "stale";
+  return "unavailable";
+};
+
+const isQuoteReadyMarket = (market: MarketCatalogMarket): boolean =>
+  (market.quoteReadyVenueCount ?? 0) > 0 && market.quoteStatus !== "unavailable";
 
 const resolveCatalogMarket = async (
   repository: Pick<MarketCatalogRepository, "getMarket">,

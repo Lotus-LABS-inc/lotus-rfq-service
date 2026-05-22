@@ -56,7 +56,8 @@ describe("MarketOrderbookRecorder", () => {
         intervalMs: 60_000,
         marketBatchSize: 10,
         retentionHours: 720,
-        levelsPerSide: 25
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
       }
     );
 
@@ -68,6 +69,7 @@ describe("MarketOrderbookRecorder", () => {
       sampledOutcomes: 2,
       insertedSnapshots: 2,
       failedSamples: 0,
+      skippedCooldownSamples: 0,
       deletedOldSnapshots: 2,
       deletedClosedMarketSnapshots: 3
     });
@@ -82,6 +84,64 @@ describe("MarketOrderbookRecorder", () => {
       bidDepth: "10",
       askDepth: "11"
     });
+  });
+
+  it("records quote blockers and cools down fully blocked venue samples", async () => {
+    const inserted: VenueOrderbookSnapshotInput[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [{
+          ...marketFixture("OPEN"),
+          venues: ["LIMITLESS"],
+          venueMarkets: marketFixture("OPEN").venueMarkets.map((venueMarket) => ({
+            ...venueMarket,
+            venue: "LIMITLESS"
+          }))
+        }]
+      },
+      {
+        getQuoteSnapshotReport: async () => ({
+          snapshots: [],
+          blocked: [{
+            venue: "LIMITLESS",
+            reason: "QUOTE_PROVIDER_HTTP_429",
+            venueMarketId: "limitless-1",
+            detailsCode: "Limitless_orderbook_request_failed_with_status_429."
+          }]
+        })
+      },
+      {
+        insertMany: async (snapshots) => {
+          inserted.push(...snapshots);
+          return snapshots.length;
+        },
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0
+        })
+      },
+      logger,
+      {
+        enabled: true,
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 60_000
+      }
+    );
+
+    const first = await recorder.runOnce();
+    const second = await recorder.runOnce();
+
+    expect(first.insertedSnapshots).toBe(1);
+    expect(inserted[0]).toMatchObject({
+      venue: "LIMITLESS",
+      venueMarketId: "limitless-1",
+      quoteQuality: "DIAGNOSTIC_ONLY",
+      blockers: ["QUOTE_PROVIDER_HTTP_429", "Limitless_orderbook_request_failed_with_status_429."]
+    });
+    expect(second.skippedCooldownSamples).toBe(2);
   });
 });
 
