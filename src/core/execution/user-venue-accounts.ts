@@ -721,15 +721,54 @@ export class UserVenueAccountService {
         continue;
       }
       if (venue === "OPINION") {
-        const ensured = await this.ensureAccount({ userId, venue: "OPINION" });
-        const enableTradingRequest = await this.maybeBuildOpinionEnableTradingRequest(userId, ensured.account);
+        let ensured: {
+          account: UserVenueAccount;
+          readinessBlockers: string[];
+          setupInstructions: string[];
+        };
+        let enableTradingRequest: UserVenueAccountSignatureRequest | null = null;
+        try {
+          ensured = await this.ensureAccount({ userId, venue: "OPINION" });
+          enableTradingRequest = await this.maybeBuildOpinionEnableTradingRequest(userId, ensured.account);
+        } catch (error) {
+          if (!isOpinionBuilderBatchSoftFailure(error)) {
+            throw error;
+          }
+          const wallet = await this.resolveRequiredTurnkeyEvmWallet(userId);
+          const existing = await this.repository.findAccount({ userId, venue: "OPINION" });
+          ensured = await this.ensureOpinionSafeAccount(userId, wallet, existing, {
+            venueAccountId: null,
+            venueAccountAddress: null,
+            venueAccountType: "SAFE",
+            eventType: existing ? "OPINION_BUILDER_SAFE_SETUP_DEGRADED" : "OPINION_BUILDER_SAFE_SETUP_PENDING"
+          });
+          await this.repository.appendAccountAuditEvent({
+            userId,
+            venueAccountBindingId: ensured.account.venueAccountBindingId,
+            eventType: "OPINION_BUILDER_SAFE_SETUP_DEGRADED",
+            payload: {
+              venue: "OPINION",
+              reasonCode: error.code,
+              status: ensured.account.status,
+              walletAddressMatches: equalsAddress(ensured.account.walletAddress, wallet.address)
+            }
+          });
+          ensured = {
+            account: ensured.account,
+            readinessBlockers: [
+              ...ensured.readinessBlockers,
+              error.code
+            ],
+            setupInstructions: ["Opinion account setup is temporarily unavailable. Other venue setup and Lotus wallet funding remain usable."]
+          };
+        }
         venueAccounts.push({
           venue,
           account: ensured.account,
           readinessBlockers: ensured.readinessBlockers,
           setupInstructions: enableTradingRequest
             ? ["Sign the Opinion enable-trading Safe transaction with the displayed Turnkey EVM wallet."]
-            : setupInstructionsForVenue(venue, ensured.account),
+            : ensured.setupInstructions,
           setupMode: enableTradingRequest ? "SIGNATURE_REQUIRED" : setupModeForVenue(venue, ensured.account)
         });
         if (enableTradingRequest) {
@@ -1823,6 +1862,14 @@ const safeOpinionBuilderFailureMessage = (error: unknown, fallback: string): str
   }
   return fallback;
 };
+
+const isOpinionBuilderBatchSoftFailure = (error: unknown): error is UserVenueAccountError =>
+  error instanceof UserVenueAccountError &&
+  (
+    error.code === "OPINION_BUILDER_ACCOUNT_NOT_CONFIGURED" ||
+    error.code === "OPINION_BUILDER_ACCOUNT_SETUP_FAILED" ||
+    error.code === "OPINION_ENABLE_TRADING_FAILED"
+  );
 
 const safeLimitlessPartnerAccountFailureDetails = (error: unknown): Record<string, unknown> => {
   const statusCode = readErrorNumberField(error, "statusCode");

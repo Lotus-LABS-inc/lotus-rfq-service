@@ -231,6 +231,20 @@ const opinionBuilderAccountClient = (overrides: Partial<{
   };
 };
 
+const regionBlockedOpinionBuilderAccountClient = (): OpinionBuilderAccountClient => ({
+  configured: () => true,
+  accountSetupEnabled: () => true,
+  createOrRecoverSafe: async () => {
+    throw new Error("API request failed: 403 restricted jurisdiction");
+  },
+  buildEnableTradingRequest: async () => {
+    throw new Error("must not build enable-trading when setup is blocked");
+  },
+  submitEnableTrading: async () => {
+    throw new Error("must not submit enable-trading when setup is blocked");
+  }
+});
+
 const limitlessServerWalletPartnerAccountClient = (): LimitlessPartnerAccountClient => ({
   configured: () => true,
   serverWalletDelegationEnabled: () => true,
@@ -435,6 +449,58 @@ describe("user venue account service", () => {
     expect(serialized).not.toContain("apiKey");
     expect(serialized).not.toContain("builder-apikey");
     expect(serialized).not.toContain("signature");
+  });
+
+  it("keeps setup-batch usable when Opinion builder setup is region blocked", async () => {
+    const repository = new InMemoryVenueAccountRepository();
+    const service = new UserVenueAccountService(
+      repository,
+      {
+        async resolveUserTurnkeyEvmFundingWallet() {
+          return evmWallet();
+        }
+      },
+      predictAccountClient(),
+      limitlessPartnerAccountDiscoveryClient(),
+      polymarketDepositWalletClient(),
+      regionBlockedOpinionBuilderAccountClient()
+    );
+
+    const prepared = await service.prepareAccountSetupBatch("user-1");
+    const opinion = prepared.venueAccounts.find((item) => item.venue === "OPINION");
+
+    expect(prepared.venueAccounts.map((item) => item.venue)).toEqual([
+      "POLYMARKET",
+      "OPINION",
+      "PREDICT_FUN",
+      "LIMITLESS",
+      "MYRIAD"
+    ]);
+    expect(opinion).toMatchObject({
+      setupMode: "MANUAL_LINK_REQUIRED",
+      account: {
+        venue: "OPINION",
+        venueAccountType: "SAFE",
+        status: "PENDING"
+      },
+      readinessBlockers: expect.arrayContaining([
+        "OPINION account is not active yet.",
+        "OPINION venue account id/address is not linked yet.",
+        "OPINION_BUILDER_ACCOUNT_SETUP_FAILED"
+      ]),
+      setupInstructions: ["Opinion account setup is temporarily unavailable. Other venue setup and Lotus wallet funding remain usable."]
+    });
+    expect(prepared.signatureRequests.some((request) => request.venue === "OPINION")).toBe(false);
+    expect(repository.auditEvents).toContainEqual(expect.objectContaining({
+      eventType: "OPINION_BUILDER_SAFE_SETUP_DEGRADED",
+      payload: expect.objectContaining({
+        venue: "OPINION",
+        reasonCode: "OPINION_BUILDER_ACCOUNT_SETUP_FAILED"
+      })
+    }));
+    const serialized = JSON.stringify(prepared);
+    expect(serialized).not.toContain("restricted jurisdiction");
+    expect(serialized).not.toContain("403");
   });
 
   it("completes Opinion enable-trading through complete-batch and rejects stale Safe hashes", async () => {
