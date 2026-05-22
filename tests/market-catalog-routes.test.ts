@@ -174,6 +174,7 @@ describe("market catalog routes", () => {
             canonicalMarketId: market.canonicalMarketIds[0]!,
             quoteStatus: "partial" as const,
             quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
             lastQuoteAt: "2026-05-21T23:41:15.000Z",
             quoteBlockers: [{
               venue: "LIMITLESS",
@@ -196,6 +197,7 @@ describe("market catalog routes", () => {
       markets: [{
         quoteStatus: "partial",
         quoteReadyVenueCount: 1,
+        quoteReadyVenues: ["POLYMARKET"],
         lastQuoteAt: "2026-05-21T23:41:15.000Z",
         quoteBlockers: [{
           venue: "LIMITLESS",
@@ -220,6 +222,7 @@ describe("market catalog routes", () => {
             canonicalMarketId: market.canonicalMarketIds[0]!,
             quoteStatus: "unavailable" as const,
             quoteReadyVenueCount: 0,
+            quoteReadyVenues: [],
             lastQuoteAt: "2026-05-21T23:41:15.000Z",
             quoteBlockers: [{
               venue: "POLYMARKET",
@@ -247,6 +250,73 @@ describe("market catalog routes", () => {
       count: 1,
       markets: [{ quoteStatus: "unavailable", quoteReadyVenueCount: 0 }]
     });
+
+    await app.close();
+  });
+
+  it("filters quote-ready markets by pair tri and strict-all coverage", async () => {
+    const pairMarket = {
+      ...market,
+      canonicalEventId: "22222222-2222-5222-8222-222222222222",
+      canonicalMarketIds: ["PAIR_MARKET"],
+      venues: ["POLYMARKET", "LIMITLESS"],
+      venueCount: 2,
+      venueMarketCount: 2
+    };
+    const triMarket = {
+      ...market,
+      canonicalEventId: "33333333-3333-5333-8333-333333333333",
+      canonicalMarketIds: ["TRI_MARKET"],
+      venues: ["POLYMARKET", "LIMITLESS", "PREDICT_FUN"],
+      venueCount: 3,
+      venueMarketCount: 3
+    };
+    const app = Fastify({ logger: false });
+    const repository = new FakeMarketCatalogRepository();
+    repository.listMarkets = async () => [market, pairMarket, triMarket];
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: []
+          }, {
+            canonicalMarketId: "PAIR_MARKET",
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 2,
+            quoteReadyVenues: ["POLYMARKET", "LIMITLESS"],
+            lastQuoteAt: "2026-05-21T23:41:16.000Z",
+            quoteBlockers: []
+          }, {
+            canonicalMarketId: "TRI_MARKET",
+            quoteStatus: "partial" as const,
+            quoteReadyVenueCount: 2,
+            quoteReadyVenues: ["POLYMARKET", "LIMITLESS"],
+            lastQuoteAt: "2026-05-21T23:41:17.000Z",
+            quoteBlockers: [{
+              venue: "PREDICT_FUN",
+              reason: "PREDICT_PROVIDER_AUTH_INVALID"
+            }]
+          }];
+        }
+      }
+    });
+
+    const pair = await app.inject({ method: "GET", url: "/markets?quoteReadyOnly=true&routeCoverage=pair&limit=10" });
+    const tri = await app.inject({ method: "GET", url: "/markets?quoteReadyOnly=true&routeCoverage=tri&limit=10" });
+    const strictAll = await app.inject({ method: "GET", url: "/markets?quoteReadyOnly=true&routeCoverage=strict_all&limit=10" });
+
+    expect(pair.statusCode).toBe(200);
+    expect(pair.json().markets.map((item: MarketCatalogMarket) => item.canonicalMarketIds[0])).toEqual(["PAIR_MARKET", "TRI_MARKET"]);
+    expect(tri.statusCode).toBe(200);
+    expect(tri.json()).toMatchObject({ count: 0, markets: [] });
+    expect(strictAll.statusCode).toBe(200);
+    expect(strictAll.json().markets.map((item: MarketCatalogMarket) => item.canonicalMarketIds[0])).toEqual(["PAIR_MARKET"]);
 
     await app.close();
   });

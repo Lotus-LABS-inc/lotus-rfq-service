@@ -33,6 +33,7 @@ export interface MarketQuoteReadinessSnapshot {
   canonicalMarketId: string;
   quoteStatus: "live" | "partial" | "stale" | "unavailable";
   quoteReadyVenueCount: number;
+  quoteReadyVenues: string[];
   quoteBlockers: Array<{
     venue: string;
     reason: string;
@@ -171,6 +172,7 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
       canonical_market_id: string;
       quote_status: string;
       quote_ready_venue_count: string;
+      quote_ready_venues: string[] | null;
       quote_blockers: unknown;
       last_quote_at: Date | null;
     }>(
@@ -203,6 +205,11 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
                     AND COALESCE(jsonb_array_length(blockers), 0) = 0
                     AND COALESCE(midpoint, best_bid, best_ask) IS NOT NULL
                 ) AS ready_venue_count,
+                array_agg(DISTINCT venue) FILTER (
+                  WHERE received_at >= now() - ($2::int * interval '1 millisecond')
+                    AND COALESCE(jsonb_array_length(blockers), 0) = 0
+                    AND COALESCE(midpoint, best_bid, best_ask) IS NOT NULL
+                ) AS ready_venues,
                 COUNT(DISTINCT venue) FILTER (
                   WHERE COALESCE(jsonb_array_length(blockers), 0) > 0
                 ) AS blocked_venue_count,
@@ -228,6 +235,7 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
                 ELSE 'unavailable'
               END AS quote_status,
               ready_venue_count::text AS quote_ready_venue_count,
+              COALESCE(ready_venues, '{}'::text[]) AS quote_ready_venues,
               COALESCE(quote_blockers, '[]'::jsonb) AS quote_blockers,
               last_quote_at
          FROM rolled`,
@@ -237,6 +245,7 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
       canonicalMarketId: row.canonical_market_id,
       quoteStatus: parseQuoteStatus(row.quote_status),
       quoteReadyVenueCount: Number(row.quote_ready_venue_count),
+      quoteReadyVenues: parseQuoteReadyVenues(row.quote_ready_venues),
       quoteBlockers: parseQuoteBlockers(row.quote_blockers),
       lastQuoteAt: row.last_quote_at?.toISOString() ?? null
     }));
@@ -284,6 +293,13 @@ const parseQuoteStatus = (value: string): MarketQuoteReadinessSnapshot["quoteSta
   value === "live" || value === "partial" || value === "stale" || value === "unavailable"
     ? value
     : "unavailable";
+
+const parseQuoteReadyVenues = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? [...new Set(value
+      .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      .map((item) => item.trim().toUpperCase()))]
+    : [];
 
 const parseQuoteBlockers = (value: unknown): MarketQuoteReadinessSnapshot["quoteBlockers"] => {
   if (!Array.isArray(value)) {

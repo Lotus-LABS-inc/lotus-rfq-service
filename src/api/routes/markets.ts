@@ -4,10 +4,13 @@ import type { MarketCatalogMarket, MarketCatalogRepository } from "../../reposit
 import type { MarketQuoteReadinessSnapshot } from "../../repositories/venue-orderbook-snapshot.repository.js";
 import type { LiveMarketDataViewService, MarketBatchQuoteResponse, MarketChartTimeframe } from "../../services/market-data-view.service.js";
 
+const routeCoverageSchema = z.enum(["all", "single", "pair", "tri", "strict_all"]);
+
 const listQuerySchema = z.object({
   category: z.string().min(1).optional(),
   search: z.string().min(1).optional(),
   limit: z.coerce.number().int().positive().max(1000).optional(),
+  routeCoverage: routeCoverageSchema.optional(),
   quoteReadyOnly: z.preprocess((value) => {
     if (value === undefined) {
       return undefined;
@@ -82,12 +85,13 @@ export const registerMarketCatalogRoutes = async (
     const markets = await deps.marketCatalogRepository.listMarkets({
       ...(parsed.data.category !== undefined ? { category: parsed.data.category } : {}),
       ...(parsed.data.search !== undefined ? { search: parsed.data.search } : {}),
-      ...(parsed.data.limit !== undefined ? { limit: parsed.data.quoteReadyOnly ? Math.min(parsed.data.limit * 3, 1000) : parsed.data.limit } : {})
+      ...(parsed.data.limit !== undefined ? { limit: shouldOverfetchMarkets(parsed.data) ? Math.min(parsed.data.limit * 3, 1000) : parsed.data.limit } : {})
     });
     const enrichedMarkets = await enrichMarketsWithQuoteReadiness(markets, deps.marketQuoteReadinessSource);
-    const visibleMarkets = parsed.data.quoteReadyOnly
-      ? enrichedMarkets.filter(isQuoteReadyMarket).slice(0, parsed.data.limit ?? enrichedMarkets.length)
-      : enrichedMarkets;
+    const visibleMarkets = enrichedMarkets
+      .filter((market) => !parsed.data.quoteReadyOnly || isQuoteReadyMarket(market))
+      .filter((market) => routeCoverageMatches(market, parsed.data.routeCoverage ?? "all"))
+      .slice(0, parsed.data.limit ?? enrichedMarkets.length);
     return reply.send({
       markets: visibleMarkets,
       count: visibleMarkets.length
@@ -330,19 +334,31 @@ const enrichMarketsWithQuoteReadiness = async (
 
 const aggregateMarketQuoteReadiness = (
   readiness: readonly MarketQuoteReadinessSnapshot[]
-): Pick<MarketCatalogMarket, "quoteStatus" | "quoteReadyVenueCount" | "quoteBlockers" | "lastQuoteAt"> => {
+): Pick<MarketCatalogMarket, "quoteStatus" | "quoteReadyVenueCount" | "quoteReadyVenues" | "quoteBlockers" | "lastQuoteAt"> => {
   if (readiness.length === 0) {
     return {
       quoteStatus: "unavailable",
       quoteReadyVenueCount: 0,
+      quoteReadyVenues: [],
       quoteBlockers: [],
       lastQuoteAt: null
     };
   }
-  const quoteReadyVenueCount = readiness.reduce((sum, item) => sum + item.quoteReadyVenueCount, 0);
+  const quoteReadyVenues = [...new Set(readiness
+    .flatMap((item) => item.quoteReadyVenues.length > 0
+      ? item.quoteReadyVenues
+      : item.quoteReadyVenueCount > 0
+        ? item.quoteBlockers.length > 0 ? [] : ["UNKNOWN"]
+        : [])
+    .filter((venue) => venue !== "UNKNOWN")
+    .map((venue) => venue.trim().toUpperCase()))].sort();
+  const quoteReadyVenueCount = quoteReadyVenues.length > 0
+    ? quoteReadyVenues.length
+    : readiness.reduce((sum, item) => sum + item.quoteReadyVenueCount, 0);
   return {
     quoteStatus: pickMarketQuoteStatus(readiness),
     quoteReadyVenueCount,
+    quoteReadyVenues,
     quoteBlockers: [...new Map(readiness
       .flatMap((item) => item.quoteBlockers)
       .map((blocker) => [`${blocker.venue}:${blocker.reason}:${blocker.venueMarketId ?? ""}:${blocker.venueOutcomeId ?? ""}`, blocker] as const)
@@ -367,6 +383,28 @@ const pickMarketQuoteStatus = (
 
 const isQuoteReadyMarket = (market: MarketCatalogMarket): boolean =>
   (market.quoteReadyVenueCount ?? 0) > 0 && market.quoteStatus !== "unavailable";
+
+const shouldOverfetchMarkets = (query: z.infer<typeof listQuerySchema>): boolean =>
+  query.quoteReadyOnly === true || (query.routeCoverage !== undefined && query.routeCoverage !== "all");
+
+const routeCoverageMatches = (
+  market: MarketCatalogMarket,
+  routeCoverage: z.infer<typeof routeCoverageSchema>
+): boolean => {
+  const readyVenueCount = market.quoteReadyVenueCount ?? 0;
+  switch (routeCoverage) {
+    case "single":
+      return readyVenueCount >= 1;
+    case "pair":
+      return readyVenueCount >= 2;
+    case "tri":
+      return readyVenueCount >= 3;
+    case "strict_all":
+      return market.venueCount > 0 && readyVenueCount >= market.venueCount;
+    case "all":
+      return true;
+  }
+};
 
 const resolveCatalogMarket = async (
   repository: Pick<MarketCatalogRepository, "getMarket">,

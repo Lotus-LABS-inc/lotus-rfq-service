@@ -103,6 +103,7 @@ export interface MarketCatalogMarket {
   venueMarkets: MarketCatalogVenueMarket[];
   quoteStatus?: "live" | "partial" | "stale" | "unavailable" | undefined;
   quoteReadyVenueCount?: number | undefined;
+  quoteReadyVenues?: string[] | undefined;
   quoteBlockers?: Array<{
     venue: string;
     reason: string;
