@@ -33,15 +33,19 @@ export interface MarketOrderbookRecorderRunResult {
   deletedClosedMarketSnapshots: number;
 }
 
+const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
+  intervalMs: 60_000,
+  marketBatchSize: 50,
+  retentionHours: 720,
+  levelsPerSide: 25,
+  quoteProviderCooldownMs: 30_000
+} as const;
+
 export const buildMarketOrderbookRecorderConfigFromEnv = (
   env: NodeJS.ProcessEnv
 ): MarketOrderbookRecorderConfig => ({
   enabled: env.MARKET_ORDERBOOK_RECORDER_ENABLED === "true",
-  intervalMs: parseBoundedInteger(env.MARKET_ORDERBOOK_RECORDER_INTERVAL_MS, 60_000, 10_000, 3_600_000),
-  marketBatchSize: parseBoundedInteger(env.MARKET_ORDERBOOK_RECORDER_MARKET_BATCH_SIZE, 100, 1, 1_000),
-  retentionHours: parseBoundedInteger(env.MARKET_ORDERBOOK_RECORDER_RETENTION_HOURS, 720, 1, 8_760),
-  levelsPerSide: parseBoundedInteger(env.MARKET_ORDERBOOK_RECORDER_LEVELS_PER_SIDE, 25, 1, 50),
-  quoteProviderCooldownMs: parseBoundedInteger(env.MARKET_ORDERBOOK_RECORDER_PROVIDER_COOLDOWN_MS, 30_000, 1_000, 3_600_000)
+  ...DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG
 });
 
 export class MarketOrderbookRecorder {
@@ -350,16 +354,3 @@ const normalizeBlockerReason = (reason: string): string =>
   reason.includes("POLYMARKET_OFFICIAL_MARKET_CLOSED") || reason.includes("POLYMARKET_OFFICIAL_MARKET_NOT_ACCEPTING_ORDERS")
     ? "closed_or_not_accepting_orders"
     : reason;
-
-const parseBoundedInteger = (
-  value: string | undefined,
-  fallback: number,
-  min: number,
-  max: number
-): number => {
-  const parsed = Number.parseInt(value ?? "", 10);
-  if (!Number.isFinite(parsed)) {
-    return fallback;
-  }
-  return Math.min(Math.max(parsed, min), max);
-};
