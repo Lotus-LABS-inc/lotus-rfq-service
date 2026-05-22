@@ -941,7 +941,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     new OpinionQuoteReader({
       client: new OpinionClient({
         baseUrl: process.env.OPINION_CLOB_BASE_URL ?? process.env.OPINION_OPENAPI_BASE_URL ?? "https://proxy.opinion.trade:8443/openapi",
-        apiKey: process.env.OPINION_API_KEY ?? process.env.OPINION_BUILDER_API_KEY ?? "",
+        apiKey: process.env.OPINION_API_KEY ?? "",
         requestTimeoutMs: parseOptionalNumber(process.env.OPINION_QUOTE_TIMEOUT_MS) ?? 8_000
       }),
       streamCache: opinionQuoteCache,

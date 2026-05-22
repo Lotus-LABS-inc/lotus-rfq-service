@@ -125,7 +125,7 @@ export const buildOpinionBuilderAccountClientFromEnv = (
 ): OpinionBuilderAccountClient => new OpinionBuilderAccountClient({
   enabled: env.OPINION_BUILDER_ACCOUNT_SETUP_ENABLED === "true",
   host: env.OPINION_BUILDER_BASE_URL ?? null,
-  builderApiKey: env.OPINION_BUILDER_API_KEY ?? env.OPINION_API_KEY ?? null,
+  builderApiKey: env.OPINION_BUILDER_API_KEY ?? null,
   rpcUrl: env.OPINION_BUILDER_RPC_URL ?? null,
   requestTimeoutMs: parsePositiveInt(env.OPINION_BUILDER_ACCOUNT_SETUP_TIMEOUT_MS) ?? OPINION_BUILDER_DEFAULT_TIMEOUT_MS
 });
