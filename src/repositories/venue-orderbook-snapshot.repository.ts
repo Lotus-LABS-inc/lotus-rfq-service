@@ -197,35 +197,61 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
                    venue_outcome_id,
                    received_at DESC
        ),
-       rolled AS (
+       annotated AS (
          SELECT canonical_market_id,
-                MAX(received_at) AS last_quote_at,
-                COUNT(DISTINCT venue) FILTER (
-                  WHERE received_at >= now() - ($2::int * interval '1 millisecond')
-                    AND COALESCE(jsonb_array_length(blockers), 0) = 0
-                    AND COALESCE(midpoint, best_bid, best_ask) IS NOT NULL
+                canonical_outcome_id,
+                CASE WHEN venue IN ('PREDICT', 'PREDICT_FUN') THEN 'PREDICT_FUN' ELSE venue END AS normalized_venue,
+                venue_market_id,
+                venue_outcome_id,
+                received_at,
+                best_bid,
+                best_ask,
+                midpoint,
+                blockers,
+                received_at >= now() - ($2::int * interval '1 millisecond')
+                  AND COALESCE(jsonb_array_length(blockers), 0) = 0
+                  AND COALESCE(midpoint, best_bid, best_ask) IS NOT NULL AS quote_ready,
+                COALESCE(jsonb_array_length(blockers), 0) > 0 AS quote_blocked
+           FROM latest
+       ),
+       ready_venues AS (
+         SELECT DISTINCT canonical_market_id,
+                normalized_venue
+           FROM annotated
+          WHERE quote_ready
+       ),
+       rolled AS (
+         SELECT annotated.canonical_market_id,
+                MAX(annotated.received_at) AS last_quote_at,
+                COUNT(DISTINCT annotated.normalized_venue) FILTER (
+                  WHERE annotated.quote_ready
                 ) AS ready_venue_count,
-                array_agg(DISTINCT venue) FILTER (
-                  WHERE received_at >= now() - ($2::int * interval '1 millisecond')
-                    AND COALESCE(jsonb_array_length(blockers), 0) = 0
-                    AND COALESCE(midpoint, best_bid, best_ask) IS NOT NULL
+                array_agg(DISTINCT annotated.normalized_venue) FILTER (
+                  WHERE annotated.quote_ready
                 ) AS ready_venues,
-                COUNT(DISTINCT venue) FILTER (
-                  WHERE COALESCE(jsonb_array_length(blockers), 0) > 0
+                COUNT(DISTINCT annotated.normalized_venue) FILTER (
+                  WHERE annotated.quote_blocked
+                    AND ready_venues.normalized_venue IS NULL
                 ) AS blocked_venue_count,
                 jsonb_agg(
                   DISTINCT jsonb_build_object(
-                    'venue', venue,
+                    'venue', annotated.normalized_venue,
                     'reason', COALESCE(
-                      NULLIF(array_to_string(ARRAY(SELECT jsonb_array_elements_text(blockers)), ','), ''),
+                      NULLIF(array_to_string(ARRAY(SELECT jsonb_array_elements_text(annotated.blockers)), ','), ''),
                       'QUOTE_SNAPSHOT_UNAVAILABLE'
                     ),
-                    'venueMarketId', venue_market_id,
-                    'venueOutcomeId', venue_outcome_id
+                    'venueMarketId', annotated.venue_market_id,
+                    'venueOutcomeId', annotated.venue_outcome_id
                   )
-                ) FILTER (WHERE COALESCE(jsonb_array_length(blockers), 0) > 0) AS quote_blockers
-           FROM latest
-          GROUP BY canonical_market_id
+                ) FILTER (
+                  WHERE annotated.quote_blocked
+                    AND ready_venues.normalized_venue IS NULL
+                ) AS quote_blockers
+           FROM annotated
+           LEFT JOIN ready_venues
+             ON ready_venues.canonical_market_id = annotated.canonical_market_id
+            AND ready_venues.normalized_venue = annotated.normalized_venue
+          GROUP BY annotated.canonical_market_id
        )
        SELECT canonical_market_id,
               CASE

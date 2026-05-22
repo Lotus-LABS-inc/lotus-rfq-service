@@ -233,7 +233,7 @@ const toSnapshotInput = (input: {
     canonicalEventId: input.canonicalEventId,
     canonicalMarketId: input.canonicalMarketId,
     canonicalOutcomeId: input.canonicalOutcomeId,
-    venue: input.snapshot.venue.toUpperCase(),
+    venue: normalizeVenue(input.snapshot.venue),
     venueMarketId: input.snapshot.venueMarketId,
     venueOutcomeId: input.snapshot.venueOutcomeId ?? null,
     source: input.snapshot.source,
@@ -342,8 +342,10 @@ const emptyResult = (): MarketOrderbookRecorderRunResult => ({
   deletedClosedMarketSnapshots: 0
 });
 
-const normalizeVenue = (venue: string): string =>
-  venue.trim().toUpperCase() === "PREDICT_FUN" ? "PREDICT" : venue.trim().toUpperCase();
+const normalizeVenue = (venue: string): string => {
+  const normalized = venue.trim().toUpperCase();
+  return normalized === "PREDICT" ? "PREDICT_FUN" : normalized;
+};
 
 const shouldCooldownProvider = (reason: string): boolean =>
   reason.includes("QUOTE_PROVIDER_HTTP_429") ||
