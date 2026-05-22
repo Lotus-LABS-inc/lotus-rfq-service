@@ -23,6 +23,7 @@ export interface MarketOrderbookRecorderLogger {
 }
 
 export interface MarketOrderbookRecorderRunResult {
+  marketOffset: number;
   scannedMarkets: number;
   skippedClosedMarkets: number;
   sampledOutcomes: number;
@@ -51,6 +52,7 @@ export const buildMarketOrderbookRecorderConfigFromEnv = (
 export class MarketOrderbookRecorder {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private marketOffset = 0;
   private readonly venueCooldownUntil = new Map<string, number>();
 
   public constructor(
@@ -102,8 +104,20 @@ export class MarketOrderbookRecorder {
       const cleanup = await this.snapshotRepository.cleanupSnapshots({
         olderThan: new Date(Date.now() - this.config.retentionHours * 60 * 60 * 1000)
       });
-      const markets = await this.marketCatalogRepository.listMarkets({ limit: this.config.marketBatchSize });
+      const marketOffset = this.marketOffset;
+      let markets = await this.marketCatalogRepository.listMarkets({
+        limit: this.config.marketBatchSize,
+        offset: marketOffset
+      });
+      if (markets.length === 0 && marketOffset > 0) {
+        this.marketOffset = 0;
+        markets = await this.marketCatalogRepository.listMarkets({ limit: this.config.marketBatchSize, offset: 0 });
+      }
+      this.marketOffset = markets.length < this.config.marketBatchSize
+        ? 0
+        : this.marketOffset + this.config.marketBatchSize;
       const result: MarketOrderbookRecorderRunResult = {
+        marketOffset,
         scannedMarkets: markets.length,
         skippedClosedMarkets: 0,
         sampledOutcomes: 0,
@@ -332,6 +346,7 @@ const decimal = (value: string | number | null | undefined): InstanceType<typeof
 };
 
 const emptyResult = (): MarketOrderbookRecorderRunResult => ({
+  marketOffset: 0,
   scannedMarkets: 0,
   skippedClosedMarkets: 0,
   sampledOutcomes: 0,

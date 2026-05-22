@@ -30,6 +30,7 @@ export interface MarketCatalogFilter {
   category?: string;
   search?: string;
   limit?: number;
+  offset?: number;
   includeUnapproved?: boolean;
 }
 
@@ -253,6 +254,7 @@ export class MarketCatalogRepository {
 
   public async listMarkets(filter: MarketCatalogFilter = {}): Promise<MarketCatalogMarket[]> {
     const limit = clampLimit(filter.limit);
+    const offset = clampOffset(filter.offset);
     const conditions: string[] = [];
     const params: unknown[] = [];
     if (!filter.includeUnapproved) {
@@ -280,6 +282,8 @@ export class MarketCatalogRepository {
     }
     params.push(limit);
     const limitParam = `$${params.length}`;
+    params.push(offset);
+    const offsetParam = `$${params.length}`;
     const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
     const result = await this.pool.query<MarketRow>(
       `SELECT
@@ -319,7 +323,8 @@ export class MarketCatalogRepository {
                  ce.canonical_category ASC,
                  COALESCE(ce.expires_at, ce.resolves_at, ce.updated_at) DESC,
                  ce.title ASC
-        LIMIT ${limitParam}`,
+        LIMIT ${limitParam}
+        OFFSET ${offsetParam}`,
       params
     );
     return this.hydrateMarkets(result.rows);
@@ -1216,6 +1221,13 @@ const clampLimit = (value: number | undefined): number => {
     return DEFAULT_LIMIT;
   }
   return Math.max(1, Math.min(MAX_LIMIT, Math.floor(value!)));
+};
+
+const clampOffset = (value: number | undefined): number => {
+  if (!Number.isFinite(value ?? NaN)) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(value!));
 };
 
 const marketLookupCandidates = (marketId: string): string[] => {
