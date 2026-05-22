@@ -3387,6 +3387,19 @@ describe("Funding v0 domain", () => {
         configured: true
       });
 
+      if (venue === "OPINION") {
+        expect(getOpinionFundingReadinessConfigFromEnv({
+          OPINION_OPENAPI_BASE_URL: "https://openapi.opinion.trade/openapi",
+          OPINION_OPS_FUNDING_BALANCE_API_KEY: "opinion-openapi-token"
+        } as NodeJS.ProcessEnv)).toMatchObject({
+          enabled: true,
+          mode: "LIVE_READ",
+          balanceUrl: "https://openapi.opinion.trade/openapi/user/balance?chain_id=56",
+          authMode: "NONE",
+          configured: true
+        });
+      }
+
       const balanceClient = new StubFundingBalanceReadClient();
       const checker = new ConfigurableVenueFundingReadinessChecker(venue, balanceClient, {
         mode: "STUB",

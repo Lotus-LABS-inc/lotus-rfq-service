@@ -205,13 +205,14 @@ export const getFundingReadinessConfigFromEnv = (
 ): OperatorFundingReadinessConfig => {
   const prefix = envPrefix(venue);
   const configuredMode = env[`${prefix}_FUNDING_READINESS_MODE`]?.toUpperCase();
+  const defaultBalanceUrl = defaultOpinionFundingBalanceUrl(venue, env);
   const mode: FundingReadinessMode =
     configuredMode === "STUB" || configuredMode === "LIVE_READ" || configuredMode === "DISABLED"
       ? configuredMode
-      : env[`${prefix}_FUNDING_READINESS_ENABLED`] === "true"
+      : env[`${prefix}_FUNDING_READINESS_ENABLED`] === "true" || Boolean(defaultBalanceUrl)
         ? "LIVE_READ"
         : "DISABLED";
-  const balanceUrl = env[`${prefix}_FUNDING_BALANCE_URL`]?.trim() || null;
+  const balanceUrl = env[`${prefix}_FUNDING_BALANCE_URL`]?.trim() || defaultBalanceUrl;
   const balanceUrlValid = isValidHttpUrl(balanceUrl);
   const authMode = env[`${prefix}_FUNDING_READ_AUTH_MODE`] === "BEARER" ? "BEARER" : "NONE";
   const timeoutMs = Number.parseInt(env[`${prefix}_FUNDING_READ_TIMEOUT_MS`] ?? "5000", 10);
@@ -229,6 +230,17 @@ export const getFundingReadinessConfigFromEnv = (
     redactionPolicy: "SERVER_SAFE_DEFAULT",
     configured: mode === "STUB" || (mode === "LIVE_READ" && balanceUrlValid)
   };
+};
+
+const defaultOpinionFundingBalanceUrl = (
+  venue: FundingVenue,
+  env: NodeJS.ProcessEnv
+): string | null => {
+  if (venue !== "OPINION" || !opinionFundingBalanceApiKey(env)) {
+    return null;
+  }
+  const baseUrl = env.OPINION_OPENAPI_BASE_URL?.trim() || "https://openapi.opinion.trade/openapi";
+  return `${baseUrl.replace(/\/+$/, "")}/user/balance?chain_id=56`;
 };
 
 const stripVenue = (config: OperatorFundingReadinessConfig): Omit<OperatorFundingReadinessConfig, "venue"> => ({
@@ -486,6 +498,57 @@ export class DisabledLimitlessFundingBalanceReadClient extends DisabledFundingBa
   }
 }
 
+class OpinionOpenApiFundingBalanceReadClient implements FundingBalanceReadClient {
+  public constructor(
+    private readonly env: NodeJS.ProcessEnv,
+    private readonly fetchImpl: typeof fetch = fetch
+  ) {}
+
+  public async fetchUsableUsdcBalance(): Promise<{ usableBalance: string; raw?: Record<string, unknown> }> {
+    const apiKey = opinionFundingBalanceApiKey(this.env);
+    if (!apiKey) {
+      throw new Error("Opinion funding balance API key is not configured.");
+    }
+    const baseUrl = this.env.OPINION_OPENAPI_BASE_URL?.trim() || "https://openapi.opinion.trade/openapi";
+    const url = new URL("user/balance", `${baseUrl.replace(/\/+$/, "")}/`);
+    url.searchParams.set("chain_id", "56");
+    const timeoutMs = Number.parseInt(this.env.OPINION_FUNDING_READ_TIMEOUT_MS ?? "5000", 10);
+    const response = await this.fetchImpl(url, {
+      headers: { apikey: apiKey },
+      signal: AbortSignal.timeout(Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 5_000)
+    });
+    const raw = await response.json() as unknown;
+    if (!response.ok) {
+      throw new Error(`Opinion funding balance read returned HTTP ${response.status}.`);
+    }
+    const usableBalance = readDotPath(raw, "result.balances.0.availableBalance");
+    if (typeof usableBalance !== "string" && typeof usableBalance !== "number") {
+      throw new Error("Opinion funding balance response did not contain availableBalance.");
+    }
+    return {
+      usableBalance: String(usableBalance),
+      raw: { source: "OPINION_OPENAPI_BALANCE" }
+    };
+  }
+}
+
+const readDotPath = (raw: unknown, path: string): unknown =>
+  path.split(".").reduce<unknown>((current, part) => {
+    if (Array.isArray(current)) {
+      const index = Number.parseInt(part, 10);
+      return Number.isInteger(index) && index >= 0 ? current[index] : undefined;
+    }
+    if (!current || typeof current !== "object") {
+      return undefined;
+    }
+    return (current as Record<string, unknown>)[part];
+  }, raw);
+
+const opinionFundingBalanceApiKey = (env: NodeJS.ProcessEnv): string | null =>
+  env.OPINION_OPS_FUNDING_BALANCE_API_KEY?.trim() ||
+  env.OPINION_API_KEY?.trim() ||
+  null;
+
 export class HttpFundingBalanceReadClient implements FundingBalanceReadClient {
   public constructor(
     private readonly venue: FundingVenue,
@@ -573,13 +636,15 @@ const buildCheckerFromEnv = (
   env: NodeJS.ProcessEnv
 ): VenueFundingReadinessChecker => {
   const config = getFundingReadinessConfigFromEnv(venue, env);
-  const client = config.mode === "LIVE_READ"
-    ? new HttpFundingBalanceReadClient(venue, {
+  const client = config.mode === "LIVE_READ" && venue === "OPINION" && opinionFundingBalanceApiKey(env)
+    ? new OpinionOpenApiFundingBalanceReadClient(env)
+    : config.mode === "LIVE_READ"
+      ? new HttpFundingBalanceReadClient(venue, {
       balanceUrl: config.balanceUrl ?? undefined,
       timeoutMs: config.timeoutMs,
       authMode: config.authMode,
       apiKey: env[`${envPrefix(venue)}_FUNDING_READ_API_KEY`]
     })
-    : new DisabledFundingBalanceReadClient(venue);
+      : new DisabledFundingBalanceReadClient(venue);
   return new ConfigurableVenueFundingReadinessChecker(venue, client, { ...config, env });
 };

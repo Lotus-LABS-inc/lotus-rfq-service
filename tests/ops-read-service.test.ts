@@ -231,6 +231,41 @@ describe("ops read service", () => {
     expectNoSecrets(response.body);
   });
 
+  it("uses safe Opinion balance defaults when only the server-side API key is configured", async () => {
+    const fetchImpl: typeof fetch = vi.fn(async (input, init) => {
+      expect(String(input)).toContain("https://openapi.opinion.trade/openapi/user/balance?chain_id=56");
+      expect(init?.headers instanceof Headers ? init.headers.get("apikey") : null).toBe("opinion-openapi-token");
+      return new Response(JSON.stringify({
+        result: {
+          balances: [{ availableBalance: "4.125" }]
+        }
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    });
+    const app = await buildOpsReadServer({
+      env: {
+        NODE_ENV: "production",
+        OPINION_OPENAPI_BASE_URL: "https://openapi.opinion.trade/openapi",
+        OPINION_OPS_FUNDING_BALANCE_MODE: "DIRECT_HTTP",
+        OPINION_OPS_FUNDING_BALANCE_API_KEY: "opinion-openapi-token"
+      } as NodeJS.ProcessEnv,
+      fetchImpl
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/lotus/opinion/funding-balance?userId=user-1&fundingIntentId=funding-1&routeLegId=leg-1",
+      headers: { authorization: "Bearer opinion-openapi-token" }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ usableBalance: "4.125" });
+    expectNoSecrets(response.body);
+  });
+
   it("selects Opinion multi-chain direct balance paths from the route destination chain", async () => {
     const requestedUrls: string[] = [];
     const fetchImpl: typeof fetch = vi.fn(async (input) => {

@@ -219,7 +219,7 @@ const resolveDirectFundingBalancePath = (
   mode: string
 ): string | undefined => {
   if (mode !== "MULTI_DIRECT_HTTP") {
-    return env[`${venue}_OPS_FUNDING_BALANCE_PATH`]?.trim();
+    return env[`${venue}_OPS_FUNDING_BALANCE_PATH`]?.trim() || defaultDirectFundingBalancePath(venue);
   }
 
   const destinationChain = normalizeChainEnvKey(input.destinationChain);
@@ -235,6 +235,11 @@ const resolveDirectFundingBalancePath = (
 
   return undefined;
 };
+
+const defaultDirectFundingBalancePath = (
+  venue: Exclude<FundingVenue, "POLYMARKET">
+): string | undefined =>
+  venue === "OPINION" ? "user/balance?chain_id=56" : undefined;
 
 const encodeErc20BalanceOfCall = (walletAddress: string): string =>
   `0x70a08231${walletAddress.trim().toLowerCase().replace(/^0x/, "").padStart(64, "0")}`;
@@ -270,7 +275,7 @@ const buildDirectFundingBalanceHeaders = (
   pathWithSearch: string
 ): Headers => {
   const headers = new Headers();
-  const authMode = `${env[`${venue}_OPS_FUNDING_BALANCE_AUTH_MODE`] ?? "NONE"}`.trim().toUpperCase();
+  const authMode = directFundingBalanceAuthMode(venue, env);
   if (authMode === "BEARER") {
     const apiKey = env[`${venue}_OPS_FUNDING_BALANCE_API_KEY`]?.trim();
     if (!apiKey) {
@@ -283,7 +288,7 @@ const buildDirectFundingBalanceHeaders = (
     if (!apiKey) {
       throw new OpsFundingBalanceNotConfiguredError(`${venue} funding balance API key is not configured.`);
     }
-    headers.set(env[`${venue}_OPS_FUNDING_BALANCE_API_KEY_HEADER`]?.trim() || "x-api-key", apiKey);
+    headers.set(directFundingBalanceApiKeyHeader(venue, env), apiKey);
   }
   if (authMode === "HMAC") {
     const apiKey = env[`${venue}_OPS_FUNDING_BALANCE_API_KEY`]?.trim();
@@ -306,6 +311,35 @@ const buildDirectFundingBalanceHeaders = (
   }
   return headers;
 };
+
+const directFundingBalanceAuthMode = (
+  venue: Exclude<FundingVenue, "POLYMARKET">,
+  env: NodeJS.ProcessEnv
+): string => {
+  const configured = env[`${venue}_OPS_FUNDING_BALANCE_AUTH_MODE`]?.trim().toUpperCase();
+  if (configured) {
+    return configured;
+  }
+  return venue === "OPINION" && env.OPINION_OPS_FUNDING_BALANCE_API_KEY?.trim() ? "API_KEY" : "NONE";
+};
+
+const directFundingBalanceApiKeyHeader = (
+  venue: Exclude<FundingVenue, "POLYMARKET">,
+  env: NodeJS.ProcessEnv
+): string => {
+  const configured = env[`${venue}_OPS_FUNDING_BALANCE_API_KEY_HEADER`]?.trim();
+  if (configured) {
+    return configured;
+  }
+  return venue === "OPINION" ? "apikey" : "x-api-key";
+};
+
+const directFundingBalanceResponseField = (
+  venue: Exclude<FundingVenue, "POLYMARKET">,
+  env: NodeJS.ProcessEnv
+): string | undefined =>
+  env[`${venue}_OPS_FUNDING_BALANCE_RESPONSE_FIELD`]?.trim() ||
+  (venue === "OPINION" ? "result.balances.0.availableBalance" : undefined);
 
 const readDirectHttpFundingBalance = async (
   venue: Exclude<FundingVenue, "POLYMARKET">,
@@ -352,7 +386,7 @@ const readDirectHttpFundingBalance = async (
     return fundingBalanceOutputFromUsableBalance(
       normalizeDirectBalance(
         await response.json(),
-        env[`${venue}_OPS_FUNDING_BALANCE_RESPONSE_FIELD`]
+        directFundingBalanceResponseField(venue, env)
       )
     );
   } catch (error) {
@@ -529,7 +563,7 @@ export const buildOpsReadServer = async (deps: OpsReadServerDeps = {}): Promise<
       });
     }
 
-    if (!authorizeOpsRead(request, env[`${venue}_FUNDING_READ_API_KEY`], env.NODE_ENV)) {
+    if (!authorizeOpsRead(request, fundingReadApiKey(venue, env), env.NODE_ENV)) {
       return reply.status(401).send({
         code: "UNAUTHORIZED",
         message: `${venue} funding balance read is not authorized.`
@@ -645,6 +679,9 @@ export const buildOpsReadServer = async (deps: OpsReadServerDeps = {}): Promise<
 
   return app;
 };
+
+const fundingReadApiKey = (venue: FundingVenue, env: NodeJS.ProcessEnv): string | undefined =>
+  env[`${venue}_FUNDING_READ_API_KEY`] ?? (venue === "OPINION" ? env.OPINION_OPS_FUNDING_BALANCE_API_KEY : undefined);
 
 export const startOpsReadService = async (): Promise<OpsReadRuntime> => {
   loadDotenvFile();
