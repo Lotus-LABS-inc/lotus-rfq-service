@@ -95,6 +95,7 @@
     "report:crypto:prod-readiness": "tsx scripts/reports/report-crypto-prod-readiness.ts",
     "report:crypto:final-canary-package": "tsx scripts/reports/report-crypto-final-canary-package.ts",
     "report:execution-system:v0": "tsx scripts/reports/report-execution-system-v0.ts",
+    "report:env:audit": "tsx scripts/reports/report-env-audit.ts",
     "report:latency:baseline": "tsx scripts/reports/report-latency-baseline.ts",
     "report:beta-readiness": "tsx scripts/reports/report-beta-readiness.ts",
     "report:monetization:shadow": "tsx scripts/reports/report-monetization-shadow.ts",
