@@ -3,9 +3,11 @@ import { z } from "zod";
 import type { RedisClient } from "../db/redis.js";
 import { wsConnectionsActive } from "../observability/metrics.js";
 
+const TOPIC_PATTERN = /^(rfq:[^:]+|execution:(user|quote|portfolio):[A-Za-z0-9_.-]+|execution:positions:[A-Za-z0-9_.-]+:[a-f0-9]{24}:[a-f0-9]{24}|notifications:user:[A-Za-z0-9_.-]+|markets:orderbook:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+)$/;
+
 const SUBSCRIPTION_MESSAGE_SCHEMA = z.object({
   action: z.enum(["subscribe", "unsubscribe"]),
-  topic: z.string().regex(/^(rfq:[^:]+|execution:(user|quote|portfolio):[A-Za-z0-9_.-]+|execution:positions:[A-Za-z0-9_.-]+:[a-f0-9]{24}:[a-f0-9]{24}|notifications:user:[A-Za-z0-9_.-]+)$/)
+  topic: z.string().regex(TOPIC_PATTERN)
 });
 
 const BROADCAST_EVENT_SCHEMA = z.object({
@@ -19,9 +21,11 @@ const BROADCAST_EVENT_SCHEMA = z.object({
     "EXECUTION_PORTFOLIO_UPDATE",
     "EXECUTION_READINESS_UPDATE",
     "EXECUTION_BALANCE_UPDATE",
-    "USER_NOTIFICATION"
+    "USER_NOTIFICATION",
+    "MARKET_ORDERBOOK_UPDATE",
+    "MARKET_QUOTE_UPDATE"
   ]),
-  topic: z.string().regex(/^(rfq:[^:]+|execution:(user|quote|portfolio):[A-Za-z0-9_.-]+|execution:positions:[A-Za-z0-9_.-]+:[a-f0-9]{24}:[a-f0-9]{24}|notifications:user:[A-Za-z0-9_.-]+)$/),
+  topic: z.string().regex(TOPIC_PATTERN),
   emittedAt: z.string().datetime(),
   payload: z.record(z.string(), z.unknown())
 });

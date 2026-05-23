@@ -10,9 +10,11 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "dev:ops-read": "tsx src/ops-read-service.ts",
+    "dev:orderbook-stream-service": "tsx src/orderbook-stream-service.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/src/index.js",
     "start:ops-read": "node dist/src/ops-read-service.js",
+    "start:orderbook-stream-service": "node dist/src/orderbook-stream-service.js",
     "start:polymarket-execution-relay": "node dist/src/polymarket-execution-relay.js",
     "start:predictfun-execution-relay": "node dist/src/predictfun-execution-relay.js",
     "test": "vitest run",

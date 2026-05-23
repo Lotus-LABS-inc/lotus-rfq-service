@@ -90,6 +90,16 @@ export interface VenueQuoteSnapshotReader {
   getQuoteSnapshot(input: VenueQuoteSnapshotReaderInput): Promise<NormalizedVenueQuoteSnapshot | null>;
 }
 
+export interface HotVenueQuoteSnapshotStore {
+  touch(input: { canonicalMarketId: string; canonicalOutcomeId?: string | undefined }): void;
+  put?(snapshot: NormalizedVenueQuoteSnapshot): void;
+  get(input: {
+    venue: string;
+    venueMarketId: string;
+    venueOutcomeId?: string | undefined;
+  }): Promise<NormalizedVenueQuoteSnapshot | null>;
+}
+
 export interface VenueQuoteMapping {
   venue: string;
   venueMarketId: string;
@@ -193,7 +203,8 @@ export class CompositeVenueQuoteSource {
   public constructor(
     readers: readonly VenueQuoteSnapshotReader[],
     private readonly mappingResolver: VenueQuoteMappingResolver,
-    private readonly now: () => Date = () => new Date()
+    private readonly now: () => Date = () => new Date(),
+    private readonly hotSnapshotStore?: HotVenueQuoteSnapshotStore | undefined
   ) {
     this.readerByVenue = new Map(readers.flatMap((reader) => {
       const venue = reader.venue.toUpperCase();
@@ -294,6 +305,10 @@ export class CompositeVenueQuoteSource {
     side: "buy" | "sell";
     quantity: number;
   }): Promise<VenueQuoteSnapshotReport> {
+    this.hotSnapshotStore?.touch({
+      canonicalMarketId: input.canonicalMarketId,
+      ...(input.canonicalOutcomeId ? { canonicalOutcomeId: input.canonicalOutcomeId } : {})
+    });
     const readiness = await withLatencyStage("quote_source_mapping_lookup", {
       canonicalMarketId: input.canonicalMarketId
     }, () => this.loadMappingReadiness(input));
@@ -337,6 +352,20 @@ export class CompositeVenueQuoteSource {
             }
           };
         }
+        const hotSnapshot = await this.hotSnapshotStore?.get({
+          venue: mapping.venue,
+          venueMarketId: mapping.venueMarketId,
+          ...(mapping.venueOutcomeId ? { venueOutcomeId: mapping.venueOutcomeId } : {})
+        });
+        if (hotSnapshot) {
+          recordLatencyDuration("venue_quote_fetch", performance.now() - startedAt, {
+            canonicalMarketId: input.canonicalMarketId,
+            venue: mapping.venue,
+            external: false,
+            cache: "hit"
+          });
+          return { snapshot: hotSnapshot, blocker: null };
+        }
         const snapshot = await reader.getQuoteSnapshot({
           canonicalMarketId: input.canonicalMarketId,
           ...(input.canonicalOutcomeId ? { canonicalOutcomeId: input.canonicalOutcomeId } : {}),
@@ -367,6 +396,7 @@ export class CompositeVenueQuoteSource {
           venue: mapping.venue,
           external: true
         });
+        this.hotSnapshotStore?.put?.(snapshot);
         return { snapshot, blocker: null };
       } catch (error) {
         const classified = classifyQuoteReaderError(error);

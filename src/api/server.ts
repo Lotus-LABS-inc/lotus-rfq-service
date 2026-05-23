@@ -350,6 +350,7 @@ import {
 import { PgNotificationRepository } from "../repositories/notification.repository.js";
 import { MarketCatalogRepository, SharedCoreQuoteMappingRepository } from "../repositories/market-catalog.repository.js";
 import { LiveMarketDataViewService } from "../services/market-data-view.service.js";
+import { HotQuoteSnapshotService } from "../services/hot-quote-snapshot.service.js";
 import { LimitlessMarketChartSource } from "../services/limitless-market-chart-source.js";
 import {
   buildMarketOrderbookRecorderConfigFromEnv,
@@ -897,6 +898,14 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const predictQuoteCache = new QuoteSnapshotCache();
   const opinionQuoteCache = new QuoteSnapshotCache();
   const myriadQuoteCache = new QuoteSnapshotCache();
+  const hotQuoteMemoryCache = new QuoteSnapshotCache();
+  const venueOrderbookSnapshotRepository = new VenueOrderbookSnapshotRepository(dependencies.pgPool);
+  const hotQuoteSnapshots = new HotQuoteSnapshotService({
+    memoryCache: hotQuoteMemoryCache,
+    redis: dependencies.redisClient,
+    dbFallback: venueOrderbookSnapshotRepository,
+    logger: dependencies.logger
+  });
   const polymarketClobHost = process.env.POLYMARKET_CLOB_HOST ?? process.env.POLY_CLOB_HOST ?? "https://clob.polymarket.com";
   const polymarketGammaBaseUrl = process.env.POLYMARKET_GAMMA_BASE_URL ?? "https://gamma-api.polymarket.com";
   const limitlessBaseUrl = process.env.LIMITLESS_BASE_URL ?? "https://api.limitless.exchange";
@@ -956,9 +965,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       }),
       streamCache: myriadQuoteCache
     })
-  ], new SharedCoreVenueQuoteMappingResolver(new SharedCoreQuoteMappingRepository(dependencies.pgPool)));
+  ], new SharedCoreVenueQuoteMappingResolver(new SharedCoreQuoteMappingRepository(dependencies.pgPool)), () => new Date(), hotQuoteSnapshots);
   const historicalMarketStateRepository = new HistoricalMarketStateRepository(dependencies.pgPool);
-  const venueOrderbookSnapshotRepository = new VenueOrderbookSnapshotRepository(dependencies.pgPool);
   const limitlessMarketChartSource = new LimitlessMarketChartSource({
     client: new LimitlessHistoricalClient({
       baseUrl: limitlessBaseUrl,

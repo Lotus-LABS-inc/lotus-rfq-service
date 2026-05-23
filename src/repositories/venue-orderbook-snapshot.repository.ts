@@ -1,4 +1,5 @@
 import type { Pool, QueryResultRow } from "pg";
+import type { NormalizedQuoteLevel, NormalizedVenueQuoteSnapshot } from "../core/sor/quote-snapshot.js";
 import type { MarketChartTimeframe, MarketHistoricalChartSource } from "../services/market-data-view.service.js";
 
 export interface VenueOrderbookSnapshotInput {
@@ -157,6 +158,75 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
         ? [{ timestamp: row.timestamp, venue: row.venue, value: row.value }]
         : [])
       .sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime());
+  }
+
+  public async getLatestSnapshot(input: {
+    venue: string;
+    venueMarketId: string;
+    venueOutcomeId?: string | undefined;
+    maxAgeMs: number;
+  }): Promise<NormalizedVenueQuoteSnapshot | null> {
+    const result = await this.pool.query<QueryResultRow & {
+      canonical_market_id: string;
+      venue: string;
+      venue_market_id: string;
+      venue_outcome_id: string | null;
+      source: "STREAM" | "REST";
+      quote_quality: string;
+      source_timestamp: Date | null;
+      received_at: Date;
+      bids: unknown;
+      asks: unknown;
+      blockers: unknown;
+    }>(
+      `SELECT canonical_market_id,
+              venue,
+              venue_market_id,
+              venue_outcome_id,
+              source,
+              quote_quality,
+              source_timestamp,
+              received_at,
+              bids,
+              asks,
+              blockers
+         FROM venue_orderbook_snapshots
+        WHERE venue = $1
+          AND venue_market_id = $2
+          AND ($3::text IS NULL OR venue_outcome_id = $3)
+          AND received_at >= now() - ($4::int * interval '1 millisecond')
+        ORDER BY received_at DESC
+        LIMIT 1`,
+      [
+        input.venue.toUpperCase(),
+        input.venueMarketId,
+        input.venueOutcomeId ?? null,
+        Math.max(1, Math.floor(input.maxAgeMs))
+      ]
+    );
+    const row = result.rows[0];
+    if (!row) {
+      return null;
+    }
+    return {
+      venue: row.venue.toUpperCase(),
+      venueMarketId: row.venue_market_id,
+      ...(row.venue_outcome_id ? { venueOutcomeId: row.venue_outcome_id } : {}),
+      source: row.source,
+      quoteQuality: parseQuoteQuality(row.quote_quality),
+      sourceTimestamp: row.source_timestamp,
+      receivedAt: row.received_at,
+      bids: parseLevels(row.bids),
+      asks: parseLevels(row.asks),
+      missingFactors: [],
+      blockers: parseStringArray(row.blockers),
+      streamResynced: true,
+      metadata: {
+        venueMarketId: row.venue_market_id,
+        venueOutcomeId: row.venue_outcome_id,
+        hotSnapshotSource: "db_last_good"
+      }
+    };
   }
 
   public async listLatestMarketQuoteReadiness(input: {
@@ -332,6 +402,30 @@ const parseQuoteStatus = (value: string): MarketQuoteReadinessSnapshot["quoteSta
   value === "live" || value === "partial" || value === "stale" || value === "unavailable"
     ? value
     : "unavailable";
+
+const parseQuoteQuality = (value: string): NormalizedVenueQuoteSnapshot["quoteQuality"] =>
+  value === "FULL_DEPTH_STREAM" ||
+  value === "FULL_DEPTH_REST" ||
+  value === "TOP_OF_BOOK_REST" ||
+  value === "INDICATIVE_DEPTH" ||
+  value === "DIAGNOSTIC_ONLY"
+    ? value
+    : "DIAGNOSTIC_ONLY";
+
+const parseLevels = (value: unknown): readonly NormalizedQuoteLevel[] =>
+  Array.isArray(value)
+    ? value.flatMap((item) => {
+      const record = typeof item === "object" && item !== null ? item as Record<string, unknown> : {};
+      const price = typeof record.price === "string" ? record.price : null;
+      const size = typeof record.size === "string" ? record.size : null;
+      return price && size ? [{ price, size }] : [];
+    })
+    : [];
+
+const parseStringArray = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((item) => item.trim())
+    : [];
 
 const parseQuoteReadyVenues = (value: unknown): string[] =>
   Array.isArray(value)

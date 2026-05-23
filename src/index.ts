@@ -103,10 +103,15 @@ const defaultModules: BootstrapModules = {
 };
 
 export const POLYMARKET_RELAY_SERVICE_MODE = "polymarket-execution-relay";
+export const ORDERBOOK_STREAM_SERVICE_MODE = "orderbook-stream-service";
 
 export const shouldRunPolymarketRelayEntrypoint = (
   env: NodeJS.ProcessEnv = process.env
 ): boolean => env.LOTUS_SERVICE_MODE === POLYMARKET_RELAY_SERVICE_MODE;
+
+export const shouldRunOrderbookStreamEntrypoint = (
+  env: NodeJS.ProcessEnv = process.env
+): boolean => env.LOTUS_SERVICE_MODE === ORDERBOOK_STREAM_SERVICE_MODE;
 
 const sleep = (durationMs: number): Promise<void> =>
   new Promise((resolve) => {
@@ -325,6 +330,12 @@ export const run = async (): Promise<void> => {
     if (shouldRunPolymarketRelayEntrypoint()) {
       const { runPolymarketExecutionRelay } = await import("./polymarket-execution-relay.js");
       await runPolymarketExecutionRelay();
+      return;
+    }
+
+    if (shouldRunOrderbookStreamEntrypoint()) {
+      const { runOrderbookStreamService } = await import("./orderbook-stream-service.js");
+      await runOrderbookStreamService();
       return;
     }
 

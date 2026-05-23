@@ -45,6 +45,9 @@ export interface MarketOrderbookVenue {
   venueMarketId: string;
   venueOutcomeId: string | null;
   source: "STREAM" | "REST";
+  hotSnapshotSource?: "memory" | "redis" | "db_last_good" | undefined;
+  freshnessMs?: number | undefined;
+  snapshotStatus?: "live" | "stale" | "blocked" | "resyncing" | undefined;
   quoteQuality: string;
   sourceTimestamp: string | null;
   receivedAt: string;
@@ -111,6 +114,8 @@ export interface MarketBatchQuoteVenueEvidence {
   liquidity: string;
   spread: string | null;
   source: "STREAM" | "REST";
+  hotSnapshotSource?: "memory" | "redis" | "db_last_good" | undefined;
+  snapshotStatus?: "live" | "stale" | "blocked" | "resyncing" | undefined;
   quoteQuality: string;
   freshnessMs: number | null;
   blockers: string[];
@@ -456,6 +461,9 @@ const sanitizeVenueOrderbook = (snapshot: NormalizedVenueQuoteSnapshot, depth: n
     venueMarketId: snapshot.venueMarketId,
     venueOutcomeId: snapshot.venueOutcomeId ?? null,
     source: snapshot.source,
+    ...hotSnapshotSourceField(snapshot.metadata),
+    freshnessMs: snapshotFreshnessMs(snapshot, new Date()),
+    snapshotStatus: snapshotStatus(snapshot, new Date()),
     quoteQuality: snapshot.quoteQuality,
     sourceTimestamp: snapshot.sourceTimestamp?.toISOString() ?? null,
     receivedAt: snapshot.receivedAt.toISOString(),
@@ -469,6 +477,34 @@ const sanitizeVenueOrderbook = (snapshot: NormalizedVenueQuoteSnapshot, depth: n
     bids,
     asks
   };
+};
+
+const snapshotFreshnessMs = (snapshot: NormalizedVenueQuoteSnapshot, now: Date): number => {
+  const basis = snapshot.sourceTimestamp ?? snapshot.receivedAt;
+  return Math.max(0, now.getTime() - basis.getTime());
+};
+
+const snapshotStatus = (
+  snapshot: NormalizedVenueQuoteSnapshot,
+  now: Date
+): "live" | "stale" | "blocked" | "resyncing" => {
+  if (snapshot.streamResynced === false) {
+    return "resyncing";
+  }
+  if ((snapshot.blockers ?? []).length > 0) {
+    return "blocked";
+  }
+  const thresholdMs = snapshot.source === "STREAM" ? 1_000 : 1_500;
+  return snapshotFreshnessMs(snapshot, now) <= thresholdMs ? "live" : "stale";
+};
+
+const hotSnapshotSourceField = (
+  metadata: Readonly<Record<string, unknown>> | undefined
+): { hotSnapshotSource?: "memory" | "redis" | "db_last_good" | undefined } => {
+  const value = metadata?.hotSnapshotSource;
+  return value === "memory" || value === "redis" || value === "db_last_good"
+    ? { hotSnapshotSource: value }
+    : {};
 };
 
 const buildBatchQuoteItem = (input: {
@@ -503,6 +539,8 @@ const buildBatchQuoteItem = (input: {
       liquidity,
       spread: spreadFromBest(bid, ask),
       source: snapshot.source,
+      ...hotSnapshotSourceField(snapshot.metadata),
+      snapshotStatus: snapshotStatus(snapshot, input.now),
       quoteQuality: snapshot.quoteQuality,
       freshnessMs,
       blockers: [...new Set([...(snapshot.blockers ?? []), ...(snapshot.missingFactors ?? [])])]
