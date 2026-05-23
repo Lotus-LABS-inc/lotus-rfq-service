@@ -90,13 +90,20 @@ export const runOrderbookStreamService = async (): Promise<OrderbookStreamRuntim
 };
 
 const buildConnectors = (logger: ReturnType<typeof createLogger>) => {
-  const connectors: VenueOrderbookStreamConnector[] = [
-    createPolymarketOrderbookConnector({ logger }),
-    new LimitlessSdkOrderbookConnector({ logger })
-  ];
+  const connectors: VenueOrderbookStreamConnector[] = [];
+  const addConnector = (venue: string, create: () => VenueOrderbookStreamConnector): void => {
+    try {
+      connectors.push(create());
+    } catch (error) {
+      logger.warn({ err: error, venue }, "Venue orderbook websocket connector disabled after startup initialization failure.");
+    }
+  };
+
+  addConnector("POLYMARKET", () => createPolymarketOrderbookConnector({ logger }));
+  addConnector("LIMITLESS", () => new LimitlessSdkOrderbookConnector({ logger }));
 
   const predictUrl = process.env.PREDICT_WS_MAINNET_URL?.trim() || DEFAULT_PREDICT_WS_MAINNET_URL;
-  connectors.push(new PredictWebSocketOrderbookConnector({
+  addConnector("PREDICT_FUN", () => new PredictWebSocketOrderbookConnector({
     url: predictUrl,
     environment: "mainnet",
     logger
@@ -106,7 +113,7 @@ const buildConnectors = (logger: ReturnType<typeof createLogger>) => {
   const opinionWalletAddress = process.env.OPINION_STREAM_WALLET_ADDRESS?.trim() ||
     process.env.OPINION_BUILDER_WALLET_ADDRESS?.trim();
   if (opinionApiKey && opinionWalletAddress) {
-    connectors.push(new OpinionSdkOrderbookConnector({
+    addConnector("OPINION", () => new OpinionSdkOrderbookConnector({
       apiKey: opinionApiKey,
       walletAddress: opinionWalletAddress,
       ...(process.env.OPINION_WS_URL?.trim() ? { wsUrl: process.env.OPINION_WS_URL.trim() } : {}),

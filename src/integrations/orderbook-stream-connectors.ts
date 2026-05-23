@@ -175,7 +175,7 @@ export class LimitlessSdkOrderbookConnector implements VenueOrderbookStreamConne
     wsUrl?: string | undefined;
   } = {}) {
     this.client = new LimitlessWebSocketClient({ url: config.wsUrl ?? LIMITLESS_DEFAULT_WS_URL, autoReconnect: true });
-    const onMethod = this.client.on as unknown as (event: string, handler: (payload: unknown) => void) => void;
+    const onMethod = this.client.on.bind(this.client) as unknown as (event: string, handler: (payload: unknown) => void) => void;
     onMethod("orderbookUpdate", (payload) => this.onPayload(payload));
     onMethod("orderbook", (payload) => this.onPayload(payload));
   }
