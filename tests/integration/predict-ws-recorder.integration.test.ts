@@ -20,9 +20,9 @@ class FakeSocket {
 
   public close(): void {}
 
-  public emit(type: "open" | "message", data?: unknown): void {
+  public emit(type: "open" | "message" | "error", data?: unknown): void {
     for (const listener of this.listeners.get(type) ?? []) {
-      listener(type === "message" ? { data } : {});
+      listener(type === "message" ? { data } : data ?? {});
     }
   }
 }
@@ -66,5 +66,27 @@ describe("Predict websocket recorder integration", () => {
       expect(recordSnapshot).toHaveBeenCalledTimes(1);
     });
     expect(socket.sent[0]).toContain("market:m-1:orderbook");
+  });
+
+  it("does not leave websocket open failures as unhandled rejections", async () => {
+    const socket = new FakeSocket();
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const wsClient = new PredictWsClient({
+      environment: "mainnet",
+      url: "wss://example.invalid",
+      webSocketFactory: () => socket,
+      logger
+    });
+
+    wsClient.connect();
+    socket.emit("error", new Error("connect failed"));
+    await expect(wsClient.waitForOpen()).rejects.toThrow("connect failed");
+
+    await vi.waitFor(() => {
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ environment: "mainnet" }),
+        "Predict websocket open failed."
+      );
+    });
   });
 });
