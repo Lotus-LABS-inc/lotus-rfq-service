@@ -670,7 +670,7 @@ const buildCheckerFromEnv = (
   env: NodeJS.ProcessEnv
 ): VenueFundingReadinessChecker => {
   const config = getFundingReadinessConfigFromEnv(venue, env);
-  const client = config.mode === "LIVE_READ" && venue === "OPINION" && opinionFundingBalanceApiKey(env)
+  const client = config.mode === "LIVE_READ" && venue === "OPINION" && !config.balanceUrl && opinionFundingBalanceApiKey(env)
     ? new OpinionOpenApiFundingBalanceReadClient(env)
     : config.mode === "LIVE_READ"
       ? new HttpFundingBalanceReadClient(venue, {

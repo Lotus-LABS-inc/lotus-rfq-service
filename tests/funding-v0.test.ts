@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   aggregateFundingStatus,
@@ -32,6 +32,7 @@ import {
 import { buildVenueCapabilityMatrix, getVenueFundingDestinationMode } from "../src/core/funding/venue-capabilities.js";
 import {
   ConfigurableVenueFundingReadinessChecker,
+  buildFundingVenueReadinessCheckersFromEnv,
   getFundingReadinessConfigFromEnv,
   getLimitlessFundingReadinessConfigFromEnv,
   getMyriadFundingReadinessConfigFromEnv,
@@ -79,6 +80,10 @@ import {
 } from "../src/integrations/lifi/lifi-client.js";
 import type { UserWallet } from "../src/core/funding/user-wallets.js";
 import { zeroFees, type ExecutionRequestV0 } from "../src/execution-system/types.js";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const env = {
   POLYMARKET_FUNDING_DESTINATION_ADDRESS: "0x1111111111111111111111111111111111111111",
@@ -3616,6 +3621,83 @@ describe("Funding v0 domain", () => {
       await expect(checker.check({ userId: "user-1", intent, leg, reconciliations: [] }))
         .resolves.toMatchObject({ status: "UNKNOWN", readyToTrade: false, reason: `${venue}_BALANCE_RESPONSE_MALFORMED` });
     }
+  });
+
+  it("routes Opinion live funding reads through configured ops service even when SDK keys exist", async () => {
+    let observedUrl = "";
+    let observedAuthorization = "";
+    vi.stubGlobal("fetch", async (url: RequestInfo | URL, init?: RequestInit) => {
+      observedUrl = String(url);
+      observedAuthorization = new Headers(init?.headers).get("authorization") ?? "";
+      return new Response(JSON.stringify({ usableBalance: "25" }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    });
+
+    const checkers = buildFundingVenueReadinessCheckersFromEnv({
+      OPINION_FUNDING_READINESS_MODE: "LIVE_READ",
+      OPINION_FUNDING_BALANCE_URL: "https://ops.example.com/lotus/opinion/funding-balance",
+      OPINION_FUNDING_READ_AUTH_MODE: "BEARER",
+      OPINION_FUNDING_READ_API_KEY: "internal-read-token",
+      OPINION_API_KEY: "opinion-provider-key-that-must-not-be-used-here",
+      OPINION_OPS_FUNDING_BALANCE_API_KEY: "opinion-provider-key-that-must-not-be-used-here"
+    } as NodeJS.ProcessEnv);
+    const checker = checkers.get("OPINION");
+    expect(checker).toBeDefined();
+
+    const intent = {
+      fundingIntentId: "opinion-intent-ops-read",
+      userId: "user-1",
+      sourceChain: "SOLANA",
+      sourceToken: "USDC",
+      sourceAmount: "25",
+      sourceWalletAddress: "wallet",
+      status: "ROUTES_SUBMITTED" as const,
+      idempotencyKey: "opinion-ops-read-idem",
+      aggregateRouteQuote: {},
+      totalEstimatedFees: "0",
+      totalEstimatedTimeSeconds: null,
+      auditEventIds: [],
+      createdAt: "2026-04-25T00:00:00.000Z",
+      updatedAt: "2026-04-25T00:00:00.000Z"
+    };
+    const leg = {
+      routeLegId: "opinion-leg-ops-read",
+      fundingIntentId: intent.fundingIntentId,
+      fundingTargetId: "opinion-target-ops-read",
+      targetVenue: "OPINION" as FundingVenue,
+      sourceChain: "SOLANA",
+      sourceToken: "USDC",
+      sourceAmount: "25",
+      destinationChain: "BNB",
+      destinationToken: "USDT",
+      destinationAmountEstimate: "25",
+      routeProvider: "LIFI" as const,
+      routeQuote: {} as FundingRouteQuote,
+      txHashes: ["0x2222222222222222222222222222222222222222222222222222222222222222"],
+      providerStatus: {},
+      bridgeStatus: "DONE",
+      destinationStatus: "CONFIRMED",
+      venueCreditStatus: "PENDING",
+      status: "LEG_VENUE_CREDIT_PENDING" as const,
+      errorReason: null,
+      createdAt: "2026-04-25T00:00:00.000Z",
+      updatedAt: "2026-04-25T00:00:00.000Z"
+    };
+
+    const result = await checker!.check({ userId: "user-1", intent, leg, reconciliations: [] });
+
+    expect(result).toMatchObject({
+      venue: "OPINION",
+      status: "READY_TO_TRADE",
+      readyToTrade: true,
+      reason: "OPINION_USABLE_BALANCE_CONFIRMED"
+    });
+    expect(observedUrl).toContain("https://ops.example.com/lotus/opinion/funding-balance");
+    expect(observedUrl).toContain("targetVenue=OPINION");
+    expect(observedUrl).not.toContain("openapi.opinion.trade");
+    expect(observedAuthorization).toBe("Bearer internal-read-token");
   });
 
   it("validates Polymarket operator readiness config and redacts live-read evidence", async () => {
