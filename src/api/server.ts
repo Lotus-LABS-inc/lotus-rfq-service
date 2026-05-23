@@ -270,6 +270,7 @@ import {
   ScopeAuthorityLaneResolver,
   SettlementVerificationService,
   SignedTradeBundleService,
+  ExecutionOrderOrchestratorV1,
   TestExecutionAdapter,
   alwaysHealthyPreflightDeps
 } from "../execution-system/index.js";
@@ -343,6 +344,7 @@ import {
 } from "../execution-system/execution-status-watcher.js";
 import {
   PgExecutionQuoteRepository,
+  PgExecutionOrderRepository,
   PgSignedTradePositionRecorder,
   PgSignedTradeExecutionStatusRepository,
   PgVerifiedPositionRepository
@@ -531,6 +533,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const userWalletRepository = new UserWalletRepository(dependencies.pgPool);
   const userVenueAccountRepository = new UserVenueAccountRepository(dependencies.pgPool);
   const executionQuoteRepository = new PgExecutionQuoteRepository(dependencies.pgPool);
+  const executionOrderRepository = new PgExecutionOrderRepository(dependencies.pgPool);
   const verifiedPositionRepository = new PgVerifiedPositionRepository(dependencies.pgPool);
   const signedTradeExecutionStatusRepository = new PgSignedTradeExecutionStatusRepository(dependencies.pgPool);
   const signedTradePositionRecorder = new PgSignedTradePositionRecorder(dependencies.pgPool);
@@ -1407,8 +1410,44 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           ...input,
           fundingIntentId: "signed-bundle-readiness",
           routeLegId: "signed-bundle-readiness"
-        })
+      })
     }
+  );
+  const liveExecutionCandidateProvider = {
+    getCandidates: async (input: {
+      userId: string;
+      side: "buy" | "sell";
+      marketId: string;
+      outcomeId: string;
+      amount: string;
+      venues?: readonly string[] | undefined;
+    }) => {
+      const quantity = Number(input.amount);
+      const report = Number.isFinite(quantity) && quantity > 0
+        ? await venueQuoteSource.getCalculatedSnapshotReport({
+            canonicalMarketId: input.marketId,
+            canonicalOutcomeId: input.outcomeId,
+            side: input.side,
+            quantity
+          })
+        : { snapshots: [], blocked: [] };
+      return buildLiveExecutionCandidatesResponse({
+        marketId: input.marketId,
+        outcomeId: input.outcomeId,
+        amount: input.amount,
+        snapshots: report.snapshots,
+        snapshotBlockers: report.blocked,
+        readiness: await executionVenuesAdminService.listVenues(),
+        ...(input.venues ? { venues: input.venues } : {})
+      });
+    }
+  };
+  const executionOrderService = new ExecutionOrderOrchestratorV1(
+    executionOrderRepository,
+    executableRouteService,
+    sellQuoteService,
+    signedTradeBundleService,
+    liveExecutionCandidateProvider
   );
   if (dependencies.executionSystemSandboxEnabled) {
     const laneGate = new ApprovedLaneExecutionGate(new ScopeAuthorityLaneResolver(executionScopeAuthorities));
@@ -1559,8 +1598,17 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     buildExecutionStatusWatcherConfigFromEnv(process.env)
   );
   executionStatusWatcher.start();
+  const executionOrderRefreshTimer = setInterval(() => {
+    void executionOrderService.refreshOpenOrders({ limit: 50 }).catch((error) => {
+      dependencies.logger.warn({
+        errorName: error instanceof Error ? error.name : "UnknownError"
+      }, "Execution order V1 refresher tick failed.");
+    });
+  }, 5_000);
+  executionOrderRefreshTimer.unref?.();
   app.addHook("onClose", async () => {
     executionStatusWatcher.stop();
+    clearInterval(executionOrderRefreshTimer);
   });
   await registerHealthRoute(app);
   await registerMetricsRoute(app);
@@ -1956,30 +2004,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     executableRouteService,
     sellQuoteService,
     signedTradeBundleService,
+    executionOrderService,
     positionRepository: verifiedPositionRepository,
     executionStatusRepository: signedTradeExecutionStatusRepository,
-    liveCandidateProvider: {
-      getCandidates: async (input) => {
-        const quantity = Number(input.amount);
-        const report = Number.isFinite(quantity) && quantity > 0
-          ? await venueQuoteSource.getCalculatedSnapshotReport({
-              canonicalMarketId: input.marketId,
-              canonicalOutcomeId: input.outcomeId,
-              side: input.side,
-              quantity
-            })
-          : { snapshots: [], blocked: [] };
-        return buildLiveExecutionCandidatesResponse({
-          marketId: input.marketId,
-          outcomeId: input.outcomeId,
-          amount: input.amount,
-          snapshots: report.snapshots,
-          snapshotBlockers: report.blocked,
-          readiness: await executionVenuesAdminService.listVenues(),
-          ...(input.venues ? { venues: input.venues } : {})
-        });
-      }
-    }
+    liveCandidateProvider: liveExecutionCandidateProvider
   });
   await registerMarketCatalogRoutes(app, {
     marketCatalogRepository,

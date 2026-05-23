@@ -20,6 +20,11 @@ import type { CalculatedVenueQuoteSnapshot, VenueQuoteSnapshotBlocker } from "..
 import type { SettlementStatusV0 } from "../../execution-system/types.js";
 import type { ExecutionVenueReadinessSummary } from "../admin/execution-venues-admin-service.js";
 import { withLatencyStage } from "../../observability/latency.js";
+import {
+  EXECUTION_ORCHESTRATOR_V1_ENABLED,
+  ExecutionOrderError,
+  type ExecutionOrderOrchestratorV1
+} from "../../execution-system/execution-order-orchestrator.js";
 
 const candidateSchema = z.object({
   venue: z.string().min(1),
@@ -112,6 +117,23 @@ const openOrdersQuerySchema = z.object({
   cursor: z.string().datetime().optional()
 });
 
+const executionOrderPreviewSchema = z.object({
+  marketId: z.string().min(1),
+  outcomeId: z.string().min(1),
+  side: z.enum(["buy", "sell"]),
+  amount: z.string().regex(/^\d+(\.\d+)?$/),
+  venuePreference: z.enum(["BEST_ROUTE", "POLYMARKET", "LIMITLESS", "PREDICT_FUN", "OPINION"])
+});
+
+const executionOrderSignaturesSchema = z.object({
+  signedPayloads: z.array(z.object({
+    legIndex: z.number().int().nonnegative(),
+    venue: z.string().min(1),
+    requestType: z.string().min(1).optional(),
+    signedPayload: z.record(z.string(), z.unknown())
+  }))
+});
+
 const portfolioTimeSeriesQuerySchema = z.object({
   range: z.enum(["1D", "7D", "30D", "90D", "ALL"]).optional()
 });
@@ -143,6 +165,7 @@ export interface ExecutionRouteDeps {
       cursor?: string | undefined;
     }): Promise<SignedTradeExecutionStatus[]>;
   } | undefined;
+  executionOrderService?: ExecutionOrderOrchestratorV1 | undefined;
 }
 
 export interface LiveExecutionCandidateProvider {
@@ -191,6 +214,113 @@ export const registerExecutionRoutes = async (
   authMiddleware: preHandlerHookHandler,
   deps: ExecutionRouteDeps
 ): Promise<void> => {
+  app.post("/execution/orders/preview", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!EXECUTION_ORCHESTRATOR_V1_ENABLED || !deps.executionOrderService) {
+      return reply.status(501).send({
+        code: "EXECUTION_ORCHESTRATOR_V1_NOT_CONFIGURED",
+        message: "Execution order orchestration is not configured on this backend."
+      });
+    }
+    const parsed = executionOrderPreviewSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "Execution order preview request validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    try {
+      const result = await withLatencyStage("execution_order_preview", {
+        endpoint: "POST /execution/orders/preview",
+        canonicalMarketId: parsed.data.marketId,
+        routeType: parsed.data.venuePreference
+      }, () => deps.executionOrderService!.preview({
+        userId: request.user.userId,
+        marketId: parsed.data.marketId,
+        outcomeId: parsed.data.outcomeId,
+        side: parsed.data.side,
+        amount: parsed.data.amount,
+        venuePreference: parsed.data.venuePreference
+      }));
+      return reply.status(201).send(result);
+    } catch (error) {
+      return sendExecutionOrderError(reply, error);
+    }
+  });
+
+  app.post("/execution/orders/:orderId/place", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!EXECUTION_ORCHESTRATOR_V1_ENABLED || !deps.executionOrderService) {
+      return reply.status(501).send({
+        code: "EXECUTION_ORCHESTRATOR_V1_NOT_CONFIGURED",
+        message: "Execution order orchestration is not configured on this backend."
+      });
+    }
+    const { orderId } = request.params as { orderId: string };
+    try {
+      const result = await withLatencyStage("execution_order_place", {
+        endpoint: "POST /execution/orders/:orderId/place"
+      }, () => deps.executionOrderService!.place({
+        userId: request.user.userId,
+        orderId
+      }));
+      return reply.status(result.state === "SUBMITTED" || result.state === "FILLED" ? 202 : 200).send(result);
+    } catch (error) {
+      return sendExecutionOrderError(reply, error);
+    }
+  });
+
+  app.post("/execution/orders/:orderId/signatures", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!EXECUTION_ORCHESTRATOR_V1_ENABLED || !deps.executionOrderService) {
+      return reply.status(501).send({
+        code: "EXECUTION_ORCHESTRATOR_V1_NOT_CONFIGURED",
+        message: "Execution order orchestration is not configured on this backend."
+      });
+    }
+    const parsed = executionOrderSignaturesSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "Execution order signature request validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    const { orderId } = request.params as { orderId: string };
+    try {
+      const result = await withLatencyStage("execution_order_signature_submit", {
+        endpoint: "POST /execution/orders/:orderId/signatures",
+        external: true
+      }, () => deps.executionOrderService!.submitSignatures({
+        userId: request.user.userId,
+        orderId,
+        signedPayloads: parsed.data.signedPayloads
+      }));
+      return reply.status(result.state === "SUBMITTED" || result.state === "FILLED" ? 202 : 200).send(result);
+    } catch (error) {
+      return sendExecutionOrderError(reply, error);
+    }
+  });
+
+  app.get("/execution/orders/:orderId/status", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!EXECUTION_ORCHESTRATOR_V1_ENABLED || !deps.executionOrderService) {
+      return reply.status(501).send({
+        code: "EXECUTION_ORCHESTRATOR_V1_NOT_CONFIGURED",
+        message: "Execution order orchestration is not configured on this backend."
+      });
+    }
+    const { orderId } = request.params as { orderId: string };
+    try {
+      const result = await withLatencyStage("execution_order_status", {
+        endpoint: "GET /execution/orders/:orderId/status"
+      }, () => deps.executionOrderService!.status({
+        userId: request.user.userId,
+        orderId
+      }));
+      return reply.send(result);
+    } catch (error) {
+      return sendExecutionOrderError(reply, error);
+    }
+  });
+
   app.post("/execution/live-candidates", { preHandler: authMiddleware }, async (request, reply) => {
     if (!deps.liveCandidateProvider) {
       return reply.status(501).send({
@@ -934,6 +1064,16 @@ const sendExecutionDataUnavailable = (
     code: "EXECUTION_ACCOUNT_DATA_UNAVAILABLE",
     message: "Execution account data is temporarily unavailable. Please try again shortly."
   });
+};
+
+const sendExecutionOrderError = (reply: FastifyReply, error: unknown) => {
+  if (error instanceof ExecutionOrderError) {
+    return reply.status(error.statusCode).send({ code: error.code, message: error.message });
+  }
+  if (error instanceof SignedTradeBundleError) {
+    return reply.status(error.statusCode).send({ code: error.code, message: error.message });
+  }
+  throw error;
 };
 
 const markPositions = async (input: {

@@ -4,8 +4,63 @@ import {
   buildLiveExecutionCandidatesResponse,
   registerExecutionRoutes
 } from "../src/api/routes/execution.js";
+import {
+  ExecutionOrderOrchestratorV1,
+  type ExecutionOrderRecord,
+  type ExecutionOrderRepository
+} from "../src/execution-system/execution-order-orchestrator.js";
 
 describe("execution signed bundle routes", () => {
+  class MemoryExecutionOrderRepository implements ExecutionOrderRepository {
+    private readonly rows = new Map<string, ExecutionOrderRecord>();
+
+    public async saveOrder(order: ExecutionOrderRecord): Promise<void> {
+      this.rows.set(this.key(order.userId, order.orderId), { ...order });
+    }
+
+    public async findOrder(input: { userId: string; orderId: string }): Promise<ExecutionOrderRecord | null> {
+      return this.rows.get(this.key(input.userId, input.orderId)) ?? null;
+    }
+
+    public async updateOrder(input: {
+      userId: string;
+      orderId: string;
+      patch: Partial<Omit<ExecutionOrderRecord, "orderId" | "userId" | "createdAt">>;
+    }): Promise<ExecutionOrderRecord | null> {
+      const existing = await this.findOrder(input);
+      if (!existing) return null;
+      const next = { ...existing, ...input.patch, updatedAt: new Date().toISOString() };
+      this.rows.set(this.key(input.userId, input.orderId), next);
+      return next;
+    }
+
+    public async startSubmit(input: {
+      userId: string;
+      orderId: string;
+      allowedStates: readonly ExecutionOrderRecord["state"][];
+    }): Promise<ExecutionOrderRecord | null> {
+      const existing = await this.findOrder(input);
+      if (!existing || !input.allowedStates.includes(existing.state)) return null;
+      return this.updateOrder({
+        userId: input.userId,
+        orderId: input.orderId,
+        patch: {
+          state: "SUBMITTING",
+          primaryAction: "NONE",
+          nextPollAt: new Date(Date.now() + 2_000).toISOString()
+        }
+      });
+    }
+
+    public async listRefreshableOrders(): Promise<ExecutionOrderRecord[]> {
+      return [...this.rows.values()].filter((order) => order.state === "SUBMITTING" || order.state === "SUBMITTED");
+    }
+
+    private key(userId: string, orderId: string): string {
+      return `${userId}:${orderId}`;
+    }
+  }
+
   const sellQuote = () => ({
     quoteId: "exec_quote_sell",
     userId: "user-1",
@@ -28,6 +83,271 @@ describe("execution signed bundle routes", () => {
       price: 0.99,
       requiresUserSignature: true
     }]
+  });
+
+  const buyQuote = (venue = "POLYMARKET", requiresUserSignature = true) => ({
+    quoteId: `exec_quote_${venue.toLowerCase()}`,
+    userId: "user-1",
+    side: "buy" as const,
+    marketId: "market-1",
+    outcomeId: "YES",
+    routeType: "SINGLE_VENUE" as const,
+    venuePath: [venue],
+    executableAmount: "1",
+    skippedAmount: "0",
+    expectedPrice: 0.5,
+    effectivePrice: 0.5,
+    requiredUserSignatureSteps: requiresUserSignature ? [`${venue} user signature required`] : [],
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    legs: [{
+      venue,
+      venueMarketId: `${venue.toLowerCase()}-market`,
+      venueOutcomeId: `${venue.toLowerCase()}-token`,
+      size: "1",
+      price: 0.5,
+      requiresUserSignature
+    }]
+  });
+
+  it("orchestrates Polymarket buy as Place then signature then backend submit", async () => {
+    const app = Fastify();
+    const quote = buyQuote("POLYMARKET", true);
+    const executableRouteService = {
+      quote: vi.fn(async () => ({ quote, rejectedCandidates: [], internalCandidateCount: 1 })),
+      getQuote: vi.fn(async () => quote)
+    };
+    const getLiveReadiness = vi.fn(async () => ({
+      quoteId: quote.quoteId,
+      generatedAt: new Date().toISOString(),
+      expiresAt: quote.expiresAt,
+      status: "fresh",
+      blockers: [],
+      venues: [{
+        venue: "POLYMARKET",
+        status: "fresh",
+        checkedAt: new Date().toISOString(),
+        blockers: [],
+        readinessCode: "POLYMARKET_CLOB_READY_FOR_SUBMIT",
+        account: { walletAddress: "0xwallet", venueAccountAddress: "0xdeposit", ownerAddress: "0xdeposit" },
+        collateral: {
+          requiredNotional: "1",
+          balance: "10",
+          allowance: "10",
+          tokenSymbol: "pUSD",
+          tokenAddress: null,
+          spenderAddress: null,
+          chainId: 137
+        }
+      }]
+    }));
+    const prepare = vi.fn(async () => ({
+      quoteId: quote.quoteId,
+      expiresAt: quote.expiresAt,
+      signatureRequests: [{
+        legIndex: 0,
+        venue: "POLYMARKET",
+        requestType: "ORDER",
+        account: "0xdeposit",
+        message: "sign order",
+        typedData: {},
+        signedPayloadHint: {}
+      }]
+    }));
+    const submit = vi.fn(async () => ({
+      executionId: quote.quoteId,
+      status: "SUBMITTED",
+      dryRun: false,
+      submittedLegs: [{ legIndex: 0, venue: "POLYMARKET", status: "SUBMITTED", venueOrderId: "poly-order" }]
+    }));
+    const service = new ExecutionOrderOrchestratorV1(
+      new MemoryExecutionOrderRepository(),
+      executableRouteService as never,
+      { prepareExit: vi.fn() } as never,
+      {
+        getLiveReadiness,
+        prepare,
+        submit,
+        getExecutionStatus: vi.fn(async () => null)
+      } as never,
+      {
+        getCandidates: vi.fn(async () => ({
+          generatedAt: new Date().toISOString(),
+          marketId: "market-1",
+          outcomeId: "YES",
+          amount: "1",
+          candidates: [{
+            venue: "POLYMARKET",
+            venueMarketId: "polymarket-market",
+            venueOutcomeId: "polymarket-token",
+            price: 0.5,
+            availableSize: "10",
+            requiresUserSignature: true,
+            metadata: { polymarketTickSize: "0.001" }
+          }],
+          blocked: []
+        }))
+      }
+    );
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: executableRouteService as never,
+      sellQuoteService: { prepareExit: vi.fn() } as never,
+      executionOrderService: service
+    });
+
+    const preview = await app.inject({
+      method: "POST",
+      url: "/execution/orders/preview",
+      payload: { marketId: "market-1", outcomeId: "YES", side: "buy", amount: "1", venuePreference: "POLYMARKET" }
+    });
+    expect(preview.statusCode).toBe(201);
+    expect(preview.json()).toMatchObject({
+      state: "READY_TO_PLACE",
+      primaryAction: { type: "PLACE_ORDER" },
+      signingMode: "USER_SIGNATURE_REQUIRED"
+    });
+
+    const place = await app.inject({ method: "POST", url: `/execution/orders/${quote.quoteId}/place` });
+    expect(place.statusCode).toBe(200);
+    expect(place.json()).toMatchObject({
+      state: "NEEDS_SIGNATURE",
+      primaryAction: { type: "SIGN" }
+    });
+    expect(prepare).toHaveBeenCalledWith({ userId: "user-1", quoteId: quote.quoteId });
+
+    const signed = await app.inject({
+      method: "POST",
+      url: `/execution/orders/${quote.quoteId}/signatures`,
+      payload: {
+        signedPayloads: [{
+          legIndex: 0,
+          venue: "POLYMARKET",
+          requestType: "ORDER",
+          signedPayload: {
+            purpose: "POLYMARKET_ORDER",
+            data: { order: { makerAmount: "500000", takerAmount: "1000000" } },
+            signature: "0xsig",
+            account: "0xdeposit"
+          }
+        }]
+      }
+    });
+    expect(signed.statusCode).toBe(202);
+    expect(signed.json()).toMatchObject({
+      state: "SUBMITTED",
+      primaryAction: { type: "NONE" },
+      executionId: quote.quoteId
+    });
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps venue-specific order previews on the requested venue", async () => {
+    const app = Fastify();
+    const quote = buyQuote("LIMITLESS", false);
+    const getCandidates = vi.fn(async (input) => ({
+      generatedAt: new Date().toISOString(),
+      marketId: input.marketId,
+      outcomeId: input.outcomeId,
+      amount: input.amount,
+      candidates: [{
+        venue: "LIMITLESS",
+        venueMarketId: "limitless-market",
+        venueOutcomeId: "limitless-token",
+        price: 0.5,
+        availableSize: "10",
+        requiresUserSignature: false
+      }],
+      blocked: []
+    }));
+    const service = new ExecutionOrderOrchestratorV1(
+      new MemoryExecutionOrderRepository(),
+      {
+        quote: vi.fn(async () => ({ quote, rejectedCandidates: [], internalCandidateCount: 1 })),
+        getQuote: vi.fn(async () => quote)
+      } as never,
+      { prepareExit: vi.fn() } as never,
+      {
+        getLiveReadiness: vi.fn(async () => ({
+          quoteId: quote.quoteId,
+          generatedAt: new Date().toISOString(),
+          expiresAt: quote.expiresAt,
+          status: "fresh",
+          blockers: [],
+          venues: [{
+            venue: "LIMITLESS",
+            status: "fresh",
+            checkedAt: new Date().toISOString(),
+            blockers: [],
+            account: { walletAddress: "0xwallet", venueAccountAddress: "0xsafe", ownerAddress: "0xwallet" },
+            collateral: { requiredNotional: "1", balance: "5", allowance: "5", tokenSymbol: "USDC", tokenAddress: null, spenderAddress: null, chainId: 8453 }
+          }]
+        })),
+        prepare: vi.fn(),
+        submit: vi.fn(),
+        getExecutionStatus: vi.fn(async () => null)
+      } as never,
+      { getCandidates }
+    );
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: { quote: vi.fn(), getQuote: vi.fn() } as never,
+      sellQuoteService: { prepareExit: vi.fn() } as never,
+      executionOrderService: service
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/execution/orders/preview",
+      payload: { marketId: "market-1", outcomeId: "YES", side: "buy", amount: "1", venuePreference: "LIMITLESS" }
+    });
+    expect(response.statusCode).toBe(201);
+    expect(getCandidates).toHaveBeenCalledWith(expect.objectContaining({ venues: ["LIMITLESS"] }));
+    expect(response.json()).toMatchObject({
+      state: "READY_TO_PLACE",
+      venuePreference: "LIMITLESS",
+      routeSummary: { venuePath: ["LIMITLESS"] }
+    });
+  });
+
+  it("reports venue setup blockers without submitting", async () => {
+    const app = Fastify();
+    const service = new ExecutionOrderOrchestratorV1(
+      new MemoryExecutionOrderRepository(),
+      { quote: vi.fn(), getQuote: vi.fn() } as never,
+      { prepareExit: vi.fn() } as never,
+      undefined,
+      {
+        getCandidates: vi.fn(async () => ({
+          generatedAt: new Date().toISOString(),
+          marketId: "market-1",
+          outcomeId: "YES",
+          amount: "1",
+          candidates: [],
+          blocked: [{ venue: "PREDICT_FUN", reason: "Predict.fun account auth is required.", detailsCode: "PREDICT_AUTH_REQUIRED" }]
+        }))
+      }
+    );
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: { quote: vi.fn(), getQuote: vi.fn() } as never,
+      sellQuoteService: { prepareExit: vi.fn() } as never,
+      executionOrderService: service
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/execution/orders/preview",
+      payload: { marketId: "market-1", outcomeId: "YES", side: "buy", amount: "1", venuePreference: "PREDICT_FUN" }
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      state: "NEEDS_VENUE_SETUP",
+      primaryAction: { type: "ENABLE_VENUE" },
+      quoteId: null
+    });
   });
 
   it("routes sell quote creation through verified position exits", async () => {

@@ -428,6 +428,133 @@ paths:
                 $ref: "#/components/schemas/ExecutionStatusResponse"
         "404":
           $ref: "#/components/responses/Error"
+  /execution/orders/preview:
+    post:
+      tags: [Execution]
+      summary: Preview a backend-owned execution order.
+      description: Creates a V1 execution order from the existing quote/readiness path. The response drives the one-click Place flow; required user signatures are returned only after Place.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: write
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecutionOrderPreviewRequest"
+      responses:
+        "201":
+          description: Execution order preview.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionOrderResponse"
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "501": { $ref: "#/components/responses/Error" }
+  /execution/orders/{orderId}/place:
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Execution]
+      summary: Place a backend-owned execution order.
+      description: Revalidates quote/readiness. If signing is needed, returns NEEDS_SIGNATURE; otherwise submits through the existing signed-bundle path. Duplicate Place calls are idempotent.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: write
+      x-lotus-danger: high
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Order state after Place.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionOrderResponse"
+        "202":
+          description: Order submitted or filled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionOrderResponse"
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "501": { $ref: "#/components/responses/Error" }
+  /execution/orders/{orderId}/signatures:
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Execution]
+      summary: Submit signatures and let backend submit the order.
+      description: Accepts frontend-signed payloads for an order in NEEDS_SIGNATURE, then automatically submits through the existing signed-bundle path. The frontend should not call submit-signed-bundle in the V1 flow.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: write
+      x-lotus-danger: high
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecutionOrderSignaturesRequest"
+      responses:
+        "200":
+          description: Order state after signature processing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionOrderResponse"
+        "202":
+          description: Order submitted or filled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionOrderResponse"
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "501": { $ref: "#/components/responses/Error" }
+  /execution/orders/{orderId}/status:
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Execution]
+      summary: Read canonical V1 execution order status.
+      description: Refreshes through existing signed execution status/fill reconciliation where possible, then returns the frontend-safe V1 order state.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: user
+      x-lotus-side-effects: read-refresh
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Current order state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionOrderResponse"
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "501": { $ref: "#/components/responses/Error" }
   /execution/positions:
     get:
       tags: [Execution]
@@ -4185,6 +4312,100 @@ components:
           schema:
             $ref: "#/components/schemas/AdminSchemaMapResponse"
   schemas:
+    ExecutionOrderPreviewRequest:
+      type: object
+      required: [marketId, outcomeId, side, amount, venuePreference]
+      additionalProperties: false
+      properties:
+        marketId: { type: string }
+        outcomeId: { type: string }
+        side: { type: string, enum: [buy, sell] }
+        amount:
+          type: string
+          pattern: "^\\d+(\\.\\d+)?$"
+        venuePreference:
+          type: string
+          enum: [BEST_ROUTE, POLYMARKET, LIMITLESS, PREDICT_FUN, OPINION]
+    ExecutionOrderSignaturesRequest:
+      type: object
+      required: [signedPayloads]
+      additionalProperties: false
+      properties:
+        signedPayloads:
+          type: array
+          items:
+            type: object
+            required: [legIndex, venue, signedPayload]
+            properties:
+              legIndex: { type: integer, minimum: 0 }
+              venue: { type: string }
+              requestType: { type: string }
+              signedPayload:
+                type: object
+                additionalProperties: true
+    ExecutionOrderResponse:
+      type: object
+      required:
+        - orderId
+        - state
+        - primaryAction
+        - signingMode
+        - venuePreference
+        - readinessSummary
+        - venueCapabilitySummary
+        - blockers
+      properties:
+        orderId: { type: string }
+        quoteId: { type: string, nullable: true }
+        executionId: { type: string, nullable: true }
+        state:
+          type: string
+          enum:
+            - READY_TO_PLACE
+            - NEEDS_SIGNATURE
+            - NEEDS_VENUE_SETUP
+            - WAITING_FOR_VENUE_READY
+            - BLOCKED_ACTION_REQUIRED
+            - SUBMITTING
+            - SUBMITTED
+            - FILLED
+            - FAILED
+            - EXPIRED
+        primaryAction:
+          type: object
+          required: [type]
+          properties:
+            type:
+              type: string
+              enum: [PLACE_ORDER, SIGN, ENABLE_VENUE, NONE]
+        signingMode:
+          type: string
+          enum: [NONE, USER_SIGNATURE_REQUIRED, BACKEND_SIGNABLE, MIXED, UNSUPPORTED]
+        routeSummary: { type: object, nullable: true, additionalProperties: true }
+        priceSummary: { type: object, nullable: true, additionalProperties: true }
+        venuePreference:
+          type: string
+          enum: [BEST_ROUTE, POLYMARKET, LIMITLESS, PREDICT_FUN, OPINION]
+        readinessSummary: { type: object, additionalProperties: true }
+        venueCapabilitySummary: { type: object, additionalProperties: true }
+        blockers:
+          type: array
+          items:
+            type: object
+            required: [code, message, actionable]
+            properties:
+              code: { type: string }
+              message: { type: string }
+              venue: { type: string }
+              actionable: { type: boolean }
+        signatureRequests:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        nextPollAt: { type: string, format: date-time, nullable: true }
+        canAutoRenew: { type: boolean }
+        renewalReason: { type: string, enum: [QUOTE_EXPIRED] }
     MarketCatalogCategory:
       type: object
       required: [category, marketCount]
