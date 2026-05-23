@@ -127,7 +127,7 @@ export class OrderbookStreamService {
       const newTargets = desiredTargets.filter((target) => !this.activeSubscriptionKeys.has(subscriptionKey(target)));
 
       await this.unsubscribe(staleKeys);
-      await this.subscribe(desiredTargets);
+      await this.subscribe(newTargets);
 
       for (const key of staleKeys) {
         this.activeSubscriptionKeys.delete(key);

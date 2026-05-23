@@ -244,4 +244,37 @@ describe("OrderbookStreamService", () => {
       "Venue orderbook subscribe failed."
     );
   });
+
+  it("does not resubscribe unchanged active targets on every tick", async () => {
+    const connector = new FakeConnector("POLYMARKET");
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [{ canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: now }];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness() {
+          return [{
+            venue: "POLYMARKET",
+            approvedVenueMarketId: "approved-1",
+            venueMarketId: "market-1",
+            venueOutcomeId: "token-yes",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors: [connector],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now
+    });
+
+    await service.runOnce();
+    await service.runOnce();
+
+    expect(connector.subscribed).toHaveLength(1);
+  });
 });
