@@ -41,6 +41,13 @@ const market = {
 describe("Polymarket CLOB token enrichment", () => {
   it("extracts source identifiers from approved shared-core payloads", () => {
     expect(extractPolymarketQuoteIdentifier(profile)).toBe("bitcoin-all-time-high-by-june-30-2026");
+    expect(extractPolymarketQuoteIdentifier({
+      ...profile,
+      normalizedPayload: {
+        ...profile.normalizedPayload,
+        quoteMarketId: market.conditionId
+      }
+    })).toBe(market.conditionId);
     expect(classifyPolymarketQuoteIdentifier(market.conditionId)).toBe("CONDITION_ID");
     expect(classifyPolymarketQuoteIdentifier("123")).toBe("MARKET_ID");
     expect(classifyPolymarketQuoteIdentifier("bitcoin-all-time-high-by-june-30-2026")).toBe("MARKET_SLUG");
@@ -90,6 +97,44 @@ describe("Polymarket CLOB token enrichment", () => {
       marketId: "123",
       marketSlug: "bitcoin-all-time-high-by-june-30-2026"
     });
+  });
+
+  it("clears stale verification blockers when official source enrichment succeeds", () => {
+    const result = buildPolymarketClobTokenEnrichment({
+      profile: {
+        ...profile,
+        normalizedPayload: {
+          ...profile.normalizedPayload,
+          quoteMarketId: market.conditionId,
+          quoteTokenId: "yes-token",
+          quoteVerificationBlockers: ["POLYMARKET_SOURCE_MATCH_MISSING"],
+          quoteVerificationSource: "polymarket_official_api",
+          quoteVerificationCheckedAt: "2026-05-22T00:00:00.000Z"
+        },
+        rawSourcePayload: {
+          quoteEvidence: {
+            conditionId: market.conditionId,
+            marketSlug: market.marketSlug,
+            source: "polymarket_official_api"
+          },
+          quoteVerificationBlockers: ["POLYMARKET_SOURCE_MATCH_MISSING"]
+        }
+      },
+      markets: [market],
+      generatedAt: "2026-05-23T00:00:00.000Z",
+      metadataVersion: "polymarket-official-v1",
+      source: "polymarket_official_api"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("expected enrichment");
+    }
+    expect(result.enrichment.matchedIdentifier).toBe(market.conditionId);
+    expect(result.enrichment.normalizedPayload.quoteVerificationBlockers).toBeUndefined();
+    expect(result.enrichment.normalizedPayload.quoteVerificationSource).toBeUndefined();
+    expect(result.enrichment.normalizedPayload.quoteVerificationCheckedAt).toBeUndefined();
+    expect(result.enrichment.rawSourcePayload.quoteVerificationBlockers).toBeUndefined();
   });
 
   it("rejects ambiguous source matches", () => {

@@ -34,19 +34,21 @@ export const extractPolymarketQuoteIdentifier = (
   const normalizedPayload = asRecord(profile.normalizedPayload);
   const rawPayload = asRecord(profile.rawSourcePayload);
   return firstString(
-    normalizedPayload.venueMarketId,
-    normalizedPayload.venue_market_id,
-    rawPayload.venueMarketId,
-    rawPayload.venue_market_id,
-    stripCuratedVenueMarketId(profile.approvedVenueMarketId, firstString(normalizedPayload.curatedKey, rawPayload.curatedKey)),
     normalizedPayload.quoteMarketId,
     normalizedPayload.quote_market_id,
     normalizedPayload.conditionId,
     normalizedPayload.condition_id,
+    sourceQuoteEvidence(rawPayload).conditionId,
+    sourceQuoteEvidence(rawPayload).marketId,
     rawPayload.quoteMarketId,
     rawPayload.quote_market_id,
     rawPayload.conditionId,
-    rawPayload.condition_id
+    rawPayload.condition_id,
+    normalizedPayload.venueMarketId,
+    normalizedPayload.venue_market_id,
+    rawPayload.venueMarketId,
+    rawPayload.venue_market_id,
+    stripCuratedVenueMarketId(profile.approvedVenueMarketId, firstString(normalizedPayload.curatedKey, rawPayload.curatedKey))
   );
 };
 
@@ -138,7 +140,7 @@ export const buildPolymarketClobTokenEnrichment = (input: {
   }
 
   const normalizedPayload = {
-    ...asRecord(input.profile.normalizedPayload),
+    ...withoutQuoteVerificationBlockers(input.profile.normalizedPayload),
     quoteMarketId: matchedMarket.conditionId,
     quoteTokenId: outcomeTokens.yes,
     quoteOutcomeLabel: "Yes",
@@ -155,7 +157,7 @@ export const buildPolymarketClobTokenEnrichment = (input: {
     ...metadata
   };
   const rawSourcePayload = {
-    ...asRecord(input.profile.rawSourcePayload),
+    ...withoutQuoteVerificationBlockers(input.profile.rawSourcePayload),
     ...(media.imageUrl ? { imageUrl: media.imageUrl } : {}),
     ...(media.iconUrl ? { iconUrl: media.iconUrl } : {}),
     ...metadata,
@@ -449,6 +451,24 @@ const asRecord = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+
+const sourceQuoteEvidence = (value: Record<string, unknown>): Record<string, unknown> =>
+  asRecord(value.quoteEvidence);
+
+const withoutQuoteVerificationBlockers = (value: unknown): Record<string, unknown> => {
+  const record = { ...asRecord(value) };
+  for (const key of [
+    "quoteVerificationBlockers",
+    "quote_verification_blockers",
+    "quoteVerificationSource",
+    "quote_verification_source",
+    "quoteVerificationCheckedAt",
+    "quote_verification_checked_at"
+  ]) {
+    delete record[key];
+  }
+  return record;
+};
 
 const firstString = (...values: readonly unknown[]): string | null => {
   for (const value of values) {
