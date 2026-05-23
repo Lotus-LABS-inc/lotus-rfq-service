@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { NormalizedVenueQuoteSnapshot } from "../src/core/sor/quote-snapshot.js";
+import { parseOrderbookStreamVenues } from "../src/orderbook-stream-service.js";
 import {
   OrderbookStreamService,
   marketOrderbookTopic,
@@ -62,6 +63,22 @@ class FailingSubscribeConnector extends FakeConnector {
 }
 
 describe("OrderbookStreamService", () => {
+  it("parses explicit venue ownership without defaulting typoed values to all venues", () => {
+    expect(Array.from(parseOrderbookStreamVenues(undefined))).toEqual([
+      "POLYMARKET",
+      "LIMITLESS",
+      "PREDICT_FUN",
+      "OPINION"
+    ]);
+    expect(Array.from(parseOrderbookStreamVenues("polymarket, limitless, predict"))).toEqual([
+      "POLYMARKET",
+      "LIMITLESS",
+      "PREDICT_FUN"
+    ]);
+    expect(Array.from(parseOrderbookStreamVenues("opinion"))).toEqual(["OPINION"]);
+    expect(Array.from(parseOrderbookStreamVenues("not-a-venue"))).toEqual([]);
+  });
+
   it("subscribes quote-ready mappings for Redis-active markets and unsubscribes idle targets", async () => {
     let active = [{
       canonicalMarketId: "canonical-1",

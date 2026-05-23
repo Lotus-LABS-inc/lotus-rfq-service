@@ -23,6 +23,16 @@ export interface OrderbookStreamRuntime {
 
 const DEFAULT_ORDERBOOK_STREAM_PORT = 3011;
 const DEFAULT_PREDICT_WS_MAINNET_URL = "wss://ws.predict.fun/";
+const DEFAULT_ORDERBOOK_STREAM_VENUES = ["POLYMARKET", "LIMITLESS", "PREDICT_FUN", "OPINION"] as const;
+const ORDERBOOK_STREAM_VENUE_ALIASES: Record<string, string> = {
+  PREDICT: "PREDICT_FUN",
+  PREDICTFUN: "PREDICT_FUN",
+  PREDICT_FUN: "PREDICT_FUN",
+  POLY: "POLYMARKET",
+  POLYMARKET: "POLYMARKET",
+  LIMITLESS: "LIMITLESS",
+  OPINION: "OPINION"
+};
 
 export const runOrderbookStreamService = async (): Promise<OrderbookStreamRuntime> => {
   loadDotenvFile();
@@ -83,15 +93,37 @@ export const runOrderbookStreamService = async (): Promise<OrderbookStreamRuntim
 
   registerSignals(shutdown);
   logger.info(
-    { host: env.HOST, port: orderbookStreamPort(process.env) },
+    {
+      host: env.HOST,
+      port: orderbookStreamPort(process.env),
+      venues: Array.from(parseOrderbookStreamVenues(process.env.ORDERBOOK_STREAM_VENUES))
+    },
     "Lotus orderbook stream service listening."
   );
   return { shutdown };
 };
 
+export const parseOrderbookStreamVenues = (raw: string | undefined): ReadonlySet<string> => {
+  const trimmed = raw?.trim();
+  if (!trimmed) {
+    return new Set(DEFAULT_ORDERBOOK_STREAM_VENUES);
+  }
+  const venues = (raw ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+    .map((value) => ORDERBOOK_STREAM_VENUE_ALIASES[value.toUpperCase().replace(/[\s-]/g, "_")])
+    .filter((value): value is string => Boolean(value));
+  return new Set(venues);
+};
+
 const buildConnectors = (logger: ReturnType<typeof createLogger>) => {
+  const enabledVenues = parseOrderbookStreamVenues(process.env.ORDERBOOK_STREAM_VENUES);
   const connectors: VenueOrderbookStreamConnector[] = [];
   const addConnector = (venue: string, create: () => VenueOrderbookStreamConnector): void => {
+    if (!enabledVenues.has(venue)) {
+      return;
+    }
     try {
       connectors.push(create());
     } catch (error) {
@@ -99,6 +131,7 @@ const buildConnectors = (logger: ReturnType<typeof createLogger>) => {
     }
   };
 
+  logger.info({ venues: Array.from(enabledVenues) }, "Orderbook stream venue ownership configured.");
   addConnector("POLYMARKET", () => createPolymarketOrderbookConnector({ logger }));
   addConnector("LIMITLESS", () => new LimitlessSdkOrderbookConnector({ logger }));
 
@@ -113,6 +146,9 @@ const buildConnectors = (logger: ReturnType<typeof createLogger>) => {
     process.env.OPINION_BUILDER_SERVICE_API_KEY?.trim();
   const opinionWalletAddress = process.env.OPINION_STREAM_WALLET_ADDRESS?.trim() ||
     process.env.OPINION_BUILDER_WALLET_ADDRESS?.trim();
+  if (!enabledVenues.has("OPINION")) {
+    return connectors;
+  }
   if (opinionApiKey && opinionWalletAddress) {
     addConnector("OPINION", () => new OpinionSdkOrderbookConnector({
       apiKey: opinionApiKey,
