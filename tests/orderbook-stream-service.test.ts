@@ -55,6 +55,12 @@ class FakeConnector implements VenueOrderbookStreamConnector {
   }
 }
 
+class FailingSubscribeConnector extends FakeConnector {
+  public async subscribe(): Promise<void> {
+    throw new Error("venue subscribe timeout");
+  }
+}
+
 describe("OrderbookStreamService", () => {
   it("subscribes quote-ready mappings for Redis-active markets and unsubscribes idle targets", async () => {
     let active = [{
@@ -190,5 +196,52 @@ describe("OrderbookStreamService", () => {
     await expect(service.runOnce()).resolves.toMatchObject({ activeMarkets: 2, subscribed: 2 });
     expect(listApprovedReadiness).toHaveBeenCalledTimes(1);
     expect(getReadiness).not.toHaveBeenCalled();
+  });
+
+  it("keeps a failed venue subscription from failing the whole stream tick", async () => {
+    const failing = new FailingSubscribeConnector("LIMITLESS");
+    const healthy = new FakeConnector("POLYMARKET");
+    const warn = vi.fn();
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [{ canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: now }];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness() {
+          return [
+            {
+              venue: "LIMITLESS",
+              approvedVenueMarketId: "approved-limitless",
+              venueMarketId: "limitless-market",
+              venueOutcomeId: "YES",
+              quoteReady: true,
+              blockers: []
+            },
+            {
+              venue: "POLYMARKET",
+              approvedVenueMarketId: "approved-poly",
+              venueMarketId: "poly-market",
+              venueOutcomeId: "poly-token",
+              quoteReady: true,
+              blockers: []
+            }
+          ];
+        }
+      },
+      connectors: [failing, healthy],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn, error: vi.fn() },
+      now: () => now
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ activeMarkets: 1, desiredSubscriptions: 2 });
+    expect(healthy.subscribed).toHaveLength(1);
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ venue: "LIMITLESS", targetCount: 1 }),
+      "Venue orderbook subscribe failed."
+    );
   });
 });

@@ -202,9 +202,13 @@ export class OrderbookStreamService {
         this.deps.logger.warn({ venue, targetCount: venueTargets.length }, "No orderbook stream connector registered for venue.");
         return;
       }
-      await connector.subscribe(venueTargets, (snapshot, target) => {
-        this.onSnapshot(snapshot, target);
-      });
+      try {
+        await connector.subscribe(venueTargets, (snapshot, target) => {
+          this.onSnapshot(snapshot, target);
+        });
+      } catch (error) {
+        this.deps.logger.warn({ err: error, venue, targetCount: venueTargets.length }, "Venue orderbook subscribe failed.");
+      }
     }));
   }
 
@@ -221,7 +225,11 @@ export class OrderbookStreamService {
       if (!connector) {
         return;
       }
-      await connector.unsubscribe(keys);
+      try {
+        await connector.unsubscribe(keys);
+      } catch (error) {
+        this.deps.logger.warn({ err: error, venue, targetCount: keys.length }, "Venue orderbook unsubscribe failed.");
+      }
     }));
   }
 
