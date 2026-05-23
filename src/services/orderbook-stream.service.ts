@@ -1,6 +1,7 @@
 import type { Logger } from "pino";
 import type {
   NormalizedVenueQuoteSnapshot,
+  SharedCoreQuoteReadinessMarket,
   VenueQuoteMappingReadiness,
   VenueQuoteMappingResolver
 } from "../core/sor/quote-snapshot.js";
@@ -39,7 +40,7 @@ export interface OrderbookStreamServiceConfig {
 export interface OrderbookStreamServiceDeps {
   activeMarkets: Pick<HotQuoteSnapshotService, "listActiveMarketsFromRedis">;
   hotSnapshots: Pick<HotQuoteSnapshotService, "put">;
-  mappingResolver: Pick<VenueQuoteMappingResolver, "getReadiness">;
+  mappingResolver: Pick<VenueQuoteMappingResolver, "getReadiness" | "listApprovedReadiness">;
   connectors: readonly VenueOrderbookStreamConnector[];
   publisher: Pick<RedisClient, "publish">;
   logger: Pick<Logger, "info" | "warn" | "error">;
@@ -151,15 +152,13 @@ export class OrderbookStreamService {
   }
 
   private async resolveTargets(activeMarkets: readonly ActiveOrderbookMarket[]): Promise<readonly VenueOrderbookSubscriptionTarget[]> {
-    const results = await Promise.all(activeMarkets.map(async (market) => {
-      if (!this.deps.mappingResolver.getReadiness) {
-        return [];
-      }
-      const readiness = await this.deps.mappingResolver.getReadiness({
-        canonicalMarketId: market.canonicalMarketId,
-        ...(market.canonicalOutcomeId ? { canonicalOutcomeId: market.canonicalOutcomeId } : {})
-      });
-      return readiness
+    const batchReadiness = await this.loadBatchReadiness(activeMarkets.length);
+    const results: VenueOrderbookSubscriptionTarget[][] = [];
+    for (const market of activeMarkets) {
+      const readiness = batchReadiness
+        ? batchReadiness.get(market.canonicalMarketId) ?? []
+        : await this.loadSingleReadiness(market);
+      const targets = readiness
         .filter(isQuoteReadyMapping)
         .map((row): VenueOrderbookSubscriptionTarget => ({
           canonicalMarketId: market.canonicalMarketId,
@@ -168,8 +167,31 @@ export class OrderbookStreamService {
           venueMarketId: row.venueMarketId!,
           ...(row.venueOutcomeId ? { venueOutcomeId: row.venueOutcomeId } : {})
         }));
-    }));
+      results.push(targets);
+    }
     return dedupeTargets(results.flat());
+  }
+
+  private async loadBatchReadiness(
+    activeMarketCount: number
+  ): Promise<ReadonlyMap<string, readonly VenueQuoteMappingReadiness[]> | null> {
+    if (!this.deps.mappingResolver.listApprovedReadiness) {
+      return null;
+    }
+    const rows = await this.deps.mappingResolver.listApprovedReadiness({
+      limit: Math.max(activeMarketCount, this.config.activeMarketLimit)
+    });
+    return readinessByCanonicalMarket(rows);
+  }
+
+  private async loadSingleReadiness(market: ActiveOrderbookMarket): Promise<readonly VenueQuoteMappingReadiness[]> {
+    if (!this.deps.mappingResolver.getReadiness) {
+      return [];
+    }
+    return this.deps.mappingResolver.getReadiness({
+      canonicalMarketId: market.canonicalMarketId,
+      ...(market.canonicalOutcomeId ? { canonicalOutcomeId: market.canonicalOutcomeId } : {})
+    });
   }
 
   private async subscribe(targets: readonly VenueOrderbookSubscriptionTarget[]): Promise<void> {
@@ -277,6 +299,21 @@ const groupByVenue = (targets: readonly VenueOrderbookSubscriptionTarget[]): Rea
     grouped.set(venue, bucket);
   }
   return grouped;
+};
+
+const readinessByCanonicalMarket = (
+  rows: readonly SharedCoreQuoteReadinessMarket[]
+): ReadonlyMap<string, readonly VenueQuoteMappingReadiness[]> => {
+  const byMarket = new Map<string, VenueQuoteMappingReadiness[]>();
+  for (const row of rows) {
+    const marketIds = row.canonicalMarketIds.length > 0
+      ? row.canonicalMarketIds
+      : [row.canonicalEventId];
+    for (const marketId of marketIds) {
+      byMarket.set(marketId, [...(byMarket.get(marketId) ?? []), ...row.venues]);
+    }
+  }
+  return byMarket;
 };
 
 const topicPart = (value: string): string =>

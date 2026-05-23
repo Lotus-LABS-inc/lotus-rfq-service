@@ -149,4 +149,46 @@ describe("OrderbookStreamService", () => {
       snapshotStatus: "live"
     });
   });
+
+  it("loads approved quote readiness in one batch for active market scans", async () => {
+    const connector = new FakeConnector("POLYMARKET");
+    const getReadiness = vi.fn();
+    const listApprovedReadiness = vi.fn(async () => [{
+      canonicalEventId: "event-1",
+      canonicalMarketIds: ["canonical-1", "canonical-2"],
+      title: "Event",
+      category: "Politics",
+      venues: [{
+        venue: "POLYMARKET",
+        approvedVenueMarketId: "approved-1",
+        venueMarketId: "market-1",
+        venueOutcomeId: "token-yes",
+        quoteReady: true,
+        blockers: []
+      }]
+    }]);
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [
+            { canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: now },
+            { canonicalMarketId: "canonical-2", canonicalOutcomeId: "YES", lastSeenAt: now }
+          ];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        getReadiness,
+        listApprovedReadiness
+      },
+      connectors: [connector],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ activeMarkets: 2, subscribed: 2 });
+    expect(listApprovedReadiness).toHaveBeenCalledTimes(1);
+    expect(getReadiness).not.toHaveBeenCalled();
+  });
 });

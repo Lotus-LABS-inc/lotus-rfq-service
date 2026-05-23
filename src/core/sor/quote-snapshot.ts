@@ -132,6 +132,9 @@ export interface VenueQuoteMappingResolver {
     canonicalMarketId: string;
     canonicalOutcomeId?: string | undefined;
   }): Promise<readonly VenueQuoteMappingReadiness[]>;
+  listApprovedReadiness?(input: {
+    limit: number;
+  }): Promise<readonly SharedCoreQuoteReadinessMarket[]>;
 }
 
 export interface SharedCoreVenueQuoteMappingRow extends Record<string, unknown> {
