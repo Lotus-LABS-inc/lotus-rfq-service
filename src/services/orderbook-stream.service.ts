@@ -121,7 +121,8 @@ export class OrderbookStreamService {
       const activeMarkets = await this.deps.activeMarkets.listActiveMarketsFromRedis({
         limit: this.config.activeMarketLimit
       });
-      const desiredTargets = await this.resolveTargets(activeMarkets);
+      const resolvedTargets = await this.resolveTargets(activeMarkets);
+      const desiredTargets = resolvedTargets.filter((target) => this.connectorsByVenue.has(normalizeVenue(target.venue)));
       const desiredKeys = new Set(desiredTargets.map(subscriptionKey));
       const staleKeys = [...this.activeSubscriptionKeys].filter((key) => !desiredKeys.has(key));
       const newTargets = desiredTargets.filter((target) => !this.activeSubscriptionKeys.has(subscriptionKey(target)));
@@ -141,7 +142,7 @@ export class OrderbookStreamService {
         desiredSubscriptions: desiredTargets.length,
         subscribed: newTargets.length,
         unsubscribed: staleKeys.length,
-        unsupportedVenueTargets: desiredTargets.filter((target) => !this.connectorsByVenue.has(normalizeVenue(target.venue))).length
+        unsupportedVenueTargets: resolvedTargets.length - desiredTargets.length
       };
     } catch (error) {
       this.deps.logger.warn({ err: error }, "Orderbook stream service tick failed.");
@@ -199,7 +200,6 @@ export class OrderbookStreamService {
     await Promise.all([...grouped.entries()].map(async ([venue, venueTargets]) => {
       const connector = this.connectorsByVenue.get(venue);
       if (!connector) {
-        this.deps.logger.warn({ venue, targetCount: venueTargets.length }, "No orderbook stream connector registered for venue.");
         return;
       }
       try {

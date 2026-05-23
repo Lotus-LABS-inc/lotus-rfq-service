@@ -262,6 +262,56 @@ describe("OrderbookStreamService", () => {
     );
   });
 
+  it("skips quote-ready venues owned by another stream worker without warning noise", async () => {
+    const connector = new FakeConnector("POLYMARKET");
+    const warn = vi.fn();
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [{ canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: now }];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness() {
+          return [
+            {
+              venue: "POLYMARKET",
+              approvedVenueMarketId: "approved-poly",
+              venueMarketId: "poly-market",
+              venueOutcomeId: "poly-token",
+              quoteReady: true,
+              blockers: []
+            },
+            {
+              venue: "OPINION",
+              approvedVenueMarketId: "approved-opinion",
+              venueMarketId: "opinion-market",
+              venueOutcomeId: "opinion-token",
+              quoteReady: true,
+              blockers: []
+            }
+          ];
+        }
+      },
+      connectors: [connector],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn, error: vi.fn() },
+      now: () => now
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({
+      desiredSubscriptions: 1,
+      subscribed: 1,
+      unsupportedVenueTargets: 1
+    });
+    expect(connector.subscribed).toHaveLength(1);
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.objectContaining({ venue: "OPINION" }),
+      "No orderbook stream connector registered for venue."
+    );
+  });
+
   it("does not resubscribe unchanged active targets on every tick", async () => {
     const connector = new FakeConnector("POLYMARKET");
     const service = new OrderbookStreamService({
