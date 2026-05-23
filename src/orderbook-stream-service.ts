@@ -109,7 +109,8 @@ const buildConnectors = (logger: ReturnType<typeof createLogger>) => {
     logger
   }));
 
-  const opinionApiKey = process.env.OPINION_BUILDER_API_KEY?.trim();
+  const opinionApiKey = process.env.OPINION_BUILDER_API_KEY?.trim() ||
+    process.env.OPINION_BUILDER_SERVICE_API_KEY?.trim();
   const opinionWalletAddress = process.env.OPINION_STREAM_WALLET_ADDRESS?.trim() ||
     process.env.OPINION_BUILDER_WALLET_ADDRESS?.trim();
   if (opinionApiKey && opinionWalletAddress) {
