@@ -144,7 +144,7 @@ describe("MarketOrderbookRecorder", () => {
     expect(second.skippedCooldownSamples).toBe(2);
   });
 
-  it("cools down stable missing-source and 404 mapping blockers", async () => {
+  it("records stable missing-source and 404 mapping blockers without cooling down the whole venue", async () => {
     const inserted: VenueOrderbookSnapshotInput[] = [];
     const recorder = new MarketOrderbookRecorder(
       {
@@ -192,14 +192,15 @@ describe("MarketOrderbookRecorder", () => {
     const first = await recorder.runOnce();
     const second = await recorder.runOnce();
 
-    expect(first.insertedSnapshots).toBe(1);
+    expect(first.insertedSnapshots).toBe(2);
     expect(inserted[0]).toMatchObject({
       venue: "POLYMARKET",
       venueMarketId: "poly-missing",
       quoteQuality: "DIAGNOSTIC_ONLY",
       blockers: ["POLYMARKET_SOURCE_MATCH_MISSING", "QUOTE_PROVIDER_HTTP_404"]
     });
-    expect(second.skippedCooldownSamples).toBe(2);
+    expect(second.skippedCooldownSamples).toBe(0);
+    expect(second.insertedSnapshots).toBe(2);
   });
 
   it("records Opinion display snapshots as quote-ready when fee discovery is the only missing factor", async () => {

@@ -37,8 +37,9 @@ export class LimitlessQuoteReader implements VenueQuoteSnapshotReader {
       venueMarketId: input.venueMarketId,
       venueOutcomeId: input.venueOutcomeId
     });
-    const marketDetail = await this.config.client.getMarketDetail?.(input.venueMarketId).catch(() => null);
-    const executableMarketId = resolveLimitlessExecutableMarketId(input.venueMarketId, input.canonicalMarketId, marketDetail);
+    const detailMarketId = resolveLimitlessDetailMarketId(input.venueMarketId);
+    const marketDetail = await this.config.client.getMarketDetail?.(detailMarketId).catch(() => null);
+    const executableMarketId = resolveLimitlessExecutableMarketId(detailMarketId, input.canonicalMarketId, marketDetail);
     const venueAddresses = resolveLimitlessVenueAddresses(marketDetail, executableMarketId);
     const outcomeResolution = resolveLimitlessOutcome(input.venueOutcomeId, input.canonicalOutcomeId, marketDetail);
     if (cached?.source === "STREAM") {
@@ -220,6 +221,11 @@ const findLimitlessMarketRecord = (
     }
   }
   return null;
+};
+
+const resolveLimitlessDetailMarketId = (approvedMarketId: string): string => {
+  const [parentMarketId, childHint, ...rest] = approvedMarketId.split(":");
+  return parentMarketId && childHint && rest.length === 0 ? parentMarketId : approvedMarketId;
 };
 
 const inferLimitlessMarketType = (record: Record<string, unknown>): "amm" | "clob" => {

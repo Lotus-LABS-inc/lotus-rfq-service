@@ -85,7 +85,7 @@ const artifactDir = path.join(process.cwd(), "artifacts", "shared", "optional");
 const metadataVersion = process.env.OPINION_METADATA_VERSION ?? "opinion-openapi-v1";
 const generatedAt = new Date().toISOString();
 const args = parseArgs();
-const databaseUrl = process.env.DATABASE_URL ?? process.env.SUPABASE_DB_URL;
+const databaseUrl = process.env.SUPABASE_DB_URL ?? process.env.DATABASE_URL;
 const opinionApiKey = process.env.OPINION_API_KEY ?? process.env.OPINION_BUILDER_API_KEY;
 const opinionBaseUrl = process.env.OPINION_OPENAPI_BASE_URL ?? process.env.OPINION_CLOB_BASE_URL ?? "https://openapi.opinion.trade/openapi";
 

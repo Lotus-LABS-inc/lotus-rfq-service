@@ -306,6 +306,52 @@ describe("extended venue quote readers", () => {
     });
   });
 
+  it("Limitless reader hydrates parent group markets before resolving colon-scoped outcomes", async () => {
+    const detailMarkets: string[] = [];
+    const requestedMarkets: string[] = [];
+    const reader = new LimitlessQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      now: () => now,
+      client: {
+        async getMarketDetail(marketId: string) {
+          detailMarkets.push(marketId);
+          return {
+            slug: "uefa-champions-league-winner-1765297468263",
+            marketType: "group",
+            markets: [
+              { slug: "real-madrid-1765297468001", title: "Real Madrid" },
+              { slug: "paris-saint-germain-1765297468002", title: "Paris Saint Germain" }
+            ]
+          };
+        },
+        async getOrderbook(input: { marketId: string }) {
+          requestedMarkets.push(input.marketId);
+          return {
+            tokenId: "psg-token",
+            bids: [{ price: 0.56, size: "10" }],
+            asks: [{ price: 0.57, size: "10" }]
+          };
+        }
+      }
+    });
+
+    const snapshot = await reader.getQuoteSnapshot({
+      canonicalMarketId: "FRONTEND_CURATED:SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026|PARIS_SAINT_GERMAIN",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "uefa-champions-league-winner-1765297468263:psg",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(detailMarkets).toEqual(["uefa-champions-league-winner-1765297468263"]);
+    expect(requestedMarkets).toEqual(["paris-saint-germain-1765297468002"]);
+    expect(snapshot?.venueMarketId).toBe("paris-saint-germain-1765297468002");
+    expect(snapshot?.metadata).toMatchObject({
+      approvedVenueMarketId: "uefa-champions-league-winner-1765297468263:psg",
+      venueMarketId: "paris-saint-germain-1765297468002"
+    });
+  });
+
   it("Limitless reader enriches stream cache snapshots with market exchange metadata", async () => {
     const streamCache = new QuoteSnapshotCache();
     streamCache.put({

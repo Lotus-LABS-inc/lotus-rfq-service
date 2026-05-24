@@ -43,7 +43,6 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
 } as const;
 const RATE_LIMIT_COOLDOWN_MS = 5 * 60_000;
 const PROVIDER_AUTH_COOLDOWN_MS = 15 * 60_000;
-const STABLE_MAPPING_BLOCKER_COOLDOWN_MS = 30 * 60_000;
 
 export const buildMarketOrderbookRecorderConfigFromEnv = (
   env: NodeJS.ProcessEnv
@@ -396,16 +395,8 @@ const providerCooldownMsForReason = (reason: string, baseCooldownMs: number): nu
   if (reason.includes("QUOTE_PROVIDER_HTTP_401") || reason.includes("PREDICT_PROVIDER_AUTH_INVALID")) {
     return Math.max(baseCooldownMs, PROVIDER_AUTH_COOLDOWN_MS);
   }
-  if (
-    reason.includes("QUOTE_PROVIDER_HTTP_404") ||
-    reason.includes("VENUE_OUTCOME_ID_MISSING") ||
-    reason.includes("SOURCE_MATCH_MISSING") ||
-    reason.includes("TOKEN_ID_MISSING") ||
-    reason.includes("OFFICIAL_MARKET_CLOSED") ||
-    reason.includes("OFFICIAL_MARKET_NOT_ACCEPTING_ORDERS") ||
-    reason.includes("closed_or_not_accepting_orders")
-  ) {
-    return Math.max(baseCooldownMs, STABLE_MAPPING_BLOCKER_COOLDOWN_MS);
+  if (reason.includes("QUOTE_PROVIDER_HTTP_503") || reason.includes("QUOTE_PROVIDER_HTTP_502")) {
+    return Math.max(baseCooldownMs, baseCooldownMs * 2);
   }
   return 0;
 };
