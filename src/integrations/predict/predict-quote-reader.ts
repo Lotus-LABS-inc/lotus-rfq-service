@@ -19,6 +19,8 @@ export interface PredictQuoteReaderConfig {
 export class PredictQuoteReader implements VenueQuoteSnapshotReader {
   public readonly venue = "PREDICT_FUN";
   private readonly now: () => Date;
+  private readonly inFlight = new Map<string, Promise<NormalizedVenueQuoteSnapshot | null>>();
+  private readonly failureCooldowns = new Map<string, { until: number; error: unknown }>();
 
   public constructor(private readonly config: PredictQuoteReaderConfig) {
     this.now = config.now ?? (() => new Date());
@@ -34,24 +36,59 @@ export class PredictQuoteReader implements VenueQuoteSnapshotReader {
       return cached;
     }
 
-    const [orderbook, stats, marketDetail] = await Promise.all([
-      this.config.client.getMarketOrderbook(input.venueMarketId),
-      this.config.client.getMarketStatistics(input.venueMarketId).catch(() => null),
-      this.config.client.getMarketById?.(input.venueMarketId).catch(() => null) ?? Promise.resolve(null)
-    ]);
-    const statsRecord = asRecord(stats);
-    const venueFeeBps = this.config.feeBps ?? parseOptionalNumber(statsRecord.feeRateBps ?? statsRecord.fee_rate_bps);
-    const outcomeResolution = resolvePredictOutcome(input.venueOutcomeId, input.canonicalOutcomeId, marketDetail);
-    return normalizePredictOrderbook({
-      payload: orderbook,
-      venueMarketId: input.venueMarketId,
-      venueOutcomeId: outcomeResolution.venueOutcomeId,
-      outcomeSide: outcomeResolution.outcomeSide,
-      receivedAt: this.now(),
-      environment: this.config.environment,
-      feeBps: this.config.feeBps,
-      venueFeeBps
+    const key = predictSnapshotKey(input);
+    const cooldown = this.failureCooldowns.get(key) ?? this.failureCooldowns.get(input.venueMarketId);
+    if (cooldown && cooldown.until > Date.now()) {
+      throw cooldown.error;
+    }
+    const existing = this.inFlight.get(key);
+    if (existing) {
+      return existing;
+    }
+    const pending = this.fetchQuoteSnapshot(input).finally(() => {
+      this.inFlight.delete(key);
     });
+    this.inFlight.set(key, pending);
+    return pending;
+  }
+
+  private async fetchQuoteSnapshot(input: VenueQuoteSnapshotReaderInput): Promise<NormalizedVenueQuoteSnapshot | null> {
+    try {
+      const shouldFetchStats = this.config.feeBps === undefined;
+      const shouldFetchMarketDetail = shouldResolvePredictMarketDetail(input);
+      const [orderbook, stats, marketDetail] = await Promise.all([
+        this.config.client.getMarketOrderbook(input.venueMarketId),
+        shouldFetchStats
+          ? this.config.client.getMarketStatistics(input.venueMarketId).catch(() => null)
+          : Promise.resolve(null),
+        shouldFetchMarketDetail
+          ? (this.config.client.getMarketById?.(input.venueMarketId).catch(() => null) ?? Promise.resolve(null))
+          : Promise.resolve(null)
+      ]);
+      const statsRecord = asRecord(stats);
+      const venueFeeBps = this.config.feeBps ?? parseOptionalNumber(statsRecord.feeRateBps ?? statsRecord.fee_rate_bps);
+      const outcomeResolution = resolvePredictOutcome(input.venueOutcomeId, input.canonicalOutcomeId, marketDetail);
+      return normalizePredictOrderbook({
+        payload: orderbook,
+        venueMarketId: input.venueMarketId,
+        venueOutcomeId: outcomeResolution.venueOutcomeId,
+        outcomeSide: outcomeResolution.outcomeSide,
+        receivedAt: this.now(),
+        environment: this.config.environment,
+        feeBps: this.config.feeBps,
+        venueFeeBps
+      });
+    } catch (error) {
+      const status = predictErrorStatus(error);
+      const cooldownMs = predictFailureCooldownMs(status);
+      if (cooldownMs > 0) {
+        const until = Date.now() + cooldownMs;
+        const entry = { until, error };
+        this.failureCooldowns.set(input.venueMarketId, entry);
+        this.failureCooldowns.set(predictSnapshotKey(input), entry);
+      }
+      throw error;
+    }
   }
 }
 
@@ -156,6 +193,8 @@ const resolvePredictOutcome = (
   if (configuredOutcomeId && looksLikeNumericId(configuredOutcomeId)) {
     return {
       venueOutcomeId: configuredOutcomeId,
+      ...(normalizedCanonical === "YES" ? { outcomeSide: "YES" as const } : {}),
+      ...(normalizedCanonical === "NO" ? { outcomeSide: "NO" as const } : {}),
       ...(yes && configuredOutcomeId === yes ? { outcomeSide: "YES" as const } : {}),
       ...(no && configuredOutcomeId === no ? { outcomeSide: "NO" as const } : {})
     };
@@ -180,6 +219,33 @@ const findOutcomeToken = (outcomes: readonly unknown[], label: "YES" | "NO"): st
 };
 
 const looksLikeNumericId = (value: string): boolean => /^\d+$/.test(value);
+
+const shouldResolvePredictMarketDetail = (input: VenueQuoteSnapshotReaderInput): boolean =>
+  !input.venueOutcomeId || !looksLikeNumericId(input.venueOutcomeId);
+
+const predictSnapshotKey = (input: VenueQuoteSnapshotReaderInput): string =>
+  [
+    input.venueMarketId,
+    input.venueOutcomeId ?? "",
+    input.canonicalOutcomeId ?? "",
+    input.side
+  ].join("|");
+
+const predictErrorStatus = (error: unknown): number | null => {
+  const record = asRecord(error);
+  if (typeof record.status === "number" && Number.isInteger(record.status)) {
+    return record.status;
+  }
+  const message = error instanceof Error ? error.message : firstString(record.message) ?? "";
+  const match = message.match(/\bstatus\s+(\d{3})\b/i);
+  return match?.[1] ? Number.parseInt(match[1], 10) : null;
+};
+
+const predictFailureCooldownMs = (status: number | null): number => {
+  if (status === 429) return 60_000;
+  if (status === 400 || status === 404) return 5 * 60_000;
+  return 0;
+};
 
 const normalizeOutcomeLabel = (value: string): string =>
   value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");

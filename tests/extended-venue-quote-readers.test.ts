@@ -91,6 +91,122 @@ describe("extended venue quote readers", () => {
     expect(snapshot?.blockers).toContain("PREDICT_FUN_TOKEN_ID_MISSING");
   });
 
+  it("Predict reader avoids optional stats and market-detail calls when static fee and token id are already known", async () => {
+    let orderbookCalls = 0;
+    let statsCalls = 0;
+    let detailCalls = 0;
+    const reader = new PredictQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      environment: "mainnet",
+      now: () => now,
+      feeBps: 12,
+      client: {
+        async getMarketOrderbook() {
+          orderbookCalls += 1;
+          return { bids: [{ price: "0.4", size: "10" }], asks: [{ price: "0.42", size: "10" }] };
+        },
+        async getMarketStatistics() {
+          statsCalls += 1;
+          return { feeRateBps: "35" };
+        },
+        async getMarketById() {
+          detailCalls += 1;
+          return {
+            outcomes: [
+              { label: "Yes", tokenId: "1001" },
+              { label: "No", tokenId: "1002" }
+            ]
+          };
+        }
+      } as never
+    });
+
+    const snapshot = await reader.getQuoteSnapshot({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "predict-market-1",
+      venueOutcomeId: "1001",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(snapshot?.feeBps).toBe(12);
+    expect(snapshot?.metadata).toMatchObject({ outcomeSide: "YES" });
+    expect(orderbookCalls).toBe(1);
+    expect(statsCalls).toBe(0);
+    expect(detailCalls).toBe(0);
+  });
+
+  it("Predict reader coalesces concurrent uncached reads for the same market outcome", async () => {
+    let orderbookCalls = 0;
+    const reader = new PredictQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      environment: "mainnet",
+      now: () => now,
+      feeBps: 12,
+      client: {
+        async getMarketOrderbook() {
+          orderbookCalls += 1;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          return { bids: [{ price: "0.4", size: "10" }], asks: [{ price: "0.42", size: "10" }] };
+        },
+        async getMarketStatistics() {
+          return { feeRateBps: "35" };
+        }
+      } as never
+    });
+    const input = {
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "predict-market-1",
+      venueOutcomeId: "1001",
+      side: "buy" as const,
+      quantity: 1
+    };
+
+    const [left, right] = await Promise.all([
+      reader.getQuoteSnapshot(input),
+      reader.getQuoteSnapshot(input)
+    ]);
+
+    expect(left?.venueMarketId).toBe("predict-market-1");
+    expect(right?.venueMarketId).toBe("predict-market-1");
+    expect(orderbookCalls).toBe(1);
+  });
+
+  it("Predict reader cools down repeated rate-limited market refreshes", async () => {
+    let orderbookCalls = 0;
+    const rateLimitError = Object.assign(new Error("Predict request failed with status 429."), { status: 429 });
+    const reader = new PredictQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      environment: "mainnet",
+      now: () => now,
+      feeBps: 12,
+      client: {
+        async getMarketOrderbook() {
+          orderbookCalls += 1;
+          throw rateLimitError;
+        },
+        async getMarketStatistics() {
+          return { feeRateBps: "35" };
+        }
+      } as never
+    });
+    const input = {
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "predict-market-1",
+      venueOutcomeId: "1001",
+      side: "buy" as const,
+      quantity: 1
+    };
+
+    await expect(reader.getQuoteSnapshot(input)).rejects.toThrow("status 429");
+    await expect(reader.getQuoteSnapshot({ ...input, venueOutcomeId: "1002", canonicalOutcomeId: "NO" })).rejects.toThrow("status 429");
+
+    expect(orderbookCalls).toBe(1);
+  });
+
   it("Predict.fun reader resolves missing binary outcome ids from market detail and inverts NO", async () => {
     const reader = new PredictQuoteReader({
       streamCache: new QuoteSnapshotCache(),
