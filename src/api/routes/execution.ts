@@ -805,11 +805,20 @@ export const registerExecutionRoutes = async (
             })
           : [];
       const activePositions = positions.filter(isActiveVerifiedPosition);
+      const generatedAt = new Date().toISOString();
+      const markedPositions = deps.liveCandidateProvider
+        ? await markPositions({
+            positions: activePositions,
+            generatedAt,
+            liveCandidateProvider: deps.liveCandidateProvider,
+            userId: request.user.userId
+          })
+        : activePositions;
       return reply.send({
-        generatedAt: new Date().toISOString(),
+        generatedAt,
         marketId: query.marketId ?? null,
         outcomeId: query.outcomeId ?? null,
-        positions: activePositions
+        positions: markedPositions
       });
     } catch (error) {
       return sendExecutionDataUnavailable(app, reply, error, "execution positions");

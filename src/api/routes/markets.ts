@@ -84,19 +84,17 @@ export const registerMarketCatalogRoutes = async (
         details: parsed.error.flatten()
       });
     }
+    const marketLimit = parsed.data.limit === undefined ? undefined : resolveMarketFetchLimit(parsed.data.limit, parsed.data);
     const markets = await deps.marketCatalogRepository.listMarkets({
       ...(parsed.data.category !== undefined ? { category: parsed.data.category } : {}),
       ...(parsed.data.search !== undefined ? { search: parsed.data.search } : {}),
-      ...(parsed.data.limit !== undefined ? { limit: shouldOverfetchMarkets(parsed.data) ? Math.min(parsed.data.limit * 3, 1000) : parsed.data.limit } : {})
+      ...(marketLimit !== undefined ? { limit: marketLimit } : {})
     });
     const enriched = await enrichMarketsWithQuoteReadiness(markets, deps.marketQuoteReadinessSource);
     const routeCoverage = parsed.data.routeCoverage ?? "all";
-    const canApplyQuoteReadyFilter = !enriched.degraded;
     const visibleMarkets = enriched.markets
-      .filter((market) => !parsed.data.quoteReadyOnly || !canApplyQuoteReadyFilter || isQuoteReadyMarket(market))
-      .filter((market) => enriched.degraded
-        ? routeCoverageMatchesBaseCoverage(market, routeCoverage)
-        : routeCoverageMatches(market, routeCoverage))
+      .filter((market) => !parsed.data.quoteReadyOnly || isQuoteReadyMarket(market))
+      .filter((market) => routeCoverageMatches(market, routeCoverage))
       .slice(0, parsed.data.limit ?? enriched.markets.length);
     return reply.send({
       markets: visibleMarkets,
@@ -457,6 +455,11 @@ const isQuoteReadyMarket = (market: MarketCatalogMarket): boolean =>
 const shouldOverfetchMarkets = (query: z.infer<typeof listQuerySchema>): boolean =>
   query.quoteReadyOnly === true || (query.routeCoverage !== undefined && query.routeCoverage !== "all");
 
+const resolveMarketFetchLimit = (limit: number, query: z.infer<typeof listQuerySchema>): number =>
+  shouldOverfetchMarkets(query)
+    ? Math.min(Math.max(limit * 10, 250), 1000)
+    : limit;
+
 const routeCoverageMatches = (
   market: MarketCatalogMarket,
   routeCoverage: z.infer<typeof routeCoverageSchema>
@@ -471,23 +474,6 @@ const routeCoverageMatches = (
       return readyVenueCount >= 3;
     case "strict_all":
       return market.venueCount > 0 && readyVenueCount >= market.venueCount;
-    case "all":
-      return true;
-  }
-};
-
-const routeCoverageMatchesBaseCoverage = (
-  market: MarketCatalogMarket,
-  routeCoverage: z.infer<typeof routeCoverageSchema>
-): boolean => {
-  switch (routeCoverage) {
-    case "single":
-      return market.venueCount >= 1;
-    case "pair":
-      return market.venueCount >= 2;
-    case "tri":
-      return market.venueCount >= 3;
-    case "strict_all":
     case "all":
       return true;
   }

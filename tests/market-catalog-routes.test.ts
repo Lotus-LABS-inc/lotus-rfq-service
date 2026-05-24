@@ -258,7 +258,7 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
-  it("returns base markets when quote readiness snapshots time out", async () => {
+  it("does not return unfiltered unavailable markets when quote readiness snapshots time out", async () => {
     process.env.MARKET_QUOTE_READINESS_TIMEOUT_MS = "1";
     const app = Fastify({ logger: false });
     await registerMarketCatalogRoutes(app, {
@@ -277,18 +277,57 @@ describe("market catalog routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
-      count: 1,
+      count: 0,
       quoteReadinessDegraded: true,
       quoteReadinessReason: "timeout",
-      markets: [{
-        quoteStatus: "unavailable",
-        quoteReadyVenueCount: 0,
-        quoteBlockers: [{
-          venue: "SYSTEM",
-          reason: "QUOTE_READINESS_SNAPSHOT_TIMEOUT"
-        }]
-      }]
+      markets: []
     });
+
+    await app.close();
+  });
+
+  it("fetches a larger catalog window before quote-ready filtering", async () => {
+    const readyMarket = {
+      ...market,
+      canonicalEventId: "44444444-4444-5444-8444-444444444444",
+      canonicalMarketIds: ["READY_LATE_MARKET"]
+    };
+    const app = Fastify({ logger: false });
+    const repository = new FakeMarketCatalogRepository();
+    repository.listMarkets = async (filter = {}) => {
+      repository.filters.push(filter);
+      const rows = Array.from({ length: 24 }, (_, index) => ({
+        ...market,
+        canonicalEventId: `55555555-5555-5555-8555-${String(index).padStart(12, "0")}`,
+        canonicalMarketIds: [`UNREADY_${index}`]
+      }));
+      rows.push(readyMarket);
+      return rows;
+    };
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: "READY_LATE_MARKET",
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: []
+          }];
+        }
+      }
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=24"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(repository.filters[0]).toMatchObject({ limit: 250 });
+    expect(response.json().markets.map((item: MarketCatalogMarket) => item.canonicalMarketIds[0])).toEqual(["READY_LATE_MARKET"]);
 
     await app.close();
   });

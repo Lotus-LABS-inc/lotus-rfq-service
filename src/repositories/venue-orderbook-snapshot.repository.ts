@@ -104,8 +104,81 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
         ]
       );
       inserted += result.rowCount ?? 0;
+      await this.upsertLatest(snapshot);
     }
     return inserted;
+  }
+
+  private async upsertLatest(snapshot: VenueOrderbookSnapshotInput): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO venue_orderbook_latest_snapshots (
+         canonical_event_id,
+         canonical_market_id,
+         canonical_outcome_id,
+         venue,
+         venue_market_id,
+         venue_outcome_id,
+         source,
+         quote_quality,
+         source_timestamp,
+         received_at,
+         best_bid,
+         best_ask,
+         midpoint,
+         spread,
+         bid_depth,
+         ask_depth,
+         bids,
+         asks,
+         blockers,
+         metadata_version,
+         updated_at
+       ) VALUES (
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+         $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19::jsonb, $20, now()
+       )
+       ON CONFLICT (canonical_market_id, canonical_outcome_id, venue, venue_market_id, venue_outcome_id)
+       DO UPDATE SET
+         canonical_event_id = EXCLUDED.canonical_event_id,
+         source = EXCLUDED.source,
+         quote_quality = EXCLUDED.quote_quality,
+         source_timestamp = EXCLUDED.source_timestamp,
+         received_at = EXCLUDED.received_at,
+         best_bid = EXCLUDED.best_bid,
+         best_ask = EXCLUDED.best_ask,
+         midpoint = EXCLUDED.midpoint,
+         spread = EXCLUDED.spread,
+         bid_depth = EXCLUDED.bid_depth,
+         ask_depth = EXCLUDED.ask_depth,
+         bids = EXCLUDED.bids,
+         asks = EXCLUDED.asks,
+         blockers = EXCLUDED.blockers,
+         metadata_version = EXCLUDED.metadata_version,
+         updated_at = now()
+       WHERE EXCLUDED.received_at >= venue_orderbook_latest_snapshots.received_at`,
+      [
+        snapshot.canonicalEventId,
+        snapshot.canonicalMarketId,
+        nullableKey(snapshot.canonicalOutcomeId),
+        snapshot.venue.toUpperCase(),
+        snapshot.venueMarketId,
+        nullableKey(snapshot.venueOutcomeId),
+        snapshot.source,
+        snapshot.quoteQuality,
+        snapshot.sourceTimestamp,
+        snapshot.receivedAt,
+        snapshot.bestBid,
+        snapshot.bestAsk,
+        snapshot.midpoint,
+        snapshot.spread,
+        snapshot.bidDepth,
+        snapshot.askDepth,
+        JSON.stringify(snapshot.bids),
+        JSON.stringify(snapshot.asks),
+        JSON.stringify([...new Set(snapshot.blockers)]),
+        snapshot.metadataVersion ?? "venue-orderbook-recorder-v1"
+      ]
+    );
   }
 
   public async listChartPoints(input: {
@@ -190,7 +263,7 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
               bids,
               asks,
               blockers
-         FROM venue_orderbook_snapshots
+         FROM venue_orderbook_latest_snapshots
         WHERE venue = $1
           AND venue_market_id = $2
           AND ($3::text IS NULL OR venue_outcome_id = $3)
@@ -200,7 +273,7 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
       [
         input.venue.toUpperCase(),
         input.venueMarketId,
-        input.venueOutcomeId ?? null,
+        input.venueOutcomeId === undefined ? null : nullableKey(input.venueOutcomeId),
         Math.max(1, Math.floor(input.maxAgeMs))
       ]
     );
@@ -223,7 +296,7 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
       streamResynced: true,
       metadata: {
         venueMarketId: row.venue_market_id,
-        venueOutcomeId: row.venue_outcome_id,
+        venueOutcomeId: row.venue_outcome_id || undefined,
         hotSnapshotSource: "db_last_good"
       }
     };
@@ -252,8 +325,7 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
       last_quote_at: Date | null;
     }>(
       `WITH latest AS (
-         SELECT DISTINCT ON (canonical_market_id, canonical_outcome_id, venue, venue_market_id, venue_outcome_id)
-                canonical_market_id,
+         SELECT canonical_market_id,
                 canonical_outcome_id,
                 venue,
                 venue_market_id,
@@ -263,15 +335,9 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
                 best_ask,
                 midpoint,
                 blockers
-           FROM venue_orderbook_snapshots
+           FROM venue_orderbook_latest_snapshots
           WHERE canonical_market_id = ANY($1::text[])
             AND received_at >= now() - ($3::int * interval '1 millisecond')
-          ORDER BY canonical_market_id,
-                   canonical_outcome_id,
-                   venue,
-                   venue_market_id,
-                   venue_outcome_id,
-                   received_at DESC
        ),
        annotated AS (
          SELECT canonical_market_id,
@@ -284,9 +350,9 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
                 best_ask,
                 midpoint,
                 blockers,
-                received_at >= now() - ($2::int * interval '1 millisecond')
-                  AND COALESCE(jsonb_array_length(blockers), 0) = 0
-                  AND COALESCE(midpoint, best_bid, best_ask) IS NOT NULL AS quote_ready,
+                COALESCE(jsonb_array_length(blockers), 0) = 0
+                  AND COALESCE(midpoint, best_bid, best_ask) IS NOT NULL AS display_ready,
+                received_at >= now() - ($2::int * interval '1 millisecond') AS fresh,
                 COALESCE(jsonb_array_length(blockers), 0) > 0 AS quote_blocked
            FROM latest
        ),
@@ -294,16 +360,19 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
          SELECT DISTINCT canonical_market_id,
                 normalized_venue
            FROM annotated
-          WHERE quote_ready
+          WHERE display_ready
        ),
        rolled AS (
          SELECT annotated.canonical_market_id,
                 MAX(annotated.received_at) AS last_quote_at,
                 COUNT(DISTINCT annotated.normalized_venue) FILTER (
-                  WHERE annotated.quote_ready
+                  WHERE annotated.display_ready
                 ) AS ready_venue_count,
+                COUNT(DISTINCT annotated.normalized_venue) FILTER (
+                  WHERE annotated.display_ready AND annotated.fresh
+                ) AS fresh_ready_venue_count,
                 array_agg(DISTINCT annotated.normalized_venue) FILTER (
-                  WHERE annotated.quote_ready
+                  WHERE annotated.display_ready
                 ) AS ready_venues,
                 COUNT(DISTINCT annotated.normalized_venue) FILTER (
                   WHERE annotated.quote_blocked
@@ -331,8 +400,8 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
        )
        SELECT canonical_market_id,
               CASE
-                WHEN ready_venue_count > 0 AND last_quote_at >= now() - ($2::int * interval '1 millisecond') AND blocked_venue_count = 0 THEN 'live'
-                WHEN ready_venue_count > 0 AND last_quote_at >= now() - ($2::int * interval '1 millisecond') THEN 'partial'
+                WHEN ready_venue_count > 0 AND fresh_ready_venue_count = ready_venue_count AND blocked_venue_count = 0 THEN 'live'
+                WHEN ready_venue_count > 0 AND fresh_ready_venue_count > 0 THEN 'partial'
                 WHEN ready_venue_count > 0 THEN 'stale'
                 ELSE 'unavailable'
               END AS quote_status,
@@ -427,6 +496,9 @@ const parseStringArray = (value: unknown): string[] =>
     ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((item) => item.trim())
     : [];
 
+const nullableKey = (value: string | null | undefined): string =>
+  value ?? "";
+
 const parseQuoteReadyVenues = (value: unknown): string[] =>
   Array.isArray(value)
     ? [...new Set(value
@@ -458,8 +530,5 @@ const normalizeQuoteBlockerReason = (value: unknown): string | null => {
   if (typeof value !== "string" || !value.trim()) {
     return null;
   }
-  const raw = value.trim();
-  return raw.includes("POLYMARKET_OFFICIAL_MARKET_CLOSED") || raw.includes("POLYMARKET_OFFICIAL_MARKET_NOT_ACCEPTING_ORDERS")
-    ? "closed_or_not_accepting_orders"
-    : raw;
+  return value.trim();
 };

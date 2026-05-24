@@ -177,6 +177,46 @@ describe("Polymarket CLOB token enrichment", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("matches event-outcome slug identifiers against official source titles", () => {
+    const result = buildPolymarketClobTokenEnrichment({
+      profile: {
+        ...profile,
+        approvedVenueMarketId: "POLYMARKET:uefa-champions-league-winner:paris-saint-germain:SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2026|PSG",
+        normalizedPayload: {
+          curatedKey: "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2026|PSG",
+          venueMarketId: "uefa-champions-league-winner:paris-saint-germain"
+        },
+        title: "UEFA Champions League 2025 2026 Winner: Paris Saint Germain"
+      },
+      markets: [{
+        ...market,
+        conditionId: "0xpsg",
+        marketId: "psg-market",
+        marketSlug: "will-psg-win-the-uefa-champions-league",
+        title: "Will PSG win the UEFA Champions League?",
+        raw: {
+          outcomes: [
+            { label: "Yes", token_id: "psg-yes" },
+            { label: "No", token_id: "psg-no" }
+          ]
+        }
+      }],
+      generatedAt: "2026-05-06T00:00:00.000Z",
+      metadataVersion: "polymarket-official-v1",
+      source: "polymarket_official_api"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("expected enrichment");
+    }
+    expect(result.enrichment.quoteMarketId).toBe("0xpsg");
+    expect(result.enrichment.normalizedPayload.quoteOutcomeTokenIds).toEqual({
+      YES: "psg-yes",
+      NO: "psg-no"
+    });
+  });
+
   it("rejects markets without labeled binary token evidence", () => {
     const result = buildPolymarketClobTokenEnrichment({
       profile,

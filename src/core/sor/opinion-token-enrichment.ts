@@ -71,6 +71,25 @@ export const opinionLookupCandidatesFromIdentifier = (identifier: string): reado
   return [...new Set(candidates)];
 };
 
+export const opinionLookupCandidatesFromTitle = (title: string): readonly string[] => {
+  const slug = slugify(title);
+  if (!slug) {
+    return [];
+  }
+  const candidates = [slug, ...knownOpinionSlugCandidatesFromTitle(title)];
+  const withoutQuestionPrefix = slug.replace(/^will-/, "");
+  if (withoutQuestionPrefix !== slug) {
+    candidates.push(withoutQuestionPrefix);
+  }
+  const withoutTrailingQuestionWords = withoutQuestionPrefix
+    .replace(/-before-\d{4}$/, "")
+    .replace(/-in-\d{4}$/, "");
+  if (withoutTrailingQuestionWords !== withoutQuestionPrefix) {
+    candidates.push(withoutTrailingQuestionWords);
+  }
+  return [...new Set(candidates.filter((candidate) => candidate.length > 0))];
+};
+
 export const buildOpinionTokenEnrichment = (input: {
   profile: OpinionQuoteProfileForEnrichment;
   market: OpinionNormalizedMarket | null;
@@ -270,6 +289,36 @@ const normalizeText = (value: string | null): string =>
     .replace(/\b(YES|NO|OPINION|POLYMARKET|LIMITLESS|PREDICT|FUN|FRONTEND|CURATED)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+
+const slugify = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const knownOpinionSlugCandidatesFromTitle = (title: string): string[] => {
+  const trimmed = title.trim();
+  const candidates: string[] = [];
+  const seoulWinner = /^Seoul Mayor 2026 Winner:\s*(.+)$/i.exec(trimmed);
+  if (seoulWinner?.[1]) {
+    candidates.push(`2026-seoul-mayoral-election-winner-${slugify(seoulWinner[1])}`);
+    candidates.push("2026-seoul-mayoral-election-winner");
+  }
+  const balanceOutcome = /^2026 Balance Of Power:\s*(.+)$/i.exec(trimmed);
+  if (balanceOutcome?.[1]) {
+    candidates.push(`balance-of-power-2026-midterms-${slugify(balanceOutcome[1])}`);
+    candidates.push("balance-of-power-2026-midterms");
+  }
+  if (/^Balance of Power:\s*2026 Midterms/i.test(trimmed)) {
+    candidates.push("balance-of-power-2026-midterms");
+  }
+  if (/^USA Greenland Trump Acquire Greenland/i.test(trimmed)) {
+    candidates.push("will-the-us-acquire-part-of-greenland-in-2026");
+  }
+  return candidates;
+};
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)

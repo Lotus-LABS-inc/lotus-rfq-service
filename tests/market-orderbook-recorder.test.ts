@@ -144,6 +144,64 @@ describe("MarketOrderbookRecorder", () => {
     expect(second.skippedCooldownSamples).toBe(2);
   });
 
+  it("cools down stable missing-source and 404 mapping blockers", async () => {
+    const inserted: VenueOrderbookSnapshotInput[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [{
+          ...marketFixture("OPEN"),
+          venues: ["POLYMARKET"],
+          venueMarkets: marketFixture("OPEN").venueMarkets.map((venueMarket) => ({
+            ...venueMarket,
+            venue: "POLYMARKET"
+          }))
+        }]
+      },
+      {
+        getQuoteSnapshotReport: async () => ({
+          snapshots: [],
+          blocked: [{
+            venue: "POLYMARKET",
+            reason: "POLYMARKET_SOURCE_MATCH_MISSING",
+            venueMarketId: "poly-missing",
+            detailsCode: "QUOTE_PROVIDER_HTTP_404"
+          }]
+        })
+      },
+      {
+        insertMany: async (snapshots) => {
+          inserted.push(...snapshots);
+          return snapshots.length;
+        },
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0
+        })
+      },
+      logger,
+      {
+        enabled: true,
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const first = await recorder.runOnce();
+    const second = await recorder.runOnce();
+
+    expect(first.insertedSnapshots).toBe(1);
+    expect(inserted[0]).toMatchObject({
+      venue: "POLYMARKET",
+      venueMarketId: "poly-missing",
+      quoteQuality: "DIAGNOSTIC_ONLY",
+      blockers: ["POLYMARKET_SOURCE_MATCH_MISSING", "QUOTE_PROVIDER_HTTP_404"]
+    });
+    expect(second.skippedCooldownSamples).toBe(2);
+  });
+
   it("records Opinion display snapshots as quote-ready when fee discovery is the only missing factor", async () => {
     const inserted: VenueOrderbookSnapshotInput[] = [];
     const recorder = new MarketOrderbookRecorder(

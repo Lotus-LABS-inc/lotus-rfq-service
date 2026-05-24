@@ -923,6 +923,61 @@ describe("execution signed bundle routes", () => {
     });
   });
 
+  it("adds typed mark freshness to selected positions when live marks are unavailable", async () => {
+    const app = Fastify();
+    const positionRepository = {
+      listVerifiedPositions: vi.fn(async () => ([{
+        positionId: "position-1",
+        userId: "user-1",
+        venue: "POLYMARKET",
+        marketId: "market-1",
+        outcomeId: "YES",
+        venueAccountAddress: "0xabc",
+        verifiedSize: "2.5",
+        averageEntryPrice: 0.388,
+        sellableSize: "2.5",
+        lastSettlementEvidenceId: "order-1",
+        status: "VERIFIED" as const,
+        metadata: {}
+      }]))
+    };
+    const liveCandidateProvider = {
+      getCandidates: vi.fn(async () => ({
+        generatedAt: "2026-05-06T00:00:00.000Z",
+        marketId: "market-1",
+        outcomeId: "YES",
+        amount: "2.5",
+        source: "LIVE_QUOTE_SOURCE" as const,
+        candidates: [],
+        blocked: [{ venue: "POLYMARKET", reason: "POLYMARKET_SOURCE_MATCH_MISSING" }]
+      }))
+    };
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: { quote: vi.fn(), getQuote: vi.fn() } as never,
+      sellQuoteService: { prepareExit: vi.fn() } as never,
+      positionRepository,
+      liveCandidateProvider
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/execution/positions?marketId=market-1&outcomeId=YES&venue=POLYMARKET"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      positions: [{
+        positionId: "position-1",
+        markPrice: null,
+        markValue: null,
+        markFreshness: "unavailable",
+        markBlocker: "POLYMARKET_SOURCE_MATCH_MISSING"
+      }]
+    });
+  });
+
   it("serves user-wide positions when market filters are omitted", async () => {
     const app = Fastify();
     const positionRepository = {

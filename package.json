@@ -99,6 +99,7 @@
     "report:execution-system:v0": "tsx scripts/reports/report-execution-system-v0.ts",
     "report:env:audit": "tsx scripts/reports/report-env-audit.ts",
     "report:latency:baseline": "tsx scripts/reports/report-latency-baseline.ts",
+    "report:market:quote-readiness-drift": "tsx scripts/reports/report-market-quote-readiness-drift.ts",
     "report:beta-readiness": "tsx scripts/reports/report-beta-readiness.ts",
     "report:monetization:shadow": "tsx scripts/reports/report-monetization-shadow.ts",
     "report:monetization:private-beta": "tsx scripts/reports/report-monetization-shadow.ts",

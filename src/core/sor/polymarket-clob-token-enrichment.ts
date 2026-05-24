@@ -302,12 +302,17 @@ const marketMatchesIdentifier = (market: PolymarketQuoteMetadataMarket, identifi
 
 const marketMatchesEventOutcomeSlug = (market: PolymarketQuoteMetadataMarket, identifier: string): boolean => {
   const [, outcomeSlug] = identifier.split(":", 2);
-  if (!outcomeSlug || !market.marketSlug) {
+  if (!outcomeSlug) {
     return false;
   }
   const normalizedOutcome = normalizeKnownAlias(normalizeSlug(outcomeSlug));
-  const normalizedMarketSlug = normalizeKnownAlias(normalizeSlug(market.marketSlug));
-  return normalizedMarketSlug.includes(normalizedOutcome);
+  const normalizedMarketSlug = normalizeKnownAlias(normalizeSlug(market.marketSlug ?? ""));
+  const normalizedTitle = normalizeKnownAlias(normalizeSlug(market.title ?? ""));
+  return normalizedMarketSlug.includes(normalizedOutcome)
+    || normalizedTitle.includes(normalizedOutcome)
+    || titleSubjectCandidates(market.title ?? "").some((subject) =>
+      normalizeKnownAlias(normalizeSlug(subject)).includes(normalizedOutcome)
+    );
 };
 
 const marketMatchesExactTitle = (market: PolymarketQuoteMetadataMarket, title: string | undefined): boolean =>

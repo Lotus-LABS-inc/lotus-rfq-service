@@ -9,6 +9,7 @@ import {
   buildOpinionTokenEnrichment,
   extractOpinionQuoteIdentifier,
   opinionLookupCandidatesFromIdentifier,
+  opinionLookupCandidatesFromTitle,
   withoutOpinionQuoteEvidence,
   type OpinionQuoteProfileForEnrichment,
   type OpinionTokenEnrichmentResult
@@ -212,11 +213,12 @@ try {
 
 async function resolveEnrichment(profile: OpinionQuoteProfileForEnrichment): Promise<OpinionTokenEnrichmentResult> {
   const identifier = extractOpinionQuoteIdentifier(profile);
-  if (!identifier) {
-    return buildOpinionTokenEnrichment({ profile, market: null, matchedIdentifier: null, generatedAt, metadataVersion });
-  }
+  const candidates = [
+    ...(identifier ? opinionLookupCandidatesFromIdentifier(identifier) : []),
+    ...opinionLookupCandidatesFromTitle(profile.title)
+  ];
 
-  for (const candidate of opinionLookupCandidatesFromIdentifier(identifier)) {
+  for (const candidate of [...new Set(candidates)]) {
     const market = await lookupMarket(candidate);
     if (!market) {
       continue;
