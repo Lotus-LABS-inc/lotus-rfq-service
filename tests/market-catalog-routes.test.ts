@@ -922,6 +922,123 @@ describe("market catalog routes", () => {
     expect(mediaMarket?.venueMarkets[1]?.imageUrl).toBeNull();
   });
 
+  it("derives public source links from prefixed venue market identifiers", async () => {
+    const pool = {
+      query: async (_sql: string, _params?: unknown[]) => {
+        if (String(_sql).includes("COUNT(*)::int AS total_count")) {
+          return { rows: [{ total_count: "1" }] };
+        }
+        if (String(_sql).includes("venue_market_count")) {
+          return {
+            rows: [{
+              canonical_event_id: "11111111-1111-5111-8111-111111111116",
+              proposition_key: "SPORTS|CHAMPIONS",
+              title: "Champions Source Link Market",
+              normalized_proposition_text: "champions source link market",
+              canonical_category: "SPORTS",
+              market_class: "BINARY",
+              starts_at: "2026-05-03T00:00:00.000Z",
+              expires_at: null,
+              resolves_at: null,
+              updated_at: "2026-05-03T00:00:00.000Z",
+              event_metadata: {},
+              frontend_display_title: null,
+              frontend_sort_priority: 1000,
+              canonical_market_ids: ["SPORTS|CHAMPIONS"],
+              venues: ["POLYMARKET", "LIMITLESS", "PREDICT"],
+              venue_market_count: "4"
+            }]
+          };
+        }
+        return {
+          rows: [
+            {
+              canonical_event_id: "11111111-1111-5111-8111-111111111116",
+              canonical_market_id: "SPORTS|CHAMPIONS",
+              canonical_market_title: "Champions Source Link Market",
+              venue_market_profile_id: "vmp_poly_source",
+              venue: "POLYMARKET",
+              venue_market_id: "POLYMARKET:uefa-champions-league-winner:SPORTS|CHAMPIONS",
+              venue_title: "UEFA Champions League Winner",
+              market_class: "BINARY",
+              outcomes: [{ id: "YES", label: "Yes" }],
+              network: "POLYGON",
+              chain: "POLYGON",
+              expires_at: null,
+              resolves_at: null,
+              normalized_payload: {},
+              raw_source_payload: {}
+            },
+            {
+              canonical_event_id: "11111111-1111-5111-8111-111111111116",
+              canonical_market_id: "SPORTS|CHAMPIONS",
+              canonical_market_title: "Champions Source Link Market",
+              venue_market_profile_id: "vmp_limitless_source",
+              venue: "LIMITLESS",
+              venue_market_id: "LIMITLESS:2026-fifa-world-cup-winner-1765296582257:argentina:SPORTS|CHAMPIONS",
+              venue_title: "World Cup Winner",
+              market_class: "BINARY",
+              outcomes: [{ id: "YES", label: "Yes" }],
+              network: "BASE",
+              chain: "BASE",
+              expires_at: null,
+              resolves_at: null,
+              normalized_payload: {},
+              raw_source_payload: {}
+            },
+            {
+              canonical_event_id: "11111111-1111-5111-8111-111111111116",
+              canonical_market_id: "SPORTS|CHAMPIONS",
+              canonical_market_title: "Champions Source Link Market",
+              venue_market_profile_id: "vmp_predict_source",
+              venue: "PREDICT",
+              venue_market_id: "PREDICT:1490:SPORTS|CHAMPIONS",
+              venue_title: "NBA Champion",
+              market_class: "BINARY",
+              outcomes: [{ id: "YES", label: "Yes" }],
+              network: "BASE",
+              chain: "BASE",
+              expires_at: null,
+              resolves_at: null,
+              normalized_payload: { sourceUrl: "https://predict.fun/market/2026-nba-champion" },
+              raw_source_payload: {}
+            },
+            {
+              canonical_event_id: "11111111-1111-5111-8111-111111111116",
+              canonical_market_id: "SPORTS|CHAMPIONS",
+              canonical_market_title: "Champions Source Link Market",
+              venue_market_profile_id: "vmp_poly_condition",
+              venue: "POLYMARKET",
+              venue_market_id: "POLYMARKET:condition-1:SPORTS|CHAMPIONS",
+              venue_title: "Condition-only Polymarket",
+              market_class: "BINARY",
+              outcomes: [{ id: "YES", label: "Yes" }],
+              network: "POLYGON",
+              chain: "POLYGON",
+              expires_at: null,
+              resolves_at: null,
+              normalized_payload: {},
+              raw_source_payload: {}
+            }
+          ]
+        };
+      }
+    };
+
+    const repository = new PgMarketCatalogRepository(pool as never);
+    const [sourceMarket] = await repository.listMarkets({ limit: 1 });
+    const byProfile = new Map(sourceMarket?.venueMarkets.map((venueMarket) => [venueMarket.venueMarketProfileId, venueMarket]));
+
+    expect(byProfile.get("vmp_poly_source")?.marketSlug).toBe("uefa-champions-league-winner");
+    expect(byProfile.get("vmp_poly_source")?.eventSlug).toBe("uefa-champions-league-winner");
+    expect(byProfile.get("vmp_poly_source")?.sourceUrl).toBe("https://polymarket.com/event/uefa-champions-league-winner");
+    expect(byProfile.get("vmp_limitless_source")?.marketSlug).toBe("2026-fifa-world-cup-winner-1765296582257");
+    expect(byProfile.get("vmp_limitless_source")?.sourceUrl).toBe("https://limitless.exchange/markets/2026-fifa-world-cup-winner-1765296582257");
+    expect(byProfile.get("vmp_predict_source")?.marketSlug).toBeNull();
+    expect(byProfile.get("vmp_predict_source")?.sourceUrl).toBe("https://predict.fun/market/2026-nba-champion");
+    expect(byProfile.get("vmp_poly_condition")?.sourceUrl).toBeNull();
+  });
+
   it("resolves shared-core quote mappings when frontend sends a venue-neutral canonical market id", async () => {
     const queries: Array<{ sql: string; params?: unknown[] }> = [];
     const pool = {

@@ -954,9 +954,13 @@ const toVenueMarket = (row: VenueMarketRow): MarketCatalogVenueMarket => {
   const curatedTimestamp = extractCuratedTimestamp(row.normalized_payload, row.raw_source_payload);
   const marketSlug = firstNonEmptyString(
     extractSanitizedSlug(row.normalized_payload, row.raw_source_payload, ["marketSlug", "market_slug", "slug"]),
+    slugFromPrefixedVenueMarketId(row.venue, row.venue_market_id),
     slugLikeVenueMarketId(row.venue_market_id)
   );
-  const eventSlug = extractSanitizedSlug(row.normalized_payload, row.raw_source_payload, ["eventSlug", "event_slug", "event_slug_id"]);
+  const eventSlug = firstNonEmptyString(
+    extractSanitizedSlug(row.normalized_payload, row.raw_source_payload, ["eventSlug", "event_slug", "event_slug_id"]),
+    eventSlugFromPrefixedVenueMarketId(row.venue, row.venue_market_id)
+  );
   const sourceUrl = firstNonEmptyString(
     extractSanitizedSourceUrl(row.normalized_payload, row.raw_source_payload, ["sourceUrl", "source_url", "url", "permalink", "marketUrl", "market_url"]),
     buildVenueSourceUrl(row.venue, marketSlug, eventSlug)
@@ -1318,13 +1322,88 @@ const sanitizeSlug = (value: string): string | null => {
 };
 
 const slugLikeVenueMarketId = (value: string): string | null => (
-  value.includes(":") || /^\d+$/.test(value.trim()) || value.startsWith("0x")
+  value.includes(":") || /^\d+$/.test(value.trim()) || value.trim().toLowerCase().startsWith("0x")
     ? null
     : sanitizeSlug(value)
 );
 
+const slugFromPrefixedVenueMarketId = (venue: string, venueMarketId: string): string | null => {
+  const parsed = parsePrefixedVenueMarketId(venue, venueMarketId);
+  if (!parsed) {
+    return null;
+  }
+  const [primary, secondary] = parsed.segments;
+  if (parsed.venue === "PREDICT_FUN") {
+    return slugLikePredictIdentifier(primary ?? "");
+  }
+  if (parsed.venue === "POLYMARKET") {
+    return slugLikePublicVenueIdentifier(primary ?? "");
+  }
+  if (parsed.venue === "LIMITLESS") {
+    return slugLikePublicVenueIdentifier(primary ?? "") ?? slugLikePublicVenueIdentifier(secondary ?? "");
+  }
+  if (parsed.venue === "OPINION" || parsed.venue === "MYRIAD") {
+    return slugLikePublicVenueIdentifier(primary ?? "");
+  }
+  return null;
+};
+
+const eventSlugFromPrefixedVenueMarketId = (venue: string, venueMarketId: string): string | null => {
+  const parsed = parsePrefixedVenueMarketId(venue, venueMarketId);
+  if (!parsed) {
+    return null;
+  }
+  if (parsed.venue !== "POLYMARKET") {
+    return null;
+  }
+  return slugLikePublicVenueIdentifier(parsed.segments[0] ?? "");
+};
+
+const parsePrefixedVenueMarketId = (
+  venue: string,
+  venueMarketId: string
+): { venue: string; segments: string[] } | null => {
+  const [rawPrefix, ...segments] = venueMarketId.split(":");
+  if (!rawPrefix || segments.length === 0) {
+    return null;
+  }
+  const normalizedPrefix = normalizeCatalogVenue(rawPrefix);
+  const normalizedVenue = normalizeCatalogVenue(venue);
+  if (normalizedPrefix !== normalizedVenue) {
+    return null;
+  }
+  return { venue: normalizedVenue, segments };
+};
+
+const normalizeCatalogVenue = (value: string): string => {
+  const normalized = value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+  return normalized === "PREDICT" ? "PREDICT_FUN" : normalized;
+};
+
+const slugLikePredictIdentifier = (value: string): string | null => {
+  const trimmed = value.trim();
+  return /^\d+$/.test(trimmed) ? null : slugLikePublicVenueIdentifier(trimmed);
+};
+
+const slugLikePublicVenueIdentifier = (value: string): string | null => {
+  const sanitized = sanitizeSlug(value);
+  if (!sanitized) {
+    return null;
+  }
+  if (
+    sanitized === "condition" ||
+    /^condition-\d+$/u.test(sanitized) ||
+    /^token-\d+$/u.test(sanitized) ||
+    /^market-\d+$/u.test(sanitized) ||
+    /^[0-9a-f]{24,}$/u.test(sanitized.replaceAll("-", ""))
+  ) {
+    return null;
+  }
+  return sanitized;
+};
+
 const buildVenueSourceUrl = (venue: string, marketSlug: string | null, eventSlug: string | null): string | null => {
-  const normalizedVenue = venue === "PREDICT" ? "PREDICT_FUN" : venue;
+  const normalizedVenue = normalizeCatalogVenue(venue);
   if (normalizedVenue === "POLYMARKET") {
     const slug = eventSlug ?? marketSlug;
     return slug ? `https://polymarket.com/event/${slug}` : null;
