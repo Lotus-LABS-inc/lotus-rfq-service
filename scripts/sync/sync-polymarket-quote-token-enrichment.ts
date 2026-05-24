@@ -265,7 +265,7 @@ async function resolveEnrichment(profile: PolymarketQuoteProfileForEnrichment): 
     for (const eventSlug of eventSlugs) {
       const eventMarkets = await listMarketsCached(`event:${eventSlug}`, () => gammaClient.getEventMarketsBySlug(eventSlug));
       const eventResult = buildPolymarketClobTokenEnrichment({ profile, markets: eventMarkets, generatedAt, metadataVersion, source: SOURCE });
-      if (eventResult.ok) {
+      if (eventResult.ok || !eventResult.blockers.includes("POLYMARKET_SOURCE_MATCH_MISSING")) {
         return eventResult;
       }
     }
