@@ -731,6 +731,9 @@ const classifyQuoteReaderError = (error: unknown): { reason: string; detailsCode
   const normalized = `${name ?? ""} ${message}`.toUpperCase();
   const messageStatus = message.match(/\bstatus\s+(\d{3})\b/i)?.[1] ?? null;
 
+  if (normalized.includes("LIMITLESS") && normalized.includes("MARKET IS NOT ACTIVE")) {
+    return { reason: "LIMITLESS_MARKET_NOT_ACTIVE", detailsCode: safeDetailsCode(message) };
+  }
   if (status !== null || messageStatus !== null) {
     return { reason: `QUOTE_PROVIDER_HTTP_${status ?? messageStatus}`, detailsCode: safeDetailsCode(message) };
   }

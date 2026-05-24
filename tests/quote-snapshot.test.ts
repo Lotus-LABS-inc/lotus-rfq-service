@@ -601,4 +601,41 @@ describe("venue quote mapping resolvers", () => {
       detailsCode: "PREDICT_PROVIDER_AUTH_INVALID"
     }]);
   });
+
+  it("keeps Limitless inactive markets typed instead of generic HTTP 400", async () => {
+    const limitlessReader: VenueQuoteSnapshotReader = {
+      venue: "LIMITLESS",
+      async getQuoteSnapshot() {
+        throw new Error("Limitless orderbook request failed with status 400. Market is not active");
+      }
+    };
+    const source = new CompositeVenueQuoteSource([limitlessReader], new SharedCoreVenueQuoteMappingResolver({
+      async loadApprovedVenueMappings() {
+        return [{
+          venue: "LIMITLESS",
+          venue_market_id: "LIMITLESS:market-1:canonical",
+          normalized_payload: { venueMarketId: "market-1", quoteTokenId: "yes-token" },
+          raw_source_payload: {}
+        }];
+      },
+      async listApprovedVenueMappings() {
+        return [];
+      }
+    }));
+
+    const report = await source.getQuoteSnapshotReport({
+      canonicalMarketId: "canonical",
+      canonicalOutcomeId: "YES",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(report.blocked).toEqual([{
+      venue: "LIMITLESS",
+      reason: "LIMITLESS_MARKET_NOT_ACTIVE",
+      venueMarketId: "market-1",
+      venueOutcomeId: "yes-token",
+      detailsCode: "Limitless_orderbook_request_failed_with_status_400._Market_is_not_active"
+    }]);
+  });
 });

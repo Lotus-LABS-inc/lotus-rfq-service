@@ -352,6 +352,83 @@ describe("extended venue quote readers", () => {
     });
   });
 
+  it("Limitless reader resolves shorthand child hints and known aliases to executable child slugs", async () => {
+    const detailMarkets: string[] = [];
+    const requestedMarkets: string[] = [];
+    const reader = new LimitlessQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      now: () => now,
+      client: {
+        async getMarketDetail(marketId: string) {
+          detailMarkets.push(marketId);
+          return {
+            slug: "uefa-champions-league-winner-1765297468263",
+            marketType: "group",
+            markets: [
+              { slug: "psg-1765297468297", title: "PSG" },
+              { slug: "man-city-1765297468308", title: "Man City" }
+            ]
+          };
+        },
+        async getOrderbook(input: { marketId: string }) {
+          requestedMarkets.push(input.marketId);
+          return {
+            tokenId: "psg-token",
+            bids: [{ price: 0.54, size: "10" }],
+            asks: [{ price: 0.55, size: "10" }]
+          };
+        }
+      }
+    });
+
+    const snapshot = await reader.getQuoteSnapshot({
+      canonicalMarketId: "FRONTEND_CURATED:SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026|PARIS_SAINT_GERMAIN",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "uefa-champions-league-winner-1765297468263:psg",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(detailMarkets).toEqual(["uefa-champions-league-winner-1765297468263"]);
+    expect(requestedMarkets).toEqual(["psg-1765297468297"]);
+    expect(snapshot?.venueMarketId).toBe("psg-1765297468297");
+  });
+
+  it("Limitless reader falls back to parent detail slug instead of invalid colon scoped ids", async () => {
+    const requestedMarkets: string[] = [];
+    const reader = new LimitlessQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      now: () => now,
+      client: {
+        async getMarketDetail() {
+          return {
+            slug: "english-premier-league-winner-1765295467473",
+            marketType: "group",
+            markets: [{ slug: "arsenal-1765295467483", title: "Arsenal" }]
+          };
+        },
+        async getOrderbook(input: { marketId: string }) {
+          requestedMarkets.push(input.marketId);
+          return {
+            tokenId: "fallback-token",
+            bids: [],
+            asks: []
+          };
+        }
+      }
+    });
+
+    await reader.getQuoteSnapshot({
+      canonicalMarketId: "FRONTEND_CURATED:SPORTS|LEAGUE_WINNER|EPL|2025_2026|UNKNOWN_TEAM",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "english-premier-league-winner-1765295467473:unknown-team",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(requestedMarkets).toEqual(["english-premier-league-winner-1765295467473"]);
+  });
+
   it("Limitless reader enriches stream cache snapshots with market exchange metadata", async () => {
     const streamCache = new QuoteSnapshotCache();
     streamCache.put({
