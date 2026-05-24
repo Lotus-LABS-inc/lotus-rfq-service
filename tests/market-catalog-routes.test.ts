@@ -68,6 +68,9 @@ const market: MarketCatalogMarket = {
     changePercent24h: "1.5",
     marketClass: "CATEGORICAL",
     outcomes: [{ id: "jd-vance", label: "JD Vance" }, { id: "donald-trump", label: "Donald Trump" }],
+    resolutionSource: "Polymarket market rules",
+    resolutionTitle: "Republican nominee?",
+    resolutionRulesText: "This market resolves to the Republican nominee for the 2028 US presidential election.",
     network: "POLYGON",
     chain: "POLYGON",
     expiresAt: "2028-11-01T00:00:00.000Z",
@@ -443,6 +446,7 @@ describe("market catalog routes", () => {
     expect(detail.statusCode).toBe(200);
     expect(detail.json().market.title).toBe("Republican Presidential Nominee 2028");
     expect(detail.json().market.venueMarkets[0].imageUrl).toBe("https://polymarket-upload.s3.us-east-2.amazonaws.com/republican-nominee.png");
+    expect(detail.json().market.venueMarkets[0].resolutionRulesText).toContain("Republican nominee");
 
     const suffixedDetail = await app.inject({
       method: "GET",

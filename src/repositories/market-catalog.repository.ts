@@ -61,6 +61,9 @@ export interface MarketCatalogVenueMarket {
   changePercent24h: string | null;
   marketClass: string;
   outcomes: Array<{ id: string; label: string }>;
+  resolutionSource?: string | null | undefined;
+  resolutionTitle?: string | null | undefined;
+  resolutionRulesText?: string | null | undefined;
   network: string | null;
   chain: string | null;
   expiresAt: string | null;
@@ -184,6 +187,12 @@ interface VenueMarketRow {
   resolves_at: string | null;
   normalized_payload: unknown;
   raw_source_payload: unknown;
+  resolution_source: string | null;
+  resolution_title: string | null;
+  resolution_rules_text: string | null;
+  venue_resolution_source: string | null;
+  venue_resolution_title: string | null;
+  venue_resolution_rules_text: string | null;
 }
 
 interface CategoryRow {
@@ -431,10 +440,18 @@ export class MarketCatalogRepository {
           vmp.expires_at::text,
           vmp.resolves_at::text,
           vmp.normalized_payload,
-          vmp.raw_source_payload
+          vmp.raw_source_payload,
+          vmp.resolution_source,
+          vmp.resolution_title,
+          vmp.resolution_rules_text,
+          vrp.resolution_source AS venue_resolution_source,
+          vrp.resolution_title AS venue_resolution_title,
+          vrp.rule_text AS venue_resolution_rules_text
          FROM canonical_events ce
          JOIN venue_market_profiles vmp
            ON vmp.canonical_event_id = ce.id
+         LEFT JOIN venue_resolution_profiles vrp
+           ON vrp.venue_market_profile_id = vmp.id
          LEFT JOIN canonical_executable_market_members mem
            ON mem.venue_market_profile_id = vmp.id
          LEFT JOIN canonical_executable_markets cem
@@ -953,6 +970,17 @@ const toVenueMarket = (row: VenueMarketRow): MarketCatalogVenueMarket => {
     changePercent24h: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["changePercent24h", "change_percent_24h", "priceChangePercent24h", "price_change_percent_24h", "oneDayPriceChangePercent", "one_day_price_change_percent", "percentChange24h", "percent_change_24h", "changePct24h", "change_pct_24h"]),
     marketClass: row.market_class,
     outcomes: normalizeOutcomes(row.outcomes),
+    resolutionSource: firstNonEmptyString(
+      row.venue_resolution_source,
+      row.resolution_source,
+      extractSanitizedString(row.normalized_payload, row.raw_source_payload, ["resolutionSource", "resolution_source", "sourceUrl", "source_url"])
+    ),
+    resolutionTitle: firstNonEmptyString(row.venue_resolution_title, row.resolution_title, row.venue_title),
+    resolutionRulesText: firstNonEmptyString(
+      row.venue_resolution_rules_text,
+      row.resolution_rules_text,
+      extractSanitizedString(row.normalized_payload, row.raw_source_payload, ["resolutionRules", "resolution_rules", "rules", "description"])
+    ),
     network: row.network,
     chain: row.chain,
     expiresAt: row.expires_at ?? payloadExpiresAt ?? curatedTimestamp,
@@ -1042,6 +1070,28 @@ const extractSanitizedTimestamp = (
     const sanitized = sanitizeTimestamp(candidate);
     if (sanitized) {
       return sanitized;
+    }
+  }
+  return null;
+};
+
+const extractSanitizedString = (
+  normalizedPayload: unknown,
+  rawSourcePayload: unknown,
+  fieldNames: readonly string[]
+): string | null => {
+  const candidates = [
+    ...collectStringFields(normalizedPayload, fieldNames, 3),
+    ...collectStringFields(rawSourcePayload, fieldNames, 4)
+  ];
+  return firstNonEmptyString(...candidates.map((candidate) => sanitizeDisplayText(candidate)));
+};
+
+const firstNonEmptyString = (...values: Array<string | null | undefined>): string | null => {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) {
+      return trimmed;
     }
   }
   return null;
@@ -1184,6 +1234,14 @@ const sanitizeTimestamp = (value: string): string | null => {
     return null;
   }
   return parsed.toISOString();
+};
+
+const sanitizeDisplayText = (value: string): string | null => {
+  const trimmed = value.replace(/\s+/g, " ").trim();
+  if (!trimmed || trimmed.length > 5_000) {
+    return null;
+  }
+  return trimmed;
 };
 
 const normalizeOutcomes = (value: unknown): Array<{ id: string; label: string }> => {

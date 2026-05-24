@@ -60,6 +60,7 @@
     "acquire:opinion:exact-seeds": "tsx scripts/ingest/acquire-opinion-exact-seeds.ts",
     "ingest:opinion:same-day-seeds": "tsx scripts/ingest/ingest-opinion-same-day-seeds.ts",
     "sync:predict:current-state": "tsx scripts/sync/sync-predict-current-state.ts",
+    "sync:market:quote-blocker-cleanup": "tsx scripts/sync/sync-market-quote-blocker-cleanup.ts",
     "acquire:predict:exact-seeds": "tsx scripts/ingest/acquire-predict-exact-seeds.ts",
     "ingest:predict:same-day-seeds": "tsx scripts/ingest/ingest-predict-same-day-seeds.ts",
     "scan:predict:live-markets": "tsx scripts/ingest/select-predict-live-markets.ts",
