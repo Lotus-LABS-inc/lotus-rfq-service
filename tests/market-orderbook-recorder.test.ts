@@ -47,7 +47,9 @@ describe("MarketOrderbookRecorder", () => {
         },
         cleanupSnapshots: async () => ({
           deletedOldSnapshots: 2,
-          deletedClosedMarketSnapshots: 3
+          deletedClosedMarketSnapshots: 3,
+          deletedClosedLatestSnapshots: 4,
+          deletedStaleBlockedLatestSnapshots: 5
         })
       },
       logger,
@@ -71,7 +73,9 @@ describe("MarketOrderbookRecorder", () => {
       failedSamples: 0,
       skippedCooldownSamples: 0,
       deletedOldSnapshots: 2,
-      deletedClosedMarketSnapshots: 3
+      deletedClosedMarketSnapshots: 3,
+      deletedClosedLatestSnapshots: 4,
+      deletedStaleBlockedLatestSnapshots: 5
     });
     expect(inserted.map((snapshot) => snapshot.canonicalOutcomeId)).toEqual(["YES", "NO"]);
     expect(inserted[0]).toMatchObject({
@@ -117,7 +121,9 @@ describe("MarketOrderbookRecorder", () => {
         },
         cleanupSnapshots: async () => ({
           deletedOldSnapshots: 0,
-          deletedClosedMarketSnapshots: 0
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
         })
       },
       logger,
@@ -175,7 +181,9 @@ describe("MarketOrderbookRecorder", () => {
         },
         cleanupSnapshots: async () => ({
           deletedOldSnapshots: 0,
-          deletedClosedMarketSnapshots: 0
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
         })
       },
       logger,
@@ -234,7 +242,9 @@ describe("MarketOrderbookRecorder", () => {
         },
         cleanupSnapshots: async () => ({
           deletedOldSnapshots: 0,
-          deletedClosedMarketSnapshots: 0
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
         })
       },
       logger,

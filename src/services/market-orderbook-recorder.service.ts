@@ -32,6 +32,8 @@ export interface MarketOrderbookRecorderRunResult {
   skippedCooldownSamples: number;
   deletedOldSnapshots: number;
   deletedClosedMarketSnapshots: number;
+  deletedClosedLatestSnapshots: number;
+  deletedStaleBlockedLatestSnapshots: number;
 }
 
 const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
@@ -185,7 +187,14 @@ export class MarketOrderbookRecorder {
         }
       }
 
-      if (result.insertedSnapshots > 0 || result.failedSamples > 0 || result.deletedClosedMarketSnapshots > 0 || result.deletedOldSnapshots > 0) {
+      if (
+        result.insertedSnapshots > 0 ||
+        result.failedSamples > 0 ||
+        result.deletedClosedMarketSnapshots > 0 ||
+        result.deletedClosedLatestSnapshots > 0 ||
+        result.deletedStaleBlockedLatestSnapshots > 0 ||
+        result.deletedOldSnapshots > 0
+      ) {
         this.logger.info({ ...result }, "Market orderbook recorder tick completed.");
       }
       return result;
@@ -380,7 +389,9 @@ const emptyResult = (): MarketOrderbookRecorderRunResult => ({
   failedSamples: 0,
   skippedCooldownSamples: 0,
   deletedOldSnapshots: 0,
-  deletedClosedMarketSnapshots: 0
+  deletedClosedMarketSnapshots: 0,
+  deletedClosedLatestSnapshots: 0,
+  deletedStaleBlockedLatestSnapshots: 0
 });
 
 const normalizeVenue = (venue: string): string => {

@@ -28,6 +28,8 @@ export interface VenueOrderbookSnapshotInput {
 export interface VenueOrderbookSnapshotCleanupResult {
   deletedOldSnapshots: number;
   deletedClosedMarketSnapshots: number;
+  deletedClosedLatestSnapshots: number;
+  deletedStaleBlockedLatestSnapshots: number;
 }
 
 export interface MarketQuoteReadinessSnapshot {
@@ -459,10 +461,39 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
              )
         )`
     );
+    const closedLatestResult = await this.pool.query(
+      `DELETE FROM venue_orderbook_latest_snapshots vos
+        WHERE EXISTS (
+          SELECT 1
+            FROM canonical_events ce
+            LEFT JOIN canonical_executable_markets cem
+              ON cem.canonical_event_id = ce.id
+            LEFT JOIN frontend_market_approvals fma
+              ON fma.canonical_event_id = ce.id
+             AND fma.metadata->>'source' = 'frontend-curated-catalog'
+           WHERE (
+                 vos.canonical_event_id = ce.id::text
+                 OR vos.canonical_market_id = ce.proposition_key
+                 OR vos.canonical_market_id = cem.id
+             )
+             AND (
+                 ce.resolves_at <= now()
+                 OR ce.expires_at <= now()
+                 OR COALESCE(fma.status, 'APPROVED') <> 'APPROVED'
+             )
+        )`
+    );
+    const staleBlockedLatestResult = await this.pool.query(
+      `DELETE FROM venue_orderbook_latest_snapshots
+        WHERE COALESCE(jsonb_array_length(blockers), 0) > 0
+          AND received_at < now() - interval '30 minutes'`
+    );
 
     return {
       deletedOldSnapshots: oldResult.rowCount ?? 0,
-      deletedClosedMarketSnapshots: closedResult.rowCount ?? 0
+      deletedClosedMarketSnapshots: closedResult.rowCount ?? 0,
+      deletedClosedLatestSnapshots: closedLatestResult.rowCount ?? 0,
+      deletedStaleBlockedLatestSnapshots: staleBlockedLatestResult.rowCount ?? 0
     };
   }
 }

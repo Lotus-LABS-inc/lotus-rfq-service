@@ -34,6 +34,7 @@ interface AllBlockedRow {
 interface Report {
   generatedAt: string;
   sourceTable: string;
+  activeLookbackMinutes: number;
   blockerGroups: Array<{
     venue: string;
     reason: string;
@@ -48,6 +49,8 @@ interface Report {
   }>;
   safetyNotes: string[];
 }
+
+const ACTIVE_LOOKBACK_MINUTES = 30;
 
 function requiresSsl(connectionString: string): boolean {
   try {
@@ -64,6 +67,7 @@ function renderMarkdown(report: Report): string {
     "",
     `Generated: ${report.generatedAt}`,
     `Source table: ${report.sourceTable}`,
+    `Active blocker lookback: ${report.activeLookbackMinutes} minutes`,
     "",
     "## Blocker Groups",
     "",
@@ -118,6 +122,7 @@ try {
                 received_at
            FROM venue_orderbook_latest_snapshots
           WHERE jsonb_array_length(blockers) > 0
+            AND received_at >= now() - ($1::int * interval '1 minute')
        )
        SELECT venue,
               reason,
@@ -126,7 +131,8 @@ try {
          FROM latest_blockers
         GROUP BY venue, reason
         ORDER BY COUNT(DISTINCT canonical_market_id) DESC, venue, reason
-        LIMIT 100`
+        LIMIT 100`,
+      [ACTIVE_LOOKBACK_MINUTES]
     ),
     pool.query<AllBlockedRow>(
       `WITH annotated AS (
@@ -136,8 +142,8 @@ try {
                 COALESCE(jsonb_array_length(blockers), 0) = 0
                   AND COALESCE(midpoint, best_bid, best_ask) IS NOT NULL AS display_ready,
                 blockers
-           FROM venue_orderbook_latest_snapshots
-          WHERE received_at >= now() - interval '30 minutes'
+          FROM venue_orderbook_latest_snapshots
+          WHERE received_at >= now() - ($1::int * interval '1 minute')
        ),
        rolled AS (
          SELECT canonical_market_id,
@@ -158,13 +164,15 @@ try {
          FROM rolled
         WHERE ready_count = 0
         ORDER BY latest_quote_at DESC
-        LIMIT 100`
+        LIMIT 100`,
+      [ACTIVE_LOOKBACK_MINUTES]
     )
   ]);
 
   const report: Report = {
     generatedAt: new Date().toISOString(),
     sourceTable: "venue_orderbook_latest_snapshots",
+    activeLookbackMinutes: ACTIVE_LOOKBACK_MINUTES,
     blockerGroups: blockerGroups.rows.map((row) => ({
       venue: row.venue,
       reason: row.reason,
