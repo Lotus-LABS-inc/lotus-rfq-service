@@ -673,6 +673,17 @@ describe("Funding v0 domain", () => {
       userSignedWithdrawalSupported: true,
       partnerManagedWithdrawal: null
     });
+    expect(buildVenueCapabilityMatrix({ env: withdrawalEnv }).POLYMARKET.withdrawalDestinations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ chain: "SOLANA", token: "USDC", supported: false })
+    ]));
+    expect(buildVenueCapabilityMatrix({
+      env: {
+        ...withdrawalEnv,
+        POLYMARKET_WITHDRAWAL_BRIDGE_BACK_ENABLED: "true"
+      } as NodeJS.ProcessEnv
+    }).POLYMARKET.withdrawalDestinations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ chain: "SOLANA", token: "USDC", supported: true })
+    ]));
     expect(matrix.LIMITLESS).toMatchObject({
       supportedChains: expect.arrayContaining(["SOLANA", "BASE", "8453"])
     });
@@ -716,6 +727,35 @@ describe("Funding v0 domain", () => {
       withdrawalMode: "AUTO_RESOLUTION_ONLY",
       userSignedWithdrawalSupported: false
     });
+    expect(buildVenueCapabilityMatrix({ env: withdrawalEnv }).OPINION.withdrawalDestinations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ chain: "SOLANA", token: "USDC", supported: false })
+    ]));
+    expect(buildVenueCapabilityMatrix({
+      env: {
+        ...withdrawalEnv,
+        OPINION_WITHDRAWAL_BRIDGE_BACK_ENABLED: "true"
+      } as NodeJS.ProcessEnv
+    }).OPINION.withdrawalDestinations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ chain: "SOLANA", token: "USDC", supported: true })
+    ]));
+    expect(buildVenueCapabilityMatrix({
+      env: {
+        ...withdrawalEnv,
+        MYRIAD_FUNDING_PREFERRED_TOKEN: "USD1",
+        MYRIAD_WITHDRAWAL_BRIDGE_BACK_ENABLED: "true"
+      } as NodeJS.ProcessEnv
+    }).MYRIAD.withdrawalDestinations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ chain: "SOLANA", token: "USDC", supported: true })
+    ]));
+    expect(buildVenueCapabilityMatrix({
+      env: {
+        ...withdrawalEnv,
+        PREDICT_FUN_FUNDING_PREFERRED_TOKEN: "USDT",
+        PREDICT_FUN_WITHDRAWAL_BRIDGE_BACK_ENABLED: "true"
+      } as NodeJS.ProcessEnv
+    }).PREDICT_FUN.withdrawalDestinations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ chain: "SOLANA", token: "USDT", supported: true })
+    ]));
     expect(buildVenueCapabilityMatrix({ env: {} as NodeJS.ProcessEnv }).OPINION.readinessStatus).toBe("DISABLED");
     expect(buildVenueCapabilityMatrix({ env: {} as NodeJS.ProcessEnv }).PREDICT_FUN).toMatchObject({
       readinessStatus: "READY",
@@ -2315,6 +2355,118 @@ describe("Funding v0 domain", () => {
     });
   });
 
+  it("prepares Polymarket EVM release plus Solana bridge-back when explicitly enabled", async () => {
+    const repository = new InMemoryFundingRepository();
+    repository.ready = true;
+    const lifi = new StubLifiProvider();
+    const bridgeAdapter = new PolymarketBridgeWithdrawalAdapter(
+      new MockPolymarketBridgeWithdrawalClient(),
+      {
+        enabled: true,
+        mode: "DRY_RUN",
+        apiBaseUrl: "https://bridge.operator.example",
+        authMode: "NONE",
+        timeoutMs: 5000,
+        dryRunOnly: true,
+        configured: true
+      },
+      { now: () => new Date("2026-04-26T00:00:00.000Z") }
+    );
+    const evmWallet = userWallet({
+      walletId: "wallet-evm",
+      userId: "user-1",
+      chainFamily: "EVM",
+      chain: "POLYGON",
+      address: "0xD1059eC5F635712f6dcEAd569a41dFD7970DAffa"
+    });
+    const service = new FundingService(
+      repository,
+      lifi,
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env: {
+          ...withdrawalEnv,
+          POLYMARKET_WITHDRAWAL_BRIDGE_BACK_ENABLED: "true"
+        } as NodeJS.ProcessEnv
+      },
+      new Map(),
+      null,
+      null,
+      bridgeAdapter,
+      null,
+      null,
+      null,
+      null,
+      {
+        resolveFundingSourceWallet: async () => null,
+        resolveUserTurnkeyEvmFundingWallet: async () => evmWallet,
+        resolveVenueTargetWallet: async () => null
+      }
+    );
+
+    const created = await service.createWithdrawalIntent("user-1", {
+      token: "USDC",
+      amount: "40",
+      destinationChain: "SOLANA",
+      destinationWalletAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+      idempotencyKey: "withdraw-polymarket-bridge-back",
+      sources: [{ sourceVenue: "POLYMARKET", sourcePercentage: 100 }]
+    });
+    const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
+
+    expect(quoted.routeLegs).toHaveLength(2);
+    expect(quoted.routeLegs[0]).toMatchObject({
+      sourceVenue: "POLYMARKET",
+      destinationChain: "POLYGON",
+      destinationWalletAddress: evmWallet.address,
+      providerStatus: {
+        provider: "POLYMARKET_BRIDGE",
+        mode: "SANDBOX_DRY_RUN",
+        bridgeBackPlanned: true,
+        finalDestinationChain: "SOLANA",
+        finalDestinationWalletAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc"
+      }
+    });
+    expect(quoted.routeLegs[1]).toMatchObject({
+      sourceVenue: "POLYMARKET",
+      destinationChain: "SOLANA",
+      destinationWalletAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+      providerStatus: {
+        provider: "LIFI",
+        mode: "VENUE_EVM_BRIDGE_BACK",
+        sourceVenue: "POLYMARKET",
+        sourceChain: "POLYGON",
+        sourceTokenSymbol: "USDC",
+        destinationChain: "SOLANA",
+        destinationTokenSymbol: "USDC",
+        sourceWalletAddress: evmWallet.address,
+        requiresPriorVenueRelease: true,
+        backendBroadcast: false
+      }
+    });
+    expect(lifi.quoteInputs[0]).toMatchObject({
+      fromChain: "POLYGON",
+      toChain: "SOLANA",
+      fromAddress: evmWallet.address,
+      toAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+      targetVenue: "POLYMARKET"
+    });
+    expect(quoted.intent.aggregateRouteQuote).toMatchObject({
+      routeLegCount: 2,
+      venueEvmBridgeBack: [
+        {
+          provider: "LIFI",
+          mode: "VENUE_EVM_BRIDGE_BACK",
+          sourceVenue: "POLYMARKET",
+          requiresPriorVenueRelease: true,
+          backendBroadcast: false,
+          completionPersisted: false
+        }
+      ]
+    });
+  });
+
   it("keeps default withdrawal quote behavior when Bridge sandbox is not wired", async () => {
     const repository = new InMemoryFundingRepository();
     repository.ready = true;
@@ -2471,6 +2623,98 @@ describe("Funding v0 domain", () => {
     const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
     expect(quoted.routeLegs.some((leg) => leg.providerStatus.provider === "PREDICT_FUN_USER_WALLET")).toBe(false);
     expect(quoted.intent.aggregateRouteQuote).not.toHaveProperty("predictFunUserWallet");
+  });
+
+  it("automatically prepares Predict.fun EVM-to-Solana bridge-back after the venue withdrawal leg", async () => {
+    const repository = new InMemoryFundingRepository();
+    repository.ready = true;
+    const lifi = new StubLifiProvider();
+    const evmWallet = userWallet({
+      walletId: "wallet-evm",
+      userId: "user-1",
+      chainFamily: "EVM",
+      chain: "BSC",
+      address: "0xD1059eC5F635712f6dcEAd569a41dFD7970DAffa"
+    });
+    const predictEnv = {
+      ...withdrawalEnv,
+      PREDICT_FUN_WITHDRAWAL_ADAPTER_ENABLED: "true",
+      PREDICT_FUN_WITHDRAWAL_ADAPTER_MODE: "USER_WALLET_DRY_RUN",
+      PREDICT_FUN_WITHDRAWAL_ADAPTER_DRY_RUN_ONLY: "true",
+      PREDICT_FUN_WITHDRAWAL_BRIDGE_BACK_ENABLED: "true",
+      PREDICT_FUN_WITHDRAWAL_INSTRUCTIONS_URL: "https://docs.predict.fun/knowledge-base/wallets"
+    } as NodeJS.ProcessEnv;
+    const service = new FundingService(
+      repository,
+      lifi,
+      {
+        lifiQuotesEnabled: true,
+        liveSubmitEnabled: false,
+        env: predictEnv
+      },
+      new Map(),
+      null,
+      null,
+      null,
+      new PredictFunWithdrawalAdapter(getPredictFunWithdrawalConfigFromEnv(predictEnv)),
+      null,
+      null,
+      null,
+      {
+        resolveFundingSourceWallet: async () => null,
+        resolveUserTurnkeyEvmFundingWallet: async () => evmWallet,
+        resolveVenueTargetWallet: async () => null
+      }
+    );
+
+    const created = await service.createWithdrawalIntent("user-1", {
+      token: "USDT",
+      amount: "5",
+      destinationChain: "SOLANA",
+      destinationWalletAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+      idempotencyKey: "withdraw-predictfun-full-exit",
+      sources: [{ sourceVenue: "PREDICT_FUN", sourcePercentage: 100 }]
+    });
+    const quoted = await service.quoteWithdrawalIntent("user-1", created.intent.withdrawalIntentId);
+
+    expect(quoted.routeLegs).toHaveLength(2);
+    expect(quoted.routeLegs[0]).toMatchObject({
+      sourceVenue: "PREDICT_FUN",
+      destinationChain: "BSC",
+      destinationWalletAddress: evmWallet.address,
+      providerStatus: {
+        provider: "PREDICT_FUN_USER_WALLET",
+        mode: "USER_WALLET_DRY_RUN",
+        bridgeBackPlanned: true,
+        finalDestinationChain: "SOLANA",
+        finalDestinationWalletAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+        backendBroadcast: false
+      }
+    });
+    expect(quoted.routeLegs[1]).toMatchObject({
+      sourceVenue: "PREDICT_FUN",
+      destinationChain: "SOLANA",
+      destinationWalletAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+      providerStatus: {
+        provider: "LIFI",
+        mode: "VENUE_EVM_BRIDGE_BACK",
+        sourceVenue: "PREDICT_FUN",
+        sourceChain: "BSC",
+        sourceTokenSymbol: "USDT",
+        destinationChain: "SOLANA",
+        destinationTokenSymbol: "USDT",
+        sourceWalletAddress: evmWallet.address,
+        requiresPriorVenueRelease: true,
+        backendBroadcast: false
+      }
+    });
+    expect(lifi.quoteInputs[0]).toMatchObject({
+      fromChain: "BSC",
+      toChain: "SOLANA",
+      fromAddress: evmWallet.address,
+      toAddress: "A5K7uttgW2TPPd9dce6cxgdbAwDkKR7gEsopFDYZGooc",
+      targetVenue: "PREDICT_FUN"
+    });
   });
 
   it("returns safe Myriad user-wallet instructions for single-source BSC USD1 withdrawals", async () => {
