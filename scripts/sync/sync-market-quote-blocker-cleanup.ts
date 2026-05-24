@@ -23,6 +23,8 @@ interface ParsedArgs {
   predictSearchLimit: number;
   predictTimeoutMs: number;
   predictEnvironment: PredictEnvironment;
+  hidePredictVenueMarketIds: string[];
+  hideFrontendCuratedKeys: string[];
 }
 
 interface HiddenPolymarketRow {
@@ -55,7 +57,7 @@ interface PredictRepairCandidate {
   title: string;
   currentVenueMarketId: string;
   blockers: string[];
-  status: "UPDATED" | "PLANNED" | "NEEDS_OPERATOR_LINK" | "SKIPPED";
+  status: "UPDATED" | "PLANNED" | "NEEDS_OPERATOR_LINK" | "HIDDEN" | "SKIPPED";
   reason: string;
   candidate: {
     venueMarketId: string;
@@ -83,6 +85,8 @@ interface CleanupArtifact {
     predictRowsScanned: number;
     predictRowsUpdatedOrPlanned: number;
     predictRowsNeedingOperatorLinks: number;
+    predictRowsHiddenOrPlanned: number;
+    operatorConfirmedEventsHiddenOrPlanned: number;
   };
   safety: {
     hidesFrontendApprovalOnly: true;
@@ -128,6 +132,8 @@ try {
     try {
       await hidePolymarketClosedEvents(pool, polymarketRows);
       await deleteSnapshotsForPolymarketClosedEvents(pool, polymarketRows);
+      await hideOperatorConfirmedEvents(pool, args.hideFrontendCuratedKeys);
+      await hidePredictNonRepairableRows(pool, predictRepairs);
       await applyPredictRepairs(pool, predictRepairs);
       await pool.query("COMMIT");
     } catch (error) {
@@ -145,7 +151,9 @@ try {
       polymarketEventsHiddenOrPlanned: polymarketRows.length,
       predictRowsScanned: predictRows.length,
       predictRowsUpdatedOrPlanned: predictRepairs.filter((row) => row.status === "PLANNED" || row.status === "UPDATED").length,
-      predictRowsNeedingOperatorLinks: predictRepairs.filter((row) => row.status === "NEEDS_OPERATOR_LINK").length
+      predictRowsNeedingOperatorLinks: predictRepairs.filter((row) => row.status === "NEEDS_OPERATOR_LINK").length,
+      predictRowsHiddenOrPlanned: predictRepairs.filter((row) => row.status === "HIDDEN").length,
+      operatorConfirmedEventsHiddenOrPlanned: args.hideFrontendCuratedKeys.length
     },
     safety: {
       hidesFrontendApprovalOnly: true,
@@ -170,6 +178,8 @@ try {
   console.log(`predictRowsScanned=${artifact.summary.predictRowsScanned}`);
   console.log(`predictRowsUpdatedOrPlanned=${artifact.summary.predictRowsUpdatedOrPlanned}`);
   console.log(`predictRowsNeedingOperatorLinks=${artifact.summary.predictRowsNeedingOperatorLinks}`);
+  console.log(`predictRowsHiddenOrPlanned=${artifact.summary.predictRowsHiddenOrPlanned}`);
+  console.log(`operatorConfirmedEventsHiddenOrPlanned=${artifact.summary.operatorConfirmedEventsHiddenOrPlanned}`);
 } finally {
   await pool.end();
 }
@@ -188,6 +198,8 @@ function parseArgs(): ParsedArgs {
   const predictSearchLimit = Number.parseInt(values.get("predictSearchLimit") ?? "20", 10);
   const predictTimeoutMs = Number.parseInt(values.get("predictTimeoutMs") ?? "8_000".replace("_", ""), 10);
   const predictEnvironment = (values.get("predictEnvironment") ?? "mainnet") as PredictEnvironment;
+  const hidePredictVenueMarketIds = parseCsv(values.get("hidePredictVenueMarketIds"));
+  const hideFrontendCuratedKeys = parseCsv(values.get("hideFrontendCuratedKeys"));
   if (!Number.isFinite(lookbackMinutes) || lookbackMinutes <= 0) {
     throw new Error("lookbackMinutes must be a positive integer.");
   }
@@ -209,7 +221,9 @@ function parseArgs(): ParsedArgs {
     predictLimit,
     predictSearchLimit,
     predictTimeoutMs,
-    predictEnvironment
+    predictEnvironment,
+    hidePredictVenueMarketIds,
+    hideFrontendCuratedKeys
   };
 }
 
@@ -357,6 +371,10 @@ async function buildPredictRepairCandidates(rows: readonly PredictBlockedRow[]):
   const results: PredictRepairCandidate[] = [];
   let searchedRows = 0;
   for (const row of rows) {
+    if (args.hidePredictVenueMarketIds.some((id) => samePredictVenueMarketId(id, row.venue_market_id))) {
+      results.push(toPredictUnresolved(row, "PREDICT_OPERATOR_CONFIRMED_NON_REPAIRABLE"));
+      continue;
+    }
     const currentId = extractNumericMarketId(row.venue_market_id);
     if (currentId) {
       try {
@@ -452,12 +470,6 @@ async function hidePolymarketClosedEvents(db: Pool, rows: readonly HiddenPolymar
         })
       ]
     );
-    await db.query(
-      `DELETE FROM venue_orderbook_latest_snapshots
-        WHERE venue IN ('PREDICT', 'PREDICT_FUN')
-          AND venue_market_id = $1`,
-      [row.currentVenueMarketId]
-    );
   }
 }
 
@@ -520,6 +532,96 @@ async function applyPredictRepairs(db: Pool, rows: readonly PredictRepairCandida
   }
 }
 
+async function hidePredictNonRepairableRows(db: Pool, rows: readonly PredictRepairCandidate[]): Promise<void> {
+  const rowsToHide = rows.filter((row) =>
+    row.status === "HIDDEN" &&
+    args.hidePredictVenueMarketIds.some((id) => samePredictVenueMarketId(id, row.currentVenueMarketId))
+  );
+  for (const row of rowsToHide) {
+    await db.query(
+      `UPDATE frontend_market_approvals
+          SET status = 'HIDDEN',
+              approval_reason = 'hidden because operator confirmed the linked Predict market is inactive or does not contain the curated outcome',
+              metadata = metadata || $2::jsonb,
+              updated_at = now()
+        WHERE canonical_event_id = $1::uuid
+          AND status = 'APPROVED'
+          AND metadata->>'source' = 'frontend-curated-catalog'`,
+      [
+        row.canonicalEventId,
+        JSON.stringify({
+          hiddenBy: "sync-market-quote-blocker-cleanup",
+          hiddenAt: generatedAt,
+          hiddenReason: "PREDICT_OPERATOR_CONFIRMED_NON_REPAIRABLE",
+          currentVenueMarketId: row.currentVenueMarketId,
+          latestBlockers: row.blockers
+        })
+      ]
+    );
+    await db.query(
+      `DELETE FROM venue_orderbook_latest_snapshots
+        WHERE venue IN ('PREDICT', 'PREDICT_FUN')
+          AND (
+            venue_market_id = $1
+            OR venue_market_id = regexp_replace($1, '^PREDICT:?([0-9]+).*$', '\\1')
+          )`,
+      [row.currentVenueMarketId]
+    );
+    await db.query(
+      `DELETE FROM venue_orderbook_snapshots
+        WHERE venue IN ('PREDICT', 'PREDICT_FUN')
+          AND (
+            venue_market_id = $1
+            OR venue_market_id = regexp_replace($1, '^PREDICT:?([0-9]+).*$', '\\1')
+          )`,
+      [row.currentVenueMarketId]
+    );
+  }
+}
+
+async function hideOperatorConfirmedEvents(db: Pool, curatedKeys: readonly string[]): Promise<void> {
+  const keys = [...new Set(curatedKeys.map((key) => key.trim()).filter(Boolean))];
+  if (keys.length === 0) {
+    return;
+  }
+  await db.query(
+    `UPDATE frontend_market_approvals
+        SET status = 'HIDDEN',
+            approval_reason = 'hidden because operator confirmed the linked venue market is inactive or does not contain the curated outcome',
+            metadata = metadata || $2::jsonb,
+            updated_at = now()
+      WHERE status = 'APPROVED'
+        AND metadata->>'source' = 'frontend-curated-catalog'
+        AND metadata->>'curatedKey' = ANY($1::text[])`,
+    [
+      keys,
+      JSON.stringify({
+        hiddenBy: "sync-market-quote-blocker-cleanup",
+        hiddenAt: generatedAt,
+        hiddenReason: "OPERATOR_CONFIRMED_NON_REPAIRABLE"
+      })
+    ]
+  );
+  await db.query(
+    `DELETE FROM venue_orderbook_latest_snapshots
+      WHERE canonical_event_id IN (
+        SELECT canonical_event_id::text
+          FROM frontend_market_approvals
+         WHERE metadata->>'curatedKey' = ANY($1::text[])
+      )`,
+    [keys]
+  );
+  await db.query(
+    `DELETE FROM venue_orderbook_snapshots
+      WHERE canonical_event_id IN (
+        SELECT canonical_event_id::text
+          FROM frontend_market_approvals
+         WHERE metadata->>'curatedKey' = ANY($1::text[])
+      )`,
+    [keys]
+  );
+}
+
 function toPredictRepair(
   row: PredictBlockedRow,
   market: PredictNormalizedMarket,
@@ -548,6 +650,7 @@ function toPredictRepair(
 }
 
 function toPredictUnresolved(row: PredictBlockedRow, reason: string): PredictRepairCandidate {
+  const shouldHide = args.hidePredictVenueMarketIds.some((id) => samePredictVenueMarketId(id, row.venue_market_id));
   return {
     profileId: row.profile_id,
     canonicalEventId: row.canonical_event_id,
@@ -555,11 +658,22 @@ function toPredictUnresolved(row: PredictBlockedRow, reason: string): PredictRep
     title: row.title,
     currentVenueMarketId: row.venue_market_id,
     blockers: parseStringArray(row.blockers),
-    status: "NEEDS_OPERATOR_LINK",
-    reason,
+    status: shouldHide ? "HIDDEN" : "NEEDS_OPERATOR_LINK",
+    reason: shouldHide ? `PREDICT_OPERATOR_CONFIRMED_NON_REPAIRABLE:${reason}` : reason,
     candidate: null,
     linkHints: buildPredictLinkHints(row)
   };
+}
+
+function samePredictVenueMarketId(left: string, right: string): boolean {
+  const leftTrimmed = left.trim();
+  const rightTrimmed = right.trim();
+  if (leftTrimmed.toUpperCase() === rightTrimmed.toUpperCase()) {
+    return true;
+  }
+  const leftNumeric = extractNumericMarketId(leftTrimmed);
+  const rightNumeric = extractNumericMarketId(rightTrimmed);
+  return leftNumeric !== null && leftNumeric === rightNumeric;
 }
 
 function buildPredictLinkHints(row: PredictBlockedRow): PredictRepairCandidate["linkHints"] {
@@ -643,6 +757,10 @@ function parseStringArray(value: unknown): string[] {
   return [];
 }
 
+function parseCsv(value: string | undefined): string[] {
+  return value?.split(",").map((entry) => entry.trim()).filter(Boolean) ?? [];
+}
+
 async function writeArtifacts(artifact: CleanupArtifact): Promise<void> {
   await mkdir(artifactDir, { recursive: true });
   await writeFile(
@@ -671,6 +789,8 @@ function renderMarkdown(artifact: CleanupArtifact): string {
     `- Predict rows scanned: ${artifact.summary.predictRowsScanned}`,
     `- Predict rows ${artifact.mode === "APPLY" ? "updated" : "planned"}: ${artifact.summary.predictRowsUpdatedOrPlanned}`,
     `- Predict rows needing operator links: ${artifact.summary.predictRowsNeedingOperatorLinks}`,
+    `- Predict rows ${artifact.mode === "APPLY" ? "hidden" : "planned hidden"}: ${artifact.summary.predictRowsHiddenOrPlanned}`,
+    `- Operator-confirmed events ${artifact.mode === "APPLY" ? "hidden" : "planned hidden"}: ${artifact.summary.operatorConfirmedEventsHiddenOrPlanned}`,
     "",
     "## Polymarket Closed Events",
     "",

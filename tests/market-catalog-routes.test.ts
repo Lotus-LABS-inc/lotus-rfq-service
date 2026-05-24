@@ -53,6 +53,9 @@ const market: MarketCatalogMarket = {
     venue: "POLYMARKET",
     venueMarketProfileId: "vmp_poly",
     venueMarketId: "poly-1",
+    marketSlug: "republican-presidential-nominee-2028",
+    eventSlug: "republican-presidential-nominee-2028",
+    sourceUrl: "https://polymarket.com/event/republican-presidential-nominee-2028",
     venueTitle: "Republican nominee?",
     imageUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/republican-nominee.png",
     iconUrl: null,
@@ -446,6 +449,8 @@ describe("market catalog routes", () => {
     expect(detail.statusCode).toBe(200);
     expect(detail.json().market.title).toBe("Republican Presidential Nominee 2028");
     expect(detail.json().market.venueMarkets[0].imageUrl).toBe("https://polymarket-upload.s3.us-east-2.amazonaws.com/republican-nominee.png");
+    expect(detail.json().market.venueMarkets[0].sourceUrl).toBe("https://polymarket.com/event/republican-presidential-nominee-2028");
+    expect(detail.json().market.venueMarkets[0].marketSlug).toBe("republican-presidential-nominee-2028");
     expect(detail.json().market.venueMarkets[0].resolutionRulesText).toContain("Republican nominee");
 
     const suffixedDetail = await app.inject({

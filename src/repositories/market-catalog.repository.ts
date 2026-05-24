@@ -46,6 +46,9 @@ export interface MarketCatalogVenueMarket {
   venue: string;
   venueMarketProfileId: string;
   venueMarketId: string;
+  marketSlug?: string | null | undefined;
+  eventSlug?: string | null | undefined;
+  sourceUrl?: string | null | undefined;
   venueTitle: string;
   imageUrl: string | null;
   iconUrl: string | null;
@@ -949,12 +952,24 @@ const toVenueMarket = (row: VenueMarketRow): MarketCatalogVenueMarket => {
     "resolution_time"
   ]);
   const curatedTimestamp = extractCuratedTimestamp(row.normalized_payload, row.raw_source_payload);
+  const marketSlug = firstNonEmptyString(
+    extractSanitizedSlug(row.normalized_payload, row.raw_source_payload, ["marketSlug", "market_slug", "slug"]),
+    slugLikeVenueMarketId(row.venue_market_id)
+  );
+  const eventSlug = extractSanitizedSlug(row.normalized_payload, row.raw_source_payload, ["eventSlug", "event_slug", "event_slug_id"]);
+  const sourceUrl = firstNonEmptyString(
+    extractSanitizedSourceUrl(row.normalized_payload, row.raw_source_payload, ["sourceUrl", "source_url", "url", "permalink", "marketUrl", "market_url"]),
+    buildVenueSourceUrl(row.venue, marketSlug, eventSlug)
+  );
   return {
     canonicalMarketId: row.canonical_market_id,
     canonicalMarketTitle: displayTitle(row.canonical_market_title, row.canonical_market_id),
     venue: row.venue === "PREDICT" ? "PREDICT_FUN" : row.venue,
     venueMarketProfileId: row.venue_market_profile_id,
     venueMarketId: row.venue_market_id,
+    marketSlug,
+    eventSlug,
+    sourceUrl,
     venueTitle: row.venue_title,
     imageUrl: extractSanitizedMediaUrl(row.normalized_payload, row.raw_source_payload, ["imageUrl", "image_url", "image", "twitterCardImage", "thumbnailUrl", "thumbnail", "banner"]),
     iconUrl: extractSanitizedMediaUrl(row.normalized_payload, row.raw_source_payload, ["iconUrl", "icon_url", "icon", "logoUrl", "logo"]),
@@ -1039,6 +1054,21 @@ const MEDIA_HOST_ALLOWLIST = [
   "predict.fun"
 ];
 
+const SOURCE_HOST_ALLOWLIST = [
+  "polymarket.com",
+  "www.polymarket.com",
+  "predict.fun",
+  "www.predict.fun",
+  "limitless.exchange",
+  "www.limitless.exchange",
+  "opinion.trade",
+  "www.opinion.trade",
+  "myriad.markets",
+  "www.myriad.markets",
+  "myriad.social",
+  "www.myriad.social"
+];
+
 const extractSanitizedMediaUrl = (
   normalizedPayload: unknown,
   rawSourcePayload: unknown,
@@ -1085,6 +1115,42 @@ const extractSanitizedString = (
     ...collectStringFields(rawSourcePayload, fieldNames, 4)
   ];
   return firstNonEmptyString(...candidates.map((candidate) => sanitizeDisplayText(candidate)));
+};
+
+const extractSanitizedSlug = (
+  normalizedPayload: unknown,
+  rawSourcePayload: unknown,
+  fieldNames: readonly string[]
+): string | null => {
+  const candidates = [
+    ...collectStringFields(normalizedPayload, fieldNames, 3),
+    ...collectStringFields(rawSourcePayload, fieldNames, 4)
+  ];
+  for (const candidate of candidates) {
+    const sanitized = sanitizeSlug(candidate);
+    if (sanitized) {
+      return sanitized;
+    }
+  }
+  return null;
+};
+
+const extractSanitizedSourceUrl = (
+  normalizedPayload: unknown,
+  rawSourcePayload: unknown,
+  fieldNames: readonly string[]
+): string | null => {
+  const candidates = [
+    ...collectStringFields(normalizedPayload, fieldNames, 3),
+    ...collectStringFields(rawSourcePayload, fieldNames, 4)
+  ];
+  for (const candidate of candidates) {
+    const sanitized = sanitizeSourceUrl(candidate);
+    if (sanitized) {
+      return sanitized;
+    }
+  }
+  return null;
 };
 
 const firstNonEmptyString = (...values: Array<string | null | undefined>): string | null => {
@@ -1219,6 +1285,63 @@ const sanitizeMediaUrl = (value: string): string | null => {
   const hostname = parsed.hostname.toLowerCase();
   const allowed = MEDIA_HOST_ALLOWLIST.some((host) => hostname === host || hostname.endsWith(`.${host}`));
   return allowed ? parsed.toString() : null;
+};
+
+const sanitizeSourceUrl = (value: string): string | null => {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 2048) {
+    return null;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:") {
+    return null;
+  }
+  parsed.hash = "";
+  parsed.username = "";
+  parsed.password = "";
+  const hostname = parsed.hostname.toLowerCase();
+  const allowed = SOURCE_HOST_ALLOWLIST.some((host) => hostname === host || hostname.endsWith(`.${host}`));
+  return allowed ? parsed.toString() : null;
+};
+
+const sanitizeSlug = (value: string): string | null => {
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed || trimmed.length > 180 || !/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
+};
+
+const slugLikeVenueMarketId = (value: string): string | null => (
+  value.includes(":") || /^\d+$/.test(value.trim()) || value.startsWith("0x")
+    ? null
+    : sanitizeSlug(value)
+);
+
+const buildVenueSourceUrl = (venue: string, marketSlug: string | null, eventSlug: string | null): string | null => {
+  const normalizedVenue = venue === "PREDICT" ? "PREDICT_FUN" : venue;
+  if (normalizedVenue === "POLYMARKET") {
+    const slug = eventSlug ?? marketSlug;
+    return slug ? `https://polymarket.com/event/${slug}` : null;
+  }
+  if (normalizedVenue === "PREDICT_FUN") {
+    return marketSlug ? `https://predict.fun/market/${marketSlug}` : null;
+  }
+  if (normalizedVenue === "LIMITLESS") {
+    return marketSlug ? `https://limitless.exchange/markets/${marketSlug}` : null;
+  }
+  if (normalizedVenue === "OPINION") {
+    return marketSlug ? `https://www.opinion.trade/market/${marketSlug}` : null;
+  }
+  if (normalizedVenue === "MYRIAD") {
+    return marketSlug ? `https://myriad.markets/markets/${marketSlug}` : null;
+  }
+  return null;
 };
 
 const sanitizeTimestamp = (value: string): string | null => {
