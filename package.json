@@ -56,6 +56,7 @@
     "sync:limitless:live-current-state": "tsx scripts/sync/sync-limitless-live-current-state.ts",
     "sync:opinion:current-state": "tsx scripts/sync/sync-opinion-current-state.ts",
     "sync:opinion:historical-recovery": "tsx scripts/backfill/sync-opinion-historical-recovery.ts",
+    "sync:venue:resolution-metadata": "tsx scripts/sync/sync-venue-resolution-metadata.ts",
     "acquire:opinion:seed-candidates": "tsx scripts/ingest/acquire-opinion-seed-candidates.ts",
     "acquire:opinion:exact-seeds": "tsx scripts/ingest/acquire-opinion-exact-seeds.ts",
     "ingest:opinion:same-day-seeds": "tsx scripts/ingest/ingest-opinion-same-day-seeds.ts",
