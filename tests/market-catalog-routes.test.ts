@@ -1039,6 +1039,135 @@ describe("market catalog routes", () => {
     expect(byProfile.get("vmp_poly_condition")?.sourceUrl).toBeNull();
   });
 
+  it("uses venue-provided rules and sources instead of placeholder catalog text", async () => {
+    const pool = {
+      query: async (sql: string) => {
+        if (sql.includes("COUNT(*)::int AS total_count")) {
+          return { rows: [{ total_count: "1" }] };
+        }
+        if (sql.includes("venue_market_count")) {
+          return {
+            rows: [{
+              canonical_event_id: "11111111-1111-5111-8111-111111111117",
+              proposition_key: "CRYPTO|ATH_BY_DATE|XRP|2026_09_30",
+              title: "XRP all time high by September 30, 2026",
+              normalized_proposition_text: "xrp all time high by september 30 2026",
+              canonical_category: "CRYPTO",
+              market_class: "BINARY",
+              starts_at: "2026-05-03T00:00:00.000Z",
+              expires_at: "2026-09-30T00:00:00.000Z",
+              resolves_at: null,
+              updated_at: "2026-05-03T00:00:00.000Z",
+              event_metadata: {},
+              frontend_display_title: null,
+              frontend_sort_priority: 1000,
+              canonical_market_ids: ["CRYPTO|ATH_BY_DATE|XRP|2026_09_30"],
+              venues: ["LIMITLESS", "OPINION", "POLYMARKET", "PREDICT", "MYRIAD"],
+              venue_market_count: "5"
+            }]
+          };
+        }
+        return {
+          rows: [
+            {
+              venue_market_profile_id: "vmp_limitless_rules",
+              venue: "LIMITLESS",
+              venue_market_id: "LIMITLESS:september-30-2026-1775137169961:CRYPTO|ATH_BY_DATE|XRP|2026_09_30",
+              venue_title: "Ath By Date Xrp 2026-09-30: 2026-09-30",
+              normalized_payload: {},
+              raw_source_payload: {
+                marketDetail: {
+                  rules: "This market resolves to Yes if XRP makes a new all-time high on or before September 30, 2026. Otherwise it resolves to No.",
+                  resolutionSource: "Resolution source: venue-published Limitless market rules."
+                }
+              },
+              resolution_rules_text: "ath by date xrp 2026 09 30 2026 09 30"
+            },
+            {
+              venue_market_profile_id: "vmp_poly_rules",
+              venue: "POLYMARKET",
+              venue_market_id: "POLYMARKET:xrp-all-time-high-by-september-30-2026:CRYPTO|ATH_BY_DATE|XRP|2026_09_30",
+              venue_title: "XRP ATH by September 30",
+              normalized_payload: {},
+              raw_source_payload: {
+                market: {
+                  resolutionRules: "This market resolves according to Polymarket's published XRP all-time-high rules and final market resolution.",
+                  resolutionSource: "Resolution source: Polymarket market rules."
+                }
+              },
+              resolution_rules_text: "ath by date xrp 2026 09 30 2026 09 30"
+            },
+            {
+              venue_market_profile_id: "vmp_predict_rules",
+              venue: "PREDICT",
+              venue_market_id: "PREDICT:xrp-ath-september-2026:CRYPTO|ATH_BY_DATE|XRP|2026_09_30",
+              venue_title: "XRP ATH by September 30",
+              normalized_payload: {},
+              raw_source_payload: {
+                description: "This market resolves to Yes if Predict.fun's listed XRP threshold condition is met before the market close.",
+                resolutionSource: "Resolution source: Predict.fun market metadata."
+              },
+              resolution_rules_text: "ath by date xrp 2026 09 30 2026 09 30"
+            },
+            {
+              venue_market_profile_id: "vmp_opinion_rules",
+              venue: "OPINION",
+              venue_market_id: "OPINION:xrp-ath-september-2026:CRYPTO|ATH_BY_DATE|XRP|2026_09_30",
+              venue_title: "XRP ATH by September 30",
+              normalized_payload: {},
+              raw_source_payload: {
+                rules: "This market resolves by Opinion's published market rules for whether XRP reaches a new all-time high by the cutoff.",
+                resolutionSource: "Resolution source: Opinion market rules."
+              },
+              resolution_rules_text: "ath by date xrp 2026 09 30 2026 09 30"
+            },
+            {
+              venue_market_profile_id: "vmp_myriad_rules",
+              venue: "MYRIAD",
+              venue_market_id: "MYRIAD:xrp-ath-september-2026:CRYPTO|ATH_BY_DATE|XRP|2026_09_30",
+              venue_title: "XRP ATH by September 30",
+              normalized_payload: {},
+              raw_source_payload: {
+                description: "This market resolves to Yes under the Myriad market question rules if the stated XRP ATH condition occurs.",
+                resolutionSource: "Resolution source: Myriad market rules."
+              },
+              resolution_rules_text: "ath by date xrp 2026 09 30 2026 09 30"
+            }
+          ].map((row) => ({
+            canonical_event_id: "11111111-1111-5111-8111-111111111117",
+            canonical_market_id: "CRYPTO|ATH_BY_DATE|XRP|2026_09_30",
+            canonical_market_title: "XRP all time high by September 30, 2026",
+            market_class: "BINARY",
+            outcomes: [{ id: "YES", label: "Yes" }, { id: "NO", label: "No" }],
+            network: null,
+            chain: null,
+            expires_at: "2026-09-30T00:00:00.000Z",
+            resolves_at: null,
+            resolution_source: null,
+            resolution_title: row.venue_title,
+            venue_resolution_source: null,
+            venue_resolution_title: null,
+            venue_resolution_rules_text: null,
+            ...row
+          }))
+        };
+      }
+    };
+
+    const repository = new PgMarketCatalogRepository(pool as never);
+    const [catalogMarket] = await repository.listMarkets({ limit: 1 });
+    const byVenue = new Map(catalogMarket?.venueMarkets.map((venueMarket) => [venueMarket.venue, venueMarket]));
+
+    expect(catalogMarket?.venueMarkets).toHaveLength(5);
+    for (const venueMarket of catalogMarket?.venueMarkets ?? []) {
+      expect(venueMarket.resolutionRulesText).toContain("resolves");
+      expect(venueMarket.resolutionRulesText).not.toBe("ath by date xrp 2026 09 30 2026 09 30");
+      expect(venueMarket.resolutionSource).toContain("Resolution source:");
+    }
+    expect(byVenue.get("LIMITLESS")?.resolutionRulesText).toContain("new all-time high");
+    expect(byVenue.get("PREDICT_FUN")?.resolutionSource).toContain("Predict.fun");
+  });
+
   it("resolves shared-core quote mappings when frontend sends a venue-neutral canonical market id", async () => {
     const queries: Array<{ sql: string; params?: unknown[] }> = [];
     const pool = {

@@ -15,6 +15,73 @@ const stripHtml = (value: string): string =>
 const asOptionalText = (value: unknown): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 
+const asRecord = (value: unknown): Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+
+const normalizeComparableText = (value: string): string =>
+  stripHtml(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+const collectTextFields = (
+  value: unknown,
+  fieldNames: readonly string[],
+  depth: number
+): string[] => {
+  if (depth < 0 || typeof value === "string") {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => collectTextFields(entry, fieldNames, depth - 1));
+  }
+  const record = asRecord(value);
+  if (Object.keys(record).length === 0) {
+    return [];
+  }
+  const direct = fieldNames.flatMap((field) => {
+    const candidate = record[field];
+    return typeof candidate === "string" && candidate.trim().length > 0 ? [candidate] : [];
+  });
+  const nested = Object.values(record).flatMap((entry) => collectTextFields(entry, fieldNames, depth - 1));
+  return [...direct, ...nested];
+};
+
+const selectVenueRuleText = (input: {
+  detail: LimitlessMarketDetail | null;
+  fallbackTitle: string;
+  fallbackDescription?: string | null;
+}): string | null => {
+  const detail = asRecord(input.detail);
+  const candidates = [
+    ...collectTextFields(detail, [
+      "resolutionRules",
+      "resolution_rules",
+      "resolutionRule",
+      "resolution_rule",
+      "resolutionRulesText",
+      "resolution_rules_text",
+      "rules",
+      "rule",
+      "description",
+      "resolveDescription",
+      "resolutionCriteria",
+      "settlementRules"
+    ], 3),
+    input.fallbackDescription ?? null
+  ];
+  const normalizedTitle = normalizeComparableText(input.fallbackTitle);
+  for (const candidate of candidates) {
+    const stripped = stripHtml(candidate ?? "");
+    if (!stripped) {
+      continue;
+    }
+    const normalizedCandidate = normalizeComparableText(stripped);
+    if (!normalizedCandidate || normalizedCandidate === normalizedTitle) {
+      continue;
+    }
+    return stripped;
+  }
+  return null;
+};
+
 const toDateOrNull = (value: unknown): Date | null => {
   if (typeof value === "number" && Number.isFinite(value)) {
     return new Date(value);
@@ -74,16 +141,14 @@ export const hydrateLimitlessExecutableProfile = (input: {
   fallbackTitle: string;
   fallbackDescription?: string | null;
 }): HydratedLimitlessExecutableProfile => {
-  const detailDescription = asOptionalText(input.detail?.description);
-  const normalizedRules = detailDescription ? stripHtml(detailDescription) : null;
-  const normalizedFallbackDescription = asOptionalText(input.fallbackDescription);
+  const normalizedRules = selectVenueRuleText(input);
   const detailTitle = asOptionalText(input.detail?.title);
   const title = selectExecutableTitle({
     detailTitle,
     fallbackTitle: input.fallbackTitle,
     normalizedRules
   });
-  const description = normalizedRules ?? normalizedFallbackDescription ?? input.fallbackTitle;
+  const description = normalizedRules;
   const publishedAt = toDateOrNull(input.detail?.createdAt);
   const expiration =
     toDateOrNull(input.detail?.expirationTimestamp)

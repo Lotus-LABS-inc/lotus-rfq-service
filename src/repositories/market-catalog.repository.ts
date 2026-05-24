@@ -6,6 +6,44 @@ const FRONTEND_CATALOG_EXCLUDED_TOPIC_PREFIXES = [
 ] as const;
 
 const VENUE_SUFFIX_PATTERN = /:(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$/i;
+const VENUE_RULE_TEXT_FIELDS = [
+  "resolutionRules",
+  "resolution_rules",
+  "resolutionRule",
+  "resolution_rule",
+  "resolutionRulesText",
+  "resolution_rules_text",
+  "rules",
+  "rule",
+  "description",
+  "resolveDescription",
+  "resolutionCriteria",
+  "settlementRules",
+  "settlement_rules"
+] as const;
+const VENUE_RESOLUTION_SOURCE_FIELDS = [
+  "resolutionSource",
+  "resolution_source",
+  "resolutionSourceUrl",
+  "resolution_source_url",
+  "source",
+  "sourceName",
+  "source_name",
+  "resolver",
+  "oracle",
+  "oracleName",
+  "oracle_name"
+] as const;
+const VENUE_SOURCE_URL_FIELDS = [
+  "sourceUrl",
+  "source_url",
+  "url",
+  "permalink",
+  "marketUrl",
+  "market_url",
+  "resolutionSourceUrl",
+  "resolution_source_url"
+] as const;
 
 const addFrontendCatalogExclusionCondition = (conditions: string[], params: unknown[]): void => {
   params.push([...FRONTEND_CATALOG_EXCLUDED_TOPIC_PREFIXES]);
@@ -962,9 +1000,11 @@ const toVenueMarket = (row: VenueMarketRow): MarketCatalogVenueMarket => {
     eventSlugFromPrefixedVenueMarketId(row.venue, row.venue_market_id)
   );
   const sourceUrl = firstNonEmptyString(
-    extractSanitizedSourceUrl(row.normalized_payload, row.raw_source_payload, ["sourceUrl", "source_url", "url", "permalink", "marketUrl", "market_url"]),
+    extractSanitizedSourceUrl(row.normalized_payload, row.raw_source_payload, VENUE_SOURCE_URL_FIELDS),
     buildVenueSourceUrl(row.venue, marketSlug, eventSlug)
   );
+  const resolutionRulesText = selectVenueResolutionRulesText(row);
+  const resolutionSource = selectVenueResolutionSourceText(row, resolutionRulesText);
   return {
     canonicalMarketId: row.canonical_market_id,
     canonicalMarketTitle: displayTitle(row.canonical_market_title, row.canonical_market_id),
@@ -989,17 +1029,9 @@ const toVenueMarket = (row: VenueMarketRow): MarketCatalogVenueMarket => {
     changePercent24h: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["changePercent24h", "change_percent_24h", "priceChangePercent24h", "price_change_percent_24h", "oneDayPriceChangePercent", "one_day_price_change_percent", "percentChange24h", "percent_change_24h", "changePct24h", "change_pct_24h"]),
     marketClass: row.market_class,
     outcomes: normalizeOutcomes(row.outcomes),
-    resolutionSource: firstNonEmptyString(
-      row.venue_resolution_source,
-      row.resolution_source,
-      extractSanitizedString(row.normalized_payload, row.raw_source_payload, ["resolutionSource", "resolution_source", "sourceUrl", "source_url"])
-    ),
+    resolutionSource,
     resolutionTitle: firstNonEmptyString(row.venue_resolution_title, row.resolution_title, row.venue_title),
-    resolutionRulesText: firstNonEmptyString(
-      row.venue_resolution_rules_text,
-      row.resolution_rules_text,
-      extractSanitizedString(row.normalized_payload, row.raw_source_payload, ["resolutionRules", "resolution_rules", "rules", "description"])
-    ),
+    resolutionRulesText,
     network: row.network,
     chain: row.chain,
     expiresAt: row.expires_at ?? payloadExpiresAt ?? curatedTimestamp,
@@ -1109,17 +1141,140 @@ const extractSanitizedTimestamp = (
   return null;
 };
 
-const extractSanitizedString = (
-  normalizedPayload: unknown,
-  rawSourcePayload: unknown,
-  fieldNames: readonly string[]
+const selectVenueResolutionRulesText = (row: VenueMarketRow): string | null => {
+  const candidates = [
+    row.venue_resolution_rules_text,
+    row.resolution_rules_text,
+    ...collectStringFields(row.raw_source_payload, VENUE_RULE_TEXT_FIELDS, 4),
+    ...collectStringFields(row.normalized_payload, VENUE_RULE_TEXT_FIELDS, 3)
+  ];
+  for (const candidate of candidates) {
+    const sanitized = sanitizeVenueRuleText(candidate, row.venue_title);
+    if (sanitized) {
+      return sanitized;
+    }
+  }
+  return null;
+};
+
+const selectVenueResolutionSourceText = (
+  row: VenueMarketRow,
+  rulesText: string | null
 ): string | null => {
   const candidates = [
-    ...collectStringFields(normalizedPayload, fieldNames, 3),
-    ...collectStringFields(rawSourcePayload, fieldNames, 4)
+    row.venue_resolution_source,
+    row.resolution_source,
+    ...collectStringFields(row.raw_source_payload, VENUE_RESOLUTION_SOURCE_FIELDS, 4),
+    ...collectStringFields(row.normalized_payload, VENUE_RESOLUTION_SOURCE_FIELDS, 3),
+    rulesText ? extractResolutionSourceParagraph(rulesText) : null
   ];
-  return firstNonEmptyString(...candidates.map((candidate) => sanitizeDisplayText(candidate)));
+  for (const candidate of candidates) {
+    const sanitized = sanitizeVenueSourceText(candidate, row.venue);
+    if (sanitized) {
+      return sanitized;
+    }
+  }
+  return null;
 };
+
+const sanitizeVenueRuleText = (value: string | null | undefined, title: string | null | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+  const sanitized = sanitizeDisplayText(stripHtmlDisplayText(value));
+  if (!sanitized || sanitized.length < 24) {
+    return null;
+  }
+  const normalized = normalizeComparableDisplayText(sanitized);
+  const normalizedTitle = normalizeComparableDisplayText(title ?? "");
+  if (!normalized || (normalizedTitle && normalized === normalizedTitle)) {
+    return null;
+  }
+  if (looksLikeGeneratedPlaceholderRule(normalized)) {
+    return null;
+  }
+  if (!looksLikeVenueResolutionRule(sanitized) && normalized.split(" ").length <= 8) {
+    return null;
+  }
+  return sanitized;
+};
+
+const sanitizeVenueSourceText = (value: string | null | undefined, venue: string): string | null => {
+  if (!value) {
+    return null;
+  }
+  const sanitized = sanitizeDisplayText(stripHtmlDisplayText(value));
+  if (!sanitized) {
+    return null;
+  }
+  const normalized = normalizeComparableDisplayText(sanitized);
+  const normalizedVenueAliases = venueSourceAliases(venue);
+  if (
+    normalizedVenueAliases.has(normalized)
+    || normalized === "opinion openapi market"
+    || normalized === "predict market metadata"
+    || normalized === "limitless public market surface"
+    || normalized === "limitless public market detail"
+    || normalized === "limitless persisted market detail"
+  ) {
+    return null;
+  }
+  if (sanitizeSourceUrl(sanitized)) {
+    return sanitized;
+  }
+  return /\b(source|oracle|resolver|according|official|resolution|settlement|rules)\b/i.test(sanitized)
+    ? sanitized
+    : null;
+};
+
+const venueSourceAliases = (venue: string): ReadonlySet<string> => {
+  const normalizedVenue = normalizeCatalogVenue(venue);
+  const aliases = new Set([
+    normalizeComparableDisplayText(venue),
+    normalizeComparableDisplayText(normalizedVenue)
+  ]);
+  if (normalizedVenue === "PREDICT_FUN") {
+    aliases.add("predict");
+    aliases.add("predict fun");
+  }
+  return aliases;
+};
+
+const extractResolutionSourceParagraph = (rulesText: string): string | null => {
+  const paragraphs = rulesText
+    .split(/\n{2,}|\r\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => paragraph.length > 0);
+  const matched = paragraphs.filter((paragraph) =>
+    /\b(resolution source|source for this market|according to|official source|settlement source|oracle)\b/i.test(paragraph)
+  );
+  return matched.length > 0 ? matched.join("\n\n") : null;
+};
+
+const stripHtmlDisplayText = (value: string): string =>
+  value
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'")
+    .replace(/&ldquo;|&rdquo;/gi, "\"")
+    .replace(/&lsquo;|&rsquo;/gi, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+const normalizeComparableDisplayText = (value: string): string =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+const looksLikeVenueResolutionRule = (value: string): boolean =>
+  /\b(resolve|resolves|resolution|source|oracle|settle|settlement|outcome|according|will be considered|will not be considered|if|unless|void|cancel|refund)\b/i.test(value);
+
+const looksLikeGeneratedPlaceholderRule = (normalized: string): boolean =>
+  /^(ath|fdv|token launch|first to hit|price|winner|nominee|champion|launch) by date\b/.test(normalized)
+  || /^(ath|fdv|token launch|first to hit|price|winner|nominee|champion|launch)\b(?: [a-z0-9]+){0,8} \d{4} \d{2} \d{2}(?: \d{4} \d{2} \d{2})?$/.test(normalized);
 
 const extractSanitizedSlug = (
   normalizedPayload: unknown,

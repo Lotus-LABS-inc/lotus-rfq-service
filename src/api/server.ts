@@ -3118,13 +3118,13 @@ const fetchOfficialVenueResolutionMetadata = async (
 ): Promise<OfficialVenueResolutionMetadata | null> => {
   const venue = row.venue.trim().toUpperCase();
   if (venue === "POLYMARKET") {
-    return fetchPolymarketOfficialResolutionMetadata(row);
+    return await fetchPolymarketOfficialResolutionMetadata(row) ?? fetchPersistedVenueResolutionMetadata(row);
   }
   if (venue === "LIMITLESS") {
-    return fetchLimitlessOfficialResolutionMetadata(row);
+    return await fetchLimitlessOfficialResolutionMetadata(row) ?? fetchPersistedVenueResolutionMetadata(row);
   }
 
-  return null;
+  return fetchPersistedVenueResolutionMetadata(row);
 };
 
 const fetchPolymarketOfficialResolutionMetadata = async (
@@ -3143,17 +3143,12 @@ const fetchPolymarketOfficialResolutionMetadata = async (
       }
 
       const raw = apiServerAsRecord(market.raw);
-      const primaryResolutionText = apiServerFirstString(
-        raw.description,
-        raw.resolutionRules,
-        raw.rules,
-        raw.resolution_rules
-      );
+      const primaryResolutionText = selectOfficialVenueRuleText(raw, apiServerFirstString(raw.question, raw.title, market.title));
       if (!primaryResolutionText) {
         continue;
       }
 
-      const resolutionSourceText = apiServerFirstString(raw.resolutionSource, raw.resolution_source)
+      const resolutionSourceText = selectOfficialVenueSourceText(raw, primaryResolutionText, row.venue)
         ?? extractResolutionSourceText(primaryResolutionText);
       const oracleSource = deriveVenueDeclaredOracleSource(resolutionSourceText ?? primaryResolutionText);
 
@@ -3189,9 +3184,10 @@ const fetchLimitlessOfficialResolutionMetadata = async (
     try {
       const detail = await client.getMarketDetail(identifier);
       const rawDetail = apiServerAsRecord(detail);
-      const primaryResolutionText = stripHtmlRules(apiServerFirstString(rawDetail.description));
+      const primaryResolutionText = selectOfficialVenueRuleText(rawDetail, apiServerFirstString(rawDetail.title, rawDetail.proxyTitle, identifier));
       if (primaryResolutionText && looksLikeTrustedResolutionText(primaryResolutionText)) {
-        const resolutionSourceText = extractResolutionSourceText(primaryResolutionText);
+        const resolutionSourceText = selectOfficialVenueSourceText(rawDetail, primaryResolutionText, row.venue)
+          ?? extractResolutionSourceText(primaryResolutionText);
         const oracleSource = deriveVenueDeclaredOracleSource(resolutionSourceText ?? primaryResolutionText);
         return {
           title: apiServerFirstString(rawDetail.title, rawDetail.proxyTitle, identifier),
@@ -3218,11 +3214,12 @@ const fetchLimitlessOfficialResolutionMetadata = async (
   ].map(apiServerAsRecord);
 
   for (const payload of persistedPayloads) {
-    const primaryResolutionText = stripHtmlRules(apiServerFirstString(payload.description));
+    const primaryResolutionText = selectOfficialVenueRuleText(payload, apiServerFirstString(payload.title, payload.proxyTitle, row.vmp_title));
     if (!primaryResolutionText || !looksLikeTrustedResolutionText(primaryResolutionText)) {
       continue;
     }
-    const resolutionSourceText = extractResolutionSourceText(primaryResolutionText);
+    const resolutionSourceText = selectOfficialVenueSourceText(payload, primaryResolutionText, row.venue)
+      ?? extractResolutionSourceText(primaryResolutionText);
     const oracleSource = deriveVenueDeclaredOracleSource(resolutionSourceText ?? primaryResolutionText);
     return {
       title: apiServerFirstString(payload.title, payload.proxyTitle),
@@ -3238,6 +3235,47 @@ const fetchLimitlessOfficialResolutionMetadata = async (
   }
 
   return null;
+};
+
+const fetchPersistedVenueResolutionMetadata = (
+  row: ResolutionProfileLookupRow
+): OfficialVenueResolutionMetadata | null => {
+  const payloads = [
+    apiServerAsRecord(row.vmp_raw_source_payload),
+    apiServerAsRecord(row.vmp_normalized_payload)
+  ];
+  const primaryResolutionText = selectTrustedResolutionText(
+    ...payloads.map((payload) => selectOfficialVenueRuleText(payload, row.vmp_title)),
+    row.vmp_resolution_rules_text,
+    row.vmp_description,
+    row.vrp_rule_text,
+    row.primary_resolution_text,
+    row.supplemental_rules_text
+  );
+  if (!primaryResolutionText) {
+    return null;
+  }
+
+  const resolutionSourceText = payloads
+    .map((payload) => selectOfficialVenueSourceText(payload, primaryResolutionText, row.venue))
+    .find((value): value is string => value !== null)
+    ?? sanitizeOfficialVenueSourceText(row.vmp_resolution_source, row.venue)
+    ?? sanitizeOfficialVenueSourceText(row.vrp_resolution_source, row.venue)
+    ?? sanitizeOfficialVenueSourceText(row.supplemental_rules_text, row.venue)
+    ?? extractResolutionSourceText(primaryResolutionText);
+  const oracleSource = deriveVenueDeclaredOracleSource(resolutionSourceText ?? primaryResolutionText);
+
+  return {
+    title: row.vmp_title,
+    primaryResolutionText,
+    supplementalRulesText: resolutionSourceText,
+    resolutionSourceText,
+    oracleType: oracleSource?.oracleType ?? null,
+    oracleName: oracleSource?.oracleName ?? null,
+    resolver: null,
+    sourceUrl: extractFirstUrl(resolutionSourceText ?? primaryResolutionText) ?? defaultOracleSourceUrl(oracleSource),
+    fetchedBy: `${row.venue.toLowerCase()}_persisted_market_metadata`
+  };
 };
 
 const persistOfficialVenueResolutionMetadata = async (
@@ -3375,6 +3413,140 @@ const collectLimitlessMetadataIdentifiers = (row: ResolutionProfileLookupRow): r
     apiServerFirstString(normalizedLimitlessMarketDetail.address, rawLimitlessMarketDetail.address)
   ]);
 };
+
+const OFFICIAL_VENUE_RULE_TEXT_FIELDS = [
+  "resolutionRules",
+  "resolution_rules",
+  "resolutionRule",
+  "resolution_rule",
+  "resolutionRulesText",
+  "resolution_rules_text",
+  "rules",
+  "rule",
+  "description",
+  "resolveDescription",
+  "resolutionCriteria",
+  "settlementRules",
+  "settlement_rules"
+] as const;
+
+const OFFICIAL_VENUE_SOURCE_TEXT_FIELDS = [
+  "resolutionSource",
+  "resolution_source",
+  "resolutionSourceUrl",
+  "resolution_source_url",
+  "source",
+  "sourceName",
+  "source_name",
+  "resolver",
+  "oracle",
+  "oracleName",
+  "oracle_name"
+] as const;
+
+const selectOfficialVenueRuleText = (
+  payload: Record<string, unknown>,
+  title: string | null
+): string | null => {
+  const candidates = collectOfficialStringFields(payload, OFFICIAL_VENUE_RULE_TEXT_FIELDS, 4);
+  const normalizedTitle = normalizeOfficialComparableText(title ?? "");
+  for (const candidate of candidates) {
+    const sanitized = stripHtmlRules(candidate);
+    if (!sanitized) {
+      continue;
+    }
+    const normalized = normalizeOfficialComparableText(sanitized);
+    if (!normalized || (normalizedTitle && normalized === normalizedTitle) || looksLikeGeneratedResolutionPlaceholder(normalized)) {
+      continue;
+    }
+    if (looksLikeTrustedResolutionText(sanitized)) {
+      return sanitized;
+    }
+  }
+  return null;
+};
+
+const selectOfficialVenueSourceText = (
+  payload: Record<string, unknown>,
+  rulesText: string,
+  venue: string
+): string | null => {
+  for (const candidate of collectOfficialStringFields(payload, OFFICIAL_VENUE_SOURCE_TEXT_FIELDS, 4)) {
+    const sanitized = sanitizeOfficialVenueSourceText(candidate, venue);
+    if (sanitized) {
+      return sanitized;
+    }
+  }
+  return sanitizeOfficialVenueSourceText(extractResolutionSourceText(rulesText), venue);
+};
+
+const sanitizeOfficialVenueSourceText = (
+  value: string | null | undefined,
+  venue: string
+): string | null => {
+  const sanitized = stripHtmlRules(value ?? null);
+  if (!sanitized) {
+    return null;
+  }
+  const normalized = normalizeOfficialComparableText(sanitized);
+  const normalizedVenueAliases = officialVenueSourceAliases(venue);
+  if (
+    normalizedVenueAliases.has(normalized)
+    || normalized === "opinion openapi market"
+    || normalized === "predict market metadata"
+    || normalized === "limitless public market surface"
+    || normalized === "limitless public market detail"
+    || normalized === "limitless persisted market detail"
+  ) {
+    return null;
+  }
+  if (extractFirstUrl(sanitized)) {
+    return sanitized;
+  }
+  return /\b(source|oracle|resolver|according|official|resolution|settlement|rules)\b/i.test(sanitized)
+    ? sanitized
+    : null;
+};
+
+const officialVenueSourceAliases = (venue: string): ReadonlySet<string> => {
+  const normalized = normalizeOfficialComparableText(venue);
+  const aliases = new Set([normalized]);
+  if (normalized === "predict" || normalized === "predict fun" || normalized === "predict_fun") {
+    aliases.add("predict");
+    aliases.add("predict fun");
+  }
+  return aliases;
+};
+
+const collectOfficialStringFields = (
+  value: unknown,
+  fieldNames: readonly string[],
+  depth: number
+): string[] => {
+  if (depth < 0 || typeof value === "string") {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => collectOfficialStringFields(entry, fieldNames, depth - 1));
+  }
+  const record = apiServerAsRecord(value);
+  if (Object.keys(record).length === 0) {
+    return [];
+  }
+  const direct = fieldNames.flatMap((field) => {
+    const candidate = record[field];
+    return typeof candidate === "string" && candidate.trim().length > 0 ? [candidate] : [];
+  });
+  const nested = Object.values(record).flatMap((entry) => collectOfficialStringFields(entry, fieldNames, depth - 1));
+  return [...direct, ...nested];
+};
+
+const normalizeOfficialComparableText = (value: string): string =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+const looksLikeGeneratedResolutionPlaceholder = (normalized: string): boolean =>
+  /^(ath|fdv|token launch|first to hit|price|winner|nominee|champion|launch) by date\b/.test(normalized)
+  || /^(ath|fdv|token launch|first to hit|price|winner|nominee|champion|launch)\b(?: [a-z0-9]+){0,8} \d{4} \d{2} \d{2}(?: \d{4} \d{2} \d{2})?$/.test(normalized);
 
 const extractResolutionSourceText = (ruleText: string): string | null => {
   const paragraphs = ruleText
