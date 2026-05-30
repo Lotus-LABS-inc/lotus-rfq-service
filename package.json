@@ -45,6 +45,7 @@
     "db:schema:validate": "node scripts/db/db-schema-validate.mjs",
     "db:schema:visualize": "tsx scripts/reports/report-db-schema-visualizer.ts",
     "db:prune:user-venue-audit": "tsx scripts/db/prune-user-venue-account-audit-events.ts",
+    "db:retention:compact": "tsx scripts/db/compact-db-retention.ts",
     "reset:canonical:ingestion-state": "tsx scripts/dev/reset-canonical-ingestion-state.ts",
     "seed:simulation-console-preview": "tsx scripts/dev/seed-simulation-console-preview.ts",
     "migrate:canonical:exact-markets": "tsx scripts/batch/rewrite-canonical-exact-markets.ts",

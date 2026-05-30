@@ -204,19 +204,45 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
       venue: string;
       value: string | null;
     }>(
-      `SELECT received_at AS "timestamp",
-              venue,
-              COALESCE(midpoint, best_bid, best_ask)::text AS value
-         FROM venue_orderbook_snapshots
-        WHERE (
-              canonical_market_id = $1
-              OR canonical_event_id = $2
-              OR ($3::text[] IS NOT NULL AND venue_market_id = ANY($3::text[]))
-        )
-          AND ($4::text IS NULL OR canonical_outcome_id = $4)
-          AND ($5::timestamptz IS NULL OR received_at >= $5)
-          AND COALESCE(midpoint, best_bid, best_ask) IS NOT NULL
-        ORDER BY received_at DESC
+      `WITH detail_points AS (
+         SELECT received_at AS "timestamp",
+                venue,
+                COALESCE(midpoint, best_bid, best_ask)::text AS value
+           FROM venue_orderbook_snapshots
+          WHERE (
+                canonical_market_id = $1
+                OR canonical_event_id = $2
+                OR ($3::text[] IS NOT NULL AND venue_market_id = ANY($3::text[]))
+          )
+            AND ($4::text IS NULL OR canonical_outcome_id = $4)
+            AND ($5::timestamptz IS NULL OR received_at >= $5)
+            AND COALESCE(midpoint, best_bid, best_ask) IS NOT NULL
+          ORDER BY received_at DESC
+          LIMIT $6
+       ),
+       hourly_points AS (
+         SELECT bucket_start AS "timestamp",
+                venue,
+                COALESCE(last_midpoint, avg_midpoint, last_best_bid, avg_best_bid, last_best_ask, avg_best_ask)::text AS value
+           FROM venue_orderbook_snapshot_hourly_compactions
+          WHERE (
+                canonical_market_id = $1
+                OR canonical_event_id = $2
+                OR ($3::text[] IS NOT NULL AND venue_market_id = ANY($3::text[]))
+          )
+            AND ($4::text IS NULL OR canonical_outcome_id = $4)
+            AND ($5::timestamptz IS NULL OR bucket_start >= date_trunc('hour', $5::timestamptz))
+            AND COALESCE(last_midpoint, avg_midpoint, last_best_bid, avg_best_bid, last_best_ask, avg_best_ask) IS NOT NULL
+          ORDER BY bucket_start DESC
+          LIMIT $6
+       )
+       SELECT "timestamp", venue, value
+         FROM (
+           SELECT * FROM detail_points
+           UNION ALL
+           SELECT * FROM hourly_points
+         ) points
+        ORDER BY "timestamp" DESC
         LIMIT $6`,
       [
         input.marketId,

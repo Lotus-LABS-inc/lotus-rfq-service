@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { existsSync } from "node:fs";
 import pg from "pg";
 
@@ -26,6 +26,19 @@ interface DbHygieneReport {
   publicTableCount: number;
   totalPublicRows: number;
   largestTables: TableCount[];
+  retention: {
+    venueOrderbookSnapshots: {
+      detailRows: number;
+      hourlyCompactRows: number;
+      detailRowsOlderThan14Days: number;
+    } | null;
+    funding: {
+      auditEventRows: number;
+      reconciliationRows: number;
+      auditDuplicateRowsOlderThan7Days: number;
+      successfulReconciliationRowsOlderThan60Days: number;
+    } | null;
+  };
   userVenueAccountAudit: {
     rows: number;
     exactDuplicateRows: number;
@@ -136,12 +149,87 @@ const buildReport = async (pool: pg.Pool, target: string): Promise<DbHygieneRepo
     };
   }
 
+  let venueOrderbookSnapshots: DbHygieneReport["retention"]["venueOrderbookSnapshots"] = null;
+  if (
+    await tableExists(pool, "venue_orderbook_snapshots") &&
+    await tableExists(pool, "venue_orderbook_snapshot_hourly_compactions")
+  ) {
+    const result = await pool.query<{
+      detail_rows: string;
+      compact_rows: string;
+      old_detail_rows: string;
+    }>(
+      `SELECT (SELECT COUNT(*) FROM venue_orderbook_snapshots)::text AS detail_rows,
+              (SELECT COUNT(*) FROM venue_orderbook_snapshot_hourly_compactions)::text AS compact_rows,
+              (SELECT COUNT(*) FROM venue_orderbook_snapshots
+                WHERE received_at < now() - interval '14 days')::text AS old_detail_rows`
+    );
+    venueOrderbookSnapshots = {
+      detailRows: Number(result.rows[0]?.detail_rows ?? 0),
+      hourlyCompactRows: Number(result.rows[0]?.compact_rows ?? 0),
+      detailRowsOlderThan14Days: Number(result.rows[0]?.old_detail_rows ?? 0)
+    };
+  }
+
+  let funding: DbHygieneReport["retention"]["funding"] = null;
+  if (
+    await tableExists(pool, "funding_audit_events") &&
+    await tableExists(pool, "funding_reconciliation_records")
+  ) {
+    const result = await pool.query<{
+      audit_rows: string;
+      reconciliation_rows: string;
+      audit_duplicate_rows: string;
+      old_successful_reconciliation_rows: string;
+    }>(
+      `WITH audit_ranked AS (
+         SELECT row_number() OVER (
+                  PARTITION BY funding_intent_id, route_leg_id, event_type, payload::text
+                  ORDER BY created_at DESC, id DESC
+                ) AS rn,
+                created_at
+           FROM funding_audit_events
+       ),
+       reconciliation_ranked AS (
+         SELECT fr.checked_at,
+                row_number() OVER (
+                  PARTITION BY fr.funding_intent_id, fr.route_leg_id, fr.target_venue
+                  ORDER BY fr.checked_at DESC, fr.id DESC
+                ) AS rn
+           FROM funding_reconciliation_records fr
+           JOIN funding_intents fi ON fi.id = fr.funding_intent_id
+           JOIN funding_route_legs fl ON fl.id = fr.route_leg_id
+          WHERE fr.ready_to_trade = true
+            AND fr.destination_received = true
+            AND fr.venue_credit_confirmed = true
+            AND fi.status IN ('READY_TO_TRADE', 'PARTIALLY_READY_TO_TRADE')
+            AND fl.status = 'LEG_READY_TO_TRADE'
+       )
+       SELECT (SELECT COUNT(*) FROM funding_audit_events)::text AS audit_rows,
+              (SELECT COUNT(*) FROM funding_reconciliation_records)::text AS reconciliation_rows,
+              (SELECT COUNT(*) FROM audit_ranked
+                WHERE rn > 1 AND created_at < now() - interval '7 days')::text AS audit_duplicate_rows,
+              (SELECT COUNT(*) FROM reconciliation_ranked
+                WHERE rn > 3 AND checked_at < now() - interval '60 days')::text AS old_successful_reconciliation_rows`
+    );
+    funding = {
+      auditEventRows: Number(result.rows[0]?.audit_rows ?? 0),
+      reconciliationRows: Number(result.rows[0]?.reconciliation_rows ?? 0),
+      auditDuplicateRowsOlderThan7Days: Number(result.rows[0]?.audit_duplicate_rows ?? 0),
+      successfulReconciliationRowsOlderThan60Days: Number(result.rows[0]?.old_successful_reconciliation_rows ?? 0)
+    };
+  }
+
   return {
     generatedAt: new Date().toISOString(),
     target,
     publicTableCount: countsResult.rows.length,
     totalPublicRows,
     largestTables,
+    retention: {
+      venueOrderbookSnapshots,
+      funding
+    },
     userVenueAccountAudit
   };
 };
@@ -162,9 +250,40 @@ const renderMarkdown = (report: DbHygieneReport): string => {
     "| --- | ---: |",
     ...report.largestTables.map((row) => `| ${row.table} | ${row.rows} |`),
     "",
-    "## User Venue Account Audit",
+    "## Retention Candidates",
+    "",
+    "### Venue Orderbook Snapshots",
     ""
   ];
+  if (report.retention.venueOrderbookSnapshots) {
+    lines.push(
+      `Detail rows: ${report.retention.venueOrderbookSnapshots.detailRows}`,
+      `Hourly compact rows: ${report.retention.venueOrderbookSnapshots.hourlyCompactRows}`,
+      `Detail rows older than 14 days: ${report.retention.venueOrderbookSnapshots.detailRowsOlderThan14Days}`
+    );
+  } else {
+    lines.push("Orderbook retention tables not present.");
+  }
+  lines.push(
+    "",
+    "### Funding History",
+    ""
+  );
+  if (report.retention.funding) {
+    lines.push(
+      `Funding audit rows: ${report.retention.funding.auditEventRows}`,
+      `Funding reconciliation rows: ${report.retention.funding.reconciliationRows}`,
+      `Old exact duplicate funding audit rows: ${report.retention.funding.auditDuplicateRowsOlderThan7Days}`,
+      `Old successful reconciliation rows prunable: ${report.retention.funding.successfulReconciliationRowsOlderThan60Days}`
+    );
+  } else {
+    lines.push("Funding retention tables not present.");
+  }
+  lines.push(
+    "",
+    "## User Venue Account Audit",
+    ""
+  );
   if (!report.userVenueAccountAudit) {
     lines.push("Table not present.");
     return `${lines.join("\n")}\n`;
