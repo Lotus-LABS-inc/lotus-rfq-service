@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { registerMarketCatalogRoutes } from "../src/api/routes/markets.js";
+import { clearMarketQuoteReadinessCacheForTests, registerMarketCatalogRoutes } from "../src/api/routes/markets.js";
 import type {
   MarketCatalogCategory,
   MarketCatalogEvent,
@@ -12,6 +12,7 @@ import {
   MarketCatalogRepository as PgMarketCatalogRepository,
   SharedCoreQuoteMappingRepository
 } from "../src/repositories/market-catalog.repository.js";
+import type { MarketCatalogSnapshotCache } from "../src/services/market-catalog-snapshot-cache.js";
 
 const market: MarketCatalogMarket = {
   eventId: "event:NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
@@ -138,9 +139,29 @@ class FakeMarketCatalogRepository implements Pick<MarketCatalogRepository, "list
   }
 }
 
+class FakeMarketCatalogSnapshotCache implements MarketCatalogSnapshotCache {
+  public readonly values = new Map<string, unknown>();
+  public getCount = 0;
+  public setCount = 0;
+
+  public async get<T>(key: string): Promise<T | null> {
+    this.getCount += 1;
+    return (this.values.get(key) as T | undefined) ?? null;
+  }
+
+  public async set<T>(key: string, value: T): Promise<void> {
+    this.setCount += 1;
+    this.values.set(key, value);
+  }
+}
+
 describe("market catalog routes", () => {
   afterEach(() => {
     delete process.env.MARKET_QUOTE_READINESS_TIMEOUT_MS;
+    delete process.env.MARKET_QUOTE_READINESS_STALE_CACHE_MS;
+    delete process.env.MARKET_LIST_OVERFETCH_MULTIPLIER;
+    delete process.env.MARKET_LIST_OVERFETCH_CAP;
+    clearMarketQuoteReadinessCacheForTests();
   });
 
   it("lists normalized user-facing markets by category without raw venue internals", async () => {
@@ -287,6 +308,98 @@ describe("market catalog routes", () => {
       quoteReadinessDegraded: true,
       quoteReadinessReason: "timeout",
       markets: []
+    });
+
+    await app.close();
+  });
+
+  it("uses stale last-good quote readiness when a later snapshot read times out", async () => {
+    process.env.MARKET_QUOTE_READINESS_TIMEOUT_MS = "1";
+    const app = Fastify({ logger: false });
+    let shouldTimeout = false;
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: new FakeMarketCatalogRepository(),
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          if (shouldTimeout) {
+            return new Promise(() => undefined);
+          }
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: []
+          }];
+        }
+      }
+    });
+
+    const warm = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&routeCoverage=all&limit=10"
+    });
+    shouldTimeout = true;
+    const degraded = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&routeCoverage=all&limit=11"
+    });
+
+    expect(warm.statusCode).toBe(200);
+    expect(degraded.statusCode).toBe(200);
+    expect(degraded.json()).toMatchObject({
+      count: 1,
+      quoteReadinessDegraded: true,
+      quoteReadinessReason: "timeout",
+      markets: [{
+        quoteStatus: "stale",
+        quoteReadyVenueCount: 1,
+        quoteReadyVenues: ["POLYMARKET"]
+      }]
+    });
+
+    await app.close();
+  });
+
+  it("materializes market catalog responses into the shared snapshot cache", async () => {
+    const repository = new FakeMarketCatalogRepository();
+    const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketCatalogSnapshotCache: snapshotCache,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: []
+          }];
+        }
+      }
+    });
+
+    const first = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=10"
+    });
+    clearMarketQuoteReadinessCacheForTests();
+    const second = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=10"
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(snapshotCache.setCount).toBe(1);
+    expect(repository.filters).toHaveLength(1);
+    expect(second.json()).toMatchObject({
+      count: 1,
+      markets: [{ quoteReadyVenueCount: 1 }]
     });
 
     await app.close();

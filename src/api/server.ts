@@ -20,6 +20,7 @@ import { buildLiveExecutionCandidatesResponse, registerExecutionRoutes } from ".
 import { registerTurnkeyAuthRoutes } from "./routes/turnkey-auth.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerMarketCatalogRoutes } from "./routes/markets.js";
+import { RedisMarketCatalogSnapshotCache } from "../services/market-catalog-snapshot-cache.js";
 import { buildVenueBalanceActivationActions } from "../core/funding/venue-activation.js";
 import { registerUserWithdrawalWalletRoutes } from "./routes/user-withdrawal-wallets.js";
 import { registerUserWalletRoutes, toSafeWallet } from "./routes/user-wallets.js";
@@ -2012,6 +2013,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   await registerMarketCatalogRoutes(app, {
     marketCatalogRepository,
     marketQuoteReadinessSource: venueOrderbookSnapshotRepository,
+    marketCatalogSnapshotCache: new RedisMarketCatalogSnapshotCache(dependencies.redisClient),
     marketDataViewService
   });
   await registerUserWalletRoutes(app, userAuthMiddleware, {
