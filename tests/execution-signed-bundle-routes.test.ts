@@ -235,8 +235,13 @@ describe("execution signed bundle routes", () => {
     });
     expect(signed.statusCode).toBe(202);
     expect(signed.json()).toMatchObject({
-      state: "SUBMITTED",
+      state: "SUBMITTING",
       primaryAction: { type: "NONE" },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    const status = await app.inject({ method: "GET", url: `/execution/orders/${quote.quoteId}/status` });
+    expect(status.json()).toMatchObject({
+      state: "SUBMITTED",
       executionId: quote.quoteId
     });
     expect(submit).toHaveBeenCalledTimes(1);
@@ -358,13 +363,206 @@ describe("execution signed bundle routes", () => {
       }
     });
 
-    expect(signed.statusCode).toBe(200);
+    expect(signed.statusCode).toBe(202);
     expect(signed.json()).toMatchObject({
+      state: "SUBMITTING"
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    const status = await app.inject({ method: "GET", url: `/execution/orders/${quote.quoteId}/status` });
+    expect(status.json()).toMatchObject({
       state: "FAILED",
       lastError: "Polymarket rejected the order parameters.",
       blockers: [{
         code: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
         message: "Polymarket rejected the order parameters.",
+        venue: "POLYMARKET",
+        actionable: false
+      }]
+    });
+  });
+
+  it("does not submit duplicate signed orders while the first submit is pending", async () => {
+    const app = Fastify();
+    const quote = buyQuote("POLYMARKET", true);
+    let resolveSubmit: ((value: unknown) => void) | undefined;
+    const submit = vi.fn(() => new Promise((resolve) => {
+      resolveSubmit = resolve;
+    }));
+    const service = new ExecutionOrderOrchestratorV1(
+      new MemoryExecutionOrderRepository(),
+      {
+        quote: vi.fn(async () => ({ quote, rejectedCandidates: [], internalCandidateCount: 1 })),
+        getQuote: vi.fn(async () => quote)
+      } as never,
+      { prepareExit: vi.fn() } as never,
+      {
+        getLiveReadiness: vi.fn(async () => ({
+          quoteId: quote.quoteId,
+          generatedAt: new Date().toISOString(),
+          expiresAt: quote.expiresAt,
+          status: "fresh",
+          blockers: [],
+          venues: [{
+            venue: "POLYMARKET",
+            status: "fresh",
+            checkedAt: new Date().toISOString(),
+            blockers: [],
+            readinessCode: "POLYMARKET_CLOB_READY_FOR_SUBMIT",
+            account: { walletAddress: "0xwallet", venueAccountAddress: "0xdeposit", ownerAddress: "0xdeposit" },
+            collateral: { requiredNotional: "1", balance: "10", allowance: "10", tokenSymbol: "pUSD", tokenAddress: null, spenderAddress: null, chainId: 137 }
+          }]
+        })),
+        prepare: vi.fn(async () => ({
+          quoteId: quote.quoteId,
+          expiresAt: quote.expiresAt,
+          signatureRequests: [{
+            legIndex: 0,
+            venue: "POLYMARKET",
+            requestType: "ORDER",
+            account: "0xdeposit",
+            message: "sign order",
+            typedData: {},
+            signedPayloadHint: {}
+          }]
+        })),
+        submit,
+        getExecutionStatus: vi.fn(async () => null)
+      } as never,
+      {
+        getCandidates: vi.fn(async () => ({
+          generatedAt: new Date().toISOString(),
+          marketId: "market-1",
+          outcomeId: "YES",
+          amount: "1",
+          candidates: [{
+            venue: "POLYMARKET",
+            venueMarketId: "polymarket-market",
+            venueOutcomeId: "polymarket-token",
+            price: 0.5,
+            availableSize: "10",
+            requiresUserSignature: true,
+            metadata: { polymarketTickSize: "0.001" }
+          }],
+          blocked: []
+        }))
+      }
+    );
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: { quote: vi.fn(), getQuote: vi.fn() } as never,
+      sellQuoteService: { prepareExit: vi.fn() } as never,
+      executionOrderService: service
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/execution/orders/preview",
+      payload: { marketId: "market-1", outcomeId: "YES", side: "buy", amount: "1", venuePreference: "POLYMARKET" }
+    });
+    await app.inject({ method: "POST", url: `/execution/orders/${quote.quoteId}/place` });
+    const payload = {
+      signedPayloads: [{
+        legIndex: 0,
+        venue: "POLYMARKET",
+        requestType: "ORDER",
+        signedPayload: {
+          purpose: "POLYMARKET_ORDER",
+          data: { order: { makerAmount: "500000", takerAmount: "1000000" } },
+          signature: "0xsig",
+          account: "0xdeposit"
+        }
+      }]
+    };
+    const first = await app.inject({ method: "POST", url: `/execution/orders/${quote.quoteId}/signatures`, payload });
+    const second = await app.inject({ method: "POST", url: `/execution/orders/${quote.quoteId}/signatures`, payload });
+
+    expect(first.statusCode).toBe(202);
+    expect(second.statusCode).toBe(202);
+    expect(second.json()).toMatchObject({ state: "SUBMITTING" });
+    expect(submit).toHaveBeenCalledTimes(1);
+    resolveSubmit?.({
+      executionId: quote.quoteId,
+      status: "SUBMITTED",
+      dryRun: false,
+      submittedLegs: [{ legIndex: 0, venue: "POLYMARKET", status: "SUBMITTED", venueOrderId: "poly-order" }]
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+
+  it("blocks Polymarket sell previews when the executable conditional token id is missing", async () => {
+    const app = Fastify();
+    const quote = {
+      ...sellQuote(),
+      quoteId: "exec_quote_missing_token",
+      legs: [{ ...sellQuote().legs[0]!, venueOutcomeId: undefined }]
+    };
+    const prepareExit = vi.fn(async () => ({
+      quote,
+      allocations: [],
+      skippedAmount: "0",
+      rejectedCandidates: []
+    }));
+    const service = new ExecutionOrderOrchestratorV1(
+      new MemoryExecutionOrderRepository(),
+      { quote: vi.fn(), getQuote: vi.fn(async () => quote) } as never,
+      { prepareExit } as never,
+      {
+        getLiveReadiness: vi.fn(async () => ({
+          quoteId: quote.quoteId,
+          generatedAt: new Date().toISOString(),
+          expiresAt: quote.expiresAt,
+          status: "fresh",
+          blockers: [],
+          venues: [{
+            venue: "POLYMARKET",
+            status: "fresh",
+            checkedAt: new Date().toISOString(),
+            blockers: [],
+            account: { walletAddress: "0xwallet", venueAccountAddress: "0xdeposit", ownerAddress: "0xdeposit" },
+            collateral: { requiredNotional: "1", balance: "10", allowance: "10", tokenSymbol: "shares", tokenAddress: null, spenderAddress: null, chainId: 137 }
+          }]
+        })),
+        prepare: vi.fn(),
+        submit: vi.fn(),
+        getExecutionStatus: vi.fn(async () => null)
+      } as never,
+      {
+        getCandidates: vi.fn(async () => ({
+          generatedAt: new Date().toISOString(),
+          marketId: "market-1",
+          outcomeId: "NO",
+          amount: "2",
+          candidates: [{
+            venue: "POLYMARKET",
+            venueMarketId: "poly-market",
+            price: 0.99,
+            availableSize: "100",
+            requiresUserSignature: true
+          }],
+          blocked: []
+        }))
+      }
+    );
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: { quote: vi.fn(), getQuote: vi.fn() } as never,
+      sellQuoteService: { prepareExit } as never,
+      executionOrderService: service
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/execution/orders/preview",
+      payload: { marketId: "market-1", outcomeId: "NO", side: "sell", amount: "2", venuePreference: "POLYMARKET" }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      state: "BLOCKED_ACTION_REQUIRED",
+      blockers: [{
+        code: "POLYMARKET_SELL_TOKEN_ID_MISSING",
         venue: "POLYMARKET",
         actionable: false
       }]

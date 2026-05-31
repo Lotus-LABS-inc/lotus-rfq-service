@@ -153,11 +153,14 @@ interface StoredChartPoint {
 const MAX_STORED_POINTS = 20_000;
 const MAX_HISTORY_MS = 31 * 24 * 60 * 60 * 1000;
 const BATCH_QUOTE_CACHE_MS = 3_000;
+const CHART_CACHE_MS = 10_000;
+const CHART_LIVE_POINT_TIMEOUT_MS = 250;
 const VENUE_COLORS = ["#3B82F6", "#10B981", "#8B5CF6", "#F59E0B", "#EC4899", "#22D3EE"];
 
 export class LiveMarketDataViewService {
   private readonly chartPoints: StoredChartPoint[] = [];
   private readonly batchQuoteCache = new Map<string, { expiresAt: number; item?: MarketBatchQuoteItem; promise?: Promise<MarketBatchQuoteItem> }>();
+  private readonly chartCache = new Map<string, { expiresAt: number; response: MarketChartResponse }>();
   private readonly lastGoodBatchQuotes = new Map<string, MarketBatchQuoteItem>();
   private readonly now: () => Date;
 
@@ -330,8 +333,21 @@ export class LiveMarketDataViewService {
     venueMappings?: readonly { venue: string; venueMarketId: string }[] | undefined;
     timeframe: MarketChartTimeframe;
   }): Promise<MarketChartResponse> {
-    const orderbook = await this.getChartOrderbook(input);
+    const cacheKey = chartCacheKey(input);
+    const now = this.now();
+    const cached = this.chartCache.get(cacheKey);
+    if (cached && cached.expiresAt > now.getTime()) {
+      return {
+        ...cached.response,
+        generatedAt: now.toISOString()
+      };
+    }
     const cutoff = timeframeCutoff(input.timeframe, this.now());
+    const orderbook = await withTimeout(
+      this.getChartOrderbook(input),
+      CHART_LIVE_POINT_TIMEOUT_MS,
+      unavailableChartOrderbook(input, now.toISOString(), "LIVE_ORDERBOOK_TIMEOUT")
+    );
     const storedPoints = this.chartPoints
       .filter((point) =>
         point.marketId === input.marketId &&
@@ -359,12 +375,17 @@ export class LiveMarketDataViewService {
         color: VENUE_COLORS[index % VENUE_COLORS.length]!
       }))
     ];
-    return {
+    const historyStatus: MarketChartResponse["historyStatus"] = points.length > 1
+      ? "live"
+      : orderbook.status === "unavailable" || orderbook.status === "blocked"
+        ? "unavailable"
+        : "accumulating";
+    const response: MarketChartResponse = {
       marketId: input.marketId,
       outcomeId: input.outcomeId ?? null,
       timeframe: input.timeframe,
-      generatedAt: orderbook.generatedAt,
-      historyStatus: points.length > 1 ? "live" : orderbook.status === "unavailable" || orderbook.status === "blocked" ? "unavailable" : "accumulating",
+      generatedAt: now.toISOString(),
+      historyStatus,
       series,
       points: points.map((point) => ({
         timestamp: point.timestamp.toISOString(),
@@ -374,6 +395,11 @@ export class LiveMarketDataViewService {
       })),
       blockers: orderbook.blockers
     };
+    this.chartCache.set(cacheKey, {
+      expiresAt: now.getTime() + CHART_CACHE_MS,
+      response
+    });
+    return response;
   }
 
   private async getChartOrderbook(input: {
@@ -479,6 +505,46 @@ export class LiveMarketDataViewService {
       .sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime());
   }
 }
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timeout = setTimeout(() => resolve(fallback), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+};
+
+const unavailableChartOrderbook = (
+  input: { marketId: string; outcomeId?: string | undefined },
+  generatedAt: string,
+  reason: string
+): MarketOrderbookResponse => ({
+  marketId: input.marketId,
+  outcomeId: input.outcomeId ?? null,
+  generatedAt,
+  depth: 5,
+  venues: [],
+  bids: [],
+  asks: [],
+  bestBid: null,
+  bestAsk: null,
+  midpoint: null,
+  spread: null,
+  status: "unavailable",
+  blockers: [{ venue: "LOTUS", reason }]
+});
+
+const chartCacheKey = (input: {
+  marketId: string;
+  outcomeId?: string | undefined;
+  timeframe: MarketChartTimeframe;
+}): string => `${input.marketId}\u0000${input.outcomeId ?? ""}\u0000${input.timeframe}`;
 
 const sanitizeVenueOrderbook = (snapshot: NormalizedVenueQuoteSnapshot, depth: number): MarketOrderbookVenue => {
   const bids = cumulativeLevels(snapshot.venue, snapshot.venueMarketId, snapshot.venueOutcomeId ?? null, sortRawLevels(snapshot.bids, "desc").slice(0, depth));
