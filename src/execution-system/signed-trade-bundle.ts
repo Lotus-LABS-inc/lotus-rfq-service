@@ -1939,7 +1939,9 @@ const buildPolymarketOrderPayload = async (
   const negRisk = metadataNegRisk ?? parseOptionalEnvBoolean(env.POLYMARKET_NEG_RISK ?? env.POLY_NEG_RISK);
   const signedOrder = await client.createOrder({
     tokenID: tokenId,
-    price: side === "buy" ? polymarketMarketBuyLimitPrice(price, tickSize, env) : price,
+    price: side === "buy"
+      ? polymarketMarketBuyLimitPrice(price, tickSize, env)
+      : polymarketMarketSellLimitPrice(price, tickSize, env),
     size,
     side: side === "buy" ? PolymarketSide.BUY : PolymarketSide.SELL,
     builderCode
@@ -1973,6 +1975,8 @@ const POLYMARKET_MARKET_BUY_COLLATERAL_QUANTUM_ATOMIC = 10_000n;
 const POLYMARKET_MARKET_BUY_SHARE_QUANTUM_ATOMIC = 10n;
 const POLYMARKET_DEFAULT_MARKET_BUY_SLIPPAGE_BPS = 100;
 const POLYMARKET_MAX_MARKET_BUY_SLIPPAGE_BPS = 500;
+const POLYMARKET_DEFAULT_MARKET_SELL_SLIPPAGE_BPS = 100;
+const POLYMARKET_MAX_MARKET_SELL_SLIPPAGE_BPS = 500;
 const POLYMARKET_ORDER_TYPE_STRING = "Order(uint256 salt,address maker,address signer,uint256 tokenId,uint256 makerAmount,uint256 takerAmount,uint8 side,uint8 signatureType,uint256 timestamp,bytes32 metadata,bytes32 builder)";
 const POLYMARKET_ORDER_TYPE_HASH = keccak256(toUtf8Bytes(POLYMARKET_ORDER_TYPE_STRING));
 const POLYMARKET_DOMAIN_TYPE_HASH = keccak256(
@@ -2168,6 +2172,26 @@ const polymarketMarketBuyLimitPrice = (
   return Number(tickAligned.toString());
 };
 
+const polymarketMarketSellLimitPrice = (
+  quotedPrice: number,
+  tickSize: PolymarketTickSize | undefined,
+  env: NodeJS.ProcessEnv
+): number => {
+  if (!Number.isFinite(quotedPrice) || quotedPrice <= 0 || quotedPrice >= 1) {
+    return quotedPrice;
+  }
+  const bps = parseBoundedPolymarketSellSlippageBps(env);
+  if (bps <= 0) {
+    return quotedPrice;
+  }
+  const tick = new Decimal(tickSize ?? "0.001");
+  const minPrice = tick;
+  const cushioned = new Decimal(quotedPrice).times(new Decimal(1).minus(new Decimal(bps).div(10_000)));
+  const capped = Decimal.max(minPrice, cushioned);
+  const tickAligned = Decimal.max(minPrice, capped.div(tick).floor().times(tick));
+  return Number(tickAligned.toString());
+};
+
 const parseBoundedPolymarketBuySlippageBps = (env: NodeJS.ProcessEnv): number => {
   const raw = env.POLYMARKET_MARKET_BUY_SLIPPAGE_BPS ?? env.POLY_MARKET_BUY_SLIPPAGE_BPS;
   if (raw === undefined || raw.trim().length === 0) {
@@ -2178,6 +2202,18 @@ const parseBoundedPolymarketBuySlippageBps = (env: NodeJS.ProcessEnv): number =>
     return POLYMARKET_DEFAULT_MARKET_BUY_SLIPPAGE_BPS;
   }
   return Math.min(parsed, POLYMARKET_MAX_MARKET_BUY_SLIPPAGE_BPS);
+};
+
+const parseBoundedPolymarketSellSlippageBps = (env: NodeJS.ProcessEnv): number => {
+  const raw = env.POLYMARKET_MARKET_SELL_SLIPPAGE_BPS ?? env.POLY_MARKET_SELL_SLIPPAGE_BPS;
+  if (raw === undefined || raw.trim().length === 0) {
+    return POLYMARKET_DEFAULT_MARKET_SELL_SLIPPAGE_BPS;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return POLYMARKET_DEFAULT_MARKET_SELL_SLIPPAGE_BPS;
+  }
+  return Math.min(parsed, POLYMARKET_MAX_MARKET_SELL_SLIPPAGE_BPS);
 };
 
 const polymarket1271SignatureSuffix = (typedData: Record<string, unknown>, signature: unknown): string => {

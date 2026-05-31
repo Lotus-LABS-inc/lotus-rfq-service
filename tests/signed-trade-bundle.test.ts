@@ -734,6 +734,61 @@ describe("SignedTradeBundleService", () => {
     }
   });
 
+  it("adds Polymarket market-sell slippage room for FOK orders", async () => {
+    const fixtureServer = await startPolymarketClobFixtureServer();
+    const env = {
+      ...polymarketSigningEnv,
+      POLYMARKET_CLOB_HOST: fixtureServer.host,
+      POLYMARKET_TICK_SIZE: undefined,
+      POLYMARKET_MARKET_SELL_SLIPPAGE_BPS: "100"
+    } as NodeJS.ProcessEnv;
+    const registry = new ExecutionVenueAdapterRegistry();
+    registry.register(new PolymarketExecutionAdapterV2({
+      executionMode: "v2",
+      liveExecutionEnabled: false,
+      clobHost: env.POLYMARKET_CLOB_HOST,
+      chainId: env.POLYMARKET_CHAIN_ID,
+      builderCode: env.POLYMARKET_BUILDER_CODE,
+      signatureType: env.POLYMARKET_SIGNATURE_TYPE
+    }));
+    const liveQuote: ExecutableTradeQuote = {
+      ...polymarketSellQuote({
+        venueOutcomeId: "15636396498081492607537245191035256780946494107835473972503944043229908184003",
+        size: "10",
+        price: 0.25,
+        requiresUserSignature: true,
+        metadata: {
+          tickSize: "0.001",
+          negRisk: false
+        }
+      }),
+      requiredUserSignatureSteps: ["POLYMARKET user signature required"]
+    };
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => liveQuote } as never,
+      registry,
+      { getAccount: async () => polymarketDepositWalletAccount() },
+      () => new Date("2026-05-20T19:18:20.000Z"),
+      env
+    );
+    try {
+      const prepared = await sut.prepare({ userId: "user-1", quoteId: "exec_quote_polymarket_sell" });
+      const orderRequest = prepared.signatureRequests.find((request) => request.requestType === "ORDER")!;
+      const data = orderRequest.signedPayloadHint.data as Record<string, unknown>;
+      const order = data.order as Record<string, unknown>;
+      const typedData = orderRequest.typedData as {
+        message: { contents: Record<string, unknown> };
+      };
+
+      expect(BigInt(String(order.takerAmount)) * 1_000n / BigInt(String(order.makerAmount))).toBe(247n);
+      expect(typedData.message.contents.takerAmount).toBe(order.takerAmount);
+      expect(typedData.message.contents.makerAmount).toBe(order.makerAmount);
+      expect(data.orderType).toBe("FOK");
+    } finally {
+      await fixtureServer.close();
+    }
+  });
+
   it("signs Limitless orders against the market venue exchange address", async () => {
     const marketExchange = "0xe3E00BA3a9888d1DE4834269f62ac008b4BB5C47";
     const liveQuote: ExecutableTradeQuote = {

@@ -571,7 +571,7 @@ export class ExecutionOrderOrchestratorV1 {
         primaryAction: primaryActionForState(state),
         executionId: result.executionId,
         lastError: result.status === "FAILED" ? firstSubmitFailure(result) : null,
-        blockers: failureBlockers.length > 0 ? failureBlockers : order.blockers,
+        blockers: result.status === "FAILED" ? failureBlockers : [],
         nextPollAt: nextPollAtForState(state)
       }
     }) ?? order;
@@ -591,7 +591,7 @@ export class ExecutionOrderOrchestratorV1 {
         primaryAction: primaryActionForState(state),
         executionId: status.executionId,
         lastError: status.status === "FAILED" ? firstStatusFailure(status) : null,
-        blockers: failureBlockers.length > 0 ? failureBlockers : order.blockers,
+        blockers: status.status === "FAILED" ? failureBlockers : [],
         nextPollAt: nextPollAtForState(state)
       }
     }) ?? order;
@@ -1211,7 +1211,19 @@ const polymarketRouteFokSellLimitPrice = (leg: ExecutableTradeQuote["legs"][numb
     return null;
   }
   const tick = new Decimal(polymarketTickSizeFromMetadata(leg.metadata) ?? "0.001");
-  return new Decimal(leg.price).div(tick).floor().times(tick);
+  const bps = boundedPolymarketMarketSellSlippageBps();
+  const minPrice = tick;
+  const cushioned = new Decimal(leg.price).times(new Decimal(1).minus(new Decimal(bps).div(10_000)));
+  return Decimal.max(minPrice, cushioned).div(tick).floor().times(tick);
+};
+
+const boundedPolymarketMarketSellSlippageBps = (): number => {
+  const raw = process.env.POLYMARKET_MARKET_SELL_SLIPPAGE_BPS ?? process.env.POLY_MARKET_SELL_SLIPPAGE_BPS;
+  if (!raw || raw.trim().length === 0) {
+    return 100;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 500) : 100;
 };
 
 const polymarketTickSizeFromMetadata = (metadata: Readonly<Record<string, unknown>> | undefined): string | null => {

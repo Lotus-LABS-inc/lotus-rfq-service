@@ -242,7 +242,8 @@ describe("execution signed bundle routes", () => {
     const status = await app.inject({ method: "GET", url: `/execution/orders/${quote.quoteId}/status` });
     expect(status.json()).toMatchObject({
       state: "SUBMITTED",
-      executionId: quote.quoteId
+      executionId: quote.quoteId,
+      blockers: []
     });
     expect(submit).toHaveBeenCalledTimes(1);
   });
@@ -682,7 +683,7 @@ describe("execution signed bundle routes", () => {
             venue: "POLYMARKET",
             venueMarketId: quote.legs[0]!.venueMarketId,
             venueOutcomeId: quote.legs[0]!.venueOutcomeId,
-            price: 0.98,
+            price: 0.97,
             availableSize: "10",
             requiresUserSignature: true
           }],
