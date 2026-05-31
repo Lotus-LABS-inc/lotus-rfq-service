@@ -240,7 +240,18 @@ export class ExecutionOrderOrchestratorV1 {
     if (sellGuard.length > 0) {
       return this.blockOrder(order, quote, sellGuard);
     }
-    await this.assertPolymarketFokBuyStillExecutable(input.userId, quote.quoteId);
+    try {
+      await assertPolymarketFokStillExecutable({
+        userId: input.userId,
+        quote,
+        liveCandidateProvider: this.liveCandidateProvider
+      });
+    } catch (error) {
+      if (error instanceof SignedTradeBundleError) {
+        return this.blockOrder(order, quote, [blockerFromSignedTradeBundleError(error)]);
+      }
+      throw error;
+    }
     const readiness = await this.requireFreshReadiness(input.userId, quote.quoteId, quote);
     const capabilities = buildVenueCapabilities(quote, readiness, Boolean(this.signedTradeBundleService));
     const readinessState = classifyReadiness(readiness, capabilities);
@@ -300,8 +311,20 @@ export class ExecutionOrderOrchestratorV1 {
     if (sellGuard.length > 0) {
       return this.blockOrder(order, quote, sellGuard);
     }
-    this.assertSignedSellPayloadsMatchRoute(quote, input.signedPayloads);
-    await this.assertPolymarketFokBuyStillExecutable(input.userId, quote.quoteId, input.signedPayloads);
+    try {
+      this.assertSignedSellPayloadsMatchRoute(quote, input.signedPayloads);
+      await assertPolymarketFokStillExecutable({
+        userId: input.userId,
+        quote,
+        liveCandidateProvider: this.liveCandidateProvider,
+        signedLegs: input.signedPayloads
+      });
+    } catch (error) {
+      if (error instanceof SignedTradeBundleError) {
+        return this.blockOrder(order, quote, [blockerFromSignedTradeBundleError(error)]);
+      }
+      throw error;
+    }
     return this.submitOrderAsync({
       userId: input.userId,
       orderId: input.orderId,
@@ -604,6 +627,9 @@ export class ExecutionOrderOrchestratorV1 {
     if (!this.signedTradeBundleService || state !== "READY_TO_PLACE" || !quoteRequiresSignature(quote)) {
       return;
     }
+    if (quote.side === "sell" && hasPolymarketLeg(quote)) {
+      return;
+    }
     const key = signaturePrepCacheKey(userId, quote.quoteId);
     if (this.signaturePrepCache.has(key)) {
       return;
@@ -628,9 +654,14 @@ export class ExecutionOrderOrchestratorV1 {
   private async getPreparedSignatureRequests(userId: string, quote: ExecutableTradeQuote): Promise<readonly TradeSignatureRequest[]> {
     const key = signaturePrepCacheKey(userId, quote.quoteId);
     const cached = this.signaturePrepCache.get(key);
-    if (cached && cached.expiresAt > Date.now()) {
+    if (cached && cached.expiresAt > Date.now() && !(quote.side === "sell" && hasPolymarketLeg(quote))) {
       return cached.promise;
     }
+    await assertPolymarketFokStillExecutable({
+      userId,
+      quote,
+      liveCandidateProvider: this.liveCandidateProvider
+    });
     const promise = this.signedTradeBundleService!.prepare({ userId, quoteId: quote.quoteId })
       .then((bundle) => bundle.signatureRequests);
     this.signaturePrepCache.set(key, {
@@ -686,7 +717,7 @@ export class ExecutionOrderOrchestratorV1 {
       if (signedTokenId && signedTokenId !== leg.venueOutcomeId) {
         throw new SignedTradeBundleError(
           "POLYMARKET_SELL_TOKEN_ID_MISMATCH",
-          "Polymarket sell signature does not match the executable route token. Refresh route and sign again."
+          "Polymarket signed sell token id no longer matches the route token id. Refresh route and sign again."
         );
       }
     }
@@ -752,68 +783,6 @@ export class ExecutionOrderOrchestratorV1 {
     };
   }
 
-  private async assertPolymarketFokBuyStillExecutable(
-    userId: string,
-    quoteId: string,
-    signedLegs?: readonly SignedTradeLegPayload[]
-  ): Promise<void> {
-    if (!this.liveCandidateProvider) {
-      return;
-    }
-    const quote = await this.executableRouteService.getQuote(userId, quoteId);
-    if (!quote || quote.side !== "buy") {
-      return;
-    }
-    for (const [index, leg] of quote.legs.entries()) {
-      if (leg.venue.toUpperCase() !== "POLYMARKET") {
-        continue;
-      }
-      const signedOrder = signedLegs ? findPolymarketSignedOrder(signedLegs, index) : null;
-      const signedOrderType = signedOrder ? asString(recordField(recordField(signedOrder.signedPayload, "data") ?? {}, "orderType")) : null;
-      if (signedOrderType && signedOrderType.toUpperCase() !== "FOK") {
-        continue;
-      }
-      const maxPrice = signedOrder ? polymarketSignedOrderLimitPrice(signedOrder) : polymarketRouteFokBuyLimitPrice(leg);
-      if (maxPrice === null) {
-        throw new SignedTradeBundleError(
-          "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
-          "Polymarket FOK route could not derive a signed limit price. Refresh route before signing."
-        );
-      }
-      const live = await this.liveCandidateProvider.getCandidates({
-        userId,
-        side: "buy",
-        marketId: quote.marketId,
-        outcomeId: quote.outcomeId,
-        amount: leg.size,
-        venues: ["POLYMARKET"]
-      });
-      const candidate = live.candidates.find((item) =>
-        item.venue.toUpperCase() === "POLYMARKET" &&
-        (!leg.venueMarketId || item.venueMarketId === leg.venueMarketId) &&
-        (!leg.venueOutcomeId || item.venueOutcomeId === leg.venueOutcomeId)
-      );
-      if (!candidate) {
-        throw new SignedTradeBundleError(
-          "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
-          live.blocked.find((item) => item.venue.toUpperCase() === "POLYMARKET")?.reason ??
-            "Polymarket FOK route is no longer executable. Refresh route before signing."
-        );
-      }
-      if (new Decimal(candidate.availableSize).lt(new Decimal(leg.size))) {
-        throw new SignedTradeBundleError(
-          "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
-          "Polymarket FOK depth changed before execution. Refresh route and retry."
-        );
-      }
-      if (!Number.isFinite(candidate.price) || new Decimal(candidate.price).gt(maxPrice.plus("0.000000001"))) {
-        throw new SignedTradeBundleError(
-          "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
-          "Polymarket FOK price moved before execution. Refresh route and retry."
-        );
-      }
-    }
-  }
 }
 
 const buildVenueCapabilities = (
@@ -923,6 +892,100 @@ const stateFromSignedStatus = (status: SignedTradeExecutionStatus["status"]): Ex
 const isTerminalOrPendingSubmit = (state: ExecutionOrderState): boolean =>
   ["SUBMITTING", "SUBMITTED", "FILLED", "FAILED", "EXPIRED"].includes(state);
 
+const hasPolymarketLeg = (quote: ExecutableTradeQuote): boolean =>
+  quote.legs.some((leg) => leg.venue.toUpperCase() === "POLYMARKET");
+
+export const assertPolymarketFokStillExecutable = async (input: {
+  userId: string;
+  quote: ExecutableTradeQuote | null;
+  liveCandidateProvider?: ExecutionOrderLiveCandidateProvider | undefined;
+  signedLegs?: readonly SignedTradeLegPayload[] | undefined;
+}): Promise<void> => {
+  if (!input.liveCandidateProvider || !input.quote) {
+    return;
+  }
+  for (const [index, leg] of input.quote.legs.entries()) {
+    if (leg.venue.toUpperCase() !== "POLYMARKET") {
+      continue;
+    }
+    if (input.quote.side === "sell" && !leg.venueOutcomeId) {
+      throw new SignedTradeBundleError(
+        "POLYMARKET_SELL_TOKEN_ID_MISSING",
+        "Polymarket sell route is missing the executable conditional token id. Refresh market metadata before selling."
+      );
+    }
+    const signedOrder = input.signedLegs ? findPolymarketSignedOrder(input.signedLegs, index) : null;
+    const signedOrderType = signedOrder ? asString(recordField(recordField(signedOrder.signedPayload, "data") ?? {}, "orderType")) : null;
+    if (signedOrderType && signedOrderType.toUpperCase() !== "FOK") {
+      continue;
+    }
+    if (input.quote.side === "sell" && signedOrder) {
+      const signedTokenId = polymarketSignedOrderTokenId(signedOrder);
+      if (!signedTokenId || signedTokenId.toLowerCase() !== leg.venueOutcomeId?.toLowerCase()) {
+        throw new SignedTradeBundleError(
+          "POLYMARKET_SELL_TOKEN_ID_MISMATCH",
+          "Polymarket signed sell token id no longer matches the route token id. Refresh route and sign again."
+        );
+      }
+    }
+    const live = await input.liveCandidateProvider.getCandidates({
+      userId: input.userId,
+      side: input.quote.side,
+      marketId: input.quote.marketId,
+      outcomeId: input.quote.outcomeId,
+      amount: leg.size,
+      venues: ["POLYMARKET"]
+    });
+    const candidate = live.candidates.find((item) =>
+      item.venue.toUpperCase() === "POLYMARKET" &&
+      (!leg.venueMarketId || item.venueMarketId === leg.venueMarketId) &&
+      (!leg.venueOutcomeId || item.venueOutcomeId === leg.venueOutcomeId)
+    );
+    if (!candidate) {
+      throw new SignedTradeBundleError(
+        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
+        live.blocked.find((item) => item.venue.toUpperCase() === "POLYMARKET")?.reason ??
+          "Polymarket FOK route is no longer executable. Refresh route before signing."
+      );
+    }
+    if (new Decimal(candidate.availableSize).lt(new Decimal(leg.size))) {
+      throw new SignedTradeBundleError(
+        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
+        "Polymarket FOK depth changed before execution. Refresh route and retry."
+      );
+    }
+    if (input.quote.side === "buy") {
+      const maxPrice = signedOrder ? polymarketSignedOrderLimitPrice(signedOrder, "buy") : polymarketRouteFokBuyLimitPrice(leg);
+      if (maxPrice === null) {
+        throw new SignedTradeBundleError(
+          "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
+          "Polymarket FOK route could not derive a signed limit price. Refresh route before signing."
+        );
+      }
+      if (!Number.isFinite(candidate.price) || new Decimal(candidate.price).gt(maxPrice.plus("0.000000001"))) {
+        throw new SignedTradeBundleError(
+          "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
+          "Polymarket FOK price moved before execution. Refresh route and retry."
+        );
+      }
+      continue;
+    }
+    const minPrice = signedOrder ? polymarketSignedOrderLimitPrice(signedOrder, "sell") : polymarketRouteFokSellLimitPrice(leg);
+    if (minPrice === null) {
+      throw new SignedTradeBundleError(
+        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
+        "Polymarket FOK route could not derive a signed sell limit price. Refresh route before signing."
+      );
+    }
+    if (!Number.isFinite(candidate.price) || new Decimal(candidate.price).lt(minPrice.minus("0.000000001"))) {
+      throw new SignedTradeBundleError(
+        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
+        "Polymarket FOK sell price moved before execution. Refresh route and retry."
+      );
+    }
+  }
+};
+
 const nextPollAtForState = (state: ExecutionOrderState): string | null =>
   state === "SUBMITTING" || state === "SUBMITTED" || state === "WAITING_FOR_VENUE_READY"
     ? new Date(Date.now() + 2_000).toISOString()
@@ -961,6 +1024,13 @@ const blockersFromCapabilities = (capabilities: { venues: ExecutionOrderVenueCap
       actionable: false
     }))
   );
+
+const blockerFromSignedTradeBundleError = (error: SignedTradeBundleError): ExecutionOrderBlocker => ({
+  code: error.code,
+  message: error.message,
+  venue: error.code.startsWith("POLYMARKET") ? "POLYMARKET" : undefined,
+  actionable: false
+});
 
 const executionOrderIntentKey = (input: ExecutionOrderPreviewInput): string =>
   [
@@ -1103,15 +1173,18 @@ const findPolymarketSignedOrder = (
       Boolean(recordField(data ?? {}, "order"));
   }) ?? null;
 
-const polymarketSignedOrderLimitPrice = (signedLeg: SignedTradeLegPayload): InstanceType<typeof Decimal> | null => {
+const polymarketSignedOrderLimitPrice = (
+  signedLeg: SignedTradeLegPayload,
+  side: TradeSide
+): InstanceType<typeof Decimal> | null => {
   const data = recordField(signedLeg.signedPayload, "data");
   const order = data ? recordField(data, "order") : null;
   const makerAmount = order ? decimalFromRecord(order, "makerAmount") : null;
   const takerAmount = order ? decimalFromRecord(order, "takerAmount") : null;
-  if (!makerAmount || !takerAmount || takerAmount.lte(0)) {
+  if (!makerAmount || !takerAmount || makerAmount.lte(0) || takerAmount.lte(0)) {
     return null;
   }
-  return makerAmount.div(takerAmount);
+  return side === "sell" ? takerAmount.div(makerAmount) : makerAmount.div(takerAmount);
 };
 
 const polymarketSignedOrderTokenId = (signedLeg: SignedTradeLegPayload): string | null => {
@@ -1131,6 +1204,14 @@ const polymarketRouteFokBuyLimitPrice = (leg: ExecutableTradeQuote["legs"][numbe
   const maxPrice = Decimal.max(0, new Decimal(1).minus(tick));
   const cushioned = new Decimal(leg.price).times(new Decimal(1).plus(new Decimal(100).div(10_000)));
   return Decimal.min(maxPrice, cushioned).div(tick).ceil().times(tick);
+};
+
+const polymarketRouteFokSellLimitPrice = (leg: ExecutableTradeQuote["legs"][number]): InstanceType<typeof Decimal> | null => {
+  if (!Number.isFinite(leg.price) || leg.price <= 0 || leg.price >= 1) {
+    return null;
+  }
+  const tick = new Decimal(polymarketTickSizeFromMetadata(leg.metadata) ?? "0.001");
+  return new Decimal(leg.price).div(tick).floor().times(tick);
 };
 
 const polymarketTickSizeFromMetadata = (metadata: Readonly<Record<string, unknown>> | undefined): string | null => {

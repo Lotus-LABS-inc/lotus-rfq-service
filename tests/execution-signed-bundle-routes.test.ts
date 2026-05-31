@@ -226,7 +226,7 @@ describe("execution signed bundle routes", () => {
           requestType: "ORDER",
           signedPayload: {
             purpose: "POLYMARKET_ORDER",
-            data: { order: { makerAmount: "500000", takerAmount: "1000000" } },
+            data: { order: { makerAmount: "500000", takerAmount: "1000000" }, orderType: "FOK" },
             signature: "0xsig",
             account: "0xdeposit"
           }
@@ -355,7 +355,7 @@ describe("execution signed bundle routes", () => {
           requestType: "ORDER",
           signedPayload: {
             purpose: "POLYMARKET_ORDER",
-            data: { order: { makerAmount: "500000", takerAmount: "1000000" } },
+            data: { order: { makerAmount: "500000", takerAmount: "1000000" }, orderType: "FOK" },
             signature: "0xsig",
             account: "0xdeposit"
           }
@@ -468,7 +468,7 @@ describe("execution signed bundle routes", () => {
         requestType: "ORDER",
         signedPayload: {
           purpose: "POLYMARKET_ORDER",
-          data: { order: { makerAmount: "500000", takerAmount: "1000000" } },
+          data: { order: { makerAmount: "500000", takerAmount: "1000000" }, orderType: "FOK" },
           signature: "0xsig",
           account: "0xdeposit"
         }
@@ -567,6 +567,141 @@ describe("execution signed bundle routes", () => {
         actionable: false
       }]
     });
+  });
+
+  it("rechecks Polymarket sell depth before preparing signatures and does not use warmed sell signatures", async () => {
+    const quote = sellQuote();
+    const prepare = vi.fn(async () => ({
+      quoteId: quote.quoteId,
+      expiresAt: quote.expiresAt,
+      signatureRequests: [{
+        legIndex: 0,
+        venue: "POLYMARKET",
+        requestType: "ORDER",
+        account: "0xdeposit",
+        message: "sign sell order",
+        typedData: {},
+        signedPayloadHint: {}
+      }]
+    }));
+    const liveCandidateProvider = {
+      getCandidates: vi.fn(async () => ({
+        generatedAt: new Date().toISOString(),
+        marketId: quote.marketId,
+        outcomeId: quote.outcomeId,
+        amount: quote.legs[0]!.size,
+        candidates: [{
+          venue: "POLYMARKET",
+          venueMarketId: quote.legs[0]!.venueMarketId,
+          venueOutcomeId: quote.legs[0]!.venueOutcomeId,
+          price: quote.legs[0]!.price,
+          availableSize: "10",
+          requiresUserSignature: true
+        }],
+        blocked: []
+      }))
+    };
+    const service = new ExecutionOrderOrchestratorV1(
+      new MemoryExecutionOrderRepository(),
+      { quote: vi.fn(), getQuote: vi.fn(async () => quote) } as never,
+      { prepareExit: vi.fn(async () => ({ quote, allocations: [], skippedAmount: "0", rejectedCandidates: [] })) } as never,
+      {
+        getLiveReadiness: vi.fn(async () => ({
+          quoteId: quote.quoteId,
+          generatedAt: new Date().toISOString(),
+          expiresAt: quote.expiresAt,
+          status: "fresh",
+          blockers: [],
+          venues: [{
+            venue: "POLYMARKET",
+            status: "fresh",
+            checkedAt: new Date().toISOString(),
+            blockers: [],
+            account: { walletAddress: "0xwallet", venueAccountAddress: "0xdeposit", ownerAddress: "0xdeposit" },
+            collateral: { requiredNotional: "2", balance: "10", allowance: "10", tokenSymbol: "shares", tokenAddress: null, spenderAddress: null, chainId: 137 }
+          }]
+        })),
+        prepare,
+        submit: vi.fn(),
+        getExecutionStatus: vi.fn(async () => null)
+      } as never,
+      liveCandidateProvider
+    );
+
+    await service.preview({ userId: "user-1", marketId: "market-1", outcomeId: "NO", side: "sell", amount: "2", venuePreference: "POLYMARKET" });
+    expect(prepare).not.toHaveBeenCalled();
+
+    const placed = await service.place({ userId: "user-1", orderId: quote.quoteId });
+
+    expect(placed).toMatchObject({ state: "NEEDS_SIGNATURE" });
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(liveCandidateProvider.getCandidates).toHaveBeenCalledWith({
+      userId: "user-1",
+      side: "sell",
+      marketId: quote.marketId,
+      outcomeId: quote.outcomeId,
+      amount: "2",
+      venues: ["POLYMARKET"]
+    });
+  });
+
+  it("blocks Polymarket sell signature preparation when FOK sell depth moved", async () => {
+    const quote = sellQuote();
+    const prepare = vi.fn();
+    const service = new ExecutionOrderOrchestratorV1(
+      new MemoryExecutionOrderRepository(),
+      { quote: vi.fn(), getQuote: vi.fn(async () => quote) } as never,
+      { prepareExit: vi.fn(async () => ({ quote, allocations: [], skippedAmount: "0", rejectedCandidates: [] })) } as never,
+      {
+        getLiveReadiness: vi.fn(async () => ({
+          quoteId: quote.quoteId,
+          generatedAt: new Date().toISOString(),
+          expiresAt: quote.expiresAt,
+          status: "fresh",
+          blockers: [],
+          venues: [{
+            venue: "POLYMARKET",
+            status: "fresh",
+            checkedAt: new Date().toISOString(),
+            blockers: [],
+            account: { walletAddress: "0xwallet", venueAccountAddress: "0xdeposit", ownerAddress: "0xdeposit" },
+            collateral: { requiredNotional: "2", balance: "10", allowance: "10", tokenSymbol: "shares", tokenAddress: null, spenderAddress: null, chainId: 137 }
+          }]
+        })),
+        prepare,
+        submit: vi.fn(),
+        getExecutionStatus: vi.fn(async () => null)
+      } as never,
+      {
+        getCandidates: vi.fn(async () => ({
+          generatedAt: new Date().toISOString(),
+          marketId: quote.marketId,
+          outcomeId: quote.outcomeId,
+          amount: quote.legs[0]!.size,
+          candidates: [{
+            venue: "POLYMARKET",
+            venueMarketId: quote.legs[0]!.venueMarketId,
+            venueOutcomeId: quote.legs[0]!.venueOutcomeId,
+            price: 0.98,
+            availableSize: "10",
+            requiresUserSignature: true
+          }],
+          blocked: []
+        }))
+      }
+    );
+
+    await service.preview({ userId: "user-1", marketId: "market-1", outcomeId: "NO", side: "sell", amount: "2", venuePreference: "POLYMARKET" });
+    const placed = await service.place({ userId: "user-1", orderId: quote.quoteId });
+
+    expect(placed).toMatchObject({
+      state: "BLOCKED_ACTION_REQUIRED",
+      blockers: [{
+        code: "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
+        message: "Polymarket FOK sell price moved before execution. Refresh route and retry."
+      }]
+    });
+    expect(prepare).not.toHaveBeenCalled();
   });
 
   it("keeps venue-specific order previews on the requested venue", async () => {
@@ -1116,6 +1251,129 @@ describe("execution signed bundle routes", () => {
       code: "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
       message: "Polymarket FOK price moved before execution. Refresh route and retry."
     });
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("blocks Polymarket FOK sell signed submit when current live price is below the signed floor", async () => {
+    const app = Fastify();
+    const quote = sellQuote();
+    const submit = vi.fn();
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: {
+        quote: vi.fn(),
+        getQuote: vi.fn(async () => quote)
+      } as never,
+      sellQuoteService: {
+        prepareExit: vi.fn()
+      } as never,
+      signedTradeBundleService: {
+        submit,
+        getExecutionStatus: vi.fn(async () => null)
+      } as never,
+      liveCandidateProvider: {
+        getCandidates: vi.fn(async () => ({
+          generatedAt: new Date().toISOString(),
+          marketId: quote.marketId,
+          outcomeId: quote.outcomeId,
+          amount: "2",
+          source: "LIVE_QUOTE_SOURCE" as const,
+          candidates: [{
+            venue: "POLYMARKET",
+            venueMarketId: "poly-market",
+            venueOutcomeId: "12345678901234567890",
+            price: 0.98,
+            availableSize: "100",
+            requiresUserSignature: true
+          }],
+          blocked: []
+        }))
+      }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/execution/exec_quote_sell/submit-signed-bundle",
+      payload: {
+        signedLegs: [{
+          legIndex: 0,
+          venue: "POLYMARKET",
+          requestType: "ORDER",
+          signedPayload: {
+            purpose: "POLYMARKET_ORDER",
+            data: {
+              order: {
+                tokenId: "12345678901234567890",
+                makerAmount: "2000000",
+                takerAmount: "1980000"
+              },
+              orderType: "FOK"
+            }
+          }
+        }]
+      }
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      code: "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
+      message: "Polymarket FOK sell price moved before execution. Refresh route and retry."
+    });
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("blocks Polymarket sell submit when the signed token id no longer matches the route", async () => {
+    const app = Fastify();
+    const quote = sellQuote();
+    const submit = vi.fn();
+    const getCandidates = vi.fn();
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: {
+        quote: vi.fn(),
+        getQuote: vi.fn(async () => quote)
+      } as never,
+      sellQuoteService: {
+        prepareExit: vi.fn()
+      } as never,
+      signedTradeBundleService: {
+        submit,
+        getExecutionStatus: vi.fn(async () => null)
+      } as never,
+      liveCandidateProvider: { getCandidates }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/execution/exec_quote_sell/submit-signed-bundle",
+      payload: {
+        signedLegs: [{
+          legIndex: 0,
+          venue: "POLYMARKET",
+          requestType: "ORDER",
+          signedPayload: {
+            purpose: "POLYMARKET_ORDER",
+            data: {
+              order: {
+                tokenId: "different-token",
+                makerAmount: "2000000",
+                takerAmount: "1980000"
+              },
+              orderType: "FOK"
+            }
+          }
+        }]
+      }
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      code: "POLYMARKET_SELL_TOKEN_ID_MISMATCH",
+      message: "Polymarket signed sell token id no longer matches the route token id. Refresh route and sign again."
+    });
+    expect(getCandidates).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
   });
 

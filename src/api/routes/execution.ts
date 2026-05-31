@@ -13,8 +13,7 @@ import {
   SignedTradeBundleError,
   type LiveSubmitReadinessSnapshot,
   type SignedTradeExecutionStatus,
-  type SignedTradeBundleService,
-  type SignedTradeLegPayload
+  type SignedTradeBundleService
 } from "../../execution-system/signed-trade-bundle.js";
 import type { CalculatedVenueQuoteSnapshot, VenueQuoteSnapshotBlocker } from "../../core/sor/quote-snapshot.js";
 import type { SettlementStatusV0 } from "../../execution-system/types.js";
@@ -23,6 +22,7 @@ import { withLatencyStage } from "../../observability/latency.js";
 import {
   EXECUTION_ORCHESTRATOR_V1_ENABLED,
   ExecutionOrderError,
+  assertPolymarketFokStillExecutable,
   type ExecutionOrderOrchestratorV1
 } from "../../execution-system/execution-order-orchestrator.js";
 
@@ -494,10 +494,10 @@ export const registerExecutionRoutes = async (
     }
     const { executionId } = request.params as { executionId: string };
     try {
-      await assertPolymarketFokBuyStillExecutable({
+      const quote = await deps.executableRouteService.getQuote(request.user.userId, executionId);
+      await assertPolymarketFokStillExecutable({
         userId: request.user.userId,
-        quoteId: executionId,
-        executableRouteService: deps.executableRouteService,
+        quote,
         liveCandidateProvider: deps.liveCandidateProvider
       });
       const bundle = await withLatencyStage("execution_signature_prepare", {
@@ -533,10 +533,10 @@ export const registerExecutionRoutes = async (
     }
     const { executionId } = request.params as { executionId: string };
     try {
-      await assertPolymarketFokBuyStillExecutable({
+      const quote = await deps.executableRouteService.getQuote(request.user.userId, executionId);
+      await assertPolymarketFokStillExecutable({
         userId: request.user.userId,
-        quoteId: executionId,
-        executableRouteService: deps.executableRouteService,
+        quote,
         liveCandidateProvider: deps.liveCandidateProvider,
         signedLegs: parsed.data.signedLegs
       });
@@ -900,125 +900,6 @@ export const registerExecutionRoutes = async (
       });
     }
   });
-};
-
-const assertPolymarketFokBuyStillExecutable = async (input: {
-  userId: string;
-  quoteId: string;
-  executableRouteService: ExecutableRouteService;
-  liveCandidateProvider?: LiveExecutionCandidateProvider | undefined;
-  signedLegs?: readonly SignedTradeLegPayload[] | undefined;
-}): Promise<void> => {
-  if (!input.liveCandidateProvider) {
-    return;
-  }
-  const quote = await input.executableRouteService.getQuote(input.userId, input.quoteId);
-  if (!quote || quote.side !== "buy") {
-    return;
-  }
-  for (const [index, leg] of quote.legs.entries()) {
-    if (leg.venue.toUpperCase() !== "POLYMARKET") {
-      continue;
-    }
-    const signedOrder = input.signedLegs ? findPolymarketSignedOrder(input.signedLegs, index) : null;
-    const signedOrderType = signedOrder ? asString(recordField(recordField(signedOrder.signedPayload, "data") ?? {}, "orderType")) : null;
-    if (signedOrderType && signedOrderType.toUpperCase() !== "FOK") {
-      continue;
-    }
-    const maxPrice = signedOrder
-      ? polymarketSignedOrderLimitPrice(signedOrder)
-      : polymarketRouteFokBuyLimitPrice(leg);
-    if (maxPrice === null) {
-      throw new SignedTradeBundleError(
-        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
-        "Polymarket FOK route could not derive a signed limit price. Refresh route before signing."
-      );
-    }
-    const live = await input.liveCandidateProvider.getCandidates({
-      userId: input.userId,
-      side: "buy",
-      marketId: quote.marketId,
-      outcomeId: quote.outcomeId,
-      amount: leg.size,
-      venues: ["POLYMARKET"]
-    });
-    const candidate = live.candidates.find((item) =>
-      item.venue.toUpperCase() === "POLYMARKET" &&
-      (!leg.venueMarketId || item.venueMarketId === leg.venueMarketId) &&
-      (!leg.venueOutcomeId || item.venueOutcomeId === leg.venueOutcomeId)
-    );
-    if (!candidate) {
-      throw new SignedTradeBundleError(
-        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
-        live.blocked.find((item) => item.venue.toUpperCase() === "POLYMARKET")?.reason ??
-          "Polymarket FOK route is no longer executable. Refresh route before signing."
-      );
-    }
-    const available = new Decimal(candidate.availableSize);
-    const required = new Decimal(leg.size);
-    if (!available.isFinite() || available.lt(required)) {
-      throw new SignedTradeBundleError(
-        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
-        "Polymarket FOK depth changed before execution. Refresh route and retry."
-      );
-    }
-    if (!Number.isFinite(candidate.price) || new Decimal(candidate.price).gt(maxPrice.plus("0.000000001"))) {
-      throw new SignedTradeBundleError(
-        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
-        "Polymarket FOK price moved before execution. Refresh route and retry."
-      );
-    }
-  }
-};
-
-const findPolymarketSignedOrder = (
-  signedLegs: readonly SignedTradeLegPayload[],
-  legIndex: number
-): SignedTradeLegPayload | null =>
-  signedLegs.find((payload) => {
-    if (payload.legIndex !== legIndex || payload.venue.toUpperCase() !== "POLYMARKET") {
-      return false;
-    }
-    const data = recordField(payload.signedPayload, "data");
-    return payload.requestType === "ORDER" ||
-      asString(payload.signedPayload.purpose) === "POLYMARKET_ORDER" ||
-      Boolean(recordField(data ?? {}, "order"));
-  }) ?? null;
-
-const polymarketSignedOrderLimitPrice = (signedLeg: SignedTradeLegPayload): InstanceType<typeof Decimal> | null => {
-  const data = recordField(signedLeg.signedPayload, "data");
-  const order = data ? recordField(data, "order") : null;
-  const makerAmount = order ? decimalFromRecord(order, "makerAmount") : null;
-  const takerAmount = order ? decimalFromRecord(order, "takerAmount") : null;
-  if (!makerAmount || !takerAmount || takerAmount.lte(0)) {
-    return null;
-  }
-  return makerAmount.div(takerAmount);
-};
-
-const polymarketRouteFokBuyLimitPrice = (leg: ExecutableTradeQuote["legs"][number]): InstanceType<typeof Decimal> | null => {
-  if (!Number.isFinite(leg.price) || leg.price <= 0 || leg.price >= 1) {
-    return null;
-  }
-  const tick = new Decimal(polymarketTickSizeFromMetadata(leg.metadata) ?? "0.001");
-  const bps = boundedPolymarketMarketBuySlippageBps();
-  const maxPrice = Decimal.max(0, new Decimal(1).minus(tick));
-  const cushioned = new Decimal(leg.price).times(new Decimal(1).plus(new Decimal(bps).div(10_000)));
-  return Decimal.min(maxPrice, cushioned).div(tick).ceil().times(tick);
-};
-
-const polymarketTickSizeFromMetadata = (metadata: Readonly<Record<string, unknown>> | undefined): string | null => {
-  const value = asString(metadata?.polymarketTickSize) ?? asString(metadata?.tickSize);
-  return value === "0.1" || value === "0.01" || value === "0.001" || value === "0.0001" ? value : null;
-};
-
-const boundedPolymarketMarketBuySlippageBps = (): number => {
-  const raw = process.env.POLYMARKET_MARKET_BUY_SLIPPAGE_BPS ?? process.env.POLY_MARKET_BUY_SLIPPAGE_BPS;
-  if (!raw || raw.trim().length === 0) {
-    return 100;
-  }
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 500) : 100;
 };
 
 const recordField = (value: unknown, field: string): Record<string, unknown> | null => {
