@@ -242,6 +242,135 @@ describe("execution signed bundle routes", () => {
     expect(submit).toHaveBeenCalledTimes(1);
   });
 
+  it("returns submitted leg failure details from orchestrated signature submit", async () => {
+    const app = Fastify();
+    const quote = buyQuote("POLYMARKET", true);
+    const executableRouteService = {
+      quote: vi.fn(async () => ({ quote, rejectedCandidates: [], internalCandidateCount: 1 })),
+      getQuote: vi.fn(async () => quote)
+    };
+    const service = new ExecutionOrderOrchestratorV1(
+      new MemoryExecutionOrderRepository(),
+      executableRouteService as never,
+      { prepareExit: vi.fn() } as never,
+      {
+        getLiveReadiness: vi.fn(async () => ({
+          quoteId: quote.quoteId,
+          generatedAt: new Date().toISOString(),
+          expiresAt: quote.expiresAt,
+          status: "fresh",
+          blockers: [],
+          venues: [{
+            venue: "POLYMARKET",
+            status: "fresh",
+            checkedAt: new Date().toISOString(),
+            blockers: [],
+            readinessCode: "POLYMARKET_CLOB_READY_FOR_SUBMIT",
+            account: { walletAddress: "0xwallet", venueAccountAddress: "0xdeposit", ownerAddress: "0xdeposit" },
+            collateral: {
+              requiredNotional: "1",
+              balance: "10",
+              allowance: "10",
+              tokenSymbol: "pUSD",
+              tokenAddress: null,
+              spenderAddress: null,
+              chainId: 137
+            }
+          }]
+        })),
+        prepare: vi.fn(async () => ({
+          quoteId: quote.quoteId,
+          expiresAt: quote.expiresAt,
+          signatureRequests: [{
+            legIndex: 0,
+            venue: "POLYMARKET",
+            requestType: "ORDER",
+            account: "0xdeposit",
+            signer: "0xwallet",
+            kind: "EIP712",
+            expiresAt: quote.expiresAt,
+            typedData: {},
+            signedPayloadHint: {}
+          }]
+        })),
+        submit: vi.fn(async () => ({
+          executionId: quote.quoteId,
+          status: "FAILED",
+          dryRun: false,
+          submittedLegs: [{
+            legIndex: 0,
+            venue: "POLYMARKET",
+            status: "FAILED",
+            reasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
+            reason: "Polymarket rejected the order parameters."
+          }]
+        })),
+        getExecutionStatus: vi.fn(async () => null)
+      } as never,
+      {
+        getCandidates: vi.fn(async () => ({
+          generatedAt: new Date().toISOString(),
+          marketId: "market-1",
+          outcomeId: "YES",
+          amount: "1",
+          candidates: [{
+            venue: "POLYMARKET",
+            venueMarketId: "polymarket-market",
+            venueOutcomeId: "polymarket-token",
+            price: 0.5,
+            availableSize: "10",
+            requiresUserSignature: true,
+            metadata: { polymarketTickSize: "0.001" }
+          }],
+          blocked: []
+        }))
+      }
+    );
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: executableRouteService as never,
+      sellQuoteService: { prepareExit: vi.fn() } as never,
+      executionOrderService: service
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/execution/orders/preview",
+      payload: { marketId: "market-1", outcomeId: "YES", side: "buy", amount: "1", venuePreference: "POLYMARKET" }
+    });
+    await app.inject({ method: "POST", url: `/execution/orders/${quote.quoteId}/place` });
+    const signed = await app.inject({
+      method: "POST",
+      url: `/execution/orders/${quote.quoteId}/signatures`,
+      payload: {
+        signedPayloads: [{
+          legIndex: 0,
+          venue: "POLYMARKET",
+          requestType: "ORDER",
+          signedPayload: {
+            purpose: "POLYMARKET_ORDER",
+            data: { order: { makerAmount: "500000", takerAmount: "1000000" } },
+            signature: "0xsig",
+            account: "0xdeposit"
+          }
+        }]
+      }
+    });
+
+    expect(signed.statusCode).toBe(200);
+    expect(signed.json()).toMatchObject({
+      state: "FAILED",
+      lastError: "Polymarket rejected the order parameters.",
+      blockers: [{
+        code: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
+        message: "Polymarket rejected the order parameters.",
+        venue: "POLYMARKET",
+        actionable: false
+      }]
+    });
+  });
+
   it("keeps venue-specific order previews on the requested venue", async () => {
     const app = Fastify();
     const quote = buyQuote("LIMITLESS", false);

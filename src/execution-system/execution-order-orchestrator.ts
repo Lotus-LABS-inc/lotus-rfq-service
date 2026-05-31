@@ -432,6 +432,7 @@ export class ExecutionOrderOrchestratorV1 {
     result: SignedTradeBundleSubmitResult
   ): Promise<ExecutionOrderRecord> {
     const state = stateFromSubmitResult(result.status);
+    const failureBlockers = result.status === "FAILED" ? blockersFromSubmittedLegs(result.submittedLegs) : [];
     return await this.repository.updateOrder({
       userId: order.userId,
       orderId: order.orderId,
@@ -440,6 +441,7 @@ export class ExecutionOrderOrchestratorV1 {
         primaryAction: primaryActionForState(state),
         executionId: result.executionId,
         lastError: result.status === "FAILED" ? firstSubmitFailure(result) : null,
+        blockers: failureBlockers.length > 0 ? failureBlockers : order.blockers,
         nextPollAt: nextPollAtForState(state)
       }
     }) ?? order;
@@ -450,6 +452,7 @@ export class ExecutionOrderOrchestratorV1 {
     status: SignedTradeExecutionStatus
   ): Promise<ExecutionOrderRecord> {
     const state = stateFromSignedStatus(status.status);
+    const failureBlockers = status.status === "FAILED" ? blockersFromSubmittedLegs(status.submittedLegs) : [];
     return await this.repository.updateOrder({
       userId: order.userId,
       orderId: order.orderId,
@@ -458,6 +461,7 @@ export class ExecutionOrderOrchestratorV1 {
         primaryAction: primaryActionForState(state),
         executionId: status.executionId,
         lastError: status.status === "FAILED" ? firstStatusFailure(status) : null,
+        blockers: failureBlockers.length > 0 ? failureBlockers : order.blockers,
         nextPollAt: nextPollAtForState(state)
       }
     }) ?? order;
@@ -751,6 +755,7 @@ const toOrderResponse = (
   readinessSummary: order.readinessSummary,
   venueCapabilitySummary: order.venueCapabilitySummary,
   blockers: order.blockers,
+  ...(order.lastError ? { lastError: order.lastError } : {}),
   ...(signatureRequests ? { signatureRequests: [...signatureRequests] } : {}),
   ...(order.nextPollAt ? { nextPollAt: order.nextPollAt } : {}),
   ...(override?.canAutoRenew ? { canAutoRenew: true } : {}),
@@ -788,10 +793,28 @@ const normalizeSubmitError = (error: unknown): { code: string; message: string }
 };
 
 const firstSubmitFailure = (result: SignedTradeBundleSubmitResult): string | null =>
-  result.submittedLegs.find((leg) => leg.reason)?.reason ?? null;
+  result.submittedLegs.find((leg) => leg.reason)?.reason ??
+  result.submittedLegs.find((leg) => leg.reasonCode)?.reasonCode ??
+  result.submittedLegs.find((leg) => leg.status === "FAILED")?.status ??
+  null;
 
 const firstStatusFailure = (status: SignedTradeExecutionStatus): string | null =>
-  status.submittedLegs.find((leg) => leg.reason)?.reason ?? null;
+  status.submittedLegs.find((leg) => leg.reason)?.reason ??
+  status.submittedLegs.find((leg) => leg.reasonCode)?.reasonCode ??
+  status.submittedLegs.find((leg) => leg.status === "FAILED")?.status ??
+  null;
+
+const blockersFromSubmittedLegs = (
+  legs: ReadonlyArray<{ venue: string; reasonCode?: string | undefined; reason?: string | undefined; status?: string | undefined }>
+): ExecutionOrderBlocker[] =>
+  legs
+    .filter((leg) => leg.reason || leg.reasonCode || leg.status === "FAILED")
+    .map((leg) => ({
+      code: leg.reasonCode ?? leg.status ?? "VENUE_SUBMIT_FAILED",
+      message: leg.reason ?? leg.reasonCode ?? "Venue submit failed.",
+      venue: leg.venue,
+      actionable: false
+    }));
 
 const findPolymarketSignedOrder = (
   signedLegs: readonly SignedTradeLegPayload[],
