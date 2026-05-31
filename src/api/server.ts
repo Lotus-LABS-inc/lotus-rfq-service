@@ -1771,12 +1771,30 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     }
     return activations;
   };
+  const accountSnapshotCache = new Map<string, { expiresAt: number; snapshot: unknown }>();
+  const accountSnapshotTimeout = async <T>(read: Promise<T>, fallback: T): Promise<T> => {
+    let timeout: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        read,
+        new Promise<T>((resolve) => {
+          timeout = setTimeout(() => resolve(fallback), 2_000);
+        })
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  };
   app.get("/account/snapshot", { preHandler: userAuthMiddleware }, async (request, reply) => {
     const generatedAt = new Date().toISOString();
     const userId = request.user.userId;
+    const cached = accountSnapshotCache.get(userId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return reply.status(200).send(cached.snapshot);
+    }
     const fallbackSection = async <T>(section: string, read: Promise<T>, fallback: T): Promise<T> => {
       try {
-        return await read;
+        return await accountSnapshotTimeout(read, fallback);
       } catch (error) {
         app.log.warn({
           section,
@@ -1816,7 +1834,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     ]);
     const walletSnapshots = await Promise.all(wallets.map(async (wallet) => {
       try {
-        return toSafeWallet(wallet, await userWalletBalanceReader.readWalletBalances(wallet));
+        return toSafeWallet(wallet, await accountSnapshotTimeout(userWalletBalanceReader.readWalletBalances(wallet), null));
       } catch (error) {
         app.log.warn({
           section: "walletBalance",
@@ -1828,7 +1846,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         return toSafeWallet(wallet, null);
       }
     }));
-    return reply.status(200).send({
+    const snapshot = {
       generatedAt,
       balances,
       activations,
@@ -1842,7 +1860,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       openOrders: { generatedAt, items: openOrders.slice(0, 50), nextCursor: openOrders.length > 50 ? openOrders[49]?.updatedAt ?? null : null },
       history: { generatedAt, items: history.slice(0, 50), nextCursor: history.length > 50 ? history[49]?.updatedAt ?? null : null },
       fundingHistory
-    });
+    };
+    accountSnapshotCache.set(userId, { expiresAt: Date.now() + 5_000, snapshot });
+    return reply.status(200).send(snapshot);
   });
   await registerFundingRoutes(app, userAuthMiddleware, {
     createIntent: (userId, request) => fundingService.createIntent(userId, request),

@@ -13,8 +13,7 @@ import {
   SignedTradeBundleError,
   type LiveSubmitReadinessSnapshot,
   type SignedTradeExecutionStatus,
-  type SignedTradeBundleService,
-  type SignedTradeLegPayload
+  type SignedTradeBundleService
 } from "../../execution-system/signed-trade-bundle.js";
 import type { CalculatedVenueQuoteSnapshot, VenueQuoteSnapshotBlocker } from "../../core/sor/quote-snapshot.js";
 import type { SettlementStatusV0 } from "../../execution-system/types.js";
@@ -23,6 +22,7 @@ import { withLatencyStage } from "../../observability/latency.js";
 import {
   EXECUTION_ORCHESTRATOR_V1_ENABLED,
   ExecutionOrderError,
+  assertPolymarketFokStillExecutable,
   type ExecutionOrderOrchestratorV1
 } from "../../execution-system/execution-order-orchestrator.js";
 
@@ -197,7 +197,7 @@ export interface LiveExecutionCandidateBlocker {
   detailsCode?: string | undefined;
 }
 
-export type MarkFreshness = "live" | "unavailable";
+export type MarkFreshness = "live" | "stale" | "unavailable";
 
 export interface MarkedExecutionPosition extends VerifiedExecutionPosition {
   markPrice: number | null;
@@ -208,6 +208,22 @@ export interface MarkedExecutionPosition extends VerifiedExecutionPosition {
   markGeneratedAt: string | null;
   markBlocker: string | null;
 }
+
+const LIVE_CANDIDATE_CACHE_MS = 2_000;
+const POSITION_MARK_CACHE_MS = 15_000;
+const POSITION_MARK_LIVE_TIMEOUT_MS = 700;
+const ROUTE_RATE_LIMIT_WINDOW_MS = 10_000;
+const RATE_LIMITS: Record<string, number> = {
+  preview: 40,
+  place: 12,
+  signatures: 8,
+  status: 120,
+  liveCandidates: 80
+};
+
+const liveCandidateCache = new Map<string, { expiresAt: number; promise: Promise<LiveExecutionCandidatesResponse> }>();
+const positionMarkCache = new Map<string, { expiresAt: number; position: MarkedExecutionPosition }>();
+const routeRateLimitBuckets = new Map<string, { resetAt: number; count: number }>();
 
 export const registerExecutionRoutes = async (
   app: FastifyInstance,
@@ -230,6 +246,7 @@ export const registerExecutionRoutes = async (
       });
     }
     try {
+      assertRouteRateLimit(request.user.userId, "preview");
       const result = await withLatencyStage("execution_order_preview", {
         endpoint: "POST /execution/orders/preview",
         canonicalMarketId: parsed.data.marketId,
@@ -257,13 +274,14 @@ export const registerExecutionRoutes = async (
     }
     const { orderId } = request.params as { orderId: string };
     try {
+      assertRouteRateLimit(request.user.userId, "place");
       const result = await withLatencyStage("execution_order_place", {
         endpoint: "POST /execution/orders/:orderId/place"
       }, () => deps.executionOrderService!.place({
         userId: request.user.userId,
         orderId
       }));
-      return reply.status(result.state === "SUBMITTED" || result.state === "FILLED" ? 202 : 200).send(result);
+      return reply.status(["SUBMITTING", "SUBMITTED", "FILLED"].includes(result.state) ? 202 : 200).send(result);
     } catch (error) {
       return sendExecutionOrderError(reply, error);
     }
@@ -286,6 +304,7 @@ export const registerExecutionRoutes = async (
     }
     const { orderId } = request.params as { orderId: string };
     try {
+      assertRouteRateLimit(request.user.userId, "signatures");
       const result = await withLatencyStage("execution_order_signature_submit", {
         endpoint: "POST /execution/orders/:orderId/signatures",
         external: true
@@ -294,7 +313,7 @@ export const registerExecutionRoutes = async (
         orderId,
         signedPayloads: parsed.data.signedPayloads
       }));
-      return reply.status(result.state === "SUBMITTED" || result.state === "FILLED" ? 202 : 200).send(result);
+      return reply.status(["SUBMITTING", "SUBMITTED", "FILLED"].includes(result.state) ? 202 : 200).send(result);
     } catch (error) {
       return sendExecutionOrderError(reply, error);
     }
@@ -309,6 +328,7 @@ export const registerExecutionRoutes = async (
     }
     const { orderId } = request.params as { orderId: string };
     try {
+      assertRouteRateLimit(request.user.userId, "status");
       const result = await withLatencyStage("execution_order_status", {
         endpoint: "GET /execution/orders/:orderId/status"
       }, () => deps.executionOrderService!.status({
@@ -336,13 +356,16 @@ export const registerExecutionRoutes = async (
         details: parsed.error.flatten()
       });
     }
+    if (!consumeRouteRateLimit(request.user.userId, "liveCandidates")) {
+      return reply.status(429).send({
+        code: "EXECUTION_RATE_LIMITED",
+        message: "Too many live execution candidate refreshes. Please wait briefly and try again."
+      });
+    }
     const result = await withLatencyStage("route_preview_live_candidates", {
       endpoint: "POST /execution/live-candidates",
       canonicalMarketId: parsed.data.marketId
-    }, () => deps.liveCandidateProvider!.getCandidates({
-      userId: request.user.userId,
-      ...parsed.data
-    }));
+    }, () => getCachedLiveCandidates(deps.liveCandidateProvider!, request.user.userId, parsed.data));
     if (result.candidates.length === 0) {
       return reply.status(409).send({
         code: "NO_LIVE_EXECUTION_CANDIDATES",
@@ -471,10 +494,10 @@ export const registerExecutionRoutes = async (
     }
     const { executionId } = request.params as { executionId: string };
     try {
-      await assertPolymarketFokBuyStillExecutable({
+      const quote = await deps.executableRouteService.getQuote(request.user.userId, executionId);
+      await assertPolymarketFokStillExecutable({
         userId: request.user.userId,
-        quoteId: executionId,
-        executableRouteService: deps.executableRouteService,
+        quote,
         liveCandidateProvider: deps.liveCandidateProvider
       });
       const bundle = await withLatencyStage("execution_signature_prepare", {
@@ -510,10 +533,10 @@ export const registerExecutionRoutes = async (
     }
     const { executionId } = request.params as { executionId: string };
     try {
-      await assertPolymarketFokBuyStillExecutable({
+      const quote = await deps.executableRouteService.getQuote(request.user.userId, executionId);
+      await assertPolymarketFokStillExecutable({
         userId: request.user.userId,
-        quoteId: executionId,
-        executableRouteService: deps.executableRouteService,
+        quote,
         liveCandidateProvider: deps.liveCandidateProvider,
         signedLegs: parsed.data.signedLegs
       });
@@ -879,125 +902,6 @@ export const registerExecutionRoutes = async (
   });
 };
 
-const assertPolymarketFokBuyStillExecutable = async (input: {
-  userId: string;
-  quoteId: string;
-  executableRouteService: ExecutableRouteService;
-  liveCandidateProvider?: LiveExecutionCandidateProvider | undefined;
-  signedLegs?: readonly SignedTradeLegPayload[] | undefined;
-}): Promise<void> => {
-  if (!input.liveCandidateProvider) {
-    return;
-  }
-  const quote = await input.executableRouteService.getQuote(input.userId, input.quoteId);
-  if (!quote || quote.side !== "buy") {
-    return;
-  }
-  for (const [index, leg] of quote.legs.entries()) {
-    if (leg.venue.toUpperCase() !== "POLYMARKET") {
-      continue;
-    }
-    const signedOrder = input.signedLegs ? findPolymarketSignedOrder(input.signedLegs, index) : null;
-    const signedOrderType = signedOrder ? asString(recordField(recordField(signedOrder.signedPayload, "data") ?? {}, "orderType")) : null;
-    if (signedOrderType && signedOrderType.toUpperCase() !== "FOK") {
-      continue;
-    }
-    const maxPrice = signedOrder
-      ? polymarketSignedOrderLimitPrice(signedOrder)
-      : polymarketRouteFokBuyLimitPrice(leg);
-    if (maxPrice === null) {
-      throw new SignedTradeBundleError(
-        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
-        "Polymarket FOK route could not derive a signed limit price. Refresh route before signing."
-      );
-    }
-    const live = await input.liveCandidateProvider.getCandidates({
-      userId: input.userId,
-      side: "buy",
-      marketId: quote.marketId,
-      outcomeId: quote.outcomeId,
-      amount: leg.size,
-      venues: ["POLYMARKET"]
-    });
-    const candidate = live.candidates.find((item) =>
-      item.venue.toUpperCase() === "POLYMARKET" &&
-      (!leg.venueMarketId || item.venueMarketId === leg.venueMarketId) &&
-      (!leg.venueOutcomeId || item.venueOutcomeId === leg.venueOutcomeId)
-    );
-    if (!candidate) {
-      throw new SignedTradeBundleError(
-        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
-        live.blocked.find((item) => item.venue.toUpperCase() === "POLYMARKET")?.reason ??
-          "Polymarket FOK route is no longer executable. Refresh route before signing."
-      );
-    }
-    const available = new Decimal(candidate.availableSize);
-    const required = new Decimal(leg.size);
-    if (!available.isFinite() || available.lt(required)) {
-      throw new SignedTradeBundleError(
-        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
-        "Polymarket FOK depth changed before execution. Refresh route and retry."
-      );
-    }
-    if (!Number.isFinite(candidate.price) || new Decimal(candidate.price).gt(maxPrice.plus("0.000000001"))) {
-      throw new SignedTradeBundleError(
-        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
-        "Polymarket FOK price moved before execution. Refresh route and retry."
-      );
-    }
-  }
-};
-
-const findPolymarketSignedOrder = (
-  signedLegs: readonly SignedTradeLegPayload[],
-  legIndex: number
-): SignedTradeLegPayload | null =>
-  signedLegs.find((payload) => {
-    if (payload.legIndex !== legIndex || payload.venue.toUpperCase() !== "POLYMARKET") {
-      return false;
-    }
-    const data = recordField(payload.signedPayload, "data");
-    return payload.requestType === "ORDER" ||
-      asString(payload.signedPayload.purpose) === "POLYMARKET_ORDER" ||
-      Boolean(recordField(data ?? {}, "order"));
-  }) ?? null;
-
-const polymarketSignedOrderLimitPrice = (signedLeg: SignedTradeLegPayload): InstanceType<typeof Decimal> | null => {
-  const data = recordField(signedLeg.signedPayload, "data");
-  const order = data ? recordField(data, "order") : null;
-  const makerAmount = order ? decimalFromRecord(order, "makerAmount") : null;
-  const takerAmount = order ? decimalFromRecord(order, "takerAmount") : null;
-  if (!makerAmount || !takerAmount || takerAmount.lte(0)) {
-    return null;
-  }
-  return makerAmount.div(takerAmount);
-};
-
-const polymarketRouteFokBuyLimitPrice = (leg: ExecutableTradeQuote["legs"][number]): InstanceType<typeof Decimal> | null => {
-  if (!Number.isFinite(leg.price) || leg.price <= 0 || leg.price >= 1) {
-    return null;
-  }
-  const tick = new Decimal(polymarketTickSizeFromMetadata(leg.metadata) ?? "0.001");
-  const bps = boundedPolymarketMarketBuySlippageBps();
-  const maxPrice = Decimal.max(0, new Decimal(1).minus(tick));
-  const cushioned = new Decimal(leg.price).times(new Decimal(1).plus(new Decimal(bps).div(10_000)));
-  return Decimal.min(maxPrice, cushioned).div(tick).ceil().times(tick);
-};
-
-const polymarketTickSizeFromMetadata = (metadata: Readonly<Record<string, unknown>> | undefined): string | null => {
-  const value = asString(metadata?.polymarketTickSize) ?? asString(metadata?.tickSize);
-  return value === "0.1" || value === "0.01" || value === "0.001" || value === "0.0001" ? value : null;
-};
-
-const boundedPolymarketMarketBuySlippageBps = (): number => {
-  const raw = process.env.POLYMARKET_MARKET_BUY_SLIPPAGE_BPS ?? process.env.POLY_MARKET_BUY_SLIPPAGE_BPS;
-  if (!raw || raw.trim().length === 0) {
-    return 100;
-  }
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 500) : 100;
-};
-
 const recordField = (value: unknown, field: string): Record<string, unknown> | null => {
   const record = isRecord(value) ? value : null;
   const next = record?.[field];
@@ -1085,6 +989,73 @@ const sendExecutionOrderError = (reply: FastifyReply, error: unknown) => {
   throw error;
 };
 
+const assertRouteRateLimit = (userId: string, action: keyof typeof RATE_LIMITS): void => {
+  if (consumeRouteRateLimit(userId, action)) {
+    return;
+  }
+  throw new ExecutionOrderError(
+    "EXECUTION_RATE_LIMITED",
+    "Too many execution requests are in flight. Please wait briefly and try again.",
+    429
+  );
+};
+
+const consumeRouteRateLimit = (userId: string, action: keyof typeof RATE_LIMITS): boolean => {
+  const now = Date.now();
+  const key = `${userId}\u0000${action}`;
+  const current = routeRateLimitBuckets.get(key);
+  if (!current || current.resetAt <= now) {
+    routeRateLimitBuckets.set(key, { resetAt: now + ROUTE_RATE_LIMIT_WINDOW_MS, count: 1 });
+    return true;
+  }
+  const limit = RATE_LIMITS[action] ?? 20;
+  if (current.count >= limit) {
+    return false;
+  }
+  current.count += 1;
+  return true;
+};
+
+const getCachedLiveCandidates = (
+  provider: LiveExecutionCandidateProvider,
+  userId: string,
+  input: {
+    side: "buy" | "sell";
+    marketId: string;
+    outcomeId: string;
+    amount: string;
+    venues?: readonly string[] | undefined;
+  }
+): Promise<LiveExecutionCandidatesResponse> => {
+  const now = Date.now();
+  const key = [
+    userId,
+    input.side,
+    input.marketId,
+    input.outcomeId,
+    normalizeAmountKey(input.amount),
+    [...(input.venues ?? [])].map((venue) => venue.toUpperCase()).sort().join(",")
+  ].join("\u0000");
+  const cached = liveCandidateCache.get(key);
+  if (cached && cached.expiresAt > now) {
+    return cached.promise;
+  }
+  const promise = provider.getCandidates({ userId, ...input });
+  liveCandidateCache.set(key, { expiresAt: now + LIVE_CANDIDATE_CACHE_MS, promise });
+  void promise.catch(() => {
+    liveCandidateCache.delete(key);
+  });
+  return promise;
+};
+
+const normalizeAmountKey = (value: string): string => {
+  try {
+    return new Decimal(value).toDecimalPlaces(8).toString();
+  } catch {
+    return value.trim();
+  }
+};
+
 const markPositions = async (input: {
   positions: readonly VerifiedExecutionPosition[];
   generatedAt: string;
@@ -1094,40 +1065,80 @@ const markPositions = async (input: {
   if (!input.liveCandidateProvider || Number(position.verifiedSize) <= 0) {
     return unavailableMarkedPosition(position, input.generatedAt, "LIVE_MARK_SOURCE_UNAVAILABLE");
   }
+  const cacheKey = positionMarkCacheKey(input.userId, position);
+  const cached = positionMarkCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.position;
+  }
   try {
-    const candidates = await input.liveCandidateProvider.getCandidates({
-      userId: input.userId,
-      side: "sell",
-      marketId: position.marketId,
-      outcomeId: position.outcomeId,
-      amount: position.verifiedSize,
-      venues: [position.venue]
-    });
+    const candidates = await withMarkTimeout(
+      getCachedLiveCandidates(input.liveCandidateProvider, input.userId, {
+        side: "sell",
+        marketId: position.marketId,
+        outcomeId: position.outcomeId,
+        amount: position.verifiedSize,
+        venues: [position.venue]
+      }),
+      POSITION_MARK_LIVE_TIMEOUT_MS
+    );
     const candidate = candidates.candidates[0];
     if (!candidate || !Number.isFinite(candidate.price)) {
-      return unavailableMarkedPosition(position, input.generatedAt, candidates.blocked[0]?.reason ?? "LIVE_MARK_QUOTE_UNAVAILABLE");
+      return lastGoodOrUnavailable(cacheKey, position, input.generatedAt, candidates.blocked[0]?.reason ?? "LIVE_MARK_QUOTE_UNAVAILABLE");
     }
     const size = Number(position.verifiedSize);
     const markValue = size * candidate.price;
     const entryValue = size * position.averageEntryPrice;
-    return {
+    const marked: MarkedExecutionPosition = {
       ...position,
       markPrice: candidate.price,
       markValue: fixedDecimal(markValue),
       unrealizedPnl: fixedDecimal(markValue - entryValue),
-      markSource: "LIVE_QUOTE_SOURCE",
-      markFreshness: "live",
+      markSource: "LIVE_QUOTE_SOURCE" as const,
+      markFreshness: "live" as const,
       markGeneratedAt: candidates.generatedAt,
       markBlocker: null
     };
+    positionMarkCache.set(cacheKey, { expiresAt: Date.now() + POSITION_MARK_CACHE_MS, position: marked });
+    return marked;
   } catch (error) {
-    return unavailableMarkedPosition(
-      position,
-      input.generatedAt,
-      error instanceof Error && error.message ? "LIVE_MARK_QUOTE_FAILED" : "LIVE_MARK_QUOTE_UNAVAILABLE"
-    );
+    return lastGoodOrUnavailable(cacheKey, position, input.generatedAt, error instanceof Error && error.message ? "LIVE_MARK_QUOTE_FAILED" : "LIVE_MARK_QUOTE_UNAVAILABLE");
   }
 }));
+
+const withMarkTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error("LIVE_MARK_QUOTE_TIMEOUT")), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+};
+
+const positionMarkCacheKey = (userId: string, position: VerifiedExecutionPosition): string =>
+  [userId, position.venue.toUpperCase(), position.marketId, position.outcomeId, position.positionId, normalizeAmountKey(position.verifiedSize)].join("\u0000");
+
+const lastGoodOrUnavailable = (
+  cacheKey: string,
+  position: VerifiedExecutionPosition,
+  generatedAt: string,
+  blocker: string
+): MarkedExecutionPosition => {
+  const cached = positionMarkCache.get(cacheKey);
+  if (cached) {
+    return {
+      ...cached.position,
+      markFreshness: "stale",
+      markGeneratedAt: generatedAt,
+      markBlocker: blocker
+    };
+  }
+  return unavailableMarkedPosition(position, generatedAt, blocker);
+};
 
 const isActiveVerifiedPosition = (position: VerifiedExecutionPosition): boolean =>
   position.status === "VERIFIED" && Number(position.verifiedSize) > 0;

@@ -157,6 +157,15 @@ export class ExecutionOrderError extends Error {
 }
 
 export class ExecutionOrderOrchestratorV1 {
+  private readonly previewIntentCache = new Map<string, { orderId: string; expiresAt: number }>();
+  private readonly previewInFlight = new Map<string, Promise<ExecutionOrderResponse>>();
+  private readonly signaturePrepCache = new Map<string, {
+    expiresAt: number;
+    hash: string;
+    promise: Promise<readonly TradeSignatureRequest[]>;
+  }>();
+  private readonly submitInFlight = new Map<string, Promise<void>>();
+
   public constructor(
     private readonly repository: ExecutionOrderRepository,
     private readonly executableRouteService: ExecutableRouteService,
@@ -166,6 +175,25 @@ export class ExecutionOrderOrchestratorV1 {
   ) {}
 
   public async preview(input: ExecutionOrderPreviewInput): Promise<ExecutionOrderResponse> {
+    const intentKey = executionOrderIntentKey(input);
+    const cached = await this.loadCachedIntent(input.userId, intentKey);
+    if (cached) {
+      return cached;
+    }
+    const inFlight = this.previewInFlight.get(intentKey);
+    if (inFlight) {
+      return inFlight;
+    }
+    const promise = this.createPreview(input, intentKey);
+    this.previewInFlight.set(intentKey, promise);
+    try {
+      return await promise;
+    } finally {
+      this.previewInFlight.delete(intentKey);
+    }
+  }
+
+  private async createPreview(input: ExecutionOrderPreviewInput, intentKey: string): Promise<ExecutionOrderResponse> {
     const candidates = await this.loadCandidates(input);
     if (candidates.candidates.length === 0) {
       const order = this.newOrder(input, {
@@ -186,21 +214,44 @@ export class ExecutionOrderOrchestratorV1 {
     const order = this.newOrder(input, {
       quote,
       state,
-      blockers: blockersFromReadiness(readiness),
+      blockers: [...blockersFromReadiness(readiness), ...blockersFromCapabilities(capabilities)],
       readiness,
       capabilities
     });
     await this.repository.saveOrder(order);
+    this.previewIntentCache.set(intentKey, {
+      orderId: order.orderId,
+      expiresAt: Math.min(Date.parse(order.expiresAt ?? "") || (Date.now() + 5_000), Date.now() + 8_000)
+    });
+    this.warmSignatureRequests(input.userId, quote, state);
     return toOrderResponse(order, quote, null);
   }
 
   public async place(input: { userId: string; orderId: string }): Promise<ExecutionOrderResponse> {
     const order = await this.requireOrder(input);
+    if (isTerminalOrPendingSubmit(order.state)) {
+      return this.status(input);
+    }
     const quote = await this.loadFreshQuote(order);
     if (!quote) {
       return this.expireOrder(order);
     }
-    await this.assertPolymarketFokBuyStillExecutable(input.userId, quote.quoteId);
+    const sellGuard = polymarketSellTokenIdBlockers(quote);
+    if (sellGuard.length > 0) {
+      return this.blockOrder(order, quote, sellGuard);
+    }
+    try {
+      await assertPolymarketFokStillExecutable({
+        userId: input.userId,
+        quote,
+        liveCandidateProvider: this.liveCandidateProvider
+      });
+    } catch (error) {
+      if (error instanceof SignedTradeBundleError) {
+        return this.blockOrder(order, quote, [blockerFromSignedTradeBundleError(error)]);
+      }
+      throw error;
+    }
     const readiness = await this.requireFreshReadiness(input.userId, quote.quoteId, quote);
     const capabilities = buildVenueCapabilities(quote, readiness, Boolean(this.signedTradeBundleService));
     const readinessState = classifyReadiness(readiness, capabilities);
@@ -213,17 +264,14 @@ export class ExecutionOrderOrchestratorV1 {
           primaryAction: primaryActionForState(readinessState),
           readinessSummary: summarizeReadiness(readiness),
           venueCapabilitySummary: capabilities,
-          blockers: blockersFromReadiness(readiness),
+          blockers: [...blockersFromReadiness(readiness), ...blockersFromCapabilities(capabilities)],
           nextPollAt: nextPollAtForState(readinessState)
         }
       });
       return toOrderResponse(updated ?? order, quote, null);
     }
     if (quoteRequiresSignature(quote)) {
-      const bundle = await this.signedTradeBundleService!.prepare({
-        userId: input.userId,
-        quoteId: quote.quoteId
-      });
+      const signatureRequests = await this.getPreparedSignatureRequests(input.userId, quote);
       const updated = await this.repository.updateOrder({
         userId: input.userId,
         orderId: input.orderId,
@@ -234,13 +282,13 @@ export class ExecutionOrderOrchestratorV1 {
           readinessSummary: summarizeReadiness(readiness),
           venueCapabilitySummary: capabilities,
           blockers: [],
-          signatureRequestHash: signatureRequestHash(bundle.signatureRequests),
+          signatureRequestHash: signatureRequestHash(signatureRequests),
           nextPollAt: null
         }
       });
-      return toOrderResponse(updated ?? order, quote, bundle.signatureRequests);
+      return toOrderResponse(updated ?? order, quote, signatureRequests);
     }
-    return this.submitOrder({ userId: input.userId, orderId: input.orderId, quote, signedLegs: [], allowedStates: ["READY_TO_PLACE"] });
+    return this.submitOrderAsync({ userId: input.userId, orderId: input.orderId, quote, signedLegs: [], allowedStates: ["READY_TO_PLACE"] });
   }
 
   public async submitSignatures(input: {
@@ -259,8 +307,25 @@ export class ExecutionOrderOrchestratorV1 {
     if (!quote) {
       return this.expireOrder(order);
     }
-    await this.assertPolymarketFokBuyStillExecutable(input.userId, quote.quoteId, input.signedPayloads);
-    return this.submitOrder({
+    const sellGuard = polymarketSellTokenIdBlockers(quote);
+    if (sellGuard.length > 0) {
+      return this.blockOrder(order, quote, sellGuard);
+    }
+    try {
+      this.assertSignedSellPayloadsMatchRoute(quote, input.signedPayloads);
+      await assertPolymarketFokStillExecutable({
+        userId: input.userId,
+        quote,
+        liveCandidateProvider: this.liveCandidateProvider,
+        signedLegs: input.signedPayloads
+      });
+    } catch (error) {
+      if (error instanceof SignedTradeBundleError) {
+        return this.blockOrder(order, quote, [blockerFromSignedTradeBundleError(error)]);
+      }
+      throw error;
+    }
+    return this.submitOrderAsync({
       userId: input.userId,
       orderId: input.orderId,
       quote,
@@ -427,6 +492,71 @@ export class ExecutionOrderOrchestratorV1 {
     }
   }
 
+  private async submitOrderAsync(input: {
+    userId: string;
+    orderId: string;
+    quote: ExecutableTradeQuote;
+    signedLegs: readonly SignedTradeLegPayload[];
+    allowedStates: readonly ExecutionOrderState[];
+  }): Promise<ExecutionOrderResponse> {
+    if (!this.signedTradeBundleService) {
+      throw new ExecutionOrderError("SIGNED_TRADE_BUNDLE_NOT_CONFIGURED", "Signed trade bundle submission is not configured.", 501);
+    }
+    const submitting = await this.repository.startSubmit({
+      userId: input.userId,
+      orderId: input.orderId,
+      allowedStates: input.allowedStates
+    });
+    if (!submitting) {
+      return this.status({ userId: input.userId, orderId: input.orderId });
+    }
+    const key = `${input.userId}:${input.orderId}`;
+    if (!this.submitInFlight.has(key)) {
+      const promise = this.runSubmitInBackground({
+        submitting,
+        quote: input.quote,
+        signedLegs: input.signedLegs
+      }).finally(() => {
+        this.submitInFlight.delete(key);
+      });
+      this.submitInFlight.set(key, promise);
+    }
+    return toOrderResponse(submitting, input.quote, null);
+  }
+
+  private async runSubmitInBackground(input: {
+    submitting: ExecutionOrderRecord;
+    quote: ExecutableTradeQuote;
+    signedLegs: readonly SignedTradeLegPayload[];
+  }): Promise<void> {
+    try {
+      const result = await this.signedTradeBundleService!.submit({
+        userId: input.submitting.userId,
+        quoteId: input.quote.quoteId,
+        signedLegs: input.signedLegs,
+        dryRun: false
+      });
+      await this.updateFromSubmitResult(input.submitting, result);
+    } catch (error) {
+      const normalized = normalizeSubmitError(error);
+      await this.repository.updateOrder({
+        userId: input.submitting.userId,
+        orderId: input.submitting.orderId,
+        patch: {
+          state: "FAILED",
+          primaryAction: "NONE",
+          lastError: normalized.message,
+          blockers: [{
+            code: normalized.code,
+            message: normalized.message,
+            actionable: false
+          }],
+          nextPollAt: null
+        }
+      });
+    }
+  }
+
   private async updateFromSubmitResult(
     order: ExecutionOrderRecord,
     result: SignedTradeBundleSubmitResult
@@ -472,6 +602,125 @@ export class ExecutionOrderOrchestratorV1 {
       return null;
     }
     return this.executableRouteService.getQuote(order.userId, order.quoteId);
+  }
+
+  private async loadCachedIntent(userId: string, intentKey: string): Promise<ExecutionOrderResponse | null> {
+    const cached = this.previewIntentCache.get(intentKey);
+    if (!cached || cached.expiresAt <= Date.now()) {
+      this.previewIntentCache.delete(intentKey);
+      return null;
+    }
+    const order = await this.repository.findOrder({ userId, orderId: cached.orderId });
+    if (!order || isTerminalOrPendingSubmit(order.state)) {
+      this.previewIntentCache.delete(intentKey);
+      return null;
+    }
+    const quote = await this.loadFreshQuote(order);
+    if (order.quoteId && !quote) {
+      this.previewIntentCache.delete(intentKey);
+      return null;
+    }
+    return toOrderResponse(order, quote, null);
+  }
+
+  private warmSignatureRequests(userId: string, quote: ExecutableTradeQuote, state: ExecutionOrderState): void {
+    if (!this.signedTradeBundleService || state !== "READY_TO_PLACE" || !quoteRequiresSignature(quote)) {
+      return;
+    }
+    if (quote.side === "sell" && hasPolymarketLeg(quote)) {
+      return;
+    }
+    const key = signaturePrepCacheKey(userId, quote.quoteId);
+    if (this.signaturePrepCache.has(key)) {
+      return;
+    }
+    const promise = this.signedTradeBundleService.prepare({ userId, quoteId: quote.quoteId })
+      .then((bundle) => bundle.signatureRequests);
+    this.signaturePrepCache.set(key, {
+      expiresAt: Math.min(Date.parse(quote.expiresAt ?? "") || (Date.now() + 10_000), Date.now() + 20_000),
+      hash: "",
+      promise
+    });
+    void promise.then((requests) => {
+      const existing = this.signaturePrepCache.get(key);
+      if (existing) {
+        this.signaturePrepCache.set(key, { ...existing, hash: signatureRequestHash(requests) });
+      }
+    }).catch(() => {
+      this.signaturePrepCache.delete(key);
+    });
+  }
+
+  private async getPreparedSignatureRequests(userId: string, quote: ExecutableTradeQuote): Promise<readonly TradeSignatureRequest[]> {
+    const key = signaturePrepCacheKey(userId, quote.quoteId);
+    const cached = this.signaturePrepCache.get(key);
+    if (cached && cached.expiresAt > Date.now() && !(quote.side === "sell" && hasPolymarketLeg(quote))) {
+      return cached.promise;
+    }
+    await assertPolymarketFokStillExecutable({
+      userId,
+      quote,
+      liveCandidateProvider: this.liveCandidateProvider
+    });
+    const promise = this.signedTradeBundleService!.prepare({ userId, quoteId: quote.quoteId })
+      .then((bundle) => bundle.signatureRequests);
+    this.signaturePrepCache.set(key, {
+      expiresAt: Math.min(Date.parse(quote.expiresAt ?? "") || (Date.now() + 10_000), Date.now() + 20_000),
+      hash: "",
+      promise
+    });
+    try {
+      const requests = await promise;
+      const existing = this.signaturePrepCache.get(key);
+      if (existing) {
+        this.signaturePrepCache.set(key, { ...existing, hash: signatureRequestHash(requests) });
+      }
+      return requests;
+    } catch (error) {
+      this.signaturePrepCache.delete(key);
+      throw error;
+    }
+  }
+
+  private async blockOrder(
+    order: ExecutionOrderRecord,
+    quote: ExecutableTradeQuote,
+    blockers: ExecutionOrderBlocker[]
+  ): Promise<ExecutionOrderResponse> {
+    const updated = await this.repository.updateOrder({
+      userId: order.userId,
+      orderId: order.orderId,
+      patch: {
+        state: "BLOCKED_ACTION_REQUIRED",
+        primaryAction: "NONE",
+        blockers,
+        lastError: blockers[0]?.message ?? null,
+        nextPollAt: null
+      }
+    });
+    return toOrderResponse(updated ?? order, quote, null);
+  }
+
+  private assertSignedSellPayloadsMatchRoute(
+    quote: ExecutableTradeQuote,
+    signedLegs: readonly SignedTradeLegPayload[]
+  ): void {
+    if (quote.side !== "sell") {
+      return;
+    }
+    for (const [index, leg] of quote.legs.entries()) {
+      if (leg.venue.toUpperCase() !== "POLYMARKET" || !leg.venueOutcomeId) {
+        continue;
+      }
+      const signed = findPolymarketSignedOrder(signedLegs, index);
+      const signedTokenId = signed ? polymarketSignedOrderTokenId(signed) : null;
+      if (signedTokenId && signedTokenId !== leg.venueOutcomeId) {
+        throw new SignedTradeBundleError(
+          "POLYMARKET_SELL_TOKEN_ID_MISMATCH",
+          "Polymarket signed sell token id no longer matches the route token id. Refresh route and sign again."
+        );
+      }
+    }
   }
 
   private async requireOrder(input: { userId: string; orderId: string }): Promise<ExecutionOrderRecord> {
@@ -534,68 +783,6 @@ export class ExecutionOrderOrchestratorV1 {
     };
   }
 
-  private async assertPolymarketFokBuyStillExecutable(
-    userId: string,
-    quoteId: string,
-    signedLegs?: readonly SignedTradeLegPayload[]
-  ): Promise<void> {
-    if (!this.liveCandidateProvider) {
-      return;
-    }
-    const quote = await this.executableRouteService.getQuote(userId, quoteId);
-    if (!quote || quote.side !== "buy") {
-      return;
-    }
-    for (const [index, leg] of quote.legs.entries()) {
-      if (leg.venue.toUpperCase() !== "POLYMARKET") {
-        continue;
-      }
-      const signedOrder = signedLegs ? findPolymarketSignedOrder(signedLegs, index) : null;
-      const signedOrderType = signedOrder ? asString(recordField(recordField(signedOrder.signedPayload, "data") ?? {}, "orderType")) : null;
-      if (signedOrderType && signedOrderType.toUpperCase() !== "FOK") {
-        continue;
-      }
-      const maxPrice = signedOrder ? polymarketSignedOrderLimitPrice(signedOrder) : polymarketRouteFokBuyLimitPrice(leg);
-      if (maxPrice === null) {
-        throw new SignedTradeBundleError(
-          "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
-          "Polymarket FOK route could not derive a signed limit price. Refresh route before signing."
-        );
-      }
-      const live = await this.liveCandidateProvider.getCandidates({
-        userId,
-        side: "buy",
-        marketId: quote.marketId,
-        outcomeId: quote.outcomeId,
-        amount: leg.size,
-        venues: ["POLYMARKET"]
-      });
-      const candidate = live.candidates.find((item) =>
-        item.venue.toUpperCase() === "POLYMARKET" &&
-        (!leg.venueMarketId || item.venueMarketId === leg.venueMarketId) &&
-        (!leg.venueOutcomeId || item.venueOutcomeId === leg.venueOutcomeId)
-      );
-      if (!candidate) {
-        throw new SignedTradeBundleError(
-          "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
-          live.blocked.find((item) => item.venue.toUpperCase() === "POLYMARKET")?.reason ??
-            "Polymarket FOK route is no longer executable. Refresh route before signing."
-        );
-      }
-      if (new Decimal(candidate.availableSize).lt(new Decimal(leg.size))) {
-        throw new SignedTradeBundleError(
-          "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
-          "Polymarket FOK depth changed before execution. Refresh route and retry."
-        );
-      }
-      if (!Number.isFinite(candidate.price) || new Decimal(candidate.price).gt(maxPrice.plus("0.000000001"))) {
-        throw new SignedTradeBundleError(
-          "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
-          "Polymarket FOK price moved before execution. Refresh route and retry."
-        );
-      }
-    }
-  }
 }
 
 const buildVenueCapabilities = (
@@ -608,10 +795,14 @@ const buildVenueCapabilities = (
     venues: quote.legs.map((leg) => {
       const venue = leg.venue.toUpperCase();
       const venueReadiness = readinessByVenue.get(venue);
-      const blockers = venueReadiness?.blockers ?? [];
+      const sellTokenBlockers = polymarketSellTokenIdBlockersForLeg(quote, leg);
+      const blockers = [
+        ...(venueReadiness?.blockers ?? []),
+        ...sellTokenBlockers.map((blocker) => blocker.message)
+      ];
       const adapterMissing = blockers.some((blocker) => /NOT CONFIGURED|UNSUPPORTED|ADAPTER/i.test(blocker));
       const submitSupported = signedSubmitConfigured && venue !== "MYRIAD" && !adapterMissing;
-      const status = !submitSupported || venueReadiness?.status === "blocked"
+      const status = !submitSupported || venueReadiness?.status === "blocked" || sellTokenBlockers.length > 0
         ? "blocked"
         : venueReadiness?.status === "stale" || !venueReadiness
         ? "waiting"
@@ -636,6 +827,9 @@ const classifyReadiness = (
   capabilities: { venues: ExecutionOrderVenueCapability[] }
 ): ExecutionOrderState => {
   if (capabilities.venues.some((venue) => !venue.submitSupported)) {
+    return "BLOCKED_ACTION_REQUIRED";
+  }
+  if (capabilities.venues.some((venue) => venue.status === "blocked")) {
     return "BLOCKED_ACTION_REQUIRED";
   }
   if (!readiness || readiness.status === "stale" || capabilities.venues.some((venue) => venue.status === "waiting")) {
@@ -698,6 +892,100 @@ const stateFromSignedStatus = (status: SignedTradeExecutionStatus["status"]): Ex
 const isTerminalOrPendingSubmit = (state: ExecutionOrderState): boolean =>
   ["SUBMITTING", "SUBMITTED", "FILLED", "FAILED", "EXPIRED"].includes(state);
 
+const hasPolymarketLeg = (quote: ExecutableTradeQuote): boolean =>
+  quote.legs.some((leg) => leg.venue.toUpperCase() === "POLYMARKET");
+
+export const assertPolymarketFokStillExecutable = async (input: {
+  userId: string;
+  quote: ExecutableTradeQuote | null;
+  liveCandidateProvider?: ExecutionOrderLiveCandidateProvider | undefined;
+  signedLegs?: readonly SignedTradeLegPayload[] | undefined;
+}): Promise<void> => {
+  if (!input.liveCandidateProvider || !input.quote) {
+    return;
+  }
+  for (const [index, leg] of input.quote.legs.entries()) {
+    if (leg.venue.toUpperCase() !== "POLYMARKET") {
+      continue;
+    }
+    if (input.quote.side === "sell" && !leg.venueOutcomeId) {
+      throw new SignedTradeBundleError(
+        "POLYMARKET_SELL_TOKEN_ID_MISSING",
+        "Polymarket sell route is missing the executable conditional token id. Refresh market metadata before selling."
+      );
+    }
+    const signedOrder = input.signedLegs ? findPolymarketSignedOrder(input.signedLegs, index) : null;
+    const signedOrderType = signedOrder ? asString(recordField(recordField(signedOrder.signedPayload, "data") ?? {}, "orderType")) : null;
+    if (signedOrderType && signedOrderType.toUpperCase() !== "FOK") {
+      continue;
+    }
+    if (input.quote.side === "sell" && signedOrder) {
+      const signedTokenId = polymarketSignedOrderTokenId(signedOrder);
+      if (!signedTokenId || signedTokenId.toLowerCase() !== leg.venueOutcomeId?.toLowerCase()) {
+        throw new SignedTradeBundleError(
+          "POLYMARKET_SELL_TOKEN_ID_MISMATCH",
+          "Polymarket signed sell token id no longer matches the route token id. Refresh route and sign again."
+        );
+      }
+    }
+    const live = await input.liveCandidateProvider.getCandidates({
+      userId: input.userId,
+      side: input.quote.side,
+      marketId: input.quote.marketId,
+      outcomeId: input.quote.outcomeId,
+      amount: leg.size,
+      venues: ["POLYMARKET"]
+    });
+    const candidate = live.candidates.find((item) =>
+      item.venue.toUpperCase() === "POLYMARKET" &&
+      (!leg.venueMarketId || item.venueMarketId === leg.venueMarketId) &&
+      (!leg.venueOutcomeId || item.venueOutcomeId === leg.venueOutcomeId)
+    );
+    if (!candidate) {
+      throw new SignedTradeBundleError(
+        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
+        live.blocked.find((item) => item.venue.toUpperCase() === "POLYMARKET")?.reason ??
+          "Polymarket FOK route is no longer executable. Refresh route before signing."
+      );
+    }
+    if (new Decimal(candidate.availableSize).lt(new Decimal(leg.size))) {
+      throw new SignedTradeBundleError(
+        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
+        "Polymarket FOK depth changed before execution. Refresh route and retry."
+      );
+    }
+    if (input.quote.side === "buy") {
+      const maxPrice = signedOrder ? polymarketSignedOrderLimitPrice(signedOrder, "buy") : polymarketRouteFokBuyLimitPrice(leg);
+      if (maxPrice === null) {
+        throw new SignedTradeBundleError(
+          "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
+          "Polymarket FOK route could not derive a signed limit price. Refresh route before signing."
+        );
+      }
+      if (!Number.isFinite(candidate.price) || new Decimal(candidate.price).gt(maxPrice.plus("0.000000001"))) {
+        throw new SignedTradeBundleError(
+          "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
+          "Polymarket FOK price moved before execution. Refresh route and retry."
+        );
+      }
+      continue;
+    }
+    const minPrice = signedOrder ? polymarketSignedOrderLimitPrice(signedOrder, "sell") : polymarketRouteFokSellLimitPrice(leg);
+    if (minPrice === null) {
+      throw new SignedTradeBundleError(
+        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
+        "Polymarket FOK route could not derive a signed sell limit price. Refresh route before signing."
+      );
+    }
+    if (!Number.isFinite(candidate.price) || new Decimal(candidate.price).lt(minPrice.minus("0.000000001"))) {
+      throw new SignedTradeBundleError(
+        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
+        "Polymarket FOK sell price moved before execution. Refresh route and retry."
+      );
+    }
+  }
+};
+
 const nextPollAtForState = (state: ExecutionOrderState): string | null =>
   state === "SUBMITTING" || state === "SUBMITTED" || state === "WAITING_FOR_VENUE_READY"
     ? new Date(Date.now() + 2_000).toISOString()
@@ -726,6 +1014,61 @@ const blockersFromReadiness = (readiness: LiveSubmitReadinessSnapshot | null): E
       actionable: venue.status === "blocked"
     }))
   ) ?? []);
+
+const blockersFromCapabilities = (capabilities: { venues: ExecutionOrderVenueCapability[] }): ExecutionOrderBlocker[] =>
+  capabilities.venues.flatMap((venue) =>
+    venue.blockers.map((message) => ({
+      code: message.includes("conditional token id") ? "POLYMARKET_SELL_TOKEN_ID_MISSING" : "VENUE_CAPABILITY_BLOCKED",
+      message,
+      venue: venue.venue,
+      actionable: false
+    }))
+  );
+
+const blockerFromSignedTradeBundleError = (error: SignedTradeBundleError): ExecutionOrderBlocker => ({
+  code: error.code,
+  message: error.message,
+  venue: error.code.startsWith("POLYMARKET") ? "POLYMARKET" : undefined,
+  actionable: false
+});
+
+const executionOrderIntentKey = (input: ExecutionOrderPreviewInput): string =>
+  [
+    input.userId,
+    input.marketId,
+    input.outcomeId,
+    input.side,
+    normalizeAmountKey(input.amount),
+    input.venuePreference
+  ].join("\u0000");
+
+const normalizeAmountKey = (value: string): string => {
+  try {
+    return new Decimal(value).toDecimalPlaces(8).toString();
+  } catch {
+    return value.trim();
+  }
+};
+
+const signaturePrepCacheKey = (userId: string, quoteId: string): string => `${userId}\u0000${quoteId}`;
+
+const polymarketSellTokenIdBlockers = (quote: ExecutableTradeQuote): ExecutionOrderBlocker[] =>
+  quote.legs.flatMap((leg) => polymarketSellTokenIdBlockersForLeg(quote, leg));
+
+const polymarketSellTokenIdBlockersForLeg = (
+  quote: ExecutableTradeQuote,
+  leg: ExecutableTradeQuote["legs"][number]
+): ExecutionOrderBlocker[] => {
+  if (quote.side !== "sell" || leg.venue.toUpperCase() !== "POLYMARKET" || leg.venueOutcomeId) {
+    return [];
+  }
+  return [{
+    code: "POLYMARKET_SELL_TOKEN_ID_MISSING",
+    message: "Polymarket sell route is missing the executable conditional token id. Refresh market metadata before selling.",
+    venue: "POLYMARKET",
+    actionable: false
+  }];
+};
 
 const toCandidateBlocker = (blocker: { venue: string; reason: string; detailsCode?: string | undefined }): ExecutionOrderBlocker => ({
   code: blocker.detailsCode ?? "LIVE_CANDIDATE_BLOCKED",
@@ -830,15 +1173,27 @@ const findPolymarketSignedOrder = (
       Boolean(recordField(data ?? {}, "order"));
   }) ?? null;
 
-const polymarketSignedOrderLimitPrice = (signedLeg: SignedTradeLegPayload): InstanceType<typeof Decimal> | null => {
+const polymarketSignedOrderLimitPrice = (
+  signedLeg: SignedTradeLegPayload,
+  side: TradeSide
+): InstanceType<typeof Decimal> | null => {
   const data = recordField(signedLeg.signedPayload, "data");
   const order = data ? recordField(data, "order") : null;
   const makerAmount = order ? decimalFromRecord(order, "makerAmount") : null;
   const takerAmount = order ? decimalFromRecord(order, "takerAmount") : null;
-  if (!makerAmount || !takerAmount || takerAmount.lte(0)) {
+  if (!makerAmount || !takerAmount || makerAmount.lte(0) || takerAmount.lte(0)) {
     return null;
   }
-  return makerAmount.div(takerAmount);
+  return side === "sell" ? takerAmount.div(makerAmount) : makerAmount.div(takerAmount);
+};
+
+const polymarketSignedOrderTokenId = (signedLeg: SignedTradeLegPayload): string | null => {
+  const data = recordField(signedLeg.signedPayload, "data");
+  const order = data ? recordField(data, "order") : null;
+  if (!order) {
+    return null;
+  }
+  return asString(order.tokenId) ?? asString(order.assetId) ?? asString(order.makerAssetId) ?? asString(order.takerAssetId) ?? null;
 };
 
 const polymarketRouteFokBuyLimitPrice = (leg: ExecutableTradeQuote["legs"][number]): InstanceType<typeof Decimal> | null => {
@@ -849,6 +1204,14 @@ const polymarketRouteFokBuyLimitPrice = (leg: ExecutableTradeQuote["legs"][numbe
   const maxPrice = Decimal.max(0, new Decimal(1).minus(tick));
   const cushioned = new Decimal(leg.price).times(new Decimal(1).plus(new Decimal(100).div(10_000)));
   return Decimal.min(maxPrice, cushioned).div(tick).ceil().times(tick);
+};
+
+const polymarketRouteFokSellLimitPrice = (leg: ExecutableTradeQuote["legs"][number]): InstanceType<typeof Decimal> | null => {
+  if (!Number.isFinite(leg.price) || leg.price <= 0 || leg.price >= 1) {
+    return null;
+  }
+  const tick = new Decimal(polymarketTickSizeFromMetadata(leg.metadata) ?? "0.001");
+  return new Decimal(leg.price).div(tick).floor().times(tick);
 };
 
 const polymarketTickSizeFromMetadata = (metadata: Readonly<Record<string, unknown>> | undefined): string | null => {
