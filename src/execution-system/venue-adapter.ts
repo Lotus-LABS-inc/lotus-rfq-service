@@ -15,6 +15,26 @@ export interface VenueSubmitResult {
   averagePrice: number;
 }
 
+export interface VenueOrderLookupContext {
+  userId?: string | undefined;
+  submittedAt?: string | undefined;
+  venueOrderId?: string | undefined;
+  fillId?: string | undefined;
+  venueAccountAddress?: string | null | undefined;
+  route?: {
+    marketId?: string | undefined;
+    outcomeId?: string | undefined;
+    side?: string | undefined;
+  } | undefined;
+  routeLeg?: {
+    venueMarketId?: string | undefined;
+    venueOutcomeId?: string | undefined;
+    side?: string | undefined;
+    size?: string | undefined;
+    price?: number | undefined;
+  } | undefined;
+}
+
 export interface VenueFillState {
   status: "OPEN" | "PARTIAL_FILL" | "FILLED" | "CANCELLED" | "FAILED";
   filledSize: string;
@@ -44,9 +64,9 @@ export interface ExecutionVenueAdapter {
   readonly venue: string;
   prepareOrder(leg: ExecutionLegV0): Promise<PreparedVenueOrder>;
   submitOrder(order: PreparedVenueOrder): Promise<VenueSubmitResult>;
-  fetchFillState(venueOrderId: string): Promise<VenueFillState>;
+  fetchFillState(venueOrderId: string, context?: VenueOrderLookupContext): Promise<VenueFillState>;
   cancelOrder?(venueOrderId: string): Promise<{ cancelled: boolean }>;
-  fetchSettlementState(fillOrOrderId: string): Promise<VenueSettlementState>;
+  fetchSettlementState(fillOrOrderId: string, context?: VenueOrderLookupContext): Promise<VenueSettlementState>;
   normalizeVenueError(error: unknown): NormalizedVenueError;
 }
 

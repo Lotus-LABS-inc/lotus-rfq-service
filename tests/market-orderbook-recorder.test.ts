@@ -47,7 +47,9 @@ describe("MarketOrderbookRecorder", () => {
         },
         cleanupSnapshots: async () => ({
           deletedOldSnapshots: 2,
-          deletedClosedMarketSnapshots: 3
+          deletedClosedMarketSnapshots: 3,
+          deletedClosedLatestSnapshots: 4,
+          deletedStaleBlockedLatestSnapshots: 5
         })
       },
       logger,
@@ -56,7 +58,8 @@ describe("MarketOrderbookRecorder", () => {
         intervalMs: 60_000,
         marketBatchSize: 10,
         retentionHours: 720,
-        levelsPerSide: 25
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
       }
     );
 
@@ -68,8 +71,11 @@ describe("MarketOrderbookRecorder", () => {
       sampledOutcomes: 2,
       insertedSnapshots: 2,
       failedSamples: 0,
+      skippedCooldownSamples: 0,
       deletedOldSnapshots: 2,
-      deletedClosedMarketSnapshots: 3
+      deletedClosedMarketSnapshots: 3,
+      deletedClosedLatestSnapshots: 4,
+      deletedStaleBlockedLatestSnapshots: 5
     });
     expect(inserted.map((snapshot) => snapshot.canonicalOutcomeId)).toEqual(["YES", "NO"]);
     expect(inserted[0]).toMatchObject({
@@ -81,6 +87,186 @@ describe("MarketOrderbookRecorder", () => {
       midpoint: "0.6",
       bidDepth: "10",
       askDepth: "11"
+    });
+  });
+
+  it("records quote blockers and cools down fully blocked venue samples", async () => {
+    const inserted: VenueOrderbookSnapshotInput[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [{
+          ...marketFixture("OPEN"),
+          venues: ["LIMITLESS"],
+          venueMarkets: marketFixture("OPEN").venueMarkets.map((venueMarket) => ({
+            ...venueMarket,
+            venue: "LIMITLESS"
+          }))
+        }]
+      },
+      {
+        getQuoteSnapshotReport: async () => ({
+          snapshots: [],
+          blocked: [{
+            venue: "LIMITLESS",
+            reason: "QUOTE_PROVIDER_HTTP_429",
+            venueMarketId: "limitless-1",
+            detailsCode: "Limitless_orderbook_request_failed_with_status_429."
+          }]
+        })
+      },
+      {
+        insertMany: async (snapshots) => {
+          inserted.push(...snapshots);
+          return snapshots.length;
+        },
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        enabled: true,
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 60_000
+      }
+    );
+
+    const first = await recorder.runOnce();
+    const second = await recorder.runOnce();
+
+    expect(first.insertedSnapshots).toBe(1);
+    expect(inserted[0]).toMatchObject({
+      venue: "LIMITLESS",
+      venueMarketId: "limitless-1",
+      quoteQuality: "DIAGNOSTIC_ONLY",
+      blockers: ["QUOTE_PROVIDER_HTTP_429", "Limitless_orderbook_request_failed_with_status_429."]
+    });
+    expect(second.skippedCooldownSamples).toBe(2);
+  });
+
+  it("records stable missing-source and 404 mapping blockers without cooling down the whole venue", async () => {
+    const inserted: VenueOrderbookSnapshotInput[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [{
+          ...marketFixture("OPEN"),
+          venues: ["POLYMARKET"],
+          venueMarkets: marketFixture("OPEN").venueMarkets.map((venueMarket) => ({
+            ...venueMarket,
+            venue: "POLYMARKET"
+          }))
+        }]
+      },
+      {
+        getQuoteSnapshotReport: async () => ({
+          snapshots: [],
+          blocked: [{
+            venue: "POLYMARKET",
+            reason: "POLYMARKET_SOURCE_MATCH_MISSING",
+            venueMarketId: "poly-missing",
+            detailsCode: "QUOTE_PROVIDER_HTTP_404"
+          }]
+        })
+      },
+      {
+        insertMany: async (snapshots) => {
+          inserted.push(...snapshots);
+          return snapshots.length;
+        },
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        enabled: true,
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const first = await recorder.runOnce();
+    const second = await recorder.runOnce();
+
+    expect(first.insertedSnapshots).toBe(2);
+    expect(inserted[0]).toMatchObject({
+      venue: "POLYMARKET",
+      venueMarketId: "poly-missing",
+      quoteQuality: "DIAGNOSTIC_ONLY",
+      blockers: ["POLYMARKET_SOURCE_MATCH_MISSING", "QUOTE_PROVIDER_HTTP_404"]
+    });
+    expect(second.skippedCooldownSamples).toBe(0);
+    expect(second.insertedSnapshots).toBe(2);
+  });
+
+  it("records Opinion display snapshots as quote-ready when fee discovery is the only missing factor", async () => {
+    const inserted: VenueOrderbookSnapshotInput[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [opinionMarketFixture()]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalOutcomeId }) => ({
+          snapshots: [{
+            venue: "OPINION",
+            venueMarketId: "3062",
+            venueOutcomeId: canonicalOutcomeId === "NO" ? "token-no" : "token-yes",
+            source: "REST",
+            quoteQuality: "FULL_DEPTH_REST",
+            sourceTimestamp: new Date("2026-05-10T12:00:00.000Z"),
+            receivedAt: new Date("2026-05-10T12:00:01.000Z"),
+            bids: [{ price: "0.44", size: "10" }],
+            asks: [{ price: "0.46", size: "11" }],
+            blockers: [],
+            missingFactors: ["FEE_DISCOVERY"]
+          }],
+          blocked: []
+        })
+      },
+      {
+        insertMany: async (snapshots) => {
+          inserted.push(...snapshots);
+          return snapshots.length;
+        },
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        enabled: true,
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.insertedSnapshots).toBe(2);
+    expect(inserted[0]).toMatchObject({
+      venue: "OPINION",
+      bestBid: "0.44",
+      bestAsk: "0.46",
+      blockers: [],
+      metadataVersion: "venue-orderbook-recorder-opinion-fee-warning-v1"
     });
   });
 });
@@ -149,4 +335,21 @@ const marketFixture = (status: MarketCatalogMarket["status"]): MarketCatalogMark
     resolvesAt: null
   }],
   updatedAt: "2026-05-10T12:00:00.000Z"
+});
+
+const opinionMarketFixture = (): MarketCatalogMarket => ({
+  ...marketFixture("OPEN"),
+  venues: ["OPINION"],
+  venueMarkets: marketFixture("OPEN").venueMarkets.map((venueMarket) => ({
+    ...venueMarket,
+    venue: "OPINION",
+    venueMarketId: "3062",
+    venueMarketProfileId: "profile-opinion",
+    network: "BNB_MAINNET",
+    chain: "BNB",
+    outcomes: [
+      { id: "YES", label: "Yes" },
+      { id: "NO", label: "No" }
+    ]
+  }))
 });

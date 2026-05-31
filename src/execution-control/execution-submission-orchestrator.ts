@@ -1,6 +1,7 @@
 import type { Logger } from "pino";
 
 import { ExecutionControlRepository } from "../repositories/execution-control.repository.js";
+import { withLatencyStage, withLatencyStageSync } from "../observability/latency.js";
 import type { ExecutionAuditContext } from "./execution-audit-writer.js";
 import type { ExecutionControlRequest, ExecutionSubmissionKind } from "./execution-control-types.js";
 
@@ -40,17 +41,29 @@ export class ExecutionSubmissionOrchestrator {
         audit: ExecutionAuditContext;
         idempotencyKey: string;
     }): Promise<ExecutionSubmissionResult> {
-        const handler = this.resolveHandler(input.request.submissionKind);
-        await this.executionControlRepository.createSubmissionLineage({
+        const handler = withLatencyStageSync("execution_submission_handler_resolve", {
+            canonicalMarketId: input.request.canonicalExecutableMarketId,
+            routeType: input.request.routeType,
+            external: input.request.submissionKind !== "INTERNAL_CROSS"
+        }, () => this.resolveHandler(input.request.submissionKind));
+        await withLatencyStage("execution_submission_lineage_write", {
+            canonicalMarketId: input.request.canonicalExecutableMarketId,
+            routeType: input.request.routeType,
+            external: input.request.submissionKind !== "INTERNAL_CROSS"
+        }, () => this.executionControlRepository.createSubmissionLineage({
             executionIntentId: input.audit.intent.id,
             executionRecordId: input.audit.getRecord().id,
             routePlanId: input.request.routePlanId,
             submissionKind: input.request.submissionKind,
             providerExecutionKey: input.audit.getRecord().providerExecutionKey,
             lineagePayload: input.request.submissionPayload as Record<string, unknown>
-        });
+        }));
 
-        return handler.execute(input);
+        return withLatencyStage("execution_submission_handler_execute", {
+            canonicalMarketId: input.request.canonicalExecutableMarketId,
+            routeType: input.request.routeType,
+            external: input.request.submissionKind !== "INTERNAL_CROSS"
+        }, () => handler.execute(input));
     }
 
     private resolveHandler(kind: ExecutionSubmissionKind): ExecutionSubmissionHandler {

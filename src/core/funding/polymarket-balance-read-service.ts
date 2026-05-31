@@ -10,6 +10,7 @@ import {
   type BalanceAllowanceResponse,
   type ClobClientOptions
 } from "@polymarket/clob-client-v2";
+import { PolymarketDataApiClient } from "../../integrations/polymarket/polymarket-data-api-client.js";
 
 type DecimalValue = InstanceType<typeof Decimal>;
 
@@ -68,6 +69,8 @@ export interface PolymarketFundingBalanceReadServiceConfig {
   bridgedUsdcTokenAddress?: string | undefined;
   recognizeBridgedUsdcAsUsable?: boolean | undefined;
   requireUserDepositWallet?: boolean | undefined;
+  conditionalTokensAddress?: string | undefined;
+  dataApiBaseUrl?: string | undefined;
 }
 
 export interface PolymarketBalanceAllowanceClient {
@@ -207,6 +210,7 @@ const decimalToPlainString = (value: ReturnType<typeof toDecimal>): string =>
 
 const defaultPusdTokenAddress = "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB";
 const defaultPolygonBridgedUsdcTokenAddress = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
+const defaultConditionalTokensAddress = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045";
 
 const configuredApprovalSpenders = (config: PolymarketFundingBalanceReadServiceConfig): string[] =>
   uniqueHexAddresses([
@@ -252,7 +256,9 @@ export const buildPolymarketFundingBalanceReadConfigFromEnv = (
   bridgedUsdcTokenAddress: firstNonEmpty(env.POLYMARKET_BRIDGED_USDC_TOKEN_ADDRESS, env.POLYGON_USDC_TOKEN_ADDRESS) ?? defaultPolygonBridgedUsdcTokenAddress,
   recognizeBridgedUsdcAsUsable: env.POLYMARKET_RECOGNIZE_BRIDGED_USDC_AS_USABLE !== "false",
   requireUserDepositWallet: env.POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED === "true" ||
-    env.POLYMARKET_FUNDING_DESTINATION_MODE === "USER_VENUE_DEPOSIT_WALLET"
+    env.POLYMARKET_FUNDING_DESTINATION_MODE === "USER_VENUE_DEPOSIT_WALLET",
+  conditionalTokensAddress: firstNonEmpty(env.POLYMARKET_CONDITIONAL_TOKENS_ADDRESS, env.POLYMARKET_CTF_CONTRACT_ADDRESS) ?? defaultConditionalTokensAddress,
+  dataApiBaseUrl: env.POLYMARKET_DATA_API_BASE_URL
 });
 
 export const getPolymarketFundingBalanceReadStatus = (
@@ -318,12 +324,19 @@ const userDepositWalletClobConfig = (
   : config;
 
 export class PolymarketFundingBalanceReadService {
+  private readonly dataApiClient: PolymarketDataApiClient;
+
   public constructor(
     private readonly config: PolymarketFundingBalanceReadServiceConfig,
     private readonly clientFactory: PolymarketBalanceAllowanceClientFactory = createPolymarketBalanceAllowanceClient,
     private readonly venueAccountReader?: PolymarketFundingVenueAccountReader,
     private readonly fetchImpl: typeof fetch = fetch
-  ) {}
+  ) {
+    this.dataApiClient = new PolymarketDataApiClient({
+      baseUrl: config.dataApiBaseUrl,
+      fetchImpl
+    });
+  }
 
   public getStatus(): PolymarketFundingBalanceReadStatus {
     return getPolymarketFundingBalanceReadStatus(this.config);
@@ -434,15 +447,61 @@ export class PolymarketFundingBalanceReadService {
     await client.updateBalanceAllowance?.(params);
     const response = await client.getBalanceAllowance(params);
     const allowanceSpenders = clobAllowanceSpendersFromResponse(response);
+    const clobBalance = collateralAtomicUnitsToUsdc(response.balance);
+    let tokenBalance = clobBalance;
+    let tokenAllowance = collateralAtomicUnitsToUsdc(collateralAllowanceAtomicUnits(response));
+    const dataApiPosition = await this.dataApiClient.findPosition({
+      proxyWallet: funderAddress,
+      assetId: input.tokenId
+    }).catch(() => null);
+    if (dataApiPosition && new Decimal(dataApiPosition.size).greaterThan(tokenBalance)) {
+      tokenBalance = new Decimal(dataApiPosition.size);
+    }
+    if (
+      this.config.onchainFallbackEnabled !== false &&
+      tokenBalance.greaterThan(0) &&
+      tokenAllowance.lessThan(tokenBalance)
+    ) {
+      const approved = await this.readAnyConditionalTokenApproval(
+        funderAddress,
+        allowanceSpenders.map((spender) => spender.spenderAddress)
+      );
+      if (approved) {
+        tokenAllowance = tokenBalance;
+      }
+    }
     return {
       tokenId: input.tokenId,
-      tokenBalance: collateralAtomicUnitsToUsdc(response.balance).toFixed(),
-      tokenAllowance: collateralAtomicUnitsToUsdc(collateralAllowanceAtomicUnits(response)).toFixed(),
+      tokenBalance: decimalToPlainString(tokenBalance),
+      tokenAllowance: decimalToPlainString(tokenAllowance),
       clobAllowanceSpenders: allowanceSpenders.map((spender) => ({
         spenderAddress: spender.spenderAddress,
         allowance: decimalToPlainString(spender.allowance)
       }))
     };
+  }
+
+  private async readAnyConditionalTokenApproval(
+    ownerAddress: string | null,
+    spenderAddresses: string[]
+  ): Promise<boolean> {
+    const tokenAddress = this.config.conditionalTokensAddress;
+    const rpcUrl = this.config.polygonRpcUrl;
+    if (!isHexAddress(ownerAddress ?? undefined) || !isHexAddress(tokenAddress) || !nonEmpty(rpcUrl)) {
+      return false;
+    }
+    const candidates = uniqueHexAddresses([
+      ...spenderAddresses,
+      this.config.pusdApprovalSpenderAddress,
+      this.config.negRiskPusdApprovalSpenderAddress
+    ]);
+    if (candidates.length === 0) {
+      return false;
+    }
+    const approvals = await Promise.all(candidates.map((spenderAddress) =>
+      this.readOnchainErc1155ApprovalForAll(ownerAddress!, spenderAddress, tokenAddress!)
+    ));
+    return approvals.some(Boolean);
   }
 
   private async resolveUserDepositWalletAddress(input: PolymarketFundingBalanceReadInput): Promise<string | null> {
@@ -538,6 +597,35 @@ export class PolymarketFundingBalanceReadService {
     }
     const atomic = BigInt(raw.result);
     return new Decimal(atomic.toString()).div(new Decimal(10).pow(COLLATERAL_TOKEN_DECIMALS));
+  }
+
+  private async readOnchainErc1155ApprovalForAll(
+    ownerAddress: string,
+    operatorAddress: string,
+    tokenAddress: string
+  ): Promise<boolean> {
+    const rpcUrl = this.config.polygonRpcUrl;
+    if (!nonEmpty(rpcUrl) || !isHexAddress(ownerAddress) || !isHexAddress(operatorAddress) || !isHexAddress(tokenAddress)) {
+      return false;
+    }
+    const cleanOwner = ownerAddress.toLowerCase().replace(/^0x/, "").padStart(64, "0");
+    const cleanOperator = operatorAddress.toLowerCase().replace(/^0x/, "").padStart(64, "0");
+    const data = `0xe985e9c5${cleanOwner}${cleanOperator}`;
+    const response = await this.fetchImpl(rpcUrl!, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_call",
+        params: [{ to: tokenAddress, data }, "latest"]
+      })
+    });
+    if (!response.ok) {
+      return false;
+    }
+    const raw = await response.json() as { result?: unknown };
+    return typeof raw.result === "string" && /^0x[a-fA-F0-9]+$/.test(raw.result) && BigInt(raw.result) !== 0n;
   }
 }
 

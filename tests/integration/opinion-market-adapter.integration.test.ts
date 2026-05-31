@@ -17,6 +17,10 @@ describe("OpinionMarketAdapter integration", () => {
           rules: "This market is based on the DOTA2 match between Team Yandex and Tundra Esports.",
           yesLabel: "Yandex",
           noLabel: "Tundra",
+          yesTokenId: "yes-token",
+          noTokenId: "no-token",
+          conditionId: "condition-id",
+          resultTokenId: "result-token-id",
           volume: "34.065",
           createdAt: 1774587391,
           cutoffAt: 1774656000,
@@ -35,7 +39,14 @@ describe("OpinionMarketAdapter integration", () => {
     expect(seed.marketClass).toBe("BINARY");
     expect(seed.normalizedPayload).toMatchObject({
       marketId: "10562",
-      slug: "dota2-esl-yandex-vs-tundra-mar-28-11-30am-et"
+      slug: "dota2-esl-yandex-vs-tundra-mar-28-11-30am-et",
+      quoteTokenId: "yes-token",
+      quoteOutcomeTokenIds: {
+        YES: "yes-token",
+        NO: "no-token"
+      },
+      conditionId: "condition-id",
+      resultTokenId: "result-token-id"
     });
   });
 
@@ -52,12 +63,17 @@ describe("OpinionMarketAdapter integration", () => {
       venueMarketId: "8454",
       title: "Will another country strike Iran by March 31?",
       slug: "iran-strike-march-31",
+      marketType: 0,
       status: "Activated",
       statusCode: 2,
       labels: ["Politics"],
       rules: "Politics market",
       yesLabel: "Yes",
       noLabel: "No",
+      yesTokenId: null,
+      noTokenId: null,
+      conditionId: null,
+      resultTokenId: null,
       volume: "0",
       volume24h: "0",
       volume7d: "0",
@@ -67,6 +83,7 @@ describe("OpinionMarketAdapter integration", () => {
       createdAt: null,
       cutoffAt: null,
       resolvedAt: null,
+      childMarkets: [],
       sourceMetadataVersion: "opinion-v1",
       raw: {}
     })).toBe("POLITICS");

@@ -63,6 +63,14 @@ export class PolymarketGammaClient {
     return normalizeGammaMarketList(markets);
   }
 
+  public async getEventBySlug(slug: string): Promise<Record<string, unknown>> {
+    const trimmed = slug.trim();
+    if (!trimmed) {
+      return {};
+    }
+    return asRecord(await this.getJson(`/events/slug/${encodeURIComponent(trimmed)}`));
+  }
+
   public async searchMarkets(query: string): Promise<PolymarketGammaMarket[]> {
     const trimmed = query.trim();
     if (!trimmed) {

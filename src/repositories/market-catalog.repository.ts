@@ -6,6 +6,44 @@ const FRONTEND_CATALOG_EXCLUDED_TOPIC_PREFIXES = [
 ] as const;
 
 const VENUE_SUFFIX_PATTERN = /:(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$/i;
+const VENUE_RULE_TEXT_FIELDS = [
+  "resolutionRules",
+  "resolution_rules",
+  "resolutionRule",
+  "resolution_rule",
+  "resolutionRulesText",
+  "resolution_rules_text",
+  "rules",
+  "rule",
+  "description",
+  "resolveDescription",
+  "resolutionCriteria",
+  "settlementRules",
+  "settlement_rules"
+] as const;
+const VENUE_RESOLUTION_SOURCE_FIELDS = [
+  "resolutionSource",
+  "resolution_source",
+  "resolutionSourceUrl",
+  "resolution_source_url",
+  "source",
+  "sourceName",
+  "source_name",
+  "resolver",
+  "oracle",
+  "oracleName",
+  "oracle_name"
+] as const;
+const VENUE_SOURCE_URL_FIELDS = [
+  "sourceUrl",
+  "source_url",
+  "url",
+  "permalink",
+  "marketUrl",
+  "market_url",
+  "resolutionSourceUrl",
+  "resolution_source_url"
+] as const;
 
 const addFrontendCatalogExclusionCondition = (conditions: string[], params: unknown[]): void => {
   params.push([...FRONTEND_CATALOG_EXCLUDED_TOPIC_PREFIXES]);
@@ -30,6 +68,7 @@ export interface MarketCatalogFilter {
   category?: string;
   search?: string;
   limit?: number;
+  offset?: number;
   includeUnapproved?: boolean;
 }
 
@@ -45,6 +84,9 @@ export interface MarketCatalogVenueMarket {
   venue: string;
   venueMarketProfileId: string;
   venueMarketId: string;
+  marketSlug?: string | null | undefined;
+  eventSlug?: string | null | undefined;
+  sourceUrl?: string | null | undefined;
   venueTitle: string;
   imageUrl: string | null;
   iconUrl: string | null;
@@ -60,6 +102,9 @@ export interface MarketCatalogVenueMarket {
   changePercent24h: string | null;
   marketClass: string;
   outcomes: Array<{ id: string; label: string }>;
+  resolutionSource?: string | null | undefined;
+  resolutionTitle?: string | null | undefined;
+  resolutionRulesText?: string | null | undefined;
   network: string | null;
   chain: string | null;
   expiresAt: string | null;
@@ -101,6 +146,16 @@ export interface MarketCatalogMarket {
   buyCount: string | null;
   sellCount: string | null;
   venueMarkets: MarketCatalogVenueMarket[];
+  quoteStatus?: "live" | "partial" | "stale" | "unavailable" | undefined;
+  quoteReadyVenueCount?: number | undefined;
+  quoteReadyVenues?: string[] | undefined;
+  quoteBlockers?: Array<{
+    venue: string;
+    reason: string;
+    venueMarketId?: string | undefined;
+    venueOutcomeId?: string | undefined;
+  }> | undefined;
+  lastQuoteAt?: string | null | undefined;
   updatedAt: string;
 }
 
@@ -173,6 +228,12 @@ interface VenueMarketRow {
   resolves_at: string | null;
   normalized_payload: unknown;
   raw_source_payload: unknown;
+  resolution_source: string | null;
+  resolution_title: string | null;
+  resolution_rules_text: string | null;
+  venue_resolution_source: string | null;
+  venue_resolution_title: string | null;
+  venue_resolution_rules_text: string | null;
 }
 
 interface CategoryRow {
@@ -243,6 +304,7 @@ export class MarketCatalogRepository {
 
   public async listMarkets(filter: MarketCatalogFilter = {}): Promise<MarketCatalogMarket[]> {
     const limit = clampLimit(filter.limit);
+    const offset = clampOffset(filter.offset);
     const conditions: string[] = [];
     const params: unknown[] = [];
     if (!filter.includeUnapproved) {
@@ -270,6 +332,8 @@ export class MarketCatalogRepository {
     }
     params.push(limit);
     const limitParam = `$${params.length}`;
+    params.push(offset);
+    const offsetParam = `$${params.length}`;
     const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
     const result = await this.pool.query<MarketRow>(
       `SELECT
@@ -309,7 +373,8 @@ export class MarketCatalogRepository {
                  ce.canonical_category ASC,
                  COALESCE(ce.expires_at, ce.resolves_at, ce.updated_at) DESC,
                  ce.title ASC
-        LIMIT ${limitParam}`,
+        LIMIT ${limitParam}
+        OFFSET ${offsetParam}`,
       params
     );
     return this.hydrateMarkets(result.rows);
@@ -416,10 +481,18 @@ export class MarketCatalogRepository {
           vmp.expires_at::text,
           vmp.resolves_at::text,
           vmp.normalized_payload,
-          vmp.raw_source_payload
+          vmp.raw_source_payload,
+          vmp.resolution_source,
+          vmp.resolution_title,
+          vmp.resolution_rules_text,
+          vrp.resolution_source AS venue_resolution_source,
+          vrp.resolution_title AS venue_resolution_title,
+          vrp.rule_text AS venue_resolution_rules_text
          FROM canonical_events ce
          JOIN venue_market_profiles vmp
            ON vmp.canonical_event_id = ce.id
+         LEFT JOIN venue_resolution_profiles vrp
+           ON vrp.venue_market_profile_id = vmp.id
          LEFT JOIN canonical_executable_market_members mem
            ON mem.venue_market_profile_id = vmp.id
          LEFT JOIN canonical_executable_markets cem
@@ -917,12 +990,30 @@ const toVenueMarket = (row: VenueMarketRow): MarketCatalogVenueMarket => {
     "resolution_time"
   ]);
   const curatedTimestamp = extractCuratedTimestamp(row.normalized_payload, row.raw_source_payload);
+  const marketSlug = firstNonEmptyString(
+    extractSanitizedSlug(row.normalized_payload, row.raw_source_payload, ["marketSlug", "market_slug", "slug"]),
+    slugFromPrefixedVenueMarketId(row.venue, row.venue_market_id),
+    slugLikeVenueMarketId(row.venue_market_id)
+  );
+  const eventSlug = firstNonEmptyString(
+    extractSanitizedSlug(row.normalized_payload, row.raw_source_payload, ["eventSlug", "event_slug", "event_slug_id"]),
+    eventSlugFromPrefixedVenueMarketId(row.venue, row.venue_market_id)
+  );
+  const sourceUrl = firstNonEmptyString(
+    extractSanitizedSourceUrl(row.normalized_payload, row.raw_source_payload, VENUE_SOURCE_URL_FIELDS),
+    buildVenueSourceUrl(row.venue, marketSlug, eventSlug)
+  );
+  const resolutionRulesText = selectVenueResolutionRulesText(row);
+  const resolutionSource = selectVenueResolutionSourceText(row, resolutionRulesText);
   return {
     canonicalMarketId: row.canonical_market_id,
     canonicalMarketTitle: displayTitle(row.canonical_market_title, row.canonical_market_id),
     venue: row.venue === "PREDICT" ? "PREDICT_FUN" : row.venue,
     venueMarketProfileId: row.venue_market_profile_id,
     venueMarketId: row.venue_market_id,
+    marketSlug,
+    eventSlug,
+    sourceUrl,
     venueTitle: row.venue_title,
     imageUrl: extractSanitizedMediaUrl(row.normalized_payload, row.raw_source_payload, ["imageUrl", "image_url", "image", "twitterCardImage", "thumbnailUrl", "thumbnail", "banner"]),
     iconUrl: extractSanitizedMediaUrl(row.normalized_payload, row.raw_source_payload, ["iconUrl", "icon_url", "icon", "logoUrl", "logo"]),
@@ -938,6 +1029,9 @@ const toVenueMarket = (row: VenueMarketRow): MarketCatalogVenueMarket => {
     changePercent24h: extractNumericMetric(row.normalized_payload, row.raw_source_payload, ["changePercent24h", "change_percent_24h", "priceChangePercent24h", "price_change_percent_24h", "oneDayPriceChangePercent", "one_day_price_change_percent", "percentChange24h", "percent_change_24h", "changePct24h", "change_pct_24h"]),
     marketClass: row.market_class,
     outcomes: normalizeOutcomes(row.outcomes),
+    resolutionSource,
+    resolutionTitle: firstNonEmptyString(row.venue_resolution_title, row.resolution_title, row.venue_title),
+    resolutionRulesText,
     network: row.network,
     chain: row.chain,
     expiresAt: row.expires_at ?? payloadExpiresAt ?? curatedTimestamp,
@@ -996,6 +1090,21 @@ const MEDIA_HOST_ALLOWLIST = [
   "predict.fun"
 ];
 
+const SOURCE_HOST_ALLOWLIST = [
+  "polymarket.com",
+  "www.polymarket.com",
+  "predict.fun",
+  "www.predict.fun",
+  "limitless.exchange",
+  "www.limitless.exchange",
+  "opinion.trade",
+  "www.opinion.trade",
+  "myriad.markets",
+  "www.myriad.markets",
+  "myriad.social",
+  "www.myriad.social"
+];
+
 const extractSanitizedMediaUrl = (
   normalizedPayload: unknown,
   rawSourcePayload: unknown,
@@ -1027,6 +1136,187 @@ const extractSanitizedTimestamp = (
     const sanitized = sanitizeTimestamp(candidate);
     if (sanitized) {
       return sanitized;
+    }
+  }
+  return null;
+};
+
+const selectVenueResolutionRulesText = (row: VenueMarketRow): string | null => {
+  const candidates = [
+    row.venue_resolution_rules_text,
+    row.resolution_rules_text,
+    ...collectStringFields(row.raw_source_payload, VENUE_RULE_TEXT_FIELDS, 4),
+    ...collectStringFields(row.normalized_payload, VENUE_RULE_TEXT_FIELDS, 3)
+  ];
+  for (const candidate of candidates) {
+    const sanitized = sanitizeVenueRuleText(candidate, row.venue_title);
+    if (sanitized) {
+      return sanitized;
+    }
+  }
+  return null;
+};
+
+const selectVenueResolutionSourceText = (
+  row: VenueMarketRow,
+  rulesText: string | null
+): string | null => {
+  const candidates = [
+    row.venue_resolution_source,
+    row.resolution_source,
+    ...collectStringFields(row.raw_source_payload, VENUE_RESOLUTION_SOURCE_FIELDS, 4),
+    ...collectStringFields(row.normalized_payload, VENUE_RESOLUTION_SOURCE_FIELDS, 3),
+    rulesText ? extractResolutionSourceParagraph(rulesText) : null
+  ];
+  for (const candidate of candidates) {
+    const sanitized = sanitizeVenueSourceText(candidate, row.venue);
+    if (sanitized) {
+      return sanitized;
+    }
+  }
+  return null;
+};
+
+const sanitizeVenueRuleText = (value: string | null | undefined, title: string | null | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+  const sanitized = sanitizeDisplayText(stripHtmlDisplayText(value));
+  if (!sanitized || sanitized.length < 24) {
+    return null;
+  }
+  const normalized = normalizeComparableDisplayText(sanitized);
+  const normalizedTitle = normalizeComparableDisplayText(title ?? "");
+  if (!normalized || (normalizedTitle && normalized === normalizedTitle)) {
+    return null;
+  }
+  if (looksLikeGeneratedPlaceholderRule(normalized)) {
+    return null;
+  }
+  if (!looksLikeVenueResolutionRule(sanitized) && normalized.split(" ").length <= 8) {
+    return null;
+  }
+  return sanitized;
+};
+
+const sanitizeVenueSourceText = (value: string | null | undefined, venue: string): string | null => {
+  if (!value) {
+    return null;
+  }
+  const sanitized = sanitizeDisplayText(stripHtmlDisplayText(value));
+  if (!sanitized) {
+    return null;
+  }
+  const normalized = normalizeComparableDisplayText(sanitized);
+  const normalizedVenueAliases = venueSourceAliases(venue);
+  if (
+    normalizedVenueAliases.has(normalized)
+    || normalized === "opinion openapi market"
+    || normalized === "predict market metadata"
+    || normalized === "limitless public market surface"
+    || normalized === "limitless public market detail"
+    || normalized === "limitless persisted market detail"
+  ) {
+    return null;
+  }
+  if (sanitizeSourceUrl(sanitized)) {
+    return sanitized;
+  }
+  return /\b(source|oracle|resolver|according|official|resolution|settlement|rules)\b/i.test(sanitized)
+    ? sanitized
+    : null;
+};
+
+const venueSourceAliases = (venue: string): ReadonlySet<string> => {
+  const normalizedVenue = normalizeCatalogVenue(venue);
+  const aliases = new Set([
+    normalizeComparableDisplayText(venue),
+    normalizeComparableDisplayText(normalizedVenue)
+  ]);
+  if (normalizedVenue === "PREDICT_FUN") {
+    aliases.add("predict");
+    aliases.add("predict fun");
+  }
+  return aliases;
+};
+
+const extractResolutionSourceParagraph = (rulesText: string): string | null => {
+  const paragraphs = rulesText
+    .split(/\n{2,}|\r\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => paragraph.length > 0);
+  const matched = paragraphs.filter((paragraph) =>
+    /\b(resolution source|source for this market|according to|official source|settlement source|oracle)\b/i.test(paragraph)
+  );
+  return matched.length > 0 ? matched.join("\n\n") : null;
+};
+
+const stripHtmlDisplayText = (value: string): string =>
+  value
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'")
+    .replace(/&ldquo;|&rdquo;/gi, "\"")
+    .replace(/&lsquo;|&rsquo;/gi, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+const normalizeComparableDisplayText = (value: string): string =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+const looksLikeVenueResolutionRule = (value: string): boolean =>
+  /\b(resolve|resolves|resolution|source|oracle|settle|settlement|outcome|according|will be considered|will not be considered|if|unless|void|cancel|refund)\b/i.test(value);
+
+const looksLikeGeneratedPlaceholderRule = (normalized: string): boolean =>
+  /^(ath|fdv|token launch|first to hit|price|winner|nominee|champion|launch) by date\b/.test(normalized)
+  || /^(ath|fdv|token launch|first to hit|price|winner|nominee|champion|launch)\b(?: [a-z0-9]+){0,8} \d{4} \d{2} \d{2}(?: \d{4} \d{2} \d{2})?$/.test(normalized);
+
+const extractSanitizedSlug = (
+  normalizedPayload: unknown,
+  rawSourcePayload: unknown,
+  fieldNames: readonly string[]
+): string | null => {
+  const candidates = [
+    ...collectStringFields(normalizedPayload, fieldNames, 3),
+    ...collectStringFields(rawSourcePayload, fieldNames, 4)
+  ];
+  for (const candidate of candidates) {
+    const sanitized = sanitizeSlug(candidate);
+    if (sanitized) {
+      return sanitized;
+    }
+  }
+  return null;
+};
+
+const extractSanitizedSourceUrl = (
+  normalizedPayload: unknown,
+  rawSourcePayload: unknown,
+  fieldNames: readonly string[]
+): string | null => {
+  const candidates = [
+    ...collectStringFields(normalizedPayload, fieldNames, 3),
+    ...collectStringFields(rawSourcePayload, fieldNames, 4)
+  ];
+  for (const candidate of candidates) {
+    const sanitized = sanitizeSourceUrl(candidate);
+    if (sanitized) {
+      return sanitized;
+    }
+  }
+  return null;
+};
+
+const firstNonEmptyString = (...values: Array<string | null | undefined>): string | null => {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) {
+      return trimmed;
     }
   }
   return null;
@@ -1156,6 +1446,138 @@ const sanitizeMediaUrl = (value: string): string | null => {
   return allowed ? parsed.toString() : null;
 };
 
+const sanitizeSourceUrl = (value: string): string | null => {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 2048) {
+    return null;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:") {
+    return null;
+  }
+  parsed.hash = "";
+  parsed.username = "";
+  parsed.password = "";
+  const hostname = parsed.hostname.toLowerCase();
+  const allowed = SOURCE_HOST_ALLOWLIST.some((host) => hostname === host || hostname.endsWith(`.${host}`));
+  return allowed ? parsed.toString() : null;
+};
+
+const sanitizeSlug = (value: string): string | null => {
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed || trimmed.length > 180 || !/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
+};
+
+const slugLikeVenueMarketId = (value: string): string | null => (
+  value.includes(":") || /^\d+$/.test(value.trim()) || value.trim().toLowerCase().startsWith("0x")
+    ? null
+    : sanitizeSlug(value)
+);
+
+const slugFromPrefixedVenueMarketId = (venue: string, venueMarketId: string): string | null => {
+  const parsed = parsePrefixedVenueMarketId(venue, venueMarketId);
+  if (!parsed) {
+    return null;
+  }
+  const [primary, secondary] = parsed.segments;
+  if (parsed.venue === "PREDICT_FUN") {
+    return slugLikePredictIdentifier(primary ?? "");
+  }
+  if (parsed.venue === "POLYMARKET") {
+    return slugLikePublicVenueIdentifier(primary ?? "");
+  }
+  if (parsed.venue === "LIMITLESS") {
+    return slugLikePublicVenueIdentifier(primary ?? "") ?? slugLikePublicVenueIdentifier(secondary ?? "");
+  }
+  if (parsed.venue === "OPINION" || parsed.venue === "MYRIAD") {
+    return slugLikePublicVenueIdentifier(primary ?? "");
+  }
+  return null;
+};
+
+const eventSlugFromPrefixedVenueMarketId = (venue: string, venueMarketId: string): string | null => {
+  const parsed = parsePrefixedVenueMarketId(venue, venueMarketId);
+  if (!parsed) {
+    return null;
+  }
+  if (parsed.venue !== "POLYMARKET") {
+    return null;
+  }
+  return slugLikePublicVenueIdentifier(parsed.segments[0] ?? "");
+};
+
+const parsePrefixedVenueMarketId = (
+  venue: string,
+  venueMarketId: string
+): { venue: string; segments: string[] } | null => {
+  const [rawPrefix, ...segments] = venueMarketId.split(":");
+  if (!rawPrefix || segments.length === 0) {
+    return null;
+  }
+  const normalizedPrefix = normalizeCatalogVenue(rawPrefix);
+  const normalizedVenue = normalizeCatalogVenue(venue);
+  if (normalizedPrefix !== normalizedVenue) {
+    return null;
+  }
+  return { venue: normalizedVenue, segments };
+};
+
+const normalizeCatalogVenue = (value: string): string => {
+  const normalized = value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+  return normalized === "PREDICT" ? "PREDICT_FUN" : normalized;
+};
+
+const slugLikePredictIdentifier = (value: string): string | null => {
+  const trimmed = value.trim();
+  return /^\d+$/.test(trimmed) ? null : slugLikePublicVenueIdentifier(trimmed);
+};
+
+const slugLikePublicVenueIdentifier = (value: string): string | null => {
+  const sanitized = sanitizeSlug(value);
+  if (!sanitized) {
+    return null;
+  }
+  if (
+    sanitized === "condition" ||
+    /^condition-\d+$/u.test(sanitized) ||
+    /^token-\d+$/u.test(sanitized) ||
+    /^market-\d+$/u.test(sanitized) ||
+    /^[0-9a-f]{24,}$/u.test(sanitized.replaceAll("-", ""))
+  ) {
+    return null;
+  }
+  return sanitized;
+};
+
+const buildVenueSourceUrl = (venue: string, marketSlug: string | null, eventSlug: string | null): string | null => {
+  const normalizedVenue = normalizeCatalogVenue(venue);
+  if (normalizedVenue === "POLYMARKET") {
+    const slug = eventSlug ?? marketSlug;
+    return slug ? `https://polymarket.com/event/${slug}` : null;
+  }
+  if (normalizedVenue === "PREDICT_FUN") {
+    return marketSlug ? `https://predict.fun/market/${marketSlug}` : null;
+  }
+  if (normalizedVenue === "LIMITLESS") {
+    return marketSlug ? `https://limitless.exchange/markets/${marketSlug}` : null;
+  }
+  if (normalizedVenue === "OPINION") {
+    return marketSlug ? `https://www.opinion.trade/market/${marketSlug}` : null;
+  }
+  if (normalizedVenue === "MYRIAD") {
+    return marketSlug ? `https://myriad.markets/markets/${marketSlug}` : null;
+  }
+  return null;
+};
+
 const sanitizeTimestamp = (value: string): string | null => {
   const trimmed = value.trim();
   if (!trimmed || trimmed.length > 64) {
@@ -1169,6 +1591,14 @@ const sanitizeTimestamp = (value: string): string | null => {
     return null;
   }
   return parsed.toISOString();
+};
+
+const sanitizeDisplayText = (value: string): string | null => {
+  const trimmed = value.replace(/\s+/g, " ").trim();
+  if (!trimmed || trimmed.length > 5_000) {
+    return null;
+  }
+  return trimmed;
 };
 
 const normalizeOutcomes = (value: unknown): Array<{ id: string; label: string }> => {
@@ -1206,6 +1636,13 @@ const clampLimit = (value: number | undefined): number => {
     return DEFAULT_LIMIT;
   }
   return Math.max(1, Math.min(MAX_LIMIT, Math.floor(value!)));
+};
+
+const clampOffset = (value: number | undefined): number => {
+  if (!Number.isFinite(value ?? NaN)) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(value!));
 };
 
 const marketLookupCandidates = (marketId: string): string[] => {

@@ -125,3 +125,36 @@ When this issue happens after a deploy:
 ## Deployment Guardrail
 
 Before staging or production validation, confirm Render is running the same commit that local tests passed against. A passing local test suite does not protect staging if Render is still deployed from an older `main` commit.
+
+Polymarket relay-mode submit has an additional guardrail: the external execution relay is part of the execution surface. If `POLYMARKET_EXECUTION_SUBMIT_MODE=relay`, the configured `POLYMARKET_EXECUTION_RELAY_URL` must be deployed from the same commit as the backend execution fix, or a later commit that includes the same relay changes. Do not validate user submit against an old relay.
+
+Required checks after any Polymarket execution-relay change:
+
+```bash
+render deploys list srv-d7nobb3eo5us73ff246g -o json
+aws elasticbeanstalk describe-environments --region eu-west-1 --environment-name lotus-polymarket-relay-euw1c --output json
+aws elasticbeanstalk describe-application-versions --region eu-west-1 --application-name lotus-polymarket-execution-relay --output json
+curl -s http://lotus-polymarket-relay-euw1c.eu-west-1.elasticbeanstalk.com/health
+```
+
+When packaging the Elastic Beanstalk relay from Windows, do not use PowerShell `Compress-Archive`. EB deploys the bundle on Linux and can fail `StageApplication` if the ZIP entries contain Windows `\` path separators. Build the package with a POSIX-path ZIP tool, for example:
+
+```bash
+npm run build
+tar -a -cf eb-polymarket-relay-<commit>-<timestamp>.zip -C <staging-dir> .
+tar -tf eb-polymarket-relay-<commit>-<timestamp>.zip | head
+```
+
+The archive listing must show `/` paths such as `dist/src/polymarket-execution-relay.js`, not `dist\src\polymarket-execution-relay.js`. If an EB deploy fails with `app_source_bundle appears to use backslashes as path separators`, rebuild the ZIP with POSIX paths and deploy a new app version.
+
+The EB `VersionLabel` should include the tested commit short SHA, and the relay `/health` endpoint must respond. If main points at a different relay URL, inspect that relay instead.
+
+Failure mode this guardrail prevents:
+
+```text
+main backend: user-signed POLY_1271 deposit-wallet order
+stale relay: rebuilds/submits static POLY_PROXY order
+Polymarket: not enough balance / allowance -> balance: 0
+```
+
+Relay log evidence of this drift is any submit to `https://clob.polymarket.com/order` where a Turnkey deposit-wallet terminal order is posted as `signatureType: 1` / `POLY_PROXY`, with a static maker/funder, or as `OrderType.GTC`. Current user terminal market orders must preserve the signed `POLY_1271` order and post as `FOK`.

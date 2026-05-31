@@ -16,11 +16,12 @@ import {
 } from "@limitless-exchange/sdk";
 import { AddressesByChainId, ChainId, OrderBuilder, Side as PredictSide, SignatureType } from "@predictdotfun/sdk";
 import { verifyTypedData } from "@ethersproject/wallet";
-import { verifyTypedData as verifyTypedDataV6 } from "ethers";
+import { AbiCoder, hexlify, keccak256, toUtf8Bytes, verifyTypedData as verifyTypedDataV6 } from "ethers";
 import type { UserVenueAccount } from "../core/execution/user-venue-accounts.js";
+import { withLatencyStage } from "../observability/latency.js";
 import type { ExecutableRouteLeg, ExecutableRouteService, ExecutableTradeQuote } from "./executable-routing.js";
 import type { ExecutionLegV0 } from "./types.js";
-import type { ExecutionVenueAdapterRegistry, PreparedVenueOrder, VenueFillState, VenueSettlementState, VenueSubmitResult } from "./venue-adapter.js";
+import type { ExecutionVenueAdapterRegistry, PreparedVenueOrder, VenueFillState, VenueOrderLookupContext, VenueSettlementState, VenueSubmitResult } from "./venue-adapter.js";
 
 export type TradeSignatureKind = "EIP712" | "MESSAGE";
 
@@ -59,6 +60,7 @@ export interface SignedTradeBundleSubmitResult {
     venue: string;
     status: string;
     venueOrderId?: string | undefined;
+    fillId?: string | undefined;
     reasonCode?: string | undefined;
     reason?: string | undefined;
     fillState?: VenueFillState | undefined;
@@ -79,6 +81,7 @@ export interface SignedTradeExecutionStatus {
     venue: string;
     status: string;
     venueOrderId?: string | undefined;
+    fillId?: string | undefined;
     reasonCode?: string | undefined;
     reason?: string | undefined;
     fillState?: VenueFillState | undefined;
@@ -117,6 +120,7 @@ export interface SignedTradePositionRecorder {
     legIndex: number;
     venue: string;
     reason: string;
+    liveSellableSize?: string | null | undefined;
     route: ExecutableTradeQuote;
     routeLeg: ExecutableRouteLeg;
   }): Promise<void>;
@@ -207,13 +211,18 @@ export class SignedTradeBundleService {
   ) {}
 
   public async prepare(input: { userId: string; quoteId: string }): Promise<PreparedTradeSignatureBundle> {
-    const quote = await this.requireFreshQuote(input.userId, input.quoteId);
+    const quote = await withLatencyStage("execution_quote_load", {}, () => this.requireFreshQuote(input.userId, input.quoteId));
     const requestGroups = await Promise.all(quote.legs.map(async (leg, index) => {
       if (!leg.requiresUserSignature) {
         return [];
       }
       const executionLeg = this.toExecutionLeg(quote, leg, index);
-      const prepared = await this.adapters.get(leg.venue).prepareOrder(executionLeg);
+      const prepared = await withLatencyStage("venue_adapter_prepare", {
+        canonicalMarketId: quote.marketId,
+        venue: leg.venue,
+        routeType: quote.routeType,
+        external: true
+      }, () => this.adapters.get(leg.venue).prepareOrder(executionLeg));
       const binding = await this.expectedBinding(quote.userId, leg.venue);
       return this.toSignatureRequest(index, prepared, binding);
     }));
@@ -230,7 +239,13 @@ export class SignedTradeBundleService {
     signedLegs: readonly SignedTradeLegPayload[];
     dryRun?: boolean | undefined;
   }): Promise<SignedTradeBundleSubmitResult> {
-    const quote = await this.requireFreshQuote(input.userId, input.quoteId);
+    const quote = await withLatencyStage("execution_quote_load", {}, () => this.requireFreshQuote(input.userId, input.quoteId));
+    if (input.dryRun !== true) {
+      const existing = await this.findStoredExecutionStatus({ userId: input.userId, executionId: quote.quoteId });
+      if (existing && isDuplicateSubmitStatus(existing.status)) {
+        return toSubmitResultFromStoredStatus(existing);
+      }
+    }
     let liveReadiness: LiveSubmitReadinessSnapshot | null = null;
     if (input.dryRun !== true) {
       liveReadiness = await this.getLiveReadiness({ userId: input.userId, quoteId: input.quoteId });
@@ -251,7 +266,12 @@ export class SignedTradeBundleService {
     for (const [index, leg] of quote.legs.entries()) {
       const executionLeg = this.toExecutionLeg(quote, leg, index);
       const adapter = this.adapters.get(leg.venue);
-      const prepared = await adapter.prepareOrder(executionLeg);
+      const prepared = await withLatencyStage("venue_adapter_prepare", {
+        canonicalMarketId: quote.marketId,
+        venue: leg.venue,
+        routeType: quote.routeType,
+        external: true
+      }, () => adapter.prepareOrder(executionLeg));
       let order = prepared;
       if (leg.requiresUserSignature) {
         const signedPayloads = signedByLeg.get(`${index}:${leg.venue.toUpperCase()}`) ?? [];
@@ -280,7 +300,12 @@ export class SignedTradeBundleService {
         continue;
       }
       try {
-        const submitted = await adapter.submitOrder(order);
+        const submitted = await withLatencyStage("venue_adapter_submit", {
+          canonicalMarketId: quote.marketId,
+          venue: leg.venue,
+          routeType: quote.routeType,
+          external: true
+        }, () => adapter.submitOrder(order));
         submittedLegs.push(this.toSubmittedLeg(index, leg.venue, submitted, leg));
       } catch (error) {
         const normalized = adapter.normalizeVenueError(error);
@@ -297,8 +322,11 @@ export class SignedTradeBundleService {
           dryRun: false,
           submittedLegs
         };
-        await this.recordExecutionStatus(input.userId, result, quote);
-        return result;
+        const stored = await this.recordExecutionStatus(input.userId, result, quote);
+        return {
+          ...result,
+          submittedLegs: stored.submittedLegs
+        };
       }
     }
 
@@ -341,7 +369,7 @@ export class SignedTradeBundleService {
         return leg;
       }
       const routeLeg = stored.route?.legs[leg.legIndex];
-      if (leg.status === "FILLED" && !leg.fillState && routeLeg) {
+      if (leg.status === "FILLED" && !leg.fillState && routeLeg && !requiresVerifiedSettlementForPosition(leg.venue)) {
         return {
           ...leg,
           fillState: inferredFilledLegState(routeLeg),
@@ -351,24 +379,48 @@ export class SignedTradeBundleService {
       }
       try {
         const adapter = this.adapters.get(leg.venue);
-        const fillState = await adapter.fetchFillState(leg.venueOrderId);
-        const effectiveFillState = leg.status === "FILLED" && fillState.status === "OPEN" && routeLeg
+        const lookupContext = await this.lookupContextForStoredLeg(stored, leg, routeLeg);
+        const venueOrderId = leg.venueOrderId;
+        const fillState = await withLatencyStage("venue_status_fetch", {
+          canonicalMarketId: stored.route?.marketId,
+          venue: leg.venue,
+          routeType: stored.route?.routeType,
+          external: true
+        }, () => adapter.fetchFillState(venueOrderId, lookupContext));
+        const needsVerifiedSettlement = requiresVerifiedSettlementForPosition(leg.venue);
+        let effectiveFillState = leg.status === "FILLED" && fillState.status === "OPEN" && routeLeg && !needsVerifiedSettlement
           ? inferredFilledLegState(routeLeg)
           : fillState;
         const settlementIntervalMs = options.settlementIntervalMs ?? 0;
         const lastSettlementCheckedAt = leg.lastSettlementCheckedAt ? Date.parse(leg.lastSettlementCheckedAt) : 0;
         const settlementCheckDue = !lastSettlementCheckedAt ||
           this.now().getTime() - lastSettlementCheckedAt >= settlementIntervalMs;
+        const settlementLookupId = leg.fillId ?? leg.venueOrderId;
         const shouldRefreshSettlement = settlementCheckDue &&
-          (effectiveFillState.status === "FILLED" || leg.settlementState?.status === "SETTLEMENT_PENDING");
+          (effectiveFillState.status === "FILLED" ||
+            leg.settlementState?.status === "SETTLEMENT_PENDING" ||
+            (needsVerifiedSettlement && Boolean(leg.fillId)) ||
+            (needsVerifiedSettlement && (leg.status === "FILLED" || leg.fillState?.status === "FILLED")));
         const settlementState = shouldRefreshSettlement
-          ? await adapter.fetchSettlementState(leg.venueOrderId)
+          ? await withLatencyStage("venue_settlement_fetch", {
+              canonicalMarketId: stored.route?.marketId,
+              venue: leg.venue,
+              routeType: stored.route?.routeType,
+              external: true
+            }, () => adapter.fetchSettlementState(settlementLookupId, lookupContext))
           : leg.settlementState;
+        const hasVerifiedSettlement = hasVerifiedPositionSettlement(settlementState);
+        if (needsVerifiedSettlement && hasVerifiedSettlement && routeLeg && effectiveFillState.status !== "FILLED") {
+          effectiveFillState = inferredFilledLegState(routeLeg);
+        }
+        const nextLegStatus = needsVerifiedSettlement && effectiveFillState.status === "FILLED" && !hasVerifiedSettlement
+          ? "SUBMITTED"
+          : effectiveFillState.status;
         return {
           ...leg,
           fillState: effectiveFillState,
           ...(settlementState ? { settlementState } : {}),
-          status: effectiveFillState.status,
+          status: nextLegStatus,
           lastStatusCheckedAt: checkedAt,
           ...(shouldRefreshSettlement ? { lastSettlementCheckedAt: checkedAt } : {}),
           lastWatcherError: undefined
@@ -399,8 +451,38 @@ export class SignedTradeBundleService {
     await this.recordFilledPositions(status);
   }
 
+  private async lookupContextForStoredLeg(
+    stored: SignedTradeExecutionStatus,
+    leg: SignedTradeExecutionStatus["submittedLegs"][number],
+    routeLeg: ExecutableRouteLeg | undefined
+  ): Promise<VenueOrderLookupContext | undefined> {
+    if (!routeLeg || !stored.route) {
+      return undefined;
+    }
+    const account = await this.venueAccounts.getAccount(stored.userId, leg.venue).catch(() => null);
+    return {
+      userId: stored.userId,
+      submittedAt: stored.submittedAt,
+      venueOrderId: leg.venueOrderId,
+      fillId: leg.fillId,
+      venueAccountAddress: account?.venueAccountAddress ?? null,
+      route: {
+        marketId: stored.route.marketId,
+        outcomeId: stored.route.outcomeId,
+        side: stored.route.side
+      },
+      routeLeg: {
+        venueMarketId: routeLeg.venueMarketId,
+        venueOutcomeId: routeLeg.venueOutcomeId,
+        side: stored.route.side,
+        size: routeLeg.size,
+        price: routeLeg.price
+      }
+    };
+  }
+
   public async getLiveReadiness(input: { userId: string; quoteId: string }): Promise<LiveSubmitReadinessSnapshot> {
-    const quote = await this.requireFreshQuote(input.userId, input.quoteId);
+    const quote = await withLatencyStage("execution_quote_load", {}, () => this.requireFreshQuote(input.userId, input.quoteId));
     const generatedAt = this.now().toISOString();
     const venues = await Promise.all(quote.legs.map((leg, index) => this.liveReadinessForLeg(quote, leg, index, generatedAt)));
     const blockers = venues.flatMap((venue) => venue.blockers.map((blocker) => `${venue.venue}: ${blocker}`));
@@ -457,7 +539,7 @@ export class SignedTradeBundleService {
     checkedAt: string
   ): Promise<LiveSubmitVenueReadiness> {
     const binding = await this.expectedBinding(quote.userId, leg.venue, false);
-    const requiredNotional = requiredUsdNotional(quote.side, leg);
+    const requiredNotional = requiredUsdNotional(quote.side, leg, this.env);
     const base: LiveSubmitVenueReadiness = {
       venue: leg.venue,
       status: "fresh",
@@ -495,7 +577,7 @@ export class SignedTradeBundleService {
       return this.polymarketCollateralReadiness(base, quote.userId, requiredNotional);
     }
     if (leg.venue.toUpperCase() === "POLYMARKET" && quote.side === "sell") {
-      return this.polymarketConditionalTokenReadiness(base, quote.userId, leg);
+      return this.polymarketConditionalTokenReadiness(base, quote, leg, index);
     }
     if (leg.venue.toUpperCase() === "PREDICT_FUN" && quote.side === "sell") {
       const executionLeg = this.toExecutionLeg(quote, leg, index);
@@ -589,8 +671,9 @@ export class SignedTradeBundleService {
 
   private async polymarketConditionalTokenReadiness(
     base: LiveSubmitVenueReadiness,
-    userId: string,
-    leg: ExecutableRouteLeg
+    quote: ExecutableTradeQuote,
+    leg: ExecutableRouteLeg,
+    legIndex: number
   ): Promise<LiveSubmitVenueReadiness> {
     const next: LiveSubmitVenueReadiness = {
       ...base,
@@ -611,11 +694,24 @@ export class SignedTradeBundleService {
     }
     try {
       const approval = await this.polymarketBalanceReader.readConditionalTokenApproval({
-        userId,
+        userId: quote.userId,
         tokenId: leg.venueOutcomeId
       });
+      const shareBalanceBelowSellAmount = compareDecimalStrings(approval.tokenBalance, leg.size) < 0;
+      if (shareBalanceBelowSellAmount && this.positionRecorder?.reconcileFailedSell) {
+        await this.positionRecorder.reconcileFailedSell({
+          executionId: quote.quoteId,
+          userId: quote.userId,
+          legIndex,
+          venue: leg.venue,
+          reason: `Polymarket live share balance is below the quoted sell amount. Sellable balance: ${approval.tokenBalance} shares.`,
+          liveSellableSize: approval.tokenBalance,
+          route: quote,
+          routeLeg: leg
+        });
+      }
       const blockers = [
-        compareDecimalStrings(approval.tokenBalance, leg.size) < 0
+        shareBalanceBelowSellAmount
           ? `Polymarket share balance is below the sell amount. Sellable balance: ${approval.tokenBalance} shares.`
           : null,
         compareDecimalStrings(approval.tokenAllowance, leg.size) < 0
@@ -733,10 +829,13 @@ export class SignedTradeBundleService {
       stringFromRecord(metadata, "exchange") ||
       stringFromRecord(metadata, "venueExchange") ||
       "";
-    const rpcUrl = this.env.LIMITLESS_BALANCE_PREFLIGHT_RPC_URL?.trim() ||
-      this.env.BASE_RPC_URL?.trim() ||
-      this.env.LIMITLESS_BASE_RPC_URL?.trim() ||
-      "https://mainnet.base.org";
+    const rpcUrls = uniqueNonEmptyStrings([
+      this.env.LIMITLESS_BALANCE_PREFLIGHT_RPC_URL,
+      this.env.BASE_RPC_URL,
+      this.env.LIMITLESS_BASE_RPC_URL,
+      ...splitDelimitedEnv(this.env.LIMITLESS_BALANCE_PREFLIGHT_RPC_FALLBACK_URLS),
+      "https://mainnet.base.org"
+    ]);
     const decimals = parsePositiveInteger(this.env.LIMITLESS_BALANCE_ACTIVATION_TOKEN_DECIMALS) ?? 6;
     const next: LiveSubmitVenueReadiness = {
       ...base,
@@ -754,16 +853,16 @@ export class SignedTradeBundleService {
       !isEvmAddress(ownerAddress) ? "Limitless live preflight owner account is missing or invalid." : null,
       !isEvmAddress(tokenAddress) ? "LIMITLESS_BALANCE_ACTIVATION_TOKEN_ADDRESS is missing or invalid." : null,
       !isEvmAddress(spenderAddress) ? "Limitless market exchange spender address could not be derived from the live route." : null,
-      !rpcUrl ? "Limitless live preflight RPC URL is required before live submit." : null,
+      rpcUrls.length === 0 ? "Limitless live preflight RPC URL is required before live submit." : null,
       !requiredNotional ? "Limitless live preflight could not derive required notional." : null
     ].filter((blocker): blocker is string => Boolean(blocker));
-    if (configBlockers.length > 0 || !requiredNotional || !isEvmAddress(tokenAddress) || !isEvmAddress(spenderAddress) || !rpcUrl) {
+    if (configBlockers.length > 0 || !requiredNotional || !isEvmAddress(tokenAddress) || !isEvmAddress(spenderAddress) || rpcUrls.length === 0) {
       return { ...next, status: "blocked", blockers: configBlockers };
     }
     try {
       const [balanceAtomic, allowanceAtomic] = await Promise.all([
-        readErc20Value(rpcUrl, tokenAddress, encodeErc20BalanceOf(ownerAddress)),
-        readErc20Value(rpcUrl, tokenAddress, encodeErc20Allowance(ownerAddress, spenderAddress))
+        readErc20ValueFromAnyRpc(rpcUrls, tokenAddress, encodeErc20BalanceOf(ownerAddress)),
+        readErc20ValueFromAnyRpc(rpcUrls, tokenAddress, encodeErc20Allowance(ownerAddress, spenderAddress))
       ]);
       const balance = formatBaseUnits(balanceAtomic, decimals);
       const allowance = formatBaseUnits(allowanceAtomic, decimals);
@@ -1309,27 +1408,36 @@ export class SignedTradeBundleService {
     return {
       legIndex: index,
       venue,
-      status: submitted.status,
+      status: requiresVerifiedSettlementForPosition(venue) && submitted.status === "FILLED" ? "SUBMITTED" : submitted.status,
       venueOrderId: submitted.venueOrderId,
+      ...(submitted.fillId ? { fillId: submitted.fillId } : {}),
       ...(fillState ? { fillState } : {})
     };
   }
 
-  private async recordExecutionStatus(userId: string, result: SignedTradeBundleSubmitResult, route: ExecutableTradeQuote): Promise<void> {
+  private async recordExecutionStatus(userId: string, result: SignedTradeBundleSubmitResult, route: ExecutableTradeQuote): Promise<SignedTradeExecutionStatus> {
     const now = this.now().toISOString();
+    const existing = await this.findStoredExecutionStatus({ userId, executionId: result.executionId });
     const status: SignedTradeExecutionStatus = {
       executionId: result.executionId,
       userId,
       status: result.status,
       dryRun: result.dryRun,
-      submittedAt: now,
+      submittedAt: existing?.submittedAt ?? now,
       updatedAt: now,
-      route,
-      submittedLegs: result.submittedLegs
+      route: existing?.route ?? route,
+      submittedLegs: mergeSubmittedLegFailures(existing?.submittedLegs ?? [], result.submittedLegs)
     };
     await this.saveExecutionStatus(status);
     await this.recordFilledPositions(status);
     await this.recordFailedSellPositionCorrections(status);
+    return status;
+  }
+
+  private async findStoredExecutionStatus(input: { userId: string; executionId: string }): Promise<SignedTradeExecutionStatus | null> {
+    return this.executionStatuses.get(statusKey(input.userId, input.executionId)) ??
+      await this.statusRepository?.findExecutionStatus(input) ??
+      null;
   }
 
   private async saveExecutionStatus(status: SignedTradeExecutionStatus): Promise<void> {
@@ -1343,6 +1451,9 @@ export class SignedTradeBundleService {
     }
     await Promise.all(status.submittedLegs.map(async (leg) => {
       if (leg.status !== "FILLED" || !leg.venueOrderId || !leg.fillState) {
+        return;
+      }
+      if (requiresVerifiedSettlementForPosition(leg.venue) && !hasVerifiedPositionSettlement(leg.settlementState)) {
         return;
       }
       const routeLeg = status.route!.legs[leg.legIndex];
@@ -1388,8 +1499,91 @@ export class SignedTradeBundleService {
 
 const statusKey = (userId: string, executionId: string): string => `${userId}:${executionId}`;
 
+type SubmittedExecutionLeg = SignedTradeExecutionStatus["submittedLegs"][number];
+
+const mergeSubmittedLegFailures = (
+  existingLegs: readonly SubmittedExecutionLeg[],
+  nextLegs: readonly SubmittedExecutionLeg[]
+): SubmittedExecutionLeg[] => {
+  if (existingLegs.length === 0) {
+    return [...nextLegs];
+  }
+
+  const merged = new Map<string, SubmittedExecutionLeg>();
+  for (const leg of existingLegs) {
+    merged.set(submittedLegKey(leg), leg);
+  }
+  for (const leg of nextLegs) {
+    const key = submittedLegKey(leg);
+    const existing = merged.get(key);
+    merged.set(key, existing ? selectPreferredSubmittedLeg(existing, leg) : leg);
+  }
+
+  return [...merged.values()].sort((left, right) =>
+    left.legIndex - right.legIndex || left.venue.localeCompare(right.venue)
+  );
+};
+
+const submittedLegKey = (leg: Pick<SubmittedExecutionLeg, "legIndex" | "venue">): string =>
+  `${leg.legIndex}:${leg.venue.toUpperCase()}`;
+
+const isDuplicateSubmitStatus = (status: SignedTradeExecutionStatus["status"]): boolean =>
+  status === "FAILED" || status === "SUBMITTED" || status === "PARTIAL" || status === "FILLED";
+
+const toSubmitResultFromStoredStatus = (status: SignedTradeExecutionStatus): SignedTradeBundleSubmitResult => ({
+  executionId: status.executionId,
+  status: status.status === "FAILED"
+    ? "FAILED"
+    : status.status === "PARTIAL"
+      ? "PARTIAL"
+      : "SUBMITTED",
+  dryRun: status.dryRun,
+  submittedLegs: status.submittedLegs.map((leg) => ({
+    legIndex: leg.legIndex,
+    venue: leg.venue,
+    status: leg.status,
+    ...(leg.venueOrderId ? { venueOrderId: leg.venueOrderId } : {}),
+    ...(leg.fillId ? { fillId: leg.fillId } : {}),
+    ...(leg.reasonCode ? { reasonCode: leg.reasonCode } : {}),
+    ...(leg.reason ? { reason: leg.reason } : {}),
+    ...(leg.fillState ? { fillState: leg.fillState } : {})
+  }))
+});
+
+const selectPreferredSubmittedLeg = (
+  existing: SubmittedExecutionLeg,
+  next: SubmittedExecutionLeg
+): SubmittedExecutionLeg => {
+  if (existing.status !== "FAILED" && next.status === "FAILED") {
+    return existing;
+  }
+  if (existing.status === "FAILED" && next.status === "FAILED") {
+    return failureReasonSpecificityScore(existing) >= failureReasonSpecificityScore(next)
+      ? { ...next, reasonCode: existing.reasonCode, reason: existing.reason }
+      : next;
+  }
+  return next;
+};
+
+const failureReasonSpecificityScore = (leg: SubmittedExecutionLeg): number => {
+  const code = leg.reasonCode ?? "";
+  if (!code) {
+    return 0;
+  }
+  if (code.includes("UNKNOWN")) {
+    return 1;
+  }
+  return 2;
+};
+
 const isInsufficientSellBalanceReason = (reason: string): boolean =>
-  /INSUFFICIENT\s+SHARES|INSUFFICIENT\s+CONDITIONAL\s+TOKEN\s+BALANCE|TOKEN\s+BALANCE\s+IS\s+LESS|BALANCE\s+IS\s+NOT\s+ENOUGH/i.test(reason);
+  /INSUFFICIENT\s+SHARES|INSUFFICIENT\s+CONDITIONAL\s+TOKEN\s+BALANCE|TOKEN\s+BALANCE\s+IS\s+LESS|BALANCE\s+IS\s+NOT\s+ENOUGH|SHARE\s+BALANCE\s+IS\s+BELOW|SELLABLE\s+BALANCE/i.test(reason);
+
+const requiresVerifiedSettlementForPosition = (venue: string): boolean =>
+  venue.toUpperCase() === "POLYMARKET";
+
+const hasVerifiedPositionSettlement = (settlementState: VenueSettlementState | undefined): boolean =>
+  settlementState?.status === "SETTLEMENT_VERIFIED";
 
 const inferredFilledLegState = (routeLeg: ExecutableRouteLeg): VenueFillState => ({
   status: "FILLED",
@@ -1446,13 +1640,15 @@ const buildLimitlessOrderPayload = (
   const side = String(payload.side).toLowerCase().includes("sell") || payload.side === LimitlessSide.SELL
     ? LimitlessSide.SELL
     : LimitlessSide.BUY;
+  const makerAmount = side === LimitlessSide.SELL
+    ? roundedSize
+    : limitlessFokBuyMakerAmount(roundedSize, price);
   const feeRateBps = numberField(payload, "feeRateBps") ?? 300;
   const builder = new LimitlessOrderBuilder(signerAddress, feeRateBps);
   const order = builder.buildOrder({
     tokenId,
     side,
-    size: roundedSize,
-    price
+    makerAmount
   });
   const domain = {
     name: "Limitless CTF Exchange",
@@ -1512,6 +1708,17 @@ const roundLimitlessOrderSize = (value: number): number => {
     );
   }
   return Number((scaled / 1_000).toFixed(3));
+};
+
+const limitlessFokBuyMakerAmount = (size: number, price: number): number => {
+  const amount = new Decimal(size).times(price).toDecimalPlaces(6, Decimal.ROUND_FLOOR);
+  if (!amount.isFinite() || amount.lte(0)) {
+    throw new SignedTradeBundleError(
+      "LIMITLESS_ORDER_AMOUNT_TOO_SMALL",
+      "Limitless FOK buy order amount is below venue precision."
+    );
+  }
+  return amount.toNumber();
 };
 
 const buildPredictOrderPayload = (
@@ -1720,29 +1927,38 @@ const buildPolymarketOrderPayload = async (
     retryOnError: false,
     throwOnError: true
   });
+  const routeMetadata = recordField(payload, "metadata");
+  const tickSize = parsePolymarketTickSize(
+    stringField(routeMetadata ?? {}, "polymarketTickSize")
+      ?? stringField(routeMetadata ?? {}, "tickSize")
+      ?? env.POLYMARKET_TICK_SIZE
+      ?? env.POLY_TICK_SIZE
+  );
+  const metadataNegRisk = booleanField(routeMetadata ?? {}, "polymarketNegRisk") ??
+    booleanField(routeMetadata ?? {}, "negRisk");
+  const negRisk = metadataNegRisk ?? parseOptionalEnvBoolean(env.POLYMARKET_NEG_RISK ?? env.POLY_NEG_RISK);
   const signedOrder = await client.createOrder({
     tokenID: tokenId,
-    price,
+    price: side === "buy" ? polymarketMarketBuyLimitPrice(price, tickSize, env) : price,
     size,
     side: side === "buy" ? PolymarketSide.BUY : PolymarketSide.SELL,
     builderCode
   }, {
-    ...(parsePolymarketTickSize(env.POLYMARKET_TICK_SIZE ?? env.POLY_TICK_SIZE)
-      ? { tickSize: parsePolymarketTickSize(env.POLYMARKET_TICK_SIZE ?? env.POLY_TICK_SIZE)! }
-      : {}),
-    ...(parseOptionalEnvBoolean(env.POLYMARKET_NEG_RISK ?? env.POLY_NEG_RISK) !== undefined
-      ? { negRisk: parseOptionalEnvBoolean(env.POLYMARKET_NEG_RISK ?? env.POLY_NEG_RISK)! }
-      : {})
+    ...(tickSize ? { tickSize } : {}),
+    ...(negRisk !== undefined ? { negRisk } : {})
   });
   if (!capturedTypedData) {
     throw new SignedTradeBundleError("POLYMARKET_TYPED_DATA_NOT_CAPTURED", "Polymarket CLOB SDK did not produce typed data for signing.");
   }
-  const { signature: dummySignature, ...orderWithoutSignature } = signedOrder as Record<string, unknown>;
+  const quantized = side === "buy"
+    ? quantizePolymarketMarketBuyOrderAmounts(signedOrder as Record<string, unknown>, capturedTypedData, tickSize, price)
+    : { signedOrder: signedOrder as Record<string, unknown>, typedData: capturedTypedData };
+  const { signature: dummySignature, ...orderWithoutSignature } = quantized.signedOrder;
   const polymarketSignatureSuffix = signatureType === PolymarketSignatureType.POLY_1271
-    ? polymarket1271SignatureSuffix(dummySignature)
+    ? polymarket1271SignatureSuffix(quantized.typedData, dummySignature)
     : null;
   return {
-    typedData: capturedTypedData,
+    typedData: quantized.typedData,
     data: {
       order: orderWithoutSignature,
       orderType: "FOK",
@@ -1753,14 +1969,283 @@ const buildPolymarketOrderPayload = async (
   };
 };
 
-const polymarket1271SignatureSuffix = (signature: unknown): string => {
+const POLYMARKET_MARKET_BUY_COLLATERAL_QUANTUM_ATOMIC = 10_000n;
+const POLYMARKET_MARKET_BUY_SHARE_QUANTUM_ATOMIC = 10n;
+const POLYMARKET_DEFAULT_MARKET_BUY_SLIPPAGE_BPS = 100;
+const POLYMARKET_MAX_MARKET_BUY_SLIPPAGE_BPS = 500;
+const POLYMARKET_ORDER_TYPE_STRING = "Order(uint256 salt,address maker,address signer,uint256 tokenId,uint256 makerAmount,uint256 takerAmount,uint8 side,uint8 signatureType,uint256 timestamp,bytes32 metadata,bytes32 builder)";
+const POLYMARKET_ORDER_TYPE_HASH = keccak256(toUtf8Bytes(POLYMARKET_ORDER_TYPE_STRING));
+const POLYMARKET_DOMAIN_TYPE_HASH = keccak256(
+  toUtf8Bytes("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
+);
+const ABI_CODER = AbiCoder.defaultAbiCoder();
+
+const quantizePolymarketMarketBuyOrderAmounts = (
+  signedOrder: Record<string, unknown>,
+  typedData: Record<string, unknown>,
+  tickSize: PolymarketTickSize | undefined,
+  quotedPrice: number
+): { signedOrder: Record<string, unknown>; typedData: Record<string, unknown> } => {
+  const makerAmount = parsePositiveAtomicAmount(signedOrder.makerAmount, "makerAmount");
+  const takerAmount = parsePositiveAtomicAmount(signedOrder.takerAmount, "takerAmount");
+  const quantizedTakerAmount = roundDownAtomic(takerAmount, POLYMARKET_MARKET_BUY_SHARE_QUANTUM_ATOMIC);
+  if (quantizedTakerAmount <= 0n) {
+    throw new SignedTradeBundleError(
+      "POLYMARKET_ORDER_SIZE_TOO_SMALL",
+      "Polymarket market-buy order size is below the minimum 0.00001 share precision."
+    );
+  }
+  const quantized = polymarketVenuePrecisionMarketBuyAmounts(
+    makerAmount,
+    takerAmount,
+    quantizedTakerAmount,
+    tickSize ?? "0.001",
+    quotedPrice
+  );
+  if (!quantized) {
+    throw new SignedTradeBundleError(
+      "POLYMARKET_ORDER_AMOUNT_INVALID",
+      "Polymarket market-buy order amount cannot be represented at venue precision. Refresh route and sign again."
+    );
+  }
+  const amounts = {
+    makerAmount: quantized.makerAmount.toString(),
+    takerAmount: quantized.takerAmount.toString()
+  };
+  return {
+    signedOrder: {
+      ...signedOrder,
+      ...amounts
+    },
+    typedData: patchPolymarketTypedDataAmounts(typedData, amounts)
+  };
+};
+
+const patchPolymarketTypedDataAmounts = (
+  typedData: Record<string, unknown>,
+  amounts: { makerAmount: string; takerAmount: string }
+): Record<string, unknown> => {
+  const message = isRecord(typedData.message) ? typedData.message : null;
+  if (!message) {
+    return typedData;
+  }
+  const contents = isRecord(message.contents) ? message.contents : null;
+  return {
+    ...typedData,
+    message: contents
+      ? {
+          ...message,
+          contents: {
+            ...contents,
+            ...amounts
+          }
+        }
+      : {
+          ...message,
+          ...amounts
+        }
+  };
+};
+
+const parsePositiveAtomicAmount = (value: unknown, field: string): bigint => {
+  const text = typeof value === "bigint" ? value.toString() : String(value ?? "").trim();
+  if (!/^\d+$/.test(text)) {
+    throw new SignedTradeBundleError(
+      "POLYMARKET_ORDER_AMOUNT_INVALID",
+      `Polymarket signed order ${field} must be a positive atomic integer.`
+    );
+  }
+  const parsed = BigInt(text);
+  if (parsed <= 0n) {
+    throw new SignedTradeBundleError(
+      "POLYMARKET_ORDER_AMOUNT_INVALID",
+      `Polymarket signed order ${field} must be greater than zero.`
+    );
+  }
+  return parsed;
+};
+
+const roundDownAtomic = (value: bigint, quantum: bigint): bigint =>
+  (value / quantum) * quantum;
+
+const polymarketVenuePrecisionMarketBuyAmounts = (
+  makerAmount: bigint,
+  takerAmount: bigint,
+  quantizedTakerAmount: bigint,
+  tickSize: PolymarketTickSize,
+  quotedPrice: number
+): { makerAmount: bigint; takerAmount: bigint } | null => {
+  const tick = polymarketTickFraction(tickSize);
+  const maxTicks = makerAmount * tick.denominator / (takerAmount * tick.numerator);
+  const minTicks = polymarketMinimumBuyTicks(quotedPrice, tick);
+  if (maxTicks <= 0n || minTicks <= 0n || minTicks > maxTicks) {
+    return null;
+  }
+  for (let ticks = maxTicks; ticks >= minTicks; ticks -= 1n) {
+    const takerStep = polymarketTakerStepForCollateralPrecision(ticks, tick);
+    const candidateTaker = roundDownAtomic(quantizedTakerAmount, takerStep);
+    if (candidateTaker <= 0n) {
+      continue;
+    }
+    const numerator = candidateTaker * ticks * tick.numerator;
+    if (numerator % tick.denominator !== 0n) {
+      continue;
+    }
+    const candidateMaker = numerator / tick.denominator;
+    if (
+      candidateMaker > 0n &&
+      candidateMaker <= makerAmount &&
+      candidateMaker % POLYMARKET_MARKET_BUY_COLLATERAL_QUANTUM_ATOMIC === 0n
+    ) {
+      return { makerAmount: candidateMaker, takerAmount: candidateTaker };
+    }
+  }
+  return null;
+};
+
+const polymarketMinimumBuyTicks = (
+  quotedPrice: number,
+  tick: { numerator: bigint; denominator: bigint }
+): bigint => {
+  if (!Number.isFinite(quotedPrice) || quotedPrice <= 0) {
+    return 1n;
+  }
+  const scaled = new Decimal(quotedPrice)
+    .times(tick.denominator.toString())
+    .div(tick.numerator.toString())
+    .ceil();
+  return BigInt(scaled.toFixed(0));
+};
+
+const polymarketTakerStepForCollateralPrecision = (
+  ticks: bigint,
+  tick: { numerator: bigint; denominator: bigint }
+): bigint => {
+  const denominator = tick.denominator * POLYMARKET_MARKET_BUY_COLLATERAL_QUANTUM_ATOMIC;
+  const numerator = ticks * tick.numerator;
+  return lcm(POLYMARKET_MARKET_BUY_SHARE_QUANTUM_ATOMIC, denominator / gcd(denominator, numerator));
+};
+
+const gcd = (left: bigint, right: bigint): bigint => {
+  let a = left < 0n ? -left : left;
+  let b = right < 0n ? -right : right;
+  while (b !== 0n) {
+    const next = a % b;
+    a = b;
+    b = next;
+  }
+  return a;
+};
+
+const lcm = (left: bigint, right: bigint): bigint =>
+  left / gcd(left, right) * right;
+
+const polymarketTickFraction = (tickSize: PolymarketTickSize): { numerator: bigint; denominator: bigint } => {
+  const [, fractional = ""] = tickSize.split(".");
+  return {
+    numerator: BigInt(tickSize.replace(".", "")),
+    denominator: 10n ** BigInt(fractional.length)
+  };
+};
+
+const polymarketMarketBuyLimitPrice = (
+  quotedPrice: number,
+  tickSize: PolymarketTickSize | undefined,
+  env: NodeJS.ProcessEnv
+): number => {
+  if (!Number.isFinite(quotedPrice) || quotedPrice <= 0 || quotedPrice >= 1) {
+    return quotedPrice;
+  }
+  const bps = parseBoundedPolymarketBuySlippageBps(env);
+  if (bps <= 0) {
+    return quotedPrice;
+  }
+  const tick = new Decimal(tickSize ?? "0.001");
+  const maxPrice = Decimal.max(0, new Decimal(1).minus(tick));
+  const cushioned = new Decimal(quotedPrice).times(new Decimal(1).plus(new Decimal(bps).div(10_000)));
+  const capped = Decimal.min(maxPrice, cushioned);
+  const tickAligned = Decimal.min(maxPrice, capped.div(tick).ceil().times(tick));
+  return Number(tickAligned.toString());
+};
+
+const parseBoundedPolymarketBuySlippageBps = (env: NodeJS.ProcessEnv): number => {
+  const raw = env.POLYMARKET_MARKET_BUY_SLIPPAGE_BPS ?? env.POLY_MARKET_BUY_SLIPPAGE_BPS;
+  if (raw === undefined || raw.trim().length === 0) {
+    return POLYMARKET_DEFAULT_MARKET_BUY_SLIPPAGE_BPS;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return POLYMARKET_DEFAULT_MARKET_BUY_SLIPPAGE_BPS;
+  }
+  return Math.min(parsed, POLYMARKET_MAX_MARKET_BUY_SLIPPAGE_BPS);
+};
+
+const polymarket1271SignatureSuffix = (typedData: Record<string, unknown>, signature: unknown): string => {
   if (typeof signature !== "string" || !/^0x[a-fA-F0-9]+$/.test(signature)) {
     throw new SignedTradeBundleError("POLYMARKET_1271_SIGNATURE_INVALID", "Polymarket CLOB SDK did not produce a valid POLY_1271 signature template.");
   }
   if (signature.length <= 132) {
     throw new SignedTradeBundleError("POLYMARKET_1271_SIGNATURE_SUFFIX_MISSING", "Polymarket CLOB SDK did not produce the POLY_1271 wrapper suffix.");
   }
-  return `0x${signature.slice(132)}`;
+  const domain = isRecord(typedData.domain) ? typedData.domain : null;
+  const message = isRecord(typedData.message) ? typedData.message : null;
+  const contents = message && isRecord(message.contents) ? message.contents : message;
+  if (!domain || !contents) {
+    throw new SignedTradeBundleError("POLYMARKET_1271_SIGNATURE_SUFFIX_MISSING", "Polymarket POLY_1271 typed data is missing the wrapper domain or order contents.");
+  }
+  const domainSeparator = keccak256(ABI_CODER.encode(
+    ["bytes32", "bytes32", "bytes32", "uint256", "address"],
+    [
+      POLYMARKET_DOMAIN_TYPE_HASH,
+      keccak256(toUtf8Bytes(requiredString(domain.name, "domain.name"))),
+      keccak256(toUtf8Bytes(requiredString(domain.version, "domain.version"))),
+      BigInt(requiredIntegerLike(domain.chainId, "domain.chainId")),
+      requireAddress(domain.verifyingContract as string | null | undefined, "domain.verifyingContract")
+    ]
+  ));
+  const contentsHash = keccak256(ABI_CODER.encode(
+    ["bytes32", "uint256", "address", "address", "uint256", "uint256", "uint256", "uint8", "uint8", "uint256", "bytes32", "bytes32"],
+    [
+      POLYMARKET_ORDER_TYPE_HASH,
+      BigInt(requiredIntegerLike(contents.salt, "contents.salt")),
+      requireAddress(contents.maker as string | null | undefined, "contents.maker"),
+      requireAddress(contents.signer as string | null | undefined, "contents.signer"),
+      BigInt(requiredIntegerLike(contents.tokenId, "contents.tokenId")),
+      BigInt(requiredIntegerLike(contents.makerAmount, "contents.makerAmount")),
+      BigInt(requiredIntegerLike(contents.takerAmount, "contents.takerAmount")),
+      Number(requiredIntegerLike(contents.side, "contents.side")),
+      Number(requiredIntegerLike(contents.signatureType, "contents.signatureType")),
+      BigInt(requiredIntegerLike(contents.timestamp, "contents.timestamp")),
+      requiredBytes32(contents.metadata, "contents.metadata"),
+      requiredBytes32(contents.builder, "contents.builder")
+    ]
+  ));
+  const orderTypeHex = hexlify(toUtf8Bytes(POLYMARKET_ORDER_TYPE_STRING)).slice(2);
+  const lengthHex = POLYMARKET_ORDER_TYPE_STRING.length.toString(16).padStart(4, "0");
+  return `0x${domainSeparator.slice(2)}${contentsHash.slice(2)}${orderTypeHex}${lengthHex}`;
+};
+
+const requiredString = (value: unknown, label: string): string => {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new SignedTradeBundleError("POLYMARKET_1271_TYPED_DATA_INVALID", `Polymarket POLY_1271 typed data ${label} is missing.`);
+  }
+  return value;
+};
+
+const requiredIntegerLike = (value: unknown, label: string): string => {
+  const text = typeof value === "bigint" ? value.toString() : String(value ?? "").trim();
+  if (!/^\d+$/.test(text)) {
+    throw new SignedTradeBundleError("POLYMARKET_1271_TYPED_DATA_INVALID", `Polymarket POLY_1271 typed data ${label} must be an unsigned integer.`);
+  }
+  return text;
+};
+
+const requiredBytes32 = (value: unknown, label: string): string => {
+  const text = requiredString(value, label);
+  if (!/^0x[a-fA-F0-9]{64}$/.test(text)) {
+    throw new SignedTradeBundleError("POLYMARKET_1271_TYPED_DATA_INVALID", `Polymarket POLY_1271 typed data ${label} must be bytes32.`);
+  }
+  return text;
 };
 
 const requireAddress = (value: string | null | undefined, label: string): string => {
@@ -1904,7 +2389,7 @@ const parseOptionalEnvBoolean = (value: string | undefined): boolean | undefined
   return undefined;
 };
 
-const requiredUsdNotional = (side: string, leg: ExecutableRouteLeg): string | null => {
+const requiredUsdNotional = (side: string, leg: ExecutableRouteLeg, env: NodeJS.ProcessEnv): string | null => {
   if (side !== "buy") {
     return null;
   }
@@ -1913,7 +2398,19 @@ const requiredUsdNotional = (side: string, leg: ExecutableRouteLeg): string | nu
   if (!Number.isFinite(size) || size <= 0 || !Number.isFinite(price) || price <= 0) {
     return null;
   }
-  const notional = multiplyDecimalStrings(leg.size, String(leg.price));
+  const metadata = leg.metadata ?? {};
+  const tickSize = leg.venue.toUpperCase() === "POLYMARKET"
+    ? parsePolymarketTickSize(
+        stringField(metadata, "polymarketTickSize")
+          ?? stringField(metadata, "tickSize")
+          ?? env.POLYMARKET_TICK_SIZE
+          ?? env.POLY_TICK_SIZE
+      )
+    : undefined;
+  const limitPrice = leg.venue.toUpperCase() === "POLYMARKET"
+    ? polymarketMarketBuyLimitPrice(price, tickSize, env)
+    : price;
+  const notional = multiplyDecimalStrings(leg.size, String(limitPrice));
   if (leg.feeAmount === undefined || leg.feeAmount === null || leg.feeAmount <= 0) {
     return notional;
   }
@@ -1967,6 +2464,18 @@ const readErc20Value = async (rpcUrl: string, tokenAddress: string, data: string
   return BigInt(body.result);
 };
 
+const readErc20ValueFromAnyRpc = async (rpcUrls: readonly string[], tokenAddress: string, data: string): Promise<bigint> => {
+  let lastError: unknown = null;
+  for (const rpcUrl of rpcUrls) {
+    try {
+      return await readErc20Value(rpcUrl, tokenAddress, data);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError ?? new Error("erc20_read_unavailable");
+};
+
 const readErc1155ApprovalForAll = async (
   rpcUrl: string,
   tokenAddress: string,
@@ -1997,6 +2506,23 @@ const formatBaseUnits = (value: bigint, decimals: number): string => {
 
 const trimDecimal = (value: string): string =>
   value.includes(".") ? value.replace(/0+$/, "").replace(/\.$/, "") : value;
+
+const splitDelimitedEnv = (value: string | undefined): string[] =>
+  (value ?? "").split(/[,\s]+/).map((item) => item.trim()).filter(Boolean);
+
+const uniqueNonEmptyStrings = (values: readonly (string | undefined)[]): string[] => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+  return result;
+};
 
 const decimalFromString = (value: string): InstanceType<typeof Decimal> => {
   const parsed = new Decimal(value.trim());

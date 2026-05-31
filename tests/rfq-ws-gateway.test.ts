@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RedisClient } from "../src/db/redis.js";
+import { marketOrderbookTopic } from "../src/services/orderbook-stream.service.js";
 import { RFQWebSocketGateway } from "../src/ws/rfq-ws-gateway.js";
 
 class FakeRedisBus {
@@ -305,6 +306,36 @@ describe("RFQWebSocketGateway", () => {
       .toEqual({ notification: { notificationId: "notice-1" } });
     expect(payloads.find((entry) => entry.type === "EXECUTION_MARK_UPDATE")?.payload)
       .toEqual({ marketId: "market-1", positions: [] });
+
+    await gateway.stop();
+  });
+
+  it("broadcasts market orderbook updates to subscribed market topics", async () => {
+    const bus = new FakeRedisBus();
+    const publisher = new FakeRedisClient(bus);
+    const subscriber = new FakeRedisClient(bus);
+    const gateway = new RFQWebSocketGateway({
+      publisher,
+      subscriber,
+      logger: { warn: vi.fn(), error: vi.fn() }
+    });
+
+    await gateway.start();
+    const socket = new FakeSocket();
+    const topic = marketOrderbookTopic("OFFICE_WINNER|SEOUL|MAYOR|2026", "YES");
+    gateway.registerConnection(socket);
+    socket.emit("message", JSON.stringify({ action: "subscribe", topic }));
+
+    await gateway.publishEvent({
+      type: "MARKET_ORDERBOOK_UPDATE",
+      topic,
+      emittedAt: "2026-05-23T10:00:00.000Z",
+      payload: { venue: "POLYMARKET", bestBid: "0.49", bestAsk: "0.51" }
+    });
+
+    const payloads = socket.sent.map((entry) => JSON.parse(entry) as Record<string, unknown>);
+    expect(payloads.find((entry) => entry.type === "MARKET_ORDERBOOK_UPDATE")?.payload)
+      .toEqual({ venue: "POLYMARKET", bestBid: "0.49", bestAsk: "0.51" });
 
     await gateway.stop();
   });

@@ -52,6 +52,12 @@ export class PredictWsClient {
       this.resolveOpen = resolve;
       this.rejectOpen = reject;
     });
+    this.openPromise.catch((error: unknown) => {
+      this.config.logger?.warn(
+        { err: error, environment: this.config.environment },
+        "Predict websocket open failed."
+      );
+    });
     const factory = this.config.webSocketFactory ?? createDefaultWebSocket;
     this.socket = factory(this.config.url);
     this.socket.addEventListener("open", () => {

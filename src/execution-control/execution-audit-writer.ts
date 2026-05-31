@@ -10,20 +10,28 @@ import type { ExecutionRecord } from "../execution/execution-record.js";
 import type { FailureRecoveryManager } from "../execution/failure-recovery-manager.js";
 import type { ExecutionControlRequest } from "./execution-control-types.js";
 
+interface ExecutionTransitionOptions {
+    payload?: Record<string, unknown>;
+    syncStatus?: string;
+    settlementStatus?: string;
+    fillDetails?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+}
+
+interface ExecutionTransitionRequest extends ExecutionTransitionOptions {
+    nextState: ExecutionState;
+    reason: string;
+}
+
 export interface ExecutionAuditContext {
     intent: ExecutionIntent;
     getRecord: () => ExecutionRecord;
     transition: (
         nextState: ExecutionState,
         reason: string,
-        options?: {
-            payload?: Record<string, unknown>;
-            syncStatus?: string;
-            settlementStatus?: string;
-            fillDetails?: Record<string, unknown>;
-            metadata?: Record<string, unknown>;
-        }
+        options?: ExecutionTransitionOptions
     ) => Promise<ExecutionRecord>;
+    transitionMany: (transitions: readonly ExecutionTransitionRequest[]) => Promise<ExecutionRecord>;
     recordRecovery: (flags?: {
         quoteExpired?: boolean;
         localSyncFailed?: boolean;
@@ -108,68 +116,101 @@ export class ExecutionAuditWriter {
 
         const stateMachine = new ExecutionStateMachine();
 
-        const transition = async (
-            nextState: ExecutionState,
-            reason: string,
-            options: {
-                payload?: Record<string, unknown>;
-                syncStatus?: string;
-                settlementStatus?: string;
-                fillDetails?: Record<string, unknown>;
-                metadata?: Record<string, unknown>;
-            } = {}
+        const writeTransitionEvidence = async (events: readonly {
+            fromState: ExecutionState | null;
+            toState: ExecutionState;
+            reason: string;
+            payload?: Record<string, unknown>;
+        }[]): Promise<void> => {
+            await this.executionRecordRepository.appendStateTransitions(
+                events.map((event) => ({
+                    executionRecordId: record.id,
+                    fromState: event.fromState,
+                    toState: event.toState,
+                    transitionMetadata: {
+                        reason: event.reason,
+                        ...(event.payload ? { payload: event.payload } : {})
+                    },
+                    replayEnvelopeId: record.replayEnvelopeId
+                }))
+            );
+
+            await this.executionControlRepository.createAuditRecords(
+                events.map((event) => ({
+                    executionIntentId: intent.id,
+                    executionRecordId: record.id,
+                    routePlanId: request.routePlanId,
+                    idempotencyKey: input.idempotencyKey,
+                    eventType: "EXECUTION_CONTROL_STATE_TRANSITION",
+                    actorIdentity: request.userWalletReference.principalId,
+                    payload: {
+                        fromState: event.fromState,
+                        toState: event.toState,
+                        reason: event.reason,
+                        ...(event.payload ? { transitionPayload: event.payload } : {})
+                    }
+                }))
+            );
+        };
+
+        const transitionMany = async (
+            transitions: readonly ExecutionTransitionRequest[]
         ): Promise<ExecutionRecord> => {
-            const fromState = stateMachine.getState();
-            stateMachine.transitionTo(nextState, {
-                reason,
-                ...(options.payload ? { payload: options.payload } : {})
+            if (transitions.length === 0) {
+                return record;
+            }
+
+            const transitionEvents = transitions.map((transitionRequest) => {
+                const fromState = stateMachine.getState();
+                stateMachine.transitionTo(transitionRequest.nextState, {
+                    reason: transitionRequest.reason,
+                    ...(transitionRequest.payload ? { payload: transitionRequest.payload } : {})
+                });
+                return {
+                    fromState,
+                    toState: transitionRequest.nextState,
+                    reason: transitionRequest.reason,
+                    ...(transitionRequest.payload ? { payload: transitionRequest.payload } : {}),
+                    options: transitionRequest
+                };
             });
+
+            const finalTransition = transitions[transitions.length - 1]!;
+            const finalMetadata = transitions.reduce<Record<string, unknown>>(
+                (acc, transitionRequest) => ({
+                    ...acc,
+                    ...(transitionRequest.metadata ?? {})
+                }),
+                record.metadata as Record<string, unknown>
+            );
+            const finalFillDetails =
+                [...transitions].reverse().find((transitionRequest) => transitionRequest.fillDetails !== undefined)
+                    ?.fillDetails ?? record.fillDetails;
 
             record = await this.executionRecordRepository.create({
                 executionIntentId: intent.id,
                 venue: record.venue,
                 venueExecutionRef: record.venueExecutionRef,
-                executionState: nextState,
-                syncStatus: options.syncStatus ?? record.syncStatus,
-                settlementStatus: options.settlementStatus ?? record.settlementStatus,
-                fillDetails: options.fillDetails ?? record.fillDetails,
+                executionState: finalTransition.nextState,
+                syncStatus: finalTransition.syncStatus ?? record.syncStatus,
+                settlementStatus: finalTransition.settlementStatus ?? record.settlementStatus,
+                fillDetails: finalFillDetails,
                 retryLineage: record.retryLineage,
                 providerExecutionKey: record.providerExecutionKey,
                 replayEnvelopeId: record.replayEnvelopeId,
-                metadata: {
-                    ...(record.metadata as Record<string, unknown>),
-                    ...(options.metadata ?? {})
-                }
+                metadata: finalMetadata
             });
 
-            await this.executionRecordRepository.appendStateTransition(
-                record.id,
-                fromState,
-                nextState,
-                {
-                    reason,
-                    ...(options.payload ? { payload: options.payload } : {})
-                },
-                record.replayEnvelopeId
-            );
-
-            await this.executionControlRepository.createAuditRecord({
-                executionIntentId: intent.id,
-                executionRecordId: record.id,
-                routePlanId: request.routePlanId,
-                idempotencyKey: input.idempotencyKey,
-                eventType: "EXECUTION_CONTROL_STATE_TRANSITION",
-                actorIdentity: request.userWalletReference.principalId,
-                payload: {
-                    fromState,
-                    toState: nextState,
-                    reason,
-                    ...(options.payload ? { transitionPayload: options.payload } : {})
-                }
-            });
+            await writeTransitionEvidence(transitionEvents);
 
             return record;
         };
+
+        const transition = async (
+            nextState: ExecutionState,
+            reason: string,
+            options: ExecutionTransitionOptions = {}
+        ): Promise<ExecutionRecord> => transitionMany([{ nextState, reason, ...options }]);
 
         const recordRecovery = async (flags: {
             quoteExpired?: boolean;
@@ -192,16 +233,24 @@ export class ExecutionAuditWriter {
             }
         };
 
-        await transition("CREATED", "execution_control_intent_created", {
-            payload: {
-                submissionKind: request.submissionKind
-            }
+        const createdFromState = stateMachine.getState();
+        const createdPayload = { submissionKind: request.submissionKind };
+        stateMachine.transitionTo("CREATED", {
+            reason: "execution_control_intent_created",
+            payload: createdPayload
         });
+        await writeTransitionEvidence([{
+            fromState: createdFromState,
+            toState: "CREATED",
+            reason: "execution_control_intent_created",
+            payload: createdPayload
+        }]);
 
         return {
             intent,
             getRecord: () => record,
             transition,
+            transitionMany,
             recordRecovery
         };
     }

@@ -46,9 +46,13 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
     || envValue(env, "POLYMARKET_FUNDING_DESTINATION_MODE") === "USER_VENUE_DEPOSIT_WALLET";
   const limitlessDepositAddress = configuredVenueDepositAddress(env, "LIMITLESS", "BASE", ["SOLANA"]);
   const opinionDepositAddress = configuredVenueDepositAddress(env, "OPINION", "BSC", ["SOLANA", "POLYGON"]);
+  const opinionUserWalletDestinationEnabled = envValue(env, "OPINION_FUNDING_DESTINATION_MODE") === "USER_TURNKEY_EVM_WALLET"
+    || envValue(env, "OPINION_FUNDING_DESTINATION_MODE") === "USER_VENUE_DEPOSIT_WALLET";
   const myriadDepositAddress = configuredVenueDepositAddress(env, "MYRIAD", "BSC", ["SOLANA", "POLYGON"]);
   const predictFunDepositAddress = configuredVenueDepositAddress(env, "PREDICT_FUN", "BSC", ["SOLANA", "POLYGON"]);
-  const predictFunUserVenueDepositWalletEnabled = envValue(env, "PREDICT_FUN_FUNDING_DESTINATION_MODE") === "USER_VENUE_DEPOSIT_WALLET";
+  const predictFunFundingDestinationMode = envValue(env, "PREDICT_FUN_FUNDING_DESTINATION_MODE") ?? "USER_TURNKEY_EVM_WALLET";
+  const predictFunUserWalletDestinationEnabled = predictFunFundingDestinationMode === "USER_TURNKEY_EVM_WALLET"
+    || predictFunFundingDestinationMode === "USER_VENUE_DEPOSIT_WALLET";
   const solanaUsdcAddress = envValue(env, "SOLANA_USDC_TOKEN_ADDRESS") ?? "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
   const solanaUsdtAddress = envValue(env, "SOLANA_USDT_TOKEN_ADDRESS") ?? "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY1p8ARw5ygP2Z7n";
   const polygonUsdcAddress = envValue(env, "POLYGON_USDC_TOKEN_ADDRESS") ?? "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
@@ -131,9 +135,22 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
   };
   const supportsWithdrawal = (venue: FundingVenue): boolean => envValue(env, `${venue}_FUNDING_WITHDRAWALS_ENABLED`) === "true";
   const limitlessBridgeBackEnabled = supportsWithdrawal("LIMITLESS") && envValue(env, "LIMITLESS_WITHDRAWAL_BRIDGE_BACK_ENABLED") === "true";
-  const polymarketWithdrawalDestinations = ["POLYGON", "BASE"].map((chain) =>
-    toWithdrawalDestination(resolvePolymarketBridgeDestinationAsset(chain, "USDC"), supportsWithdrawal("POLYMARKET"))
-  );
+  const polymarketBridgeBackEnabled = supportsWithdrawal("POLYMARKET") && envValue(env, "POLYMARKET_WITHDRAWAL_BRIDGE_BACK_ENABLED") === "true";
+  const opinionBridgeBackEnabled = supportsWithdrawal("OPINION") && envValue(env, "OPINION_WITHDRAWAL_BRIDGE_BACK_ENABLED") === "true";
+  const myriadBridgeBackEnabled = supportsWithdrawal("MYRIAD") && envValue(env, "MYRIAD_WITHDRAWAL_BRIDGE_BACK_ENABLED") === "true";
+  const predictFunBridgeBackEnabled = supportsWithdrawal("PREDICT_FUN") && envValue(env, "PREDICT_FUN_WITHDRAWAL_BRIDGE_BACK_ENABLED") === "true";
+  const polymarketWithdrawalDestinations = [
+    ...["POLYGON", "BASE"].map((chain) =>
+      toWithdrawalDestination(resolvePolymarketBridgeDestinationAsset(chain, "USDC"), supportsWithdrawal("POLYMARKET"))
+    ),
+    toWithdrawalDestination({
+      chain: "SOLANA",
+      chainId: 101,
+      token: "USDC",
+      tokenAddress: solanaUsdcAddress,
+      decimals: 6
+    }, polymarketBridgeBackEnabled, "Polymarket withdrawals to Solana use a venue EVM release followed by a Lotus-prepared LI.FI bridge-back leg.")
+  ];
 
   return {
     POLYMARKET: {
@@ -207,14 +224,25 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
     },
     OPINION: configurableCapability({
       venue: "OPINION",
-      depositAddress: opinionDepositAddress,
+      depositAddress: opinionUserWalletDestinationEnabled ? "USER_WALLET" : opinionDepositAddress,
       preferredChain: opinionPreferredChain,
       preferredChainId: opinionPreferredChainId,
       preferredToken: opinionPreferredToken,
       preferredTokenAddress: opinionPreferredTokenAddress,
       sourceTokenAddressByChain: opinionSourceTokenAddressByChain,
       supportsWithdrawal: supportsWithdrawal("OPINION"),
-      configuredNote: `Opinion funding quote path is configured for Solana ${opinionPreferredToken} to the operator-approved Opinion funding destination.`,
+      additionalWithdrawalDestinations: [buildSolanaBridgeBackWithdrawalDestination({
+        sourceVenue: "OPINION",
+        sourceTokenSymbol: opinionPreferredToken,
+        destinationTokenSymbol: envValue(env, "OPINION_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_SYMBOL"),
+        destinationTokenAddress: envValue(env, "OPINION_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_ADDRESS"),
+        solanaUsdcAddress,
+        solanaUsdtAddress,
+        supported: opinionBridgeBackEnabled
+      })],
+      configuredNote: opinionUserWalletDestinationEnabled
+        ? `Opinion funding quote path is configured for user-specific ${opinionPreferredToken} venue balances.`
+        : `Opinion funding quote path is configured for Solana ${opinionPreferredToken} to the operator-approved Opinion funding destination.`,
       missingNote: "Set OPINION_FUNDING_DESTINATION_ADDRESS before enabling Opinion funding quotes."
     }),
     MYRIAD: configurableCapability({
@@ -226,27 +254,47 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
       preferredTokenAddress: myriadPreferredTokenAddress,
       sourceTokenAddressByChain: myriadSourceTokenAddressByChain,
       supportsWithdrawal: supportsWithdrawal("MYRIAD"),
+      additionalWithdrawalDestinations: [buildSolanaBridgeBackWithdrawalDestination({
+        sourceVenue: "MYRIAD",
+        sourceTokenSymbol: myriadPreferredToken,
+        destinationTokenSymbol: envValue(env, "MYRIAD_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_SYMBOL"),
+        destinationTokenAddress: envValue(env, "MYRIAD_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_ADDRESS"),
+        solanaUsdcAddress,
+        solanaUsdtAddress,
+        supported: myriadBridgeBackEnabled
+      })],
       configuredNote: `Myriad funding quote path is configured for approved ${myriadPreferredToken} source chains to the operator-approved Myriad funding destination.`,
       missingNote: "Set MYRIAD_FUNDING_DESTINATION_ADDRESS before enabling Myriad funding quotes."
     }),
     PREDICT_FUN: {
       ...configurableCapability({
         venue: "PREDICT_FUN",
-        depositAddress: predictFunDepositAddress,
+        depositAddress: predictFunUserWalletDestinationEnabled ? "USER_WALLET" : predictFunDepositAddress,
         preferredChain: predictFunPreferredChain,
         preferredChainId: predictFunPreferredChainId,
         preferredToken: predictFunPreferredToken,
         preferredTokenAddress: predictFunPreferredTokenAddress,
         sourceTokenAddressByChain: predictFunSourceTokenAddressByChain,
         supportsWithdrawal: supportsWithdrawal("PREDICT_FUN"),
-        configuredNote: `Predict.fun funding quote path is configured for approved ${predictFunPreferredToken} source chains to the operator-approved Predict.fun funding destination.`,
+        additionalWithdrawalDestinations: [buildSolanaBridgeBackWithdrawalDestination({
+          sourceVenue: "PREDICT_FUN",
+          sourceTokenSymbol: predictFunPreferredToken,
+          destinationTokenSymbol: envValue(env, "PREDICT_FUN_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_SYMBOL"),
+          destinationTokenAddress: envValue(env, "PREDICT_FUN_WITHDRAWAL_BRIDGE_BACK_DESTINATION_TOKEN_ADDRESS"),
+          solanaUsdcAddress,
+          solanaUsdtAddress,
+          supported: predictFunBridgeBackEnabled
+        })],
+        configuredNote: predictFunUserWalletDestinationEnabled
+          ? `Predict.fun funding quote path is configured for user-specific ${predictFunPreferredToken} venue balances.`
+          : `Predict.fun funding quote path is configured for approved ${predictFunPreferredToken} source chains to the operator-approved Predict.fun funding destination.`,
         missingNote: "Set PREDICT_FUN_FUNDING_DESTINATION_ADDRESS or PREDICT_FUN_FUNDING_DESTINATION_MODE=USER_VENUE_DEPOSIT_WALLET before enabling Predict.fun funding quotes; do not confuse Predict.fun with PredictIt."
       }),
-      ...(predictFunUserVenueDepositWalletEnabled
+      ...(predictFunUserWalletDestinationEnabled
         ? {
           readinessStatus: "READY" as const,
           depositAddressConfigured: true,
-          notes: "Predict.fun funding quote path is configured for the active user-specific Turnkey EVM venue account."
+          notes: "Predict.fun funding quote path is configured for the active user-specific Turnkey EVM wallet."
         }
         : {})
     }
@@ -273,6 +321,9 @@ export const getVenueFundingDestinationMode = (
   if (value === "USER_TURNKEY_EVM_WALLET" || value === "USER_VENUE_DEPOSIT_WALLET") {
     return value;
   }
+  if (venue === "PREDICT_FUN") {
+    return "USER_TURNKEY_EVM_WALLET";
+  }
   if (venue === "POLYMARKET" && envValue(env, "POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED") === "true") {
     return "USER_VENUE_DEPOSIT_WALLET";
   }
@@ -288,6 +339,7 @@ const configurableCapability = (input: {
   preferredTokenAddress: string;
   sourceTokenAddressByChain: Record<string, string>;
   supportsWithdrawal: boolean;
+  additionalWithdrawalDestinations?: NonNullable<VenueCapability["withdrawalDestinations"]>;
   configuredNote: string;
   missingNote: string;
 }): VenueCapability => ({
@@ -303,13 +355,16 @@ const configurableCapability = (input: {
   requiresFinalizationStep: true,
   supportsDirectDeposit: true,
   supportsWithdrawal: input.supportsWithdrawal,
-  withdrawalDestinations: [toWithdrawalDestination({
-    chain: input.preferredChain,
-    chainId: Number.isFinite(input.preferredChainId) && input.preferredChainId > 0 ? input.preferredChainId : 137,
-    token: input.preferredToken ?? "USDC",
-    tokenAddress: input.preferredTokenAddress,
-    decimals: 6
-  }, input.supportsWithdrawal)],
+  withdrawalDestinations: [
+    toWithdrawalDestination({
+      chain: input.preferredChain,
+      chainId: Number.isFinite(input.preferredChainId) && input.preferredChainId > 0 ? input.preferredChainId : 137,
+      token: input.preferredToken ?? "USDC",
+      tokenAddress: input.preferredTokenAddress,
+      decimals: 6
+    }, input.supportsWithdrawal),
+    ...(input.additionalWithdrawalDestinations ?? [])
+  ],
   withdrawalMode: "USER_SIGNED",
   userSignedWithdrawalSupported: true,
   partnerManagedWithdrawal: null,
@@ -317,6 +372,28 @@ const configurableCapability = (input: {
   depositAddressConfigured: Boolean(input.depositAddress),
   notes: input.depositAddress ? input.configuredNote : input.missingNote
 });
+
+const buildSolanaBridgeBackWithdrawalDestination = (input: {
+  sourceVenue: FundingVenue;
+  sourceTokenSymbol: string;
+  destinationTokenSymbol: string | null;
+  destinationTokenAddress: string | null;
+  solanaUsdcAddress: string;
+  solanaUsdtAddress: string;
+  supported: boolean;
+}): NonNullable<VenueCapability["withdrawalDestinations"]>[number] => {
+  const token = input.destinationTokenSymbol?.trim().toUpperCase()
+    || (input.sourceTokenSymbol.trim().toUpperCase() === "USD1" ? "USDC" : input.sourceTokenSymbol.trim().toUpperCase());
+  const tokenAddress = input.destinationTokenAddress
+    ?? (token === "USDT" ? input.solanaUsdtAddress : input.solanaUsdcAddress);
+  return toWithdrawalDestination({
+    chain: "SOLANA",
+    chainId: 101,
+    token,
+    tokenAddress,
+    decimals: 6
+  }, input.supported, `${input.sourceVenue} withdrawals to Solana use a venue EVM release followed by a Lotus-prepared LI.FI bridge-back leg.`);
+};
 
 const toWithdrawalDestination = (
   input: { chain: string; chainId: string | number; token: string; tokenAddress: string; decimals?: number },

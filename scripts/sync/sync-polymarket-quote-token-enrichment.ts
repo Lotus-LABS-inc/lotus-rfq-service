@@ -14,7 +14,7 @@ import {
 } from "../../src/core/sor/polymarket-clob-token-enrichment.js";
 import { PolymarketGammaClient, type PolymarketGammaMarket } from "../../src/integrations/polymarket/polymarket-gamma-client.js";
 
-const envCandidates = [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "..", ".env")];
+const envCandidates = [path.resolve(process.cwd(), "..", ".env"), path.resolve(process.cwd(), ".env")];
 for (const envPath of envCandidates) {
   if (existsSync(envPath)) {
     process.loadEnvFile(envPath);
@@ -80,7 +80,7 @@ const metadataVersion = process.env.POLYMARKET_METADATA_VERSION ?? "polymarket-o
 const args = parseArgs();
 const generatedAt = new Date().toISOString();
 const marketLookupCache = new Map<string, Promise<PolymarketGammaMarket[]>>();
-const databaseUrl = process.env.DATABASE_URL ?? process.env.SUPABASE_DB_URL;
+const databaseUrl = process.env.SUPABASE_DB_URL ?? process.env.DATABASE_URL;
 if (!databaseUrl) {
   throw new Error("SUPABASE_DB_URL or DATABASE_URL is required.");
 }
@@ -205,7 +205,7 @@ async function clearUnverifiedProfileQuoteEvidence(
   normalizedPayload.quoteVerificationBlockers = [...blockers];
   normalizedPayload.quoteVerificationSource = SOURCE;
   normalizedPayload.quoteVerificationCheckedAt = generatedAt;
-  await db.query(
+  const result = await db.query(
     `UPDATE venue_market_profiles
         SET normalized_payload = $2::jsonb,
             raw_source_payload = $3::jsonb,
@@ -217,6 +217,9 @@ async function clearUnverifiedProfileQuoteEvidence(
       JSON.stringify(rawSourcePayload)
     ]
   );
+  if (result.rowCount !== 1) {
+    throw new Error(`Expected to update one Polymarket profile, updated ${result.rowCount ?? 0}.`);
+  }
 }
 
 function withoutQuoteEvidence(value: unknown): Record<string, unknown> {
@@ -262,7 +265,7 @@ async function resolveEnrichment(profile: PolymarketQuoteProfileForEnrichment): 
     for (const eventSlug of eventSlugs) {
       const eventMarkets = await listMarketsCached(`event:${eventSlug}`, () => gammaClient.getEventMarketsBySlug(eventSlug));
       const eventResult = buildPolymarketClobTokenEnrichment({ profile, markets: eventMarkets, generatedAt, metadataVersion, source: SOURCE });
-      if (eventResult.ok) {
+      if (eventResult.ok || !eventResult.blockers.includes("POLYMARKET_SOURCE_MATCH_MISSING")) {
         return eventResult;
       }
     }
@@ -351,6 +354,10 @@ async function listApprovedPolymarketProfiles(
        OR COALESCE(vmp.normalized_payload->>'change24h', vmp.raw_source_payload->>'change24h', '') = ''
        OR COALESCE(vmp.normalized_payload->>'volume24h', vmp.raw_source_payload->>'volume24h', '') = ''
        OR COALESCE(vmp.normalized_payload->>'liquidity', vmp.raw_source_payload->>'liquidity', '') = ''
+       OR vmp.normalized_payload->'quoteVerificationBlockers' IS NOT NULL
+       OR vmp.normalized_payload->'quote_verification_blockers' IS NOT NULL
+       OR vmp.raw_source_payload->'quoteVerificationBlockers' IS NOT NULL
+       OR vmp.raw_source_payload->'quote_verification_blockers' IS NOT NULL
     )
       ${profileFilter}
     ORDER BY COALESCE(fma.sort_priority, 1000), ce.updated_at DESC, vmp.title
@@ -364,7 +371,7 @@ async function updateProfile(
   db: Pool,
   enrichment: Extract<PolymarketClobTokenEnrichmentResult, { ok: true }>["enrichment"]
 ): Promise<void> {
-  await db.query(
+  const result = await db.query(
     `UPDATE venue_market_profiles
         SET normalized_payload = $2::jsonb,
             raw_source_payload = $3::jsonb,
@@ -376,6 +383,9 @@ async function updateProfile(
       JSON.stringify(enrichment.rawSourcePayload)
     ]
   );
+  if (result.rowCount !== 1) {
+    throw new Error(`Expected to update one Polymarket profile, updated ${result.rowCount ?? 0}.`);
+  }
 }
 
 function toProfile(row: ApprovedPolymarketProfileRow): PolymarketQuoteProfileForEnrichment {

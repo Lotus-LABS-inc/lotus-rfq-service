@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, preHandlerHookHandler } from "fastify";
+import Decimal from "decimal.js";
 import { z } from "zod";
 import type {
   ExecutableRouteService,
@@ -10,11 +11,20 @@ import type {
 } from "../../execution-system/executable-routing.js";
 import {
   SignedTradeBundleError,
+  type LiveSubmitReadinessSnapshot,
   type SignedTradeExecutionStatus,
-  type SignedTradeBundleService
+  type SignedTradeBundleService,
+  type SignedTradeLegPayload
 } from "../../execution-system/signed-trade-bundle.js";
 import type { CalculatedVenueQuoteSnapshot, VenueQuoteSnapshotBlocker } from "../../core/sor/quote-snapshot.js";
+import type { SettlementStatusV0 } from "../../execution-system/types.js";
 import type { ExecutionVenueReadinessSummary } from "../admin/execution-venues-admin-service.js";
+import { withLatencyStage } from "../../observability/latency.js";
+import {
+  EXECUTION_ORCHESTRATOR_V1_ENABLED,
+  ExecutionOrderError,
+  type ExecutionOrderOrchestratorV1
+} from "../../execution-system/execution-order-orchestrator.js";
 
 const candidateSchema = z.object({
   venue: z.string().min(1),
@@ -107,6 +117,23 @@ const openOrdersQuerySchema = z.object({
   cursor: z.string().datetime().optional()
 });
 
+const executionOrderPreviewSchema = z.object({
+  marketId: z.string().min(1),
+  outcomeId: z.string().min(1),
+  side: z.enum(["buy", "sell"]),
+  amount: z.string().regex(/^\d+(\.\d+)?$/),
+  venuePreference: z.enum(["BEST_ROUTE", "POLYMARKET", "LIMITLESS", "PREDICT_FUN", "OPINION"])
+});
+
+const executionOrderSignaturesSchema = z.object({
+  signedPayloads: z.array(z.object({
+    legIndex: z.number().int().nonnegative(),
+    venue: z.string().min(1),
+    requestType: z.string().min(1).optional(),
+    signedPayload: z.record(z.string(), z.unknown())
+  }))
+});
+
 const portfolioTimeSeriesQuerySchema = z.object({
   range: z.enum(["1D", "7D", "30D", "90D", "ALL"]).optional()
 });
@@ -138,6 +165,7 @@ export interface ExecutionRouteDeps {
       cursor?: string | undefined;
     }): Promise<SignedTradeExecutionStatus[]>;
   } | undefined;
+  executionOrderService?: ExecutionOrderOrchestratorV1 | undefined;
 }
 
 export interface LiveExecutionCandidateProvider {
@@ -186,6 +214,113 @@ export const registerExecutionRoutes = async (
   authMiddleware: preHandlerHookHandler,
   deps: ExecutionRouteDeps
 ): Promise<void> => {
+  app.post("/execution/orders/preview", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!EXECUTION_ORCHESTRATOR_V1_ENABLED || !deps.executionOrderService) {
+      return reply.status(501).send({
+        code: "EXECUTION_ORCHESTRATOR_V1_NOT_CONFIGURED",
+        message: "Execution order orchestration is not configured on this backend."
+      });
+    }
+    const parsed = executionOrderPreviewSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "Execution order preview request validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    try {
+      const result = await withLatencyStage("execution_order_preview", {
+        endpoint: "POST /execution/orders/preview",
+        canonicalMarketId: parsed.data.marketId,
+        routeType: parsed.data.venuePreference
+      }, () => deps.executionOrderService!.preview({
+        userId: request.user.userId,
+        marketId: parsed.data.marketId,
+        outcomeId: parsed.data.outcomeId,
+        side: parsed.data.side,
+        amount: parsed.data.amount,
+        venuePreference: parsed.data.venuePreference
+      }));
+      return reply.status(201).send(result);
+    } catch (error) {
+      return sendExecutionOrderError(reply, error);
+    }
+  });
+
+  app.post("/execution/orders/:orderId/place", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!EXECUTION_ORCHESTRATOR_V1_ENABLED || !deps.executionOrderService) {
+      return reply.status(501).send({
+        code: "EXECUTION_ORCHESTRATOR_V1_NOT_CONFIGURED",
+        message: "Execution order orchestration is not configured on this backend."
+      });
+    }
+    const { orderId } = request.params as { orderId: string };
+    try {
+      const result = await withLatencyStage("execution_order_place", {
+        endpoint: "POST /execution/orders/:orderId/place"
+      }, () => deps.executionOrderService!.place({
+        userId: request.user.userId,
+        orderId
+      }));
+      return reply.status(result.state === "SUBMITTED" || result.state === "FILLED" ? 202 : 200).send(result);
+    } catch (error) {
+      return sendExecutionOrderError(reply, error);
+    }
+  });
+
+  app.post("/execution/orders/:orderId/signatures", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!EXECUTION_ORCHESTRATOR_V1_ENABLED || !deps.executionOrderService) {
+      return reply.status(501).send({
+        code: "EXECUTION_ORCHESTRATOR_V1_NOT_CONFIGURED",
+        message: "Execution order orchestration is not configured on this backend."
+      });
+    }
+    const parsed = executionOrderSignaturesSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "Execution order signature request validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    const { orderId } = request.params as { orderId: string };
+    try {
+      const result = await withLatencyStage("execution_order_signature_submit", {
+        endpoint: "POST /execution/orders/:orderId/signatures",
+        external: true
+      }, () => deps.executionOrderService!.submitSignatures({
+        userId: request.user.userId,
+        orderId,
+        signedPayloads: parsed.data.signedPayloads
+      }));
+      return reply.status(result.state === "SUBMITTED" || result.state === "FILLED" ? 202 : 200).send(result);
+    } catch (error) {
+      return sendExecutionOrderError(reply, error);
+    }
+  });
+
+  app.get("/execution/orders/:orderId/status", { preHandler: authMiddleware }, async (request, reply) => {
+    if (!EXECUTION_ORCHESTRATOR_V1_ENABLED || !deps.executionOrderService) {
+      return reply.status(501).send({
+        code: "EXECUTION_ORCHESTRATOR_V1_NOT_CONFIGURED",
+        message: "Execution order orchestration is not configured on this backend."
+      });
+    }
+    const { orderId } = request.params as { orderId: string };
+    try {
+      const result = await withLatencyStage("execution_order_status", {
+        endpoint: "GET /execution/orders/:orderId/status"
+      }, () => deps.executionOrderService!.status({
+        userId: request.user.userId,
+        orderId
+      }));
+      return reply.send(result);
+    } catch (error) {
+      return sendExecutionOrderError(reply, error);
+    }
+  });
+
   app.post("/execution/live-candidates", { preHandler: authMiddleware }, async (request, reply) => {
     if (!deps.liveCandidateProvider) {
       return reply.status(501).send({
@@ -201,10 +336,13 @@ export const registerExecutionRoutes = async (
         details: parsed.error.flatten()
       });
     }
-    const result = await deps.liveCandidateProvider.getCandidates({
+    const result = await withLatencyStage("route_preview_live_candidates", {
+      endpoint: "POST /execution/live-candidates",
+      canonicalMarketId: parsed.data.marketId
+    }, () => deps.liveCandidateProvider!.getCandidates({
       userId: request.user.userId,
       ...parsed.data
-    });
+    }));
     if (result.candidates.length === 0) {
       return reply.status(409).send({
         code: "NO_LIVE_EXECUTION_CANDIDATES",
@@ -224,10 +362,67 @@ export const registerExecutionRoutes = async (
         details: parsed.error.flatten()
       });
     }
-    const result = await deps.executableRouteService.quote({
+    if (parsed.data.side === "sell") {
+      try {
+        const result = await withLatencyStage("route_preview_quote", {
+          endpoint: "POST /execution/quote",
+          canonicalMarketId: parsed.data.marketId,
+          routeType: "SELL"
+        }, () => deps.sellQuoteService.prepareExit({
+          userId: request.user.userId,
+          sellMode: "SELL_ALL",
+          sizeMode: "CUSTOM_AMOUNT",
+          amount: parsed.data.amount,
+          marketId: parsed.data.marketId,
+          outcomeId: parsed.data.outcomeId,
+          candidates: parsed.data.candidates
+        }));
+        if (!result.quote) {
+          return reply.status(409).send({
+            code: "NO_EXECUTABLE_EXIT_ROUTE",
+            message: result.userMessage ?? "No verified sellable position is available.",
+            skippedAmount: result.skippedAmount
+          });
+        }
+        const readiness = deps.signedTradeBundleService
+          ? await deps.signedTradeBundleService.getLiveReadiness({
+              userId: request.user.userId,
+              quoteId: result.quote.quoteId
+            }).catch(() => null)
+          : null;
+        if (isPolymarketSellShareBalanceBlocked(readiness)) {
+          return reply.status(409).send({
+            code: "NO_SELLABLE_SHARES",
+            message: firstLiveReadinessBlocker(readiness) ?? "No verified Polymarket shares are available to sell for this outcome.",
+            skippedAmount: result.skippedAmount,
+            readiness
+          });
+        }
+        return reply.status(201).send({
+          quote: toUserQuote(result.quote),
+          allocations: result.allocations.map((allocation) => ({
+            venue: allocation.venue,
+            positionId: allocation.positionId,
+            sellSize: allocation.sellSize,
+            availableSize: allocation.availableSize
+          })),
+          skippedAmount: result.skippedAmount
+        });
+      } catch (error) {
+        return reply.status(409).send({
+          code: "EXIT_QUOTE_REJECTED",
+          message: error instanceof Error ? error.message : "Exit quote request rejected."
+        });
+      }
+    }
+    const result = await withLatencyStage("route_preview_quote", {
+      endpoint: "POST /execution/quote",
+      canonicalMarketId: parsed.data.marketId,
+      routeType: "BUY"
+    }, () => deps.executableRouteService.quote({
       userId: request.user.userId,
       ...parsed.data
-    });
+    }));
     if (!result.quote) {
       return reply.status(409).send({
         code: "NO_EXECUTABLE_ROUTE",
@@ -248,7 +443,9 @@ export const registerExecutionRoutes = async (
         details: parsed.error.flatten()
       });
     }
-    const quote = await deps.executableRouteService.getQuote(request.user.userId, parsed.data.quoteId);
+    const quote = await withLatencyStage("execution_quote_load", {
+      endpoint: "POST /execution/submit"
+    }, () => deps.executableRouteService.getQuote(request.user.userId, parsed.data.quoteId));
     if (!quote) {
       return reply.status(404).send({
         code: "EXECUTION_QUOTE_NOT_FOUND",
@@ -274,10 +471,19 @@ export const registerExecutionRoutes = async (
     }
     const { executionId } = request.params as { executionId: string };
     try {
-      const bundle = await deps.signedTradeBundleService.prepare({
+      await assertPolymarketFokBuyStillExecutable({
+        userId: request.user.userId,
+        quoteId: executionId,
+        executableRouteService: deps.executableRouteService,
+        liveCandidateProvider: deps.liveCandidateProvider
+      });
+      const bundle = await withLatencyStage("execution_signature_prepare", {
+        endpoint: "POST /execution/:executionId/prepare-signatures",
+        external: true
+      }, () => deps.signedTradeBundleService!.prepare({
         userId: request.user.userId,
         quoteId: executionId
-      });
+      }));
       return reply.send(bundle);
     } catch (error) {
       if (error instanceof SignedTradeBundleError) {
@@ -304,12 +510,22 @@ export const registerExecutionRoutes = async (
     }
     const { executionId } = request.params as { executionId: string };
     try {
-      const result = await deps.signedTradeBundleService.submit({
+      await assertPolymarketFokBuyStillExecutable({
+        userId: request.user.userId,
+        quoteId: executionId,
+        executableRouteService: deps.executableRouteService,
+        liveCandidateProvider: deps.liveCandidateProvider,
+        signedLegs: parsed.data.signedLegs
+      });
+      const result = await withLatencyStage("execution_signed_bundle_submit", {
+        endpoint: "POST /execution/:executionId/submit-signed-bundle",
+        external: parsed.data.dryRun !== true
+      }, () => deps.signedTradeBundleService!.submit({
         userId: request.user.userId,
         quoteId: executionId,
         signedLegs: parsed.data.signedLegs,
         dryRun: parsed.data.dryRun
-      });
+      }));
       return reply.status(parsed.data.dryRun === true ? 200 : 202).send(result);
     } catch (error) {
       if (error instanceof SignedTradeBundleError) {
@@ -328,10 +544,12 @@ export const registerExecutionRoutes = async (
     }
     const { executionId } = request.params as { executionId: string };
     try {
-      const readiness = await deps.signedTradeBundleService.getLiveReadiness({
+      const readiness = await withLatencyStage("funding_readiness_lookup", {
+        endpoint: "GET /execution/:executionId/live-readiness"
+      }, () => deps.signedTradeBundleService!.getLiveReadiness({
         userId: request.user.userId,
         quoteId: executionId
-      });
+      }));
       return reply.send(readiness);
     } catch (error) {
       if (error instanceof SignedTradeBundleError) {
@@ -529,7 +747,7 @@ export const registerExecutionRoutes = async (
       return reply.send({
         executionId,
         userStatus: signedStatus.status,
-        settlementStatus: signedStatus.status === "FILLED" ? "SETTLEMENT_PENDING" : "SETTLEMENT_PENDING",
+        settlementStatus: deriveExecutionSettlementStatus(signedStatus),
         ghostFillStatus: "NOT_APPLICABLE",
         recoveryStatus: "none",
         dryRun: signedStatus.dryRun,
@@ -587,11 +805,20 @@ export const registerExecutionRoutes = async (
             })
           : [];
       const activePositions = positions.filter(isActiveVerifiedPosition);
+      const generatedAt = new Date().toISOString();
+      const markedPositions = deps.liveCandidateProvider
+        ? await markPositions({
+            positions: activePositions,
+            generatedAt,
+            liveCandidateProvider: deps.liveCandidateProvider,
+            userId: request.user.userId
+          })
+        : activePositions;
       return reply.send({
-        generatedAt: new Date().toISOString(),
+        generatedAt,
         marketId: query.marketId ?? null,
         outcomeId: query.outcomeId ?? null,
-        positions: activePositions
+        positions: markedPositions
       });
     } catch (error) {
       return sendExecutionDataUnavailable(app, reply, error, "execution positions");
@@ -619,6 +846,20 @@ export const registerExecutionRoutes = async (
           skippedAmount: result.skippedAmount
         });
       }
+      const readiness = deps.signedTradeBundleService
+        ? await deps.signedTradeBundleService.getLiveReadiness({
+            userId: request.user.userId,
+            quoteId: result.quote.quoteId
+          }).catch(() => null)
+        : null;
+      if (isPolymarketSellShareBalanceBlocked(readiness)) {
+        return reply.status(409).send({
+          code: "NO_SELLABLE_SHARES",
+          message: firstLiveReadinessBlocker(readiness) ?? "No verified Polymarket shares are available to sell for this outcome.",
+          skippedAmount: result.skippedAmount,
+          readiness
+        });
+      }
       return reply.status(201).send({
         quote: toUserQuote(result.quote),
         allocations: result.allocations.map((allocation) => ({
@@ -636,6 +877,156 @@ export const registerExecutionRoutes = async (
       });
     }
   });
+};
+
+const assertPolymarketFokBuyStillExecutable = async (input: {
+  userId: string;
+  quoteId: string;
+  executableRouteService: ExecutableRouteService;
+  liveCandidateProvider?: LiveExecutionCandidateProvider | undefined;
+  signedLegs?: readonly SignedTradeLegPayload[] | undefined;
+}): Promise<void> => {
+  if (!input.liveCandidateProvider) {
+    return;
+  }
+  const quote = await input.executableRouteService.getQuote(input.userId, input.quoteId);
+  if (!quote || quote.side !== "buy") {
+    return;
+  }
+  for (const [index, leg] of quote.legs.entries()) {
+    if (leg.venue.toUpperCase() !== "POLYMARKET") {
+      continue;
+    }
+    const signedOrder = input.signedLegs ? findPolymarketSignedOrder(input.signedLegs, index) : null;
+    const signedOrderType = signedOrder ? asString(recordField(recordField(signedOrder.signedPayload, "data") ?? {}, "orderType")) : null;
+    if (signedOrderType && signedOrderType.toUpperCase() !== "FOK") {
+      continue;
+    }
+    const maxPrice = signedOrder
+      ? polymarketSignedOrderLimitPrice(signedOrder)
+      : polymarketRouteFokBuyLimitPrice(leg);
+    if (maxPrice === null) {
+      throw new SignedTradeBundleError(
+        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
+        "Polymarket FOK route could not derive a signed limit price. Refresh route before signing."
+      );
+    }
+    const live = await input.liveCandidateProvider.getCandidates({
+      userId: input.userId,
+      side: "buy",
+      marketId: quote.marketId,
+      outcomeId: quote.outcomeId,
+      amount: leg.size,
+      venues: ["POLYMARKET"]
+    });
+    const candidate = live.candidates.find((item) =>
+      item.venue.toUpperCase() === "POLYMARKET" &&
+      (!leg.venueMarketId || item.venueMarketId === leg.venueMarketId) &&
+      (!leg.venueOutcomeId || item.venueOutcomeId === leg.venueOutcomeId)
+    );
+    if (!candidate) {
+      throw new SignedTradeBundleError(
+        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
+        live.blocked.find((item) => item.venue.toUpperCase() === "POLYMARKET")?.reason ??
+          "Polymarket FOK route is no longer executable. Refresh route before signing."
+      );
+    }
+    const available = new Decimal(candidate.availableSize);
+    const required = new Decimal(leg.size);
+    if (!available.isFinite() || available.lt(required)) {
+      throw new SignedTradeBundleError(
+        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
+        "Polymarket FOK depth changed before execution. Refresh route and retry."
+      );
+    }
+    if (!Number.isFinite(candidate.price) || new Decimal(candidate.price).gt(maxPrice.plus("0.000000001"))) {
+      throw new SignedTradeBundleError(
+        "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
+        "Polymarket FOK price moved before execution. Refresh route and retry."
+      );
+    }
+  }
+};
+
+const findPolymarketSignedOrder = (
+  signedLegs: readonly SignedTradeLegPayload[],
+  legIndex: number
+): SignedTradeLegPayload | null =>
+  signedLegs.find((payload) => {
+    if (payload.legIndex !== legIndex || payload.venue.toUpperCase() !== "POLYMARKET") {
+      return false;
+    }
+    const data = recordField(payload.signedPayload, "data");
+    return payload.requestType === "ORDER" ||
+      asString(payload.signedPayload.purpose) === "POLYMARKET_ORDER" ||
+      Boolean(recordField(data ?? {}, "order"));
+  }) ?? null;
+
+const polymarketSignedOrderLimitPrice = (signedLeg: SignedTradeLegPayload): InstanceType<typeof Decimal> | null => {
+  const data = recordField(signedLeg.signedPayload, "data");
+  const order = data ? recordField(data, "order") : null;
+  const makerAmount = order ? decimalFromRecord(order, "makerAmount") : null;
+  const takerAmount = order ? decimalFromRecord(order, "takerAmount") : null;
+  if (!makerAmount || !takerAmount || takerAmount.lte(0)) {
+    return null;
+  }
+  return makerAmount.div(takerAmount);
+};
+
+const polymarketRouteFokBuyLimitPrice = (leg: ExecutableTradeQuote["legs"][number]): InstanceType<typeof Decimal> | null => {
+  if (!Number.isFinite(leg.price) || leg.price <= 0 || leg.price >= 1) {
+    return null;
+  }
+  const tick = new Decimal(polymarketTickSizeFromMetadata(leg.metadata) ?? "0.001");
+  const bps = boundedPolymarketMarketBuySlippageBps();
+  const maxPrice = Decimal.max(0, new Decimal(1).minus(tick));
+  const cushioned = new Decimal(leg.price).times(new Decimal(1).plus(new Decimal(bps).div(10_000)));
+  return Decimal.min(maxPrice, cushioned).div(tick).ceil().times(tick);
+};
+
+const polymarketTickSizeFromMetadata = (metadata: Readonly<Record<string, unknown>> | undefined): string | null => {
+  const value = asString(metadata?.polymarketTickSize) ?? asString(metadata?.tickSize);
+  return value === "0.1" || value === "0.01" || value === "0.001" || value === "0.0001" ? value : null;
+};
+
+const boundedPolymarketMarketBuySlippageBps = (): number => {
+  const raw = process.env.POLYMARKET_MARKET_BUY_SLIPPAGE_BPS ?? process.env.POLY_MARKET_BUY_SLIPPAGE_BPS;
+  if (!raw || raw.trim().length === 0) {
+    return 100;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 500) : 100;
+};
+
+const recordField = (value: unknown, field: string): Record<string, unknown> | null => {
+  const record = isRecord(value) ? value : null;
+  const next = record?.[field];
+  return isRecord(next) ? next : null;
+};
+
+const decimalFromRecord = (record: Record<string, unknown>, field: string): InstanceType<typeof Decimal> | null => {
+  const value = record[field];
+  if (typeof value !== "string" && typeof value !== "number") {
+    return null;
+  }
+  const decimal = new Decimal(value);
+  return decimal.isFinite() ? decimal : null;
+};
+
+const isPolymarketSellShareBalanceBlocked = (readiness: LiveSubmitReadinessSnapshot | null): boolean => {
+  const venue = readiness?.venues.find((item) => item.venue.toUpperCase() === "POLYMARKET");
+  if (!venue || venue.status !== "blocked") return false;
+  const blockerText = venue.blockers.join(" ").toUpperCase();
+  const tokenSymbol = String(venue.collateral.tokenSymbol ?? "").toUpperCase();
+  const balance = Number(venue.collateral.balance ?? NaN);
+  return /SHARE BALANCE|SELLABLE BALANCE|BELOW THE SELL AMOUNT/.test(blockerText) ||
+    (tokenSymbol.includes("SHARE") && Number.isFinite(balance) && balance <= 0);
+};
+
+const firstLiveReadinessBlocker = (readiness: LiveSubmitReadinessSnapshot | null): string | null => {
+  const venue = readiness?.venues.find((item) => item.status === "blocked" && item.blockers.length > 0);
+  if (venue) return venue.blockers[0] ?? null;
+  return readiness?.blockers[0] ?? null;
 };
 
 const toUserQuote = (quote: ExecutableTradeQuote): Record<string, unknown> => ({
@@ -684,6 +1075,16 @@ const sendExecutionDataUnavailable = (
   });
 };
 
+const sendExecutionOrderError = (reply: FastifyReply, error: unknown) => {
+  if (error instanceof ExecutionOrderError) {
+    return reply.status(error.statusCode).send({ code: error.code, message: error.message });
+  }
+  if (error instanceof SignedTradeBundleError) {
+    return reply.status(error.statusCode).send({ code: error.code, message: error.message });
+  }
+  throw error;
+};
+
 const markPositions = async (input: {
   positions: readonly VerifiedExecutionPosition[];
   generatedAt: string;
@@ -729,7 +1130,7 @@ const markPositions = async (input: {
 }));
 
 const isActiveVerifiedPosition = (position: VerifiedExecutionPosition): boolean =>
-  Number(position.verifiedSize) > 0;
+  position.status === "VERIFIED" && Number(position.verifiedSize) > 0;
 
 const unavailableMarkedPosition = (
   position: VerifiedExecutionPosition,
@@ -766,6 +1167,7 @@ const summarizePortfolio = (positions: readonly MarkedExecutionPosition[]): Reco
 const toExecutionHistoryItem = (status: SignedTradeExecutionStatus): Record<string, unknown> => ({
   executionId: status.executionId,
   status: status.status,
+  settlementStatus: deriveExecutionSettlementStatus(status),
   dryRun: status.dryRun,
   submittedAt: status.submittedAt,
   updatedAt: status.updatedAt,
@@ -782,7 +1184,7 @@ const toOpenOrderItem = (status: SignedTradeExecutionStatus): Record<string, unk
 const toExecutionReceipt = (status: SignedTradeExecutionStatus): Record<string, unknown> => ({
   executionId: status.executionId,
   userStatus: status.status,
-  settlementStatus: status.status === "FILLED" ? "SETTLEMENT_PENDING" : "SETTLEMENT_PENDING",
+  settlementStatus: deriveExecutionSettlementStatus(status),
   dryRun: status.dryRun,
   submittedAt: status.submittedAt,
   updatedAt: status.updatedAt,
@@ -797,6 +1199,8 @@ const sanitizeSubmittedLegs = (
   venue: leg.venue,
   status: leg.status,
   venueOrderId: leg.venueOrderId,
+  fillId: leg.fillId,
+  reasonCode: leg.reasonCode,
   reason: leg.reason,
   fillState: leg.fillState,
   settlementState: leg.settlementState,
@@ -804,6 +1208,53 @@ const sanitizeSubmittedLegs = (
   lastSettlementCheckedAt: leg.lastSettlementCheckedAt,
   lastWatcherError: leg.lastWatcherError
 }));
+
+const deriveExecutionSettlementStatus = (status: SignedTradeExecutionStatus): SettlementStatusV0 => {
+  if (status.dryRun) {
+    return "DRY_RUN_ONLY";
+  }
+
+  const settlementStatuses = status.submittedLegs
+    .map((leg) => leg.settlementState?.status)
+    .filter((settlementStatus): settlementStatus is SettlementStatusV0 => Boolean(settlementStatus));
+
+  if (settlementStatuses.length === 0) {
+    return "SETTLEMENT_PENDING";
+  }
+  if (settlementStatuses.includes("GHOST_FILL_CONFIRMED")) {
+    return "GHOST_FILL_CONFIRMED";
+  }
+  if (settlementStatuses.includes("GHOST_FILL_SUSPECTED")) {
+    return "GHOST_FILL_SUSPECTED";
+  }
+  if (settlementStatuses.includes("SETTLEMENT_TIMEOUT")) {
+    return "SETTLEMENT_TIMEOUT";
+  }
+  if (settlementStatuses.includes("SETTLEMENT_UNKNOWN")) {
+    return "SETTLEMENT_UNKNOWN";
+  }
+
+  const terminalSettlementStatuses = new Set<SettlementStatusV0>([
+    "SETTLEMENT_VERIFIED",
+    "NOT_APPLICABLE",
+    "DRY_RUN_ONLY"
+  ]);
+  const allKnownLegsTerminal = settlementStatuses.every((settlementStatus) =>
+    terminalSettlementStatuses.has(settlementStatus));
+  const everyLegAccountedFor = settlementStatuses.length === status.submittedLegs.length;
+
+  if (allKnownLegsTerminal && everyLegAccountedFor) {
+    if (settlementStatuses.includes("SETTLEMENT_VERIFIED")) {
+      return "SETTLEMENT_VERIFIED";
+    }
+    if (settlementStatuses.every((settlementStatus) => settlementStatus === "DRY_RUN_ONLY")) {
+      return "DRY_RUN_ONLY";
+    }
+    return "NOT_APPLICABLE";
+  }
+
+  return "SETTLEMENT_PENDING";
+};
 
 const fixedDecimal = (value: number): string =>
   Number.isFinite(value) ? value.toFixed(8).replace(/\.?0+$/, "") : "0";
@@ -896,7 +1347,11 @@ export const buildLiveExecutionCandidatesResponse = (input: {
       quoteBlockers,
       metadata: {
         ...(asString(metadata.limitlessExchangeAddress) ? { limitlessExchangeAddress: asString(metadata.limitlessExchangeAddress) } : {}),
-        ...(asString(metadata.limitlessAdapterAddress) ? { limitlessAdapterAddress: asString(metadata.limitlessAdapterAddress) } : {})
+        ...(asString(metadata.limitlessAdapterAddress) ? { limitlessAdapterAddress: asString(metadata.limitlessAdapterAddress) } : {}),
+        ...(venue === "POLYMARKET" && asString(metadata.tickSize) ? { tickSize: asString(metadata.tickSize) } : {}),
+        ...(venue === "POLYMARKET" && asString(metadata.polymarketTickSize) ? { polymarketTickSize: asString(metadata.polymarketTickSize) } : {}),
+        ...(venue === "POLYMARKET" && asBoolean(metadata.negRisk) !== undefined ? { negRisk: asBoolean(metadata.negRisk) } : {}),
+        ...(venue === "POLYMARKET" && asBoolean(metadata.polymarketNegRisk) !== undefined ? { polymarketNegRisk: asBoolean(metadata.polymarketNegRisk) } : {})
       }
     });
   }

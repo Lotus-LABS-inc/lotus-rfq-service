@@ -13,6 +13,7 @@ export interface MarketOrderbookRecorderConfig {
   marketBatchSize: number;
   retentionHours: number;
   levelsPerSide: number;
+  quoteProviderCooldownMs: number;
 }
 
 export interface MarketOrderbookRecorderLogger {
@@ -22,28 +23,41 @@ export interface MarketOrderbookRecorderLogger {
 }
 
 export interface MarketOrderbookRecorderRunResult {
+  marketOffset: number;
   scannedMarkets: number;
   skippedClosedMarkets: number;
   sampledOutcomes: number;
   insertedSnapshots: number;
   failedSamples: number;
+  skippedCooldownSamples: number;
   deletedOldSnapshots: number;
   deletedClosedMarketSnapshots: number;
+  deletedClosedLatestSnapshots: number;
+  deletedStaleBlockedLatestSnapshots: number;
 }
+
+const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
+  intervalMs: 60_000,
+  marketBatchSize: 50,
+  retentionHours: 720,
+  levelsPerSide: 25,
+  quoteProviderCooldownMs: 30_000
+} as const;
+const RATE_LIMIT_COOLDOWN_MS = 5 * 60_000;
+const PROVIDER_AUTH_COOLDOWN_MS = 15 * 60_000;
 
 export const buildMarketOrderbookRecorderConfigFromEnv = (
   env: NodeJS.ProcessEnv
 ): MarketOrderbookRecorderConfig => ({
   enabled: env.MARKET_ORDERBOOK_RECORDER_ENABLED === "true",
-  intervalMs: parseBoundedInteger(env.MARKET_ORDERBOOK_RECORDER_INTERVAL_MS, 60_000, 10_000, 3_600_000),
-  marketBatchSize: parseBoundedInteger(env.MARKET_ORDERBOOK_RECORDER_MARKET_BATCH_SIZE, 100, 1, 1_000),
-  retentionHours: parseBoundedInteger(env.MARKET_ORDERBOOK_RECORDER_RETENTION_HOURS, 720, 1, 8_760),
-  levelsPerSide: parseBoundedInteger(env.MARKET_ORDERBOOK_RECORDER_LEVELS_PER_SIDE, 25, 1, 50)
+  ...DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG
 });
 
 export class MarketOrderbookRecorder {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private marketOffset = 0;
+  private readonly venueCooldownUntil = new Map<string, number>();
 
   public constructor(
     private readonly marketCatalogRepository: Pick<MarketCatalogRepository, "listMarkets">,
@@ -94,13 +108,26 @@ export class MarketOrderbookRecorder {
       const cleanup = await this.snapshotRepository.cleanupSnapshots({
         olderThan: new Date(Date.now() - this.config.retentionHours * 60 * 60 * 1000)
       });
-      const markets = await this.marketCatalogRepository.listMarkets({ limit: this.config.marketBatchSize });
+      const marketOffset = this.marketOffset;
+      let markets = await this.marketCatalogRepository.listMarkets({
+        limit: this.config.marketBatchSize,
+        offset: marketOffset
+      });
+      if (markets.length === 0 && marketOffset > 0) {
+        this.marketOffset = 0;
+        markets = await this.marketCatalogRepository.listMarkets({ limit: this.config.marketBatchSize, offset: 0 });
+      }
+      this.marketOffset = markets.length < this.config.marketBatchSize
+        ? 0
+        : this.marketOffset + this.config.marketBatchSize;
       const result: MarketOrderbookRecorderRunResult = {
+        marketOffset,
         scannedMarkets: markets.length,
         skippedClosedMarkets: 0,
         sampledOutcomes: 0,
         insertedSnapshots: 0,
         failedSamples: 0,
+        skippedCooldownSamples: 0,
         ...cleanup
       };
 
@@ -111,6 +138,10 @@ export class MarketOrderbookRecorder {
         }
 
         for (const sample of buildMarketSamples(market)) {
+          if (this.isSampleFullyCoolingDown(market, sample)) {
+            result.skippedCooldownSamples += 1;
+            continue;
+          }
           result.sampledOutcomes += 1;
           try {
             const report = await this.quoteSource.getQuoteSnapshotReport({
@@ -128,7 +159,22 @@ export class MarketOrderbookRecorder {
                 levelsPerSide: this.config.levelsPerSide
               })
             );
-            result.insertedSnapshots += await this.snapshotRepository.insertMany(snapshots);
+            const blockedSnapshots = report.blocked.map((blocker) =>
+              toBlockedSnapshotInput({
+                canonicalEventId: market.canonicalEventId,
+                canonicalMarketId: sample.canonicalMarketId,
+                canonicalOutcomeId: sample.outcomeId,
+                blocker,
+                receivedAt: new Date()
+              })
+            );
+            for (const blocker of report.blocked) {
+              this.applyProviderCooldown(blocker.venue, blocker.reason);
+            }
+            result.insertedSnapshots += await this.snapshotRepository.insertMany([
+              ...snapshots,
+              ...blockedSnapshots
+            ]);
           } catch (error) {
             result.failedSamples += 1;
             this.logger.warn({
@@ -141,7 +187,14 @@ export class MarketOrderbookRecorder {
         }
       }
 
-      if (result.insertedSnapshots > 0 || result.failedSamples > 0 || result.deletedClosedMarketSnapshots > 0 || result.deletedOldSnapshots > 0) {
+      if (
+        result.insertedSnapshots > 0 ||
+        result.failedSamples > 0 ||
+        result.deletedClosedMarketSnapshots > 0 ||
+        result.deletedClosedLatestSnapshots > 0 ||
+        result.deletedStaleBlockedLatestSnapshots > 0 ||
+        result.deletedOldSnapshots > 0
+      ) {
         this.logger.info({ ...result }, "Market orderbook recorder tick completed.");
       }
       return result;
@@ -153,6 +206,21 @@ export class MarketOrderbookRecorder {
     } finally {
       this.running = false;
     }
+  }
+
+  private isSampleFullyCoolingDown(market: MarketCatalogMarket, sample: { canonicalMarketId: string }): boolean {
+    const venues = [...new Set(market.venueMarkets
+      .filter((venueMarket) => venueMarket.canonicalMarketId === sample.canonicalMarketId)
+      .map((venueMarket) => normalizeVenue(venueMarket.venue)))];
+    return venues.length > 0 && venues.every((venue) => (this.venueCooldownUntil.get(venue) ?? 0) > Date.now());
+  }
+
+  private applyProviderCooldown(venue: string, reason: string): void {
+    const cooldownMs = providerCooldownMsForReason(reason, this.config.quoteProviderCooldownMs);
+    if (cooldownMs <= 0) {
+      return;
+    }
+    this.venueCooldownUntil.set(normalizeVenue(venue), Date.now() + cooldownMs);
   }
 }
 
@@ -187,11 +255,12 @@ const toSnapshotInput = (input: {
   if (!bestBid && !bestAsk && !midpoint) {
     return [];
   }
+  const blockerSnapshot = snapshotBlockersForRecorder(input.snapshot);
   return [{
     canonicalEventId: input.canonicalEventId,
     canonicalMarketId: input.canonicalMarketId,
     canonicalOutcomeId: input.canonicalOutcomeId,
-    venue: input.snapshot.venue.toUpperCase(),
+    venue: normalizeVenue(input.snapshot.venue),
     venueMarketId: input.snapshot.venueMarketId,
     venueOutcomeId: input.snapshot.venueOutcomeId ?? null,
     source: input.snapshot.source,
@@ -206,9 +275,69 @@ const toSnapshotInput = (input: {
     askDepth: sumSizes(asks),
     bids,
     asks,
-    blockers: [...(input.snapshot.blockers ?? []), ...(input.snapshot.missingFactors ?? [])]
+    blockers: blockerSnapshot.blockers,
+    ...(blockerSnapshot.metadataVersion ? { metadataVersion: blockerSnapshot.metadataVersion } : {})
   }];
 };
+
+const snapshotBlockersForRecorder = (snapshot: NormalizedVenueQuoteSnapshot): {
+  blockers: readonly string[];
+  metadataVersion?: string | undefined;
+} => {
+  const blockers = [...(snapshot.blockers ?? [])];
+  const missingFactors = [...(snapshot.missingFactors ?? [])];
+  const venue = normalizeVenue(snapshot.venue);
+
+  if (venue !== "OPINION") {
+    return { blockers: [...blockers, ...missingFactors] };
+  }
+
+  const blockingMissingFactors = missingFactors.filter((factor) => factor !== "FEE_DISCOVERY");
+  return {
+    blockers: [...blockers, ...blockingMissingFactors],
+    ...(blockingMissingFactors.length !== missingFactors.length
+      ? { metadataVersion: "venue-orderbook-recorder-opinion-fee-warning-v1" }
+      : {})
+  };
+};
+
+const toBlockedSnapshotInput = (input: {
+  canonicalEventId: string;
+  canonicalMarketId: string;
+  canonicalOutcomeId: string | null;
+  blocker: {
+    venue: string;
+    reason: string;
+    venueMarketId?: string | undefined;
+    venueOutcomeId?: string | undefined;
+    detailsCode?: string | undefined;
+  };
+  receivedAt: Date;
+}): VenueOrderbookSnapshotInput => ({
+  canonicalEventId: input.canonicalEventId,
+  canonicalMarketId: input.canonicalMarketId,
+  canonicalOutcomeId: input.canonicalOutcomeId,
+  venue: normalizeVenue(input.blocker.venue),
+  venueMarketId: input.blocker.venueMarketId ?? `${normalizeVenue(input.blocker.venue)}:unknown`,
+  venueOutcomeId: input.blocker.venueOutcomeId ?? null,
+  source: "REST",
+  quoteQuality: "DIAGNOSTIC_ONLY",
+  sourceTimestamp: input.receivedAt,
+  receivedAt: input.receivedAt,
+  bestBid: null,
+  bestAsk: null,
+  midpoint: null,
+  spread: null,
+  bidDepth: "0",
+  askDepth: "0",
+  bids: [],
+  asks: [],
+  blockers: [
+    normalizeBlockerReason(input.blocker.reason),
+    ...(input.blocker.detailsCode ? [input.blocker.detailsCode] : [])
+  ],
+  metadataVersion: "venue-orderbook-recorder-blocker-v1"
+});
 
 const normalizeLevels = (
   levels: readonly NormalizedQuoteLevel[],
@@ -252,24 +381,36 @@ const decimal = (value: string | number | null | undefined): InstanceType<typeof
 };
 
 const emptyResult = (): MarketOrderbookRecorderRunResult => ({
+  marketOffset: 0,
   scannedMarkets: 0,
   skippedClosedMarkets: 0,
   sampledOutcomes: 0,
   insertedSnapshots: 0,
   failedSamples: 0,
+  skippedCooldownSamples: 0,
   deletedOldSnapshots: 0,
-  deletedClosedMarketSnapshots: 0
+  deletedClosedMarketSnapshots: 0,
+  deletedClosedLatestSnapshots: 0,
+  deletedStaleBlockedLatestSnapshots: 0
 });
 
-const parseBoundedInteger = (
-  value: string | undefined,
-  fallback: number,
-  min: number,
-  max: number
-): number => {
-  const parsed = Number.parseInt(value ?? "", 10);
-  if (!Number.isFinite(parsed)) {
-    return fallback;
-  }
-  return Math.min(Math.max(parsed, min), max);
+const normalizeVenue = (venue: string): string => {
+  const normalized = venue.trim().toUpperCase();
+  return normalized === "PREDICT" ? "PREDICT_FUN" : normalized;
 };
+
+const providerCooldownMsForReason = (reason: string, baseCooldownMs: number): number => {
+  if (reason.includes("QUOTE_PROVIDER_HTTP_429")) {
+    return Math.max(baseCooldownMs, RATE_LIMIT_COOLDOWN_MS);
+  }
+  if (reason.includes("QUOTE_PROVIDER_HTTP_401") || reason.includes("PREDICT_PROVIDER_AUTH_INVALID")) {
+    return Math.max(baseCooldownMs, PROVIDER_AUTH_COOLDOWN_MS);
+  }
+  if (reason.includes("QUOTE_PROVIDER_HTTP_503") || reason.includes("QUOTE_PROVIDER_HTTP_502")) {
+    return Math.max(baseCooldownMs, baseCooldownMs * 2);
+  }
+  return 0;
+};
+
+const normalizeBlockerReason = (reason: string): string =>
+  reason.trim();

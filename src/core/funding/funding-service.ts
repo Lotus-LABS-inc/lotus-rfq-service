@@ -68,6 +68,9 @@ import {
 import { UserWalletError, type UserWallet, type UserWalletService } from "./user-wallets.js";
 import { buildUserWalletBalanceReaderFromEnv, type UserWalletBalanceReader } from "./user-wallet-balances.js";
 
+const DEFAULT_USER_WALLET_BALANCE_READ_TIMEOUT_MS = 2_500;
+const USER_WALLET_BALANCE_READ_TIMEOUT = Symbol("USER_WALLET_BALANCE_READ_TIMEOUT");
+
 export interface FundingRepository {
   findIntentById(id: string): Promise<FundingIntent | null>;
   findIntentByUserAndIdempotencyKey(userId: string, idempotencyKey: string): Promise<FundingIntent | null>;
@@ -239,11 +242,16 @@ export class FundingService {
 
   public async listVenueBalances(userId: string): Promise<VenueBalanceView[]> {
     const balances = await this.repository.listVenueBalances(userId);
-    const [limitlessBalance, predictFunBalance] = await Promise.all([
-      this.readUserWalletVenueBalance(userId, balances, "LIMITLESS"),
-      this.readUserWalletVenueBalance(userId, balances, "PREDICT_FUN")
+    const timeoutMs = parsePositiveInt(
+      this.config.env?.FUNDING_USER_WALLET_BALANCE_READ_TIMEOUT_MS,
+      DEFAULT_USER_WALLET_BALANCE_READ_TIMEOUT_MS
+    );
+    const [limitlessBalance, opinionBalance, predictFunBalance] = await Promise.all([
+      this.readUserWalletVenueBalanceWithTimeout(userId, balances, "LIMITLESS", timeoutMs),
+      this.readUserWalletVenueBalanceWithTimeout(userId, balances, "OPINION", timeoutMs),
+      this.readUserWalletVenueBalanceWithTimeout(userId, balances, "PREDICT_FUN", timeoutMs)
     ]);
-    const walletBalances = [limitlessBalance, predictFunBalance].filter((balance): balance is VenueBalanceView => balance !== null);
+    const walletBalances = [limitlessBalance, opinionBalance, predictFunBalance].filter((balance): balance is VenueBalanceView => balance !== null);
     if (walletBalances.length === 0) {
       return balances;
     }
@@ -1689,7 +1697,7 @@ export class FundingService {
   private async readUserWalletVenueBalance(
     userId: string,
     persistedBalances: readonly VenueBalanceView[],
-    venue: "LIMITLESS" | "PREDICT_FUN"
+    venue: "LIMITLESS" | "OPINION" | "PREDICT_FUN"
   ): Promise<VenueBalanceView | null> {
     if (!this.userWalletService) {
       return null;
@@ -1726,6 +1734,30 @@ export class FundingService {
       availableAmount: decimalToPlainString(availableAmount),
       updatedAt: walletBalance.updatedAt
     };
+  }
+
+  private async readUserWalletVenueBalanceWithTimeout(
+    userId: string,
+    persistedBalances: readonly VenueBalanceView[],
+    venue: "LIMITLESS" | "OPINION" | "PREDICT_FUN",
+    timeoutMs: number
+  ): Promise<VenueBalanceView | null> {
+    let timeout: NodeJS.Timeout | null = null;
+    try {
+      const result = await Promise.race([
+        this.readUserWalletVenueBalance(userId, persistedBalances, venue),
+        new Promise<typeof USER_WALLET_BALANCE_READ_TIMEOUT>((resolve) => {
+          timeout = setTimeout(() => resolve(USER_WALLET_BALANCE_READ_TIMEOUT), timeoutMs);
+        })
+      ]);
+      return result === USER_WALLET_BALANCE_READ_TIMEOUT ? null : result;
+    } catch {
+      return null;
+    } finally {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    }
   }
 
   private async resolveFundingDestinationAddress(userId: string, venue: FundingVenue, destinationChain: string): Promise<string | null> {
@@ -1913,6 +1945,14 @@ const summarizeQuotes = (routeLegs: readonly FundingRouteLeg[]): Record<string, 
 });
 
 const decimalToPlainString = (value: InstanceType<typeof Decimal>): string => value.toFixed();
+
+const parsePositiveInt = (value: string | undefined, fallback: number): number => {
+  if (value === undefined || value.trim().length === 0) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
 
 const sourceTokenAddressForChain = (capability: VenueCapability, sourceChain: string): string | undefined => {
   const direct = capability.sourceTokenAddressByChain[sourceChain];

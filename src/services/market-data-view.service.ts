@@ -45,6 +45,9 @@ export interface MarketOrderbookVenue {
   venueMarketId: string;
   venueOutcomeId: string | null;
   source: "STREAM" | "REST";
+  hotSnapshotSource?: "memory" | "redis" | "db_last_good" | undefined;
+  freshnessMs?: number | undefined;
+  snapshotStatus?: "live" | "stale" | "blocked" | "resyncing" | undefined;
   quoteQuality: string;
   sourceTimestamp: string | null;
   receivedAt: string;
@@ -71,7 +74,7 @@ export interface MarketOrderbookResponse {
   bestAsk: string | null;
   midpoint: string | null;
   spread: string | null;
-  status: "live" | "partial" | "stale" | "unavailable";
+  status: "live" | "partial" | "stale" | "blocked" | "unavailable";
   blockers: VenueQuoteSnapshotBlocker[];
 }
 
@@ -111,6 +114,8 @@ export interface MarketBatchQuoteVenueEvidence {
   liquidity: string;
   spread: string | null;
   source: "STREAM" | "REST";
+  hotSnapshotSource?: "memory" | "redis" | "db_last_good" | undefined;
+  snapshotStatus?: "live" | "stale" | "blocked" | "resyncing" | undefined;
   quoteQuality: string;
   freshnessMs: number | null;
   blockers: string[];
@@ -197,7 +202,7 @@ export class LiveMarketDataViewService {
     const blockers = venueFilter
       ? report.blocked.filter((blocker) => blocker.venue.toUpperCase() === venueFilter)
       : report.blocked;
-    const status = venues.length > 0 && blockers.length === 0 ? "live" : venues.length > 0 ? "partial" : "unavailable";
+    const status = resolveOrderbookStatus(venues, blockers);
 
     this.recordChartPoint({
       marketId: input.marketId,
@@ -325,11 +330,7 @@ export class LiveMarketDataViewService {
     venueMappings?: readonly { venue: string; venueMarketId: string }[] | undefined;
     timeframe: MarketChartTimeframe;
   }): Promise<MarketChartResponse> {
-    const orderbook = await this.getOrderbook({
-      marketId: input.marketId,
-      ...(input.outcomeId ? { outcomeId: input.outcomeId } : {}),
-      depth: 5
-    });
+    const orderbook = await this.getChartOrderbook(input);
     const cutoff = timeframeCutoff(input.timeframe, this.now());
     const storedPoints = this.chartPoints
       .filter((point) =>
@@ -363,7 +364,7 @@ export class LiveMarketDataViewService {
       outcomeId: input.outcomeId ?? null,
       timeframe: input.timeframe,
       generatedAt: orderbook.generatedAt,
-      historyStatus: points.length > 1 ? "live" : orderbook.status === "unavailable" ? "unavailable" : "accumulating",
+      historyStatus: points.length > 1 ? "live" : orderbook.status === "unavailable" || orderbook.status === "blocked" ? "unavailable" : "accumulating",
       series,
       points: points.map((point) => ({
         timestamp: point.timestamp.toISOString(),
@@ -373,6 +374,39 @@ export class LiveMarketDataViewService {
       })),
       blockers: orderbook.blockers
     };
+  }
+
+  private async getChartOrderbook(input: {
+    marketId: string;
+    outcomeId?: string | undefined;
+  }): Promise<MarketOrderbookResponse> {
+    try {
+      return await this.getOrderbook({
+        marketId: input.marketId,
+        ...(input.outcomeId ? { outcomeId: input.outcomeId } : {}),
+        depth: 5
+      });
+    } catch (error) {
+      const generatedAt = this.now().toISOString();
+      return {
+        marketId: input.marketId,
+        outcomeId: input.outcomeId ?? null,
+        generatedAt,
+        depth: 5,
+        venues: [],
+        bids: [],
+        asks: [],
+        bestBid: null,
+        bestAsk: null,
+        midpoint: null,
+        spread: null,
+        status: "unavailable",
+        blockers: [{
+          venue: "LOTUS",
+          reason: error instanceof Error && error.message ? "LIVE_ORDERBOOK_UNAVAILABLE" : "MARKET_ORDERBOOK_UNAVAILABLE"
+        }]
+      };
+    }
   }
 
   private recordChartPoint(point: StoredChartPoint): void {
@@ -456,6 +490,9 @@ const sanitizeVenueOrderbook = (snapshot: NormalizedVenueQuoteSnapshot, depth: n
     venueMarketId: snapshot.venueMarketId,
     venueOutcomeId: snapshot.venueOutcomeId ?? null,
     source: snapshot.source,
+    ...hotSnapshotSourceField(snapshot.metadata),
+    freshnessMs: snapshotFreshnessMs(snapshot, new Date()),
+    snapshotStatus: snapshotStatus(snapshot, new Date()),
     quoteQuality: snapshot.quoteQuality,
     sourceTimestamp: snapshot.sourceTimestamp?.toISOString() ?? null,
     receivedAt: snapshot.receivedAt.toISOString(),
@@ -469,6 +506,54 @@ const sanitizeVenueOrderbook = (snapshot: NormalizedVenueQuoteSnapshot, depth: n
     bids,
     asks
   };
+};
+
+const snapshotFreshnessMs = (snapshot: NormalizedVenueQuoteSnapshot, now: Date): number => {
+  const basis = snapshot.sourceTimestamp ?? snapshot.receivedAt;
+  return Math.max(0, now.getTime() - basis.getTime());
+};
+
+const snapshotStatus = (
+  snapshot: NormalizedVenueQuoteSnapshot,
+  now: Date
+): "live" | "stale" | "blocked" | "resyncing" => {
+  if (snapshot.streamResynced === false) {
+    return "resyncing";
+  }
+  if ((snapshot.blockers ?? []).length > 0) {
+    return "blocked";
+  }
+  const thresholdMs = snapshot.source === "STREAM" ? 1_000 : 1_500;
+  return snapshotFreshnessMs(snapshot, now) <= thresholdMs ? "live" : "stale";
+};
+
+const resolveOrderbookStatus = (
+  venues: readonly MarketOrderbookVenue[],
+  blockers: readonly VenueQuoteSnapshotBlocker[]
+): MarketOrderbookResponse["status"] => {
+  const hasLive = venues.some((venue) => venue.snapshotStatus === "live");
+  const hasStale = venues.some((venue) => venue.snapshotStatus === "stale");
+  const hasBlocked = blockers.length > 0 || venues.some((venue) =>
+    venue.snapshotStatus === "blocked" || venue.snapshotStatus === "resyncing" || venue.blockers.length > 0);
+  if (hasLive) {
+    return hasBlocked || venues.some((venue) => venue.snapshotStatus !== "live") ? "partial" : "live";
+  }
+  if (hasStale) {
+    return hasBlocked ? "partial" : "stale";
+  }
+  if (hasBlocked) {
+    return "blocked";
+  }
+  return "unavailable";
+};
+
+const hotSnapshotSourceField = (
+  metadata: Readonly<Record<string, unknown>> | undefined
+): { hotSnapshotSource?: "memory" | "redis" | "db_last_good" | undefined } => {
+  const value = metadata?.hotSnapshotSource;
+  return value === "memory" || value === "redis" || value === "db_last_good"
+    ? { hotSnapshotSource: value }
+    : {};
 };
 
 const buildBatchQuoteItem = (input: {
@@ -503,6 +588,8 @@ const buildBatchQuoteItem = (input: {
       liquidity,
       spread: spreadFromBest(bid, ask),
       source: snapshot.source,
+      ...hotSnapshotSourceField(snapshot.metadata),
+      snapshotStatus: snapshotStatus(snapshot, input.now),
       quoteQuality: snapshot.quoteQuality,
       freshnessMs,
       blockers: [...new Set([...(snapshot.blockers ?? []), ...(snapshot.missingFactors ?? [])])]
@@ -518,7 +605,15 @@ const buildBatchQuoteItem = (input: {
   const freshnessValues = venues.map((venue) => venue.freshnessMs).filter((value): value is number => value !== null);
   const blockers = input.report.blocked;
   const hasVenueBlockers = venues.some((venue) => venue.blockers.length > 0);
-  const status = venues.length > 0 && blockers.length === 0 && !hasVenueBlockers ? "live" : venues.length > 0 ? "partial" : "unavailable";
+  const hasLiveVenue = venues.some((venue) => venue.snapshotStatus === "live");
+  const hasStaleVenue = venues.some((venue) => venue.snapshotStatus === "stale");
+  const status = venues.length > 0 && blockers.length === 0 && !hasVenueBlockers && hasLiveVenue
+    ? "live"
+    : venues.length > 0 && !hasLiveVenue && hasStaleVenue && blockers.length === 0 && !hasVenueBlockers
+      ? "stale"
+      : venues.length > 0
+        ? "partial"
+        : "unavailable";
   return {
     marketId: input.marketId,
     outcomeId: input.outcomeId,

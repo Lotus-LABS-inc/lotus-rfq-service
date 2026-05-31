@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ExecutionVenueReadinessSummary } from "../api/admin/execution-venues-admin-service.js";
+import { withLatencyStage, withLatencyStageSync } from "../observability/latency.js";
 
 export type TradeRouteType = "CROSS_VENUE" | "SINGLE_VENUE";
 export type TradeSide = "buy" | "sell";
@@ -256,7 +257,9 @@ export class ExecutableRouteService {
 
   public async quote(input: TradeQuoteRequest): Promise<TradeQuoteSelection> {
     const amount = parsePositiveNumber(input.amount, "amount");
-    const readinessByVenue = await this.readinessByVenue();
+    const readinessByVenue = await withLatencyStage("execution_readiness_lookup", {
+      canonicalMarketId: input.marketId
+    }, () => this.readinessByVenue());
     const evaluated = input.candidates.map((candidate) => ({
       candidate,
       evaluation: evaluateCandidate(candidate, readinessByVenue.get(candidate.venue.toUpperCase()))
@@ -276,10 +279,15 @@ export class ExecutableRouteService {
         adminReason: entry.evaluation.adminReason
       }));
 
-    let selected = this.selectBestRoute(input, executable, amount);
+    let selected = withLatencyStageSync("route_optimization", {
+      canonicalMarketId: input.marketId
+    }, () => this.selectBestRoute(input, executable, amount));
     const selectedQuoteOnly = !selected.route && quoteOnly.length > 0;
     if (selectedQuoteOnly) {
-      selected = this.selectBestRoute(input, quoteOnly, amount);
+      selected = withLatencyStageSync("route_optimization", {
+        canonicalMarketId: input.marketId,
+        routeType: "QUOTE_ONLY"
+      }, () => this.selectBestRoute(input, quoteOnly, amount));
     }
     if (!selected.route) {
       return {
@@ -295,7 +303,10 @@ export class ExecutableRouteService {
     const rejectedCandidates = selectedQuoteOnly
       ? liveRejectedCandidates.filter((candidate) => !selectedQuoteVenues.has(candidate.venue.toUpperCase()))
       : liveRejectedCandidates;
-    await this.quoteRepository?.saveQuote({ quote: selected.route, rejectedCandidates });
+    await withLatencyStage("execution_quote_persistence", {
+      canonicalMarketId: input.marketId,
+      routeType: selected.route.routeType
+    }, () => this.quoteRepository?.saveQuote({ quote: selected.route!, rejectedCandidates }) ?? Promise.resolve());
     return {
       quote: selected.route,
       rejectedCandidates,
@@ -526,10 +537,10 @@ export class SellQuoteService {
       candidates: allocations.map((allocation) => {
         const source = input.candidates.find((candidate) => candidate.venue.toUpperCase() === allocation.venue);
         return {
+          ...(source ?? {}),
           venue: allocation.venue,
           price: allocation.price,
-          availableSize: allocation.sellSize,
-          ...(source?.requiresUserSignature !== undefined ? { requiresUserSignature: source.requiresUserSignature } : {})
+          availableSize: allocation.sellSize
         };
       })
     });

@@ -20,6 +20,7 @@ import { buildLiveExecutionCandidatesResponse, registerExecutionRoutes } from ".
 import { registerTurnkeyAuthRoutes } from "./routes/turnkey-auth.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerMarketCatalogRoutes } from "./routes/markets.js";
+import { RedisMarketCatalogSnapshotCache } from "../services/market-catalog-snapshot-cache.js";
 import { buildVenueBalanceActivationActions } from "../core/funding/venue-activation.js";
 import { registerUserWithdrawalWalletRoutes } from "./routes/user-withdrawal-wallets.js";
 import { registerUserWalletRoutes, toSafeWallet } from "./routes/user-wallets.js";
@@ -162,6 +163,7 @@ import {
   sorShadowPriceDeltaBps,
   sorShadowTotal
 } from "../observability/metrics.js";
+import { withLatencyStage } from "../observability/latency.js";
 import { withSpan } from "../observability/tracing.js";
 import { LimitlessQuoteReader, LimitlessRestOrderbookClient } from "../integrations/limitless/limitless-quote-reader.js";
 import { LimitlessProfileFeeReader } from "../integrations/limitless/limitless-fee-reader.js";
@@ -269,6 +271,7 @@ import {
   ScopeAuthorityLaneResolver,
   SettlementVerificationService,
   SignedTradeBundleService,
+  ExecutionOrderOrchestratorV1,
   TestExecutionAdapter,
   alwaysHealthyPreflightDeps
 } from "../execution-system/index.js";
@@ -318,6 +321,7 @@ import {
 } from "../integrations/turnkey/turnkey-wallet-client.js";
 import { buildPredictAccountClientFromEnv } from "../integrations/predict/predict-account-client.js";
 import { buildLimitlessPartnerAccountClientFromEnv } from "../integrations/limitless/limitless-partner-account-client.js";
+import { buildOpinionBuilderAccountClientFromEnv } from "../integrations/opinion/opinion-builder-account-client.js";
 import {
   buildPolymarketDepositWalletClientConfigFromEnv,
   PolymarketDepositWalletClient
@@ -341,6 +345,7 @@ import {
 } from "../execution-system/execution-status-watcher.js";
 import {
   PgExecutionQuoteRepository,
+  PgExecutionOrderRepository,
   PgSignedTradePositionRecorder,
   PgSignedTradeExecutionStatusRepository,
   PgVerifiedPositionRepository
@@ -348,6 +353,7 @@ import {
 import { PgNotificationRepository } from "../repositories/notification.repository.js";
 import { MarketCatalogRepository, SharedCoreQuoteMappingRepository } from "../repositories/market-catalog.repository.js";
 import { LiveMarketDataViewService } from "../services/market-data-view.service.js";
+import { HotQuoteSnapshotService } from "../services/hot-quote-snapshot.service.js";
 import { LimitlessMarketChartSource } from "../services/limitless-market-chart-source.js";
 import {
   buildMarketOrderbookRecorderConfigFromEnv,
@@ -460,6 +466,9 @@ const parseAdminMagicLinkTtlSeconds = (value: string | undefined): number => {
   return Number.isFinite(parsed) && parsed >= 60 && parsed <= 3600 ? Math.trunc(parsed) : 900;
 };
 
+const DEFAULT_POLYMARKET_VENUE_BALANCE_READ_TIMEOUT_MS = 2_500;
+const VENUE_BALANCE_READ_TIMEOUT = Symbol("VENUE_BALANCE_READ_TIMEOUT");
+
 export const buildServer = async (dependencies: ServerDependencies): Promise<FastifyInstance> => {
   const app = Fastify({
     logger: false
@@ -525,6 +534,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const userWalletRepository = new UserWalletRepository(dependencies.pgPool);
   const userVenueAccountRepository = new UserVenueAccountRepository(dependencies.pgPool);
   const executionQuoteRepository = new PgExecutionQuoteRepository(dependencies.pgPool);
+  const executionOrderRepository = new PgExecutionOrderRepository(dependencies.pgPool);
   const verifiedPositionRepository = new PgVerifiedPositionRepository(dependencies.pgPool);
   const signedTradeExecutionStatusRepository = new PgSignedTradeExecutionStatusRepository(dependencies.pgPool);
   const signedTradePositionRecorder = new PgSignedTradePositionRecorder(dependencies.pgPool);
@@ -560,7 +570,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     userWalletService,
     buildPredictAccountClientFromEnv(process.env),
     buildLimitlessPartnerAccountClientFromEnv(process.env),
-    polymarketDepositWalletClient
+    polymarketDepositWalletClient,
+    buildOpinionBuilderAccountClientFromEnv(process.env)
   );
   const polymarketBridgeWithdrawalConfig = getPolymarketBridgeWithdrawalConfigFromEnv(process.env);
   const polymarketBridgeWithdrawalAdapter = polymarketBridgeWithdrawalConfig.configured && polymarketBridgeWithdrawalConfig.apiBaseUrl
@@ -891,6 +902,14 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const predictQuoteCache = new QuoteSnapshotCache();
   const opinionQuoteCache = new QuoteSnapshotCache();
   const myriadQuoteCache = new QuoteSnapshotCache();
+  const hotQuoteMemoryCache = new QuoteSnapshotCache();
+  const venueOrderbookSnapshotRepository = new VenueOrderbookSnapshotRepository(dependencies.pgPool);
+  const hotQuoteSnapshots = new HotQuoteSnapshotService({
+    memoryCache: hotQuoteMemoryCache,
+    redis: dependencies.redisClient,
+    dbFallback: venueOrderbookSnapshotRepository,
+    logger: dependencies.logger
+  });
   const polymarketClobHost = process.env.POLYMARKET_CLOB_HOST ?? process.env.POLY_CLOB_HOST ?? "https://clob.polymarket.com";
   const polymarketGammaBaseUrl = process.env.POLYMARKET_GAMMA_BASE_URL ?? "https://gamma-api.polymarket.com";
   const limitlessBaseUrl = process.env.LIMITLESS_BASE_URL ?? "https://api.limitless.exchange";
@@ -935,7 +954,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     new OpinionQuoteReader({
       client: new OpinionClient({
         baseUrl: process.env.OPINION_CLOB_BASE_URL ?? process.env.OPINION_OPENAPI_BASE_URL ?? "https://proxy.opinion.trade:8443/openapi",
-        apiKey: process.env.OPINION_API_KEY ?? process.env.OPINION_BUILDER_API_KEY ?? "",
+        apiKey: process.env.OPINION_API_KEY ?? "",
         requestTimeoutMs: parseOptionalNumber(process.env.OPINION_QUOTE_TIMEOUT_MS) ?? 8_000
       }),
       streamCache: opinionQuoteCache,
@@ -950,9 +969,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       }),
       streamCache: myriadQuoteCache
     })
-  ], new SharedCoreVenueQuoteMappingResolver(new SharedCoreQuoteMappingRepository(dependencies.pgPool)));
+  ], new SharedCoreVenueQuoteMappingResolver(new SharedCoreQuoteMappingRepository(dependencies.pgPool)), () => new Date(), hotQuoteSnapshots);
   const historicalMarketStateRepository = new HistoricalMarketStateRepository(dependencies.pgPool);
-  const venueOrderbookSnapshotRepository = new VenueOrderbookSnapshotRepository(dependencies.pgPool);
   const limitlessMarketChartSource = new LimitlessMarketChartSource({
     client: new LimitlessHistoricalClient({
       baseUrl: limitlessBaseUrl,
@@ -1393,8 +1411,44 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           ...input,
           fundingIntentId: "signed-bundle-readiness",
           routeLegId: "signed-bundle-readiness"
-        })
+      })
     }
+  );
+  const liveExecutionCandidateProvider = {
+    getCandidates: async (input: {
+      userId: string;
+      side: "buy" | "sell";
+      marketId: string;
+      outcomeId: string;
+      amount: string;
+      venues?: readonly string[] | undefined;
+    }) => {
+      const quantity = Number(input.amount);
+      const report = Number.isFinite(quantity) && quantity > 0
+        ? await venueQuoteSource.getCalculatedSnapshotReport({
+            canonicalMarketId: input.marketId,
+            canonicalOutcomeId: input.outcomeId,
+            side: input.side,
+            quantity
+          })
+        : { snapshots: [], blocked: [] };
+      return buildLiveExecutionCandidatesResponse({
+        marketId: input.marketId,
+        outcomeId: input.outcomeId,
+        amount: input.amount,
+        snapshots: report.snapshots,
+        snapshotBlockers: report.blocked,
+        readiness: await executionVenuesAdminService.listVenues(),
+        ...(input.venues ? { venues: input.venues } : {})
+      });
+    }
+  };
+  const executionOrderService = new ExecutionOrderOrchestratorV1(
+    executionOrderRepository,
+    executableRouteService,
+    sellQuoteService,
+    signedTradeBundleService,
+    liveExecutionCandidateProvider
   );
   if (dependencies.executionSystemSandboxEnabled) {
     const laneGate = new ApprovedLaneExecutionGate(new ScopeAuthorityLaneResolver(executionScopeAuthorities));
@@ -1545,8 +1599,17 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     buildExecutionStatusWatcherConfigFromEnv(process.env)
   );
   executionStatusWatcher.start();
+  const executionOrderRefreshTimer = setInterval(() => {
+    void executionOrderService.refreshOpenOrders({ limit: 50 }).catch((error) => {
+      dependencies.logger.warn({
+        errorName: error instanceof Error ? error.name : "UnknownError"
+      }, "Execution order V1 refresher tick failed.");
+    });
+  }, 5_000);
+  executionOrderRefreshTimer.unref?.();
   app.addHook("onClose", async () => {
     executionStatusWatcher.stop();
+    clearInterval(executionOrderRefreshTimer);
   });
   await registerHealthRoute(app);
   await registerMetricsRoute(app);
@@ -1573,11 +1636,15 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const listVenueBalancesForUser = async (userId: string): Promise<VenueBalanceView[]> => {
     const balances = await fundingService.listVenueBalances(userId);
     try {
-      const polymarket = await readPolymarketUsableBalanceForUser({
-        userId,
-        fundingIntentId: "venue-balance",
-        routeLegId: "venue-balance"
-      });
+      const polymarket = await withTimeout(
+        readPolymarketUsableBalanceForUser({
+          userId,
+          fundingIntentId: "venue-balance",
+          routeLegId: "venue-balance"
+        }),
+        parseOptionalNumber(process.env.POLYMARKET_VENUE_BALANCE_READ_TIMEOUT_MS)
+          ?? DEFAULT_POLYMARKET_VENUE_BALANCE_READ_TIMEOUT_MS
+      );
       const sourceReady = hasPolymarketCLOBTradeReadyBalance(
         polymarket.usableBalanceSource,
         polymarket.usableBalance
@@ -1938,33 +2005,15 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     executableRouteService,
     sellQuoteService,
     signedTradeBundleService,
+    executionOrderService,
     positionRepository: verifiedPositionRepository,
     executionStatusRepository: signedTradeExecutionStatusRepository,
-    liveCandidateProvider: {
-      getCandidates: async (input) => {
-        const quantity = Number(input.amount);
-        const report = Number.isFinite(quantity) && quantity > 0
-          ? await venueQuoteSource.getCalculatedSnapshotReport({
-              canonicalMarketId: input.marketId,
-              canonicalOutcomeId: input.outcomeId,
-              side: input.side,
-              quantity
-            })
-          : { snapshots: [], blocked: [] };
-        return buildLiveExecutionCandidatesResponse({
-          marketId: input.marketId,
-          outcomeId: input.outcomeId,
-          amount: input.amount,
-          snapshots: report.snapshots,
-          snapshotBlockers: report.blocked,
-          readiness: await executionVenuesAdminService.listVenues(),
-          ...(input.venues ? { venues: input.venues } : {})
-        });
-      }
-    }
+    liveCandidateProvider: liveExecutionCandidateProvider
   });
   await registerMarketCatalogRoutes(app, {
     marketCatalogRepository,
+    marketQuoteReadinessSource: venueOrderbookSnapshotRepository,
+    marketCatalogSnapshotCache: new RedisMarketCatalogSnapshotCache(dependencies.redisClient),
     marketDataViewService
   });
   await registerUserWalletRoutes(app, userAuthMiddleware, {
@@ -2076,15 +2125,23 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       };
     },
     acceptRFQ: async (sessionId, request) => {
-      const session = await sessionRepository.findById(sessionId);
+      const session = await withLatencyStage("rfq_load", {
+        endpoint: "POST /rfq/:id/accept"
+      }, () => sessionRepository.findById(sessionId));
       if (!session) throw new Error("Session not found");
 
-      const quote = await quoteRepository.findByExternalQuoteId(sessionId, request.quoteId);
+      const quote = await withLatencyStage("rfq_quote_load", {
+        endpoint: "POST /rfq/:id/accept",
+        canonicalMarketId: session.canonical_market_id
+      }, () => quoteRepository.findByExternalQuoteId(sessionId, request.quoteId));
       if (!quote) throw new Error("Quote not found");
 
       const acceptancePolicy = readAcceptancePolicy(session.metadata);
 
-      const reservationToken = await riskEngine.validateBeforeExecution(session, quote);
+      const reservationToken = await withLatencyStage("rfq_accept_risk_reservation", {
+        endpoint: "POST /rfq/:id/accept",
+        canonicalMarketId: session.canonical_market_id
+      }, () => riskEngine.validateBeforeExecution(session, quote));
 
       const rfqInput: CanonicalRFQInput = {
         rfqId: session.id,
@@ -2165,6 +2222,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
             currency: monetizationPolicy.currency
           }))
           .digest("hex");
+        await withLatencyStage("rfq_accept_monetization_preflight", {
+          endpoint: "POST /rfq/:id/accept",
+          canonicalMarketId: session.canonical_market_id
+        }, async () => {
         await monetizationRepository.upsertPolicy(monetizationPolicy);
         await monetizationRepository.createLedgerEntry({
           idempotencyKey: `${session.id}:quote:${request.quoteId}:${monetizationPolicy.policyVersion}:PREVIEWED`,
@@ -2204,14 +2265,22 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           currency: monetizationPolicy.currency,
           metadata: { feeSummary: preview, feeDisclosureHash: disclosureHash }
         });
+        });
       }
-      const canonicalIdentity = await resolveCanonicalIdentity(
+      const canonicalIdentity = await withLatencyStage("canonical_identity_lookup", {
+        endpoint: "POST /rfq/:id/accept",
+        canonicalMarketId: session.canonical_market_id
+      }, () => resolveCanonicalIdentity(
         dependencies.pgPool,
         session.canonical_market_id
-      );
+      ));
       let buildResult;
       try {
-        buildResult = await orderRouter.buildPlan(rfqInput, selectedQuoteInput, acceptancePolicy);
+        buildResult = await withLatencyStage("route_optimization", {
+          endpoint: "POST /rfq/:id/accept",
+          canonicalMarketId: session.canonical_market_id,
+          routeType: acceptancePolicy
+        }, () => orderRouter.buildPlan(rfqInput, selectedQuoteInput, acceptancePolicy));
       } catch (error) {
         if (riskEngine.rollbackReservation) {
           await riskEngine.rollbackReservation(reservationToken).catch((rollbackError: unknown) => {
@@ -2333,8 +2402,15 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         };
       }
 
-      const rawQuotes = await quoteRepository.listBySessionId(sessionId, 100);
-      const rankedQuotes = rankQuotesByEffectiveCost(
+      const rawQuotes = await withLatencyStage("quote_source_lookup", {
+        endpoint: "POST /rfq/:id/accept",
+        canonicalMarketId: session.canonical_market_id
+      }, () => quoteRepository.listBySessionId(sessionId, 100));
+      const rankedQuotes = await withLatencyStage("route_optimization", {
+        endpoint: "POST /rfq/:id/accept",
+        canonicalMarketId: session.canonical_market_id,
+        routeType: "LEGACY_QUOTE_RANKING"
+      }, async () => rankQuotesByEffectiveCost(
         rawQuotes.map((row) => ({
           quoteId: String(row.quote_payload.quoteId ?? row.id),
           ...(typeof row.quote_payload.lpId === "string" ? { lpId: row.quote_payload.lpId } : {}),
@@ -2348,7 +2424,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           expires_at: row.valid_until.toISOString(),
           soft_refresh_flag: false
         }))
-      );
+      ));
       const shouldAwait =
         acceptancePolicy === "ALL_OR_NONE"
           ? dependencies.sorAcceptAonAwait
@@ -2394,16 +2470,20 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
               }
             };
 
-      const validatedScope = request.executionScopeToken
-        ? await executionScopeTokenService.validate({
-            token: request.executionScopeToken,
+      const executionScopeToken = request.executionScopeToken;
+      const validatedScope = executionScopeToken
+        ? await withLatencyStage("execution_scope_token_validation", {
+            endpoint: "POST /rfq/:id/accept",
+            canonicalMarketId: session.canonical_market_id
+          }, () => executionScopeTokenService.validate({
+            token: executionScopeToken,
             principalId: session.taker_id,
             sessionId,
             quoteId: request.quoteId,
             canonicalMarketId: session.canonical_market_id,
             actualVenueTargets: executionRequest.venueTargets,
             authorities: executionScopeAuthorities
-          })
+          }))
         : null;
 
       if (validatedScope) {
@@ -2418,7 +2498,11 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         };
       }
 
-      const outcome = await executionControlGateway.execute(executionRequest);
+      const outcome = await withLatencyStage("rfq_accept_preflight", {
+        endpoint: "POST /rfq/:id/accept",
+        canonicalMarketId: session.canonical_market_id,
+        routeType: executionRequest.routeType
+      }, () => executionControlGateway.execute(executionRequest));
       if (
         dependencies.executionSystemSandboxEnabled
         && validatedScope
@@ -3036,13 +3120,13 @@ const fetchOfficialVenueResolutionMetadata = async (
 ): Promise<OfficialVenueResolutionMetadata | null> => {
   const venue = row.venue.trim().toUpperCase();
   if (venue === "POLYMARKET") {
-    return fetchPolymarketOfficialResolutionMetadata(row);
+    return await fetchPolymarketOfficialResolutionMetadata(row) ?? fetchPersistedVenueResolutionMetadata(row);
   }
   if (venue === "LIMITLESS") {
-    return fetchLimitlessOfficialResolutionMetadata(row);
+    return await fetchLimitlessOfficialResolutionMetadata(row) ?? fetchPersistedVenueResolutionMetadata(row);
   }
 
-  return null;
+  return fetchPersistedVenueResolutionMetadata(row);
 };
 
 const fetchPolymarketOfficialResolutionMetadata = async (
@@ -3061,17 +3145,12 @@ const fetchPolymarketOfficialResolutionMetadata = async (
       }
 
       const raw = apiServerAsRecord(market.raw);
-      const primaryResolutionText = apiServerFirstString(
-        raw.description,
-        raw.resolutionRules,
-        raw.rules,
-        raw.resolution_rules
-      );
+      const primaryResolutionText = selectOfficialVenueRuleText(raw, apiServerFirstString(raw.question, raw.title, market.title));
       if (!primaryResolutionText) {
         continue;
       }
 
-      const resolutionSourceText = apiServerFirstString(raw.resolutionSource, raw.resolution_source)
+      const resolutionSourceText = selectOfficialVenueSourceText(raw, primaryResolutionText, row.venue)
         ?? extractResolutionSourceText(primaryResolutionText);
       const oracleSource = deriveVenueDeclaredOracleSource(resolutionSourceText ?? primaryResolutionText);
 
@@ -3107,9 +3186,10 @@ const fetchLimitlessOfficialResolutionMetadata = async (
     try {
       const detail = await client.getMarketDetail(identifier);
       const rawDetail = apiServerAsRecord(detail);
-      const primaryResolutionText = stripHtmlRules(apiServerFirstString(rawDetail.description));
+      const primaryResolutionText = selectOfficialVenueRuleText(rawDetail, apiServerFirstString(rawDetail.title, rawDetail.proxyTitle, identifier));
       if (primaryResolutionText && looksLikeTrustedResolutionText(primaryResolutionText)) {
-        const resolutionSourceText = extractResolutionSourceText(primaryResolutionText);
+        const resolutionSourceText = selectOfficialVenueSourceText(rawDetail, primaryResolutionText, row.venue)
+          ?? extractResolutionSourceText(primaryResolutionText);
         const oracleSource = deriveVenueDeclaredOracleSource(resolutionSourceText ?? primaryResolutionText);
         return {
           title: apiServerFirstString(rawDetail.title, rawDetail.proxyTitle, identifier),
@@ -3136,11 +3216,12 @@ const fetchLimitlessOfficialResolutionMetadata = async (
   ].map(apiServerAsRecord);
 
   for (const payload of persistedPayloads) {
-    const primaryResolutionText = stripHtmlRules(apiServerFirstString(payload.description));
+    const primaryResolutionText = selectOfficialVenueRuleText(payload, apiServerFirstString(payload.title, payload.proxyTitle, row.vmp_title));
     if (!primaryResolutionText || !looksLikeTrustedResolutionText(primaryResolutionText)) {
       continue;
     }
-    const resolutionSourceText = extractResolutionSourceText(primaryResolutionText);
+    const resolutionSourceText = selectOfficialVenueSourceText(payload, primaryResolutionText, row.venue)
+      ?? extractResolutionSourceText(primaryResolutionText);
     const oracleSource = deriveVenueDeclaredOracleSource(resolutionSourceText ?? primaryResolutionText);
     return {
       title: apiServerFirstString(payload.title, payload.proxyTitle),
@@ -3156,6 +3237,47 @@ const fetchLimitlessOfficialResolutionMetadata = async (
   }
 
   return null;
+};
+
+const fetchPersistedVenueResolutionMetadata = (
+  row: ResolutionProfileLookupRow
+): OfficialVenueResolutionMetadata | null => {
+  const payloads = [
+    apiServerAsRecord(row.vmp_raw_source_payload),
+    apiServerAsRecord(row.vmp_normalized_payload)
+  ];
+  const primaryResolutionText = selectTrustedResolutionText(
+    ...payloads.map((payload) => selectOfficialVenueRuleText(payload, row.vmp_title)),
+    row.vmp_resolution_rules_text,
+    row.vmp_description,
+    row.vrp_rule_text,
+    row.primary_resolution_text,
+    row.supplemental_rules_text
+  );
+  if (!primaryResolutionText) {
+    return null;
+  }
+
+  const resolutionSourceText = payloads
+    .map((payload) => selectOfficialVenueSourceText(payload, primaryResolutionText, row.venue))
+    .find((value): value is string => value !== null)
+    ?? sanitizeOfficialVenueSourceText(row.vmp_resolution_source, row.venue)
+    ?? sanitizeOfficialVenueSourceText(row.vrp_resolution_source, row.venue)
+    ?? sanitizeOfficialVenueSourceText(row.supplemental_rules_text, row.venue)
+    ?? extractResolutionSourceText(primaryResolutionText);
+  const oracleSource = deriveVenueDeclaredOracleSource(resolutionSourceText ?? primaryResolutionText);
+
+  return {
+    title: row.vmp_title,
+    primaryResolutionText,
+    supplementalRulesText: resolutionSourceText,
+    resolutionSourceText,
+    oracleType: oracleSource?.oracleType ?? null,
+    oracleName: oracleSource?.oracleName ?? null,
+    resolver: null,
+    sourceUrl: extractFirstUrl(resolutionSourceText ?? primaryResolutionText) ?? defaultOracleSourceUrl(oracleSource),
+    fetchedBy: `${row.venue.toLowerCase()}_persisted_market_metadata`
+  };
 };
 
 const persistOfficialVenueResolutionMetadata = async (
@@ -3293,6 +3415,140 @@ const collectLimitlessMetadataIdentifiers = (row: ResolutionProfileLookupRow): r
     apiServerFirstString(normalizedLimitlessMarketDetail.address, rawLimitlessMarketDetail.address)
   ]);
 };
+
+const OFFICIAL_VENUE_RULE_TEXT_FIELDS = [
+  "resolutionRules",
+  "resolution_rules",
+  "resolutionRule",
+  "resolution_rule",
+  "resolutionRulesText",
+  "resolution_rules_text",
+  "rules",
+  "rule",
+  "description",
+  "resolveDescription",
+  "resolutionCriteria",
+  "settlementRules",
+  "settlement_rules"
+] as const;
+
+const OFFICIAL_VENUE_SOURCE_TEXT_FIELDS = [
+  "resolutionSource",
+  "resolution_source",
+  "resolutionSourceUrl",
+  "resolution_source_url",
+  "source",
+  "sourceName",
+  "source_name",
+  "resolver",
+  "oracle",
+  "oracleName",
+  "oracle_name"
+] as const;
+
+const selectOfficialVenueRuleText = (
+  payload: Record<string, unknown>,
+  title: string | null
+): string | null => {
+  const candidates = collectOfficialStringFields(payload, OFFICIAL_VENUE_RULE_TEXT_FIELDS, 4);
+  const normalizedTitle = normalizeOfficialComparableText(title ?? "");
+  for (const candidate of candidates) {
+    const sanitized = stripHtmlRules(candidate);
+    if (!sanitized) {
+      continue;
+    }
+    const normalized = normalizeOfficialComparableText(sanitized);
+    if (!normalized || (normalizedTitle && normalized === normalizedTitle) || looksLikeGeneratedResolutionPlaceholder(normalized)) {
+      continue;
+    }
+    if (looksLikeTrustedResolutionText(sanitized)) {
+      return sanitized;
+    }
+  }
+  return null;
+};
+
+const selectOfficialVenueSourceText = (
+  payload: Record<string, unknown>,
+  rulesText: string,
+  venue: string
+): string | null => {
+  for (const candidate of collectOfficialStringFields(payload, OFFICIAL_VENUE_SOURCE_TEXT_FIELDS, 4)) {
+    const sanitized = sanitizeOfficialVenueSourceText(candidate, venue);
+    if (sanitized) {
+      return sanitized;
+    }
+  }
+  return sanitizeOfficialVenueSourceText(extractResolutionSourceText(rulesText), venue);
+};
+
+const sanitizeOfficialVenueSourceText = (
+  value: string | null | undefined,
+  venue: string
+): string | null => {
+  const sanitized = stripHtmlRules(value ?? null);
+  if (!sanitized) {
+    return null;
+  }
+  const normalized = normalizeOfficialComparableText(sanitized);
+  const normalizedVenueAliases = officialVenueSourceAliases(venue);
+  if (
+    normalizedVenueAliases.has(normalized)
+    || normalized === "opinion openapi market"
+    || normalized === "predict market metadata"
+    || normalized === "limitless public market surface"
+    || normalized === "limitless public market detail"
+    || normalized === "limitless persisted market detail"
+  ) {
+    return null;
+  }
+  if (extractFirstUrl(sanitized)) {
+    return sanitized;
+  }
+  return /\b(source|oracle|resolver|according|official|resolution|settlement|rules)\b/i.test(sanitized)
+    ? sanitized
+    : null;
+};
+
+const officialVenueSourceAliases = (venue: string): ReadonlySet<string> => {
+  const normalized = normalizeOfficialComparableText(venue);
+  const aliases = new Set([normalized]);
+  if (normalized === "predict" || normalized === "predict fun" || normalized === "predict_fun") {
+    aliases.add("predict");
+    aliases.add("predict fun");
+  }
+  return aliases;
+};
+
+const collectOfficialStringFields = (
+  value: unknown,
+  fieldNames: readonly string[],
+  depth: number
+): string[] => {
+  if (depth < 0 || typeof value === "string") {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => collectOfficialStringFields(entry, fieldNames, depth - 1));
+  }
+  const record = apiServerAsRecord(value);
+  if (Object.keys(record).length === 0) {
+    return [];
+  }
+  const direct = fieldNames.flatMap((field) => {
+    const candidate = record[field];
+    return typeof candidate === "string" && candidate.trim().length > 0 ? [candidate] : [];
+  });
+  const nested = Object.values(record).flatMap((entry) => collectOfficialStringFields(entry, fieldNames, depth - 1));
+  return [...direct, ...nested];
+};
+
+const normalizeOfficialComparableText = (value: string): string =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+const looksLikeGeneratedResolutionPlaceholder = (normalized: string): boolean =>
+  /^(ath|fdv|token launch|first to hit|price|winner|nominee|champion|launch) by date\b/.test(normalized)
+  || /^(ath|fdv|token launch|first to hit|price|winner|nominee|champion|launch)\b(?: [a-z0-9]+){0,8} \d{4} \d{2} \d{2}(?: \d{4} \d{2} \d{2})?$/.test(normalized);
 
 const extractResolutionSourceText = (ruleText: string): string | null => {
   const paragraphs = ruleText
@@ -3545,4 +3801,24 @@ const parseOptionalNumber = (value: string | undefined): number | undefined => {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+};
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+  let timeout: NodeJS.Timeout | null = null;
+  try {
+    const result = await Promise.race([
+      promise,
+      new Promise<typeof VENUE_BALANCE_READ_TIMEOUT>((resolve) => {
+        timeout = setTimeout(() => resolve(VENUE_BALANCE_READ_TIMEOUT), timeoutMs);
+      })
+    ]);
+    if (result === VENUE_BALANCE_READ_TIMEOUT) {
+      throw new Error("VENUE_BALANCE_READ_TIMEOUT");
+    }
+    return result;
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 };

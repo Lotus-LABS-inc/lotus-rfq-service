@@ -6,7 +6,8 @@ import {
   getPolymarketExecutionAdapterV2EnvStatus,
   PolymarketExecutionNotConfiguredError,
   SdkPolymarketClobV2LiveClient,
-  type PreparedVenueOrder
+  type PreparedVenueOrder,
+  type VenueOrderLookupContext
 } from "./execution-system/index.js";
 import {
   polymarketRelayHeaders,
@@ -88,7 +89,8 @@ export const buildPolymarketExecutionRelayServer = () => {
     preHandler: authenticated("/internal/polymarket/v2/fill-state")
   }, async (request, reply) => {
     const venueOrderId = parseStringField(request.body, "venueOrderId");
-    return handleRelayCall(reply, async () => liveClient().fetchFillState(venueOrderId));
+    const context = parseLookupContext(request.body);
+    return handleRelayCall(reply, async () => liveClient().fetchFillState(venueOrderId, context));
   });
 
   app.post("/internal/polymarket/v2/cancel-order", {
@@ -102,7 +104,8 @@ export const buildPolymarketExecutionRelayServer = () => {
     preHandler: authenticated("/internal/polymarket/v2/settlement-state")
   }, async (request, reply) => {
     const fillOrOrderId = parseStringField(request.body, "fillOrOrderId");
-    return handleRelayCall(reply, async () => liveClient().fetchSettlementState(fillOrOrderId));
+    const context = parseLookupContext(request.body);
+    return handleRelayCall(reply, async () => liveClient().fetchSettlementState(fillOrOrderId, context));
   });
 
   return app;
@@ -124,7 +127,10 @@ const handleRelayCall = async <T>(
     if (error instanceof PolymarketExecutionNotConfiguredError) {
       return reply.status(502).send({
         code: error.reasonCode,
-        message: error.message
+        message: error.message,
+        ...(safePolymarketRelayDiagnostics(error.diagnostics)
+          ? { diagnostics: safePolymarketRelayDiagnostics(error.diagnostics) }
+          : {})
       });
     }
     return reply.status(502).send({
@@ -166,8 +172,30 @@ const parseStringField = (body: unknown, field: string): string => {
   return value.trim();
 };
 
+const parseLookupContext = (body: unknown): VenueOrderLookupContext | undefined => {
+  const context = asRecord(asRecord(body).context);
+  if (Object.keys(context).length === 0) {
+    return undefined;
+  }
+  return context as VenueOrderLookupContext;
+};
+
 const headerValue = (value: string | string[] | undefined): string | null =>
   Array.isArray(value) ? value[0] ?? null : value ?? null;
+
+const safePolymarketRelayDiagnostics = (
+  diagnostics: Record<string, unknown> | undefined
+): Record<string, unknown> | null => {
+  const postOrderDiagnostic = asRecord(diagnostics?.postOrderRejectionDiagnostic);
+  if (Object.keys(postOrderDiagnostic).length === 0) {
+    return null;
+  }
+  return {
+    diagnosticArtifact: diagnostics?.diagnosticArtifact ?? null,
+    rawVenueErrorCode: diagnostics?.rawVenueErrorCode ?? null,
+    postOrderRejectionDiagnostic: postOrderDiagnostic
+  };
+};
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null ? value as Record<string, unknown> : {};

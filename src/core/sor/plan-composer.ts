@@ -183,14 +183,21 @@ export class PlanComposer implements IPlanComposer {
     candidates: readonly RouteCandidate[],
     scores: readonly CandidateScore[]
   ): Promise<void> {
-    for (const candidate of candidates) {
-      const score = scores.find(s => s.candidateId === candidate.id);
-      await client.query(
-        `INSERT INTO route_candidates (
-          id, routing_plan_id, leg_id, provider_type, provider_id, available_size,
-          quoted_price, fees, latency_ms, fill_prob, metadata
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::jsonb)`,
-        [
+    if (candidates.length === 0) {
+      return;
+    }
+
+    const scoreByCandidateId = new Map(scores.map((score) => [score.candidateId, score] as const));
+    const values: string[] = [];
+    const params: unknown[] = [];
+
+    candidates.forEach((candidate, index) => {
+      const score = scoreByCandidateId.get(candidate.id);
+      const offset = index * 11;
+      values.push(
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}::jsonb, $${offset + 9}, $${offset + 10}, $${offset + 11}::jsonb)`
+      );
+      params.push(
           candidate.id,
           planId,
           candidate.leg_id,
@@ -202,9 +209,16 @@ export class PlanComposer implements IPlanComposer {
           candidate.latency_ms,
           candidate.fill_prob.toString(),
           JSON.stringify({ ...candidate.metadata, score: score?.totalExpectedCost ?? 0, stp_mode: rfq.stpMode })
-        ]
       );
-    }
+    });
+
+    await client.query(
+      `INSERT INTO route_candidates (
+        id, routing_plan_id, leg_id, provider_type, provider_id, available_size,
+        quoted_price, fees, latency_ms, fill_prob, metadata
+      ) VALUES ${values.join(", ")}`,
+      params
+    );
   }
 
   private async insertRouteSteps(
@@ -212,13 +226,19 @@ export class PlanComposer implements IPlanComposer {
     planId: string,
     steps: readonly PlanStep[]
   ): Promise<void> {
-    for (const step of steps) {
-      await client.query(
-        `INSERT INTO route_steps (
-          id, routing_plan_id, leg_id, step_index, provider_type, provider_id,
-          target_size, rounded_size, target_price, state, idempotency_key, metadata
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb)`,
-        [
+    if (steps.length === 0) {
+      return;
+    }
+
+    const values: string[] = [];
+    const params: unknown[] = [];
+
+    steps.forEach((step, index) => {
+      const offset = index * 12;
+      values.push(
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}::jsonb)`
+      );
+      params.push(
           step.id,
           planId,
           step.metadata ? step.metadata["leg_id"] : null,
@@ -231,8 +251,15 @@ export class PlanComposer implements IPlanComposer {
           step.state,
           step.idempotencyKey,
           JSON.stringify(step.metadata ?? {})
-        ]
       );
-    }
+    });
+
+    await client.query(
+      `INSERT INTO route_steps (
+        id, routing_plan_id, leg_id, step_index, provider_type, provider_id,
+        target_size, rounded_size, target_price, state, idempotency_key, metadata
+      ) VALUES ${values.join(", ")}`,
+      params
+    );
   }
 }

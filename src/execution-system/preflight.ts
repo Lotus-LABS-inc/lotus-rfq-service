@@ -1,4 +1,5 @@
 import type { ExecutionScopeBinding } from "../execution-control/execution-scope-token.js";
+import { withLatencyStage } from "../observability/latency.js";
 import { ApprovedLaneExecutionGate } from "./lane-authority.js";
 import type { ExecutionCheckResult, ExecutionRequestV0 } from "./types.js";
 
@@ -56,7 +57,11 @@ export class ExecutionPreflightService {
     if (input.request.fallbackLaneId) {
       laneInput.fallbackLaneId = input.request.fallbackLaneId;
     }
-    const laneResult = await this.deps.laneGate.evaluate(laneInput);
+    const laneResult = await withLatencyStage("approved_lane_lookup", {
+      canonicalMarketId: input.request.canonicalTopicKey,
+      routeType: input.request.venuePath.length > 1 ? "MULTI_VENUE" : "SINGLE_VENUE",
+      executionMode: input.request.executionMode
+    }, () => this.deps.laneGate.evaluate(laneInput));
     if (!laneResult.ok) {
       return {
         ok: false,
@@ -66,28 +71,54 @@ export class ExecutionPreflightService {
       };
     }
 
-    if (await this.deps.idempotency.isAlreadyCompleted(input.request.idempotencyKey)) {
+    if (await withLatencyStage("execution_idempotency_check", {
+      canonicalMarketId: input.request.canonicalTopicKey,
+      executionMode: input.request.executionMode
+    }, () => this.deps.idempotency.isAlreadyCompleted(input.request.idempotencyKey))) {
       return { ok: false, code: "IDEMPOTENCY_ALREADY_COMPLETED", reason: "Idempotency key already completed.", checkedAt };
     }
 
-    if (!(await this.deps.funding.hasFunding({ request: input.request }))) {
+    if (!(await withLatencyStage("funding_readiness_lookup", {
+      canonicalMarketId: input.request.canonicalTopicKey,
+      executionMode: input.request.executionMode
+    }, () => this.deps.funding.hasFunding({ request: input.request })))) {
       return { ok: false, code: "FUNDING_UNAVAILABLE", reason: "User funding is not available.", checkedAt };
     }
 
     for (const venue of input.request.venuePath) {
-      if (!(await this.deps.venueHealth.isVenueHealthy(venue))) {
+      if (!(await withLatencyStage("venue_health_check", {
+        canonicalMarketId: input.request.canonicalTopicKey,
+        venue,
+        executionMode: input.request.executionMode
+      }, () => this.deps.venueHealth.isVenueHealthy(venue)))) {
         return { ok: false, code: "VENUE_PAUSED", reason: `${venue} is not healthy.`, checkedAt };
       }
-      if (!(await this.deps.marketState.isMarketOpen({ venue, request: input.request }))) {
+      if (!(await withLatencyStage("market_state_open_check", {
+        canonicalMarketId: input.request.canonicalTopicKey,
+        venue,
+        executionMode: input.request.executionMode
+      }, () => this.deps.marketState.isMarketOpen({ venue, request: input.request })))) {
         return { ok: false, code: "MARKET_CLOSED", reason: `${venue} market is closed.`, checkedAt };
       }
-      if (!(await this.deps.marketState.isOutcomePresent({ venue, request: input.request }))) {
+      if (!(await withLatencyStage("market_outcome_lookup", {
+        canonicalMarketId: input.request.canonicalTopicKey,
+        venue,
+        executionMode: input.request.executionMode
+      }, () => this.deps.marketState.isOutcomePresent({ venue, request: input.request })))) {
         return { ok: false, code: "OUTCOME_NOT_PRESENT", reason: `${venue} outcome is not present.`, checkedAt };
       }
-      if (!(await this.deps.price.isWithinSlippage({ venue, request: input.request }))) {
+      if (!(await withLatencyStage("price_slippage_check", {
+        canonicalMarketId: input.request.canonicalTopicKey,
+        venue,
+        executionMode: input.request.executionMode
+      }, () => this.deps.price.isWithinSlippage({ venue, request: input.request })))) {
         return { ok: false, code: "PRICE_OUTSIDE_SLIPPAGE", reason: `${venue} price is outside max slippage.`, checkedAt };
       }
-      if (!(await this.deps.liquidity.hasLiquidity({ venue, request: input.request }))) {
+      if (!(await withLatencyStage("liquidity_lookup", {
+        canonicalMarketId: input.request.canonicalTopicKey,
+        venue,
+        executionMode: input.request.executionMode
+      }, () => this.deps.liquidity.hasLiquidity({ venue, request: input.request })))) {
         return { ok: false, code: "LIQUIDITY_UNAVAILABLE", reason: `${venue} liquidity is not available.`, checkedAt };
       }
     }

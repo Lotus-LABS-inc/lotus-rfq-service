@@ -37,7 +37,8 @@ export class LimitlessQuoteReader implements VenueQuoteSnapshotReader {
       venueMarketId: input.venueMarketId,
       venueOutcomeId: input.venueOutcomeId
     });
-    const marketDetail = await this.config.client.getMarketDetail?.(input.venueMarketId).catch(() => null);
+    const detailMarketId = resolveLimitlessDetailMarketId(input.venueMarketId);
+    const marketDetail = await this.config.client.getMarketDetail?.(detailMarketId).catch(() => null);
     const executableMarketId = resolveLimitlessExecutableMarketId(input.venueMarketId, input.canonicalMarketId, marketDetail);
     const venueAddresses = resolveLimitlessVenueAddresses(marketDetail, executableMarketId);
     const outcomeResolution = resolveLimitlessOutcome(input.venueOutcomeId, input.canonicalOutcomeId, marketDetail);
@@ -89,7 +90,7 @@ export class LimitlessRestOrderbookClient implements LimitlessOrderbookClient {
     }
     const response = await this.fetchImpl(url, { method: "GET", headers: { Accept: "application/json" } });
     if (!response.ok) {
-      throw new Error(`Limitless orderbook request failed with status ${response.status}.`);
+      throw new Error(`Limitless orderbook request failed with status ${response.status}.${await readSafeErrorMessage(response)}`);
     }
     return response.json();
   }
@@ -98,11 +99,22 @@ export class LimitlessRestOrderbookClient implements LimitlessOrderbookClient {
     const url = new URL(`/markets/${encodeURIComponent(marketId)}`, this.config.baseUrl);
     const response = await this.fetchImpl(url, { method: "GET", headers: { Accept: "application/json" } });
     if (!response.ok) {
-      throw new Error(`Limitless market detail request failed with status ${response.status}.`);
+      throw new Error(`Limitless market detail request failed with status ${response.status}.${await readSafeErrorMessage(response)}`);
     }
     return response.json();
   }
 }
+
+const readSafeErrorMessage = async (response: Response): Promise<string> => {
+  try {
+    const payload = await response.clone().json() as unknown;
+    const record = asRecord(payload);
+    const message = firstString(record.message, record.error);
+    return message ? ` ${message}` : "";
+  } catch {
+    return "";
+  }
+};
 
 export const normalizeLimitlessOrderbook = (input: {
   payload: unknown;
@@ -222,6 +234,11 @@ const findLimitlessMarketRecord = (
   return null;
 };
 
+const resolveLimitlessDetailMarketId = (approvedMarketId: string): string => {
+  const [parentMarketId, childHint, ...rest] = approvedMarketId.split(":");
+  return parentMarketId && childHint && rest.length === 0 ? parentMarketId : approvedMarketId;
+};
+
 const inferLimitlessMarketType = (record: Record<string, unknown>): "amm" | "clob" => {
   const tradeType = typeof record.tradeType === "string" ? record.tradeType.toLowerCase() : "";
   const marketType = typeof record.marketType === "string" ? record.marketType.toLowerCase() : "";
@@ -309,13 +326,14 @@ const resolveLimitlessExecutableMarketId = (
   canonicalMarketId: string,
   marketDetail: unknown
 ): string => {
+  const fallbackMarketId = resolveLimitlessDetailMarketId(approvedMarketId);
   const detail = asRecord(marketDetail);
   const children = Array.isArray(detail.markets) ? detail.markets.map(asRecord) : [];
   if (children.length === 0) {
-    return approvedMarketId;
+    return fallbackMarketId;
   }
 
-  const hints = candidateHints(canonicalMarketId);
+  const hints = candidateHints(canonicalMarketId, approvedMarketId);
   const exactMatches = children.filter((child) => {
     const labels = [
       child.slug,
@@ -328,20 +346,21 @@ const resolveLimitlessExecutableMarketId = (
   });
 
   if (exactMatches.length !== 1) {
-    return approvedMarketId;
+    return fallbackMarketId;
   }
 
   return firstString(
     exactMatches[0]?.slug,
     exactMatches[0]?.conditionId,
     exactMatches[0]?.id
-  ) ?? approvedMarketId;
+  ) ?? fallbackMarketId;
 };
 
-const candidateHints = (canonicalMarketId: string): ReadonlySet<string> => {
+const candidateHints = (canonicalMarketId: string, approvedMarketId: string): ReadonlySet<string> => {
   const rawParts = canonicalMarketId.split("|").flatMap((part) => part.split(":"));
   const hints = new Set<string>();
-  for (const part of rawParts) {
+  const [, approvedChildHint] = approvedMarketId.split(":", 2);
+  for (const part of [...rawParts, approvedChildHint].filter((value): value is string => Boolean(value))) {
     for (const alias of normalizedAliases(part)) {
       hints.add(alias);
     }
@@ -357,7 +376,28 @@ const normalizedAliases = (value: unknown): readonly string[] => {
   const compact = normalizeLabel(text);
   const withoutNumericSuffix = normalizeLabel(text.replace(/-\d{10,}$/, ""));
   const words = normalizeLabel(text.replace(/[_-]+/g, " "));
-  return [...new Set([compact, withoutNumericSuffix, words].filter((entry) => entry.length > 0))];
+  return [...new Set([
+    compact,
+    withoutNumericSuffix,
+    words,
+    ...knownLimitlessAliases(compact),
+    ...knownLimitlessAliases(withoutNumericSuffix),
+    ...knownLimitlessAliases(words)
+  ].filter((entry) => entry.length > 0))];
+};
+
+const knownLimitlessAliases = (value: string): readonly string[] => {
+  const aliases: Readonly<Record<string, readonly string[]>> = {
+    "manchester city": ["man city"],
+    "man city": ["manchester city"],
+    "manchester united": ["man united"],
+    "man united": ["manchester united"],
+    "paris saint germain": ["psg"],
+    "psg": ["paris saint germain"],
+    "united states": ["usa"],
+    "usa": ["united states"]
+  };
+  return aliases[value] ?? [];
 };
 
 const normalizeLabel = (value: string): string =>

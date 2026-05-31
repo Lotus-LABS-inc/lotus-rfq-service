@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ExecutionScopeBinding } from "../execution-control/execution-scope-token.js";
+import { withLatencyStage, withLatencyStageSync } from "../observability/latency.js";
 import { AccountingUpdateService } from "./accounting.js";
 import type { ExecutionAuditSink } from "./audit.js";
 import { ExecutionFeeService } from "./fees.js";
@@ -76,7 +77,11 @@ export class ExecutionSystemOrchestrator {
     let feeSummary = this.deps.fees.preview(request);
 
     const writeAudit = async (eventType: Parameters<ExecutionAuditSink["write"]>[0]["eventType"], payload: Record<string, unknown> = {}) => {
-      const id = await this.deps.audit.write({
+      const id = await withLatencyStage("execution_system_audit_write", {
+        canonicalMarketId: request.canonicalTopicKey,
+        routeType: request.venuePath.length > 1 ? "MULTI_VENUE" : "SINGLE_VENUE",
+        executionMode: request.executionMode
+      }, () => this.deps.audit.write({
         eventType,
         executionIntentId: context.executionIntentId ?? null,
         executionRecordId: context.executionRecordId ?? null,
@@ -89,7 +94,7 @@ export class ExecutionSystemOrchestrator {
           venuePath: request.venuePath,
           ...payload
         }
-      });
+      }));
       auditEventIds.push(id);
     };
 
@@ -124,10 +129,14 @@ export class ExecutionSystemOrchestrator {
       });
     }
 
-    const preflight = await this.deps.preflight.evaluate({
+    const preflight = await withLatencyStage("rfq_accept_preflight", {
+      canonicalMarketId: request.canonicalTopicKey,
+      routeType: request.venuePath.length > 1 ? "MULTI_VENUE" : "SINGLE_VENUE",
+      executionMode: request.executionMode
+    }, () => this.deps.preflight.evaluate({
       request,
       scopeBinding: context.scopeBinding ?? null
-    });
+    }));
     if (!preflight.ok) {
       stateMachine.transitionTo("PREFLIGHT_FAILED");
       await writeAudit("PREFLIGHT_FAILED", { code: preflight.code, reason: preflight.reason });
@@ -154,8 +163,18 @@ export class ExecutionSystemOrchestrator {
     for (const leg of legs) {
       const adapter = this.deps.adapters.get(leg.venue);
       try {
-        const prepared = await adapter.prepareOrder(leg);
-        const submitted = await adapter.submitOrder(prepared);
+        const prepared = await withLatencyStage("venue_adapter_prepare", {
+          canonicalMarketId: request.canonicalTopicKey,
+          venue: leg.venue,
+          executionMode: request.executionMode,
+          external: true
+        }, () => adapter.prepareOrder(leg));
+        const submitted = await withLatencyStage("venue_adapter_submit", {
+          canonicalMarketId: request.canonicalTopicKey,
+          venue: leg.venue,
+          executionMode: request.executionMode,
+          external: true
+        }, () => adapter.submitOrder(prepared));
         leg.status = submitted.status === "PARTIAL_FILL" ? "PARTIAL_FILL" : submitted.status === "FILLED" ? "FILLED_PENDING_SETTLEMENT" : "SUBMITTED";
         leg.submittedAt = this.now().toISOString();
         leg.venueOrderId = submitted.venueOrderId;
@@ -167,7 +186,12 @@ export class ExecutionSystemOrchestrator {
           stateMachine.transitionTo("SUBMITTED");
         }
 
-        const fill = await adapter.fetchFillState(submitted.venueOrderId);
+        const fill = await withLatencyStage("venue_status_fetch", {
+          canonicalMarketId: request.canonicalTopicKey,
+          venue: leg.venue,
+          executionMode: request.executionMode,
+          external: true
+        }, () => adapter.fetchFillState(submitted.venueOrderId));
         if (fill.status === "PARTIAL_FILL") {
           leg.status = "PARTIAL_FILL";
           await writeAudit("PARTIAL_FILL_RECEIVED", { legId: leg.executionLegId });
@@ -186,7 +210,12 @@ export class ExecutionSystemOrchestrator {
         }
 
         await writeAudit("SETTLEMENT_CHECK_STARTED", { legId: leg.executionLegId });
-        const settlement = await this.deps.settlement.verify(leg);
+        const settlement = await withLatencyStage("settlement_verification_trigger", {
+          canonicalMarketId: request.canonicalTopicKey,
+          venue: leg.venue,
+          executionMode: request.executionMode,
+          external: true
+        }, () => this.deps.settlement.verify(leg));
         settlementEvidenceByLegId.set(leg.executionLegId, settlement.evidence);
         const ghost = this.deps.ghostFill.classify({
           leg,
@@ -254,9 +283,17 @@ export class ExecutionSystemOrchestrator {
     feeSummary = this.deps.fees.realized({ request, realizedPrice: averagePrice });
     if (this.deps.monetization && this.deps.monetization.policy.captureMode !== "DISABLED") {
       const { policy, repository } = this.deps.monetization;
-      await repository.upsertPolicy(policy);
+      await withLatencyStage("execution_system_monetization_policy_write", {
+        canonicalMarketId: request.canonicalTopicKey,
+        routeType: request.venuePath.length > 1 ? "MULTI_VENUE" : "SINGLE_VENUE",
+        executionMode: request.executionMode
+      }, () => repository.upsertPolicy(policy));
       if (isShadowImprovementEnabled(policy)) {
-        await repository.createLedgerEntry({
+        await withLatencyStage("execution_system_monetization_ledger_write", {
+          canonicalMarketId: request.canonicalTopicKey,
+          routeType: request.venuePath.length > 1 ? "MULTI_VENUE" : "SINGLE_VENUE",
+          executionMode: request.executionMode
+        }, () => repository.createLedgerEntry({
           idempotencyKey: `${request.executionId}:SHADOW_PRICE_IMPROVEMENT:${policy.policyVersion}`,
           executionId: request.executionId,
           rfqId: request.rfqId,
@@ -280,7 +317,7 @@ export class ExecutionSystemOrchestrator {
             capApplied: feeSummary.capApplied ?? false,
             disclosure: "Estimated Lotus improvement share, not collected."
           }
-        });
+        }));
       }
       const builderFeeRows = isBuilderFeeCaptureEnabled(policy)
         ? legs
@@ -301,7 +338,11 @@ export class ExecutionSystemOrchestrator {
       }
       for (const entry of builderFeeRows) {
         const amount = entry.amount.toFixed(8);
-        await repository.createLedgerEntry({
+        await withLatencyStage("execution_system_monetization_ledger_write", {
+          canonicalMarketId: request.canonicalTopicKey,
+          routeType: request.venuePath.length > 1 ? "MULTI_VENUE" : "SINGLE_VENUE",
+          executionMode: request.executionMode
+        }, () => repository.createLedgerEntry({
           idempotencyKey: `${request.executionId}:POLYMARKET_BUILDER_FEE:${entry.leg.executionLegId}:${policy.policyVersion}`,
           executionId: request.executionId,
           rfqId: request.rfqId,
@@ -323,10 +364,14 @@ export class ExecutionSystemOrchestrator {
             builderFeeEvidenceConfirmed: true,
             disclosure: "Lotus builder fee collected by venue where supported."
           }
-        });
+        }));
       }
     }
-    this.deps.accounting.buildPostSettlementUpdate({
+    withLatencyStageSync("execution_system_accounting_build", {
+      canonicalMarketId: request.canonicalTopicKey,
+      routeType: request.venuePath.length > 1 ? "MULTI_VENUE" : "SINGLE_VENUE",
+      executionMode: request.executionMode
+    }, () => this.deps.accounting.buildPostSettlementUpdate({
       executionId: request.executionId,
       userId: request.userId,
       canonicalTopicKey: request.canonicalTopicKey,
@@ -334,10 +379,18 @@ export class ExecutionSystemOrchestrator {
       side: request.side,
       legs,
       fees: feeSummary
-    });
-    if (this.deps.positions?.applySettlementDelta) {
+    }));
+    const positions = this.deps.positions;
+    if (positions?.applySettlementDelta) {
+      const applySettlementDelta = (input: Parameters<NonNullable<typeof positions.applySettlementDelta>>[0]) =>
+        positions.applySettlementDelta!(input);
       for (const leg of legs.filter((entry) => entry.settlementStatus === "SETTLEMENT_VERIFIED")) {
-        await this.deps.positions.applySettlementDelta({
+        await withLatencyStage("execution_system_position_write", {
+          canonicalMarketId: request.canonicalTopicKey,
+          routeType: request.venuePath.length > 1 ? "MULTI_VENUE" : "SINGLE_VENUE",
+          executionMode: request.executionMode,
+          venue: leg.venue
+        }, () => applySettlementDelta({
           userId: request.userId,
           venue: leg.venue,
           marketId: request.canonicalTopicKey,
@@ -351,14 +404,18 @@ export class ExecutionSystemOrchestrator {
             executionId: request.executionId,
             executionLegId: leg.executionLegId
           }
-        });
+        }));
       }
     }
     await writeAudit("ACCOUNTING_UPDATED");
     stateMachine.transitionTo("COMPLETED");
     await writeAudit("USER_RECEIPT_EMITTED");
 
-    return this.finish({ request, state: stateMachine.current(), legs, settlementStatus: "SETTLEMENT_VERIFIED", ghostFillStatus: "CLEAR", fallbackUsed, fallbackReason, feeSummary, auditEventIds });
+    return withLatencyStageSync("execution_system_receipt_metadata_build", {
+      canonicalMarketId: request.canonicalTopicKey,
+      routeType: request.venuePath.length > 1 ? "MULTI_VENUE" : "SINGLE_VENUE",
+      executionMode: request.executionMode
+    }, () => this.finish({ request, state: stateMachine.current(), legs, settlementStatus: "SETTLEMENT_VERIFIED", ghostFillStatus: "CLEAR", fallbackUsed, fallbackReason, feeSummary, auditEventIds }));
   }
 
   private buildLegs(request: ExecutionRequestV0): ExecutionLegV0[] {

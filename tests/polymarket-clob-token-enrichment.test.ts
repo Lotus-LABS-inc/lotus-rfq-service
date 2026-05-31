@@ -41,6 +41,13 @@ const market = {
 describe("Polymarket CLOB token enrichment", () => {
   it("extracts source identifiers from approved shared-core payloads", () => {
     expect(extractPolymarketQuoteIdentifier(profile)).toBe("bitcoin-all-time-high-by-june-30-2026");
+    expect(extractPolymarketQuoteIdentifier({
+      ...profile,
+      normalizedPayload: {
+        ...profile.normalizedPayload,
+        quoteMarketId: market.conditionId
+      }
+    })).toBe(market.conditionId);
     expect(classifyPolymarketQuoteIdentifier(market.conditionId)).toBe("CONDITION_ID");
     expect(classifyPolymarketQuoteIdentifier("123")).toBe("MARKET_ID");
     expect(classifyPolymarketQuoteIdentifier("bitcoin-all-time-high-by-june-30-2026")).toBe("MARKET_SLUG");
@@ -92,6 +99,44 @@ describe("Polymarket CLOB token enrichment", () => {
     });
   });
 
+  it("clears stale verification blockers when official source enrichment succeeds", () => {
+    const result = buildPolymarketClobTokenEnrichment({
+      profile: {
+        ...profile,
+        normalizedPayload: {
+          ...profile.normalizedPayload,
+          quoteMarketId: market.conditionId,
+          quoteTokenId: "yes-token",
+          quoteVerificationBlockers: ["POLYMARKET_SOURCE_MATCH_MISSING"],
+          quoteVerificationSource: "polymarket_official_api",
+          quoteVerificationCheckedAt: "2026-05-22T00:00:00.000Z"
+        },
+        rawSourcePayload: {
+          quoteEvidence: {
+            conditionId: market.conditionId,
+            marketSlug: market.marketSlug,
+            source: "polymarket_official_api"
+          },
+          quoteVerificationBlockers: ["POLYMARKET_SOURCE_MATCH_MISSING"]
+        }
+      },
+      markets: [market],
+      generatedAt: "2026-05-23T00:00:00.000Z",
+      metadataVersion: "polymarket-official-v1",
+      source: "polymarket_official_api"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("expected enrichment");
+    }
+    expect(result.enrichment.matchedIdentifier).toBe(market.conditionId);
+    expect(result.enrichment.normalizedPayload.quoteVerificationBlockers).toBeUndefined();
+    expect(result.enrichment.normalizedPayload.quoteVerificationSource).toBeUndefined();
+    expect(result.enrichment.normalizedPayload.quoteVerificationCheckedAt).toBeUndefined();
+    expect(result.enrichment.rawSourcePayload.quoteVerificationBlockers).toBeUndefined();
+  });
+
   it("rejects ambiguous source matches", () => {
     const result = buildPolymarketClobTokenEnrichment({
       profile,
@@ -130,6 +175,46 @@ describe("Polymarket CLOB token enrichment", () => {
     });
 
     expect(result.ok).toBe(true);
+  });
+
+  it("matches event-outcome slug identifiers against official source titles", () => {
+    const result = buildPolymarketClobTokenEnrichment({
+      profile: {
+        ...profile,
+        approvedVenueMarketId: "POLYMARKET:uefa-champions-league-winner:paris-saint-germain:SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2026|PSG",
+        normalizedPayload: {
+          curatedKey: "SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2026|PSG",
+          venueMarketId: "uefa-champions-league-winner:paris-saint-germain"
+        },
+        title: "UEFA Champions League 2025 2026 Winner: Paris Saint Germain"
+      },
+      markets: [{
+        ...market,
+        conditionId: "0xpsg",
+        marketId: "psg-market",
+        marketSlug: "will-psg-win-the-uefa-champions-league",
+        title: "Will PSG win the UEFA Champions League?",
+        raw: {
+          outcomes: [
+            { label: "Yes", token_id: "psg-yes" },
+            { label: "No", token_id: "psg-no" }
+          ]
+        }
+      }],
+      generatedAt: "2026-05-06T00:00:00.000Z",
+      metadataVersion: "polymarket-official-v1",
+      source: "polymarket_official_api"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("expected enrichment");
+    }
+    expect(result.enrichment.quoteMarketId).toBe("0xpsg");
+    expect(result.enrichment.normalizedPayload.quoteOutcomeTokenIds).toEqual({
+      YES: "psg-yes",
+      NO: "psg-no"
+    });
   });
 
   it("rejects markets without labeled binary token evidence", () => {

@@ -91,6 +91,122 @@ describe("extended venue quote readers", () => {
     expect(snapshot?.blockers).toContain("PREDICT_FUN_TOKEN_ID_MISSING");
   });
 
+  it("Predict reader avoids optional stats and market-detail calls when static fee and token id are already known", async () => {
+    let orderbookCalls = 0;
+    let statsCalls = 0;
+    let detailCalls = 0;
+    const reader = new PredictQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      environment: "mainnet",
+      now: () => now,
+      feeBps: 12,
+      client: {
+        async getMarketOrderbook() {
+          orderbookCalls += 1;
+          return { bids: [{ price: "0.4", size: "10" }], asks: [{ price: "0.42", size: "10" }] };
+        },
+        async getMarketStatistics() {
+          statsCalls += 1;
+          return { feeRateBps: "35" };
+        },
+        async getMarketById() {
+          detailCalls += 1;
+          return {
+            outcomes: [
+              { label: "Yes", tokenId: "1001" },
+              { label: "No", tokenId: "1002" }
+            ]
+          };
+        }
+      } as never
+    });
+
+    const snapshot = await reader.getQuoteSnapshot({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "predict-market-1",
+      venueOutcomeId: "1001",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(snapshot?.feeBps).toBe(12);
+    expect(snapshot?.metadata).toMatchObject({ outcomeSide: "YES" });
+    expect(orderbookCalls).toBe(1);
+    expect(statsCalls).toBe(0);
+    expect(detailCalls).toBe(0);
+  });
+
+  it("Predict reader coalesces concurrent uncached reads for the same market outcome", async () => {
+    let orderbookCalls = 0;
+    const reader = new PredictQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      environment: "mainnet",
+      now: () => now,
+      feeBps: 12,
+      client: {
+        async getMarketOrderbook() {
+          orderbookCalls += 1;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          return { bids: [{ price: "0.4", size: "10" }], asks: [{ price: "0.42", size: "10" }] };
+        },
+        async getMarketStatistics() {
+          return { feeRateBps: "35" };
+        }
+      } as never
+    });
+    const input = {
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "predict-market-1",
+      venueOutcomeId: "1001",
+      side: "buy" as const,
+      quantity: 1
+    };
+
+    const [left, right] = await Promise.all([
+      reader.getQuoteSnapshot(input),
+      reader.getQuoteSnapshot(input)
+    ]);
+
+    expect(left?.venueMarketId).toBe("predict-market-1");
+    expect(right?.venueMarketId).toBe("predict-market-1");
+    expect(orderbookCalls).toBe(1);
+  });
+
+  it("Predict reader cools down repeated rate-limited market refreshes", async () => {
+    let orderbookCalls = 0;
+    const rateLimitError = Object.assign(new Error("Predict request failed with status 429."), { status: 429 });
+    const reader = new PredictQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      environment: "mainnet",
+      now: () => now,
+      feeBps: 12,
+      client: {
+        async getMarketOrderbook() {
+          orderbookCalls += 1;
+          throw rateLimitError;
+        },
+        async getMarketStatistics() {
+          return { feeRateBps: "35" };
+        }
+      } as never
+    });
+    const input = {
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "predict-market-1",
+      venueOutcomeId: "1001",
+      side: "buy" as const,
+      quantity: 1
+    };
+
+    await expect(reader.getQuoteSnapshot(input)).rejects.toThrow("status 429");
+    await expect(reader.getQuoteSnapshot({ ...input, venueOutcomeId: "1002", canonicalOutcomeId: "NO" })).rejects.toThrow("status 429");
+
+    expect(orderbookCalls).toBe(1);
+  });
+
   it("Predict.fun reader resolves missing binary outcome ids from market detail and inverts NO", async () => {
     const reader = new PredictQuoteReader({
       streamCache: new QuoteSnapshotCache(),
@@ -304,6 +420,129 @@ describe("extended venue quote readers", () => {
       limitlessExchangeAddress: "0xe3E00BA3a9888d1DE4834269f62ac008b4BB5C47",
       limitlessAdapterAddress: "0x0000000000000000000000000000000000000002"
     });
+  });
+
+  it("Limitless reader hydrates parent group markets before resolving colon-scoped outcomes", async () => {
+    const detailMarkets: string[] = [];
+    const requestedMarkets: string[] = [];
+    const reader = new LimitlessQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      now: () => now,
+      client: {
+        async getMarketDetail(marketId: string) {
+          detailMarkets.push(marketId);
+          return {
+            slug: "uefa-champions-league-winner-1765297468263",
+            marketType: "group",
+            markets: [
+              { slug: "real-madrid-1765297468001", title: "Real Madrid" },
+              { slug: "paris-saint-germain-1765297468002", title: "Paris Saint Germain" }
+            ]
+          };
+        },
+        async getOrderbook(input: { marketId: string }) {
+          requestedMarkets.push(input.marketId);
+          return {
+            tokenId: "psg-token",
+            bids: [{ price: 0.56, size: "10" }],
+            asks: [{ price: 0.57, size: "10" }]
+          };
+        }
+      }
+    });
+
+    const snapshot = await reader.getQuoteSnapshot({
+      canonicalMarketId: "FRONTEND_CURATED:SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026|PARIS_SAINT_GERMAIN",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "uefa-champions-league-winner-1765297468263:psg",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(detailMarkets).toEqual(["uefa-champions-league-winner-1765297468263"]);
+    expect(requestedMarkets).toEqual(["paris-saint-germain-1765297468002"]);
+    expect(snapshot?.venueMarketId).toBe("paris-saint-germain-1765297468002");
+    expect(snapshot?.metadata).toMatchObject({
+      approvedVenueMarketId: "uefa-champions-league-winner-1765297468263:psg",
+      venueMarketId: "paris-saint-germain-1765297468002"
+    });
+  });
+
+  it("Limitless reader resolves shorthand child hints and known aliases to executable child slugs", async () => {
+    const detailMarkets: string[] = [];
+    const requestedMarkets: string[] = [];
+    const reader = new LimitlessQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      now: () => now,
+      client: {
+        async getMarketDetail(marketId: string) {
+          detailMarkets.push(marketId);
+          return {
+            slug: "uefa-champions-league-winner-1765297468263",
+            marketType: "group",
+            markets: [
+              { slug: "psg-1765297468297", title: "PSG" },
+              { slug: "man-city-1765297468308", title: "Man City" }
+            ]
+          };
+        },
+        async getOrderbook(input: { marketId: string }) {
+          requestedMarkets.push(input.marketId);
+          return {
+            tokenId: "psg-token",
+            bids: [{ price: 0.54, size: "10" }],
+            asks: [{ price: 0.55, size: "10" }]
+          };
+        }
+      }
+    });
+
+    const snapshot = await reader.getQuoteSnapshot({
+      canonicalMarketId: "FRONTEND_CURATED:SPORTS|TOURNAMENT_WINNER|UEFA_CHAMPIONS_LEAGUE|2025_2026|PARIS_SAINT_GERMAIN",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "uefa-champions-league-winner-1765297468263:psg",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(detailMarkets).toEqual(["uefa-champions-league-winner-1765297468263"]);
+    expect(requestedMarkets).toEqual(["psg-1765297468297"]);
+    expect(snapshot?.venueMarketId).toBe("psg-1765297468297");
+  });
+
+  it("Limitless reader falls back to parent detail slug instead of invalid colon scoped ids", async () => {
+    const requestedMarkets: string[] = [];
+    const reader = new LimitlessQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      now: () => now,
+      client: {
+        async getMarketDetail() {
+          return {
+            slug: "english-premier-league-winner-1765295467473",
+            marketType: "group",
+            markets: [{ slug: "arsenal-1765295467483", title: "Arsenal" }]
+          };
+        },
+        async getOrderbook(input: { marketId: string }) {
+          requestedMarkets.push(input.marketId);
+          return {
+            tokenId: "fallback-token",
+            bids: [],
+            asks: []
+          };
+        }
+      }
+    });
+
+    await reader.getQuoteSnapshot({
+      canonicalMarketId: "FRONTEND_CURATED:SPORTS|LEAGUE_WINNER|EPL|2025_2026|UNKNOWN_TEAM",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "english-premier-league-winner-1765295467473:unknown-team",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(requestedMarkets).toEqual(["english-premier-league-winner-1765295467473"]);
   });
 
   it("Limitless reader enriches stream cache snapshots with market exchange metadata", async () => {
@@ -553,7 +792,9 @@ describe("extended venue quote readers", () => {
               outcomes: [
                 { label: "Yes", token_id: "yes-token" },
                 { label: "No", token_id: "no-token" }
-              ]
+              ],
+              tick_size: "0.001",
+              neg_risk: true
             }
           }];
         }
@@ -570,6 +811,12 @@ describe("extended venue quote readers", () => {
 
     expect(requestedTokenId).toBe("no-token");
     expect(snapshot?.venueOutcomeId).toBe("no-token");
+    expect(snapshot?.metadata).toMatchObject({
+      tickSize: "0.001",
+      polymarketTickSize: "0.001",
+      negRisk: true,
+      polymarketNegRisk: true
+    });
   });
 
   it("Polymarket reader returns display-only metadata prices when CLOB book is disabled", async () => {
@@ -595,7 +842,9 @@ describe("extended venue quote readers", () => {
               enable_order_book: false,
               outcomes: "[\"Yes\", \"No\"]",
               clobTokenIds: "[\"yes-token\", \"no-token\"]",
-              outcomePrices: "[\"1\", \"0\"]"
+              outcomePrices: "[\"1\", \"0\"]",
+              orderPriceMinTickSize: "0.01",
+              negRisk: false
             }
           }];
         }
@@ -614,6 +863,12 @@ describe("extended venue quote readers", () => {
     expect(snapshot?.quoteQuality).toBe("INDICATIVE_DEPTH");
     expect(snapshot?.asks[0]).toEqual({ price: "1", size: "0" });
     expect(snapshot?.blockers).toContain("ORDERBOOK_UNAVAILABLE_DISPLAY_ONLY");
+    expect(snapshot?.metadata).toMatchObject({
+      tickSize: "0.01",
+      polymarketTickSize: "0.01",
+      negRisk: false,
+      polymarketNegRisk: false
+    });
     expect(calculateVenueQuote({
       snapshot: snapshot!,
       side: "buy",

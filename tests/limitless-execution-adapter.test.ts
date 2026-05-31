@@ -112,8 +112,7 @@ const limitlessRelayPayload = async (overrides: Record<string, unknown> = {}) =>
     ...builder.buildOrder({
       tokenId: String(overrides.tokenId ?? limitlessTokenId),
       side: overrides.side === Side.SELL ? Side.SELL : Side.BUY,
-      size: Number(overrides.size ?? 1),
-      price: Number(overrides.price ?? 0.42)
+      makerAmount: Number(overrides.makerAmount ?? 0.42)
     }),
     ...((overrides.orderOverrides as Record<string, unknown> | undefined) ?? {})
   } as UnsignedOrder;
@@ -516,7 +515,8 @@ describe("LimitlessExecutionAdapter", () => {
               signer: evmAddress,
               tokenId: limitlessTokenId,
               side: Side.BUY,
-              price: 0.42,
+              makerAmount: 420000,
+              takerAmount: 1,
               signature: expect.stringMatching(/^0x/)
             }
           }
@@ -562,7 +562,7 @@ describe("LimitlessExecutionAdapter", () => {
     ["LIMITLESS_RELAY_ACCOUNT_MISMATCH", { account: "0x2222222222222222222222222222222222222222" }],
     ["LIMITLESS_RELAY_TOKEN_MISMATCH", { tokenId: "987654321" }],
     ["LIMITLESS_RELAY_SIDE_MISMATCH", { side: Side.SELL }],
-    ["LIMITLESS_RELAY_PRICE_MISMATCH", { price: 0.43 }]
+    ["LIMITLESS_RELAY_FOK_TAKER_AMOUNT_INVALID", { orderOverrides: { takerAmount: 420000 } }]
   ])("rejects user-signed relay payload drift: %s", async (reasonCode, signedOverrides) => {
     const adapter = new LimitlessExecutionAdapter(userSignedRelayLiveConfig, undefined, {
       async submitSignedOrder() {

@@ -5,7 +5,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import pino from "pino";
 import { buildServer } from "../src/api/server.js";
 import type { RedisClient } from "../src/db/redis.js";
-import { startService } from "../src/index.js";
+import {
+  POLYMARKET_RELAY_SERVICE_MODE,
+  shouldRunPolymarketRelayEntrypoint,
+  startService
+} from "../src/index.js";
 import { loadEnv } from "../src/utils/env.js";
 import type { AppDb } from "../src/db/postgres.js";
 
@@ -195,6 +199,22 @@ describe("bootstrap lifecycle", () => {
 
   beforeEach(() => {
     callOrder = [];
+  });
+
+  it("selects the Polymarket relay entrypoint only for the explicit service mode", () => {
+    expect(
+      shouldRunPolymarketRelayEntrypoint({
+        LOTUS_SERVICE_MODE: POLYMARKET_RELAY_SERVICE_MODE
+      })
+    ).toBe(true);
+
+    expect(
+      shouldRunPolymarketRelayEntrypoint({
+        LOTUS_SERVICE_MODE: "api"
+      })
+    ).toBe(false);
+
+    expect(shouldRunPolymarketRelayEntrypoint({})).toBe(false);
   });
 
   it("initializes dependencies in expected order", async () => {

@@ -12,6 +12,11 @@ import type {
   SignedTradeExecutionStatusRepository,
   SignedTradePositionRecorder
 } from "../execution-system/signed-trade-bundle.js";
+import type {
+  ExecutionOrderRecord,
+  ExecutionOrderRepository,
+  ExecutionOrderState
+} from "../execution-system/execution-order-orchestrator.js";
 
 interface QuoteRow {
   quote_id: string;
@@ -49,6 +54,30 @@ interface SignedTradeExecutionStatusRow {
   selected_route: ExecutableTradeQuote | null;
   watcher_metadata: SignedTradeExecutionStatus["watcherMetadata"] | null;
   submitted_legs: SignedTradeExecutionStatus["submittedLegs"];
+}
+
+interface ExecutionOrderRow {
+  order_id: string;
+  user_id: string;
+  quote_id: string | null;
+  execution_id: string | null;
+  state: ExecutionOrderRecord["state"];
+  side: TradeSide;
+  market_id: string;
+  outcome_id: string;
+  amount: string;
+  venue_preference: ExecutionOrderRecord["venuePreference"];
+  signing_mode: ExecutionOrderRecord["signingMode"];
+  primary_action: ExecutionOrderRecord["primaryAction"];
+  readiness_summary: Record<string, unknown>;
+  venue_capability_summary: ExecutionOrderRecord["venueCapabilitySummary"];
+  blockers: ExecutionOrderRecord["blockers"];
+  signature_request_hash: string | null;
+  last_error: string | null;
+  expires_at: Date | null;
+  next_poll_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
 }
 
 export interface ListUserVerifiedPositionsInput {
@@ -139,6 +168,7 @@ export class PgVerifiedPositionRepository implements VerifiedPositionRepository 
          AND market_id = $2
          AND outcome_id = $3
          AND verified_size > 0
+         AND status = 'VERIFIED'
          ${venueClause}
        ORDER BY updated_at DESC`,
       values
@@ -148,7 +178,7 @@ export class PgVerifiedPositionRepository implements VerifiedPositionRepository 
 
   public async listUserVerifiedPositions(input: ListUserVerifiedPositionsInput): Promise<VerifiedExecutionPosition[]> {
     const values: unknown[] = [input.userId];
-    const clauses = ["user_id = $1", "verified_size > 0"];
+    const clauses = ["user_id = $1", "verified_size > 0", "status = 'VERIFIED'"];
     if (input.marketId) {
       values.push(input.marketId);
       clauses.push(`market_id = $${values.length}`);
@@ -490,10 +520,13 @@ export class PgSignedTradePositionRecorder implements SignedTradePositionRecorde
   }
 
   public async reconcileFailedSell(input: NonNullable<SignedTradePositionRecorder["reconcileFailedSell"]> extends (arg: infer Arg) => Promise<void> ? Arg : never): Promise<void> {
+    const liveSellableSize = Number(input.liveSellableSize);
+    const hasLiveSellableSize = Number.isFinite(liveSellableSize) && liveSellableSize > 0;
     await this.pool.query(
       `UPDATE user_execution_positions
-       SET sellable_size = 0,
-           metadata = metadata || $5::jsonb,
+       SET sellable_size = $5::numeric,
+           status = $6,
+           metadata = coalesce(metadata, '{}'::jsonb) || $7::jsonb,
            updated_at = now()
        WHERE user_id = $1
          AND venue = $2
@@ -504,17 +537,137 @@ export class PgSignedTradePositionRecorder implements SignedTradePositionRecorde
         input.routeLeg.venue.toUpperCase(),
         input.route.marketId,
         input.route.outcomeId,
+        hasLiveSellableSize ? input.liveSellableSize : "0",
+        hasLiveSellableSize ? "VERIFIED" : "RECOVERY",
         JSON.stringify({
           sellableReconciliation: {
             source: "venue_reject",
             executionId: input.executionId,
             legIndex: input.legIndex,
             venue: input.venue,
-            reason: input.reason
+            reason: input.reason,
+            ...(hasLiveSellableSize ? { liveSellableSize: input.liveSellableSize } : {})
           }
         })
       ]
     );
+  }
+}
+
+export class PgExecutionOrderRepository implements ExecutionOrderRepository {
+  public constructor(private readonly pool: Pool) {}
+
+  public async saveOrder(order: ExecutionOrderRecord): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO execution_orders_v1 (
+        order_id,
+        user_id,
+        quote_id,
+        execution_id,
+        state,
+        side,
+        market_id,
+        outcome_id,
+        amount,
+        venue_preference,
+        signing_mode,
+        primary_action,
+        readiness_summary,
+        venue_capability_summary,
+        blockers,
+        signature_request_hash,
+        last_error,
+        expires_at,
+        next_poll_at,
+        created_at,
+        updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9::numeric, $10, $11, $12,
+        $13::jsonb, $14::jsonb, $15::jsonb, $16, $17, $18::timestamptz,
+        $19::timestamptz, $20::timestamptz, $21::timestamptz
+      )
+      ON CONFLICT (order_id, user_id) DO UPDATE SET
+        quote_id = EXCLUDED.quote_id,
+        execution_id = COALESCE(EXCLUDED.execution_id, execution_orders_v1.execution_id),
+        state = EXCLUDED.state,
+        side = EXCLUDED.side,
+        market_id = EXCLUDED.market_id,
+        outcome_id = EXCLUDED.outcome_id,
+        amount = EXCLUDED.amount,
+        venue_preference = EXCLUDED.venue_preference,
+        signing_mode = EXCLUDED.signing_mode,
+        primary_action = EXCLUDED.primary_action,
+        readiness_summary = EXCLUDED.readiness_summary,
+        venue_capability_summary = EXCLUDED.venue_capability_summary,
+        blockers = EXCLUDED.blockers,
+        signature_request_hash = EXCLUDED.signature_request_hash,
+        last_error = EXCLUDED.last_error,
+        expires_at = EXCLUDED.expires_at,
+        next_poll_at = EXCLUDED.next_poll_at,
+        updated_at = EXCLUDED.updated_at`,
+      orderValues(order)
+    );
+  }
+
+  public async findOrder(input: { userId: string; orderId: string }): Promise<ExecutionOrderRecord | null> {
+    const result = await this.pool.query<ExecutionOrderRow>(
+      `SELECT *
+       FROM execution_orders_v1
+       WHERE order_id = $1 AND user_id = $2`,
+      [input.orderId, input.userId]
+    );
+    return result.rows[0] ? mapExecutionOrderRow(result.rows[0]) : null;
+  }
+
+  public async updateOrder(input: {
+    userId: string;
+    orderId: string;
+    patch: Partial<Omit<ExecutionOrderRecord, "orderId" | "userId" | "createdAt">>;
+  }): Promise<ExecutionOrderRecord | null> {
+    const current = await this.findOrder(input);
+    if (!current) {
+      return null;
+    }
+    const next: ExecutionOrderRecord = {
+      ...current,
+      ...input.patch,
+      updatedAt: new Date().toISOString()
+    };
+    await this.saveOrder(next);
+    return this.findOrder(input);
+  }
+
+  public async startSubmit(input: {
+    userId: string;
+    orderId: string;
+    allowedStates: readonly ExecutionOrderState[];
+  }): Promise<ExecutionOrderRecord | null> {
+    const result = await this.pool.query<ExecutionOrderRow>(
+      `UPDATE execution_orders_v1
+       SET state = 'SUBMITTING',
+           primary_action = 'NONE',
+           next_poll_at = now() + interval '2 seconds',
+           updated_at = now()
+       WHERE order_id = $1
+         AND user_id = $2
+         AND state = ANY($3::text[])
+       RETURNING *`,
+      [input.orderId, input.userId, [...input.allowedStates]]
+    );
+    return result.rows[0] ? mapExecutionOrderRow(result.rows[0]) : null;
+  }
+
+  public async listRefreshableOrders(input: { limit: number }): Promise<ExecutionOrderRecord[]> {
+    const result = await this.pool.query<ExecutionOrderRow>(
+      `SELECT *
+       FROM execution_orders_v1
+       WHERE state IN ('SUBMITTING', 'SUBMITTED')
+         AND (next_poll_at IS NULL OR next_poll_at <= now())
+       ORDER BY updated_at ASC
+       LIMIT $1`,
+      [Math.min(Math.max(input.limit, 1), 250)]
+    );
+    return result.rows.map(mapExecutionOrderRow);
   }
 }
 
@@ -531,6 +684,54 @@ const mapPositionRow = (row: PositionRow): VerifiedExecutionPosition => ({
   lastSettlementEvidenceId: row.last_settlement_evidence_id,
   status: row.status,
   metadata: row.metadata
+});
+
+const orderValues = (order: ExecutionOrderRecord): unknown[] => [
+  order.orderId,
+  order.userId,
+  order.quoteId,
+  order.executionId,
+  order.state,
+  order.side,
+  order.marketId,
+  order.outcomeId,
+  order.amount,
+  order.venuePreference,
+  order.signingMode,
+  order.primaryAction,
+  JSON.stringify(order.readinessSummary),
+  JSON.stringify(order.venueCapabilitySummary),
+  JSON.stringify(order.blockers),
+  order.signatureRequestHash,
+  order.lastError,
+  order.expiresAt,
+  order.nextPollAt,
+  order.createdAt,
+  order.updatedAt
+];
+
+const mapExecutionOrderRow = (row: ExecutionOrderRow): ExecutionOrderRecord => ({
+  orderId: row.order_id,
+  userId: row.user_id,
+  quoteId: row.quote_id,
+  executionId: row.execution_id,
+  state: row.state,
+  side: row.side,
+  marketId: row.market_id,
+  outcomeId: row.outcome_id,
+  amount: row.amount,
+  venuePreference: row.venue_preference,
+  signingMode: row.signing_mode,
+  primaryAction: row.primary_action,
+  readinessSummary: row.readiness_summary,
+  venueCapabilitySummary: row.venue_capability_summary,
+  blockers: row.blockers,
+  signatureRequestHash: row.signature_request_hash,
+  lastError: row.last_error,
+  expiresAt: row.expires_at?.toISOString() ?? null,
+  nextPollAt: row.next_poll_at?.toISOString() ?? null,
+  createdAt: row.created_at.toISOString(),
+  updatedAt: row.updated_at.toISOString()
 });
 
 const mapSignedTradeExecutionStatusRow = (row: SignedTradeExecutionStatusRow): SignedTradeExecutionStatus => ({

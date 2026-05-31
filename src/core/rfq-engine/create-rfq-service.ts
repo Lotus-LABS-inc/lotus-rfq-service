@@ -13,6 +13,7 @@ import {
   rfqResolutionSafePoolTotal,
   rfqResolutionSeparatedTotal
 } from "../../observability/metrics.js";
+import { withLatencyStage } from "../../observability/latency.js";
 import { withSpan } from "../../observability/tracing.js";
 import type { IRiskEngine } from "../risk-engine.js";
 import type { IResolutionRiskGroupingService } from "./resolution-risk-grouping-service.js";
@@ -95,7 +96,10 @@ export class CreateRFQService {
         state: "CREATED"
       },
       async () => {
-        const market = await this.deps.canonicalMarketClient.fetchMarketById(command.canonicalMarketId);
+        const market = await withLatencyStage("canonical_lookup", {
+          endpoint: "POST /rfq",
+          canonicalMarketId: command.canonicalMarketId
+        }, () => this.deps.canonicalMarketClient.fetchMarketById(command.canonicalMarketId));
         if (!market.isActive) {
           throw new MarketInactiveError(command.canonicalMarketId);
         }
@@ -104,9 +108,12 @@ export class CreateRFQService {
         }
         const canonicalEventId = market.canonicalEventId;
 
-        const rawResolutionRiskGroupingTrace = await this.deps.resolutionRiskGroupingService.groupProfilesForCanonicalEventWithTrace(
+        const rawResolutionRiskGroupingTrace = await withLatencyStage("resolution_routeability_lookup", {
+          endpoint: "POST /rfq",
+          canonicalMarketId: command.canonicalMarketId
+        }, () => this.deps.resolutionRiskGroupingService.groupProfilesForCanonicalEventWithTrace(
           canonicalEventId
-        );
+        ));
         const rawResolutionRiskGrouping = rawResolutionRiskGroupingTrace.grouping;
         const resolutionRiskPolicy = this.deps.resolutionRiskPolicyService?.applyRFQGrouping(
           rawResolutionRiskGrouping,
@@ -134,12 +141,15 @@ export class CreateRFQService {
             : null;
 
         try {
-          await this.deps.riskEngine.validateRFQCreation({
+          await withLatencyStage("rfq_create_risk_validation", {
+            endpoint: "POST /rfq",
+            canonicalMarketId: command.canonicalMarketId
+          }, () => this.deps.riskEngine.validateRFQCreation({
             taker_id: command.takerId,
             canonical_market_id: command.canonicalMarketId,
             side: command.side,
             quantity: command.quantity
-          });
+          }));
         } catch (error) {
           this.deps.eventEmitter.emitEvent({
             type: "RISK_REJECTED",
@@ -160,7 +170,10 @@ export class CreateRFQService {
           logger: this.deps.logger
         });
 
-        const session = await this.deps.sessionRepository.create({
+        const session = await withLatencyStage("rfq_create_persistence", {
+          endpoint: "POST /rfq",
+          canonicalMarketId: command.canonicalMarketId
+        }, () => this.deps.sessionRepository.create({
           requestId: this.createRequestId(),
           canonicalMarketId: command.canonicalMarketId,
           takerId: command.takerId,
@@ -182,7 +195,7 @@ export class CreateRFQService {
                 }
               : {})
           }
-        });
+        }));
 
         await this.deps.sessionManager.setSessionMetadata(
           session.id,

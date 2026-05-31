@@ -15,6 +15,7 @@ import {
 } from "./types.js";
 import { InsufficientLiquidityError } from "./splitter.js";
 import { withSpan } from "../../observability/tracing.js";
+import { withLatencyStage, withLatencyStageSync } from "../../observability/latency.js";
 import {
   internalCrossKillSwitchTotal,
   internalCrossingFilledSizeTotal,
@@ -152,7 +153,10 @@ export class OrderRouter implements IOrderRouter {
         const startedAt = performance.now();
         const reservationToken = this.readReservationToken(rfq);
         const internalCrossOrder = this.buildInternalTakerOrder(rfq, selectedQuote);
-        const crossResult = await this.evaluateInternalCross(rfq, internalCrossOrder);
+        const crossResult = await withLatencyStage("route_optimization_internal_cross", {
+          canonicalMarketId: rfq.canonicalMarketId,
+          routeType: policy
+        }, () => this.evaluateInternalCross(rfq, internalCrossOrder));
 
         if (crossResult.kind === "internal_filled") {
           const internalFilledResult = {
@@ -160,7 +164,10 @@ export class OrderRouter implements IOrderRouter {
             filledSize: crossResult.filledSize,
             trades: crossResult.trades
           };
-          const replayEnvelope = await this.captureReplayDecision({
+          const replayEnvelope = await withLatencyStage("route_optimization_replay_capture", {
+            canonicalMarketId: rfq.canonicalMarketId,
+            routeType: policy
+          }, () => this.captureReplayDecision({
             rfqId: rfq.rfqId,
             rfq,
             selectedQuote,
@@ -174,7 +181,7 @@ export class OrderRouter implements IOrderRouter {
             compatibilityDecisionIds: [],
             compatibilityVersionIds: [],
             buildResult: internalFilledResult
-          });
+          }));
           return {
             kind: "internal_filled",
             filledSize: crossResult.filledSize,
@@ -188,38 +195,56 @@ export class OrderRouter implements IOrderRouter {
 
         const residualRFQ = this.buildResidualRFQ(rfq, crossResult.remainingSize);
         const residualQuote = this.buildResidualQuote(selectedQuote, Number.parseFloat(crossResult.remainingSize));
-        const preflightGuardrailDecision = await this.evaluateSorGuardrails({
+        const preflightGuardrailDecision = await withLatencyStage("route_optimization_guardrail_preflight", {
+          canonicalMarketId: rfq.canonicalMarketId,
+          routeType: policy
+        }, () => this.evaluateSorGuardrails({
           rfq,
           bucketEntityCount: 0,
           candidateGroups: 0,
           plannerLatencyMs: 0,
           reasonSuffix: "preflight"
-        });
-        const allCandidates = await this.candidateGenerator.generate(residualRFQ, residualQuote, policy);
+        }));
+        const allCandidates = await withLatencyStage("route_optimization_candidate_generation", {
+          canonicalMarketId: residualRFQ.canonicalMarketId,
+          routeType: policy
+        }, () => this.candidateGenerator.generate(residualRFQ, residualQuote, policy));
 
-        const stpFilteredCandidates = this.filterSTPViolations(residualRFQ, allCandidates);
-        const feasibility = await this.feasibilityFilter.filter(stpFilteredCandidates);
+        const stpFilteredCandidates = withLatencyStageSync("route_optimization_stp_filter", {
+          canonicalMarketId: residualRFQ.canonicalMarketId,
+          routeType: policy
+        }, () => this.filterSTPViolations(residualRFQ, allCandidates));
+        const feasibility = await withLatencyStage("route_optimization_feasibility_filter", {
+          canonicalMarketId: residualRFQ.canonicalMarketId,
+          routeType: policy
+        }, () => this.feasibilityFilter.filter(stpFilteredCandidates));
         const routeCandidates = feasibility.acceptedCandidates;
 
         if (routeCandidates.length === 0) {
           throw new InsufficientLiquidityError("00000000-0000-0000-0000-000000000000", residualQuote.quantity);
         }
 
-        const scoredCandidates = await this.routeScorer.score(
+        const scoredCandidates = await withLatencyStage("route_optimization_candidate_scoring", {
+          canonicalMarketId: residualRFQ.canonicalMarketId,
+          routeType: policy
+        }, () => this.routeScorer.score(
           residualRFQ,
           routeCandidates,
           residualQuote,
           policy
-        );
+        ));
         sorCandidatesEvaluatedCount.labels(residualRFQ.rfqId).set(scoredCandidates.length);
 
-        const postDiscoveryGuardrailDecision = await this.evaluateSorGuardrails({
+        const postDiscoveryGuardrailDecision = await withLatencyStage("route_optimization_guardrail_post_discovery", {
+          canonicalMarketId: rfq.canonicalMarketId,
+          routeType: policy
+        }, () => this.evaluateSorGuardrails({
           rfq,
           bucketEntityCount: routeCandidates.length,
           candidateGroups: scoredCandidates.length,
           plannerLatencyMs: performance.now() - startedAt,
           reasonSuffix: "post_discovery"
-        });
+        }));
         const enforcedPostDiscoveryMode =
           postDiscoveryGuardrailDecision && isEnforcedGuardrailDecision(postDiscoveryGuardrailDecision)
             ? postDiscoveryGuardrailDecision.effectiveMode
@@ -233,9 +258,12 @@ export class OrderRouter implements IOrderRouter {
           enforcedPostDiscoveryMode ??
           enforcedPreflightMode ??
           "FULL_MODE";
-        const allocationResult =
+        const allocationResult = await withLatencyStage("route_optimization_allocation", {
+          canonicalMarketId: rfq.canonicalMarketId,
+          routeType: policy
+        }, () =>
           activeGuardrailMode === "SOR_ONLY" || activeGuardrailMode === "SAFE_FALLBACK"
-            ? await this.buildIsolatedAllocationsByLeg(
+            ? this.buildIsolatedAllocationsByLeg(
                 rfq.rfqId,
                 routeCandidates,
                 scoredCandidates,
@@ -243,24 +271,27 @@ export class OrderRouter implements IOrderRouter {
                 policy,
                 rfq.canonicalMarketId
               )
-            : await this.buildAllocationsByLeg(
+            : this.buildAllocationsByLeg(
                 rfq.rfqId,
                 routeCandidates,
                 scoredCandidates,
                 residualQuote.quantity,
                 policy,
                 rfq.canonicalMarketId
-              );
+              ));
         const allocations = allocationResult.allocations;
 
         sorPlanBuildLatencyMs.labels(policy).observe(performance.now() - startedAt);
         const avgSplits = this.calculateAvgSplitsPerLeg(routeCandidates, allocations);
         sorAvgSplitsPerLeg.labels(residualRFQ.rfqId).set(avgSplits);
 
-        const plan = await this.composePlan(residualRFQ, residualQuote, policy, scoredCandidates, allocations, {
+        const plan = await withLatencyStage("route_optimization_plan_compose", {
+          canonicalMarketId: residualRFQ.canonicalMarketId,
+          routeType: policy
+        }, () => this.composePlan(residualRFQ, residualQuote, policy, scoredCandidates, allocations, {
           reservationToken,
           routeCandidates
-        });
+        }));
 
         const planCreatedResult = {
           kind: "plan_created" as const,
@@ -269,7 +300,10 @@ export class OrderRouter implements IOrderRouter {
           plan
         };
 
-        const replayEnvelope = await this.captureReplayDecision({
+        const replayEnvelope = await withLatencyStage("route_optimization_replay_capture", {
+          canonicalMarketId: residualRFQ.canonicalMarketId,
+          routeType: policy
+        }, () => this.captureReplayDecision({
           rfqId: rfq.rfqId,
           rfq: residualRFQ,
           selectedQuote: residualQuote,
@@ -289,9 +323,12 @@ export class OrderRouter implements IOrderRouter {
           compatibilityDecisionIds: feasibility.compatibilityDecisionIds,
           compatibilityVersionIds: feasibility.compatibilityVersionIds,
           buildResult: planCreatedResult as unknown as Record<string, unknown>
-        });
+        }));
 
-        await this.emitQualificationEvaluation({
+        await withLatencyStage("route_optimization_qualification_hook", {
+          canonicalMarketId: residualRFQ.canonicalMarketId,
+          routeType: policy
+        }, () => this.emitQualificationEvaluation({
           rfq: residualRFQ,
           selectedQuote: residualQuote,
           policy,
@@ -299,11 +336,14 @@ export class OrderRouter implements IOrderRouter {
           scoredCandidates,
           allocations,
           replayEnvelopeId: replayEnvelope?.id ?? null
-        });
+        }));
 
         let routeSelectionTraceId: string | null = null;
         if (this.deps.routeSelectionTraceWriter) {
-          routeSelectionTraceId = await this.deps.routeSelectionTraceWriter.create({
+          routeSelectionTraceId = await withLatencyStage("route_optimization_trace_write", {
+            canonicalMarketId: residualRFQ.canonicalMarketId,
+            routeType: policy
+          }, () => this.deps.routeSelectionTraceWriter!.create({
             rfqId: rfq.rfqId,
             routePlanId: plan.id,
             replayEnvelopeId: replayEnvelope?.id ?? null,
@@ -316,29 +356,39 @@ export class OrderRouter implements IOrderRouter {
             candidateOrdering: scoredCandidates.map((candidate) => candidate.candidateId),
             compatibilityDecisionIds: feasibility.compatibilityDecisionIds,
             compatibilityVersionIds: feasibility.compatibilityVersionIds
-          });
+          }));
+          const traceId = routeSelectionTraceId;
 
           for (const candidate of routeCandidates) {
-            await this.deps.routeSelectionTraceWriter.appendCandidate(
-              routeSelectionTraceId,
+            await withLatencyStage("route_optimization_trace_write", {
+              canonicalMarketId: residualRFQ.canonicalMarketId,
+              routeType: policy
+            }, () => this.deps.routeSelectionTraceWriter!.appendCandidate(
+              traceId,
               candidate.id,
               candidate as unknown as Record<string, unknown>,
               "accepted"
-            );
+            ));
           }
           for (const rejected of feasibility.rejectedCandidates) {
-            await this.deps.routeSelectionTraceWriter.appendCandidate(
-              routeSelectionTraceId,
+            await withLatencyStage("route_optimization_trace_write", {
+              canonicalMarketId: residualRFQ.canonicalMarketId,
+              routeType: policy
+            }, () => this.deps.routeSelectionTraceWriter!.appendCandidate(
+              traceId,
               rejected.candidate.id,
               rejected.candidate as unknown as Record<string, unknown>,
               "rejected"
-            );
-            await this.deps.routeSelectionTraceWriter.appendRejectionReason(
-              routeSelectionTraceId,
+            ));
+            await withLatencyStage("route_optimization_trace_write", {
+              canonicalMarketId: residualRFQ.canonicalMarketId,
+              routeType: policy
+            }, () => this.deps.routeSelectionTraceWriter!.appendRejectionReason(
+              traceId,
               rejected.candidate.id,
               rejected.reasonCode,
               rejected.reasonPayload
-            );
+            ));
           }
         }
 

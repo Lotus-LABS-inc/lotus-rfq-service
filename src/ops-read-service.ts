@@ -23,6 +23,11 @@ import {
 import type { FundingVenue } from "./core/funding/types.js";
 import { isWithdrawalEvidenceVenueSupported } from "./core/funding/withdrawal-evidence.js";
 import { createPgPool, closePgPool } from "./db/postgres.js";
+import {
+  buildOpinionBuilderAccountClientFromEnv,
+  type OpinionBuilderAccountClientContract,
+  type OpinionEnableTradingRequest
+} from "./integrations/opinion/opinion-builder-account-client.js";
 import { UserVenueAccountRepository } from "./repositories/user-venue-account.repository.js";
 import { createLogger } from "./utils/logger.js";
 
@@ -46,6 +51,31 @@ const evidenceQuerySchema = z.object({
   withdrawalRouteLegId: z.string().min(1),
   sourceVenue: z.string().min(1),
   withdrawalTxHash: z.string().min(1)
+});
+
+const evmAddressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/);
+
+const builderSafeBodySchema = z.object({
+  walletAddress: evmAddressSchema
+});
+
+const builderEnableTradingBodySchema = z.object({
+  safeAddress: evmAddressSchema
+});
+
+const jsonRecordSchema = z.custom<Record<string, unknown>>(
+  (value) => Boolean(value && typeof value === "object" && !Array.isArray(value))
+);
+
+const builderSubmitEnableTradingBodySchema = z.object({
+  safeAddress: evmAddressSchema,
+  signature: z.string().min(1),
+  expectedSafeTxHash: z.string().min(1),
+  request: z.object({
+    safeTxHash: z.string().min(1),
+    typedData: jsonRecordSchema,
+    safeTx: jsonRecordSchema
+  })
 });
 
 type OpsFundingBalanceInput = z.infer<typeof balanceQuerySchema>;
@@ -79,6 +109,7 @@ export interface OpsReadServerDeps {
   polymarketFundingBalanceReader?: FundingBalanceReader | undefined;
   polymarketVenueAccountReader?: PolymarketFundingVenueAccountReader | undefined;
   withdrawalEvidenceReader?: WithdrawalEvidenceReader | undefined;
+  opinionBuilderAccountClient?: OpinionBuilderAccountClientContract | undefined;
 }
 
 export interface OpsReadRuntime {
@@ -104,6 +135,13 @@ class OpsFundingBalanceUnavailableError extends Error {
   public constructor(message: string) {
     super(message);
     this.name = "OpsFundingBalanceUnavailableError";
+  }
+}
+
+class OpsFundingBalanceRestrictedError extends Error {
+  public constructor(message: string) {
+    super(message);
+    this.name = "OpsFundingBalanceRestrictedError";
   }
 }
 
@@ -148,6 +186,9 @@ const authorizeOpsRead = (request: FastifyRequest, expectedToken: string | undef
   }
   return isLoopbackRequest(request);
 };
+
+const authorizeOpinionBuilderService = (request: FastifyRequest, env: NodeJS.ProcessEnv): boolean =>
+  authorizeOpsRead(request, env.OPINION_BUILDER_SERVICE_API_KEY, env.NODE_ENV);
 
 const parsePositiveInt = (value: string | undefined, fallback: number): number => {
   const parsed = Number.parseInt(`${value ?? ""}`, 10);
@@ -207,6 +248,14 @@ const normalizeDirectBalance = (raw: unknown, responseField: string | undefined)
   return normalizeDirectBalanceFallback(raw);
 };
 
+const isOpinionRegionRestriction = (venue: FundingVenue, status: number, raw: unknown): boolean => {
+  if (venue !== "OPINION" || status !== 403) {
+    return false;
+  }
+  const serialized = typeof raw === "string" ? raw : JSON.stringify(raw);
+  return /api is not available to persons located in the united states|restricted jurisdictions|errNo"?\s*:\s*"?10403/i.test(serialized);
+};
+
 const normalizeChainEnvKey = (value: string | undefined): string | null => {
   const normalized = value?.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   return normalized && normalized.length > 0 ? normalized : null;
@@ -219,7 +268,7 @@ const resolveDirectFundingBalancePath = (
   mode: string
 ): string | undefined => {
   if (mode !== "MULTI_DIRECT_HTTP") {
-    return env[`${venue}_OPS_FUNDING_BALANCE_PATH`]?.trim();
+    return env[`${venue}_OPS_FUNDING_BALANCE_PATH`]?.trim() || defaultDirectFundingBalancePath(venue);
   }
 
   const destinationChain = normalizeChainEnvKey(input.destinationChain);
@@ -235,6 +284,11 @@ const resolveDirectFundingBalancePath = (
 
   return undefined;
 };
+
+const defaultDirectFundingBalancePath = (
+  venue: Exclude<FundingVenue, "POLYMARKET">
+): string | undefined =>
+  venue === "OPINION" ? "user/balance?chain_id=56" : undefined;
 
 const encodeErc20BalanceOfCall = (walletAddress: string): string =>
   `0x70a08231${walletAddress.trim().toLowerCase().replace(/^0x/, "").padStart(64, "0")}`;
@@ -270,7 +324,7 @@ const buildDirectFundingBalanceHeaders = (
   pathWithSearch: string
 ): Headers => {
   const headers = new Headers();
-  const authMode = `${env[`${venue}_OPS_FUNDING_BALANCE_AUTH_MODE`] ?? "NONE"}`.trim().toUpperCase();
+  const authMode = directFundingBalanceAuthMode(venue, env);
   if (authMode === "BEARER") {
     const apiKey = env[`${venue}_OPS_FUNDING_BALANCE_API_KEY`]?.trim();
     if (!apiKey) {
@@ -283,7 +337,7 @@ const buildDirectFundingBalanceHeaders = (
     if (!apiKey) {
       throw new OpsFundingBalanceNotConfiguredError(`${venue} funding balance API key is not configured.`);
     }
-    headers.set(env[`${venue}_OPS_FUNDING_BALANCE_API_KEY_HEADER`]?.trim() || "x-api-key", apiKey);
+    headers.set(directFundingBalanceApiKeyHeader(venue, env), apiKey);
   }
   if (authMode === "HMAC") {
     const apiKey = env[`${venue}_OPS_FUNDING_BALANCE_API_KEY`]?.trim();
@@ -306,6 +360,35 @@ const buildDirectFundingBalanceHeaders = (
   }
   return headers;
 };
+
+const directFundingBalanceAuthMode = (
+  venue: Exclude<FundingVenue, "POLYMARKET">,
+  env: NodeJS.ProcessEnv
+): string => {
+  const configured = env[`${venue}_OPS_FUNDING_BALANCE_AUTH_MODE`]?.trim().toUpperCase();
+  if (configured) {
+    return configured;
+  }
+  return venue === "OPINION" && env.OPINION_OPS_FUNDING_BALANCE_API_KEY?.trim() ? "API_KEY" : "NONE";
+};
+
+const directFundingBalanceApiKeyHeader = (
+  venue: Exclude<FundingVenue, "POLYMARKET">,
+  env: NodeJS.ProcessEnv
+): string => {
+  const configured = env[`${venue}_OPS_FUNDING_BALANCE_API_KEY_HEADER`]?.trim();
+  if (configured) {
+    return configured;
+  }
+  return venue === "OPINION" ? "apikey" : "x-api-key";
+};
+
+const directFundingBalanceResponseField = (
+  venue: Exclude<FundingVenue, "POLYMARKET">,
+  env: NodeJS.ProcessEnv
+): string | undefined =>
+  env[`${venue}_OPS_FUNDING_BALANCE_RESPONSE_FIELD`]?.trim() ||
+  (venue === "OPINION" ? "result.balances.0.availableBalance" : undefined);
 
 const readDirectHttpFundingBalance = async (
   venue: Exclude<FundingVenue, "POLYMARKET">,
@@ -346,17 +429,25 @@ const readDirectHttpFundingBalance = async (
       headers: buildDirectFundingBalanceHeaders(venue, env, "GET", pathWithSearch),
       signal: abortController.signal
     });
+    const raw = await response.json().catch(() => null) as unknown;
     if (!response.ok) {
+      if (isOpinionRegionRestriction(venue, response.status, raw)) {
+        throw new OpsFundingBalanceRestrictedError("OPINION balance reads are region restricted by the provider.");
+      }
       throw new OpsFundingBalanceUnavailableError(`${venue} direct funding balance read returned HTTP ${response.status}.`);
     }
     return fundingBalanceOutputFromUsableBalance(
       normalizeDirectBalance(
-        await response.json(),
-        env[`${venue}_OPS_FUNDING_BALANCE_RESPONSE_FIELD`]
+        raw,
+        directFundingBalanceResponseField(venue, env)
       )
     );
   } catch (error) {
-    if (error instanceof OpsFundingBalanceNotConfiguredError || error instanceof OpsFundingBalanceMalformedError) {
+    if (
+      error instanceof OpsFundingBalanceNotConfiguredError ||
+      error instanceof OpsFundingBalanceMalformedError ||
+      error instanceof OpsFundingBalanceRestrictedError
+    ) {
       throw error;
     }
     throw new OpsFundingBalanceUnavailableError(`${venue} direct funding balance read is unavailable.`);
@@ -471,6 +562,12 @@ const handleFundingBalanceError = (venue: FundingVenue, error: unknown, reply: F
       message: `${venue} funding balance read returned malformed data.`
     });
   }
+  if (error instanceof OpsFundingBalanceRestrictedError) {
+    return reply.status(451).send({
+      code: `${venue}_PROVIDER_REGION_RESTRICTED`,
+      message: `${venue} balance reads are not available for this region.`
+    });
+  }
   return reply.status(502).send({
     code: `${venue}_FUNDING_BALANCE_READ_UNAVAILABLE`,
     message: `${venue} funding balance read is unavailable.`
@@ -502,6 +599,36 @@ const handleWithdrawalEvidenceReadError = (venue: FundingVenue, error: unknown, 
   });
 };
 
+const handleOpinionBuilderServiceError = (error: unknown, reply: FastifyReply) => {
+  const message = safeOpinionBuilderServiceMessage(error);
+  if (/not configured|disabled|incomplete/i.test(message)) {
+    return reply.status(503).send({
+      code: "OPINION_BUILDER_ACCOUNT_NOT_CONFIGURED",
+      message: "Opinion builder account setup is disabled or incomplete."
+    });
+  }
+  if (/restricted jurisdiction|region restricted|not available to persons located/i.test(message)) {
+    return reply.status(451).send({
+      code: "OPINION_PROVIDER_REGION_RESTRICTED",
+      message: "Opinion builder account setup is not available for this service region."
+    });
+  }
+  return reply.status(502).send({
+    code: "OPINION_BUILDER_ACCOUNT_SETUP_FAILED",
+    message
+  });
+};
+
+const safeOpinionBuilderServiceMessage = (error: unknown): string => {
+  const fallback = "Opinion builder account setup failed.";
+  if (!(error instanceof Error) || error.message.trim().length === 0) {
+    return fallback;
+  }
+  return error.message
+    .replace(/apikey|api key|builder-apikey|authorization|signature/gi, "credential")
+    .slice(0, 240);
+};
+
 export const buildOpsReadServer = async (deps: OpsReadServerDeps = {}): Promise<FastifyInstance> => {
   const env = deps.env ?? process.env;
   const fetchImpl = deps.fetchImpl ?? fetch;
@@ -514,6 +641,8 @@ export const buildOpsReadServer = async (deps: OpsReadServerDeps = {}): Promise<
     );
   const withdrawalEvidenceReader = deps.withdrawalEvidenceReader ??
     new InternalWithdrawalEvidenceReadService({ env, fetchImpl });
+  const opinionBuilderAccountClient = deps.opinionBuilderAccountClient ??
+    buildOpinionBuilderAccountClientFromEnv(env);
 
   app.get("/health", async () => ({
     status: "ok",
@@ -529,7 +658,7 @@ export const buildOpsReadServer = async (deps: OpsReadServerDeps = {}): Promise<
       });
     }
 
-    if (!authorizeOpsRead(request, env[`${venue}_FUNDING_READ_API_KEY`], env.NODE_ENV)) {
+    if (!authorizeOpsRead(request, fundingReadApiKey(venue, env), env.NODE_ENV)) {
       return reply.status(401).send({
         code: "UNAUTHORIZED",
         message: `${venue} funding balance read is not authorized.`
@@ -643,8 +772,85 @@ export const buildOpsReadServer = async (deps: OpsReadServerDeps = {}): Promise<
     }
   });
 
+  app.post("/lotus/opinion/builder/safe", async (request, reply) => {
+    if (!authorizeOpinionBuilderService(request, env)) {
+      return reply.status(401).send({
+        code: "UNAUTHORIZED",
+        message: "OPINION builder account setup is not authorized."
+      });
+    }
+    const parsed = builderSafeBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "OPINION builder Safe request validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    try {
+      const result = await opinionBuilderAccountClient.createOrRecoverSafe(parsed.data);
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleOpinionBuilderServiceError(error, reply);
+    }
+  });
+
+  app.post("/lotus/opinion/builder/enable-trading-request", async (request, reply) => {
+    if (!authorizeOpinionBuilderService(request, env)) {
+      return reply.status(401).send({
+        code: "UNAUTHORIZED",
+        message: "OPINION enable-trading request is not authorized."
+      });
+    }
+    const parsed = builderEnableTradingBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "OPINION enable-trading request validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    try {
+      const result = await opinionBuilderAccountClient.buildEnableTradingRequest(parsed.data);
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleOpinionBuilderServiceError(error, reply);
+    }
+  });
+
+  app.post("/lotus/opinion/builder/enable-trading-submit", async (request, reply) => {
+    if (!authorizeOpinionBuilderService(request, env)) {
+      return reply.status(401).send({
+        code: "UNAUTHORIZED",
+        message: "OPINION enable-trading submit is not authorized."
+      });
+    }
+    const parsed = builderSubmitEnableTradingBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "OPINION enable-trading submit validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    try {
+      const result = await opinionBuilderAccountClient.submitEnableTrading({
+        safeAddress: parsed.data.safeAddress,
+        signature: parsed.data.signature,
+        expectedSafeTxHash: parsed.data.expectedSafeTxHash,
+        request: parsed.data.request as OpinionEnableTradingRequest
+      });
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleOpinionBuilderServiceError(error, reply);
+    }
+  });
+
   return app;
 };
+
+const fundingReadApiKey = (venue: FundingVenue, env: NodeJS.ProcessEnv): string | undefined =>
+  env[`${venue}_FUNDING_READ_API_KEY`] ?? (venue === "OPINION" ? env.OPINION_OPS_FUNDING_BALANCE_API_KEY : undefined);
 
 export const startOpsReadService = async (): Promise<OpsReadRuntime> => {
   loadDotenvFile();

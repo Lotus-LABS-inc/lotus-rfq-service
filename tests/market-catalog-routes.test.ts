@@ -1,7 +1,7 @@
 import Fastify from "fastify";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
-import { registerMarketCatalogRoutes } from "../src/api/routes/markets.js";
+import { clearMarketQuoteReadinessCacheForTests, registerMarketCatalogRoutes } from "../src/api/routes/markets.js";
 import type {
   MarketCatalogCategory,
   MarketCatalogEvent,
@@ -12,6 +12,7 @@ import {
   MarketCatalogRepository as PgMarketCatalogRepository,
   SharedCoreQuoteMappingRepository
 } from "../src/repositories/market-catalog.repository.js";
+import type { MarketCatalogSnapshotCache } from "../src/services/market-catalog-snapshot-cache.js";
 
 const market: MarketCatalogMarket = {
   eventId: "event:NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
@@ -53,6 +54,9 @@ const market: MarketCatalogMarket = {
     venue: "POLYMARKET",
     venueMarketProfileId: "vmp_poly",
     venueMarketId: "poly-1",
+    marketSlug: "republican-presidential-nominee-2028",
+    eventSlug: "republican-presidential-nominee-2028",
+    sourceUrl: "https://polymarket.com/event/republican-presidential-nominee-2028",
     venueTitle: "Republican nominee?",
     imageUrl: "https://polymarket-upload.s3.us-east-2.amazonaws.com/republican-nominee.png",
     iconUrl: null,
@@ -68,6 +72,9 @@ const market: MarketCatalogMarket = {
     changePercent24h: "1.5",
     marketClass: "CATEGORICAL",
     outcomes: [{ id: "jd-vance", label: "JD Vance" }, { id: "donald-trump", label: "Donald Trump" }],
+    resolutionSource: "Polymarket market rules",
+    resolutionTitle: "Republican nominee?",
+    resolutionRulesText: "This market resolves to the Republican nominee for the 2028 US presidential election.",
     network: "POLYGON",
     chain: "POLYGON",
     expiresAt: "2028-11-01T00:00:00.000Z",
@@ -132,7 +139,31 @@ class FakeMarketCatalogRepository implements Pick<MarketCatalogRepository, "list
   }
 }
 
+class FakeMarketCatalogSnapshotCache implements MarketCatalogSnapshotCache {
+  public readonly values = new Map<string, unknown>();
+  public getCount = 0;
+  public setCount = 0;
+
+  public async get<T>(key: string): Promise<T | null> {
+    this.getCount += 1;
+    return (this.values.get(key) as T | undefined) ?? null;
+  }
+
+  public async set<T>(key: string, value: T): Promise<void> {
+    this.setCount += 1;
+    this.values.set(key, value);
+  }
+}
+
 describe("market catalog routes", () => {
+  afterEach(() => {
+    delete process.env.MARKET_QUOTE_READINESS_TIMEOUT_MS;
+    delete process.env.MARKET_QUOTE_READINESS_STALE_CACHE_MS;
+    delete process.env.MARKET_LIST_OVERFETCH_MULTIPLIER;
+    delete process.env.MARKET_LIST_OVERFETCH_CAP;
+    clearMarketQuoteReadinessCacheForTests();
+  });
+
   it("lists normalized user-facing markets by category without raw venue internals", async () => {
     const app = Fastify({ logger: false });
     const repository = new FakeMarketCatalogRepository();
@@ -159,6 +190,330 @@ describe("market catalog routes", () => {
     expect(response.body).not.toContain("raw_source_payload");
     expect(response.body).not.toContain("apiKey");
     expect(response.body).not.toContain("privateKey");
+
+    await app.close();
+  });
+
+  it("filters quote-ready markets and returns sanitized readiness fields", async () => {
+    const app = Fastify({ logger: false });
+    const repository = new FakeMarketCatalogRepository();
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "partial" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: [{
+              venue: "LIMITLESS",
+              reason: "QUOTE_PROVIDER_HTTP_429",
+              venueMarketId: "limitless-1"
+            }]
+          }];
+        }
+      }
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=10"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      count: 1,
+      markets: [{
+        quoteStatus: "partial",
+        quoteReadyVenueCount: 1,
+        quoteReadyVenues: ["POLYMARKET"],
+        lastQuoteAt: "2026-05-21T23:41:15.000Z",
+        quoteBlockers: [{
+          venue: "LIMITLESS",
+          reason: "QUOTE_PROVIDER_HTTP_429",
+          venueMarketId: "limitless-1"
+        }]
+      }]
+    });
+    expect(response.body).not.toContain("apiKey");
+    expect(response.body).not.toContain("privateKey");
+
+    await app.close();
+  });
+
+  it("hides markets with no quote-ready venue only when requested", async () => {
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: new FakeMarketCatalogRepository(),
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "unavailable" as const,
+            quoteReadyVenueCount: 0,
+            quoteReadyVenues: [],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: [{
+              venue: "POLYMARKET",
+              reason: "closed_or_not_accepting_orders",
+              venueMarketId: "poly-closed"
+            }]
+          }];
+        }
+      }
+    });
+
+    const filtered = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=10"
+    });
+    const unfiltered = await app.inject({
+      method: "GET",
+      url: "/markets?limit=10"
+    });
+
+    expect(filtered.statusCode).toBe(200);
+    expect(filtered.json()).toMatchObject({ count: 0, markets: [] });
+    expect(unfiltered.statusCode).toBe(200);
+    expect(unfiltered.json()).toMatchObject({
+      count: 1,
+      markets: [{ quoteStatus: "unavailable", quoteReadyVenueCount: 0 }]
+    });
+
+    await app.close();
+  });
+
+  it("does not return unfiltered unavailable markets when quote readiness snapshots time out", async () => {
+    process.env.MARKET_QUOTE_READINESS_TIMEOUT_MS = "1";
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: new FakeMarketCatalogRepository(),
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return new Promise(() => undefined);
+        }
+      }
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&routeCoverage=all&limit=10"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      count: 0,
+      quoteReadinessDegraded: true,
+      quoteReadinessReason: "timeout",
+      markets: []
+    });
+
+    await app.close();
+  });
+
+  it("uses stale last-good quote readiness when a later snapshot read times out", async () => {
+    process.env.MARKET_QUOTE_READINESS_TIMEOUT_MS = "1";
+    const app = Fastify({ logger: false });
+    let shouldTimeout = false;
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: new FakeMarketCatalogRepository(),
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          if (shouldTimeout) {
+            return new Promise(() => undefined);
+          }
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: []
+          }];
+        }
+      }
+    });
+
+    const warm = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&routeCoverage=all&limit=10"
+    });
+    shouldTimeout = true;
+    const degraded = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&routeCoverage=all&limit=11"
+    });
+
+    expect(warm.statusCode).toBe(200);
+    expect(degraded.statusCode).toBe(200);
+    expect(degraded.json()).toMatchObject({
+      count: 1,
+      quoteReadinessDegraded: true,
+      quoteReadinessReason: "timeout",
+      markets: [{
+        quoteStatus: "stale",
+        quoteReadyVenueCount: 1,
+        quoteReadyVenues: ["POLYMARKET"]
+      }]
+    });
+
+    await app.close();
+  });
+
+  it("materializes market catalog responses into the shared snapshot cache", async () => {
+    const repository = new FakeMarketCatalogRepository();
+    const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketCatalogSnapshotCache: snapshotCache,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: []
+          }];
+        }
+      }
+    });
+
+    const first = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=10"
+    });
+    clearMarketQuoteReadinessCacheForTests();
+    const second = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=10"
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(snapshotCache.setCount).toBe(1);
+    expect(repository.filters).toHaveLength(1);
+    expect(second.json()).toMatchObject({
+      count: 1,
+      markets: [{ quoteReadyVenueCount: 1 }]
+    });
+
+    await app.close();
+  });
+
+  it("fetches a larger catalog window before quote-ready filtering", async () => {
+    const readyMarket = {
+      ...market,
+      canonicalEventId: "44444444-4444-5444-8444-444444444444",
+      canonicalMarketIds: ["READY_LATE_MARKET"]
+    };
+    const app = Fastify({ logger: false });
+    const repository = new FakeMarketCatalogRepository();
+    repository.listMarkets = async (filter = {}) => {
+      repository.filters.push(filter);
+      const rows = Array.from({ length: 24 }, (_, index) => ({
+        ...market,
+        canonicalEventId: `55555555-5555-5555-8555-${String(index).padStart(12, "0")}`,
+        canonicalMarketIds: [`UNREADY_${index}`]
+      }));
+      rows.push(readyMarket);
+      return rows;
+    };
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: "READY_LATE_MARKET",
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: []
+          }];
+        }
+      }
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=24"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(repository.filters[0]).toMatchObject({ limit: 250 });
+    expect(response.json().markets.map((item: MarketCatalogMarket) => item.canonicalMarketIds[0])).toEqual(["READY_LATE_MARKET"]);
+
+    await app.close();
+  });
+
+  it("filters quote-ready markets by pair tri and strict-all coverage", async () => {
+    const pairMarket = {
+      ...market,
+      canonicalEventId: "22222222-2222-5222-8222-222222222222",
+      canonicalMarketIds: ["PAIR_MARKET"],
+      venues: ["POLYMARKET", "LIMITLESS"],
+      venueCount: 2,
+      venueMarketCount: 2
+    };
+    const triMarket = {
+      ...market,
+      canonicalEventId: "33333333-3333-5333-8333-333333333333",
+      canonicalMarketIds: ["TRI_MARKET"],
+      venues: ["POLYMARKET", "LIMITLESS", "PREDICT_FUN"],
+      venueCount: 3,
+      venueMarketCount: 3
+    };
+    const app = Fastify({ logger: false });
+    const repository = new FakeMarketCatalogRepository();
+    repository.listMarkets = async () => [market, pairMarket, triMarket];
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: []
+          }, {
+            canonicalMarketId: "PAIR_MARKET",
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 2,
+            quoteReadyVenues: ["POLYMARKET", "LIMITLESS"],
+            lastQuoteAt: "2026-05-21T23:41:16.000Z",
+            quoteBlockers: []
+          }, {
+            canonicalMarketId: "TRI_MARKET",
+            quoteStatus: "partial" as const,
+            quoteReadyVenueCount: 2,
+            quoteReadyVenues: ["POLYMARKET", "LIMITLESS"],
+            lastQuoteAt: "2026-05-21T23:41:17.000Z",
+            quoteBlockers: [{
+              venue: "PREDICT_FUN",
+              reason: "PREDICT_PROVIDER_AUTH_INVALID"
+            }]
+          }];
+        }
+      }
+    });
+
+    const pair = await app.inject({ method: "GET", url: "/markets?quoteReadyOnly=true&routeCoverage=pair&limit=10" });
+    const tri = await app.inject({ method: "GET", url: "/markets?quoteReadyOnly=true&routeCoverage=tri&limit=10" });
+    const strictAll = await app.inject({ method: "GET", url: "/markets?quoteReadyOnly=true&routeCoverage=strict_all&limit=10" });
+
+    expect(pair.statusCode).toBe(200);
+    expect(pair.json().markets.map((item: MarketCatalogMarket) => item.canonicalMarketIds[0])).toEqual(["PAIR_MARKET", "TRI_MARKET"]);
+    expect(tri.statusCode).toBe(200);
+    expect(tri.json()).toMatchObject({ count: 0, markets: [] });
+    expect(strictAll.statusCode).toBe(200);
+    expect(strictAll.json().markets.map((item: MarketCatalogMarket) => item.canonicalMarketIds[0])).toEqual(["PAIR_MARKET"]);
 
     await app.close();
   });
@@ -207,6 +562,9 @@ describe("market catalog routes", () => {
     expect(detail.statusCode).toBe(200);
     expect(detail.json().market.title).toBe("Republican Presidential Nominee 2028");
     expect(detail.json().market.venueMarkets[0].imageUrl).toBe("https://polymarket-upload.s3.us-east-2.amazonaws.com/republican-nominee.png");
+    expect(detail.json().market.venueMarkets[0].sourceUrl).toBe("https://polymarket.com/event/republican-presidential-nominee-2028");
+    expect(detail.json().market.venueMarkets[0].marketSlug).toBe("republican-presidential-nominee-2028");
+    expect(detail.json().market.venueMarkets[0].resolutionRulesText).toContain("Republican nominee");
 
     const suffixedDetail = await app.inject({
       method: "GET",
@@ -675,6 +1033,252 @@ describe("market catalog routes", () => {
     expect(mediaMarket?.venueMarkets[0]?.imageUrl).toBe("https://polymarket-upload.s3.us-east-2.amazonaws.com/media.png");
     expect(mediaMarket?.venueMarkets[0]?.iconUrl).toBeNull();
     expect(mediaMarket?.venueMarkets[1]?.imageUrl).toBeNull();
+  });
+
+  it("derives public source links from prefixed venue market identifiers", async () => {
+    const pool = {
+      query: async (_sql: string, _params?: unknown[]) => {
+        if (String(_sql).includes("COUNT(*)::int AS total_count")) {
+          return { rows: [{ total_count: "1" }] };
+        }
+        if (String(_sql).includes("venue_market_count")) {
+          return {
+            rows: [{
+              canonical_event_id: "11111111-1111-5111-8111-111111111116",
+              proposition_key: "SPORTS|CHAMPIONS",
+              title: "Champions Source Link Market",
+              normalized_proposition_text: "champions source link market",
+              canonical_category: "SPORTS",
+              market_class: "BINARY",
+              starts_at: "2026-05-03T00:00:00.000Z",
+              expires_at: null,
+              resolves_at: null,
+              updated_at: "2026-05-03T00:00:00.000Z",
+              event_metadata: {},
+              frontend_display_title: null,
+              frontend_sort_priority: 1000,
+              canonical_market_ids: ["SPORTS|CHAMPIONS"],
+              venues: ["POLYMARKET", "LIMITLESS", "PREDICT"],
+              venue_market_count: "4"
+            }]
+          };
+        }
+        return {
+          rows: [
+            {
+              canonical_event_id: "11111111-1111-5111-8111-111111111116",
+              canonical_market_id: "SPORTS|CHAMPIONS",
+              canonical_market_title: "Champions Source Link Market",
+              venue_market_profile_id: "vmp_poly_source",
+              venue: "POLYMARKET",
+              venue_market_id: "POLYMARKET:uefa-champions-league-winner:SPORTS|CHAMPIONS",
+              venue_title: "UEFA Champions League Winner",
+              market_class: "BINARY",
+              outcomes: [{ id: "YES", label: "Yes" }],
+              network: "POLYGON",
+              chain: "POLYGON",
+              expires_at: null,
+              resolves_at: null,
+              normalized_payload: {},
+              raw_source_payload: {}
+            },
+            {
+              canonical_event_id: "11111111-1111-5111-8111-111111111116",
+              canonical_market_id: "SPORTS|CHAMPIONS",
+              canonical_market_title: "Champions Source Link Market",
+              venue_market_profile_id: "vmp_limitless_source",
+              venue: "LIMITLESS",
+              venue_market_id: "LIMITLESS:2026-fifa-world-cup-winner-1765296582257:argentina:SPORTS|CHAMPIONS",
+              venue_title: "World Cup Winner",
+              market_class: "BINARY",
+              outcomes: [{ id: "YES", label: "Yes" }],
+              network: "BASE",
+              chain: "BASE",
+              expires_at: null,
+              resolves_at: null,
+              normalized_payload: {},
+              raw_source_payload: {}
+            },
+            {
+              canonical_event_id: "11111111-1111-5111-8111-111111111116",
+              canonical_market_id: "SPORTS|CHAMPIONS",
+              canonical_market_title: "Champions Source Link Market",
+              venue_market_profile_id: "vmp_predict_source",
+              venue: "PREDICT",
+              venue_market_id: "PREDICT:1490:SPORTS|CHAMPIONS",
+              venue_title: "NBA Champion",
+              market_class: "BINARY",
+              outcomes: [{ id: "YES", label: "Yes" }],
+              network: "BASE",
+              chain: "BASE",
+              expires_at: null,
+              resolves_at: null,
+              normalized_payload: { sourceUrl: "https://predict.fun/market/2026-nba-champion" },
+              raw_source_payload: {}
+            },
+            {
+              canonical_event_id: "11111111-1111-5111-8111-111111111116",
+              canonical_market_id: "SPORTS|CHAMPIONS",
+              canonical_market_title: "Champions Source Link Market",
+              venue_market_profile_id: "vmp_poly_condition",
+              venue: "POLYMARKET",
+              venue_market_id: "POLYMARKET:condition-1:SPORTS|CHAMPIONS",
+              venue_title: "Condition-only Polymarket",
+              market_class: "BINARY",
+              outcomes: [{ id: "YES", label: "Yes" }],
+              network: "POLYGON",
+              chain: "POLYGON",
+              expires_at: null,
+              resolves_at: null,
+              normalized_payload: {},
+              raw_source_payload: {}
+            }
+          ]
+        };
+      }
+    };
+
+    const repository = new PgMarketCatalogRepository(pool as never);
+    const [sourceMarket] = await repository.listMarkets({ limit: 1 });
+    const byProfile = new Map(sourceMarket?.venueMarkets.map((venueMarket) => [venueMarket.venueMarketProfileId, venueMarket]));
+
+    expect(byProfile.get("vmp_poly_source")?.marketSlug).toBe("uefa-champions-league-winner");
+    expect(byProfile.get("vmp_poly_source")?.eventSlug).toBe("uefa-champions-league-winner");
+    expect(byProfile.get("vmp_poly_source")?.sourceUrl).toBe("https://polymarket.com/event/uefa-champions-league-winner");
+    expect(byProfile.get("vmp_limitless_source")?.marketSlug).toBe("2026-fifa-world-cup-winner-1765296582257");
+    expect(byProfile.get("vmp_limitless_source")?.sourceUrl).toBe("https://limitless.exchange/markets/2026-fifa-world-cup-winner-1765296582257");
+    expect(byProfile.get("vmp_predict_source")?.marketSlug).toBeNull();
+    expect(byProfile.get("vmp_predict_source")?.sourceUrl).toBe("https://predict.fun/market/2026-nba-champion");
+    expect(byProfile.get("vmp_poly_condition")?.sourceUrl).toBeNull();
+  });
+
+  it("uses venue-provided rules and sources instead of placeholder catalog text", async () => {
+    const pool = {
+      query: async (sql: string) => {
+        if (sql.includes("COUNT(*)::int AS total_count")) {
+          return { rows: [{ total_count: "1" }] };
+        }
+        if (sql.includes("venue_market_count")) {
+          return {
+            rows: [{
+              canonical_event_id: "11111111-1111-5111-8111-111111111117",
+              proposition_key: "CRYPTO|ATH_BY_DATE|XRP|2026_09_30",
+              title: "XRP all time high by September 30, 2026",
+              normalized_proposition_text: "xrp all time high by september 30 2026",
+              canonical_category: "CRYPTO",
+              market_class: "BINARY",
+              starts_at: "2026-05-03T00:00:00.000Z",
+              expires_at: "2026-09-30T00:00:00.000Z",
+              resolves_at: null,
+              updated_at: "2026-05-03T00:00:00.000Z",
+              event_metadata: {},
+              frontend_display_title: null,
+              frontend_sort_priority: 1000,
+              canonical_market_ids: ["CRYPTO|ATH_BY_DATE|XRP|2026_09_30"],
+              venues: ["LIMITLESS", "OPINION", "POLYMARKET", "PREDICT", "MYRIAD"],
+              venue_market_count: "5"
+            }]
+          };
+        }
+        return {
+          rows: [
+            {
+              venue_market_profile_id: "vmp_limitless_rules",
+              venue: "LIMITLESS",
+              venue_market_id: "LIMITLESS:september-30-2026-1775137169961:CRYPTO|ATH_BY_DATE|XRP|2026_09_30",
+              venue_title: "Ath By Date Xrp 2026-09-30: 2026-09-30",
+              normalized_payload: {},
+              raw_source_payload: {
+                marketDetail: {
+                  rules: "This market resolves to Yes if XRP makes a new all-time high on or before September 30, 2026. Otherwise it resolves to No.",
+                  resolutionSource: "Resolution source: venue-published Limitless market rules."
+                }
+              },
+              resolution_rules_text: "ath by date xrp 2026 09 30 2026 09 30"
+            },
+            {
+              venue_market_profile_id: "vmp_poly_rules",
+              venue: "POLYMARKET",
+              venue_market_id: "POLYMARKET:xrp-all-time-high-by-september-30-2026:CRYPTO|ATH_BY_DATE|XRP|2026_09_30",
+              venue_title: "XRP ATH by September 30",
+              normalized_payload: {},
+              raw_source_payload: {
+                market: {
+                  resolutionRules: "This market resolves according to Polymarket's published XRP all-time-high rules and final market resolution.",
+                  resolutionSource: "Resolution source: Polymarket market rules."
+                }
+              },
+              resolution_rules_text: "ath by date xrp 2026 09 30 2026 09 30"
+            },
+            {
+              venue_market_profile_id: "vmp_predict_rules",
+              venue: "PREDICT",
+              venue_market_id: "PREDICT:xrp-ath-september-2026:CRYPTO|ATH_BY_DATE|XRP|2026_09_30",
+              venue_title: "XRP ATH by September 30",
+              normalized_payload: {},
+              raw_source_payload: {
+                description: "This market resolves to Yes if Predict.fun's listed XRP threshold condition is met before the market close.",
+                resolutionSource: "Resolution source: Predict.fun market metadata."
+              },
+              resolution_rules_text: "ath by date xrp 2026 09 30 2026 09 30"
+            },
+            {
+              venue_market_profile_id: "vmp_opinion_rules",
+              venue: "OPINION",
+              venue_market_id: "OPINION:xrp-ath-september-2026:CRYPTO|ATH_BY_DATE|XRP|2026_09_30",
+              venue_title: "XRP ATH by September 30",
+              normalized_payload: {},
+              raw_source_payload: {
+                rules: "This market resolves by Opinion's published market rules for whether XRP reaches a new all-time high by the cutoff.",
+                resolutionSource: "Resolution source: Opinion market rules."
+              },
+              resolution_rules_text: "ath by date xrp 2026 09 30 2026 09 30"
+            },
+            {
+              venue_market_profile_id: "vmp_myriad_rules",
+              venue: "MYRIAD",
+              venue_market_id: "MYRIAD:xrp-ath-september-2026:CRYPTO|ATH_BY_DATE|XRP|2026_09_30",
+              venue_title: "XRP ATH by September 30",
+              normalized_payload: {},
+              raw_source_payload: {
+                description: "This market resolves to Yes under the Myriad market question rules if the stated XRP ATH condition occurs.",
+                resolutionSource: "Resolution source: Myriad market rules."
+              },
+              resolution_rules_text: "ath by date xrp 2026 09 30 2026 09 30"
+            }
+          ].map((row) => ({
+            canonical_event_id: "11111111-1111-5111-8111-111111111117",
+            canonical_market_id: "CRYPTO|ATH_BY_DATE|XRP|2026_09_30",
+            canonical_market_title: "XRP all time high by September 30, 2026",
+            market_class: "BINARY",
+            outcomes: [{ id: "YES", label: "Yes" }, { id: "NO", label: "No" }],
+            network: null,
+            chain: null,
+            expires_at: "2026-09-30T00:00:00.000Z",
+            resolves_at: null,
+            resolution_source: null,
+            resolution_title: row.venue_title,
+            venue_resolution_source: null,
+            venue_resolution_title: null,
+            venue_resolution_rules_text: null,
+            ...row
+          }))
+        };
+      }
+    };
+
+    const repository = new PgMarketCatalogRepository(pool as never);
+    const [catalogMarket] = await repository.listMarkets({ limit: 1 });
+    const byVenue = new Map(catalogMarket?.venueMarkets.map((venueMarket) => [venueMarket.venue, venueMarket]));
+
+    expect(catalogMarket?.venueMarkets).toHaveLength(5);
+    for (const venueMarket of catalogMarket?.venueMarkets ?? []) {
+      expect(venueMarket.resolutionRulesText).toContain("resolves");
+      expect(venueMarket.resolutionRulesText).not.toBe("ath by date xrp 2026 09 30 2026 09 30");
+      expect(venueMarket.resolutionSource).toContain("Resolution source:");
+    }
+    expect(byVenue.get("LIMITLESS")?.resolutionRulesText).toContain("new all-time high");
+    expect(byVenue.get("PREDICT_FUN")?.resolutionSource).toContain("Predict.fun");
   });
 
   it("resolves shared-core quote mappings when frontend sends a venue-neutral canonical market id", async () => {

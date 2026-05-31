@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { existsSync, readFileSync, rmSync } from "node:fs";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AssetType, OrderType, Side, SignatureTypeV2 } from "@polymarket/clob-client-v2";
 
@@ -225,6 +227,30 @@ const diagnosticSdkClient = (postOrderError: unknown): PolymarketClobV2SdkClient
   }
 });
 
+const diagnosticSdkClientReturning = (postOrderResponse: unknown): PolymarketClobV2SdkClient => ({
+  async createAndPostOrder() {
+    throw new Error("unsigned createAndPostOrder must not be used");
+  },
+  async postOrder() {
+    return postOrderResponse;
+  },
+  async updateBalanceAllowance() {
+    return {};
+  },
+  async getBalanceAllowance() {
+    return { balance: "2000000", allowance: "2000000" };
+  },
+  async getOrder() {
+    throw new Error("not used");
+  },
+  async getTrades() {
+    return [];
+  },
+  async cancelOrder() {
+    return { success: false };
+  }
+});
+
 const diagnosticClient = (sdkClient: PolymarketClobV2SdkClient): SdkPolymarketClobV2LiveClient =>
   new SdkPolymarketClobV2LiveClient({
     executionMode: "v2",
@@ -300,6 +326,37 @@ describe("PolymarketExecutionAdapterV2", () => {
     await expect(adapter.prepareOrder(leg())).rejects.toMatchObject({
       reasonCode: "POLYMARKET_V2_NOT_CONFIGURED"
     });
+  });
+
+  it("exposes a cached static readiness snapshot without secrets", () => {
+    const adapter = new PolymarketExecutionAdapterV2({
+      executionMode: "v2",
+      liveExecutionEnabled: true,
+      clobHost: "https://clob.polymarket.test",
+      chainId: "137",
+      builderCode: "lotus-builder",
+      executionSubmitMode: "relay",
+      executionRelayUrl: "https://relay.example",
+      executionRelaySecret: "relay-secret",
+      signatureType: "POLY_1271",
+      funderAddress: diagnosticDepositWallet
+    });
+
+    expect(adapter.configSnapshot()).toMatchObject({
+      executionMode: "v2",
+      liveExecutionEnabled: true,
+      submitMode: "relay",
+      relayConfigured: true,
+      requiredEnvPresent: true,
+      dryRunRequiredEnvPresent: true,
+      builderCodeConfigured: true,
+      missingEnv: [],
+      missingDryRunEnv: [],
+      signatureType: "POLY_1271",
+      accountModel: "DEPOSIT_WALLET",
+      depositWalletEnabled: true
+    });
+    expect(JSON.stringify(adapter.configSnapshot())).not.toContain("relay-secret");
   });
 
   it("treats relay URL and secret as live env in relay submit mode", () => {
@@ -467,6 +524,72 @@ describe("PolymarketExecutionAdapterV2", () => {
     });
   });
 
+  it("relay client writes a redacted postOrder diagnostic when the relay returns a legacy rejection", async () => {
+    const client = new RelayPolymarketClobV2LiveClient({
+      relayUrl: "https://relay.example",
+      relaySecret: "relay-secret",
+      fetchImpl: (async () => new Response(JSON.stringify({
+        code: "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
+        message: "not enough balance / allowance: the balance is not enough -> balance: 0, order amount: 1274970"
+      }), { status: 502, headers: { "content-type": "application/json" } })) as typeof fetch
+    });
+
+    await expect(client.submitOrder(signedPolymarketVenueOrder())).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE"
+    });
+
+    expect(existsSync(polymarketPostOrderDiagnosticPath)).toBe(true);
+    const artifactText = readFileSync(polymarketPostOrderDiagnosticPath, "utf8");
+    expect(artifactText).toContain("POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE");
+    expect(artifactText).toContain("not enough balance");
+    expect(artifactText).not.toContain("relay-secret");
+    expect(artifactText).not.toContain(`0x${"aa".repeat(65)}`);
+    expect(artifactText).not.toContain(diagnosticLongTokenId);
+  });
+
+  it("relay client preserves forwarded postOrder diagnostic classification from the relay", async () => {
+    const forwardedDiagnostic = {
+      quoteId: "exec_quote_forwarded",
+      executionId: "exec_quote_forwarded",
+      submitTimestamp: "2026-05-20T18:00:00.000Z",
+      httpStatus: 400,
+      polymarketApiStatus: "FAILED",
+      rawVenueErrorCode: "INVALID_SIGNATURE",
+      rawVenueErrorMessage: "invalid signature",
+      rawResponseBodyRedacted: {
+        error: "invalid signature",
+        signature: "<redacted>"
+      },
+      normalizedReasonCode: "POLYMARKET_CLOB_SIGNATURE_REJECTED",
+      normalizedReason: "Polymarket rejected the signed CLOB order signature. Refresh the route and sign again.",
+      signedOrderSummary: {
+        signatureType: "POLY_1271",
+        makerSignerFunderAllEqualDepositWallet: true
+      }
+    };
+    const client = new RelayPolymarketClobV2LiveClient({
+      relayUrl: "https://relay.example",
+      relaySecret: "relay-secret",
+      fetchImpl: (async () => new Response(JSON.stringify({
+        code: "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
+        message: "Polymarket CLOB collateral is not ready for this order.",
+        diagnostics: {
+          postOrderRejectionDiagnostic: forwardedDiagnostic
+        }
+      }), { status: 502, headers: { "content-type": "application/json" } })) as typeof fetch
+    });
+
+    await expect(client.submitOrder(signedPolymarketVenueOrder())).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_SIGNATURE_REJECTED"
+    });
+
+    expect(existsSync(polymarketPostOrderDiagnosticPath)).toBe(true);
+    const artifact = JSON.parse(readFileSync(polymarketPostOrderDiagnosticPath, "utf8")) as Record<string, unknown>;
+    expect(artifact.normalizedReasonCode).toBe("POLYMARKET_CLOB_SIGNATURE_REJECTED");
+    expect(JSON.stringify(artifact)).not.toContain("relay-secret");
+    expect(JSON.stringify(artifact)).not.toContain(`0x${"aa".repeat(65)}`);
+  });
+
   it("relay routes reject missing authentication before reaching the CLOB client", async () => {
     const previousSecret = process.env.POLYMARKET_EXECUTION_RELAY_SECRET;
     process.env.POLYMARKET_EXECUTION_RELAY_SECRET = "relay-secret";
@@ -500,11 +623,19 @@ describe("PolymarketExecutionAdapterV2", () => {
       liveSubmissionStatus: "LIVE_DISABLED",
       dryRunRequiredEnvPresent: true
     });
-    const prepared = await adapter.prepareOrder(leg());
+    const prepared = await adapter.prepareOrder({
+      ...leg(),
+      metadata: {
+        tickSize: "0.001",
+        negRisk: false
+      }
+    });
     expect(prepared.payload).toMatchObject({
       venueMarketId: "pm-market-1",
       venueOutcomeId: "pm-outcome-yes",
       metadata: {
+        tickSize: "0.001",
+        negRisk: false,
         adapter: "PolymarketExecutionAdapterV2",
         readinessState: "LIVE_DISABLED",
         clobV2DryRun: {
@@ -528,6 +659,49 @@ describe("PolymarketExecutionAdapterV2", () => {
     expect(JSON.stringify(prepared.payload)).not.toContain("server-side-secret");
     expect(JSON.stringify(prepared.payload)).not.toContain("server-side-passphrase");
     expect(JSON.stringify(prepared.payload)).not.toContain("server-side-key");
+  });
+
+  it("records Polymarket prepare sub-stage latency samples", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "lotus-polymarket-latency-"));
+    const samplePath = join(dir, "samples.jsonl");
+    const previousEnabled = process.env.LATENCY_DIAGNOSTICS_ENABLED;
+    const previousPath = process.env.LATENCY_DIAGNOSTIC_LOG_PATH;
+    process.env.LATENCY_DIAGNOSTICS_ENABLED = "true";
+    process.env.LATENCY_DIAGNOSTIC_LOG_PATH = samplePath;
+
+    try {
+      const adapter = new PolymarketExecutionAdapterV2({
+        executionMode: "v2",
+        liveExecutionEnabled: false,
+        clobHost: "https://clob.polymarket.test",
+        chainId: "137",
+        builderCode: "lotus-builder",
+        apiSecret: "server-side-secret"
+      });
+      await adapter.prepareOrder(leg());
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const lines = (await readFile(samplePath, "utf8")).trim().split(/\r?\n/);
+      const stages = lines.map((line) => (JSON.parse(line) as { stage: string }).stage);
+
+      expect(stages).toEqual(expect.arrayContaining([
+        "polymarket_prepare_env_check",
+        "polymarket_prepare_account_binding",
+        "polymarket_prepare_order_shape",
+        "polymarket_prepare_builder_config",
+        "polymarket_prepare_signature_payload"
+      ]));
+    } finally {
+      if (previousEnabled === undefined) {
+        delete process.env.LATENCY_DIAGNOSTICS_ENABLED;
+      } else {
+        process.env.LATENCY_DIAGNOSTICS_ENABLED = previousEnabled;
+      }
+      if (previousPath === undefined) {
+        delete process.env.LATENCY_DIAGNOSTIC_LOG_PATH;
+      } else {
+        process.env.LATENCY_DIAGNOSTIC_LOG_PATH = previousPath;
+      }
+    }
   });
 
   it("dry-run client validates Lotus-internal signing and payload shape without exposing credentials", () => {
@@ -825,6 +999,99 @@ describe("PolymarketExecutionAdapterV2", () => {
     });
   });
 
+  it("falls back to public Polymarket activity when the CLOB client cannot see a user-scoped fill", async () => {
+    const sdkCalls: Array<{ method: string; args: unknown[] }> = [];
+    const sdkClient: PolymarketClobV2SdkClient = {
+      async createAndPostOrder() {
+        throw new Error("not used");
+      },
+      async getOrder(orderId) {
+        sdkCalls.push({ method: "getOrder", args: [orderId] });
+        return null;
+      },
+      async getTrades(params) {
+        sdkCalls.push({ method: "getTrades", args: [params] });
+        return [];
+      },
+      async cancelOrder() {
+        return { success: true };
+      }
+    };
+    const fetchCalls: string[] = [];
+    const fetchImpl = (async (url: string | URL) => {
+      fetchCalls.push(String(url));
+      return new Response(JSON.stringify([
+        {
+          proxyWallet: "0x1111111111111111111111111111111111111111",
+          timestamp: 1779324718,
+          conditionId: "0x384a78b847edbafb7f4542dcde7000f0042d08a43ad12f11879050fbbf06b0ee",
+          type: "TRADE",
+          size: 2.024142,
+          usdcSize: 2.010000006,
+          transactionHash: "0xe15ba68115ed1ed176ad049dc9815addf6ba37332de353ee200f96e7ab7a4fc7",
+          price: 0.992999997,
+          asset: "15636396498081492607537245191035256780946494107835473972503944043229908184003",
+          side: "BUY",
+          outcome: "No"
+        }
+      ]), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    }) as typeof fetch;
+    const client = new SdkPolymarketClobV2LiveClient({
+      executionMode: "v2",
+      liveExecutionEnabled: true,
+      clobHost: completeEnv.POLY_CLOB_HOST,
+      chainId: completeEnv.POLY_CHAIN_ID,
+      apiKey: completeEnv.POLY_API_KEY,
+      apiSecret: completeEnv.POLY_API_SECRET,
+      apiPassphrase: completeEnv.POLY_API_PASSPHRASE,
+      builderCode: completeEnv.POLY_BUILDER_CODE,
+      privateKey: completeEnv.POLY_PRIVATE_KEY,
+      dataApiBaseUrl: "https://data-api.polymarket.test"
+    }, () => sdkClient, undefined, fetchImpl);
+    const context = {
+      userId: "user-1",
+      submittedAt: "2026-05-21T00:47:00.000Z",
+      venueAccountAddress: "0x1111111111111111111111111111111111111111",
+      fillId: "0xe15ba68115ed1ed176ad049dc9815addf6ba37332de353ee200f96e7ab7a4fc7",
+      route: {
+        side: "buy"
+      },
+      routeLeg: {
+        venueMarketId: "0x384a78b847edbafb7f4542dcde7000f0042d08a43ad12f11879050fbbf06b0ee",
+        venueOutcomeId: "15636396498081492607537245191035256780946494107835473972503944043229908184003"
+      }
+    };
+
+    await expect(client.fetchFillState("0x32c7b83edf7ce47e34692cb3b46e5dcf65de7a6db8c03b706743cd3f5b4534d0", context))
+      .resolves.toMatchObject({
+        status: "FILLED",
+        filledSize: "2.024142",
+        averagePrice: 0.992999997,
+        offchainFilled: true
+      });
+    await expect(client.fetchSettlementState("0xe15ba68115ed1ed176ad049dc9815addf6ba37332de353ee200f96e7ab7a4fc7", context))
+      .resolves.toMatchObject({
+        status: "SETTLEMENT_VERIFIED",
+        evidence: {
+          source: "polymarket_data_api_activity",
+          transactionHash: "0xe15ba68115ed1ed176ad049dc9815addf6ba37332de353ee200f96e7ab7a4fc7",
+          side: "BUY",
+          size: "2.024142",
+          price: 0.992999997
+        }
+      });
+    expect(fetchCalls.every((url) => url.startsWith("https://data-api.polymarket.test/activity?"))).toBe(true);
+    expect(sdkCalls.map((call) => call.method)).toEqual([
+      "getOrder",
+      "getTrades",
+      "getOrder",
+      "getTrades"
+    ]);
+  });
+
   it("wraps user-signed POLY_1271 deposit-wallet signatures before CLOB submit", async () => {
     const calls: Array<{ method: string; args: unknown[] }> = [];
     const sdkClient: PolymarketClobV2SdkClient = {
@@ -895,7 +1162,7 @@ describe("PolymarketExecutionAdapterV2", () => {
         size: "1",
         price: 0.51
       }
-    })).resolves.toMatchObject({ venueOrderId: "pm-order-1271", status: "FILLED" });
+    })).resolves.toMatchObject({ venueOrderId: "pm-order-1271", status: "FILLED", filledSize: "1" });
 
     expect(calls.map((call) => call.method)).toEqual([
       "updateBalanceAllowance",
@@ -906,6 +1173,164 @@ describe("PolymarketExecutionAdapterV2", () => {
     expect(orderType).toBe(OrderType.FOK);
     expect(postedOrder.signature).toBe(`0x${"aa".repeat(65)}${"bb".repeat(96)}`);
     expect(postedOrder.signature).not.toBe(`0x${"aa".repeat(65)}`);
+  });
+
+  it("blocks tick-misaligned signed Polymarket orders before CLOB readiness or submit", async () => {
+    const calls: string[] = [];
+    const sdkClient: PolymarketClobV2SdkClient = {
+      async createAndPostOrder() {
+        throw new Error("not used");
+      },
+      async postOrder() {
+        calls.push("postOrder");
+        return { orderID: "pm-order-invalid", status: "MATCHED" };
+      },
+      async updateBalanceAllowance() {
+        calls.push("updateBalanceAllowance");
+        return {};
+      },
+      async getBalanceAllowance() {
+        calls.push("getBalanceAllowance");
+        return { balance: "2000000", allowance: "2000000" };
+      },
+      async getOrder() {
+        throw new Error("not used");
+      },
+      async getTrades() {
+        return [];
+      },
+      async cancelOrder() {
+        return { success: true };
+      }
+    };
+    const client = new SdkPolymarketClobV2LiveClient({
+      executionMode: "v2",
+      liveExecutionEnabled: true,
+      clobHost: completeEnv.POLY_CLOB_HOST,
+      chainId: completeEnv.POLY_CHAIN_ID,
+      apiKey: completeEnv.POLY_API_KEY,
+      apiSecret: completeEnv.POLY_API_SECRET,
+      apiPassphrase: completeEnv.POLY_API_PASSPHRASE,
+      builderCode: completeEnv.POLY_BUILDER_CODE,
+      privateKey: completeEnv.POLY_PRIVATE_KEY,
+      tickSize: "0.001"
+    }, () => sdkClient);
+
+    await expect(client.submitOrder(signedPolymarketVenueOrder({
+      size: "90.90909091",
+      price: 0.01114277,
+      metadata: {
+        clobV2DryRun: {
+          adapter: "PolymarketExecutionAdapterV2",
+          dryRun: true
+        }
+      }
+    }, {
+      makerAmount: "1000000",
+      takerAmount: "90900000",
+      side: "BUY"
+    }))).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
+      message: "Price moved before execution. Refresh route and retry."
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it("blocks invalid Polymarket market-buy amount precision before CLOB readiness or submit", async () => {
+    const calls: string[] = [];
+    const sdkClient: PolymarketClobV2SdkClient = {
+      async createAndPostOrder() {
+        throw new Error("not used");
+      },
+      async postOrder() {
+        calls.push("postOrder");
+        return { orderID: "pm-order-invalid-precision", status: "MATCHED" };
+      },
+      async updateBalanceAllowance() {
+        calls.push("updateBalanceAllowance");
+        return {};
+      },
+      async getBalanceAllowance() {
+        calls.push("getBalanceAllowance");
+        return { balance: "3000000", allowance: "3000000" };
+      },
+      async getOrder() {
+        throw new Error("not used");
+      },
+      async getTrades() {
+        return [];
+      },
+      async cancelOrder() {
+        return { success: true };
+      }
+    };
+    const client = new SdkPolymarketClobV2LiveClient({
+      executionMode: "v2",
+      liveExecutionEnabled: true,
+      clobHost: completeEnv.POLY_CLOB_HOST,
+      chainId: completeEnv.POLY_CHAIN_ID,
+      apiKey: completeEnv.POLY_API_KEY,
+      apiSecret: completeEnv.POLY_API_SECRET,
+      apiPassphrase: completeEnv.POLY_API_PASSPHRASE,
+      builderCode: completeEnv.POLY_BUILDER_CODE,
+      privateKey: completeEnv.POLY_PRIVATE_KEY,
+      tickSize: "0.001"
+    }, () => sdkClient);
+
+    await expect(client.submitOrder(signedPolymarketVenueOrder({
+      size: "2.02020202",
+      price: 0.992,
+      metadata: {
+        clobV2DryRun: {
+          adapter: "PolymarketExecutionAdapterV2",
+          dryRun: true
+        }
+      }
+    }, {
+      makerAmount: "2017980",
+      takerAmount: "2020000",
+      side: "BUY"
+    }))).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_ORDER_AMOUNT_PRECISION_REJECTED",
+      message: "Polymarket rejected the order amount precision. Refresh route and sign again."
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it("blocks tick-misaligned signed Polymarket relay orders before calling the relay", async () => {
+    const calls: string[] = [];
+    const client = new RelayPolymarketClobV2LiveClient({
+      relayUrl: "https://relay.polymarket.test",
+      relaySecret: "relay-secret",
+      polymarketConfig: {
+        executionMode: "v2",
+        liveExecutionEnabled: true,
+        executionSubmitMode: "relay",
+        tickSize: "0.001"
+      },
+      fetchImpl: (async () => {
+        calls.push("fetch");
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }) as typeof fetch
+    });
+
+    await expect(client.submitOrder(signedPolymarketVenueOrder({
+      size: "90.90909091",
+      price: 0.01114277,
+      metadata: {
+        clobV2DryRun: {
+          adapter: "PolymarketExecutionAdapterV2",
+          dryRun: true
+        }
+      }
+    }, {
+      makerAmount: "1000000",
+      takerAmount: "90900000",
+      side: "BUY"
+    }))).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED"
+    });
+    expect(calls).toEqual([]);
   });
 
   it("accepts scientific-notation CLOB balance responses without crashing readiness", async () => {
@@ -978,7 +1403,7 @@ describe("PolymarketExecutionAdapterV2", () => {
         size: "1.25",
         price: 0.99
       }
-    })).resolves.toMatchObject({ venueOrderId: "pm-order-scientific-balance", status: "FILLED" });
+    })).resolves.toMatchObject({ venueOrderId: "pm-order-scientific-balance", status: "FILLED", filledSize: "1" });
 
     expect(calls.map((call) => call.method)).toEqual([
       "updateBalanceAllowance",
@@ -1352,7 +1777,8 @@ describe("PolymarketExecutionAdapterV2", () => {
       }
     })).resolves.toMatchObject({
       venueOrderId: "pm-order-clob-allowance-confirmed",
-      status: "FILLED"
+      status: "FILLED",
+      filledSize: "1.25"
     });
     expect(calls.at(-1)?.args[1]).toBe(OrderType.FOK);
   });
@@ -1531,7 +1957,8 @@ describe("PolymarketExecutionAdapterV2", () => {
       }
     })).resolves.toMatchObject({
       venueOrderId: "pm-order-direct-clob-attested",
-      status: "FILLED"
+      status: "FILLED",
+      filledSize: "1"
     });
 
     expect(calls).toEqual([
@@ -1700,9 +2127,41 @@ describe("PolymarketExecutionAdapterV2", () => {
     expect(artifactText).toContain("<token-id-redacted");
   });
 
+  it("writes a redacted diagnostic artifact when Polymarket returns a FAILED postOrder body", async () => {
+    const client = diagnosticClient(diagnosticSdkClientReturning({
+      status: "FAILED",
+      code: "INVALID_ORDER",
+      message: `invalid order: maker amount violates tick size for token ${diagnosticLongTokenId}`,
+      tokenId: diagnosticLongTokenId,
+      signature: `0x${"cc".repeat(65)}`,
+      apiKey: completeEnv.POLY_API_KEY
+    }));
+
+    await expect(client.submitOrder(signedPolymarketVenueOrder())).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED"
+    });
+
+    expect(existsSync(polymarketPostOrderDiagnosticPath)).toBe(true);
+    const artifactText = readFileSync(polymarketPostOrderDiagnosticPath, "utf8");
+    const artifact = JSON.parse(artifactText) as Record<string, unknown>;
+    expect(artifact).toMatchObject({
+      polymarketApiStatus: "FAILED",
+      rawVenueErrorCode: "INVALID_ORDER",
+      normalizedReasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED"
+    });
+    expect(artifactText).not.toContain(completeEnv.POLY_API_KEY);
+    expect(artifactText).not.toContain(`0x${"cc".repeat(65)}`);
+    expect(artifactText).not.toContain(diagnosticLongTokenId);
+    expect(artifactText).toContain("<token-id-redacted");
+  });
+
   it.each([
     ["signature has invalid EIP712 1271 signature", "POLYMARKET_CLOB_SIGNATURE_REJECTED"],
     ["Unauthorized: API key HMAC credential rejected", "POLYMARKET_CLOB_AUTH_REJECTED"],
+    [
+      "invalid amounts, the market buy orders maker amount supports a max accuracy of 2 decimals, taker amount a max of 5 decimals",
+      "POLYMARKET_CLOB_ORDER_AMOUNT_PRECISION_REJECTED"
+    ],
     ["invalid order: maker amount violates tick size for FOK", "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED"],
     ["market closed for token id / invalid outcome", "POLYMARKET_CLOB_MARKET_REJECTED"],
     ["unexpected venue rejection without known category", "POLYMARKET_CLOB_UNKNOWN_REJECTED_BY_VENUE"]
@@ -1711,6 +2170,15 @@ describe("PolymarketExecutionAdapterV2", () => {
 
     await expect(client.submitOrder(signedPolymarketVenueOrder())).rejects.toMatchObject({
       reasonCode
+    });
+  });
+
+  it("maps Polymarket FOK full-fill rejection to a price-moved message", async () => {
+    const client = diagnosticClient(diagnosticSdkClient(new Error("order couldn't be fully filled. FOK orders are fully filled or killed.")));
+
+    await expect(client.submitOrder(signedPolymarketVenueOrder())).rejects.toMatchObject({
+      reasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
+      message: "Price moved before execution. Refresh route and retry."
     });
   });
 

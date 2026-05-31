@@ -1,4 +1,6 @@
 import Decimal from "decimal.js";
+import { performance } from "node:perf_hooks";
+import { recordLatencyDuration, withLatencyStage, withLatencyStageSync } from "../../observability/latency.js";
 import { calculateVenueFeeQuote, type VenueFeeQuote } from "./venue-fees.js";
 
 export type QuoteQuality =
@@ -88,6 +90,16 @@ export interface VenueQuoteSnapshotReader {
   getQuoteSnapshot(input: VenueQuoteSnapshotReaderInput): Promise<NormalizedVenueQuoteSnapshot | null>;
 }
 
+export interface HotVenueQuoteSnapshotStore {
+  touch(input: { canonicalMarketId: string; canonicalOutcomeId?: string | undefined }): void;
+  put?(snapshot: NormalizedVenueQuoteSnapshot): void;
+  get(input: {
+    venue: string;
+    venueMarketId: string;
+    venueOutcomeId?: string | undefined;
+  }): Promise<NormalizedVenueQuoteSnapshot | null>;
+}
+
 export interface VenueQuoteMapping {
   venue: string;
   venueMarketId: string;
@@ -120,6 +132,9 @@ export interface VenueQuoteMappingResolver {
     canonicalMarketId: string;
     canonicalOutcomeId?: string | undefined;
   }): Promise<readonly VenueQuoteMappingReadiness[]>;
+  listApprovedReadiness?(input: {
+    limit: number;
+  }): Promise<readonly SharedCoreQuoteReadinessMarket[]>;
 }
 
 export interface SharedCoreVenueQuoteMappingRow extends Record<string, unknown> {
@@ -191,7 +206,8 @@ export class CompositeVenueQuoteSource {
   public constructor(
     readers: readonly VenueQuoteSnapshotReader[],
     private readonly mappingResolver: VenueQuoteMappingResolver,
-    private readonly now: () => Date = () => new Date()
+    private readonly now: () => Date = () => new Date(),
+    private readonly hotSnapshotStore?: HotVenueQuoteSnapshotStore | undefined
   ) {
     this.readerByVenue = new Map(readers.flatMap((reader) => {
       const venue = reader.venue.toUpperCase();
@@ -217,7 +233,9 @@ export class CompositeVenueQuoteSource {
     quantity: number;
   }): Promise<CalculatedVenueQuoteSnapshotReport> {
     const rawReport = await this.getQuoteSnapshotReport(input);
-    const calculatedResults = rawReport.snapshots.map((snapshot): {
+    const calculatedResults = withLatencyStageSync("quote_aggregation_calculation", {
+      canonicalMarketId: input.canonicalMarketId
+    }, () => rawReport.snapshots.map((snapshot): {
       snapshot: CalculatedVenueQuoteSnapshot | null;
       blocker: VenueQuoteSnapshotBlocker | null;
     } => {
@@ -270,7 +288,7 @@ export class CompositeVenueQuoteSource {
         }
       };
       return { snapshot: output, blocker: null };
-    });
+    }));
     return {
       snapshots: calculatedResults
         .map((result) => result.snapshot)
@@ -290,7 +308,13 @@ export class CompositeVenueQuoteSource {
     side: "buy" | "sell";
     quantity: number;
   }): Promise<VenueQuoteSnapshotReport> {
-    const readiness = await this.loadMappingReadiness(input);
+    this.hotSnapshotStore?.touch({
+      canonicalMarketId: input.canonicalMarketId,
+      ...(input.canonicalOutcomeId ? { canonicalOutcomeId: input.canonicalOutcomeId } : {})
+    });
+    const readiness = await withLatencyStage("quote_source_mapping_lookup", {
+      canonicalMarketId: input.canonicalMarketId
+    }, () => this.loadMappingReadiness(input));
     const mappingBlockers: VenueQuoteSnapshotBlocker[] = readiness
       .filter((row) => !row.quoteReady)
       .map((row) => ({
@@ -311,9 +335,16 @@ export class CompositeVenueQuoteSource {
       snapshot: NormalizedVenueQuoteSnapshot | null;
       blocker: VenueQuoteSnapshotBlocker | null;
     }> => {
+      const startedAt = performance.now();
       try {
         const reader = this.readerByVenue.get(mapping.venue.toUpperCase());
         if (!reader) {
+          recordLatencyDuration("venue_quote_fetch", performance.now() - startedAt, {
+            canonicalMarketId: input.canonicalMarketId,
+            venue: mapping.venue,
+            external: true,
+            blockerCategory: "QUOTE_READER_UNSUPPORTED"
+          });
           return {
             snapshot: null,
             blocker: {
@@ -324,6 +355,20 @@ export class CompositeVenueQuoteSource {
             }
           };
         }
+        const hotSnapshot = await this.hotSnapshotStore?.get({
+          venue: mapping.venue,
+          venueMarketId: mapping.venueMarketId,
+          ...(mapping.venueOutcomeId ? { venueOutcomeId: mapping.venueOutcomeId } : {})
+        });
+        if (hotSnapshot) {
+          recordLatencyDuration("venue_quote_fetch", performance.now() - startedAt, {
+            canonicalMarketId: input.canonicalMarketId,
+            venue: mapping.venue,
+            external: false,
+            cache: "hit"
+          });
+          return { snapshot: hotSnapshot, blocker: null };
+        }
         const snapshot = await reader.getQuoteSnapshot({
           canonicalMarketId: input.canonicalMarketId,
           ...(input.canonicalOutcomeId ? { canonicalOutcomeId: input.canonicalOutcomeId } : {}),
@@ -333,6 +378,12 @@ export class CompositeVenueQuoteSource {
           quantity: input.quantity
         });
         if (!snapshot) {
+          recordLatencyDuration("venue_quote_fetch", performance.now() - startedAt, {
+            canonicalMarketId: input.canonicalMarketId,
+            venue: mapping.venue,
+            external: true,
+            blockerCategory: "QUOTE_SNAPSHOT_UNAVAILABLE"
+          });
           return {
             snapshot: null,
             blocker: {
@@ -343,10 +394,22 @@ export class CompositeVenueQuoteSource {
             }
           };
         }
+        recordLatencyDuration("venue_quote_fetch", performance.now() - startedAt, {
+          canonicalMarketId: input.canonicalMarketId,
+          venue: mapping.venue,
+          external: true
+        });
+        this.hotSnapshotStore?.put?.(snapshot);
         return { snapshot, blocker: null };
       } catch (error) {
         const classified = classifyQuoteReaderError(error);
         const venue = mapping.venue.toUpperCase();
+        recordLatencyDuration("venue_quote_fetch", performance.now() - startedAt, {
+          canonicalMarketId: input.canonicalMarketId,
+          venue,
+          external: true,
+          blockerCategory: classified.reason
+        });
         const detailsCode = (venue === "PREDICT_FUN" || venue === "PREDICT") && classified.reason === "QUOTE_PROVIDER_HTTP_401"
           ? "PREDICT_PROVIDER_AUTH_INVALID"
           : classified.detailsCode;
@@ -668,6 +731,9 @@ const classifyQuoteReaderError = (error: unknown): { reason: string; detailsCode
   const normalized = `${name ?? ""} ${message}`.toUpperCase();
   const messageStatus = message.match(/\bstatus\s+(\d{3})\b/i)?.[1] ?? null;
 
+  if (normalized.includes("LIMITLESS") && normalized.includes("MARKET IS NOT ACTIVE")) {
+    return { reason: "LIMITLESS_MARKET_NOT_ACTIVE", detailsCode: safeDetailsCode(message) };
+  }
   if (status !== null || messageStatus !== null) {
     return { reason: `QUOTE_PROVIDER_HTTP_${status ?? messageStatus}`, detailsCode: safeDetailsCode(message) };
   }

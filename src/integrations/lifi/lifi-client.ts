@@ -114,7 +114,7 @@ export class LifiRestClient implements LifiRouteProvider {
 }
 
 export const buildLifiClientConfigFromEnv = (env: NodeJS.ProcessEnv = process.env): LifiClientConfig => ({
-  baseUrl: env.LIFI_API_BASE_URL || "https://li.quest",
+  baseUrl: env.LIFI_API_BASE_URL || "https://li.quest/v1",
   ...(env.LIFI_API_KEY ? { apiKey: env.LIFI_API_KEY } : {}),
   timeoutMs: Number.parseInt(env.LIFI_QUOTE_TIMEOUT_MS || "10000", 10),
   quoteTtlSeconds: Number.parseInt(env.LIFI_QUOTE_TTL_SECONDS || "60", 10),

@@ -29,6 +29,7 @@ import type {
   NormalizedVenueError,
   PreparedVenueOrder,
   VenueFillState,
+  VenueOrderLookupContext,
   VenueSettlementState,
   VenueSubmitResult
 } from "./venue-adapter.js";
@@ -38,6 +39,12 @@ import {
   signPolymarketRelayRequest
 } from "./polymarket-execution-relay-auth.js";
 import { normalizeLiveVenueErrorMessage } from "./live-venue-error-normalizer.js";
+import {
+  PolymarketDataApiClient,
+  normalizePolymarketDataApiSide,
+  type PolymarketDataApiActivity
+} from "../integrations/polymarket/polymarket-data-api-client.js";
+import { withLatencyStageSync } from "../observability/latency.js";
 
 export const polymarketV2RequiredEnvKeys = [
   "POLYMARKET_CLOB_HOST",
@@ -90,6 +97,7 @@ export interface PolymarketExecutionAdapterV2Config {
   executionSubmitMode?: string | undefined;
   executionRelayUrl?: string | undefined;
   executionRelaySecret?: string | undefined;
+  dataApiBaseUrl?: string | undefined;
   settlementStateOverride?: SettlementStatusV0 | undefined;
   fillStateOverride?: VenueFillState["status"] | undefined;
 }
@@ -110,6 +118,24 @@ export interface PolymarketExecutionAdapterV2EnvStatus {
   liveSubmissionStatus: "NOT_CONFIGURED" | "LIVE_DISABLED" | "ENV_INCOMPLETE" | "LIVE_READY" | "LIVE_CLIENT_DISABLED";
   submitMode: "direct" | "relay";
   relayConfigured: boolean;
+  signatureType?: string | undefined;
+  accountModel?: string | undefined;
+  depositWalletEnabled?: boolean | undefined;
+}
+
+export interface PolymarketAdapterReadinessSnapshot {
+  executionMode: string;
+  liveExecutionEnabled: boolean;
+  submitMode: "direct" | "relay";
+  relayConfigured: boolean;
+  requiredEnvPresent: boolean;
+  dryRunRequiredEnvPresent: boolean;
+  builderCodeConfigured: boolean;
+  missingEnv: readonly string[];
+  missingDryRunEnv: readonly PolymarketV2DryRunRequiredEnvKey[];
+  signatureType?: string | undefined;
+  accountModel?: string | undefined;
+  depositWalletEnabled?: boolean | undefined;
 }
 
 export interface PolymarketSubmitBalanceReader {
@@ -287,8 +313,77 @@ export const buildPolymarketExecutionAdapterV2ConfigFromEnv = (
   relayerApiKey: env.POLYMARKET_RELAYER_API_KEY ?? env.POLY_RELAYER_API_KEY,
   executionSubmitMode: env.POLYMARKET_EXECUTION_SUBMIT_MODE,
   executionRelayUrl: env.POLYMARKET_EXECUTION_RELAY_URL,
-  executionRelaySecret: env.POLYMARKET_EXECUTION_RELAY_SECRET
+  executionRelaySecret: env.POLYMARKET_EXECUTION_RELAY_SECRET,
+  dataApiBaseUrl: env.POLYMARKET_DATA_API_BASE_URL
 });
+
+const polymarketConfigEnvLike = (config: PolymarketExecutionAdapterV2Config): NodeJS.ProcessEnv => {
+  const envLike: NodeJS.ProcessEnv = {
+    POLYMARKET_EXECUTION_MODE: config.executionMode,
+    POLYMARKET_LIVE_EXECUTION_ENABLED: String(config.liveExecutionEnabled),
+    POLYMARKET_CLOB_HOST: config.clobHost,
+    POLYMARKET_CHAIN_ID: config.chainId,
+    POLYMARKET_API_KEY: config.apiKey,
+    POLYMARKET_API_SECRET: config.apiSecret,
+    POLYMARKET_API_PASSPHRASE: config.apiPassphrase,
+    POLYMARKET_BUILDER_CODE: config.builderCode,
+    POLYMARKET_PRIVATE_KEY: config.privateKey
+  };
+  if (config.executionSubmitMode) {
+    envLike.POLYMARKET_EXECUTION_SUBMIT_MODE = config.executionSubmitMode;
+  }
+  if (config.executionRelayUrl) {
+    envLike.POLYMARKET_EXECUTION_RELAY_URL = config.executionRelayUrl;
+  }
+  if (config.executionRelaySecret) {
+    envLike.POLYMARKET_EXECUTION_RELAY_SECRET = config.executionRelaySecret;
+  }
+  return envLike;
+};
+
+const normalizeConfiguredSignatureType = (value: string | undefined): string => {
+  const parsed = parseSignatureType(value);
+  if (parsed === SignatureTypeV2.EOA) return "EOA";
+  if (parsed === SignatureTypeV2.POLY_GNOSIS_SAFE) return "POLY_GNOSIS_SAFE";
+  if (parsed === SignatureTypeV2.POLY_1271) return "POLY_1271";
+  return "POLY_PROXY";
+};
+
+const inferPolymarketAccountModel = (config: PolymarketExecutionAdapterV2Config): string => {
+  if (nonEmpty(config.funderAddress)) {
+    return "DEPOSIT_WALLET";
+  }
+  const signatureType = normalizeConfiguredSignatureType(config.signatureType);
+  if (signatureType === "POLY_1271" || signatureType === "POLY_GNOSIS_SAFE") {
+    return "CONTRACT_WALLET";
+  }
+  if (signatureType === "EOA") {
+    return "EOA";
+  }
+  return "POLY_PROXY";
+};
+
+const buildPolymarketAdapterReadinessSnapshot = (
+  config: PolymarketExecutionAdapterV2Config,
+  status: PolymarketExecutionAdapterV2EnvStatus
+): PolymarketAdapterReadinessSnapshot => {
+  const signatureType = normalizeConfiguredSignatureType(config.signatureType);
+  const depositWalletEnabled = nonEmpty(config.funderAddress);
+  return {
+    executionMode: status.executionMode,
+    liveExecutionEnabled: status.liveExecutionEnabled,
+    submitMode: status.submitMode,
+    relayConfigured: status.relayConfigured,
+    requiredEnvPresent: status.requiredEnvPresent,
+    dryRunRequiredEnvPresent: status.dryRunRequiredEnvPresent,
+    builderCodeConfigured: status.builderCodeConfigured,
+    missingEnv: status.missingEnv,
+    missingDryRunEnv: status.missingDryRunEnv,
+    signatureType,
+    accountModel: inferPolymarketAccountModel(config),
+    depositWalletEnabled
+  };
+};
 
 const assertLiveClientConfig = (config: PolymarketExecutionAdapterV2Config): void => {
   const missing: string[] = [];
@@ -399,9 +494,9 @@ export interface PolymarketClobV2PreparedDryRunEnvelope {
 export interface PolymarketClobV2LiveClient {
   readonly mode: "disabled" | "live" | "relay";
   submitOrder(order: PreparedVenueOrder): Promise<VenueSubmitResult>;
-  fetchFillState(venueOrderId: string): Promise<VenueFillState>;
+  fetchFillState(venueOrderId: string, context?: VenueOrderLookupContext): Promise<VenueFillState>;
   cancelOrder(venueOrderId: string): Promise<{ cancelled: boolean }>;
-  fetchSettlementState(fillOrOrderId: string): Promise<VenueSettlementState>;
+  fetchSettlementState(fillOrOrderId: string, context?: VenueOrderLookupContext): Promise<VenueSettlementState>;
 }
 
 export interface PolymarketClobV2SdkClient {
@@ -470,14 +565,20 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
   public readonly mode = "live";
   private readonly sdkClient: PolymarketClobV2SdkClient;
   private readonly sensitiveValues: readonly string[];
+  private readonly dataApiClient: PolymarketDataApiClient;
 
   public constructor(
     private readonly config: PolymarketExecutionAdapterV2Config,
     sdkFactory: PolymarketClobV2SdkFactory = createPolymarketClobV2SdkClient,
-    private readonly balanceReader?: PolymarketSubmitBalanceReader | undefined
+    private readonly balanceReader?: PolymarketSubmitBalanceReader | undefined,
+    fetchImpl: typeof fetch = fetch
   ) {
     assertLiveClientConfig(config);
     this.sdkClient = sdkFactory(config);
+    this.dataApiClient = new PolymarketDataApiClient({
+      baseUrl: config.dataApiBaseUrl,
+      fetchImpl
+    });
     this.sensitiveValues = [
       config.apiKey,
       config.apiSecret,
@@ -491,6 +592,7 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
     parsePreparedPolymarketPayload(order);
     const signedOrder = parseUserSignedPolymarketOrder(order);
     if (signedOrder) {
+      validatePolymarketSignedOrderShapeBeforeSubmit(order, signedOrder, this.config);
       const authPayload = parsePolymarketClobAuthPayload(order);
       const sdkClient = authPayload
         ? await this.createUserScopedSdkClient(authPayload, signedOrder)
@@ -527,6 +629,17 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
           extraSensitiveValues
         });
       }
+      const returnedFailure = buildPolymarketReturnedPostOrderFailure(response);
+      if (returnedFailure) {
+        throw await this.handlePostOrderRejection({
+          error: returnedFailure,
+          order,
+          signedOrder,
+          authPayload,
+          readinessEvidence,
+          extraSensitiveValues
+        });
+      }
       return mapPolymarketOrderResponse(response);
     }
     throw new PolymarketExecutionNotConfiguredError(
@@ -535,13 +648,18 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
     );
   }
 
-  public async fetchFillState(venueOrderId: string): Promise<VenueFillState> {
+  public async fetchFillState(venueOrderId: string, context?: VenueOrderLookupContext): Promise<VenueFillState> {
     const order = await this.callSdkSafely(() => this.sdkClient.getOrder(venueOrderId));
     if (order) {
       return mapPolymarketOpenOrderToFillState(order);
     }
     const trades = await this.callSdkSafely(() => this.sdkClient.getTrades({ id: venueOrderId }));
-    return mapPolymarketTradesToFillState(trades);
+    const tradeState = mapPolymarketTradesToFillState(trades);
+    if (tradeState.status !== "OPEN") {
+      return tradeState;
+    }
+    const activity = await this.findDataApiTradeActivity(context, venueOrderId).catch(() => null);
+    return activity ? mapPolymarketDataApiActivityToFillState(activity) : tradeState;
   }
 
   public async cancelOrder(venueOrderId: string): Promise<{ cancelled: boolean }> {
@@ -549,12 +667,16 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
     return { cancelled: isPolymarketCancelSuccess(response) };
   }
 
-  public async fetchSettlementState(fillOrOrderId: string): Promise<VenueSettlementState> {
+  public async fetchSettlementState(fillOrOrderId: string, context?: VenueOrderLookupContext): Promise<VenueSettlementState> {
     const order = await this.callSdkSafely(() => this.sdkClient.getOrder(fillOrOrderId)).catch(() => null);
     const tradeId = order?.associate_trades?.[0] ?? fillOrOrderId;
     const trades = await this.callSdkSafely(() => this.sdkClient.getTrades({ id: tradeId }));
     const [trade] = trades;
     if (!trade) {
+      const activity = await this.findDataApiTradeActivity(context, fillOrOrderId).catch(() => null);
+      if (activity) {
+        return mapPolymarketDataApiActivityToSettlementState(activity);
+      }
       return {
         status: "SETTLEMENT_PENDING",
         evidence: {
@@ -568,6 +690,25 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
       settlementStatus: trade.status,
       finalityStatus: trade.transaction_hash ? "verified" : trade.status,
       ...extractPolymarketBuilderFeeEvidence(trade)
+    });
+  }
+
+  private async findDataApiTradeActivity(
+    context: VenueOrderLookupContext | undefined,
+    lookupId: string
+  ): Promise<PolymarketDataApiActivity | null> {
+    if (!context?.routeLeg?.venueMarketId || !context.routeLeg.venueOutcomeId) {
+      return null;
+    }
+    const side = normalizePolymarketDataApiSide(context.route?.side);
+    return await this.dataApiClient.findTradeActivity({
+      proxyWallet: context.venueAccountAddress,
+      conditionId: context.routeLeg.venueMarketId,
+      assetId: context.routeLeg.venueOutcomeId,
+      side,
+      transactionHash: context.fillId ?? (isHexHash(lookupId) ? lookupId : null),
+      submittedAt: context.submittedAt,
+      limit: 100
     });
   }
 
@@ -641,6 +782,8 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
       classification
     });
 
+    console.warn("[polymarket-postorder-rejection-diagnostic]", diagnostic);
+
     await writePolymarketPostOrderRejectionDiagnostic(diagnostic).catch((writeError: unknown) => {
       console.warn("[polymarket-postorder-diagnostic-write-failed]", {
         reason: redactStringValues(
@@ -664,7 +807,8 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
       classification.message,
       {
         diagnosticArtifact: POLYMARKET_POSTORDER_REJECTION_DIAGNOSTIC_PATH,
-        rawVenueErrorCode: rawError.code ?? null
+        rawVenueErrorCode: rawError.code ?? null,
+        postOrderRejectionDiagnostic: diagnostic
       }
     );
   }
@@ -912,11 +1056,13 @@ export class RelayPolymarketClobV2LiveClient implements PolymarketClobV2LiveClie
   private readonly baseUrl: string;
   private readonly secret: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly config: PolymarketExecutionAdapterV2Config;
 
   public constructor(config: {
     relayUrl: string;
     relaySecret: string;
     fetchImpl?: typeof fetch | undefined;
+    polymarketConfig?: PolymarketExecutionAdapterV2Config | undefined;
   }) {
     if (!nonEmpty(config.relayUrl) || !nonEmpty(config.relaySecret)) {
       throw new PolymarketExecutionNotConfiguredError(
@@ -927,22 +1073,31 @@ export class RelayPolymarketClobV2LiveClient implements PolymarketClobV2LiveClie
     this.baseUrl = config.relayUrl.replace(/\/+$/, "");
     this.secret = config.relaySecret;
     this.fetchImpl = config.fetchImpl ?? fetch;
+    this.config = config.polymarketConfig ?? {
+      executionMode: "v2",
+      liveExecutionEnabled: true,
+      executionSubmitMode: "relay"
+    };
   }
 
-  public submitOrder(order: PreparedVenueOrder): Promise<VenueSubmitResult> {
-    return this.post<VenueSubmitResult>("/internal/polymarket/v2/submit-order", { order });
+  public async submitOrder(order: PreparedVenueOrder): Promise<VenueSubmitResult> {
+    const signedOrder = safeParseUserSignedPolymarketOrder(order);
+    if (signedOrder) {
+      validatePolymarketSignedOrderShapeBeforeSubmit(order, signedOrder, this.config);
+    }
+    return await this.post<VenueSubmitResult>("/internal/polymarket/v2/submit-order", { order });
   }
 
-  public fetchFillState(venueOrderId: string): Promise<VenueFillState> {
-    return this.post<VenueFillState>("/internal/polymarket/v2/fill-state", { venueOrderId });
+  public fetchFillState(venueOrderId: string, context?: VenueOrderLookupContext): Promise<VenueFillState> {
+    return this.post<VenueFillState>("/internal/polymarket/v2/fill-state", { venueOrderId, context });
   }
 
   public cancelOrder(venueOrderId: string): Promise<{ cancelled: boolean }> {
     return this.post<{ cancelled: boolean }>("/internal/polymarket/v2/cancel-order", { venueOrderId });
   }
 
-  public fetchSettlementState(fillOrOrderId: string): Promise<VenueSettlementState> {
-    return this.post<VenueSettlementState>("/internal/polymarket/v2/settlement-state", { fillOrOrderId });
+  public fetchSettlementState(fillOrOrderId: string, context?: VenueOrderLookupContext): Promise<VenueSettlementState> {
+    return this.post<VenueSettlementState>("/internal/polymarket/v2/settlement-state", { fillOrOrderId, context });
   }
 
   private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
@@ -979,6 +1134,39 @@ export class RelayPolymarketClobV2LiveClient implements PolymarketClobV2LiveClie
           : "POLYMARKET_V2_RELAY_ERROR",
         fallbackMessage: message
       });
+      const forwardedPostOrderDiagnostic = extractForwardedPolymarketPostOrderDiagnostic(payload);
+      if (path === "/internal/polymarket/v2/submit-order") {
+        await this.captureRelayPostOrderRejection({
+          body,
+          payload,
+          httpStatus: response.status,
+          normalizedCode: normalized.code,
+          normalizedMessage: normalized.message
+        });
+      }
+      const relayDiagnosticCode = forwardedPostOrderDiagnostic &&
+        typeof forwardedPostOrderDiagnostic.normalizedReasonCode === "string" &&
+        isPolymarketPostOrderRejectionCode(forwardedPostOrderDiagnostic.normalizedReasonCode)
+        ? forwardedPostOrderDiagnostic.normalizedReasonCode
+        : null;
+      const relayDiagnosticMessage = forwardedPostOrderDiagnostic &&
+        typeof forwardedPostOrderDiagnostic.normalizedReason === "string"
+        ? forwardedPostOrderDiagnostic.normalizedReason
+        : null;
+      const relayRawVenueErrorCode = forwardedPostOrderDiagnostic &&
+        typeof forwardedPostOrderDiagnostic.rawVenueErrorCode === "string"
+        ? forwardedPostOrderDiagnostic.rawVenueErrorCode
+        : null;
+      if (relayDiagnosticCode) {
+        throw new PolymarketExecutionNotConfiguredError(
+          relayDiagnosticCode,
+          relayDiagnosticMessage ?? polymarketPostOrderRejectionMessages[relayDiagnosticCode],
+          {
+            diagnosticArtifact: POLYMARKET_POSTORDER_REJECTION_DIAGNOSTIC_PATH,
+            rawVenueErrorCode: relayRawVenueErrorCode
+          }
+        );
+      }
       if (
         path === "/internal/polymarket/v2/submit-order" &&
         (relayCode === "POLYMARKET_CLOB_COLLATERAL_NOT_READY" || normalized.code === "POLYMARKET_CLOB_COLLATERAL_NOT_READY") &&
@@ -995,6 +1183,79 @@ export class RelayPolymarketClobV2LiveClient implements PolymarketClobV2LiveClie
       );
     }
     return payload as T;
+  }
+
+  private async captureRelayPostOrderRejection(input: {
+    body: Record<string, unknown>;
+    payload: unknown;
+    httpStatus: number;
+    normalizedCode: string;
+    normalizedMessage: string;
+  }): Promise<Record<string, unknown> | null> {
+    const forwardedDiagnostic = extractForwardedPolymarketPostOrderDiagnostic(input.payload);
+    const diagnostic = forwardedDiagnostic ?? this.buildRelayPostOrderRejectionDiagnostic(input);
+    if (!diagnostic) {
+      return null;
+    }
+    console.warn("[polymarket-postorder-rejection-diagnostic]", diagnostic);
+    await writePolymarketPostOrderRejectionDiagnostic(diagnostic).catch((writeError: unknown) => {
+      console.warn("[polymarket-postorder-diagnostic-write-failed]", {
+        reason: redactStringValues(
+          writeError instanceof Error ? writeError.message : String(writeError),
+          [this.secret].filter((value): value is string => nonEmpty(value))
+        )
+      });
+    });
+    return diagnostic;
+  }
+
+  private buildRelayPostOrderRejectionDiagnostic(input: {
+    body: Record<string, unknown>;
+    payload: unknown;
+    httpStatus: number;
+    normalizedCode: string;
+    normalizedMessage: string;
+  }): Record<string, unknown> | null {
+    const order = parseRelayPreparedPolymarketOrder(input.body);
+    if (!order) {
+      return null;
+    }
+    const sensitiveValues = [this.secret].filter((value): value is string => nonEmpty(value));
+    const rawError = capturePolymarketRawPostOrderError({
+      status: input.httpStatus,
+      statusCode: input.httpStatus,
+      body: input.payload,
+      data: input.payload
+    }, sensitiveValues);
+    const hasConfirmedReadinessEvidence = relaySubmitHasConfirmedReadinessAttestation(input.body);
+    const classification = classifyPolymarketPostOrderRejection(rawError, hasConfirmedReadinessEvidence);
+    const signedOrder = safeParseUserSignedPolymarketOrder(order);
+    if (!signedOrder) {
+      return {
+        quoteId: optionalString(order.payload.quoteId) ?? null,
+        executionId: optionalString(order.payload.executionId)
+          ?? optionalString(order.payload.parentExecutionId)
+          ?? order.clientOrderId,
+        submitTimestamp: new Date().toISOString(),
+        httpStatus: input.httpStatus,
+        polymarketApiStatus: rawError.polymarketApiStatus ?? null,
+        rawVenueErrorCode: rawError.code ?? null,
+        rawVenueErrorMessage: rawError.message ?? null,
+        rawResponseBodyRedacted: rawError.body ?? null,
+        normalizedReasonCode: input.normalizedCode,
+        normalizedReason: input.normalizedMessage,
+        relayDiagnosticOnly: true
+      };
+    }
+    return buildPolymarketPostOrderRejectionDiagnostic({
+      config: this.config,
+      order,
+      signedOrder,
+      authPayload: safeParsePolymarketClobAuthPayload(order),
+      readinessEvidence: null,
+      rawError,
+      classification
+    });
   }
 }
 
@@ -1211,6 +1472,150 @@ const parseUserSignedPolymarketOrder = (order: PreparedVenueOrder): SignedOrder 
   } as unknown as SignedOrder;
 };
 
+const safeParseUserSignedPolymarketOrder = (order: PreparedVenueOrder): SignedOrder | null => {
+  try {
+    return parseUserSignedPolymarketOrder(order);
+  } catch {
+    return null;
+  }
+};
+
+const validatePolymarketSignedOrderShapeBeforeSubmit = (
+  order: PreparedVenueOrder,
+  signedOrder: SignedOrder,
+  config: PolymarketExecutionAdapterV2Config
+): void => {
+  const prepared = parsePreparedPolymarketPayload(order);
+  const signedRecord = signedOrder as unknown as Record<string, unknown>;
+  if (String(signedRecord.tokenId ?? "") !== prepared.venueOutcomeId) {
+    throwPolymarketOrderParamsRejected();
+  }
+  const signedSide = normalizePolymarketSignedOrderSide(signedRecord.side);
+  if (!signedSide || signedSide !== prepared.side) {
+    throwPolymarketOrderParamsRejected();
+  }
+  const normalizedSignedSide = prepared.side;
+  const orderMetadata = polymarketOrderExecutionMetadata(order);
+  const tickSize = orderMetadata.tickSize ?? config.tickSize;
+  if (!tickSize || !hasLotusPreparedPolymarketShape(order)) {
+    validatePositivePolymarketSignedAmounts(signedRecord);
+    return;
+  }
+  validatePolymarketVenuePrecisionAmounts(signedRecord, normalizedSignedSide);
+  validatePolymarketTickAlignedAmounts(signedRecord, normalizedSignedSide, tickSize);
+};
+
+const hasLotusPreparedPolymarketShape = (order: PreparedVenueOrder): boolean => {
+  const metadata = isRecord(order.payload.metadata) ? order.payload.metadata : null;
+  return Boolean(metadata && isRecord(metadata.clobV2DryRun));
+};
+
+const polymarketOrderExecutionMetadata = (order: PreparedVenueOrder): {
+  tickSize?: TickSize | undefined;
+  negRisk?: boolean | undefined;
+} => {
+  const metadata = isRecord(order.payload.metadata) ? order.payload.metadata : {};
+  const tickSize = parseTickSize(
+    optionalString(metadata.polymarketTickSize)
+      ?? optionalString(metadata.tickSize)
+      ?? undefined
+  );
+  const negRisk = parseOptionalBooleanValue(metadata.polymarketNegRisk ?? metadata.negRisk);
+  return {
+    ...(tickSize ? { tickSize } : {}),
+    ...(negRisk !== undefined ? { negRisk } : {})
+  };
+};
+
+const validatePositivePolymarketSignedAmounts = (signedRecord: Record<string, unknown>): {
+  makerAmount: bigint;
+  takerAmount: bigint;
+} => {
+  const makerAmount = parseNonNegativeAtomicUnits(signedRecord.makerAmount, "makerAmount");
+  const takerAmount = parseNonNegativeAtomicUnits(signedRecord.takerAmount, "takerAmount");
+  if (makerAmount <= 0n || takerAmount <= 0n) {
+    throwPolymarketOrderParamsRejected();
+  }
+  return { makerAmount, takerAmount };
+};
+
+const validatePolymarketTickAlignedAmounts = (
+  signedRecord: Record<string, unknown>,
+  signedSide: "buy" | "sell",
+  tickSize: TickSize
+): void => {
+  const { makerAmount, takerAmount } = validatePositivePolymarketSignedAmounts(signedRecord);
+  const collateralAtomic = signedSide === "buy" ? makerAmount : takerAmount;
+  const shareAtomic = signedSide === "buy" ? takerAmount : makerAmount;
+  const tickCount = new Decimal(collateralAtomic.toString())
+    .div(new Decimal(shareAtomic.toString()))
+    .div(new Decimal(tickSize));
+  if (!tickCount.isInteger()) {
+    throwPolymarketOrderParamsRejected();
+  }
+};
+
+const POLYMARKET_MARKET_BUY_COLLATERAL_QUANTUM_ATOMIC = 10_000n;
+const POLYMARKET_MARKET_BUY_SHARE_QUANTUM_ATOMIC = 10n;
+
+const validatePolymarketVenuePrecisionAmounts = (
+  signedRecord: Record<string, unknown>,
+  signedSide: "buy" | "sell"
+): void => {
+  const { makerAmount, takerAmount } = validatePositivePolymarketSignedAmounts(signedRecord);
+  if (
+    signedSide === "buy" &&
+    (
+      makerAmount % POLYMARKET_MARKET_BUY_COLLATERAL_QUANTUM_ATOMIC !== 0n ||
+      takerAmount % POLYMARKET_MARKET_BUY_SHARE_QUANTUM_ATOMIC !== 0n
+    )
+  ) {
+    throwPolymarketOrderAmountPrecisionRejected();
+  }
+};
+
+const normalizePolymarketSignedOrderSide = (value: unknown): "buy" | "sell" | null => {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  if (normalized === "BUY" || normalized === "0") {
+    return "buy";
+  }
+  if (normalized === "SELL" || normalized === "1") {
+    return "sell";
+  }
+  return null;
+};
+
+const throwPolymarketOrderParamsRejected = (): never => {
+  throw new PolymarketExecutionNotConfiguredError(
+    "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
+    "Price moved before execution. Refresh route and retry."
+  );
+};
+
+const throwPolymarketOrderAmountPrecisionRejected = (): never => {
+  throw new PolymarketExecutionNotConfiguredError(
+    "POLYMARKET_CLOB_ORDER_AMOUNT_PRECISION_REJECTED",
+    "Polymarket rejected the order amount precision. Refresh route and sign again."
+  );
+};
+
+const parseRelayPreparedPolymarketOrder = (body: Record<string, unknown>): PreparedVenueOrder | null => {
+  const order = isRecord(body.order) ? body.order : null;
+  if (
+    !order ||
+    order.venue !== "POLYMARKET" ||
+    typeof order.clientOrderId !== "string" ||
+    !isRecord(order.payload)
+  ) {
+    return null;
+  }
+  return {
+    venue: "POLYMARKET",
+    clientOrderId: order.clientOrderId,
+    payload: order.payload
+  };
+};
+
 const expectedBindingUserId = (order: PreparedVenueOrder): string | null => {
   const expectedBinding = isRecord(order.payload.expectedBinding) ? order.payload.expectedBinding : null;
   const userId = expectedBinding && typeof expectedBinding.userId === "string"
@@ -1403,6 +1808,22 @@ const polymarketClobSyncPendingForSubmitMessage = (
 const optionalString = (value: unknown): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 
+const parseOptionalBooleanValue = (value: unknown): boolean | undefined => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") {
+      return true;
+    }
+    if (normalized === "false") {
+      return false;
+    }
+  }
+  return undefined;
+};
+
 const optionalNumber = (value: unknown): number | null => {
   const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
   return Number.isFinite(parsed) ? parsed : null;
@@ -1570,11 +1991,20 @@ const parsePolymarketClobAuthPayload = (order: PreparedVenueOrder): PolymarketCl
   return { address, signature, timestamp, nonce, funderAddress };
 };
 
+const safeParsePolymarketClobAuthPayload = (order: PreparedVenueOrder): PolymarketClobAuthPayload | null => {
+  try {
+    return parsePolymarketClobAuthPayload(order);
+  } catch {
+    return null;
+  }
+};
+
 type PolymarketPostOrderRejectionCode =
   | "POLYMARKET_CLOB_SYNC_REJECTED_BY_VENUE"
   | "POLYMARKET_CLOB_COLLATERAL_NOT_READY"
   | "POLYMARKET_CLOB_SIGNATURE_REJECTED"
   | "POLYMARKET_CLOB_AUTH_REJECTED"
+  | "POLYMARKET_CLOB_ORDER_AMOUNT_PRECISION_REJECTED"
   | "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED"
   | "POLYMARKET_CLOB_MARKET_REJECTED"
   | "POLYMARKET_CLOB_UNKNOWN_REJECTED_BY_VENUE";
@@ -1602,13 +2032,18 @@ const polymarketPostOrderRejectionMessages = {
     "Polymarket rejected the signed CLOB order signature. Refresh the route and sign again.",
   POLYMARKET_CLOB_AUTH_REJECTED:
     "Polymarket rejected CLOB authentication for this submit. Refresh venue authentication and retry.",
+  POLYMARKET_CLOB_ORDER_AMOUNT_PRECISION_REJECTED:
+    "Polymarket rejected the order amount precision. Refresh route and sign again.",
   POLYMARKET_CLOB_ORDER_PARAMS_REJECTED:
-    "Polymarket rejected the CLOB order parameters. Refresh the route before retrying.",
+    "Price moved before execution. Refresh route and retry.",
   POLYMARKET_CLOB_MARKET_REJECTED:
     "Polymarket rejected this market or outcome for live submit. Refresh the market route before retrying.",
   POLYMARKET_CLOB_UNKNOWN_REJECTED_BY_VENUE:
     "Polymarket rejected this order for an unknown venue reason. Raw redacted evidence was captured for debugging."
 } as const satisfies Record<PolymarketPostOrderRejectionCode, string>;
+
+const isPolymarketPostOrderRejectionCode = (value: string): value is PolymarketPostOrderRejectionCode =>
+  Object.prototype.hasOwnProperty.call(polymarketPostOrderRejectionMessages, value);
 
 const diagnosticSecretKeyPattern =
   /api[_-]?key|secret|passphrase|private[_-]?key|authorization|cookie|signature|poly_signature|auth|headers/i;
@@ -1674,6 +2109,20 @@ const diagnosticStringify = (value: unknown): string => {
   }
 };
 
+const omitDiagnosticSecretKeys = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(omitDiagnosticSecretKeys);
+  }
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([entryKey]) => !diagnosticSecretKeyPattern.test(entryKey))
+        .map(([entryKey, entryValue]) => [entryKey, omitDiagnosticSecretKeys(entryValue)])
+    );
+  }
+  return value;
+};
+
 const firstRecord = (...values: unknown[]): Record<string, unknown> | null =>
   values.find((value): value is Record<string, unknown> => isRecord(value)) ?? null;
 
@@ -1699,6 +2148,36 @@ const firstNumber = (...values: unknown[]): number | undefined => {
   return undefined;
 };
 
+const buildPolymarketReturnedPostOrderFailure = (response: unknown): Record<string, unknown> | null => {
+  if (!isRecord(response)) {
+    return null;
+  }
+  const apiStatus = `${response.status ?? response.status_code ?? response.state ?? ""}`.trim().toUpperCase();
+  const successValue = response.success ?? response.ok;
+  const failed =
+    apiStatus === "FAILED" ||
+    apiStatus === "FAILURE" ||
+    apiStatus === "REJECTED" ||
+    apiStatus === "ERROR" ||
+    successValue === false;
+  if (!failed) {
+    return null;
+  }
+  return {
+    status: firstNumber(response.httpStatus, response.http_status, response.statusCode),
+    body: response,
+    data: response,
+    code: firstString(response.code, response.errorCode, response.reasonCode),
+    message: firstString(
+      response.message,
+      response.error,
+      response.errorMessage,
+      response.reason,
+      response.msg
+    )
+  };
+};
+
 const capturePolymarketRawPostOrderError = (
   error: unknown,
   sensitiveValues: readonly string[]
@@ -1716,13 +2195,17 @@ const capturePolymarketRawPostOrderError = (
   const rawMessage = firstString(
     error instanceof Error ? error.message : undefined,
     isRecord(responseData) ? responseData.message ?? responseData.error : undefined,
-    isRecord(errorRecord.body) ? errorRecord.body.message ?? errorRecord.body.error : undefined
+    isRecord(responseData) ? responseData.errorMessage ?? responseData.reason ?? responseData.msg : undefined,
+    isRecord(errorRecord.body) ? errorRecord.body.message ?? errorRecord.body.error : undefined,
+    isRecord(errorRecord.body) ? errorRecord.body.errorMessage ?? errorRecord.body.reason ?? errorRecord.body.msg : undefined
   );
   const rawCode = firstString(
     errorRecord.code,
     errorRecord.errorCode,
     isRecord(responseData) ? responseData.code ?? responseData.errorCode : undefined,
-    isRecord(errorRecord.body) ? errorRecord.body.code ?? errorRecord.body.errorCode : undefined
+    isRecord(responseData) ? responseData.reasonCode : undefined,
+    isRecord(errorRecord.body) ? errorRecord.body.code ?? errorRecord.body.errorCode : undefined,
+    isRecord(errorRecord.body) ? errorRecord.body.reasonCode : undefined
   );
   const httpStatus = firstNumber(errorRecord.status, errorRecord.statusCode, response?.status, response?.statusCode);
   const polymarketApiStatus = firstString(
@@ -1740,7 +2223,7 @@ const capturePolymarketRawPostOrderError = (
     searchText: [
       rawCode,
       rawMessage,
-      diagnosticStringify(body),
+      diagnosticStringify(omitDiagnosticSecretKeys(body)),
       httpStatus
     ].filter((value) => value !== undefined && value !== null).join(" ").toLowerCase()
   };
@@ -1754,6 +2237,8 @@ const classifyPolymarketPostOrderRejection = (
   const collateralPattern = /balance|allowance|collateral|spendable|insufficient\s+(funds|balance)|not\s+enough|sync|funding/;
   const signaturePattern = /signature|signer|eip-?712|1271|invalid\s+sig|isvalidsignature/;
   const authPattern = /unauthorized|forbidden|api\s*key|hmac|credential|auth|401|403/;
+  const amountPrecisionPattern =
+    /market\s+buy\s+orders?.*maker\s+amount\s+supports\s+a\s+max\s+accuracy|maker\s+amount\s+supports\s+a\s+max\s+accuracy.*taker\s+amount\s+a\s+max|amount\s+precision|max\s+accuracy/;
   const orderParamsPattern = /invalid\s+order|maker\s*amount|taker\s*amount|tick\s*size|price|size|side|expiration|expired|fok|gtc|min(?:imum)?\s+size/;
   const marketPattern = /market|token\s*id|asset\s*id|closed|disabled|invalid\s+outcome|outcome/;
   const code: PolymarketPostOrderRejectionCode = collateralPattern.test(text)
@@ -1764,11 +2249,13 @@ const classifyPolymarketPostOrderRejection = (
       ? "POLYMARKET_CLOB_SIGNATURE_REJECTED"
       : authPattern.test(text)
         ? "POLYMARKET_CLOB_AUTH_REJECTED"
-        : orderParamsPattern.test(text)
-          ? "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED"
-          : marketPattern.test(text)
-            ? "POLYMARKET_CLOB_MARKET_REJECTED"
-            : "POLYMARKET_CLOB_UNKNOWN_REJECTED_BY_VENUE";
+        : amountPrecisionPattern.test(text)
+          ? "POLYMARKET_CLOB_ORDER_AMOUNT_PRECISION_REJECTED"
+          : orderParamsPattern.test(text)
+            ? "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED"
+            : marketPattern.test(text)
+              ? "POLYMARKET_CLOB_MARKET_REJECTED"
+              : "POLYMARKET_CLOB_UNKNOWN_REJECTED_BY_VENUE";
   return {
     code,
     message: polymarketPostOrderRejectionMessages[code]
@@ -1807,6 +2294,7 @@ const buildPolymarketPostOrderRejectionDiagnostic = (input: {
   const depositWallet = funder ?? attestation?.venueAccountAddress ?? attestation?.ownerAddress ?? maker;
   const required = requiredBalanceAllowanceForSignedOrder(input.signedOrder);
   const constructorSignatureType = signatureTypeForSignedOrder(input.signedOrder) ?? parseSignatureType(input.config.signatureType);
+  const orderMetadata = polymarketOrderExecutionMetadata(input.order);
   return {
     quoteId: attestation?.quoteId ?? optionalString(input.order.payload.quoteId) ?? null,
     executionId: optionalString(input.order.payload.executionId)
@@ -1831,8 +2319,8 @@ const buildPolymarketPostOrderRejectionDiagnostic = (input: {
       side: signedRecord.side ?? null,
       makerAmountAtomic: optionalString(signedRecord.makerAmount) ?? null,
       takerAmountAtomic: optionalString(signedRecord.takerAmount) ?? null,
-      tickSize: input.config.tickSize ?? null,
-      negRisk: input.config.negRisk ?? null,
+      tickSize: orderMetadata.tickSize ?? input.config.tickSize ?? null,
+      negRisk: orderMetadata.negRisk ?? input.config.negRisk ?? null,
       builderConfigured: nonEmpty(input.config.builderCode) || !/^0x0+$/i.test(`${signedRecord.builder ?? ""}`)
     },
     readinessSummary: {
@@ -1855,6 +2343,18 @@ const buildPolymarketPostOrderRejectionDiagnostic = (input: {
       constructorFunderEqualsDepositWallet: equalsAddress(funder, depositWallet)
     }
   };
+};
+
+const extractForwardedPolymarketPostOrderDiagnostic = (payload: unknown): Record<string, unknown> | null => {
+  const record = isRecord(payload) ? payload : null;
+  const diagnostics = record && isRecord(record.diagnostics) ? record.diagnostics : null;
+  const diagnostic = diagnostics && isRecord(diagnostics.postOrderRejectionDiagnostic)
+    ? diagnostics.postOrderRejectionDiagnostic
+    : null;
+  if (!diagnostic) {
+    return null;
+  }
+  return diagnostic;
 };
 
 const writePolymarketPostOrderRejectionDiagnostic = async (
@@ -1974,25 +2474,40 @@ const appendPolymarket1271SignatureSuffix = (signature: string, suffix: string |
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+const firstNonEmptyString = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+  return undefined;
+};
+
 const mapPolymarketOrderResponse = (response: unknown): VenueSubmitResult => {
   const record = isRecord(response) ? response : {};
   const orderID = record.orderID ?? record.orderId ?? record.id;
   const statusValue = `${record.status ?? ""}`.trim().toUpperCase();
-  const takingAmount = record.takingAmount;
-  const makingAmount = record.makingAmount;
-  const filledSize = typeof takingAmount === "string" && takingAmount.length > 0
-    ? takingAmount
-    : typeof makingAmount === "string" && makingAmount.length > 0
-      ? makingAmount
-      : "0";
+  const explicitFilledSize = firstNonEmptyString(
+    record.filledSize,
+    record.filledAmount,
+    record.sizeMatched,
+    record.size_matched,
+    record.matchedAmount,
+    record.matched_amount,
+    record.takingAmount,
+    record.makingAmount
+  );
+  const filledSize = explicitFilledSize ?? "0";
+  const numericFilledSize = Number(filledSize);
   const averagePrice = Number(record.price ?? 0);
   const result: VenueSubmitResult = {
     venueOrderId: typeof orderID === "string" && orderID.length > 0 ? orderID : `polymarket-order-${sha256Hex(stableStringify(response)).slice(0, 16)}`,
-    status: statusValue === "MATCHED" || statusValue === "FILLED"
-      ? "FILLED"
-      : Number(filledSize) > 0
-        ? "PARTIAL_FILL"
-        : "SUBMITTED",
+    status: Number.isFinite(numericFilledSize) && numericFilledSize > 0
+      ? (statusValue === "MATCHED" || statusValue === "FILLED" ? "FILLED" : "PARTIAL_FILL")
+      : "SUBMITTED",
     filledSize,
     averagePrice: Number.isFinite(averagePrice) && averagePrice > 0 ? averagePrice : 0
   };
@@ -2045,6 +2560,30 @@ const mapPolymarketTradesToFillState = (trades: Trade[]): VenueFillState => {
     offchainFilled: true
   };
 };
+
+const mapPolymarketDataApiActivityToFillState = (activity: PolymarketDataApiActivity): VenueFillState => ({
+  status: "FILLED",
+  filledSize: String(activity.size),
+  averagePrice: Number.isFinite(activity.price) ? activity.price : 0,
+  offchainFilled: true
+});
+
+const mapPolymarketDataApiActivityToSettlementState = (activity: PolymarketDataApiActivity): VenueSettlementState => ({
+  status: "SETTLEMENT_VERIFIED",
+  evidence: {
+    source: "polymarket_data_api_activity",
+    transactionHash: activity.transactionHash ?? null,
+    conditionId: activity.conditionId,
+    assetIdHash: sha256Hex(activity.asset).slice(0, 16),
+    timestamp: new Date(activity.timestamp * 1000).toISOString(),
+    side: activity.side,
+    size: String(activity.size),
+    price: activity.price
+  }
+});
+
+const isHexHash = (value: string): boolean =>
+  /^0x[a-fA-F0-9]{64}$/.test(value);
 
 const isPolymarketCancelSuccess = (response: unknown): boolean => {
   if (typeof response === "boolean") {
@@ -2137,7 +2676,8 @@ export const createPolymarketClobV2LiveClient = (
     if (config.executionSubmitMode === "relay") {
       return new RelayPolymarketClobV2LiveClient({
         relayUrl: config.executionRelayUrl ?? "",
-        relaySecret: config.executionRelaySecret ?? ""
+        relaySecret: config.executionRelaySecret ?? "",
+        polymarketConfig: config
       });
     }
     return new SdkPolymarketClobV2LiveClient(config, sdkFactory, balanceReader);
@@ -2151,73 +2691,106 @@ export class PolymarketExecutionAdapterV2 implements ExecutionVenueAdapter {
   private readonly dryRunClient: PolymarketClobV2DryRunClient;
   private readonly now: () => Date;
   private readonly liveClient: PolymarketClobV2LiveClient;
+  private readonly envStatus: PolymarketExecutionAdapterV2EnvStatus;
+  private readonly readinessSnapshot: PolymarketAdapterReadinessSnapshot;
 
   public constructor(
     private readonly config: PolymarketExecutionAdapterV2Config,
     liveClient?: PolymarketClobV2LiveClient,
     balanceReader?: PolymarketSubmitBalanceReader | undefined
   ) {
+    const envStatus = getPolymarketExecutionAdapterV2EnvStatus(polymarketConfigEnvLike(config));
+    const readinessSnapshot = buildPolymarketAdapterReadinessSnapshot(config, envStatus);
+    this.envStatus = {
+      ...envStatus,
+      signatureType: readinessSnapshot.signatureType,
+      accountModel: readinessSnapshot.accountModel,
+      depositWalletEnabled: readinessSnapshot.depositWalletEnabled
+    };
+    this.readinessSnapshot = readinessSnapshot;
     this.liveClient = liveClient ?? createPolymarketClobV2LiveClient(config, undefined, balanceReader);
     this.dryRunClient = new PolymarketClobV2DryRunClient(config);
     this.now = () => new Date();
   }
 
   public status(): PolymarketExecutionAdapterV2EnvStatus {
-    const envLike: NodeJS.ProcessEnv = {
-      POLYMARKET_EXECUTION_MODE: this.config.executionMode,
-      POLYMARKET_LIVE_EXECUTION_ENABLED: String(this.config.liveExecutionEnabled),
-      POLYMARKET_CLOB_HOST: this.config.clobHost,
-      POLYMARKET_CHAIN_ID: this.config.chainId,
-      POLYMARKET_API_KEY: this.config.apiKey,
-      POLYMARKET_API_SECRET: this.config.apiSecret,
-      POLYMARKET_API_PASSPHRASE: this.config.apiPassphrase,
-      POLYMARKET_BUILDER_CODE: this.config.builderCode,
-      POLYMARKET_PRIVATE_KEY: this.config.privateKey
-    };
-    if (this.config.executionSubmitMode) {
-      envLike.POLYMARKET_EXECUTION_SUBMIT_MODE = this.config.executionSubmitMode;
-    }
-    if (this.config.executionRelayUrl) {
-      envLike.POLYMARKET_EXECUTION_RELAY_URL = this.config.executionRelayUrl;
-    }
-    if (this.config.executionRelaySecret) {
-      envLike.POLYMARKET_EXECUTION_RELAY_SECRET = this.config.executionRelaySecret;
-    }
-    return getPolymarketExecutionAdapterV2EnvStatus(envLike);
+    return this.envStatus;
+  }
+
+  public configSnapshot(): PolymarketAdapterReadinessSnapshot {
+    return this.readinessSnapshot;
   }
 
   public async prepareOrder(leg: ExecutionLegV0): Promise<PreparedVenueOrder> {
-    this.assertPreparedPathConfigured();
-    const dryRunOrder = this.dryRunClient.buildPreparedDryRunEnvelope({
-      clientOrderId: leg.executionLegId,
-      venueMarketId: leg.venueMarketId,
-      venueOutcomeId: leg.venueOutcomeId,
-      side: leg.side,
-      size: leg.size,
-      price: leg.price
-    }, this.now());
-    if (dryRunOrder.blockers.length > 0) {
-      throw new PolymarketExecutionNotConfiguredError(
-        "POLYMARKET_V2_DRY_RUN_ORDER_INVALID",
-        `Polymarket V2 dry-run order shape is invalid: ${dryRunOrder.blockers.join(", ")}.`
-      );
-    }
-    return {
+    const tags = {
+      canonicalMarketId: leg.venueMarketId,
       venue: this.venue,
-      clientOrderId: leg.executionLegId,
-      payload: {
+      executionMode: this.readinessSnapshot.executionMode,
+      external: true
+    } as const;
+    try {
+      withLatencyStageSync("polymarket_prepare_env_check", tags, () => {
+        this.assertPreparedPathConfigured();
+      });
+      withLatencyStageSync("polymarket_prepare_account_binding", tags, () => ({
+        signatureType: this.readinessSnapshot.signatureType,
+        accountModel: this.readinessSnapshot.accountModel,
+        depositWalletEnabled: this.readinessSnapshot.depositWalletEnabled
+      }));
+      const orderInput = withLatencyStageSync("polymarket_prepare_order_shape", tags, () => ({
+        clientOrderId: leg.executionLegId,
         venueMarketId: leg.venueMarketId,
         venueOutcomeId: leg.venueOutcomeId,
         side: leg.side,
         size: leg.size,
-        price: leg.price,
-        metadata: {
-          adapter: "PolymarketExecutionAdapterV2",
-          readinessState: this.status().readinessState,
-          clobV2DryRun: dryRunOrder
+        price: leg.price
+      }));
+      withLatencyStageSync("polymarket_prepare_builder_config", tags, () => {
+        if (!this.readinessSnapshot.builderCodeConfigured) {
+          throw new PolymarketExecutionNotConfiguredError(
+            "POLYMARKET_V2_DRY_RUN_ORDER_INVALID",
+            "Polymarket V2 dry-run order shape is invalid: missing_builder_code."
+          );
         }
+      });
+      const dryRunOrder = withLatencyStageSync("polymarket_prepare_signature_payload", tags, () =>
+        this.dryRunClient.buildPreparedDryRunEnvelope(orderInput, this.now()));
+      if (dryRunOrder.blockers.length > 0) {
+        throw new PolymarketExecutionNotConfiguredError(
+          "POLYMARKET_V2_DRY_RUN_ORDER_INVALID",
+          `Polymarket V2 dry-run order shape is invalid: ${dryRunOrder.blockers.join(", ")}.`
+        );
       }
-    };
+      return {
+        venue: this.venue,
+        clientOrderId: leg.executionLegId,
+        payload: {
+          venueMarketId: leg.venueMarketId,
+          venueOutcomeId: leg.venueOutcomeId,
+          side: leg.side,
+          size: leg.size,
+          price: leg.price,
+          metadata: {
+            ...(leg.metadata ?? {}),
+            adapter: "PolymarketExecutionAdapterV2",
+            readinessState: this.status().readinessState,
+            clobV2DryRun: dryRunOrder
+          }
+        }
+      };
+    } catch (error) {
+      withLatencyStageSync("polymarket_prepare_error_normalization", tags, () => {
+        if (error instanceof PolymarketExecutionNotConfiguredError) {
+          return this.normalizeVenueError(error);
+        }
+        return normalizeLiveVenueErrorMessage(error, {
+          venue: "POLYMARKET",
+          fallbackCode: "POLYMARKET_V2_ADAPTER_ERROR",
+          fallbackMessage: "Unknown Polymarket V2 adapter error."
+        });
+      });
+      throw error;
+    }
   }
 
   public async submitOrder(order: PreparedVenueOrder): Promise<VenueSubmitResult> {
@@ -2243,7 +2816,7 @@ export class PolymarketExecutionAdapterV2 implements ExecutionVenueAdapter {
     return this.liveClient.submitOrder(order);
   }
 
-  public async fetchFillState(venueOrderId: string): Promise<VenueFillState> {
+  public async fetchFillState(venueOrderId: string, context?: VenueOrderLookupContext): Promise<VenueFillState> {
     if (!venueOrderId) {
       return {
         status: this.config.fillStateOverride ?? "FAILED",
@@ -2253,7 +2826,7 @@ export class PolymarketExecutionAdapterV2 implements ExecutionVenueAdapter {
       };
     }
     if (!this.config.fillStateOverride) {
-      return this.liveClient.fetchFillState(venueOrderId);
+      return this.liveClient.fetchFillState(venueOrderId, context);
     }
     return {
       status: this.config.fillStateOverride,
@@ -2267,14 +2840,14 @@ export class PolymarketExecutionAdapterV2 implements ExecutionVenueAdapter {
     return this.liveClient.cancelOrder(venueOrderId);
   }
 
-  public async fetchSettlementState(fillOrOrderId: string): Promise<VenueSettlementState> {
+  public async fetchSettlementState(fillOrOrderId: string, context?: VenueOrderLookupContext): Promise<VenueSettlementState> {
     if (this.config.settlementStateOverride) {
       return {
         status: this.config.settlementStateOverride,
         evidence: { source: "polymarket_v2_test_override", fillOrOrderId }
       };
     }
-    return this.liveClient.fetchSettlementState(fillOrOrderId);
+    return this.liveClient.fetchSettlementState(fillOrOrderId, context);
   }
 
   public normalizeVenueError(error: unknown): NormalizedVenueError {
@@ -2297,7 +2870,7 @@ export class PolymarketExecutionAdapterV2 implements ExecutionVenueAdapter {
   }
 
   private assertPreparedPathConfigured(): void {
-    const status = this.status();
+    const status = this.envStatus;
     if (!status.featureFlagSelected) {
       throw new PolymarketExecutionNotConfiguredError(
         "POLYMARKET_V2_MODE_NOT_SELECTED",
