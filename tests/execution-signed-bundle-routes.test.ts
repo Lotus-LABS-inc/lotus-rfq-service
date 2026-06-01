@@ -524,6 +524,64 @@ describe("execution signed bundle routes", () => {
     await new Promise((resolve) => setImmediate(resolve));
   });
 
+  it("fails closed when async submit was interrupted before an execution id was persisted", async () => {
+    const quote = buyQuote("POLYMARKET", true);
+    const repo = new MemoryExecutionOrderRepository();
+    const staleTime = new Date(Date.now() - 60_000).toISOString();
+    await repo.saveOrder({
+      orderId: quote.quoteId,
+      userId: "user-1",
+      quoteId: quote.quoteId,
+      executionId: null,
+      state: "SUBMITTING",
+      side: "buy",
+      marketId: quote.marketId,
+      outcomeId: quote.outcomeId,
+      amount: quote.executableAmount,
+      venuePreference: "POLYMARKET",
+      orderPolicy: "FOK",
+      slippageToleranceBps: 50,
+      signingMode: "USER_SIGNATURE_REQUIRED",
+      primaryAction: "NONE",
+      readinessSummary: {},
+      venueCapabilitySummary: { venues: [] },
+      blockers: [],
+      signatureRequestHash: "sig-hash",
+      lastError: null,
+      expiresAt: quote.expiresAt,
+      nextPollAt: staleTime,
+      createdAt: staleTime,
+      updatedAt: staleTime
+    });
+    const getQuote = vi.fn(async () => quote);
+    const getExecutionStatus = vi.fn(async () => null);
+    const service = new ExecutionOrderOrchestratorV1(
+      repo,
+      { quote: vi.fn(), getQuote } as never,
+      { prepareExit: vi.fn() } as never,
+      {
+        getLiveReadiness: vi.fn(),
+        prepare: vi.fn(),
+        submit: vi.fn(),
+        getExecutionStatus
+      } as never
+    );
+
+    const status = await service.status({ userId: "user-1", orderId: quote.quoteId });
+
+    expect(status).toMatchObject({
+      state: "FAILED",
+      primaryAction: { type: "NONE" },
+      lastError: "Order submit was interrupted before the venue received it. Refresh route and place again.",
+      blockers: [{
+        code: "EXECUTION_ORDER_SUBMIT_INTERRUPTED",
+        actionable: true
+      }]
+    });
+    expect(getQuote).not.toHaveBeenCalled();
+    expect(getExecutionStatus).not.toHaveBeenCalled();
+  });
+
   it("blocks Polymarket sell previews when the executable conditional token id is missing", async () => {
     const app = Fastify();
     const quote = {

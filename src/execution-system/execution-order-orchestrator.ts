@@ -360,6 +360,10 @@ export class ExecutionOrderOrchestratorV1 {
 
   public async status(input: { userId: string; orderId: string }): Promise<ExecutionOrderResponse> {
     const order = await this.requireOrder(input);
+    const recovered = await this.recoverInterruptedSubmit(order);
+    if (recovered) {
+      return toOrderResponse(recovered, null, null);
+    }
     const quote = await this.loadFreshQuote(order);
     if (!quote && !["SUBMITTING", "SUBMITTED", "FILLED", "FAILED"].includes(order.state)) {
       return this.expireOrder(order);
@@ -761,6 +765,28 @@ export class ExecutionOrderOrchestratorV1 {
     return toOrderResponse(updated ?? order, quote, null);
   }
 
+  private async recoverInterruptedSubmit(order: ExecutionOrderRecord): Promise<ExecutionOrderRecord | null> {
+    if (order.state !== "SUBMITTING" || order.executionId) {
+      return null;
+    }
+    const updatedAtMs = Date.parse(order.updatedAt);
+    if (!Number.isFinite(updatedAtMs) || Date.now() - updatedAtMs < SUBMIT_START_INTERRUPTED_AFTER_MS) {
+      return null;
+    }
+    const blocker = interruptedSubmitBlocker();
+    return this.repository.updateOrder({
+      userId: order.userId,
+      orderId: order.orderId,
+      patch: {
+        state: "FAILED",
+        primaryAction: "NONE",
+        lastError: blocker.message,
+        blockers: [blocker],
+        nextPollAt: null
+      }
+    });
+  }
+
   private assertSignedSellPayloadsMatchRoute(
     quote: ExecutableTradeQuote,
     signedLegs: readonly SignedTradeLegPayload[]
@@ -1122,6 +1148,7 @@ const normalizeAmountKey = (value: string): string => {
 const DEFAULT_EXECUTION_ORDER_POLICY: ExecutionOrderPolicy = "FOK";
 const DEFAULT_SLIPPAGE_TOLERANCE_BPS = 100;
 const MAX_SLIPPAGE_TOLERANCE_BPS = 500;
+const SUBMIT_START_INTERRUPTED_AFTER_MS = 30_000;
 
 const normalizeSlippageToleranceBps = (value: number | undefined): number => {
   if (value === undefined) return DEFAULT_SLIPPAGE_TOLERANCE_BPS;
@@ -1245,6 +1272,12 @@ const blockersFromSubmittedLegs = (
       venue: leg.venue,
       actionable: false
     }));
+
+const interruptedSubmitBlocker = (): ExecutionOrderBlocker => ({
+  code: "EXECUTION_ORDER_SUBMIT_INTERRUPTED",
+  message: "Order submit was interrupted before the venue received it. Refresh route and place again.",
+  actionable: true
+});
 
 const findPolymarketSignedOrder = (
   signedLegs: readonly SignedTradeLegPayload[],
