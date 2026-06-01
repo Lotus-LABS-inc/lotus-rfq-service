@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ExecutionStatusWatcher,
   ExecutionVenueAdapterRegistry,
@@ -117,6 +117,46 @@ const service = (positionStore: MemoryPositionStore, adapter = new TestExecution
 };
 
 describe("ExecutionStatusWatcher", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("schedules the next tick only after the current status refresh tick completes", async () => {
+    vi.useFakeTimers();
+    const repository = new MemoryActiveStatusRepository([]);
+    let releaseFirstTick!: () => void;
+    const firstTick = new Promise<SignedTradeExecutionStatus[]>((resolve) => {
+      releaseFirstTick = () => resolve([]);
+    });
+    const listSpy = vi.spyOn(repository, "listActiveExecutionStatuses")
+      .mockReturnValueOnce(firstTick)
+      .mockResolvedValue([]);
+    const positionStore = new MemoryPositionStore();
+    const watcher = new ExecutionStatusWatcher(
+      repository,
+      service(positionStore),
+      positionStore,
+      { publishExecutionStatus: vi.fn(async () => undefined), publishPositions: vi.fn(async () => undefined) },
+      { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      { enabled: true, intervalMs: 1_000, batchSize: 50, activeWindowSeconds: 900, settlementIntervalMs: 5_000 }
+    );
+
+    watcher.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(listSpy).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(listSpy).toHaveBeenCalledTimes(1);
+
+    releaseFirstTick?.();
+    await vi.advanceTimersByTimeAsync(999);
+    expect(listSpy).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(listSpy).toHaveBeenCalledTimes(2);
+    watcher.stop();
+  });
+
   it("refreshes active submitted orders, records positions once, and publishes status and position events", async () => {
     const route = quote();
     const repository = new MemoryActiveStatusRepository([{

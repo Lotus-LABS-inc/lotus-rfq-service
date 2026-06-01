@@ -1612,17 +1612,32 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   );
   if (backgroundWorkersEnabled) {
     executionStatusWatcher.start();
-    const executionOrderRefreshTimer = setInterval(() => {
-      void executionOrderService.refreshOpenOrders({ limit: 50 }).catch((error) => {
-        dependencies.logger.warn({
-          errorName: error instanceof Error ? error.name : "UnknownError"
-        }, "Execution order V1 refresher tick failed.");
-      });
-    }, 5_000);
-    executionOrderRefreshTimer.unref?.();
+    let executionOrderRefreshStopped = false;
+    let executionOrderRefreshTimer: NodeJS.Timeout | null = null;
+    const scheduleExecutionOrderRefresh = (delayMs: number): void => {
+      if (executionOrderRefreshStopped) {
+        return;
+      }
+      executionOrderRefreshTimer = setTimeout(() => {
+        executionOrderRefreshTimer = null;
+        void executionOrderService.refreshOpenOrders({ limit: 50 }).catch((error) => {
+          dependencies.logger.warn({
+            errorName: error instanceof Error ? error.name : "UnknownError"
+          }, "Execution order V1 refresher tick failed.");
+        }).finally(() => {
+          scheduleExecutionOrderRefresh(5_000);
+        });
+      }, Math.max(0, delayMs));
+      executionOrderRefreshTimer.unref?.();
+    };
+    scheduleExecutionOrderRefresh(0);
     app.addHook("onClose", async () => {
+      executionOrderRefreshStopped = true;
       executionStatusWatcher.stop();
-      clearInterval(executionOrderRefreshTimer);
+      if (executionOrderRefreshTimer) {
+        clearTimeout(executionOrderRefreshTimer);
+        executionOrderRefreshTimer = null;
+      }
     });
   }
   await registerHealthRoute(app);

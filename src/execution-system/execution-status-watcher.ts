@@ -63,6 +63,7 @@ export const buildExecutionStatusWatcherConfigFromEnv = (
 
 export class ExecutionStatusWatcher {
   private timer: NodeJS.Timeout | null = null;
+  private started = false;
   private running = false;
 
   public constructor(
@@ -75,28 +76,41 @@ export class ExecutionStatusWatcher {
   ) {}
 
   public start(): void {
-    if (!this.config.enabled || this.timer) {
+    if (!this.config.enabled || this.started) {
       return;
     }
+    this.started = true;
     this.logger.info({
       intervalMs: this.config.intervalMs,
       batchSize: this.config.batchSize,
       activeWindowSeconds: this.config.activeWindowSeconds
     }, "Execution status watcher started.");
-    this.timer = setInterval(() => {
-      void this.runOnce();
-    }, this.config.intervalMs);
-    this.timer.unref?.();
-    void this.runOnce();
+    this.scheduleNext(0);
   }
 
   public stop(): void {
-    if (!this.timer) {
+    if (!this.started && !this.timer) {
       return;
     }
-    clearInterval(this.timer);
+    this.started = false;
+    if (this.timer) {
+      clearTimeout(this.timer);
+    }
     this.timer = null;
     this.logger.info({}, "Execution status watcher stopped.");
+  }
+
+  private scheduleNext(delayMs: number): void {
+    if (!this.started) {
+      return;
+    }
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      void this.runOnce().finally(() => {
+        this.scheduleNext(this.config.intervalMs);
+      });
+    }, Math.max(0, delayMs));
+    this.timer.unref?.();
   }
 
   public async runOnce(): Promise<ExecutionStatusWatcherRunResult> {
