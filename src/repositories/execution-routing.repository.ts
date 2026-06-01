@@ -588,7 +588,7 @@ export class PgExecutionOrderRepository implements ExecutionOrderRepository {
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9::numeric, $10, $11, $12, $13,
         $14::jsonb, $15::jsonb, $16::jsonb, $17, $18, $19::timestamptz,
-        $20::timestamptz, $21::timestamptz, $22::timestamptz
+        $20::timestamptz, $21::timestamptz, $22::timestamptz, $23::timestamptz
       )
       ON CONFLICT (order_id, user_id) DO UPDATE SET
         quote_id = EXCLUDED.quote_id,
