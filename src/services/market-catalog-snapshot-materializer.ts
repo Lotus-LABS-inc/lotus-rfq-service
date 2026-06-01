@@ -38,8 +38,8 @@ export interface MarketCatalogSnapshotMaterializerDeps {
 }
 
 const DEFAULT_CONFIG: MarketCatalogSnapshotMaterializerConfig = {
-  intervalMs: 30_000,
-  cacheTtlMs: 120_000,
+  intervalMs: 120_000,
+  cacheTtlMs: 300_000,
   limits: [80, 250],
   routeCoverages: ["all", "pair", "tri", "strict_all"]
 };
