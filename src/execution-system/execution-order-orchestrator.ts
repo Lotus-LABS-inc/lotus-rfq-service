@@ -230,7 +230,7 @@ export class ExecutionOrderOrchestratorV1 {
     const order = this.newOrder(input, {
       quote,
       state,
-      blockers: [...blockersFromReadiness(readiness), ...blockersFromCapabilities(capabilities)],
+      blockers: uniqueBlockers([...blockersFromReadiness(readiness), ...blockersFromCapabilities(capabilities)]),
       readiness,
       capabilities
     });
@@ -287,7 +287,7 @@ export class ExecutionOrderOrchestratorV1 {
           primaryAction: primaryActionForState(readinessState),
           readinessSummary: summarizeReadiness(readiness),
           venueCapabilitySummary: capabilities,
-          blockers: [...blockersFromReadiness(readiness), ...blockersFromCapabilities(capabilities)],
+          blockers: uniqueBlockers([...blockersFromReadiness(readiness), ...blockersFromCapabilities(capabilities)]),
           nextPollAt: nextPollAtForState(readinessState)
         }
       });
@@ -614,7 +614,7 @@ export class ExecutionOrderOrchestratorV1 {
     if (latest?.state === "FILLED" && state !== "FILLED") {
       return await this.clearTerminalFillNoise(latest) ?? latest;
     }
-    const failureBlockers = result.status === "FAILED" ? blockersFromSubmittedLegs(result.submittedLegs) : [];
+    const failureBlockers = result.status === "FAILED" ? uniqueBlockers(blockersFromSubmittedLegs(result.submittedLegs)) : [];
     return await this.repository.updateOrder({
       userId: order.userId,
       orderId: order.orderId,
@@ -638,7 +638,7 @@ export class ExecutionOrderOrchestratorV1 {
     if (latest?.state === "FILLED" && state !== "FILLED") {
       return await this.clearTerminalFillNoise(latest) ?? latest;
     }
-    const failureBlockers = status.status === "FAILED" ? blockersFromSubmittedLegs(status.submittedLegs) : [];
+    const failureBlockers = status.status === "FAILED" ? uniqueBlockers(blockersFromSubmittedLegs(status.submittedLegs)) : [];
     return await this.repository.updateOrder({
       userId: order.userId,
       orderId: order.orderId,
@@ -776,14 +776,15 @@ export class ExecutionOrderOrchestratorV1 {
     quote: ExecutableTradeQuote,
     blockers: ExecutionOrderBlocker[]
   ): Promise<ExecutionOrderResponse> {
+    const unique = uniqueBlockers(blockers);
     const updated = await this.repository.updateOrder({
       userId: order.userId,
       orderId: order.orderId,
       patch: {
         state: "BLOCKED_ACTION_REQUIRED",
         primaryAction: "NONE",
-        blockers,
-        lastError: blockers[0]?.message ?? null,
+        blockers: unique,
+        lastError: unique[0]?.message ?? null,
         nextPollAt: null
       }
     });
@@ -886,7 +887,7 @@ export class ExecutionOrderOrchestratorV1 {
       primaryAction: primaryActionForState(details.state),
       readinessSummary: summarizeReadiness(details.readiness),
       venueCapabilitySummary: details.capabilities,
-      blockers: details.blockers,
+      blockers: uniqueBlockers(details.blockers),
       signatureRequestHash: null,
       lastError: null,
       expiresAt: quote?.expiresAt ?? null,
@@ -909,11 +910,9 @@ const buildVenueCapabilities = (
       const venue = leg.venue.toUpperCase();
       const venueReadiness = readinessByVenue.get(venue);
       const sellTokenBlockers = polymarketSellTokenIdBlockersForLeg(quote, leg);
-      const blockers = [
-        ...(venueReadiness?.blockers ?? []),
-        ...sellTokenBlockers.map((blocker) => blocker.message)
-      ];
-      const adapterMissing = blockers.some((blocker) => /NOT CONFIGURED|UNSUPPORTED|ADAPTER/i.test(blocker));
+      const readinessBlockers = venueReadiness?.blockers ?? [];
+      const capabilityBlockers = sellTokenBlockers.map((blocker) => blocker.message);
+      const adapterMissing = [...readinessBlockers, ...capabilityBlockers].some((blocker) => /NOT CONFIGURED|UNSUPPORTED|ADAPTER/i.test(blocker));
       const submitSupported = signedSubmitConfigured && venue !== "MYRIAD" && !adapterMissing;
       const status = !submitSupported || venueReadiness?.status === "blocked" || sellTokenBlockers.length > 0
         ? "blocked"
@@ -929,7 +928,7 @@ const buildVenueCapabilities = (
         fillStatusSupported: submitSupported,
         settlementSupported: submitSupported,
         status,
-        blockers
+        blockers: capabilityBlockers
       };
     })
   };
@@ -1167,6 +1166,46 @@ const blockersFromCapabilities = (capabilities: { venues: ExecutionOrderVenueCap
     }))
   );
 
+const GENERIC_BLOCKER_CODES = new Set(["BLOCKED", "LIVE_CANDIDATE_BLOCKED", "VENUE_CAPABILITY_BLOCKED"]);
+
+const uniqueBlockers = (blockers: readonly ExecutionOrderBlocker[]): ExecutionOrderBlocker[] => {
+  const byVenueAndMessage = new Map<string, ExecutionOrderBlocker>();
+  const order: string[] = [];
+  for (const blocker of blockers) {
+    const key = `${blocker.venue ?? ""}\u0000${blocker.message.trim().toLowerCase()}`;
+    const existing = byVenueAndMessage.get(key);
+    if (!existing) {
+      byVenueAndMessage.set(key, blocker);
+      order.push(key);
+      continue;
+    }
+    byVenueAndMessage.set(key, preferSpecificBlocker(existing, blocker));
+  }
+  const values = order.map((key) => byVenueAndMessage.get(key)).filter((blocker): blocker is ExecutionOrderBlocker => Boolean(blocker));
+  const venuesWithSpecificBlockers = new Set(
+    values
+      .filter((blocker) => blocker.venue && !GENERIC_BLOCKER_CODES.has(blocker.code))
+      .map((blocker) => blocker.venue)
+  );
+  return values.filter((blocker) =>
+    !blocker.venue ||
+    !GENERIC_BLOCKER_CODES.has(blocker.code) ||
+    !venuesWithSpecificBlockers.has(blocker.venue)
+  );
+};
+
+const preferSpecificBlocker = (
+  current: ExecutionOrderBlocker,
+  candidate: ExecutionOrderBlocker
+): ExecutionOrderBlocker => {
+  const currentGeneric = GENERIC_BLOCKER_CODES.has(current.code);
+  const candidateGeneric = GENERIC_BLOCKER_CODES.has(candidate.code);
+  if (currentGeneric && !candidateGeneric) return candidate;
+  if (!currentGeneric && candidateGeneric) return current;
+  if (current.code === candidate.code && candidate.actionable && !current.actionable) return candidate;
+  return current;
+};
+
 const blockerFromSignedTradeBundleError = (error: SignedTradeBundleError): ExecutionOrderBlocker => ({
   code: error.code,
   message: error.message,
@@ -1262,7 +1301,7 @@ const toOrderResponse = (
   slippageToleranceBps: order.slippageToleranceBps,
   readinessSummary: order.readinessSummary,
   venueCapabilitySummary: order.venueCapabilitySummary,
-  blockers: order.blockers,
+  blockers: uniqueBlockers(order.blockers),
   ...(order.lastError ? { lastError: order.lastError } : {}),
   ...(signatureRequests ? { signatureRequests: [...signatureRequests] } : {}),
   ...(order.nextPollAt ? { nextPollAt: order.nextPollAt } : {}),

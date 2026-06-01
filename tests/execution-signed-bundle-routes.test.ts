@@ -768,12 +768,13 @@ describe("execution signed bundle routes", () => {
           generatedAt: new Date().toISOString(),
           expiresAt: quote.expiresAt,
           status: "fresh",
-          blockers: [],
+          blockers: ["Polymarket sell preflight could not derive the conditional token id."],
           venues: [{
             venue: "POLYMARKET",
             status: "fresh",
             checkedAt: new Date().toISOString(),
-            blockers: [],
+            readinessCode: "BLOCKED",
+            blockers: ["Polymarket sell preflight could not derive the conditional token id."],
             account: { walletAddress: "0xwallet", venueAccountAddress: "0xdeposit", ownerAddress: "0xdeposit" },
             collateral: { requiredNotional: "1", balance: "10", allowance: "10", tokenSymbol: "shares", tokenAddress: null, spenderAddress: null, chainId: 137 }
           }]
@@ -814,7 +815,8 @@ describe("execution signed bundle routes", () => {
     });
 
     expect(response.statusCode).toBe(201);
-    expect(response.json()).toMatchObject({
+    const body = response.json();
+    expect(body).toMatchObject({
       state: "BLOCKED_ACTION_REQUIRED",
       blockers: [{
         code: "POLYMARKET_SELL_TOKEN_ID_MISSING",
@@ -822,6 +824,9 @@ describe("execution signed bundle routes", () => {
         actionable: false
       }]
     });
+    expect(body.blockers).toHaveLength(1);
+    expect(body.blockers.filter((blocker: { code: string }) => blocker.code === "POLYMARKET_SELL_TOKEN_ID_MISSING")).toHaveLength(1);
+    expect(body.blockers.some((blocker: { code: string }) => blocker.code === "BLOCKED")).toBe(false);
   });
 
   it("rechecks Polymarket sell depth before preparing signatures and does not use warmed sell signatures", async () => {
