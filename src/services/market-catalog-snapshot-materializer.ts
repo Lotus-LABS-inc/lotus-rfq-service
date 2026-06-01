@@ -52,6 +52,7 @@ export class MarketCatalogSnapshotMaterializer {
   private readonly config: MarketCatalogSnapshotMaterializerConfig;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private stopped = false;
 
   public constructor(private readonly deps: MarketCatalogSnapshotMaterializerDeps) {
     this.config = {
@@ -66,6 +67,7 @@ export class MarketCatalogSnapshotMaterializer {
     if (this.timer) {
       return;
     }
+    this.stopped = false;
     void this.runOnce().catch((error) => {
       this.deps.logger.warn({ err: error }, "Initial market catalog snapshot materialization failed.");
     });
@@ -78,6 +80,7 @@ export class MarketCatalogSnapshotMaterializer {
   }
 
   public stop(): void {
+    this.stopped = true;
     if (!this.timer) {
       return;
     }
@@ -86,7 +89,7 @@ export class MarketCatalogSnapshotMaterializer {
   }
 
   public async runOnce(): Promise<MarketCatalogSnapshotMaterializerRunResult> {
-    if (this.running) {
+    if (this.stopped || this.running) {
       return { attempted: 0, written: 0, skippedEmptyQuoteReady: 0, failed: 0 };
     }
     this.running = true;
@@ -109,6 +112,9 @@ export class MarketCatalogSnapshotMaterializer {
             .map((routeCoverage) => ({ limit, quoteReadyOnly: true as const, routeCoverage }))
         ];
         for (const query of baseQueries) {
+          if (this.stopped) {
+            return result;
+          }
           result.attempted += 1;
           try {
             const written = await this.materializeMarketQuery(query);

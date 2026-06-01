@@ -135,4 +135,27 @@ describe("MarketCatalogSnapshotMaterializer", () => {
     expect(snapshotCache.values.get(`markets:${stableQueryCacheKey({ limit: 80, quoteReadyOnly: true })}`)).toBeUndefined();
     expect(snapshotCache.values.get(`markets:${stableQueryCacheKey({ limit: 80, quoteReadyOnly: true, view: "compact" })}`)).toBeUndefined();
   });
+
+  it("does not run materialization after stop is requested", async () => {
+    const listMarkets = vi.fn(async () => [baseMarket]);
+    const listLatestMarketQuoteReadiness = vi.fn(async () => []);
+    const materializer = new MarketCatalogSnapshotMaterializer({
+      marketCatalogRepository: {
+        listMarkets
+      },
+      marketQuoteReadinessSource: {
+        listLatestMarketQuoteReadiness
+      },
+      snapshotCache: new FakeSnapshotCache(),
+      logger: { info: vi.fn(), warn: vi.fn() },
+      config: { limits: [80], routeCoverages: ["all"], intervalMs: 60_000 }
+    });
+
+    materializer.stop();
+    const result = await materializer.runOnce();
+
+    expect(result).toEqual({ attempted: 0, written: 0, skippedEmptyQuoteReady: 0, failed: 0 });
+    expect(listMarkets).not.toHaveBeenCalled();
+    expect(listLatestMarketQuoteReadiness).not.toHaveBeenCalled();
+  });
 });
