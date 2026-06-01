@@ -4,14 +4,17 @@ import type { MarketCatalogMarket, MarketCatalogRepository } from "../../reposit
 import type { MarketQuoteReadinessSnapshot } from "../../repositories/venue-orderbook-snapshot.repository.js";
 import type { MarketCatalogSnapshotCache } from "../../services/market-catalog-snapshot-cache.js";
 import type { LiveMarketDataViewService, MarketBatchQuoteResponse, MarketChartTimeframe } from "../../services/market-data-view.service.js";
+import { formatMarketCatalogListMarkets } from "../../services/market-catalog-snapshot-materializer.js";
 
 const routeCoverageSchema = z.enum(["all", "single", "pair", "tri", "strict_all"]);
+const marketListViewSchema = z.enum(["full", "compact"]);
 
 const listQuerySchema = z.object({
   category: z.string().min(1).optional(),
   search: z.string().min(1).optional(),
   limit: z.coerce.number().int().positive().max(1000).optional(),
   routeCoverage: routeCoverageSchema.optional(),
+  view: marketListViewSchema.optional(),
   quoteReadyOnly: z.preprocess((value) => {
     if (value === undefined) {
       return undefined;
@@ -127,8 +130,9 @@ export const registerMarketCatalogRoutes = async (
           .filter((market) => routeCoverageMatches(market, routeCoverage))
           .slice(0, parsed.data.limit ?? enriched.markets.length);
         return {
-          markets: visibleMarkets,
+          markets: formatMarketCatalogListMarkets(visibleMarkets, parsed.data.view),
           count: visibleMarkets.length,
+          ...(parsed.data.view === "compact" ? { view: "compact" } : {}),
           ...(enriched.degraded ? {
             quoteReadinessDegraded: true,
             quoteReadinessReason: enriched.reason

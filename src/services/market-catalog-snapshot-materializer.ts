@@ -3,6 +3,7 @@ import type { MarketQuoteReadinessSnapshot } from "../repositories/venue-orderbo
 import type { MarketCatalogSnapshotCache } from "./market-catalog-snapshot-cache.js";
 
 type RouteCoverage = "all" | "single" | "pair" | "tri" | "strict_all";
+export type MarketCatalogListView = "full" | "compact";
 
 export interface MarketCatalogSnapshotMaterializerConfig {
   intervalMs: number;
@@ -111,7 +112,7 @@ export class MarketCatalogSnapshotMaterializer {
           result.attempted += 1;
           try {
             const written = await this.materializeMarketQuery(query);
-            if (written === "written") result.written += 1;
+            if (typeof written === "number") result.written += written;
             if (written === "skipped_empty_quote_ready") result.skippedEmptyQuoteReady += 1;
           } catch (error) {
             result.failed += 1;
@@ -126,7 +127,7 @@ export class MarketCatalogSnapshotMaterializer {
     }
   }
 
-  private async materializeMarketQuery(query: MarketCatalogMaterializedQuery): Promise<"written" | "skipped_empty_quote_ready"> {
+  private async materializeMarketQuery(query: MarketCatalogMaterializedQuery): Promise<number | "skipped_empty_quote_ready"> {
     const markets = await this.deps.marketCatalogRepository.listMarkets({
       limit: resolveFetchLimit(query.limit, query)
     });
@@ -145,12 +146,19 @@ export class MarketCatalogSnapshotMaterializer {
     }
 
     await this.deps.snapshotCache.set(`markets:${stableQueryCacheKey(query)}`, {
-      markets: visibleMarkets,
+      markets: formatMarketCatalogListMarkets(visibleMarkets, undefined),
       count: visibleMarkets.length,
       materialized: true,
       materializedAt: new Date().toISOString()
     }, this.config.cacheTtlMs);
-    return "written";
+    await this.deps.snapshotCache.set(`markets:${stableQueryCacheKey({ ...query, view: "compact" })}`, {
+      markets: formatMarketCatalogListMarkets(visibleMarkets, "compact"),
+      count: visibleMarkets.length,
+      materialized: true,
+      materializedAt: new Date().toISOString(),
+      view: "compact"
+    }, this.config.cacheTtlMs);
+    return 2;
   }
 }
 
@@ -158,7 +166,92 @@ interface MarketCatalogMaterializedQuery {
   limit: number;
   quoteReadyOnly?: boolean | undefined;
   routeCoverage?: RouteCoverage | undefined;
+  view?: MarketCatalogListView | undefined;
 }
+
+export interface CompactMarketCatalogMarket {
+  eventId?: string | undefined;
+  eventTitle?: string | undefined;
+  canonicalEventId: string;
+  canonicalMarketIds: string[];
+  displayTopic: string;
+  displayOutcome: string;
+  displayOutcomeKey: string;
+  title: string;
+  normalizedTitle: string;
+  category: string;
+  marketClass: string;
+  status: MarketCatalogMarket["status"];
+  startsAt: string | null;
+  expiresAt: string | null;
+  resolvesAt: string | null;
+  venues: string[];
+  venueCount: number;
+  venueMarketCount: number;
+  outcomeCount: number;
+  routeability: MarketCatalogMarket["routeability"];
+  imageUrl: string | null;
+  iconUrl: string | null;
+  volume: string | null;
+  volume24h: string | null;
+  liquidity: string | null;
+  buyVolume: string | null;
+  sellVolume: string | null;
+  tradeCount: string | null;
+  buyCount: string | null;
+  sellCount: string | null;
+  quoteStatus?: MarketCatalogMarket["quoteStatus"] | undefined;
+  quoteReadyVenueCount?: number | undefined;
+  quoteReadyVenues?: string[] | undefined;
+  quoteBlockers?: MarketCatalogMarket["quoteBlockers"] | undefined;
+  lastQuoteAt?: string | null | undefined;
+  updatedAt: string;
+}
+
+export const formatMarketCatalogListMarkets = (
+  markets: readonly MarketCatalogMarket[],
+  view: MarketCatalogListView | undefined
+): MarketCatalogMarket[] | CompactMarketCatalogMarket[] =>
+  view === "compact" ? markets.map(toCompactMarketCatalogMarket) : [...markets];
+
+const toCompactMarketCatalogMarket = (market: MarketCatalogMarket): CompactMarketCatalogMarket => ({
+  ...(market.eventId ? { eventId: market.eventId } : {}),
+  ...(market.eventTitle ? { eventTitle: market.eventTitle } : {}),
+  canonicalEventId: market.canonicalEventId,
+  canonicalMarketIds: market.canonicalMarketIds,
+  displayTopic: market.displayTopic,
+  displayOutcome: market.displayOutcome,
+  displayOutcomeKey: market.displayOutcomeKey,
+  title: market.title,
+  normalizedTitle: market.normalizedTitle,
+  category: market.category,
+  marketClass: market.marketClass,
+  status: market.status,
+  startsAt: market.startsAt,
+  expiresAt: market.expiresAt,
+  resolvesAt: market.resolvesAt,
+  venues: market.venues,
+  venueCount: market.venueCount,
+  venueMarketCount: market.venueMarketCount,
+  outcomeCount: market.outcomeCount,
+  routeability: market.routeability,
+  imageUrl: market.imageUrl,
+  iconUrl: market.iconUrl,
+  volume: market.volume,
+  volume24h: market.volume24h,
+  liquidity: market.liquidity,
+  buyVolume: market.buyVolume,
+  sellVolume: market.sellVolume,
+  tradeCount: market.tradeCount,
+  buyCount: market.buyCount,
+  sellCount: market.sellCount,
+  ...(market.quoteStatus ? { quoteStatus: market.quoteStatus } : {}),
+  ...(market.quoteReadyVenueCount !== undefined ? { quoteReadyVenueCount: market.quoteReadyVenueCount } : {}),
+  ...(market.quoteReadyVenues ? { quoteReadyVenues: market.quoteReadyVenues } : {}),
+  ...(market.quoteBlockers ? { quoteBlockers: market.quoteBlockers } : {}),
+  ...(market.lastQuoteAt !== undefined ? { lastQuoteAt: market.lastQuoteAt } : {}),
+  updatedAt: market.updatedAt
+});
 
 export const stableQueryCacheKey = (query: object): string =>
   JSON.stringify(Object.keys(query)

@@ -197,6 +197,35 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
+  it("serves compact market lists without heavy venue detail payloads", async () => {
+    const app = Fastify({ logger: false });
+    const repository = new FakeMarketCatalogRepository();
+    await registerMarketCatalogRoutes(app, { marketCatalogRepository: repository });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?limit=10&view=compact"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      count: 1,
+      view: "compact",
+      markets: [{
+        canonicalEventId: market.canonicalEventId,
+        title: "Republican Presidential Nominee 2028",
+        category: "POLITICS",
+        venues: ["LIMITLESS", "POLYMARKET", "PREDICT_FUN"],
+        venueCount: 3,
+        routeability: { hasCrossVenue: true }
+      }]
+    });
+    expect(response.json().markets[0]).not.toHaveProperty("venueMarkets");
+    expect(response.body).not.toContain("resolutionRulesText");
+
+    await app.close();
+  });
+
   it("filters quote-ready markets and returns sanitized readiness fields", async () => {
     const app = Fastify({ logger: false });
     const repository = new FakeMarketCatalogRepository();

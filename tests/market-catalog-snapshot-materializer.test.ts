@@ -81,13 +81,21 @@ describe("MarketCatalogSnapshotMaterializer", () => {
 
     const result = await materializer.runOnce();
 
-    expect(result).toMatchObject({ attempted: 6, written: 6, failed: 0 });
+    expect(result).toMatchObject({ attempted: 6, written: 12, failed: 0 });
     const allMarketKey = `markets:${stableQueryCacheKey({ limit: 80 })}`;
     expect(snapshotCache.values.get(allMarketKey)).toMatchObject({
       count: 1,
       materialized: true,
       markets: [{ quoteReadyVenueCount: 2, quoteReadyVenues: ["LIMITLESS", "POLYMARKET"] }]
     });
+    const compactAllMarketKey = `markets:${stableQueryCacheKey({ limit: 80, view: "compact" })}`;
+    expect(snapshotCache.values.get(compactAllMarketKey)).toMatchObject({
+      count: 1,
+      materialized: true,
+      view: "compact",
+      markets: [{ quoteReadyVenueCount: 2, quoteReadyVenues: ["LIMITLESS", "POLYMARKET"] }]
+    });
+    expect(JSON.stringify(snapshotCache.values.get(compactAllMarketKey))).not.toContain("venueMarkets");
     const key = `markets:${stableQueryCacheKey({ limit: 80, quoteReadyOnly: true, routeCoverage: "pair" })}`;
     expect(snapshotCache.values.get(key)).toMatchObject({
       count: 1,
@@ -112,12 +120,19 @@ describe("MarketCatalogSnapshotMaterializer", () => {
 
     const result = await materializer.runOnce();
 
-    expect(result).toMatchObject({ attempted: 5, written: 3, skippedEmptyQuoteReady: 2 });
+    expect(result).toMatchObject({ attempted: 5, written: 6, skippedEmptyQuoteReady: 2 });
     expect(snapshotCache.values.get(`markets:${stableQueryCacheKey({ limit: 80 })}`)).toMatchObject({
       count: 1,
       materialized: true,
       markets: [{ quoteStatus: "unavailable", quoteReadyVenueCount: 0 }]
     });
+    expect(snapshotCache.values.get(`markets:${stableQueryCacheKey({ limit: 80, view: "compact" })}`)).toMatchObject({
+      count: 1,
+      materialized: true,
+      view: "compact",
+      markets: [{ quoteStatus: "unavailable", quoteReadyVenueCount: 0 }]
+    });
     expect(snapshotCache.values.get(`markets:${stableQueryCacheKey({ limit: 80, quoteReadyOnly: true })}`)).toBeUndefined();
+    expect(snapshotCache.values.get(`markets:${stableQueryCacheKey({ limit: 80, quoteReadyOnly: true, view: "compact" })}`)).toBeUndefined();
   });
 });
