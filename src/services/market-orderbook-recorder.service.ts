@@ -47,9 +47,14 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
 const RATE_LIMIT_COOLDOWN_MS = 5 * 60_000;
 const PROVIDER_AUTH_COOLDOWN_MS = 15 * 60_000;
 
-export const buildMarketOrderbookRecorderConfig = (): MarketOrderbookRecorderConfig => ({
-  ...DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG
-});
+export const buildMarketOrderbookRecorderConfig = (): MarketOrderbookRecorderConfig => {
+  // Worker-owned duty: do not add per-duty env flags such as
+  // MARKET_ORDERBOOK_RECORDER_ENABLED. If the worker service is running, the
+  // recorder is expected to run with code-owned production defaults.
+  return {
+    ...DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG
+  };
+};
 
 export class MarketOrderbookRecorder {
   private timer: NodeJS.Timeout | null = null;

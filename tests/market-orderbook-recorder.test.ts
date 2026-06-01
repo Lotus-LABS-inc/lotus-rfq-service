@@ -22,6 +22,25 @@ describe("MarketOrderbookRecorder", () => {
     });
   });
 
+  it("ignores deprecated per-duty env flags so worker-owned recording stays code-owned", () => {
+    const previous = process.env.MARKET_ORDERBOOK_RECORDER_ENABLED;
+    process.env.MARKET_ORDERBOOK_RECORDER_ENABLED = "false";
+    try {
+      expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
+        intervalMs: 120_000,
+        marketBatchSize: 5,
+        maxSamplesPerTick: 20
+      });
+      expect(buildMarketOrderbookRecorderConfig()).not.toHaveProperty("enabled");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.MARKET_ORDERBOOK_RECORDER_ENABLED;
+      } else {
+        process.env.MARKET_ORDERBOOK_RECORDER_ENABLED = previous;
+      }
+    }
+  });
+
   it("records approved open market outcome snapshots and skips closed markets", async () => {
     const inserted: VenueOrderbookSnapshotInput[] = [];
     const recorder = new MarketOrderbookRecorder(
