@@ -1,0 +1,265 @@
+import type { MarketCatalogMarket, MarketCatalogRepository } from "../repositories/market-catalog.repository.js";
+import type { MarketQuoteReadinessSnapshot } from "../repositories/venue-orderbook-snapshot.repository.js";
+import type { MarketCatalogSnapshotCache } from "./market-catalog-snapshot-cache.js";
+
+type RouteCoverage = "all" | "single" | "pair" | "tri" | "strict_all";
+
+export interface MarketCatalogSnapshotMaterializerConfig {
+  intervalMs: number;
+  cacheTtlMs: number;
+  limits: readonly number[];
+  routeCoverages: readonly RouteCoverage[];
+}
+
+export interface MarketCatalogSnapshotMaterializerLogger {
+  info(input: Record<string, unknown>, message: string): void;
+  warn(input: Record<string, unknown>, message: string): void;
+}
+
+export interface MarketCatalogSnapshotMaterializerRunResult {
+  attempted: number;
+  written: number;
+  skippedEmptyQuoteReady: number;
+  failed: number;
+}
+
+export interface MarketCatalogSnapshotMaterializerDeps {
+  marketCatalogRepository: Pick<MarketCatalogRepository, "listMarkets">;
+  marketQuoteReadinessSource: {
+    listLatestMarketQuoteReadiness(input: {
+      canonicalMarketIds: readonly string[];
+      maxAgeMs?: number | undefined;
+    }): Promise<MarketQuoteReadinessSnapshot[]>;
+  };
+  snapshotCache: MarketCatalogSnapshotCache;
+  logger: MarketCatalogSnapshotMaterializerLogger;
+  config?: Partial<MarketCatalogSnapshotMaterializerConfig> | undefined;
+}
+
+const DEFAULT_CONFIG: MarketCatalogSnapshotMaterializerConfig = {
+  intervalMs: 30_000,
+  cacheTtlMs: 120_000,
+  limits: [80, 250],
+  routeCoverages: ["all", "pair", "tri", "strict_all"]
+};
+
+const OVERFETCH_MULTIPLIER = 4;
+const OVERFETCH_MIN = 250;
+const OVERFETCH_CAP = 1_000;
+
+export class MarketCatalogSnapshotMaterializer {
+  private readonly config: MarketCatalogSnapshotMaterializerConfig;
+  private timer: NodeJS.Timeout | null = null;
+  private running = false;
+
+  public constructor(private readonly deps: MarketCatalogSnapshotMaterializerDeps) {
+    this.config = {
+      ...DEFAULT_CONFIG,
+      ...(deps.config ?? {}),
+      limits: sanitizeLimits(deps.config?.limits ?? DEFAULT_CONFIG.limits),
+      routeCoverages: sanitizeRouteCoverages(deps.config?.routeCoverages ?? DEFAULT_CONFIG.routeCoverages)
+    };
+  }
+
+  public start(): void {
+    if (this.timer) {
+      return;
+    }
+    void this.runOnce().catch((error) => {
+      this.deps.logger.warn({ err: error }, "Initial market catalog snapshot materialization failed.");
+    });
+    this.timer = setInterval(() => {
+      void this.runOnce().catch((error) => {
+        this.deps.logger.warn({ err: error }, "Market catalog snapshot materialization tick failed.");
+      });
+    }, Math.max(1_000, this.config.intervalMs));
+    this.timer.unref?.();
+  }
+
+  public stop(): void {
+    if (!this.timer) {
+      return;
+    }
+    clearInterval(this.timer);
+    this.timer = null;
+  }
+
+  public async runOnce(): Promise<MarketCatalogSnapshotMaterializerRunResult> {
+    if (this.running) {
+      return { attempted: 0, written: 0, skippedEmptyQuoteReady: 0, failed: 0 };
+    }
+    this.running = true;
+    const result: MarketCatalogSnapshotMaterializerRunResult = {
+      attempted: 0,
+      written: 0,
+      skippedEmptyQuoteReady: 0,
+      failed: 0
+    };
+    try {
+      for (const limit of this.config.limits) {
+        const baseQueries = [
+          { limit, quoteReadyOnly: true as const },
+          { limit, quoteReadyOnly: true as const, routeCoverage: "all" as const },
+          ...this.config.routeCoverages
+            .filter((routeCoverage) => routeCoverage !== "all")
+            .map((routeCoverage) => ({ limit, quoteReadyOnly: true as const, routeCoverage }))
+        ];
+        for (const query of baseQueries) {
+          result.attempted += 1;
+          try {
+            const written = await this.materializeMarketQuery(query);
+            if (written === "written") result.written += 1;
+            if (written === "skipped_empty_quote_ready") result.skippedEmptyQuoteReady += 1;
+          } catch (error) {
+            result.failed += 1;
+            this.deps.logger.warn({ err: error, query }, "Market catalog snapshot query materialization failed.");
+          }
+        }
+      }
+      this.deps.logger.info(result as unknown as Record<string, unknown>, "Market catalog snapshots materialized.");
+      return result;
+    } finally {
+      this.running = false;
+    }
+  }
+
+  private async materializeMarketQuery(query: MarketCatalogMaterializedQuery): Promise<"written" | "skipped_empty_quote_ready"> {
+    const markets = await this.deps.marketCatalogRepository.listMarkets({
+      limit: resolveFetchLimit(query.limit, query)
+    });
+    const readiness = await this.deps.marketQuoteReadinessSource.listLatestMarketQuoteReadiness({
+      canonicalMarketIds: [...new Set(markets.flatMap((market) => market.canonicalMarketIds))]
+    });
+    const enriched = enrichMarketsWithReadiness(markets, readiness);
+    const routeCoverage = query.routeCoverage ?? "all";
+    const visibleMarkets = enriched
+      .filter((market) => !query.quoteReadyOnly || isQuoteReadyMarket(market))
+      .filter((market) => routeCoverageMatches(market, routeCoverage))
+      .slice(0, query.limit);
+
+    if (query.quoteReadyOnly && visibleMarkets.length === 0) {
+      return "skipped_empty_quote_ready";
+    }
+
+    await this.deps.snapshotCache.set(`markets:${stableQueryCacheKey(query)}`, {
+      markets: visibleMarkets,
+      count: visibleMarkets.length,
+      materialized: true,
+      materializedAt: new Date().toISOString()
+    }, this.config.cacheTtlMs);
+    return "written";
+  }
+}
+
+interface MarketCatalogMaterializedQuery {
+  limit: number;
+  quoteReadyOnly: boolean;
+  routeCoverage?: RouteCoverage | undefined;
+}
+
+export const stableQueryCacheKey = (query: object): string =>
+  JSON.stringify(Object.keys(query)
+    .sort()
+    .reduce<Record<string, unknown>>((memo, key) => {
+      const value = (query as Record<string, unknown>)[key];
+      if (value !== undefined) {
+        memo[key] = value;
+      }
+      return memo;
+    }, {}));
+
+const enrichMarketsWithReadiness = (
+  markets: readonly MarketCatalogMarket[],
+  readiness: readonly MarketQuoteReadinessSnapshot[]
+): MarketCatalogMarket[] => {
+  const byCanonicalMarketId = new Map(readiness.map((item) => [item.canonicalMarketId, item]));
+  return markets.map((market) => {
+    const marketReadiness = market.canonicalMarketIds
+      .map((canonicalMarketId) => byCanonicalMarketId.get(canonicalMarketId))
+      .filter((item): item is MarketQuoteReadinessSnapshot => item !== undefined);
+    return {
+      ...market,
+      ...aggregateMarketQuoteReadiness(marketReadiness)
+    };
+  });
+};
+
+const aggregateMarketQuoteReadiness = (
+  readiness: readonly MarketQuoteReadinessSnapshot[]
+): Pick<MarketCatalogMarket, "quoteStatus" | "quoteReadyVenueCount" | "quoteReadyVenues" | "quoteBlockers" | "lastQuoteAt"> => {
+  if (readiness.length === 0) {
+    return {
+      quoteStatus: "unavailable",
+      quoteReadyVenueCount: 0,
+      quoteReadyVenues: [],
+      quoteBlockers: [],
+      lastQuoteAt: null
+    };
+  }
+  const quoteReadyVenues = [...new Set(readiness
+    .flatMap((item) => item.quoteReadyVenues.length > 0 ? item.quoteReadyVenues : [])
+    .map((venue) => venue.trim().toUpperCase())
+    .filter(Boolean))].sort();
+  return {
+    quoteStatus: pickMarketQuoteStatus(readiness),
+    quoteReadyVenueCount: quoteReadyVenues.length > 0
+      ? quoteReadyVenues.length
+      : readiness.reduce((sum, item) => sum + item.quoteReadyVenueCount, 0),
+    quoteReadyVenues,
+    quoteBlockers: [...new Map(readiness
+      .flatMap((item) => item.quoteBlockers)
+      .map((blocker) => [`${blocker.venue}:${blocker.reason}:${blocker.venueMarketId ?? ""}:${blocker.venueOutcomeId ?? ""}`, blocker] as const)
+    ).values()],
+    lastQuoteAt: readiness
+      .map((item) => item.lastQuoteAt)
+      .filter((value): value is string => value !== null)
+      .sort()
+      .at(-1) ?? null
+  };
+};
+
+const pickMarketQuoteStatus = (readiness: readonly MarketQuoteReadinessSnapshot[]): MarketCatalogMarket["quoteStatus"] => {
+  const statuses = new Set(readiness.map((item) => item.quoteStatus));
+  if (statuses.has("live")) return "live";
+  if (statuses.has("partial")) return "partial";
+  if (statuses.has("stale")) return "stale";
+  return "unavailable";
+};
+
+const isQuoteReadyMarket = (market: MarketCatalogMarket): boolean =>
+  (market.quoteReadyVenueCount ?? 0) > 0 && market.quoteStatus !== "unavailable";
+
+const routeCoverageMatches = (market: MarketCatalogMarket, routeCoverage: RouteCoverage): boolean => {
+  const readyVenueCount = market.quoteReadyVenueCount ?? 0;
+  switch (routeCoverage) {
+    case "single":
+      return readyVenueCount >= 1;
+    case "pair":
+      return readyVenueCount >= 2;
+    case "tri":
+      return readyVenueCount >= 3;
+    case "strict_all":
+      return market.venueCount > 0 && readyVenueCount >= market.venueCount;
+    case "all":
+      return true;
+  }
+};
+
+const resolveFetchLimit = (limit: number, query: MarketCatalogMaterializedQuery): number =>
+  query.quoteReadyOnly || query.routeCoverage
+    ? Math.min(Math.max(limit * OVERFETCH_MULTIPLIER, OVERFETCH_MIN), OVERFETCH_CAP)
+    : limit;
+
+const sanitizeLimits = (limits: readonly number[]): number[] => {
+  const values = [...new Set(limits
+    .map((value) => Math.floor(value))
+    .filter((value) => Number.isFinite(value) && value > 0))]
+    .sort((left, right) => left - right);
+  return values.length > 0 ? values : [...DEFAULT_CONFIG.limits];
+};
+
+const sanitizeRouteCoverages = (routeCoverages: readonly RouteCoverage[]): RouteCoverage[] => {
+  const allowed = new Set<RouteCoverage>(["all", "single", "pair", "tri", "strict_all"]);
+  const values = [...new Set(routeCoverages.filter((value) => allowed.has(value)))];
+  return values.length > 0 ? values : [...DEFAULT_CONFIG.routeCoverages];
+};

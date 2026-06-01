@@ -408,6 +408,46 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
+  it("ignores empty shared quote-ready catalog snapshots and rebuilds from repository", async () => {
+    const repository = new FakeMarketCatalogRepository();
+    const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    snapshotCache.values.set("markets:{\"limit\":10,\"quoteReadyOnly\":true}", {
+      markets: [],
+      count: 0
+    });
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketCatalogSnapshotCache: snapshotCache,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: []
+          }];
+        }
+      }
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=10"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(repository.filters).toHaveLength(1);
+    expect(response.json()).toMatchObject({
+      count: 1,
+      markets: [{ quoteReadyVenueCount: 1 }]
+    });
+
+    await app.close();
+  });
+
   it("materializes degraded quote-ready responses when stale readiness still returns markets", async () => {
     process.env.MARKET_QUOTE_READINESS_TIMEOUT_MS = "1";
     const repository = new FakeMarketCatalogRepository();

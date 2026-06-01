@@ -478,7 +478,7 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
   if (options.sharedCache) {
     try {
       const shared = await options.sharedCache.get<T>(key);
-      if (shared) {
+      if (shared && isCacheableMarketCatalogResponseForKey(key, shared)) {
         cacheMarketCatalogResponse(key, shared, cacheTtlMs, staleCacheTtlMs);
         return shared;
       }
@@ -511,7 +511,9 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
     .then((value) => {
       if (options.cacheDegraded !== false || isCacheableMarketCatalogResponse(value)) {
         cacheMarketCatalogResponse(key, value, cacheTtlMs, staleCacheTtlMs);
-        void options.sharedCache?.set(key, value, cacheTtlMs).catch(() => undefined);
+        if (isCacheableMarketCatalogResponseForKey(key, value)) {
+          void options.sharedCache?.set(key, value, cacheTtlMs).catch(() => undefined);
+        }
       } else if (staleCached) {
         return markMarketCatalogResponseFromStaleCache(staleCached);
       }
@@ -557,6 +559,23 @@ const isCacheableMarketCatalogResponse = (value: Record<string, unknown>): boole
   const markets = Array.isArray(value.markets) ? value.markets : [];
   return markets.length > 0;
 };
+
+const isCacheableMarketCatalogResponseForKey = (
+  key: string,
+  value: Record<string, unknown>
+): boolean => {
+  if (!isCacheableMarketCatalogResponse(value)) {
+    return false;
+  }
+  if (!isQuoteReadyMarketCatalogCacheKey(key)) {
+    return true;
+  }
+  const markets = Array.isArray(value.markets) ? value.markets : [];
+  return markets.length > 0;
+};
+
+const isQuoteReadyMarketCatalogCacheKey = (key: string): boolean =>
+  key.startsWith("markets:") && key.includes("\"quoteReadyOnly\":true");
 
 const stableQueryCacheKey = (query: z.infer<typeof listQuerySchema>): string =>
   JSON.stringify(Object.keys(query)

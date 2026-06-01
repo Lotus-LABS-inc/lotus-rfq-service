@@ -214,6 +214,7 @@ export interface MarkedExecutionPosition extends VerifiedExecutionPosition {
 const LIVE_CANDIDATE_CACHE_MS = 2_000;
 const POSITION_MARK_CACHE_MS = 15_000;
 const POSITION_MARK_LIVE_TIMEOUT_MS = 700;
+const POSITION_MARK_LIVE_READ_BUDGET = 20;
 const ROUTE_RATE_LIMIT_WINDOW_MS = 10_000;
 const RATE_LIMITS: Record<string, number> = {
   preview: 40,
@@ -1065,49 +1066,57 @@ const markPositions = async (input: {
   generatedAt: string;
   liveCandidateProvider?: LiveExecutionCandidateProvider | undefined;
   userId: string;
-}): Promise<MarkedExecutionPosition[]> => Promise.all(input.positions.map(async (position) => {
-  if (!input.liveCandidateProvider || Number(position.verifiedSize) <= 0) {
-    return unavailableMarkedPosition(position, input.generatedAt, "LIVE_MARK_SOURCE_UNAVAILABLE");
-  }
-  const cacheKey = positionMarkCacheKey(input.userId, position);
-  const cached = positionMarkCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.position;
-  }
-  try {
-    const candidates = await withMarkTimeout(
-      getCachedLiveCandidates(input.liveCandidateProvider, input.userId, {
-        side: "sell",
-        marketId: position.marketId,
-        outcomeId: position.outcomeId,
-        amount: position.verifiedSize,
-        venues: [position.venue]
-      }),
-      POSITION_MARK_LIVE_TIMEOUT_MS
-    );
-    const candidate = candidates.candidates[0];
-    if (!candidate || !Number.isFinite(candidate.price)) {
-      return lastGoodOrUnavailable(cacheKey, position, input.generatedAt, candidates.blocked[0]?.reason ?? "LIVE_MARK_QUOTE_UNAVAILABLE");
+  maxLiveReads?: number | undefined;
+}): Promise<MarkedExecutionPosition[]> => {
+  let liveReadsRemaining = Math.max(0, input.maxLiveReads ?? POSITION_MARK_LIVE_READ_BUDGET);
+  return Promise.all(input.positions.map(async (position) => {
+    if (!input.liveCandidateProvider || Number(position.verifiedSize) <= 0) {
+      return unavailableMarkedPosition(position, input.generatedAt, "LIVE_MARK_SOURCE_UNAVAILABLE");
     }
-    const size = Number(position.verifiedSize);
-    const markValue = size * candidate.price;
-    const entryValue = size * position.averageEntryPrice;
-    const marked: MarkedExecutionPosition = {
-      ...position,
-      markPrice: candidate.price,
-      markValue: fixedDecimal(markValue),
-      unrealizedPnl: fixedDecimal(markValue - entryValue),
-      markSource: "LIVE_QUOTE_SOURCE" as const,
-      markFreshness: "live" as const,
-      markGeneratedAt: candidates.generatedAt,
-      markBlocker: null
-    };
-    positionMarkCache.set(cacheKey, { expiresAt: Date.now() + POSITION_MARK_CACHE_MS, position: marked });
-    return marked;
-  } catch (error) {
-    return lastGoodOrUnavailable(cacheKey, position, input.generatedAt, error instanceof Error && error.message ? "LIVE_MARK_QUOTE_FAILED" : "LIVE_MARK_QUOTE_UNAVAILABLE");
-  }
-}));
+    const cacheKey = positionMarkCacheKey(input.userId, position);
+    const cached = positionMarkCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.position;
+    }
+    if (liveReadsRemaining <= 0) {
+      return lastGoodOrUnavailable(cacheKey, position, input.generatedAt, "LIVE_MARK_DEFERRED");
+    }
+    liveReadsRemaining -= 1;
+    try {
+      const candidates = await withMarkTimeout(
+        getCachedLiveCandidates(input.liveCandidateProvider, input.userId, {
+          side: "sell",
+          marketId: position.marketId,
+          outcomeId: position.outcomeId,
+          amount: position.verifiedSize,
+          venues: [position.venue]
+        }),
+        POSITION_MARK_LIVE_TIMEOUT_MS
+      );
+      const candidate = candidates.candidates[0];
+      if (!candidate || !Number.isFinite(candidate.price)) {
+        return lastGoodOrUnavailable(cacheKey, position, input.generatedAt, candidates.blocked[0]?.reason ?? "LIVE_MARK_QUOTE_UNAVAILABLE");
+      }
+      const size = Number(position.verifiedSize);
+      const markValue = size * candidate.price;
+      const entryValue = size * position.averageEntryPrice;
+      const marked: MarkedExecutionPosition = {
+        ...position,
+        markPrice: candidate.price,
+        markValue: fixedDecimal(markValue),
+        unrealizedPnl: fixedDecimal(markValue - entryValue),
+        markSource: "LIVE_QUOTE_SOURCE" as const,
+        markFreshness: "live" as const,
+        markGeneratedAt: candidates.generatedAt,
+        markBlocker: null
+      };
+      positionMarkCache.set(cacheKey, { expiresAt: Date.now() + POSITION_MARK_CACHE_MS, position: marked });
+      return marked;
+    } catch (error) {
+      return lastGoodOrUnavailable(cacheKey, position, input.generatedAt, error instanceof Error && error.message ? "LIVE_MARK_QUOTE_FAILED" : "LIVE_MARK_QUOTE_UNAVAILABLE");
+    }
+  }));
+};
 
 const withMarkTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
   let timeout: NodeJS.Timeout | undefined;

@@ -1756,6 +1756,63 @@ describe("execution signed bundle routes", () => {
     });
   });
 
+  it("bounds portfolio live mark fanout and defers uncached overflow positions", async () => {
+    const app = Fastify();
+    const positions = Array.from({ length: 25 }, (_, index) => ({
+      positionId: `budget-position-${index}`,
+      userId: "user-1",
+      venue: "POLYMARKET",
+      marketId: `budget-market-${index}`,
+      outcomeId: "YES",
+      venueAccountAddress: null,
+      verifiedSize: "1",
+      averageEntryPrice: 0.4,
+      sellableSize: "1",
+      lastSettlementEvidenceId: `budget-order-${index}`,
+      status: "VERIFIED" as const,
+      metadata: {}
+    }));
+    const positionRepository = {
+      listVerifiedPositions: vi.fn(),
+      listUserVerifiedPositions: vi.fn(async () => positions)
+    };
+    const liveCandidateProvider = {
+      getCandidates: vi.fn(async (input) => ({
+        generatedAt: "2026-05-06T00:00:00.000Z",
+        marketId: input.marketId,
+        outcomeId: input.outcomeId,
+        amount: input.amount,
+        source: "LIVE_QUOTE_SOURCE" as const,
+        candidates: [{ venue: input.venues?.[0] ?? "POLYMARKET", price: 0.5, availableSize: "10" }],
+        blocked: []
+      }))
+    };
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: { quote: vi.fn(), getQuote: vi.fn() } as never,
+      sellQuoteService: { prepareExit: vi.fn() } as never,
+      positionRepository,
+      liveCandidateProvider
+    });
+
+    const response = await app.inject({ method: "GET", url: "/execution/portfolio/summary" });
+
+    expect(response.statusCode).toBe(200);
+    expect(liveCandidateProvider.getCandidates).toHaveBeenCalledTimes(20);
+    const body = response.json();
+    expect(body.markedPositionCount).toBe(20);
+    expect(body.unavailableMarkCount).toBe(5);
+    expect(body.positions.slice(20)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          markFreshness: "unavailable",
+          markBlocker: "LIVE_MARK_DEFERRED"
+        })
+      ])
+    );
+  });
+
   it("serves portfolio time series as a backend MTM snapshot without historical fabrication", async () => {
     const app = Fastify();
     const positionRepository = {

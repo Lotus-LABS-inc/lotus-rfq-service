@@ -10,6 +10,10 @@ const optionalIsoDateSchema = z.preprocess(
 const envSchema = z
   .object({
     NODE_ENV: nodeEnvSchema.default("development"),
+    LOTUS_SERVICE_MODE: z.string().default("api"),
+    LOTUS_ENV: z.string().optional(),
+    LOTUS_DEPLOY_ENV: z.string().optional(),
+    APP_ENV: z.string().optional(),
     HOST: z.string().default("0.0.0.0"),
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     LOG_LEVEL: logLevelSchema.default("info"),

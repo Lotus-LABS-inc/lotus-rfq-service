@@ -163,6 +163,11 @@ export class ExecutionOrderError extends Error {
   }
 }
 
+export interface ExecutionOrderLogger {
+  warn(input: Record<string, unknown>, message: string): void;
+  error(input: Record<string, unknown>, message: string): void;
+}
+
 export class ExecutionOrderOrchestratorV1 {
   private readonly previewIntentCache = new Map<string, { orderId: string; expiresAt: number }>();
   private readonly previewInFlight = new Map<string, Promise<ExecutionOrderResponse>>();
@@ -178,7 +183,8 @@ export class ExecutionOrderOrchestratorV1 {
     private readonly executableRouteService: ExecutableRouteService,
     private readonly sellQuoteService: SellQuoteService,
     private readonly signedTradeBundleService?: SignedTradeBundleService | undefined,
-    private readonly liveCandidateProvider?: ExecutionOrderLiveCandidateProvider | undefined
+    private readonly liveCandidateProvider?: ExecutionOrderLiveCandidateProvider | undefined,
+    private readonly logger?: ExecutionOrderLogger | undefined
   ) {}
 
   public async preview(input: ExecutionOrderPreviewInput): Promise<ExecutionOrderResponse> {
@@ -569,21 +575,29 @@ export class ExecutionOrderOrchestratorV1 {
       await this.updateFromSubmitResult(input.submitting, result);
     } catch (error) {
       const normalized = normalizeSubmitError(error);
-      await this.repository.updateOrder({
-        userId: input.submitting.userId,
-        orderId: input.submitting.orderId,
-        patch: {
-          state: "FAILED",
-          primaryAction: "NONE",
-          lastError: normalized.message,
-          blockers: [{
-            code: normalized.code,
-            message: normalized.message,
-            actionable: false
-          }],
-          nextPollAt: null
-        }
-      });
+      try {
+        await this.repository.updateOrder({
+          userId: input.submitting.userId,
+          orderId: input.submitting.orderId,
+          patch: {
+            state: "FAILED",
+            primaryAction: "NONE",
+            lastError: normalized.message,
+            blockers: [{
+              code: normalized.code,
+              message: normalized.message,
+              actionable: false
+            }],
+            nextPollAt: null
+          }
+        });
+      } catch (updateError) {
+        this.logger?.error({
+          err: updateError,
+          orderId: input.submitting.orderId,
+          errorCode: normalized.code
+        }, "Execution order background submit failed and failure state could not be persisted.");
+      }
     }
   }
 

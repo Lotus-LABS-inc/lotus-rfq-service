@@ -85,6 +85,7 @@ export interface BootstrapModules {
     sorResolutionRiskPenalty?: number;
     sorAcceptAonAwait: boolean;
     sorAcceptNonAonBackground: boolean;
+    runtimeMode?: "api" | "worker";
   }) => Promise<FastifyInstance>;
   disconnectRedis: (client: RedisClient) => Promise<void>;
   closePgPool: (pool: Pool) => Promise<void>;
@@ -104,6 +105,9 @@ const defaultModules: BootstrapModules = {
 
 export const POLYMARKET_RELAY_SERVICE_MODE = "polymarket-execution-relay";
 export const ORDERBOOK_STREAM_SERVICE_MODE = "orderbook-stream-service";
+export const WORKER_SERVICE_MODE = "worker";
+
+type RuntimeMode = "api" | "worker";
 
 export const shouldRunPolymarketRelayEntrypoint = (
   env: NodeJS.ProcessEnv = process.env
@@ -112,6 +116,10 @@ export const shouldRunPolymarketRelayEntrypoint = (
 export const shouldRunOrderbookStreamEntrypoint = (
   env: NodeJS.ProcessEnv = process.env
 ): boolean => env.LOTUS_SERVICE_MODE === ORDERBOOK_STREAM_SERVICE_MODE;
+
+export const shouldRunWorkerEntrypoint = (
+  env: NodeJS.ProcessEnv = process.env
+): boolean => env.LOTUS_SERVICE_MODE === WORKER_SERVICE_MODE;
 
 const sleep = (durationMs: number): Promise<void> =>
   new Promise((resolve) => {
@@ -171,6 +179,45 @@ const isTransientRedisStartupError = (error: unknown): boolean => {
   );
 };
 
+const isProductionDeploy = (env: EnvConfig): boolean =>
+  [env.LOTUS_DEPLOY_ENV, env.LOTUS_ENV, env.APP_ENV].some((value) =>
+    typeof value === "string" && ["prod", "production"].includes(value.trim().toLowerCase())
+  );
+
+const localDatabaseHosts = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
+
+const databaseHost = (databaseUrl: string): string => {
+  try {
+    return new URL(databaseUrl).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+};
+
+const isSupabaseDatabaseHost = (host: string): boolean =>
+  host === "supabase.com" || host.endsWith(".supabase.com") || host.includes(".supabase.co");
+
+export const validateDatabaseTargetSafety = (env: EnvConfig): void => {
+  if (!isProductionDeploy(env)) {
+    return;
+  }
+
+  const databaseHostName = databaseHost(env.DATABASE_URL);
+  const supabaseHostName = env.SUPABASE_DB_URL ? databaseHost(env.SUPABASE_DB_URL) : "";
+
+  if (!env.SUPABASE_DB_URL) {
+    throw new Error("Production deploy requires SUPABASE_DB_URL so prod cannot silently fall back to VPS-local Postgres.");
+  }
+
+  if (localDatabaseHosts.has(databaseHostName) || localDatabaseHosts.has(supabaseHostName)) {
+    throw new Error("Production deploy database URLs must not point at localhost/VPS-local Postgres.");
+  }
+
+  if (!isSupabaseDatabaseHost(databaseHostName) || !isSupabaseDatabaseHost(supabaseHostName)) {
+    throw new Error("Production deploy DATABASE_URL and SUPABASE_DB_URL must point at Supabase Postgres hosts.");
+  }
+};
+
 export const startService = async (
   modules: Partial<BootstrapModules> = {}
 ): Promise<ServiceRuntime> => {
@@ -179,6 +226,10 @@ export const startService = async (
 
   const env = impl.loadEnv();
   const logger = impl.createLogger(env.LOG_LEVEL);
+  validateDatabaseTargetSafety(env);
+  const runtimeMode: RuntimeMode = shouldRunWorkerEntrypoint({ LOTUS_SERVICE_MODE: env.LOTUS_SERVICE_MODE })
+    ? "worker"
+    : "api";
   const redisClient = impl.createRedisClient({
     redisUrl: env.REDIS_URL,
     logger
@@ -267,7 +318,8 @@ export const startService = async (
     failureWeight: env.FAILURE_WEIGHT,
     sorResolutionRiskPenalty: env.SOR_RESOLUTION_RISK_PENALTY,
     sorAcceptAonAwait: env.SOR_ACCEPT_AON_AWAIT,
-    sorAcceptNonAonBackground: env.SOR_ACCEPT_NON_AON_BACKGROUND
+    sorAcceptNonAonBackground: env.SOR_ACCEPT_NON_AON_BACKGROUND,
+    runtimeMode
   });
 
   await app.listen({
@@ -294,7 +346,7 @@ export const startService = async (
     logger.info("Service shutdown completed.");
   };
 
-  logger.info({ host: env.HOST, port: env.PORT }, "Service started.");
+  logger.info({ host: env.HOST, port: env.PORT, runtimeMode }, "Service started.");
 
   return {
     env,

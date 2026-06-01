@@ -7,7 +7,10 @@ import { buildServer } from "../src/api/server.js";
 import type { RedisClient } from "../src/db/redis.js";
 import {
   POLYMARKET_RELAY_SERVICE_MODE,
+  WORKER_SERVICE_MODE,
   shouldRunPolymarketRelayEntrypoint,
+  shouldRunWorkerEntrypoint,
+  validateDatabaseTargetSafety,
   startService
 } from "../src/index.js";
 import { loadEnv } from "../src/utils/env.js";
@@ -217,6 +220,60 @@ describe("bootstrap lifecycle", () => {
     expect(shouldRunPolymarketRelayEntrypoint({})).toBe(false);
   });
 
+  it("selects the worker entrypoint only for the explicit service mode", () => {
+    expect(
+      shouldRunWorkerEntrypoint({
+        LOTUS_SERVICE_MODE: WORKER_SERVICE_MODE
+      })
+    ).toBe(true);
+
+    expect(
+      shouldRunWorkerEntrypoint({
+        LOTUS_SERVICE_MODE: "api"
+      })
+    ).toBe(false);
+
+    expect(shouldRunWorkerEntrypoint({})).toBe(false);
+  });
+
+  it("rejects production deploys that point at local Postgres", () => {
+    expect(() =>
+      validateDatabaseTargetSafety(createRuntimeEnv({
+        LOTUS_DEPLOY_ENV: "prod",
+        DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_prod",
+        SUPABASE_DB_URL: "postgres://postgres:postgres@db.supabase.example:5432/postgres"
+      }))
+    ).toThrow(/must not point at localhost/);
+  });
+
+  it("requires a Supabase DB URL for production deploys", () => {
+    expect(() =>
+      validateDatabaseTargetSafety(createRuntimeEnv({
+        LOTUS_DEPLOY_ENV: "prod",
+        DATABASE_URL: "postgres://postgres:postgres@db.supabase.example:5432/postgres",
+        SUPABASE_DB_URL: undefined
+      }))
+    ).toThrow(/requires SUPABASE_DB_URL/);
+  });
+
+  it("requires production database URLs to target Supabase hosts", () => {
+    expect(() =>
+      validateDatabaseTargetSafety(createRuntimeEnv({
+        LOTUS_DEPLOY_ENV: "prod",
+        DATABASE_URL: "postgres://postgres:postgres@db.internal.example:5432/postgres",
+        SUPABASE_DB_URL: "postgres://postgres:postgres@db.supabase.example:5432/postgres"
+      }))
+    ).toThrow(/must point at Supabase Postgres hosts/);
+
+    expect(() =>
+      validateDatabaseTargetSafety(createRuntimeEnv({
+        LOTUS_DEPLOY_ENV: "prod",
+        DATABASE_URL: "postgres://postgres:postgres@aws-0-us-east-1.pooler.supabase.com:6543/postgres",
+        SUPABASE_DB_URL: "postgres://postgres:postgres@db.project.supabase.co:5432/postgres"
+      }))
+    ).not.toThrow();
+  });
+
   it("initializes dependencies in expected order", async () => {
     const mockApp = {
       listen: vi.fn(async () => {
@@ -255,8 +312,9 @@ describe("bootstrap lifecycle", () => {
         callOrder.push("createDrizzleDb");
         return {} as AppDb;
       },
-      buildServer: async () => {
+      buildServer: async (deps) => {
         callOrder.push("buildServer");
+        expect(deps.runtimeMode).toBe("api");
         return mockApp;
       },
       disconnectRedis: async () => {
@@ -278,6 +336,41 @@ describe("bootstrap lifecycle", () => {
       "listen"
     ]);
 
+    await runtime.shutdown();
+  });
+
+  it("passes worker runtime mode into server bootstrap", async () => {
+    const mockApp = {
+      listen: vi.fn(async () => {
+        callOrder.push("listen");
+      }),
+      close: vi.fn(async () => {
+        callOrder.push("app.close");
+      })
+    } as unknown as FastifyInstance;
+
+    const runtime = await startService({
+      loadEnv: () => createRuntimeEnv({
+        NODE_ENV: "test",
+        LOTUS_SERVICE_MODE: WORKER_SERVICE_MODE,
+        PORT: 3007
+      }),
+      createLogger: () => createTestLogger(),
+      createRedisClient: () => ({} as unknown as RedisClient),
+      connectRedis: async () => { },
+      createPgPool: () => ({} as unknown as Pool),
+      createDrizzleDb: () => ({} as AppDb),
+      buildServer: async (deps) => {
+        expect(deps.runtimeMode).toBe("worker");
+        return mockApp;
+      },
+      disconnectRedis: async () => { },
+      closePgPool: async () => {
+        callOrder.push("closePgPool");
+      }
+    });
+
+    expect(callOrder).toEqual(["listen"]);
     await runtime.shutdown();
   });
 

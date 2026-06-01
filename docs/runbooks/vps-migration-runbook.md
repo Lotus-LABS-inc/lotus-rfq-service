@@ -1156,3 +1156,118 @@ Confirm app health and market/funding pages.
 Only then run against production Supabase.
 Never run --apply if the target printed in the artifact is not the intended DB.
 ```
+
+## API And Worker Service Split
+
+Production traffic must not share a Node process with long-running watchers. The API process should serve frontend/API requests only. Background work runs in the worker service.
+
+API service:
+
+```text
+LOTUS_SERVICE_MODE=api
+```
+
+Worker service:
+
+```text
+LOTUS_SERVICE_MODE=worker
+```
+
+The worker owns:
+
+```text
+funding readiness watcher
+funding intent cleanup watcher
+market orderbook recorder
+market catalog/readiness snapshot materializer
+execution status watcher
+execution order refresher
+future market/readiness/materialized snapshot builders
+```
+
+The API owns:
+
+```text
+HTTP API routes
+WebSocket gateway
+auth/session routes
+quote/preview/place/signature request handling
+health and metrics
+```
+
+Do not run worker jobs inside the production API service. If the worker is down, the API should remain up and return explicit stale/resyncing/unavailable states from existing hot snapshots rather than crashing or rebuilding everything live.
+
+Linux start commands:
+
+```bash
+npm run start
+npm run start:worker-service
+```
+
+Use separate systemd units for production API and production worker. Use separate units again for staging API and staging worker. Do not reuse a prod env file for staging.
+
+## Production DB Guardrail
+
+Production must use Supabase as the database target.
+
+Required production rule:
+
+```text
+DATABASE_URL points to the production Supabase Postgres host
+SUPABASE_DB_URL points to the production Supabase Postgres host
+```
+
+Recommended production rule:
+
+```text
+DATABASE_URL and SUPABASE_DB_URL contain the same Supabase connection string
+```
+
+The backend now rejects a production boot when:
+
+```text
+LOTUS_DEPLOY_ENV / LOTUS_ENV / APP_ENV is prod or production
+SUPABASE_DB_URL is missing
+DATABASE_URL or SUPABASE_DB_URL points to localhost / 127.0.0.1 / ::1 / 0.0.0.0
+DATABASE_URL or SUPABASE_DB_URL does not point to a Supabase Postgres host
+```
+
+This prevents `api.uselotus.xyz` from accidentally using VPS-local Postgres. VPS-local Postgres is allowed for staging/test only.
+
+## Market Snapshot Stability Rule
+
+The market grid must not be poisoned by an empty quote-ready cache result.
+
+If Redis contains an empty cached response for:
+
+```text
+/markets?quoteReadyOnly=true
+```
+
+the API ignores it and rebuilds from repository/readiness data. This prevents one bad readiness timeout from making the frontend show `0` markets until the cache expires.
+
+Long-term production behavior should be:
+
+```text
+worker builds market/readiness snapshots
+API reads Redis/materialized latest snapshots
+API falls back to last-known display snapshots
+fresh preview/execution still revalidates live gates
+```
+
+The worker prebuilds these common quote-ready market keys:
+
+```text
+/markets?limit=80&quoteReadyOnly=true
+/markets?limit=80&quoteReadyOnly=true&routeCoverage=all
+/markets?limit=80&quoteReadyOnly=true&routeCoverage=pair
+/markets?limit=80&quoteReadyOnly=true&routeCoverage=tri
+/markets?limit=80&quoteReadyOnly=true&routeCoverage=strict_all
+/markets?limit=250&quoteReadyOnly=true
+/markets?limit=250&quoteReadyOnly=true&routeCoverage=all
+/markets?limit=250&quoteReadyOnly=true&routeCoverage=pair
+/markets?limit=250&quoteReadyOnly=true&routeCoverage=tri
+/markets?limit=250&quoteReadyOnly=true&routeCoverage=strict_all
+```
+
+The materializer intentionally skips writing an empty quote-ready snapshot. Empty quote-ready results should come from a real current DB/readiness state, not from a poisoned Redis snapshot.

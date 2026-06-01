@@ -21,6 +21,7 @@ import { registerTurnkeyAuthRoutes } from "./routes/turnkey-auth.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerMarketCatalogRoutes } from "./routes/markets.js";
 import { RedisMarketCatalogSnapshotCache } from "../services/market-catalog-snapshot-cache.js";
+import { MarketCatalogSnapshotMaterializer } from "../services/market-catalog-snapshot-materializer.js";
 import { buildVenueBalanceActivationActions } from "../core/funding/venue-activation.js";
 import { registerUserWithdrawalWalletRoutes } from "./routes/user-withdrawal-wallets.js";
 import { registerUserWalletRoutes, toSafeWallet } from "./routes/user-wallets.js";
@@ -354,7 +355,6 @@ import { PgNotificationRepository } from "../repositories/notification.repositor
 import { MarketCatalogRepository, SharedCoreQuoteMappingRepository } from "../repositories/market-catalog.repository.js";
 import { LiveMarketDataViewService } from "../services/market-data-view.service.js";
 import { HotQuoteSnapshotService } from "../services/hot-quote-snapshot.service.js";
-import { LimitlessMarketChartSource } from "../services/limitless-market-chart-source.js";
 import {
   buildMarketOrderbookRecorderConfigFromEnv,
   MarketOrderbookRecorder
@@ -449,6 +449,7 @@ export interface ServerDependencies {
   performanceGuardrailConfig?: PerformanceGuardrailConfig;
   qualificationRuntimeConfig?: QualificationRuntimeConfig;
   executionScopeAuthorities?: ExecutionScopeAuthorityRegistry;
+  runtimeMode?: "api" | "worker";
 }
 
 const parseAdminJwtTtlSeconds = (value: string | undefined): number => {
@@ -473,6 +474,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const app = Fastify({
     logger: false
   });
+  const runtimeMode = dependencies.runtimeMode ?? "api";
+  const backgroundWorkersEnabled = runtimeMode === "worker";
+  const workerOnly = runtimeMode === "worker";
   const sorEnabled = dependencies.sorEnabled ?? false;
   const sorCanaryShadowEnabled = dependencies.sorCanaryShadowEnabled ?? false;
   const sorCanaryPercent = dependencies.sorCanaryPercent ?? 0;
@@ -617,25 +621,27 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     userWalletService,
     userVenueAccountRepository
   );
-  const fundingReadinessWatcher = new FundingReadinessWatcher(
-    fundingRepository,
-    fundingService,
-    dependencies.logger,
-    buildFundingReadinessWatcherConfigFromEnv(process.env)
-  );
-  fundingReadinessWatcher.start();
-  app.addHook("onClose", async () => {
-    fundingReadinessWatcher.stop();
-  });
-  const fundingIntentCleanupWatcher = new FundingIntentCleanupWatcher(
-    fundingRepository,
-    dependencies.logger,
-    buildFundingIntentCleanupConfigFromEnv(process.env)
-  );
-  fundingIntentCleanupWatcher.start();
-  app.addHook("onClose", async () => {
-    fundingIntentCleanupWatcher.stop();
-  });
+  if (backgroundWorkersEnabled) {
+    const fundingReadinessWatcher = new FundingReadinessWatcher(
+      fundingRepository,
+      fundingService,
+      dependencies.logger,
+      buildFundingReadinessWatcherConfigFromEnv(process.env)
+    );
+    fundingReadinessWatcher.start();
+    app.addHook("onClose", async () => {
+      fundingReadinessWatcher.stop();
+    });
+    const fundingIntentCleanupWatcher = new FundingIntentCleanupWatcher(
+      fundingRepository,
+      dependencies.logger,
+      buildFundingIntentCleanupConfigFromEnv(process.env)
+    );
+    fundingIntentCleanupWatcher.start();
+    app.addHook("onClose", async () => {
+      fundingIntentCleanupWatcher.stop();
+    });
+  }
   const fundingIntentCreateRateLimiter = new FallbackRateLimiter(
     new RedisRateLimiter({
       redis: dependencies.redisClient,
@@ -971,38 +977,43 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     })
   ], new SharedCoreVenueQuoteMappingResolver(new SharedCoreQuoteMappingRepository(dependencies.pgPool)), () => new Date(), hotQuoteSnapshots);
   const historicalMarketStateRepository = new HistoricalMarketStateRepository(dependencies.pgPool);
-  const limitlessMarketChartSource = new LimitlessMarketChartSource({
-    client: new LimitlessHistoricalClient({
-      baseUrl: limitlessBaseUrl,
-      apiKey: process.env.LIMITLESS_API_KEY?.trim() ?? "",
-      logger: dependencies.logger,
-      retry: { maxRetries: 1, baseBackoffMs: 250, maxBackoffMs: 750 }
-    }),
-    logger: dependencies.logger
-  });
   const marketDataViewService = new LiveMarketDataViewService(venueQuoteSource, {
     historicalChartSource: {
       listChartPoints: async (input) => {
+        // API chart reads must stay storage-backed. Live venue history fetches belong
+        // in sync/worker jobs so terminal loads do not block on upstream venues.
         const results = await Promise.allSettled([
           venueOrderbookSnapshotRepository.listChartPoints(input),
-          historicalMarketStateRepository.listChartPoints(input),
-          limitlessMarketChartSource.listChartPoints(input)
+          historicalMarketStateRepository.listChartPoints(input)
         ]);
         return results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
       }
     }
   });
-  const marketOrderbookRecorder = new MarketOrderbookRecorder(
-    marketCatalogRepository,
-    venueQuoteSource,
-    venueOrderbookSnapshotRepository,
-    dependencies.logger,
-    buildMarketOrderbookRecorderConfigFromEnv(process.env)
-  );
-  marketOrderbookRecorder.start();
-  app.addHook("onClose", async () => {
-    marketOrderbookRecorder.stop();
-  });
+  const marketCatalogSnapshotCache = new RedisMarketCatalogSnapshotCache(dependencies.redisClient);
+  if (backgroundWorkersEnabled) {
+    const marketOrderbookRecorder = new MarketOrderbookRecorder(
+      marketCatalogRepository,
+      venueQuoteSource,
+      venueOrderbookSnapshotRepository,
+      dependencies.logger,
+      buildMarketOrderbookRecorderConfigFromEnv(process.env)
+    );
+    marketOrderbookRecorder.start();
+    app.addHook("onClose", async () => {
+      marketOrderbookRecorder.stop();
+    });
+    const marketCatalogSnapshotMaterializer = new MarketCatalogSnapshotMaterializer({
+      marketCatalogRepository,
+      marketQuoteReadinessSource: venueOrderbookSnapshotRepository,
+      snapshotCache: marketCatalogSnapshotCache,
+      logger: dependencies.logger
+    });
+    marketCatalogSnapshotMaterializer.start();
+    app.addHook("onClose", async () => {
+      marketCatalogSnapshotMaterializer.stop();
+    });
+  }
 
   const sorRouteScout = new RouteScout({
     redis: dependencies.redisClient,
@@ -1448,7 +1459,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     executableRouteService,
     sellQuoteService,
     signedTradeBundleService,
-    liveExecutionCandidateProvider
+    liveExecutionCandidateProvider,
+    dependencies.logger
   );
   if (dependencies.executionSystemSandboxEnabled) {
     const laneGate = new ApprovedLaneExecutionGate(new ScopeAuthorityLaneResolver(executionScopeAuthorities));
@@ -1598,21 +1610,27 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     dependencies.logger,
     buildExecutionStatusWatcherConfigFromEnv(process.env)
   );
-  executionStatusWatcher.start();
-  const executionOrderRefreshTimer = setInterval(() => {
-    void executionOrderService.refreshOpenOrders({ limit: 50 }).catch((error) => {
-      dependencies.logger.warn({
-        errorName: error instanceof Error ? error.name : "UnknownError"
-      }, "Execution order V1 refresher tick failed.");
+  if (backgroundWorkersEnabled) {
+    executionStatusWatcher.start();
+    const executionOrderRefreshTimer = setInterval(() => {
+      void executionOrderService.refreshOpenOrders({ limit: 50 }).catch((error) => {
+        dependencies.logger.warn({
+          errorName: error instanceof Error ? error.name : "UnknownError"
+        }, "Execution order V1 refresher tick failed.");
+      });
+    }, 5_000);
+    executionOrderRefreshTimer.unref?.();
+    app.addHook("onClose", async () => {
+      executionStatusWatcher.stop();
+      clearInterval(executionOrderRefreshTimer);
     });
-  }, 5_000);
-  executionOrderRefreshTimer.unref?.();
-  app.addHook("onClose", async () => {
-    executionStatusWatcher.stop();
-    clearInterval(executionOrderRefreshTimer);
-  });
+  }
   await registerHealthRoute(app);
   await registerMetricsRoute(app);
+  if (workerOnly) {
+    dependencies.logger.info({}, "Worker service started background jobs and health endpoints.");
+    return app;
+  }
   await registerTurnkeyAuthRoutes(app, {
     jwtTtlSeconds: parseUserJwtTtlSeconds(process.env.USER_JWT_TTL_SECONDS),
     provisionUserAccount: async ({ userId, turnkeyOrganizationId }) => {
@@ -2033,7 +2051,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   await registerMarketCatalogRoutes(app, {
     marketCatalogRepository,
     marketQuoteReadinessSource: venueOrderbookSnapshotRepository,
-    marketCatalogSnapshotCache: new RedisMarketCatalogSnapshotCache(dependencies.redisClient),
+    marketCatalogSnapshotCache,
     marketDataViewService
   });
   await registerUserWalletRoutes(app, userAuthMiddleware, {
