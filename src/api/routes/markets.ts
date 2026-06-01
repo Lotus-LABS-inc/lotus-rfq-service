@@ -593,7 +593,7 @@ const isQuoteReadyMarketCatalogCacheKey = (key: string): boolean =>
 const marketCatalogSnapshotFallbacks = (
   query: z.infer<typeof listQuerySchema>
 ): { key: string; limit: number }[] => {
-  if (query.quoteReadyOnly !== true || query.category !== undefined || query.search !== undefined) {
+  if (query.category !== undefined || query.search !== undefined) {
     return [];
   }
   const limit = query.limit ?? 80;

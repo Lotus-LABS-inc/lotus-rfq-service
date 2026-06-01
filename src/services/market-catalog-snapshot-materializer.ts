@@ -98,6 +98,9 @@ export class MarketCatalogSnapshotMaterializer {
     try {
       for (const limit of this.config.limits) {
         const baseQueries = [
+          { limit },
+          { limit, quoteReadyOnly: false as const },
+          { limit, quoteReadyOnly: false as const, routeCoverage: "all" as const },
           { limit, quoteReadyOnly: true as const },
           { limit, quoteReadyOnly: true as const, routeCoverage: "all" as const },
           ...this.config.routeCoverages
@@ -153,7 +156,7 @@ export class MarketCatalogSnapshotMaterializer {
 
 interface MarketCatalogMaterializedQuery {
   limit: number;
-  quoteReadyOnly: boolean;
+  quoteReadyOnly?: boolean | undefined;
   routeCoverage?: RouteCoverage | undefined;
 }
 
@@ -246,7 +249,7 @@ const routeCoverageMatches = (market: MarketCatalogMarket, routeCoverage: RouteC
 };
 
 const resolveFetchLimit = (limit: number, query: MarketCatalogMaterializedQuery): number =>
-  query.quoteReadyOnly || query.routeCoverage
+  query.quoteReadyOnly || (query.routeCoverage !== undefined && query.routeCoverage !== "all")
     ? Math.min(Math.max(limit * OVERFETCH_MULTIPLIER, OVERFETCH_MIN), OVERFETCH_CAP)
     : limit;
 
