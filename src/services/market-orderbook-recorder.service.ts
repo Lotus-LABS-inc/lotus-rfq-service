@@ -10,6 +10,7 @@ import type { NormalizedQuoteLevel, NormalizedVenueQuoteSnapshot } from "../core
 export interface MarketOrderbookRecorderConfig {
   intervalMs: number;
   marketBatchSize: number;
+  maxSamplesPerTick: number;
   retentionHours: number;
   levelsPerSide: number;
   quoteProviderCooldownMs: number;
@@ -36,8 +37,9 @@ export interface MarketOrderbookRecorderRunResult {
 }
 
 const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
-  intervalMs: 60_000,
-  marketBatchSize: 50,
+  intervalMs: 120_000,
+  marketBatchSize: 5,
+  maxSamplesPerTick: 20,
   retentionHours: 720,
   levelsPerSide: 25,
   quoteProviderCooldownMs: 30_000
@@ -70,6 +72,7 @@ export class MarketOrderbookRecorder {
     this.logger.info({
       intervalMs: this.config.intervalMs,
       marketBatchSize: this.config.marketBatchSize,
+      maxSamplesPerTick: this.config.maxSamplesPerTick,
       retentionHours: this.config.retentionHours,
       levelsPerSide: this.config.levelsPerSide
     }, "Market orderbook recorder started.");
@@ -124,6 +127,7 @@ export class MarketOrderbookRecorder {
         ...cleanup
       };
 
+      marketLoop:
       for (const market of markets) {
         if (market.status !== "OPEN") {
           result.skippedClosedMarkets += 1;
@@ -131,6 +135,9 @@ export class MarketOrderbookRecorder {
         }
 
         for (const sample of buildMarketSamples(market)) {
+          if (result.sampledOutcomes >= this.config.maxSamplesPerTick) {
+            break marketLoop;
+          }
           if (this.isSampleFullyCoolingDown(market, sample)) {
             result.skippedCooldownSamples += 1;
             continue;

@@ -150,4 +150,37 @@ describe("LiveMarketDataViewService", () => {
       reason: "LIVE_ORDERBOOK_UNAVAILABLE"
     });
   });
+
+  it("bounds chart reads when live orderbook and stored history are slow", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    const service = new LiveMarketDataViewService(
+      {
+        getQuoteSnapshotReport: async () => await new Promise(() => undefined)
+      },
+      {
+        now: () => now,
+        historicalChartSource: {
+          listChartPoints: async () => await new Promise(() => undefined)
+        }
+      }
+    );
+
+    const started = Date.now();
+    const chart = await service.getChart({
+      marketId: "market-slow",
+      canonicalEventId: "event-slow",
+      venueMarketIds: ["poly-1"],
+      outcomeId: "YES",
+      outcomeLabel: "Yes",
+      timeframe: "1H"
+    });
+    const elapsedMs = Date.now() - started;
+
+    expect(elapsedMs).toBeLessThan(300);
+    expect(chart.historyStatus).toBe("unavailable");
+    expect(chart.blockers[0]).toMatchObject({
+      venue: "LOTUS",
+      reason: "LIVE_ORDERBOOK_TIMEOUT"
+    });
+  });
 });

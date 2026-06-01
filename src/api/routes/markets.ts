@@ -56,7 +56,9 @@ const DEFAULT_MARKET_LIST_OVERFETCH_CAP = 500;
 const DEFAULT_MARKET_CATALOG_RESPONSE_CACHE_MS = 300_000;
 const DEFAULT_MARKET_CATALOG_RESPONSE_STALE_CACHE_MS = 900_000;
 const DEFAULT_MARKET_DETAIL_CACHE_MS = 300_000;
+const DEFAULT_MARKET_CHART_DETAIL_TIMEOUT_MS = 50;
 const MARKET_QUOTE_READINESS_TIMEOUT = Symbol("MARKET_QUOTE_READINESS_TIMEOUT");
+const MARKET_DETAIL_TIMEOUT = Symbol("MARKET_DETAIL_TIMEOUT");
 
 interface CachedMarketQuoteReadiness {
   snapshot: MarketQuoteReadinessSnapshot;
@@ -328,23 +330,24 @@ export const registerMarketCatalogRoutes = async (
       });
     }
     const { marketId } = request.params as { marketId: string };
-    const market = await resolveCachedCatalogMarket(deps.marketCatalogRepository, marketId);
-    if (!market) {
+    const marketResult = await resolveCachedCatalogMarketForChart(deps.marketCatalogRepository, marketId);
+    if (marketResult.ok && !marketResult.market) {
       return reply.status(404).send({
         code: "MARKET_NOT_FOUND",
         message: "Market was not found."
       });
     }
+    const market = marketResult.ok ? marketResult.market : null;
     const response = await deps.marketDataViewService.getChart({
       marketId,
       ...(parsed.data.outcomeId ? { outcomeId: parsed.data.outcomeId } : {}),
-      ...(parsed.data.outcomeId ? { outcomeLabel: resolveOutcomeLabel(market, parsed.data.outcomeId) } : {}),
-      canonicalEventId: market.canonicalEventId,
-      venueMarketIds: market.venueMarkets.map((venueMarket) => venueMarket.venueMarketId),
-      venueMappings: market.venueMarkets.map((venueMarket) => ({
+      ...(parsed.data.outcomeId && market ? { outcomeLabel: resolveOutcomeLabel(market, parsed.data.outcomeId) } : {}),
+      canonicalEventId: market?.canonicalEventId ?? marketId,
+      venueMarketIds: market?.venueMarkets.map((venueMarket) => venueMarket.venueMarketId) ?? [],
+      venueMappings: market?.venueMarkets.map((venueMarket) => ({
         venue: venueMarket.venue,
         venueMarketId: venueMarket.venueMarketId
-      })),
+      })) ?? [],
       timeframe: parsed.data.timeframe as MarketChartTimeframe
     });
     return reply.send(response);
@@ -758,6 +761,34 @@ const resolveCachedCatalogMarket = async (
     expiresAtMs: now + resolveMarketDetailCacheMs(process.env.MARKET_DETAIL_CACHE_MS)
   });
   return value;
+};
+
+const resolveCachedCatalogMarketForChart = async (
+  repository: Pick<MarketCatalogRepository, "getMarket">,
+  marketId: string
+): Promise<
+  | { ok: true; market: Awaited<ReturnType<MarketCatalogRepository["getMarket"]>> }
+  | { ok: false; reason: "timeout" | "error" }
+> => {
+  let timeout: NodeJS.Timeout | null = null;
+  try {
+    const value = await Promise.race([
+      resolveCachedCatalogMarket(repository, marketId),
+      new Promise<typeof MARKET_DETAIL_TIMEOUT>((resolve) => {
+        timeout = setTimeout(() => resolve(MARKET_DETAIL_TIMEOUT), DEFAULT_MARKET_CHART_DETAIL_TIMEOUT_MS);
+      })
+    ]);
+    if (value === MARKET_DETAIL_TIMEOUT) {
+      return { ok: false, reason: "timeout" };
+    }
+    return { ok: true, market: value };
+  } catch {
+    return { ok: false, reason: "error" };
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 };
 
 const resolveMarketDetailCacheMs = (value: string | undefined): number => {

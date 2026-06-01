@@ -16,8 +16,9 @@ const logger: MarketOrderbookRecorderLogger = {
 describe("MarketOrderbookRecorder", () => {
   it("enables recording by default for worker-owned runtime config", () => {
     expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
-      intervalMs: 60_000,
-      marketBatchSize: 50
+      intervalMs: 120_000,
+      marketBatchSize: 5,
+      maxSamplesPerTick: 20
     });
   });
 
@@ -64,6 +65,7 @@ describe("MarketOrderbookRecorder", () => {
       {
         intervalMs: 60_000,
         marketBatchSize: 10,
+        maxSamplesPerTick: 40,
         retentionHours: 720,
         levelsPerSide: 25,
         quoteProviderCooldownMs: 30_000
@@ -95,6 +97,62 @@ describe("MarketOrderbookRecorder", () => {
       bidDepth: "10",
       askDepth: "11"
     });
+  });
+
+  it("caps live venue samples per tick so recorder work stays bounded", async () => {
+    const inserted: VenueOrderbookSnapshotInput[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [
+          marketFixture("OPEN")
+        ]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalOutcomeId }) => ({
+          snapshots: [{
+            venue: "POLYMARKET",
+            venueMarketId: "poly-1",
+            venueOutcomeId: canonicalOutcomeId ?? "YES",
+            source: "REST",
+            quoteQuality: "FULL_DEPTH_REST",
+            sourceTimestamp: new Date("2026-05-10T12:00:00.000Z"),
+            receivedAt: new Date("2026-05-10T12:00:01.000Z"),
+            bids: [{ price: "0.59", size: "10" }],
+            asks: [{ price: "0.61", size: "11" }],
+            blockers: [],
+            missingFactors: []
+          }],
+          blocked: []
+        })
+      },
+      {
+        insertMany: async (snapshots) => {
+          inserted.push(...snapshots);
+          return snapshots.length;
+        },
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        maxSamplesPerTick: 1,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.sampledOutcomes).toBe(1);
+    expect(result.insertedSnapshots).toBe(1);
+    expect(inserted).toHaveLength(1);
   });
 
   it("records quote blockers and cools down fully blocked venue samples", async () => {
@@ -137,6 +195,7 @@ describe("MarketOrderbookRecorder", () => {
       {
         intervalMs: 60_000,
         marketBatchSize: 10,
+        maxSamplesPerTick: 40,
         retentionHours: 720,
         levelsPerSide: 25,
         quoteProviderCooldownMs: 60_000
@@ -196,6 +255,7 @@ describe("MarketOrderbookRecorder", () => {
       {
         intervalMs: 60_000,
         marketBatchSize: 10,
+        maxSamplesPerTick: 40,
         retentionHours: 720,
         levelsPerSide: 25,
         quoteProviderCooldownMs: 30_000
@@ -256,6 +316,7 @@ describe("MarketOrderbookRecorder", () => {
       {
         intervalMs: 60_000,
         marketBatchSize: 10,
+        maxSamplesPerTick: 40,
         retentionHours: 720,
         levelsPerSide: 25,
         quoteProviderCooldownMs: 30_000

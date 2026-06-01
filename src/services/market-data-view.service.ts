@@ -154,8 +154,8 @@ const MAX_STORED_POINTS = 20_000;
 const MAX_HISTORY_MS = 31 * 24 * 60 * 60 * 1000;
 const BATCH_QUOTE_CACHE_MS = 3_000;
 const CHART_CACHE_MS = 10_000;
-const CHART_LIVE_POINT_TIMEOUT_MS = 100;
-const CHART_HISTORICAL_POINTS_TIMEOUT_MS = 350;
+const CHART_LIVE_POINT_TIMEOUT_MS = 50;
+const CHART_HISTORICAL_POINTS_TIMEOUT_MS = 150;
 const VENUE_COLORS = ["#3B82F6", "#10B981", "#8B5CF6", "#F59E0B", "#EC4899", "#22D3EE"];
 
 export class LiveMarketDataViewService {
@@ -344,11 +344,27 @@ export class LiveMarketDataViewService {
       };
     }
     const cutoff = timeframeCutoff(input.timeframe, this.now());
-    const orderbook = await withTimeout(
-      this.getChartOrderbook(input),
-      CHART_LIVE_POINT_TIMEOUT_MS,
-      unavailableChartOrderbook(input, now.toISOString(), "LIVE_ORDERBOOK_TIMEOUT")
-    );
+    const [orderbook, historicalPoints] = await Promise.all([
+      withTimeout(
+        this.getChartOrderbook(input),
+        CHART_LIVE_POINT_TIMEOUT_MS,
+        unavailableChartOrderbook(input, now.toISOString(), "LIVE_ORDERBOOK_TIMEOUT")
+      ),
+      withTimeout(
+        this.loadHistoricalChartPoints({
+          marketId: input.marketId,
+          outcomeId: input.outcomeId ?? null,
+          canonicalEventId: input.canonicalEventId,
+          venueMarketIds: input.venueMarketIds,
+          venueMappings: input.venueMappings,
+          since: cutoff,
+          timeframe: input.timeframe,
+          outcomeLabel: input.outcomeLabel
+        }),
+        CHART_HISTORICAL_POINTS_TIMEOUT_MS,
+        []
+      )
+    ]);
     const storedPoints = this.chartPoints
       .filter((point) =>
         point.marketId === input.marketId &&
@@ -356,20 +372,6 @@ export class LiveMarketDataViewService {
         (cutoff === null || point.timestamp >= cutoff)
       )
       .sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime());
-    const historicalPoints = await withTimeout(
-      this.loadHistoricalChartPoints({
-        marketId: input.marketId,
-        outcomeId: input.outcomeId ?? null,
-        canonicalEventId: input.canonicalEventId,
-        venueMarketIds: input.venueMarketIds,
-        venueMappings: input.venueMappings,
-        since: cutoff,
-        timeframe: input.timeframe,
-        outcomeLabel: input.outcomeLabel
-      }),
-      CHART_HISTORICAL_POINTS_TIMEOUT_MS,
-      []
-    );
     const points = mergeChartPoints(historicalPoints, storedPoints);
     const venueIds = [...new Set(points.flatMap((point) => Object.keys(point.venues)))].sort();
     const series = [
