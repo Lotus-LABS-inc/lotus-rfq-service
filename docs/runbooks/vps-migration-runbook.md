@@ -712,6 +712,7 @@ lotus-prod-read.service                port 3001 localhost, active/enabled after
 lotus-prod-orderbook.service           port 3002 localhost, active/enabled after VPS cutover prep
 lotus-prod-polymarket-relay.service    port 3003 localhost, active after relay cutover prep
 lotus-prod-predictfun-relay.service    port 3004 localhost, active after relay cutover prep
+lotus-prod-worker.service              port 3093 localhost, active; owns recorder/materializer/watchers
 ```
 
 Staging service units:
@@ -722,6 +723,7 @@ lotus-staging-read.service             port 3101 localhost, active
 lotus-staging-orderbook.service        port 3102 localhost, active
 lotus-staging-polymarket-relay.service port 3103 localhost, active
 lotus-staging-predictfun-relay.service port 3104 localhost, active
+lotus-staging-worker.service           port 3193 localhost, active; owns recorder/materializer/watchers
 ```
 
 Prod env files were generated from the current server-side env bundle with these safety changes:
@@ -738,6 +740,18 @@ Market orderbook recording is code-owned by the worker service. Do not add
 service is active, recorder/materializer duties are expected to run. This keeps
 `/markets?quoteReadyOnly=true` backed by fresh/stable Redis/materialized
 snapshots instead of stale DB rows.
+
+Supabase session-pool protection:
+
+```text
+prod backend/read/orderbook env files should set PG_POOL_MAX=1
+prod worker unit overrides PG_POOL_MAX=3 and PG_POOL_CONNECTION_TIMEOUT_MS=10000
+```
+
+The worker needs a larger pool than the API because it runs recorder,
+materializer, and execution refresh jobs concurrently. The API/read/orderbook
+services should stay at one connection each so frontend page loads do not starve
+Supabase or cause `EMAXCONNSESSION`.
 
 Staging env files are templates only. They intentionally have empty DB/JWT fields until a real staging-only Supabase/JWT/venue-secret bundle is provided. Do not start staging by copying prod envs.
 
