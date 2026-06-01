@@ -31,7 +31,7 @@ export class RedisMarketCatalogSnapshotCache implements MarketCatalogSnapshotCac
   public async set<T>(key: string, value: T, ttlMs: number): Promise<void> {
     const safeTtlMs = Math.max(1_000, Math.floor(ttlMs));
     const payload = JSON.stringify({
-      version: this.options.version ?? "v1",
+      version: this.options.version ?? "v2",
       cachedAt: new Date().toISOString(),
       value
     });
@@ -40,6 +40,6 @@ export class RedisMarketCatalogSnapshotCache implements MarketCatalogSnapshotCac
 
   private keyFor(key: string): string {
     const digest = createHash("sha256").update(key).digest("hex").slice(0, 32);
-    return `${this.options.keyPrefix ?? "lotus:market-catalog-snapshot"}:${this.options.version ?? "v1"}:${digest}`;
+    return `${this.options.keyPrefix ?? "lotus:market-catalog-snapshot"}:${this.options.version ?? "v2"}:${digest}`;
   }
 }

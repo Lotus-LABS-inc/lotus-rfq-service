@@ -49,11 +49,13 @@ const batchQuotesRequestSchema = z.object({
 });
 
 const VENUE_SUFFIX_PATTERN = /:(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$/i;
-const DEFAULT_MARKET_QUOTE_READINESS_TIMEOUT_MS = 1_500;
-const DEFAULT_MARKET_QUOTE_READINESS_STALE_CACHE_MS = 120_000;
+const DEFAULT_MARKET_QUOTE_READINESS_TIMEOUT_MS = 5_000;
+const DEFAULT_MARKET_QUOTE_READINESS_STALE_CACHE_MS = 600_000;
 const DEFAULT_MARKET_LIST_OVERFETCH_MULTIPLIER = 4;
 const DEFAULT_MARKET_LIST_OVERFETCH_CAP = 500;
-const DEFAULT_MARKET_CATALOG_RESPONSE_CACHE_MS = 10_000;
+const DEFAULT_MARKET_CATALOG_RESPONSE_CACHE_MS = 300_000;
+const DEFAULT_MARKET_CATALOG_RESPONSE_STALE_CACHE_MS = 900_000;
+const DEFAULT_MARKET_DETAIL_CACHE_MS = 300_000;
 const MARKET_QUOTE_READINESS_TIMEOUT = Symbol("MARKET_QUOTE_READINESS_TIMEOUT");
 
 interface CachedMarketQuoteReadiness {
@@ -62,13 +64,15 @@ interface CachedMarketQuoteReadiness {
 }
 
 const marketQuoteReadinessCache = new Map<string, CachedMarketQuoteReadiness>();
-const marketCatalogResponseCache = new Map<string, { expiresAtMs: number; value: unknown }>();
+const marketCatalogResponseCache = new Map<string, { expiresAtMs: number; staleUntilMs: number; value: unknown }>();
 const marketCatalogResponsePending = new Map<string, Promise<unknown>>();
+const marketDetailCache = new Map<string, { expiresAtMs: number; value: MarketCatalogMarket | null }>();
 
 export const clearMarketQuoteReadinessCacheForTests = (): void => {
   marketQuoteReadinessCache.clear();
   marketCatalogResponseCache.clear();
   marketCatalogResponsePending.clear();
+  marketDetailCache.clear();
 };
 
 export interface MarketCatalogRouteDeps {
@@ -209,7 +213,7 @@ export const registerMarketCatalogRoutes = async (
 
   app.get("/markets/:marketId", async (request, reply) => {
     const { marketId } = request.params as { marketId: string };
-    const market = await resolveCatalogMarket(deps.marketCatalogRepository, marketId);
+    const market = await resolveCachedCatalogMarket(deps.marketCatalogRepository, marketId);
     if (!market) {
       return reply.status(404).send({
         code: "MARKET_NOT_FOUND",
@@ -221,7 +225,7 @@ export const registerMarketCatalogRoutes = async (
 
   app.get("/markets/:marketId/outcomes", async (request, reply) => {
     const { marketId } = request.params as { marketId: string };
-    const market = await resolveCatalogMarket(deps.marketCatalogRepository, marketId);
+    const market = await resolveCachedCatalogMarket(deps.marketCatalogRepository, marketId);
     if (!market) {
       return reply.status(404).send({
         code: "MARKET_NOT_FOUND",
@@ -292,7 +296,7 @@ export const registerMarketCatalogRoutes = async (
       });
     }
     const { marketId } = request.params as { marketId: string };
-    const market = await resolveCatalogMarket(deps.marketCatalogRepository, marketId);
+    const market = await resolveCachedCatalogMarket(deps.marketCatalogRepository, marketId);
     if (!market) {
       return reply.status(404).send({
         code: "MARKET_NOT_FOUND",
@@ -324,7 +328,7 @@ export const registerMarketCatalogRoutes = async (
       });
     }
     const { marketId } = request.params as { marketId: string };
-    const market = await resolveCatalogMarket(deps.marketCatalogRepository, marketId);
+    const market = await resolveCachedCatalogMarket(deps.marketCatalogRepository, marketId);
     if (!market) {
       return reply.status(404).send({
         code: "MARKET_NOT_FOUND",
@@ -466,20 +470,38 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
   if (cached && cached.expiresAtMs >= now) {
     return cached.value as T;
   }
+  const staleCached = cached && cached.staleUntilMs >= now
+    ? cached.value as T
+    : null;
   const cacheTtlMs = resolveMarketCatalogResponseCacheMs(process.env.MARKET_CATALOG_RESPONSE_CACHE_MS);
+  const staleCacheTtlMs = resolveMarketCatalogResponseStaleCacheMs(process.env.MARKET_CATALOG_RESPONSE_STALE_CACHE_MS);
   if (options.sharedCache) {
     try {
       const shared = await options.sharedCache.get<T>(key);
       if (shared) {
-        marketCatalogResponseCache.set(key, {
-          value: shared,
-          expiresAtMs: now + cacheTtlMs
-        });
+        cacheMarketCatalogResponse(key, shared, cacheTtlMs, staleCacheTtlMs);
         return shared;
       }
     } catch {
       // Redis is a hot display cache only. Fall through to the DB producer.
     }
+  }
+  if (staleCached) {
+    if (!marketCatalogResponsePending.has(key)) {
+      const background = producer()
+        .then((value) => {
+          if (options.cacheDegraded !== false || isCacheableMarketCatalogResponse(value)) {
+            cacheMarketCatalogResponse(key, value, cacheTtlMs, staleCacheTtlMs);
+            void options.sharedCache?.set(key, value, cacheTtlMs).catch(() => undefined);
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          marketCatalogResponsePending.delete(key);
+        });
+      marketCatalogResponsePending.set(key, background);
+    }
+    return markMarketCatalogResponseFromStaleCache(staleCached);
   }
   const pending = marketCatalogResponsePending.get(key);
   if (pending) {
@@ -487,14 +509,19 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
   }
   const promise = producer()
     .then((value) => {
-      if (options.cacheDegraded !== false || !isDegradedMarketCatalogResponse(value)) {
-        marketCatalogResponseCache.set(key, {
-          value,
-          expiresAtMs: Date.now() + cacheTtlMs
-        });
+      if (options.cacheDegraded !== false || isCacheableMarketCatalogResponse(value)) {
+        cacheMarketCatalogResponse(key, value, cacheTtlMs, staleCacheTtlMs);
         void options.sharedCache?.set(key, value, cacheTtlMs).catch(() => undefined);
+      } else if (staleCached) {
+        return markMarketCatalogResponseFromStaleCache(staleCached);
       }
       return value;
+    })
+    .catch((error) => {
+      if (staleCached) {
+        return markMarketCatalogResponseFromStaleCache(staleCached);
+      }
+      throw error;
     })
     .finally(() => {
       marketCatalogResponsePending.delete(key);
@@ -503,8 +530,33 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
   return await promise;
 };
 
-const isDegradedMarketCatalogResponse = (value: Record<string, unknown>): boolean =>
-  value.quoteReadinessDegraded === true;
+const markMarketCatalogResponseFromStaleCache = <T extends Record<string, unknown>>(value: T): T => ({
+  ...value,
+  quoteReadinessDegraded: true,
+  quoteReadinessReason: "stale_cache"
+});
+
+const cacheMarketCatalogResponse = <T>(
+  key: string,
+  value: T,
+  ttlMs: number,
+  staleTtlMs: number
+): void => {
+  const now = Date.now();
+  marketCatalogResponseCache.set(key, {
+    value,
+    expiresAtMs: now + ttlMs,
+    staleUntilMs: now + staleTtlMs
+  });
+};
+
+const isCacheableMarketCatalogResponse = (value: Record<string, unknown>): boolean => {
+  if (value.quoteReadinessDegraded !== true) {
+    return true;
+  }
+  const markets = Array.isArray(value.markets) ? value.markets : [];
+  return markets.length > 0;
+};
 
 const stableQueryCacheKey = (query: z.infer<typeof listQuerySchema>): string =>
   JSON.stringify(Object.keys(query)
@@ -564,6 +616,14 @@ const resolveMarketCatalogResponseCacheMs = (value: string | undefined): number 
   }
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MARKET_CATALOG_RESPONSE_CACHE_MS;
+};
+
+const resolveMarketCatalogResponseStaleCacheMs = (value: string | undefined): number => {
+  if (value === undefined || value.trim().length === 0) {
+    return DEFAULT_MARKET_CATALOG_RESPONSE_STALE_CACHE_MS;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MARKET_CATALOG_RESPONSE_STALE_CACHE_MS;
 };
 
 const aggregateMarketQuoteReadiness = (
@@ -662,6 +722,31 @@ const routeCoverageMatches = (
     case "all":
       return true;
   }
+};
+
+const resolveCachedCatalogMarket = async (
+  repository: Pick<MarketCatalogRepository, "getMarket">,
+  marketId: string
+) => {
+  const now = Date.now();
+  const cached = marketDetailCache.get(marketId);
+  if (cached && cached.expiresAtMs >= now) {
+    return cached.value;
+  }
+  const value = await resolveCatalogMarket(repository, marketId);
+  marketDetailCache.set(marketId, {
+    value,
+    expiresAtMs: now + resolveMarketDetailCacheMs(process.env.MARKET_DETAIL_CACHE_MS)
+  });
+  return value;
+};
+
+const resolveMarketDetailCacheMs = (value: string | undefined): number => {
+  if (value === undefined || value.trim().length === 0) {
+    return DEFAULT_MARKET_DETAIL_CACHE_MS;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MARKET_DETAIL_CACHE_MS;
 };
 
 const resolveCatalogMarket = async (

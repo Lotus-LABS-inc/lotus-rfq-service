@@ -343,7 +343,7 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      await client.query("SET LOCAL statement_timeout = '1200ms'");
+      await client.query("SET LOCAL statement_timeout = '4500ms'");
       const result = await client.query<QueryResultRow & {
       canonical_market_id: string;
       quote_status: string;

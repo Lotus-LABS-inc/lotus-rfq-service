@@ -161,6 +161,9 @@ describe("market catalog routes", () => {
     delete process.env.MARKET_QUOTE_READINESS_STALE_CACHE_MS;
     delete process.env.MARKET_LIST_OVERFETCH_MULTIPLIER;
     delete process.env.MARKET_LIST_OVERFETCH_CAP;
+    delete process.env.MARKET_CATALOG_RESPONSE_CACHE_MS;
+    delete process.env.MARKET_CATALOG_RESPONSE_STALE_CACHE_MS;
+    delete process.env.MARKET_DETAIL_CACHE_MS;
     clearMarketQuoteReadinessCacheForTests();
   });
 
@@ -399,6 +402,56 @@ describe("market catalog routes", () => {
     expect(repository.filters).toHaveLength(1);
     expect(second.json()).toMatchObject({
       count: 1,
+      markets: [{ quoteReadyVenueCount: 1 }]
+    });
+
+    await app.close();
+  });
+
+  it("materializes degraded quote-ready responses when stale readiness still returns markets", async () => {
+    process.env.MARKET_QUOTE_READINESS_TIMEOUT_MS = "1";
+    const repository = new FakeMarketCatalogRepository();
+    const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    const app = Fastify({ logger: false });
+    let shouldTimeout = false;
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketCatalogSnapshotCache: snapshotCache,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          if (shouldTimeout) {
+            return new Promise(() => undefined);
+          }
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: []
+          }];
+        }
+      }
+    });
+
+    const warm = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=10"
+    });
+    shouldTimeout = true;
+    const degraded = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=11"
+    });
+
+    expect(warm.statusCode).toBe(200);
+    expect(degraded.statusCode).toBe(200);
+    expect(snapshotCache.setCount).toBe(2);
+    expect(repository.filters).toHaveLength(2);
+    expect(degraded.json()).toMatchObject({
+      count: 1,
+      quoteReadinessDegraded: true,
+      quoteReadinessReason: "timeout",
       markets: [{ quoteReadyVenueCount: 1 }]
     });
 
