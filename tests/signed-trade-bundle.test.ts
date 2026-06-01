@@ -739,8 +739,7 @@ describe("SignedTradeBundleService", () => {
     const env = {
       ...polymarketSigningEnv,
       POLYMARKET_CLOB_HOST: fixtureServer.host,
-      POLYMARKET_TICK_SIZE: undefined,
-      POLYMARKET_MARKET_SELL_SLIPPAGE_BPS: "100"
+      POLYMARKET_TICK_SIZE: undefined
     } as NodeJS.ProcessEnv;
     const registry = new ExecutionVenueAdapterRegistry();
     registry.register(new PolymarketExecutionAdapterV2({
@@ -772,7 +771,12 @@ describe("SignedTradeBundleService", () => {
       env
     );
     try {
-      const prepared = await sut.prepare({ userId: "user-1", quoteId: "exec_quote_polymarket_sell" });
+      const prepared = await sut.prepare({
+        userId: "user-1",
+        quoteId: "exec_quote_polymarket_sell",
+        orderPolicy: "FOK",
+        slippageToleranceBps: 50
+      });
       const orderRequest = prepared.signatureRequests.find((request) => request.requestType === "ORDER")!;
       const data = orderRequest.signedPayloadHint.data as Record<string, unknown>;
       const order = data.order as Record<string, unknown>;
@@ -780,7 +784,7 @@ describe("SignedTradeBundleService", () => {
         message: { contents: Record<string, unknown> };
       };
 
-      expect(BigInt(String(order.takerAmount)) * 1_000n / BigInt(String(order.makerAmount))).toBe(247n);
+      expect(BigInt(String(order.takerAmount)) * 1_000n / BigInt(String(order.makerAmount))).toBe(248n);
       expect(typedData.message.contents.takerAmount).toBe(order.takerAmount);
       expect(typedData.message.contents.makerAmount).toBe(order.makerAmount);
       expect(data.orderType).toBe("FOK");

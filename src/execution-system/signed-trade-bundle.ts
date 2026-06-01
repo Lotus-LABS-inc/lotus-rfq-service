@@ -44,6 +44,8 @@ export interface PreparedTradeSignatureBundle {
   signatureRequests: TradeSignatureRequest[];
 }
 
+export type SignedTradeOrderPolicy = "FOK";
+
 export interface SignedTradeLegPayload {
   legIndex: number;
   venue: string;
@@ -210,13 +212,22 @@ export class SignedTradeBundleService {
     private readonly polymarketBalanceReader?: SignedTradeBundlePolymarketBalanceReader | undefined
   ) {}
 
-  public async prepare(input: { userId: string; quoteId: string }): Promise<PreparedTradeSignatureBundle> {
-    const quote = await withLatencyStage("execution_quote_load", {}, () => this.requireFreshQuote(input.userId, input.quoteId));
+  public async prepare(input: {
+    userId: string;
+    quoteId: string;
+    orderPolicy?: SignedTradeOrderPolicy | undefined;
+    slippageToleranceBps?: number | undefined;
+  }): Promise<PreparedTradeSignatureBundle> {
+    const rawQuote = await withLatencyStage("execution_quote_load", {}, () => this.requireFreshQuote(input.userId, input.quoteId));
+    const quote = quoteWithOrderPolicy(rawQuote, input);
     const requestGroups = await Promise.all(quote.legs.map(async (leg, index) => {
       if (!leg.requiresUserSignature) {
         return [];
       }
-      const executionLeg = this.toExecutionLeg(quote, leg, index);
+      const executionLeg = this.toExecutionLeg(quote, leg, index, {
+        orderPolicy: input.orderPolicy,
+        slippageToleranceBps: input.slippageToleranceBps
+      });
       const prepared = await withLatencyStage("venue_adapter_prepare", {
         canonicalMarketId: quote.marketId,
         venue: leg.venue,
@@ -481,8 +492,14 @@ export class SignedTradeBundleService {
     };
   }
 
-  public async getLiveReadiness(input: { userId: string; quoteId: string }): Promise<LiveSubmitReadinessSnapshot> {
-    const quote = await withLatencyStage("execution_quote_load", {}, () => this.requireFreshQuote(input.userId, input.quoteId));
+  public async getLiveReadiness(input: {
+    userId: string;
+    quoteId: string;
+    orderPolicy?: SignedTradeOrderPolicy | undefined;
+    slippageToleranceBps?: number | undefined;
+  }): Promise<LiveSubmitReadinessSnapshot> {
+    const rawQuote = await withLatencyStage("execution_quote_load", {}, () => this.requireFreshQuote(input.userId, input.quoteId));
+    const quote = quoteWithOrderPolicy(rawQuote, input);
     const generatedAt = this.now().toISOString();
     const venues = await Promise.all(quote.legs.map((leg, index) => this.liveReadinessForLeg(quote, leg, index, generatedAt)));
     const blockers = venues.flatMap((venue) => venue.blockers.map((blocker) => `${venue.venue}: ${blocker}`));
@@ -516,7 +533,17 @@ export class SignedTradeBundleService {
     return quote;
   }
 
-  private toExecutionLeg(quote: ExecutableTradeQuote, leg: ExecutableRouteLeg, index: number): ExecutionLegV0 {
+  private toExecutionLeg(
+    quote: ExecutableTradeQuote,
+    leg: ExecutableRouteLeg,
+    index: number,
+    policy?: { orderPolicy?: SignedTradeOrderPolicy | undefined; slippageToleranceBps?: number | undefined }
+  ): ExecutionLegV0 {
+    const metadata = {
+      ...(leg.metadata ?? {}),
+      ...(policy?.orderPolicy ? { orderPolicy: policy.orderPolicy } : {}),
+      ...(policy?.slippageToleranceBps !== undefined ? { slippageToleranceBps: policy.slippageToleranceBps } : {})
+    };
     return {
       executionLegId: `${quote.quoteId}-leg-${index + 1}-${randomUUID()}`,
       parentExecutionId: quote.quoteId,
@@ -528,7 +555,7 @@ export class SignedTradeBundleService {
       price: leg.price,
       status: "CREATED",
       settlementStatus: "SETTLEMENT_PENDING",
-      ...(leg.metadata ? { metadata: { ...leg.metadata } } : {})
+      ...(Object.keys(metadata).length > 0 ? { metadata } : {})
     };
   }
 
@@ -1937,11 +1964,12 @@ const buildPolymarketOrderPayload = async (
   const metadataNegRisk = booleanField(routeMetadata ?? {}, "polymarketNegRisk") ??
     booleanField(routeMetadata ?? {}, "negRisk");
   const negRisk = metadataNegRisk ?? parseOptionalEnvBoolean(env.POLYMARKET_NEG_RISK ?? env.POLY_NEG_RISK);
+  const slippageToleranceBps = boundedSlippageToleranceBpsFromMetadata(routeMetadata ?? {});
   const signedOrder = await client.createOrder({
     tokenID: tokenId,
     price: side === "buy"
-      ? polymarketMarketBuyLimitPrice(price, tickSize, env)
-      : polymarketMarketSellLimitPrice(price, tickSize, env),
+      ? polymarketMarketBuyLimitPrice(price, tickSize, env, slippageToleranceBps)
+      : polymarketMarketSellLimitPrice(price, tickSize, env, slippageToleranceBps),
     size,
     side: side === "buy" ? PolymarketSide.BUY : PolymarketSide.SELL,
     builderCode
@@ -2155,12 +2183,13 @@ const polymarketTickFraction = (tickSize: PolymarketTickSize): { numerator: bigi
 const polymarketMarketBuyLimitPrice = (
   quotedPrice: number,
   tickSize: PolymarketTickSize | undefined,
-  env: NodeJS.ProcessEnv
+  env: NodeJS.ProcessEnv,
+  slippageToleranceBps?: number | undefined
 ): number => {
   if (!Number.isFinite(quotedPrice) || quotedPrice <= 0 || quotedPrice >= 1) {
     return quotedPrice;
   }
-  const bps = parseBoundedPolymarketBuySlippageBps(env);
+  const bps = slippageToleranceBps ?? parseBoundedPolymarketBuySlippageBps(env);
   if (bps <= 0) {
     return quotedPrice;
   }
@@ -2175,12 +2204,13 @@ const polymarketMarketBuyLimitPrice = (
 const polymarketMarketSellLimitPrice = (
   quotedPrice: number,
   tickSize: PolymarketTickSize | undefined,
-  env: NodeJS.ProcessEnv
+  env: NodeJS.ProcessEnv,
+  slippageToleranceBps?: number | undefined
 ): number => {
   if (!Number.isFinite(quotedPrice) || quotedPrice <= 0 || quotedPrice >= 1) {
     return quotedPrice;
   }
-  const bps = parseBoundedPolymarketSellSlippageBps(env);
+  const bps = slippageToleranceBps ?? parseBoundedPolymarketSellSlippageBps(env);
   if (bps <= 0) {
     return quotedPrice;
   }
@@ -2214,6 +2244,14 @@ const parseBoundedPolymarketSellSlippageBps = (env: NodeJS.ProcessEnv): number =
     return POLYMARKET_DEFAULT_MARKET_SELL_SLIPPAGE_BPS;
   }
   return Math.min(parsed, POLYMARKET_MAX_MARKET_SELL_SLIPPAGE_BPS);
+};
+
+const boundedSlippageToleranceBpsFromMetadata = (metadata: Record<string, unknown>): number | undefined => {
+  const raw = numberField(metadata, "slippageToleranceBps");
+  if (raw === null) {
+    return undefined;
+  }
+  return Math.min(Math.max(Math.trunc(raw), 0), POLYMARKET_MAX_MARKET_BUY_SLIPPAGE_BPS);
 };
 
 const polymarket1271SignatureSuffix = (typedData: Record<string, unknown>, signature: unknown): string => {
@@ -2418,6 +2456,26 @@ const parsePolymarketTickSize = (value: string | undefined): PolymarketTickSize 
   return undefined;
 };
 
+const quoteWithOrderPolicy = (
+  quote: ExecutableTradeQuote,
+  policy: { orderPolicy?: SignedTradeOrderPolicy | undefined; slippageToleranceBps?: number | undefined }
+): ExecutableTradeQuote => {
+  if (!policy.orderPolicy && policy.slippageToleranceBps === undefined) {
+    return quote;
+  }
+  return {
+    ...quote,
+    legs: quote.legs.map((leg) => ({
+      ...leg,
+      metadata: {
+        ...(leg.metadata ?? {}),
+        ...(policy.orderPolicy ? { orderPolicy: policy.orderPolicy } : {}),
+        ...(policy.slippageToleranceBps !== undefined ? { slippageToleranceBps: policy.slippageToleranceBps } : {})
+      }
+    }))
+  };
+};
+
 const parseOptionalEnvBoolean = (value: string | undefined): boolean | undefined => {
   if (value === undefined) return undefined;
   if (value.toLowerCase() === "true") return true;
@@ -2444,7 +2502,7 @@ const requiredUsdNotional = (side: string, leg: ExecutableRouteLeg, env: NodeJS.
       )
     : undefined;
   const limitPrice = leg.venue.toUpperCase() === "POLYMARKET"
-    ? polymarketMarketBuyLimitPrice(price, tickSize, env)
+    ? polymarketMarketBuyLimitPrice(price, tickSize, env, boundedSlippageToleranceBpsFromMetadata(metadata))
     : price;
   const notional = multiplyDecimalStrings(leg.size, String(limitPrice));
   if (leg.feeAmount === undefined || leg.feeAmount === null || leg.feeAmount <= 0) {

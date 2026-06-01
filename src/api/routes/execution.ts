@@ -122,7 +122,9 @@ const executionOrderPreviewSchema = z.object({
   outcomeId: z.string().min(1),
   side: z.enum(["buy", "sell"]),
   amount: z.string().regex(/^\d+(\.\d+)?$/),
-  venuePreference: z.enum(["BEST_ROUTE", "POLYMARKET", "LIMITLESS", "PREDICT_FUN", "OPINION"])
+  venuePreference: z.enum(["BEST_ROUTE", "POLYMARKET", "LIMITLESS", "PREDICT_FUN", "OPINION"]),
+  orderPolicy: z.enum(["FOK"]).optional(),
+  slippageToleranceBps: z.number().int().min(0).max(500).optional()
 });
 
 const executionOrderSignaturesSchema = z.object({
@@ -257,7 +259,9 @@ export const registerExecutionRoutes = async (
         outcomeId: parsed.data.outcomeId,
         side: parsed.data.side,
         amount: parsed.data.amount,
-        venuePreference: parsed.data.venuePreference
+        venuePreference: parsed.data.venuePreference,
+        ...(parsed.data.orderPolicy ? { orderPolicy: parsed.data.orderPolicy } : {}),
+        ...(parsed.data.slippageToleranceBps !== undefined ? { slippageToleranceBps: parsed.data.slippageToleranceBps } : {})
       }));
       return reply.status(201).send(result);
     } catch (error) {

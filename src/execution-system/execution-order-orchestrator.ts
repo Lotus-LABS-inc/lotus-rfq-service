@@ -33,6 +33,7 @@ export type ExecutionOrderState =
 
 export type ExecutionOrderPrimaryAction = "PLACE_ORDER" | "SIGN" | "ENABLE_VENUE" | "NONE";
 export type ExecutionOrderVenuePreference = "BEST_ROUTE" | "POLYMARKET" | "LIMITLESS" | "PREDICT_FUN" | "OPINION";
+export type ExecutionOrderPolicy = "FOK";
 export type ExecutionOrderSigningMode =
   | "NONE"
   | "USER_SIGNATURE_REQUIRED"
@@ -70,6 +71,8 @@ export interface ExecutionOrderRecord {
   outcomeId: string;
   amount: string;
   venuePreference: ExecutionOrderVenuePreference;
+  orderPolicy: ExecutionOrderPolicy;
+  slippageToleranceBps: number;
   signingMode: ExecutionOrderSigningMode;
   primaryAction: ExecutionOrderPrimaryAction;
   readinessSummary: Record<string, unknown>;
@@ -124,6 +127,8 @@ export interface ExecutionOrderPreviewInput {
   side: TradeSide;
   amount: string;
   venuePreference: ExecutionOrderVenuePreference;
+  orderPolicy?: ExecutionOrderPolicy | undefined;
+  slippageToleranceBps?: number | undefined;
 }
 
 export interface ExecutionOrderResponse {
@@ -136,6 +141,8 @@ export interface ExecutionOrderResponse {
   routeSummary: Record<string, unknown> | null;
   priceSummary: Record<string, unknown> | null;
   venuePreference: ExecutionOrderVenuePreference;
+  orderPolicy: ExecutionOrderPolicy;
+  slippageToleranceBps: number;
   readinessSummary: Record<string, unknown>;
   venueCapabilitySummary: { venues: ExecutionOrderVenueCapability[] };
   blockers: ExecutionOrderBlocker[];
@@ -208,7 +215,10 @@ export class ExecutionOrderOrchestratorV1 {
     }
 
     const quote = await this.createQuote(input, candidates.candidates);
-    const readiness = await this.readReadiness(input.userId, quote.quoteId);
+    const readiness = await this.readReadiness(input.userId, quote.quoteId, {
+      orderPolicy: input.orderPolicy ?? DEFAULT_EXECUTION_ORDER_POLICY,
+      slippageToleranceBps: normalizeSlippageToleranceBps(input.slippageToleranceBps)
+    });
     const capabilities = buildVenueCapabilities(quote, readiness, Boolean(this.signedTradeBundleService));
     const state = classifyReadiness(readiness, capabilities);
     const order = this.newOrder(input, {
@@ -223,7 +233,13 @@ export class ExecutionOrderOrchestratorV1 {
       orderId: order.orderId,
       expiresAt: Math.min(Date.parse(order.expiresAt ?? "") || (Date.now() + 5_000), Date.now() + 8_000)
     });
-    this.warmSignatureRequests(input.userId, quote, state);
+    this.warmSignatureRequests(
+      input.userId,
+      quote,
+      state,
+      input.orderPolicy ?? DEFAULT_EXECUTION_ORDER_POLICY,
+      normalizeSlippageToleranceBps(input.slippageToleranceBps)
+    );
     return toOrderResponse(order, quote, null);
   }
 
@@ -244,7 +260,8 @@ export class ExecutionOrderOrchestratorV1 {
       await assertPolymarketFokStillExecutable({
         userId: input.userId,
         quote,
-        liveCandidateProvider: this.liveCandidateProvider
+        liveCandidateProvider: this.liveCandidateProvider,
+        slippageToleranceBps: order.slippageToleranceBps
       });
     } catch (error) {
       if (error instanceof SignedTradeBundleError) {
@@ -252,7 +269,7 @@ export class ExecutionOrderOrchestratorV1 {
       }
       throw error;
     }
-    const readiness = await this.requireFreshReadiness(input.userId, quote.quoteId, quote);
+    const readiness = await this.requireFreshReadiness(input.userId, quote.quoteId, quote, order);
     const capabilities = buildVenueCapabilities(quote, readiness, Boolean(this.signedTradeBundleService));
     const readinessState = classifyReadiness(readiness, capabilities);
     if (readinessState !== "READY_TO_PLACE") {
@@ -271,7 +288,7 @@ export class ExecutionOrderOrchestratorV1 {
       return toOrderResponse(updated ?? order, quote, null);
     }
     if (quoteRequiresSignature(quote)) {
-      const signatureRequests = await this.getPreparedSignatureRequests(input.userId, quote);
+      const signatureRequests = await this.getPreparedSignatureRequests(input.userId, quote, order);
       const updated = await this.repository.updateOrder({
         userId: input.userId,
         orderId: input.orderId,
@@ -317,7 +334,8 @@ export class ExecutionOrderOrchestratorV1 {
         userId: input.userId,
         quote,
         liveCandidateProvider: this.liveCandidateProvider,
-        signedLegs: input.signedPayloads
+        signedLegs: input.signedPayloads,
+        slippageToleranceBps: order.slippageToleranceBps
       });
     } catch (error) {
       if (error instanceof SignedTradeBundleError) {
@@ -421,19 +439,27 @@ export class ExecutionOrderOrchestratorV1 {
     return result.quote;
   }
 
-  private async readReadiness(userId: string, quoteId: string): Promise<LiveSubmitReadinessSnapshot | null> {
+  private async readReadiness(
+    userId: string,
+    quoteId: string,
+    policy?: { orderPolicy: ExecutionOrderPolicy; slippageToleranceBps: number } | undefined
+  ): Promise<LiveSubmitReadinessSnapshot | null> {
     if (!this.signedTradeBundleService) {
       return null;
     }
-    return this.signedTradeBundleService.getLiveReadiness({ userId, quoteId });
+    return this.signedTradeBundleService.getLiveReadiness({ userId, quoteId, ...policy });
   }
 
   private async requireFreshReadiness(
     userId: string,
     quoteId: string,
-    quote: ExecutableTradeQuote
+    quote: ExecutableTradeQuote,
+    order: ExecutionOrderRecord
   ): Promise<LiveSubmitReadinessSnapshot> {
-    const readiness = await this.readReadiness(userId, quoteId);
+    const readiness = await this.readReadiness(userId, quoteId, {
+      orderPolicy: order.orderPolicy,
+      slippageToleranceBps: order.slippageToleranceBps
+    });
     if (!readiness) {
       throw new ExecutionOrderError("SIGNED_TRADE_BUNDLE_NOT_CONFIGURED", "Signed trade bundle submission is not configured.", 501);
     }
@@ -623,18 +649,24 @@ export class ExecutionOrderOrchestratorV1 {
     return toOrderResponse(order, quote, null);
   }
 
-  private warmSignatureRequests(userId: string, quote: ExecutableTradeQuote, state: ExecutionOrderState): void {
+  private warmSignatureRequests(
+    userId: string,
+    quote: ExecutableTradeQuote,
+    state: ExecutionOrderState,
+    orderPolicy: ExecutionOrderPolicy,
+    slippageToleranceBps: number
+  ): void {
     if (!this.signedTradeBundleService || state !== "READY_TO_PLACE" || !quoteRequiresSignature(quote)) {
       return;
     }
     if (quote.side === "sell" && hasPolymarketLeg(quote)) {
       return;
     }
-    const key = signaturePrepCacheKey(userId, quote.quoteId);
+    const key = signaturePrepCacheKey(userId, quote.quoteId, orderPolicy, slippageToleranceBps);
     if (this.signaturePrepCache.has(key)) {
       return;
     }
-    const promise = this.signedTradeBundleService.prepare({ userId, quoteId: quote.quoteId })
+    const promise = this.signedTradeBundleService.prepare({ userId, quoteId: quote.quoteId, orderPolicy, slippageToleranceBps })
       .then((bundle) => bundle.signatureRequests);
     this.signaturePrepCache.set(key, {
       expiresAt: Math.min(Date.parse(quote.expiresAt ?? "") || (Date.now() + 10_000), Date.now() + 20_000),
@@ -651,8 +683,12 @@ export class ExecutionOrderOrchestratorV1 {
     });
   }
 
-  private async getPreparedSignatureRequests(userId: string, quote: ExecutableTradeQuote): Promise<readonly TradeSignatureRequest[]> {
-    const key = signaturePrepCacheKey(userId, quote.quoteId);
+  private async getPreparedSignatureRequests(
+    userId: string,
+    quote: ExecutableTradeQuote,
+    order: ExecutionOrderRecord
+  ): Promise<readonly TradeSignatureRequest[]> {
+    const key = signaturePrepCacheKey(userId, quote.quoteId, order.orderPolicy, order.slippageToleranceBps);
     const cached = this.signaturePrepCache.get(key);
     if (cached && cached.expiresAt > Date.now() && !(quote.side === "sell" && hasPolymarketLeg(quote))) {
       return cached.promise;
@@ -660,9 +696,15 @@ export class ExecutionOrderOrchestratorV1 {
     await assertPolymarketFokStillExecutable({
       userId,
       quote,
-      liveCandidateProvider: this.liveCandidateProvider
+      liveCandidateProvider: this.liveCandidateProvider,
+      slippageToleranceBps: order.slippageToleranceBps
     });
-    const promise = this.signedTradeBundleService!.prepare({ userId, quoteId: quote.quoteId })
+    const promise = this.signedTradeBundleService!.prepare({
+      userId,
+      quoteId: quote.quoteId,
+      orderPolicy: order.orderPolicy,
+      slippageToleranceBps: order.slippageToleranceBps
+    })
       .then((bundle) => bundle.signatureRequests);
     this.signaturePrepCache.set(key, {
       expiresAt: Math.min(Date.parse(quote.expiresAt ?? "") || (Date.now() + 10_000), Date.now() + 20_000),
@@ -769,6 +811,8 @@ export class ExecutionOrderOrchestratorV1 {
       outcomeId: input.outcomeId,
       amount: input.amount,
       venuePreference: input.venuePreference,
+      orderPolicy: input.orderPolicy ?? DEFAULT_EXECUTION_ORDER_POLICY,
+      slippageToleranceBps: normalizeSlippageToleranceBps(input.slippageToleranceBps),
       signingMode: quote ? signingModeForQuote(quote) : "UNSUPPORTED",
       primaryAction: primaryActionForState(details.state),
       readinessSummary: summarizeReadiness(details.readiness),
@@ -900,6 +944,7 @@ export const assertPolymarketFokStillExecutable = async (input: {
   quote: ExecutableTradeQuote | null;
   liveCandidateProvider?: ExecutionOrderLiveCandidateProvider | undefined;
   signedLegs?: readonly SignedTradeLegPayload[] | undefined;
+  slippageToleranceBps?: number | undefined;
 }): Promise<void> => {
   if (!input.liveCandidateProvider || !input.quote) {
     return;
@@ -955,7 +1000,9 @@ export const assertPolymarketFokStillExecutable = async (input: {
       );
     }
     if (input.quote.side === "buy") {
-      const maxPrice = signedOrder ? polymarketSignedOrderLimitPrice(signedOrder, "buy") : polymarketRouteFokBuyLimitPrice(leg);
+      const maxPrice = signedOrder
+        ? polymarketSignedOrderLimitPrice(signedOrder, "buy")
+        : polymarketRouteFokBuyLimitPrice(leg, input.slippageToleranceBps);
       if (maxPrice === null) {
         throw new SignedTradeBundleError(
           "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
@@ -970,7 +1017,9 @@ export const assertPolymarketFokStillExecutable = async (input: {
       }
       continue;
     }
-    const minPrice = signedOrder ? polymarketSignedOrderLimitPrice(signedOrder, "sell") : polymarketRouteFokSellLimitPrice(leg);
+    const minPrice = signedOrder
+      ? polymarketSignedOrderLimitPrice(signedOrder, "sell")
+      : polymarketRouteFokSellLimitPrice(leg, input.slippageToleranceBps);
     if (minPrice === null) {
       throw new SignedTradeBundleError(
         "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
@@ -1039,7 +1088,9 @@ const executionOrderIntentKey = (input: ExecutionOrderPreviewInput): string =>
     input.outcomeId,
     input.side,
     normalizeAmountKey(input.amount),
-    input.venuePreference
+    input.venuePreference,
+    input.orderPolicy ?? DEFAULT_EXECUTION_ORDER_POLICY,
+    normalizeSlippageToleranceBps(input.slippageToleranceBps)
   ].join("\u0000");
 
 const normalizeAmountKey = (value: string): string => {
@@ -1050,7 +1101,23 @@ const normalizeAmountKey = (value: string): string => {
   }
 };
 
-const signaturePrepCacheKey = (userId: string, quoteId: string): string => `${userId}\u0000${quoteId}`;
+const DEFAULT_EXECUTION_ORDER_POLICY: ExecutionOrderPolicy = "FOK";
+const DEFAULT_SLIPPAGE_TOLERANCE_BPS = 100;
+const MAX_SLIPPAGE_TOLERANCE_BPS = 500;
+
+const normalizeSlippageToleranceBps = (value: number | undefined): number => {
+  if (value === undefined) return DEFAULT_SLIPPAGE_TOLERANCE_BPS;
+  return Number.isFinite(value)
+    ? Math.min(Math.max(Math.trunc(value), 0), MAX_SLIPPAGE_TOLERANCE_BPS)
+    : DEFAULT_SLIPPAGE_TOLERANCE_BPS;
+};
+
+const signaturePrepCacheKey = (
+  userId: string,
+  quoteId: string,
+  orderPolicy: ExecutionOrderPolicy,
+  slippageToleranceBps: number
+): string => `${userId}\u0000${quoteId}\u0000${orderPolicy}\u0000${slippageToleranceBps}`;
 
 const polymarketSellTokenIdBlockers = (quote: ExecutableTradeQuote): ExecutionOrderBlocker[] =>
   quote.legs.flatMap((leg) => polymarketSellTokenIdBlockersForLeg(quote, leg));
@@ -1095,6 +1162,8 @@ const toOrderResponse = (
   routeSummary: quote ? routeSummary(quote) : null,
   priceSummary: quote ? priceSummary(quote) : null,
   venuePreference: order.venuePreference,
+  orderPolicy: order.orderPolicy,
+  slippageToleranceBps: order.slippageToleranceBps,
   readinessSummary: order.readinessSummary,
   venueCapabilitySummary: order.venueCapabilitySummary,
   blockers: order.blockers,
@@ -1196,34 +1265,33 @@ const polymarketSignedOrderTokenId = (signedLeg: SignedTradeLegPayload): string 
   return asString(order.tokenId) ?? asString(order.assetId) ?? asString(order.makerAssetId) ?? asString(order.takerAssetId) ?? null;
 };
 
-const polymarketRouteFokBuyLimitPrice = (leg: ExecutableTradeQuote["legs"][number]): InstanceType<typeof Decimal> | null => {
+const polymarketRouteFokBuyLimitPrice = (
+  leg: ExecutableTradeQuote["legs"][number],
+  slippageToleranceBps: number | undefined
+): InstanceType<typeof Decimal> | null => {
   if (!Number.isFinite(leg.price) || leg.price <= 0 || leg.price >= 1) {
     return null;
   }
   const tick = new Decimal(polymarketTickSizeFromMetadata(leg.metadata) ?? "0.001");
   const maxPrice = Decimal.max(0, new Decimal(1).minus(tick));
-  const cushioned = new Decimal(leg.price).times(new Decimal(1).plus(new Decimal(100).div(10_000)));
+  const cushioned = new Decimal(leg.price).times(
+    new Decimal(1).plus(new Decimal(normalizeSlippageToleranceBps(slippageToleranceBps)).div(10_000))
+  );
   return Decimal.min(maxPrice, cushioned).div(tick).ceil().times(tick);
 };
 
-const polymarketRouteFokSellLimitPrice = (leg: ExecutableTradeQuote["legs"][number]): InstanceType<typeof Decimal> | null => {
+const polymarketRouteFokSellLimitPrice = (
+  leg: ExecutableTradeQuote["legs"][number],
+  slippageToleranceBps: number | undefined
+): InstanceType<typeof Decimal> | null => {
   if (!Number.isFinite(leg.price) || leg.price <= 0 || leg.price >= 1) {
     return null;
   }
   const tick = new Decimal(polymarketTickSizeFromMetadata(leg.metadata) ?? "0.001");
-  const bps = boundedPolymarketMarketSellSlippageBps();
+  const bps = normalizeSlippageToleranceBps(slippageToleranceBps);
   const minPrice = tick;
   const cushioned = new Decimal(leg.price).times(new Decimal(1).minus(new Decimal(bps).div(10_000)));
   return Decimal.max(minPrice, cushioned).div(tick).floor().times(tick);
-};
-
-const boundedPolymarketMarketSellSlippageBps = (): number => {
-  const raw = process.env.POLYMARKET_MARKET_SELL_SLIPPAGE_BPS ?? process.env.POLY_MARKET_SELL_SLIPPAGE_BPS;
-  if (!raw || raw.trim().length === 0) {
-    return 100;
-  }
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 500) : 100;
 };
 
 const polymarketTickSizeFromMetadata = (metadata: Readonly<Record<string, unknown>> | undefined): string | null => {

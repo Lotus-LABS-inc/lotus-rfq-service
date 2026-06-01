@@ -199,13 +199,23 @@ describe("execution signed bundle routes", () => {
     const preview = await app.inject({
       method: "POST",
       url: "/execution/orders/preview",
-      payload: { marketId: "market-1", outcomeId: "YES", side: "buy", amount: "1", venuePreference: "POLYMARKET" }
+      payload: {
+        marketId: "market-1",
+        outcomeId: "YES",
+        side: "buy",
+        amount: "1",
+        venuePreference: "POLYMARKET",
+        orderPolicy: "FOK",
+        slippageToleranceBps: 50
+      }
     });
     expect(preview.statusCode).toBe(201);
     expect(preview.json()).toMatchObject({
       state: "READY_TO_PLACE",
       primaryAction: { type: "PLACE_ORDER" },
-      signingMode: "USER_SIGNATURE_REQUIRED"
+      signingMode: "USER_SIGNATURE_REQUIRED",
+      orderPolicy: "FOK",
+      slippageToleranceBps: 50
     });
 
     const place = await app.inject({ method: "POST", url: `/execution/orders/${quote.quoteId}/place` });
@@ -214,7 +224,12 @@ describe("execution signed bundle routes", () => {
       state: "NEEDS_SIGNATURE",
       primaryAction: { type: "SIGN" }
     });
-    expect(prepare).toHaveBeenCalledWith({ userId: "user-1", quoteId: quote.quoteId });
+    expect(prepare).toHaveBeenCalledWith({
+      userId: "user-1",
+      quoteId: quote.quoteId,
+      orderPolicy: "FOK",
+      slippageToleranceBps: 50
+    });
 
     const signed = await app.inject({
       method: "POST",

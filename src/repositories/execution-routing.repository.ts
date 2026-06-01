@@ -67,6 +67,8 @@ interface ExecutionOrderRow {
   outcome_id: string;
   amount: string;
   venue_preference: ExecutionOrderRecord["venuePreference"];
+  order_policy: ExecutionOrderRecord["orderPolicy"];
+  slippage_tolerance_bps: number;
   signing_mode: ExecutionOrderRecord["signingMode"];
   primary_action: ExecutionOrderRecord["primaryAction"];
   readiness_summary: Record<string, unknown>;
@@ -570,6 +572,8 @@ export class PgExecutionOrderRepository implements ExecutionOrderRepository {
         outcome_id,
         amount,
         venue_preference,
+        order_policy,
+        slippage_tolerance_bps,
         signing_mode,
         primary_action,
         readiness_summary,
@@ -582,9 +586,9 @@ export class PgExecutionOrderRepository implements ExecutionOrderRepository {
         created_at,
         updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9::numeric, $10, $11, $12,
-        $13::jsonb, $14::jsonb, $15::jsonb, $16, $17, $18::timestamptz,
-        $19::timestamptz, $20::timestamptz, $21::timestamptz
+        $1, $2, $3, $4, $5, $6, $7, $8, $9::numeric, $10, $11, $12, $13,
+        $14::jsonb, $15::jsonb, $16::jsonb, $17, $18, $19::timestamptz,
+        $20::timestamptz, $21::timestamptz, $22::timestamptz
       )
       ON CONFLICT (order_id, user_id) DO UPDATE SET
         quote_id = EXCLUDED.quote_id,
@@ -595,6 +599,8 @@ export class PgExecutionOrderRepository implements ExecutionOrderRepository {
         outcome_id = EXCLUDED.outcome_id,
         amount = EXCLUDED.amount,
         venue_preference = EXCLUDED.venue_preference,
+        order_policy = EXCLUDED.order_policy,
+        slippage_tolerance_bps = EXCLUDED.slippage_tolerance_bps,
         signing_mode = EXCLUDED.signing_mode,
         primary_action = EXCLUDED.primary_action,
         readiness_summary = EXCLUDED.readiness_summary,
@@ -697,6 +703,8 @@ const orderValues = (order: ExecutionOrderRecord): unknown[] => [
   order.outcomeId,
   order.amount,
   order.venuePreference,
+  order.orderPolicy,
+  order.slippageToleranceBps,
   order.signingMode,
   order.primaryAction,
   JSON.stringify(order.readinessSummary),
@@ -721,6 +729,8 @@ const mapExecutionOrderRow = (row: ExecutionOrderRow): ExecutionOrderRecord => (
   outcomeId: row.outcome_id,
   amount: row.amount,
   venuePreference: row.venue_preference,
+  orderPolicy: row.order_policy ?? "FOK",
+  slippageToleranceBps: row.slippage_tolerance_bps ?? 100,
   signingMode: row.signing_mode,
   primaryAction: row.primary_action,
   readinessSummary: row.readiness_summary,
