@@ -1021,6 +1021,59 @@ api markets over HTTPS: 200
 HTTP api/ops: 301 redirect to HTTPS
 ```
 
+### API TLS / HTTP2 Requirements
+
+The frontend opens several API requests during login, market list load, terminal open, wallet/funding refresh, and order placement. Keep API TLS hosts HTTP/2-enabled so browser requests can multiplex over one TLS session instead of creating avoidable connection pressure.
+
+Current Nginx requirements:
+
+```nginx
+listen 443 ssl http2;
+listen [::]:443 ssl http2;
+```
+
+For the relayer IPv6 primary listener that uses `ipv6only=on`, keep the protocol options together:
+
+```nginx
+listen [::]:443 ssl http2 ipv6only=on;
+```
+
+Do not leave mixed protocol options across `api.uselotus.xyz`, `ops.uselotus.xyz`, `staging-api.uselotus.xyz`, `relayer.uselotus.xyz`, and `staging-relayer.uselotus.xyz`; Nginx will warn about redefined protocol options and the frontend may fall back to HTTP/1.1.
+
+For normal API proxying, do not force upstream `Connection: close`. The active config uses the websocket-aware map:
+
+```nginx
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    '' '';
+}
+```
+
+Then API locations can use:
+
+```nginx
+proxy_http_version 1.1;
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection $connection_upgrade;
+```
+
+This preserves websocket upgrades while allowing upstream keepalive for ordinary API requests.
+
+Verification:
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+printf '' | openssl s_client -alpn h2 -connect api.uselotus.xyz:443 -servername api.uselotus.xyz 2>/dev/null | grep -i 'ALPN protocol'
+printf '' | openssl s_client -alpn h2 -connect staging-api.uselotus.xyz:443 -servername staging-api.uselotus.xyz 2>/dev/null | grep -i 'ALPN protocol'
+```
+
+Expected:
+
+```text
+ALPN protocol: h2
+```
+
 Keep Render services running until the frontend has loaded markets, wallets, funding, orderbook, and at least one dry-run/preview path successfully against the VPS-backed domains.
 
 ## VPS Staging API Front Door
