@@ -620,7 +620,7 @@ export class ExecutionOrderOrchestratorV1 {
         executionId: result.executionId,
         lastError: result.status === "FAILED" ? firstSubmitFailure(result) : null,
         blockers: result.status === "FAILED" ? failureBlockers : [],
-        nextPollAt: nextPollAtForState(state)
+        nextPollAt: nextPollAtForSubmitResult(result)
       }
     }) ?? order;
   }
@@ -640,7 +640,7 @@ export class ExecutionOrderOrchestratorV1 {
         executionId: status.executionId,
         lastError: status.status === "FAILED" ? firstStatusFailure(status) : null,
         blockers: status.status === "FAILED" ? failureBlockers : [],
-        nextPollAt: nextPollAtForState(state)
+        nextPollAt: nextPollAtForSignedStatus(order, status)
       }
     }) ?? order;
   }
@@ -1053,7 +1053,8 @@ export const assertPolymarketFokStillExecutable = async (input: {
           "Polymarket FOK route could not derive a signed limit price. Refresh route before signing."
         );
       }
-      if (!Number.isFinite(candidate.price) || new Decimal(candidate.price).gt(maxPrice.plus("0.000000001"))) {
+      const guardMaxPrice = maxPrice.minus(polymarketFokGuardTickMargin(leg, input.slippageToleranceBps));
+      if (!Number.isFinite(candidate.price) || new Decimal(candidate.price).gt(guardMaxPrice.plus("0.000000001"))) {
         throw new SignedTradeBundleError(
           "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
           "Polymarket FOK price moved before execution. Refresh route and retry."
@@ -1070,7 +1071,8 @@ export const assertPolymarketFokStillExecutable = async (input: {
         "Polymarket FOK route could not derive a signed sell limit price. Refresh route before signing."
       );
     }
-    if (!Number.isFinite(candidate.price) || new Decimal(candidate.price).lt(minPrice.minus("0.000000001"))) {
+    const guardMinPrice = minPrice.plus(polymarketFokGuardTickMargin(leg, input.slippageToleranceBps));
+    if (!Number.isFinite(candidate.price) || new Decimal(candidate.price).lt(guardMinPrice.minus("0.000000001"))) {
       throw new SignedTradeBundleError(
         "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
         "Polymarket FOK sell price moved before execution. Refresh route and retry."
@@ -1083,6 +1085,28 @@ const nextPollAtForState = (state: ExecutionOrderState): string | null =>
   state === "SUBMITTING" || state === "SUBMITTED" || state === "WAITING_FOR_VENUE_READY"
     ? new Date(Date.now() + 2_000).toISOString()
     : null;
+
+const nextPollAtForSubmitResult = (result: SignedTradeBundleSubmitResult): string | null => {
+  if (result.status === "FAILED" && result.executionId) {
+    return new Date(Date.now() + FAILED_EXECUTION_RECONCILE_POLL_MS).toISOString();
+  }
+  return nextPollAtForState(stateFromSubmitResult(result.status));
+};
+
+const nextPollAtForSignedStatus = (
+  order: ExecutionOrderRecord,
+  status: SignedTradeExecutionStatus
+): string | null => {
+  if (
+    status.status === "FAILED" &&
+    status.executionId &&
+    Number.isFinite(Date.parse(order.createdAt)) &&
+    Date.now() - Date.parse(order.createdAt) < FAILED_EXECUTION_RECONCILE_WINDOW_MS
+  ) {
+    return new Date(Date.now() + FAILED_EXECUTION_RECONCILE_POLL_MS).toISOString();
+  }
+  return nextPollAtForState(stateFromSignedStatus(status.status));
+};
 
 const summarizeReadiness = (readiness: LiveSubmitReadinessSnapshot | null): Record<string, unknown> => ({
   status: readiness?.status ?? "unavailable",
@@ -1149,6 +1173,8 @@ const DEFAULT_EXECUTION_ORDER_POLICY: ExecutionOrderPolicy = "FOK";
 const DEFAULT_SLIPPAGE_TOLERANCE_BPS = 100;
 const MAX_SLIPPAGE_TOLERANCE_BPS = 500;
 const SUBMIT_START_INTERRUPTED_AFTER_MS = 30_000;
+const FAILED_EXECUTION_RECONCILE_WINDOW_MS = 120_000;
+const FAILED_EXECUTION_RECONCILE_POLL_MS = 15_000;
 
 const normalizeSlippageToleranceBps = (value: number | undefined): number => {
   if (value === undefined) return DEFAULT_SLIPPAGE_TOLERANCE_BPS;
@@ -1343,6 +1369,16 @@ const polymarketRouteFokSellLimitPrice = (
   const minPrice = tick;
   const cushioned = new Decimal(leg.price).times(new Decimal(1).minus(new Decimal(bps).div(10_000)));
   return Decimal.max(minPrice, cushioned).div(tick).floor().times(tick);
+};
+
+const polymarketFokGuardTickMargin = (
+  leg: ExecutableTradeQuote["legs"][number],
+  slippageToleranceBps: number | undefined
+): InstanceType<typeof Decimal> => {
+  if (normalizeSlippageToleranceBps(slippageToleranceBps) <= 0) {
+    return new Decimal(0);
+  }
+  return new Decimal(polymarketTickSizeFromMetadata(leg.metadata) ?? "0.001");
 };
 
 const polymarketTickSizeFromMetadata = (metadata: Readonly<Record<string, unknown>> | undefined): string | null => {

@@ -16,7 +16,6 @@ const logger: MarketOrderbookRecorderLogger = {
 describe("MarketOrderbookRecorder", () => {
   it("enables recording by default for worker-owned runtime config", () => {
     expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
-      enabled: true,
       intervalMs: 60_000,
       marketBatchSize: 50
     });
@@ -63,7 +62,6 @@ describe("MarketOrderbookRecorder", () => {
       },
       logger,
       {
-        enabled: true,
         intervalMs: 60_000,
         marketBatchSize: 10,
         retentionHours: 720,
@@ -137,7 +135,6 @@ describe("MarketOrderbookRecorder", () => {
       },
       logger,
       {
-        enabled: true,
         intervalMs: 60_000,
         marketBatchSize: 10,
         retentionHours: 720,
@@ -197,7 +194,6 @@ describe("MarketOrderbookRecorder", () => {
       },
       logger,
       {
-        enabled: true,
         intervalMs: 60_000,
         marketBatchSize: 10,
         retentionHours: 720,
@@ -258,7 +254,6 @@ describe("MarketOrderbookRecorder", () => {
       },
       logger,
       {
-        enabled: true,
         intervalMs: 60_000,
         marketBatchSize: 10,
         retentionHours: 720,

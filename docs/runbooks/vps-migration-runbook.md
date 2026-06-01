@@ -735,9 +735,10 @@ DATABASE_URL forced to SUPABASE_DB_URL, not local 127.0.0.1:5433
 frontend VITE_* values, Render API keys, smoke keys, and test DB keys excluded
 ```
 
-Market orderbook recording is code-owned by the worker service. Do not add
-`MARKET_ORDERBOOK_RECORDER_ENABLED` to prod or staging env files; if the worker
-service is active, recorder/materializer duties are expected to run. This keeps
+Market orderbook recording is code-owned by the worker service. Do not add the
+legacy `MARKET_ORDERBOOK_RECORDER_ENABLED` flag to prod or staging env files;
+the recorder no longer reads it. If the worker service is active,
+recorder/materializer duties are expected to run. This keeps
 `/markets?quoteReadyOnly=true` backed by fresh/stable Redis/materialized
 snapshots instead of stale DB rows.
 

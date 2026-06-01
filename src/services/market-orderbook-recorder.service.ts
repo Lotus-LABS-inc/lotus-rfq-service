@@ -8,7 +8,6 @@ import type { MarketDataQuoteSource } from "./market-data-view.service.js";
 import type { NormalizedQuoteLevel, NormalizedVenueQuoteSnapshot } from "../core/sor/quote-snapshot.js";
 
 export interface MarketOrderbookRecorderConfig {
-  enabled: boolean;
   intervalMs: number;
   marketBatchSize: number;
   retentionHours: number;
@@ -47,7 +46,6 @@ const RATE_LIMIT_COOLDOWN_MS = 5 * 60_000;
 const PROVIDER_AUTH_COOLDOWN_MS = 15 * 60_000;
 
 export const buildMarketOrderbookRecorderConfig = (): MarketOrderbookRecorderConfig => ({
-  enabled: true,
   ...DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG
 });
 
@@ -66,7 +64,7 @@ export class MarketOrderbookRecorder {
   ) {}
 
   public start(): void {
-    if (!this.config.enabled || this.timer) {
+    if (this.timer) {
       return;
     }
     this.logger.info({
@@ -93,9 +91,6 @@ export class MarketOrderbookRecorder {
 
   public async runOnce(): Promise<MarketOrderbookRecorderRunResult> {
     const empty = emptyResult();
-    if (!this.config.enabled) {
-      return empty;
-    }
     if (this.running) {
       this.logger.warn({}, "Market orderbook recorder tick skipped because the previous tick is still running.");
       return empty;

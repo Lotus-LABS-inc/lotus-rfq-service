@@ -669,7 +669,14 @@ export class PgExecutionOrderRepository implements ExecutionOrderRepository {
     const result = await this.pool.query<ExecutionOrderRow>(
       `SELECT *
        FROM execution_orders_v1
-       WHERE state IN ('SUBMITTING', 'SUBMITTED')
+       WHERE (
+          state IN ('SUBMITTING', 'SUBMITTED')
+          OR (
+            state = 'FAILED'
+            AND execution_id IS NOT NULL
+            AND created_at >= now() - interval '2 minutes'
+          )
+        )
          AND (next_poll_at IS NULL OR next_poll_at <= now())
        ORDER BY updated_at ASC
        LIMIT $1`,
