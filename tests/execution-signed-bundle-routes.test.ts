@@ -261,6 +261,24 @@ describe("execution signed bundle routes", () => {
       blockers: []
     });
     expect(submit).toHaveBeenCalledTimes(1);
+    expect(submit).toHaveBeenCalledWith({
+      userId: "user-1",
+      quoteId: quote.quoteId,
+      signedLegs: [{
+        legIndex: 0,
+        venue: "POLYMARKET",
+        requestType: "ORDER",
+        signedPayload: {
+          purpose: "POLYMARKET_ORDER",
+          data: { order: { makerAmount: "500000", takerAmount: "1000000" }, orderType: "FOK" },
+          signature: "0xsig",
+          account: "0xdeposit"
+        }
+      }],
+      dryRun: false,
+      orderPolicy: "FOK",
+      slippageToleranceBps: 50
+    });
   });
 
   it("returns submitted leg failure details from orchestrated signature submit", async () => {

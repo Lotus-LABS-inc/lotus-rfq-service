@@ -493,7 +493,9 @@ export class ExecutionOrderOrchestratorV1 {
         userId: input.userId,
         quoteId: input.quote.quoteId,
         signedLegs: input.signedLegs,
-        dryRun: false
+        dryRun: false,
+        orderPolicy: submitting.orderPolicy,
+        slippageToleranceBps: submitting.slippageToleranceBps
       });
       const updated = await this.updateFromSubmitResult(submitting, result);
       return toOrderResponse(updated, input.quote, null);
@@ -560,7 +562,9 @@ export class ExecutionOrderOrchestratorV1 {
         userId: input.submitting.userId,
         quoteId: input.quote.quoteId,
         signedLegs: input.signedLegs,
-        dryRun: false
+        dryRun: false,
+        orderPolicy: input.submitting.orderPolicy,
+        slippageToleranceBps: input.submitting.slippageToleranceBps
       });
       await this.updateFromSubmitResult(input.submitting, result);
     } catch (error) {

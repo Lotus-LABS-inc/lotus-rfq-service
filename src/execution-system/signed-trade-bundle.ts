@@ -249,8 +249,11 @@ export class SignedTradeBundleService {
     quoteId: string;
     signedLegs: readonly SignedTradeLegPayload[];
     dryRun?: boolean | undefined;
+    orderPolicy?: SignedTradeOrderPolicy | undefined;
+    slippageToleranceBps?: number | undefined;
   }): Promise<SignedTradeBundleSubmitResult> {
-    const quote = await withLatencyStage("execution_quote_load", {}, () => this.requireFreshQuote(input.userId, input.quoteId));
+    const rawQuote = await withLatencyStage("execution_quote_load", {}, () => this.requireFreshQuote(input.userId, input.quoteId));
+    const quote = quoteWithOrderPolicy(rawQuote, input);
     if (input.dryRun !== true) {
       const existing = await this.findStoredExecutionStatus({ userId: input.userId, executionId: quote.quoteId });
       if (existing && isDuplicateSubmitStatus(existing.status)) {
