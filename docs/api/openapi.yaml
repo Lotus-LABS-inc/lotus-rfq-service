@@ -559,7 +559,7 @@ paths:
     get:
       tags: [Execution]
       summary: Read verified execution positions for the authenticated user.
-      description: Optional market/outcome filters return a selected position set; omitting both returns user-wide verified positions. These positions are backend-verified and must not be inferred client-side.
+      description: Optional market/outcome filters return a selected position set; omitting both returns user-wide verified positions. User-wide reads default to cached display marks to avoid page-load venue fanout; selected market/outcome reads default to live marks. These positions are backend-verified and must not be inferred client-side.
       x-lotus-status: implemented
       x-lotus-callable: true
       x-lotus-auth: user
@@ -583,6 +583,13 @@ paths:
           in: query
           required: false
           schema: { type: integer, minimum: 1, maximum: 500 }
+        - name: markMode
+          in: query
+          required: false
+          description: Use cached display marks for broad/fast reads, or live quote marks for focused views.
+          schema:
+            type: string
+            enum: [cached, live]
       responses:
         "200": { $ref: "#/components/responses/GenericObject" }
         "400": { $ref: "#/components/responses/Error" }
@@ -590,14 +597,22 @@ paths:
   /execution/portfolio/summary:
     get:
       tags: [Execution]
-      summary: Read verified portfolio summary with live mark-to-market attempts.
-      description: Uses live backend quote evidence for mark fields. Positions remain present when marks are unavailable; mark fields are null with markFreshness=unavailable and a safe blocker.
+      summary: Read verified portfolio summary with cache-first display marks.
+      description: Defaults to cached display marks so login/sidebar loads do not fan out to live venue quote providers. Pass markMode=live for an explicit live mark attempt. Positions remain present when marks are unavailable; mark fields are null with markFreshness=unavailable and a safe blocker.
       x-lotus-status: implemented
       x-lotus-callable: true
       x-lotus-auth: user
       x-lotus-side-effects: none
       x-lotus-danger: low
       security: [{ bearerAuth: [] }]
+      parameters:
+        - name: markMode
+          in: query
+          required: false
+          description: Use cached display marks for broad/fast reads, or live quote marks for focused views.
+          schema:
+            type: string
+            enum: [cached, live]
       responses:
         "200": { $ref: "#/components/responses/GenericObject" }
         "401": { $ref: "#/components/responses/Error" }
@@ -606,7 +621,7 @@ paths:
     get:
       tags: [Execution]
       summary: Read portfolio mark-to-market time-series snapshot data.
-      description: Returns backend-generated current MTM snapshot points using live quote evidence. historyAvailable is false until persisted historical portfolio snapshots exist; clients must not fabricate historical PnL.
+      description: Returns backend-generated current MTM snapshot points. Defaults to cached display marks so page loads do not fan out to live venue quote providers. Pass markMode=live for an explicit live mark attempt. historyAvailable is false until persisted historical portfolio snapshots exist; clients must not fabricate historical PnL.
       x-lotus-status: implemented
       x-lotus-callable: true
       x-lotus-auth: user
@@ -620,6 +635,13 @@ paths:
           schema:
             type: string
             enum: [1D, 7D, 30D, 90D, ALL]
+        - name: markMode
+          in: query
+          required: false
+          description: Use cached display marks for broad/fast reads, or live quote marks for focused views.
+          schema:
+            type: string
+            enum: [cached, live]
       responses:
         "200": { $ref: "#/components/responses/GenericObject" }
         "400": { $ref: "#/components/responses/Error" }

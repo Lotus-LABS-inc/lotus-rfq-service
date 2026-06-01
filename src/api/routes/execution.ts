@@ -100,10 +100,15 @@ const positionsQuerySchema = z.object({
   marketId: z.string().min(1).optional(),
   outcomeId: z.string().min(1).optional(),
   venue: z.string().min(1).optional(),
-  limit: z.coerce.number().int().positive().max(500).optional()
+  limit: z.coerce.number().int().positive().max(500).optional(),
+  markMode: z.enum(["cached", "live"]).optional()
 }).refine((query) => !query.marketId === !query.outcomeId, {
   message: "marketId and outcomeId must be provided together.",
   path: ["outcomeId"]
+});
+
+const portfolioSummaryQuerySchema = z.object({
+  markMode: z.enum(["cached", "live"]).optional()
 });
 
 const executionHistoryQuerySchema = z.object({
@@ -137,7 +142,8 @@ const executionOrderSignaturesSchema = z.object({
 });
 
 const portfolioTimeSeriesQuerySchema = z.object({
-  range: z.enum(["1D", "7D", "30D", "90D", "ALL"]).optional()
+  range: z.enum(["1D", "7D", "30D", "90D", "ALL"]).optional(),
+  markMode: z.enum(["cached", "live"]).optional()
 });
 
 export interface ExecutionRouteDeps {
@@ -200,6 +206,7 @@ export interface LiveExecutionCandidateBlocker {
 }
 
 export type MarkFreshness = "live" | "stale" | "unavailable";
+type PositionMarkMode = "cached" | "live";
 
 export interface MarkedExecutionPosition extends VerifiedExecutionPosition {
   markPrice: number | null;
@@ -215,6 +222,7 @@ const LIVE_CANDIDATE_CACHE_MS = 2_000;
 const POSITION_MARK_CACHE_MS = 15_000;
 const POSITION_MARK_LIVE_TIMEOUT_MS = 700;
 const POSITION_MARK_LIVE_READ_BUDGET = 20;
+const DISPLAY_POSITION_MARK_LIVE_READ_BUDGET = 0;
 const ROUTE_RATE_LIMIT_WINDOW_MS = 10_000;
 const RATE_LIMITS: Record<string, number> = {
   preview: 40,
@@ -594,23 +602,33 @@ export const registerExecutionRoutes = async (
         message: "Execution portfolio lookup is not configured on this backend."
       });
     }
+    const parsed = portfolioSummaryQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "Execution portfolio summary query validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
     try {
       const generatedAt = new Date().toISOString();
       const positions = await deps.positionRepository.listUserVerifiedPositions({
         userId: request.user.userId,
         limit: 500
       });
+      const markMode = parsed.data.markMode ?? "cached";
       const activePositions = positions.filter(isActiveVerifiedPosition);
       const markedPositions = await markPositions({
         positions: activePositions,
         generatedAt,
         liveCandidateProvider: deps.liveCandidateProvider,
-        userId: request.user.userId
+        userId: request.user.userId,
+        maxLiveReads: markLiveReadBudget(markMode)
       });
       const summary = summarizePortfolio(markedPositions);
       return reply.send({
         generatedAt,
-        markPolicy: "LIVE_QUOTE_REQUIRED",
+        markPolicy: markPolicyLabel(markMode),
         ...summary,
         positions: markedPositions
       });
@@ -640,18 +658,20 @@ export const registerExecutionRoutes = async (
         userId: request.user.userId,
         limit: 500
       });
+      const markMode = parsed.data.markMode ?? "cached";
       const activePositions = positions.filter(isActiveVerifiedPosition);
       const markedPositions = await markPositions({
         positions: activePositions,
         generatedAt,
         liveCandidateProvider: deps.liveCandidateProvider,
-        userId: request.user.userId
+        userId: request.user.userId,
+        maxLiveReads: markLiveReadBudget(markMode)
       });
       const summary = summarizePortfolio(markedPositions);
       return reply.send({
         generatedAt,
         range: parsed.data.range ?? "1D",
-        markPolicy: "LIVE_QUOTE_REQUIRED",
+        markPolicy: markPolicyLabel(markMode),
         seriesBasis: "CURRENT_MARK_TO_MARKET_SNAPSHOT",
         historyAvailable: false,
         points: [{
@@ -834,16 +854,19 @@ export const registerExecutionRoutes = async (
           : [];
       const activePositions = positions.filter(isActiveVerifiedPosition);
       const generatedAt = new Date().toISOString();
+      const markMode = query.markMode ?? (query.marketId && query.outcomeId ? "live" : "cached");
       const markedPositions = deps.liveCandidateProvider
         ? await markPositions({
             positions: activePositions,
             generatedAt,
             liveCandidateProvider: deps.liveCandidateProvider,
-            userId: request.user.userId
+            userId: request.user.userId,
+            maxLiveReads: markLiveReadBudget(markMode)
           })
         : activePositions;
       return reply.send({
         generatedAt,
+        markPolicy: markPolicyLabel(markMode),
         marketId: query.marketId ?? null,
         outcomeId: query.outcomeId ?? null,
         positions: markedPositions
@@ -1060,6 +1083,12 @@ const normalizeAmountKey = (value: string): string => {
     return value.trim();
   }
 };
+
+const markLiveReadBudget = (mode: PositionMarkMode): number =>
+  mode === "live" ? POSITION_MARK_LIVE_READ_BUDGET : DISPLAY_POSITION_MARK_LIVE_READ_BUDGET;
+
+const markPolicyLabel = (mode: PositionMarkMode): "CACHE_FIRST_DISPLAY_MARKS" | "LIVE_QUOTE_REQUIRED" =>
+  mode === "live" ? "LIVE_QUOTE_REQUIRED" : "CACHE_FIRST_DISPLAY_MARKS";
 
 const markPositions = async (input: {
   positions: readonly VerifiedExecutionPosition[];
