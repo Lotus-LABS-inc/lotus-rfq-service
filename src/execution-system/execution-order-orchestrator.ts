@@ -364,21 +364,24 @@ export class ExecutionOrderOrchestratorV1 {
     if (recovered) {
       return toOrderResponse(recovered, null, null);
     }
-    const quote = await this.loadFreshQuote(order);
-    if (!quote && !["SUBMITTING", "SUBMITTED", "FILLED", "FAILED"].includes(order.state)) {
-      return this.expireOrder(order);
+    const currentOrder = order.state === "FILLED"
+      ? await this.clearTerminalFillNoise(order) ?? order
+      : order;
+    const quote = await this.loadFreshQuote(currentOrder);
+    if (!quote && !["SUBMITTING", "SUBMITTED", "FILLED", "FAILED"].includes(currentOrder.state)) {
+      return this.expireOrder(currentOrder);
     }
-    if (this.signedTradeBundleService && (order.executionId ?? order.quoteId)) {
+    if (this.signedTradeBundleService && (currentOrder.executionId ?? currentOrder.quoteId)) {
       const status = await this.signedTradeBundleService.getExecutionStatus({
         userId: input.userId,
-        executionId: order.executionId ?? order.quoteId!
+        executionId: currentOrder.executionId ?? currentOrder.quoteId!
       });
       if (status) {
-        const updated = await this.updateFromSignedStatus(order, status);
+        const updated = await this.updateFromSignedStatus(currentOrder, status);
         return toOrderResponse(updated, status.route ?? quote, null);
       }
     }
-    return toOrderResponse(order, quote, null);
+    return toOrderResponse(currentOrder, quote, null);
   }
 
   public async refreshOpenOrders(input: { limit: number }): Promise<{ scanned: number; refreshed: number; failed: number }> {

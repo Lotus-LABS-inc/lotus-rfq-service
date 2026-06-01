@@ -424,8 +424,9 @@ describe("execution signed bundle routes", () => {
   it("reconciles a recent failed V1 order to filled when venue status later confirms fill", async () => {
     const quote = buyQuote("POLYMARKET", true);
     let executionStatus: SignedTradeExecutionStatus | null = null;
+    const repository = new MemoryExecutionOrderRepository();
     const service = new ExecutionOrderOrchestratorV1(
-      new MemoryExecutionOrderRepository(),
+      repository,
       {
         quote: vi.fn(async () => ({ quote, rejectedCandidates: [], internalCandidateCount: 1 })),
         getQuote: vi.fn(async () => quote)
@@ -576,6 +577,30 @@ describe("execution signed bundle routes", () => {
       blockers: []
     });
     expect(staleFailure).not.toHaveProperty("lastError");
+
+    executionStatus = null;
+    await repository.updateOrder({
+      userId: "user-1",
+      orderId: preview.orderId,
+      patch: {
+        state: "FILLED",
+        blockers: [{
+          code: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
+          venue: "POLYMARKET",
+          message: "Price moved before execution. Refresh route and retry.",
+          actionable: false
+        }],
+        lastError: "Price moved before execution. Refresh route and retry."
+      }
+    });
+    const storedFilled = await service.status({ userId: "user-1", orderId: preview.orderId });
+
+    expect(storedFilled).toMatchObject({
+      state: "FILLED",
+      executionId: quote.quoteId,
+      blockers: []
+    });
+    expect(storedFilled).not.toHaveProperty("lastError");
   });
 
   it("does not submit duplicate signed orders while the first submit is pending", async () => {
