@@ -408,6 +408,42 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
+  it("serves smaller quote-ready market lists from larger shared snapshots", async () => {
+    const repository = new FakeMarketCatalogRepository();
+    const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    snapshotCache.values.set("markets:{\"limit\":80,\"quoteReadyOnly\":true}", {
+      markets: [market, { ...market, canonicalEventId: "22222222-2222-5222-8222-222222222222", eventId: "event:two" }],
+      count: 2,
+      materialized: true
+    });
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketCatalogSnapshotCache: snapshotCache,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          throw new Error("readiness should not be called when shared snapshot fallback is available");
+        }
+      }
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=1"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(repository.filters).toHaveLength(0);
+    expect(snapshotCache.getCount).toBe(2);
+    expect(response.json()).toMatchObject({
+      count: 1,
+      materialized: true,
+      markets: [{ canonicalEventId: market.canonicalEventId }]
+    });
+
+    await app.close();
+  });
+
   it("ignores empty shared quote-ready catalog snapshots and rebuilds from repository", async () => {
     const repository = new FakeMarketCatalogRepository();
     const snapshotCache = new FakeMarketCatalogSnapshotCache();

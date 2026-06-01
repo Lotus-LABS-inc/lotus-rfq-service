@@ -137,7 +137,8 @@ export const registerMarketCatalogRoutes = async (
       },
       {
         cacheDegraded: false,
-        sharedCache: deps.marketCatalogSnapshotCache
+        sharedCache: deps.marketCatalogSnapshotCache,
+        sharedFallbacks: marketCatalogSnapshotFallbacks(parsed.data)
       }
     );
     return reply.send(payload);
@@ -466,6 +467,7 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
   options: {
     cacheDegraded?: boolean;
     sharedCache?: MarketCatalogSnapshotCache | undefined;
+    sharedFallbacks?: readonly { key: string; limit: number }[] | undefined;
   } = {}
 ): Promise<T> => {
   const now = Date.now();
@@ -484,6 +486,14 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
       if (shared && isCacheableMarketCatalogResponseForKey(key, shared)) {
         cacheMarketCatalogResponse(key, shared, cacheTtlMs, staleCacheTtlMs);
         return shared;
+      }
+      for (const fallback of options.sharedFallbacks ?? []) {
+        const fallbackShared = await options.sharedCache.get<T>(fallback.key);
+        if (fallbackShared && isCacheableMarketCatalogResponseForKey(fallback.key, fallbackShared)) {
+          const sliced = sliceMarketCatalogResponse(fallbackShared, fallback.limit);
+          cacheMarketCatalogResponse(key, sliced, cacheTtlMs, staleCacheTtlMs);
+          return sliced;
+        }
       }
     } catch {
       // Redis is a hot display cache only. Fall through to the DB producer.
@@ -579,6 +589,29 @@ const isCacheableMarketCatalogResponseForKey = (
 
 const isQuoteReadyMarketCatalogCacheKey = (key: string): boolean =>
   key.startsWith("markets:") && key.includes("\"quoteReadyOnly\":true");
+
+const marketCatalogSnapshotFallbacks = (
+  query: z.infer<typeof listQuerySchema>
+): { key: string; limit: number }[] => {
+  if (query.quoteReadyOnly !== true || query.category !== undefined || query.search !== undefined) {
+    return [];
+  }
+  const limit = query.limit ?? 80;
+  const fallbackLimits = [80, 250].filter((fallbackLimit) => fallbackLimit > limit);
+  return fallbackLimits.map((fallbackLimit) => ({
+    key: `markets:${stableQueryCacheKey({ ...query, limit: fallbackLimit })}`,
+    limit
+  }));
+};
+
+const sliceMarketCatalogResponse = <T extends Record<string, unknown>>(value: T, limit: number): T => {
+  const markets = Array.isArray(value.markets) ? value.markets.slice(0, limit) : [];
+  return {
+    ...value,
+    markets,
+    count: markets.length
+  };
+};
 
 const stableQueryCacheKey = (query: z.infer<typeof listQuerySchema>): string =>
   JSON.stringify(Object.keys(query)
