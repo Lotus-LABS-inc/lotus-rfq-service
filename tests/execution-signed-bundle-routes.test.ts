@@ -550,6 +550,32 @@ describe("execution signed bundle routes", () => {
       executionId: quote.quoteId,
       blockers: []
     });
+
+    executionStatus = {
+      executionId: quote.quoteId,
+      userId: "user-1",
+      status: "FAILED",
+      dryRun: false,
+      submittedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      route: quote,
+      submittedLegs: [{
+        legIndex: 0,
+        venue: "POLYMARKET",
+        status: "FAILED",
+        reasonCode: "POLYMARKET_CLOB_ORDER_PARAMS_REJECTED",
+        reason: "Price moved before execution. Refresh route and retry."
+      }]
+    };
+
+    const staleFailure = await service.status({ userId: "user-1", orderId: preview.orderId });
+
+    expect(staleFailure).toMatchObject({
+      state: "FILLED",
+      executionId: quote.quoteId,
+      blockers: []
+    });
+    expect(staleFailure).not.toHaveProperty("lastError");
   });
 
   it("does not submit duplicate signed orders while the first submit is pending", async () => {

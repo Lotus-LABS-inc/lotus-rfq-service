@@ -610,6 +610,10 @@ export class ExecutionOrderOrchestratorV1 {
     result: SignedTradeBundleSubmitResult
   ): Promise<ExecutionOrderRecord> {
     const state = stateFromSubmitResult(result.status);
+    const latest = await this.repository.findOrder({ userId: order.userId, orderId: order.orderId });
+    if (latest?.state === "FILLED" && state !== "FILLED") {
+      return await this.clearTerminalFillNoise(latest) ?? latest;
+    }
     const failureBlockers = result.status === "FAILED" ? blockersFromSubmittedLegs(result.submittedLegs) : [];
     return await this.repository.updateOrder({
       userId: order.userId,
@@ -630,6 +634,10 @@ export class ExecutionOrderOrchestratorV1 {
     status: SignedTradeExecutionStatus
   ): Promise<ExecutionOrderRecord> {
     const state = stateFromSignedStatus(status.status);
+    const latest = await this.repository.findOrder({ userId: order.userId, orderId: order.orderId });
+    if (latest?.state === "FILLED" && state !== "FILLED") {
+      return await this.clearTerminalFillNoise(latest) ?? latest;
+    }
     const failureBlockers = status.status === "FAILED" ? blockersFromSubmittedLegs(status.submittedLegs) : [];
     return await this.repository.updateOrder({
       userId: order.userId,
@@ -643,6 +651,23 @@ export class ExecutionOrderOrchestratorV1 {
         nextPollAt: nextPollAtForSignedStatus(order, status)
       }
     }) ?? order;
+  }
+
+  private async clearTerminalFillNoise(order: ExecutionOrderRecord): Promise<ExecutionOrderRecord | null> {
+    if (order.lastError === null && order.blockers.length === 0 && order.nextPollAt === null && order.primaryAction === "NONE") {
+      return order;
+    }
+    return this.repository.updateOrder({
+      userId: order.userId,
+      orderId: order.orderId,
+      patch: {
+        state: "FILLED",
+        primaryAction: "NONE",
+        lastError: null,
+        blockers: [],
+        nextPollAt: null
+      }
+    });
   }
 
   private async loadFreshQuote(order: ExecutionOrderRecord): Promise<ExecutableTradeQuote | null> {
