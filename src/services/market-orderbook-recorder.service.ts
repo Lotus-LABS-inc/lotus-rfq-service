@@ -46,10 +46,8 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
 const RATE_LIMIT_COOLDOWN_MS = 5 * 60_000;
 const PROVIDER_AUTH_COOLDOWN_MS = 15 * 60_000;
 
-export const buildMarketOrderbookRecorderConfigFromEnv = (
-  env: NodeJS.ProcessEnv
-): MarketOrderbookRecorderConfig => ({
-  enabled: env.MARKET_ORDERBOOK_RECORDER_ENABLED === "true",
+export const buildMarketOrderbookRecorderConfig = (): MarketOrderbookRecorderConfig => ({
+  enabled: true,
   ...DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG
 });
 

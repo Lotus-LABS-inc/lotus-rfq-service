@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildMarketOrderbookRecorderConfig,
   MarketOrderbookRecorder,
   type MarketOrderbookRecorderLogger
 } from "../src/services/market-orderbook-recorder.service.js";
@@ -13,6 +14,14 @@ const logger: MarketOrderbookRecorderLogger = {
 };
 
 describe("MarketOrderbookRecorder", () => {
+  it("enables recording by default for worker-owned runtime config", () => {
+    expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
+      enabled: true,
+      intervalMs: 60_000,
+      marketBatchSize: 50
+    });
+  });
+
   it("records approved open market outcome snapshots and skips closed markets", async () => {
     const inserted: VenueOrderbookSnapshotInput[] = [];
     const recorder = new MarketOrderbookRecorder(

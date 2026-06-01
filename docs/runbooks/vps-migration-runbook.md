@@ -730,9 +730,14 @@ Prod env files were generated from the current server-side env bundle with these
 HOST=127.0.0.1
 REDIS_URL=redis://127.0.0.1:6379/0
 DATABASE_URL forced to SUPABASE_DB_URL, not local 127.0.0.1:5433
-MARKET_ORDERBOOK_RECORDER_ENABLED=false for first smoke
 frontend VITE_* values, Render API keys, smoke keys, and test DB keys excluded
 ```
+
+Market orderbook recording is code-owned by the worker service. Do not add
+`MARKET_ORDERBOOK_RECORDER_ENABLED` to prod or staging env files; if the worker
+service is active, recorder/materializer duties are expected to run. This keeps
+`/markets?quoteReadyOnly=true` backed by fresh/stable Redis/materialized
+snapshots instead of stale DB rows.
 
 Staging env files are templates only. They intentionally have empty DB/JWT fields until a real staging-only Supabase/JWT/venue-secret bundle is provided. Do not start staging by copying prod envs.
 

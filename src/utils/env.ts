@@ -52,7 +52,6 @@ const envSchema = z
     FUNDING_UNSUBMITTED_INTENT_CANCEL_AFTER_SECONDS: z.coerce.number().int().min(300).max(604800).default(7200),
     WITHDRAWAL_UNUSED_INTENT_DELETE_AFTER_SECONDS: z.coerce.number().int().min(60).max(604800).default(1800),
     WITHDRAWAL_UNSUBMITTED_INTENT_CANCEL_AFTER_SECONDS: z.coerce.number().int().min(300).max(604800).default(7200),
-    MARKET_ORDERBOOK_RECORDER_ENABLED: z.coerce.boolean().default(false),
     DEV_SIMULATION_PREVIEW_ENABLED: z.coerce.boolean().default(false),
     COMBO_RFQ_ENABLED: z.coerce.boolean().default(false),
     SOR_ENABLED: z.coerce.boolean().default(false),

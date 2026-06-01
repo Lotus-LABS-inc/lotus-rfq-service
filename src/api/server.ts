@@ -356,7 +356,7 @@ import { MarketCatalogRepository, SharedCoreQuoteMappingRepository } from "../re
 import { LiveMarketDataViewService } from "../services/market-data-view.service.js";
 import { HotQuoteSnapshotService } from "../services/hot-quote-snapshot.service.js";
 import {
-  buildMarketOrderbookRecorderConfigFromEnv,
+  buildMarketOrderbookRecorderConfig,
   MarketOrderbookRecorder
 } from "../services/market-orderbook-recorder.service.js";
 import {
@@ -997,7 +997,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       venueQuoteSource,
       venueOrderbookSnapshotRepository,
       dependencies.logger,
-      buildMarketOrderbookRecorderConfigFromEnv(process.env)
+      buildMarketOrderbookRecorderConfig()
     );
     marketOrderbookRecorder.start();
     app.addHook("onClose", async () => {
