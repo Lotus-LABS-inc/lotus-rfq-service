@@ -508,7 +508,9 @@ export class PgSignedTradePositionRecorder implements SignedTradePositionRecorde
             source: "signed_trade_bundle",
             executionId: input.executionId,
             legIndex: input.legIndex,
-            venueOrderId: input.venueOrderId
+            venueOrderId: input.venueOrderId,
+            ...(input.routeLeg.venueMarketId ? { venueMarketId: input.routeLeg.venueMarketId } : {}),
+            ...(input.routeLeg.venueOutcomeId ? { venueOutcomeId: input.routeLeg.venueOutcomeId } : {})
           })
         ]
       );

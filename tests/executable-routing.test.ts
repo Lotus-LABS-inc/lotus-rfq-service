@@ -96,7 +96,11 @@ class MemoryPositionRepository implements VerifiedPositionRepository {
   }
 }
 
-const position = (venue: string, sellableSize = "4"): VerifiedExecutionPosition => ({
+const position = (
+  venue: string,
+  sellableSize = "4",
+  metadata?: Record<string, unknown>
+): VerifiedExecutionPosition => ({
   positionId: `${venue}-position`,
   userId: "user-1",
   venue,
@@ -107,7 +111,8 @@ const position = (venue: string, sellableSize = "4"): VerifiedExecutionPosition 
   averageEntryPrice: 0.5,
   sellableSize,
   lastSettlementEvidenceId: "settlement-1",
-  status: "VERIFIED"
+  status: "VERIFIED",
+  ...(metadata ? { metadata } : {})
 });
 
 describe("executable route selection", () => {
@@ -767,6 +772,43 @@ describe("sell quote sizing", () => {
       venueOutcomeId: "15636396498081492607537245191035256780946494107835473972503944043229908184003",
       size: "6.072426",
       requiresUserSignature: true
+    });
+  });
+
+  it("uses verified position venue token metadata when live sell candidates omit executable ids", async () => {
+    const routes = new ExecutableRouteService({
+      async listVenues() {
+        return [readyVenue("POLYMARKET")];
+      }
+    });
+    const service = new SellQuoteService(new MemoryPositionRepository([
+      position("POLYMARKET", "4", {
+        venueMarketId: "0xcondition-from-position",
+        venueOutcomeId: "15636396498081492607537245191035256780946494107835473972503944043229908184003"
+      })
+    ]), routes);
+
+    const result = await service.prepareExit({
+      userId: "user-1",
+      sellMode: "SINGLE_VENUE_SELL",
+      venue: "POLYMARKET",
+      sizeMode: "CUSTOM_AMOUNT",
+      amount: "2",
+      marketId: "market-1",
+      outcomeId: "yes",
+      candidates: [{
+        venue: "POLYMARKET",
+        price: 0.6,
+        availableSize: "4",
+        requiresUserSignature: true
+      }]
+    });
+
+    expect(result.quote?.legs[0]).toMatchObject({
+      venue: "POLYMARKET",
+      venueMarketId: "0xcondition-from-position",
+      venueOutcomeId: "15636396498081492607537245191035256780946494107835473972503944043229908184003",
+      size: "2"
     });
   });
 

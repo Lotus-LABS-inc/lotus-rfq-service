@@ -176,6 +176,9 @@ export interface PreparedSellAllocation {
   sellSize: string;
   availableSize: string;
   price: number;
+  venueMarketId?: string | undefined;
+  venueOutcomeId?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 export interface PrepareExitRequest {
@@ -539,8 +542,14 @@ export class SellQuoteService {
         return {
           ...(source ?? {}),
           venue: allocation.venue,
+          ...(source?.venueMarketId ?? allocation.venueMarketId ? { venueMarketId: source?.venueMarketId ?? allocation.venueMarketId } : {}),
+          ...(source?.venueOutcomeId ?? allocation.venueOutcomeId ? { venueOutcomeId: source?.venueOutcomeId ?? allocation.venueOutcomeId } : {}),
           price: allocation.price,
-          availableSize: allocation.sellSize
+          availableSize: allocation.sellSize,
+          metadata: {
+            ...(allocation.metadata ?? {}),
+            ...(source?.metadata ?? {})
+          }
         };
       })
     });
@@ -688,7 +697,8 @@ const allocateSellSizes = (
         positionId: position.positionId,
         sellSize: decimal(available * percent / 100),
         availableSize: decimal(available),
-        price: priceByVenue.get(position.venue.toUpperCase()) ?? position.averageEntryPrice
+        price: priceByVenue.get(position.venue.toUpperCase()) ?? position.averageEntryPrice,
+        ...sellAllocationVenueIds(position)
       };
     }).filter((allocation) => Number(allocation.sellSize) > 0);
   }
@@ -704,7 +714,8 @@ const allocateSellSizes = (
       positionId: position.positionId,
       sellSize: decimal(customAmount),
       availableSize: decimal(Number(position.sellableSize)),
-      price: priceByVenue.get(position.venue.toUpperCase()) ?? position.averageEntryPrice
+      price: priceByVenue.get(position.venue.toUpperCase()) ?? position.averageEntryPrice,
+      ...sellAllocationVenueIds(position)
     }];
   }
   return positions.map((position) => {
@@ -714,9 +725,36 @@ const allocateSellSizes = (
       positionId: position.positionId,
       sellSize: decimal(customAmount * (available / totalAvailable)),
       availableSize: decimal(available),
-      price: priceByVenue.get(position.venue.toUpperCase()) ?? position.averageEntryPrice
+      price: priceByVenue.get(position.venue.toUpperCase()) ?? position.averageEntryPrice,
+      ...sellAllocationVenueIds(position)
     };
   }).filter((allocation) => Number(allocation.sellSize) > 0);
+};
+
+const sellAllocationVenueIds = (position: VerifiedExecutionPosition): Pick<PreparedSellAllocation, "venueMarketId" | "venueOutcomeId" | "metadata"> => {
+  const metadata = position.metadata ?? {};
+  const venueMarketId = firstString(
+    metadata.venueMarketId,
+    metadata.conditionId,
+    metadata.marketId,
+    metadata.polymarketConditionId
+  );
+  const venueOutcomeId = firstString(
+    metadata.venueOutcomeId,
+    metadata.tokenId,
+    metadata.assetId,
+    metadata.polymarketTokenId,
+    metadata.polymarketAssetId
+  );
+  const nextMetadata = {
+    ...(venueMarketId ? { venueMarketId } : {}),
+    ...(venueOutcomeId ? { venueOutcomeId } : {})
+  };
+  return {
+    ...(venueMarketId ? { venueMarketId } : {}),
+    ...(venueOutcomeId ? { venueOutcomeId } : {}),
+    ...(Object.keys(nextMetadata).length > 0 ? { metadata: nextMetadata } : {})
+  };
 };
 
 const requireVenue = (venue: string | undefined): string => {
@@ -724,6 +762,18 @@ const requireVenue = (venue: string | undefined): string => {
     throw new Error("SINGLE_VENUE_SELL requires venue.");
   }
   return venue.trim().toUpperCase();
+};
+
+const firstString = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+  return undefined;
 };
 
 const bestExecutableCandidateByVenue = (
