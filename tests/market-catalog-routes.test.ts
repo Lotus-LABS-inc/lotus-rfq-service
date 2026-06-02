@@ -235,6 +235,26 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
+  it("marks listed markets active for the orderbook stream service", async () => {
+    const app = Fastify({ logger: false });
+    const repository = new FakeMarketCatalogRepository();
+    const touch = vi.fn();
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketActivityTracker: { touch }
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?limit=10&view=compact"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(touch).toHaveBeenCalledWith({ canonicalMarketId: market.canonicalMarketIds[0] });
+
+    await app.close();
+  });
+
   it("filters quote-ready markets and returns sanitized readiness fields", async () => {
     const app = Fastify({ logger: false });
     const repository = new FakeMarketCatalogRepository();

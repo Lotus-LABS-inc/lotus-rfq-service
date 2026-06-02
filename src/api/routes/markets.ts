@@ -98,6 +98,9 @@ export interface MarketCatalogRouteDeps {
     }): Promise<MarketQuoteReadinessSnapshot[]>;
   } | undefined;
   marketCatalogSnapshotCache?: MarketCatalogSnapshotCache | undefined;
+  marketActivityTracker?: {
+    touch(input: { canonicalMarketId: string; canonicalOutcomeId?: string | undefined }): void;
+  } | undefined;
   marketDataViewService?: Pick<LiveMarketDataViewService, "getOrderbook" | "getChart"> & {
     getBatchQuotes?(input: { items: readonly { marketId: string; outcomeId: string; side?: "buy" | "sell"; amount?: string | number }[] }): Promise<MarketBatchQuoteResponse>;
   } | undefined;
@@ -132,6 +135,7 @@ export const registerMarketCatalogRoutes = async (
           ...(parsed.data.search !== undefined ? { search: parsed.data.search } : {}),
           ...(marketLimit !== undefined ? { limit: marketLimit } : {})
         });
+        touchMarketCatalogActivity(markets, deps.marketActivityTracker);
         const enriched = await enrichMarketsWithQuoteReadiness(markets, deps.marketQuoteReadinessSource);
         const routeCoverage = parsed.data.routeCoverage ?? "all";
         const visibleMarkets = enriched.markets
@@ -378,6 +382,22 @@ const resolveOutcomeLabel = (
     if (outcome) return outcome.label;
   }
   return undefined;
+};
+
+const touchMarketCatalogActivity = (
+  markets: readonly MarketCatalogMarket[],
+  tracker: MarketCatalogRouteDeps["marketActivityTracker"]
+): void => {
+  if (!tracker) {
+    return;
+  }
+  const canonicalMarketIds = new Set(markets.flatMap((market) => market.canonicalMarketIds));
+  for (const canonicalMarketId of canonicalMarketIds) {
+    if (canonicalMarketId.trim().length === 0) {
+      continue;
+    }
+    tracker.touch({ canonicalMarketId });
+  }
 };
 
 const enrichMarketsWithQuoteReadiness = async (
