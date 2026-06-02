@@ -21,6 +21,7 @@ export class PredictQuoteReader implements VenueQuoteSnapshotReader {
   private readonly now: () => Date;
   private readonly inFlight = new Map<string, Promise<NormalizedVenueQuoteSnapshot | null>>();
   private readonly failureCooldowns = new Map<string, { until: number; error: unknown }>();
+  private readonly statsCache = new Map<string, { until: number; feeBps: number | undefined }>();
 
   public constructor(private readonly config: PredictQuoteReaderConfig) {
     this.now = config.now ?? (() => new Date());
@@ -54,7 +55,8 @@ export class PredictQuoteReader implements VenueQuoteSnapshotReader {
 
   private async fetchQuoteSnapshot(input: VenueQuoteSnapshotReaderInput): Promise<NormalizedVenueQuoteSnapshot | null> {
     try {
-      const shouldFetchStats = this.config.feeBps === undefined;
+      const cachedStats = this.statsCache.get(input.venueMarketId);
+      const shouldFetchStats = this.config.feeBps === undefined && (!cachedStats || cachedStats.until <= Date.now());
       const shouldFetchMarketDetail = shouldResolvePredictMarketDetail(input);
       const [orderbook, stats, marketDetail] = await Promise.all([
         this.config.client.getMarketOrderbook(input.venueMarketId),
@@ -66,7 +68,14 @@ export class PredictQuoteReader implements VenueQuoteSnapshotReader {
           : Promise.resolve(null)
       ]);
       const statsRecord = asRecord(stats);
-      const venueFeeBps = this.config.feeBps ?? parseOptionalNumber(statsRecord.feeRateBps ?? statsRecord.fee_rate_bps);
+      const parsedVenueFeeBps = parseOptionalNumber(statsRecord.feeRateBps ?? statsRecord.fee_rate_bps);
+      if (stats !== null && this.config.feeBps === undefined) {
+        this.statsCache.set(input.venueMarketId, {
+          until: Date.now() + PREDICT_STATS_CACHE_TTL_MS,
+          feeBps: parsedVenueFeeBps
+        });
+      }
+      const venueFeeBps = this.config.feeBps ?? parsedVenueFeeBps ?? cachedStats?.feeBps;
       const outcomeResolution = resolvePredictOutcome(input.venueOutcomeId, input.canonicalOutcomeId, marketDetail);
       return normalizePredictOrderbook({
         payload: orderbook,
@@ -222,6 +231,8 @@ const looksLikeNumericId = (value: string): boolean => /^\d+$/.test(value);
 
 const shouldResolvePredictMarketDetail = (input: VenueQuoteSnapshotReaderInput): boolean =>
   !input.venueOutcomeId || !looksLikeNumericId(input.venueOutcomeId);
+
+const PREDICT_STATS_CACHE_TTL_MS = 5 * 60_000;
 
 const predictSnapshotKey = (input: VenueQuoteSnapshotReaderInput): string =>
   [

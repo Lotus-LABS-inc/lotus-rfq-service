@@ -92,6 +92,46 @@ describe("extended venue quote readers", () => {
     expect(snapshot?.blockers).toContain("PREDICT_FUN_TOKEN_ID_MISSING");
   });
 
+  it("Predict reader reuses market stats across outcome reads for the same market", async () => {
+    let orderbookCalls = 0;
+    let statsCalls = 0;
+    const reader = new PredictQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      environment: "mainnet",
+      now: () => now,
+      client: {
+        async getMarketOrderbook() {
+          orderbookCalls += 1;
+          return { bids: [{ price: "0.4", size: "10" }], asks: [{ price: "0.42", size: "10" }] };
+        },
+        async getMarketStatistics() {
+          statsCalls += 1;
+          return { feeRateBps: "35" };
+        }
+      } as never
+    });
+
+    await reader.getQuoteSnapshot({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "predict-market-1",
+      venueOutcomeId: "1001",
+      side: "buy",
+      quantity: 1
+    });
+    await reader.getQuoteSnapshot({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "NO",
+      venueMarketId: "predict-market-1",
+      venueOutcomeId: "1002",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(orderbookCalls).toBe(2);
+    expect(statsCalls).toBe(1);
+  });
+
   it("Predict reader avoids optional stats and market-detail calls when static fee and token id are already known", async () => {
     let orderbookCalls = 0;
     let statsCalls = 0;
