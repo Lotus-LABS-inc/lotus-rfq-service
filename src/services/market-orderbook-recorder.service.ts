@@ -13,6 +13,8 @@ export interface MarketOrderbookRecorderConfig {
   priorityMarketBatchSize?: number;
   priorityVenues?: readonly string[];
   maxSamplesPerTick: number;
+  maxTickDurationMs?: number;
+  sampleTimeoutMs?: number;
   retentionHours: number;
   levelsPerSide: number;
   quoteProviderCooldownMs: number;
@@ -44,6 +46,8 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
   priorityMarketBatchSize: 8,
   priorityVenues: ["OPINION"] as readonly string[],
   maxSamplesPerTick: 60,
+  maxTickDurationMs: 45_000,
+  sampleTimeoutMs: 2_500,
   retentionHours: 720,
   levelsPerSide: 25,
   quoteProviderCooldownMs: 30_000
@@ -87,6 +91,8 @@ export class MarketOrderbookRecorder {
       priorityMarketBatchSize: this.config.priorityMarketBatchSize ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityMarketBatchSize,
       priorityVenues: this.config.priorityVenues ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityVenues,
       maxSamplesPerTick: this.config.maxSamplesPerTick,
+      maxTickDurationMs: this.config.maxTickDurationMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.maxTickDurationMs,
+      sampleTimeoutMs: this.config.sampleTimeoutMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.sampleTimeoutMs,
       retentionHours: this.config.retentionHours,
       levelsPerSide: this.config.levelsPerSide
     }, "Market orderbook recorder started.");
@@ -121,6 +127,9 @@ export class MarketOrderbookRecorder {
 
     this.running = true;
     try {
+      const tickStartedAt = Date.now();
+      const maxTickDurationMs = this.config.maxTickDurationMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.maxTickDurationMs;
+      const sampleTimeoutMs = this.config.sampleTimeoutMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.sampleTimeoutMs;
       const cleanup = await this.snapshotRepository.cleanupSnapshots({
         olderThan: new Date(Date.now() - this.config.retentionHours * 60 * 60 * 1000)
       });
@@ -168,18 +177,29 @@ export class MarketOrderbookRecorder {
           if (result.sampledOutcomes >= this.config.maxSamplesPerTick) {
             break marketLoop;
           }
+          if (Date.now() - tickStartedAt >= maxTickDurationMs) {
+            this.logger.warn({
+              maxTickDurationMs,
+              sampledOutcomes: result.sampledOutcomes,
+              scannedMarkets: result.scannedMarkets
+            }, "Market orderbook recorder tick stopped early because its time budget was exhausted.");
+            break marketLoop;
+          }
           if (this.isSampleFullyCoolingDown(market, sample)) {
             result.skippedCooldownSamples += 1;
             continue;
           }
           result.sampledOutcomes += 1;
           try {
-            const report = await this.quoteSource.getQuoteSnapshotReport({
-              canonicalMarketId: sample.canonicalMarketId,
-              ...(sample.outcomeId ? { canonicalOutcomeId: sample.outcomeId } : {}),
-              side: "buy",
-              quantity: 1
-            });
+            const report = await withRecorderTimeout(
+              this.quoteSource.getQuoteSnapshotReport({
+                canonicalMarketId: sample.canonicalMarketId,
+                ...(sample.outcomeId ? { canonicalOutcomeId: sample.outcomeId } : {}),
+                side: "buy",
+                quantity: 1
+              }),
+              sampleTimeoutMs
+            );
             if (this.stopped) {
               break marketLoop;
             }
@@ -292,6 +312,31 @@ export class MarketOrderbookRecorder {
 
 const sleep = async (durationMs: number): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, durationMs));
+};
+
+class RecorderSampleTimeoutError extends Error {
+  public constructor(timeoutMs: number) {
+    super(`Market orderbook recorder sample timed out after ${timeoutMs}ms.`);
+    this.name = "RecorderSampleTimeoutError";
+  }
+}
+
+const withRecorderTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return promise;
+  }
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new RecorderSampleTimeoutError(timeoutMs)), timeoutMs);
+        timeout.unref?.();
+      })
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 };
 
 const buildMarketSamples = (market: MarketCatalogMarket): Array<{ canonicalMarketId: string; outcomeId: string | null }> => {

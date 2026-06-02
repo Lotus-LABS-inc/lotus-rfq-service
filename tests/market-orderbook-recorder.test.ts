@@ -20,7 +20,9 @@ describe("MarketOrderbookRecorder", () => {
       marketBatchSize: 15,
       priorityMarketBatchSize: 8,
       priorityVenues: ["OPINION"],
-      maxSamplesPerTick: 60
+      maxSamplesPerTick: 60,
+      maxTickDurationMs: 45_000,
+      sampleTimeoutMs: 2_500
     });
   });
 
@@ -33,7 +35,9 @@ describe("MarketOrderbookRecorder", () => {
         marketBatchSize: 15,
         priorityMarketBatchSize: 8,
         priorityVenues: ["OPINION"],
-        maxSamplesPerTick: 60
+        maxSamplesPerTick: 60,
+        maxTickDurationMs: 45_000,
+        sampleTimeoutMs: 2_500
       });
       expect(buildMarketOrderbookRecorderConfig()).not.toHaveProperty("enabled");
     } finally {
@@ -229,6 +233,46 @@ describe("MarketOrderbookRecorder", () => {
 
     expect(result.scannedMarkets).toBe(2);
     expect(sampledMarketIds).toEqual(["market-opinion", "market-opinion", "market-1", "market-1"]);
+  });
+
+  it("bounds hung quote source samples so recorder ticks cannot stall indefinitely", async () => {
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [marketFixture("OPEN")]
+      },
+      {
+        getQuoteSnapshotReport: async () => await new Promise(() => undefined)
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 1,
+        priorityMarketBatchSize: 0,
+        priorityVenues: [],
+        maxSamplesPerTick: 40,
+        maxTickDurationMs: 50,
+        sampleTimeoutMs: 1,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.scannedMarkets).toBe(1);
+    expect(result.sampledOutcomes).toBeGreaterThan(0);
+    expect(result.failedSamples).toBeGreaterThan(0);
+    expect(result.insertedSnapshots).toBe(0);
   });
 
   it("does not run recording after stop is requested", async () => {
