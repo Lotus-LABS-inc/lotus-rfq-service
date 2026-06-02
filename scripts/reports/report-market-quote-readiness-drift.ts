@@ -21,11 +21,13 @@ interface BlockerRow {
   venue: string;
   reason: string;
   affected_markets: string;
+  affected_raw_snapshot_ids: string;
   latest_quote_at: Date | null;
 }
 
 interface AllBlockedRow {
   canonical_market_id: string;
+  raw_canonical_market_ids: string[] | null;
   venues: string[];
   blockers: unknown;
   latest_quote_at: Date | null;
@@ -39,10 +41,12 @@ interface Report {
     venue: string;
     reason: string;
     affectedMarkets: number;
+    affectedRawSnapshotIds: number;
     latestQuoteAt: string | null;
   }>;
   allBlockedMarkets: Array<{
     canonicalMarketId: string;
+    rawCanonicalMarketIds: string[];
     venues: string[];
     blockers: Array<{ venue: string; reason: string }>;
     latestQuoteAt: string | null;
@@ -89,7 +93,9 @@ function renderBlockerGroups(report: Report): string[] {
     return ["- none"];
   }
   return report.blockerGroups.map((row) =>
-    `- ${row.venue} / ${row.reason}: ${row.affectedMarkets} markets${row.latestQuoteAt ? `, latest ${row.latestQuoteAt}` : ""}`);
+    `- ${row.venue} / ${row.reason}: ${row.affectedMarkets} markets` +
+    `${row.affectedRawSnapshotIds !== row.affectedMarkets ? ` (${row.affectedRawSnapshotIds} raw snapshot ids)` : ""}` +
+    `${row.latestQuoteAt ? `, latest ${row.latestQuoteAt}` : ""}`);
 }
 
 function renderAllBlockedMarkets(report: Report): string[] {
@@ -116,7 +122,8 @@ try {
   const [blockerGroups, allBlockedMarkets] = await Promise.all([
     pool.query<BlockerRow>(
       `WITH latest_blockers AS (
-         SELECT canonical_market_id,
+         SELECT regexp_replace(canonical_market_id, ':(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$', '') AS normalized_canonical_market_id,
+                canonical_market_id,
                 venue,
                 jsonb_array_elements_text(blockers) AS reason,
                 received_at
@@ -126,17 +133,19 @@ try {
        )
        SELECT venue,
               reason,
-              COUNT(DISTINCT canonical_market_id)::text AS affected_markets,
+              COUNT(DISTINCT normalized_canonical_market_id)::text AS affected_markets,
+              COUNT(DISTINCT canonical_market_id)::text AS affected_raw_snapshot_ids,
               MAX(received_at) AS latest_quote_at
          FROM latest_blockers
         GROUP BY venue, reason
-        ORDER BY COUNT(DISTINCT canonical_market_id) DESC, venue, reason
+        ORDER BY COUNT(DISTINCT normalized_canonical_market_id) DESC, venue, reason
         LIMIT 100`,
       [ACTIVE_LOOKBACK_MINUTES]
     ),
     pool.query<AllBlockedRow>(
       `WITH annotated AS (
-         SELECT canonical_market_id,
+         SELECT regexp_replace(canonical_market_id, ':(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$', '') AS normalized_canonical_market_id,
+                canonical_market_id,
                 venue,
                 received_at,
                 COALESCE(jsonb_array_length(blockers), 0) = 0
@@ -146,7 +155,8 @@ try {
           WHERE received_at >= now() - ($1::int * interval '1 minute')
        ),
        rolled AS (
-         SELECT canonical_market_id,
+         SELECT normalized_canonical_market_id AS canonical_market_id,
+                array_agg(DISTINCT canonical_market_id ORDER BY canonical_market_id) AS raw_canonical_market_ids,
                 array_agg(DISTINCT venue ORDER BY venue) AS venues,
                 COUNT(*) FILTER (WHERE display_ready) AS ready_count,
                 jsonb_agg(DISTINCT jsonb_build_object(
@@ -155,9 +165,10 @@ try {
                 )) FILTER (WHERE NOT display_ready) AS blockers,
                 MAX(received_at) AS latest_quote_at
            FROM annotated
-          GROUP BY canonical_market_id
+          GROUP BY normalized_canonical_market_id
        )
        SELECT canonical_market_id,
+              raw_canonical_market_ids,
               venues,
               COALESCE(blockers, '[]'::jsonb) AS blockers,
               latest_quote_at
@@ -177,16 +188,19 @@ try {
       venue: row.venue,
       reason: row.reason,
       affectedMarkets: Number(row.affected_markets),
+      affectedRawSnapshotIds: Number(row.affected_raw_snapshot_ids),
       latestQuoteAt: row.latest_quote_at?.toISOString() ?? null
     })),
     allBlockedMarkets: allBlockedMarkets.rows.map((row) => ({
       canonicalMarketId: row.canonical_market_id,
+      rawCanonicalMarketIds: row.raw_canonical_market_ids ?? [],
       venues: row.venues,
       blockers: parseBlockers(row.blockers),
       latestQuoteAt: row.latest_quote_at?.toISOString() ?? null
     })),
     safetyNotes: [
       "This report is read-only.",
+      "Affected market counts normalize venue-suffixed canonical ids before grouping.",
       "Blockers are typed display/readiness evidence only.",
       "Stale or blocked snapshots must never authorize route preview, RFQ accept, or execution submit.",
       "Provider secrets, auth headers, HMACs, signatures, and raw payloads are not included."
