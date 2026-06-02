@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { CompositeVenueQuoteSource, QuoteSnapshotCache, type NormalizedVenueQuoteSnapshot } from "../src/core/sor/quote-snapshot.js";
-import { HotQuoteSnapshotService } from "../src/services/hot-quote-snapshot.service.js";
+import { HotQuoteSnapshotService, resolveHotQuoteRedisNamespace } from "../src/services/hot-quote-snapshot.service.js";
 
 const now = new Date("2026-05-23T12:00:00.000Z");
 
@@ -279,6 +279,43 @@ describe("HotQuoteSnapshotService", () => {
 
     const result = await service.listActiveMarketsFromRedis({ limit: 2 });
     expect(result.map((entry) => entry.canonicalMarketId)).toEqual(["newer-market", "older-market"]);
+  });
+
+  it("isolates hot quote and active-market Redis keys by environment namespace", async () => {
+    const redis = new FakeRedis();
+    const staging = new HotQuoteSnapshotService({
+      memoryCache: new QuoteSnapshotCache(),
+      redis,
+      now: () => now,
+      config: { redisNamespace: "staging" }
+    });
+    const prod = new HotQuoteSnapshotService({
+      memoryCache: new QuoteSnapshotCache(),
+      redis,
+      now: () => now,
+      config: { redisNamespace: "prod" }
+    });
+
+    staging.touch({ canonicalMarketId: "staging-market" });
+    staging.put(snapshot({ venueMarketId: "staging-venue-market" }));
+    await vi.waitFor(() => {
+      expect(redis.values.size).toBeGreaterThan(1);
+    });
+
+    await expect(prod.listActiveMarketsFromRedis()).resolves.toEqual([]);
+    await expect(prod.getDisplay({
+      venue: "POLYMARKET",
+      venueMarketId: "staging-venue-market",
+      venueOutcomeId: "yes",
+      maxAgeMs: 15_000,
+      includeDbFallback: false
+    })).resolves.toBeNull();
+  });
+
+  it("derives a sanitized Redis namespace from deploy labels", () => {
+    expect(resolveHotQuoteRedisNamespace({ LOTUS_DEPLOY_ENV: "staging" })).toBe("staging");
+    expect(resolveHotQuoteRedisNamespace({ LOTUS_ENV: "Production" })).toBe("production");
+    expect(resolveHotQuoteRedisNamespace({ APP_ENV: "vps prod" })).toBe("vps-prod");
   });
 
   it("lets CompositeVenueQuoteSource use hot snapshots before live readers and refill hot cache from REST", async () => {
