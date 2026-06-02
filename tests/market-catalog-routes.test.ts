@@ -13,6 +13,7 @@ import {
   SharedCoreQuoteMappingRepository
 } from "../src/repositories/market-catalog.repository.js";
 import type { MarketCatalogSnapshotCache } from "../src/services/market-catalog-snapshot-cache.js";
+import { marketCatalogDetailCacheKey } from "../src/services/market-catalog-snapshot-materializer.js";
 
 const market: MarketCatalogMarket = {
   eventId: "event:NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
@@ -115,6 +116,7 @@ const marketEvent: MarketCatalogEvent = {
 
 class FakeMarketCatalogRepository implements Pick<MarketCatalogRepository, "listCategories" | "listMarkets" | "listEvents" | "getMarket" | "getEvent"> {
   public filters: unknown[] = [];
+  public getMarketCalls: string[] = [];
 
   public async listCategories(): Promise<MarketCatalogCategory[]> {
     return [{ category: "POLITICS", marketCount: 1, eventCount: 1 }];
@@ -126,6 +128,7 @@ class FakeMarketCatalogRepository implements Pick<MarketCatalogRepository, "list
   }
 
   public async getMarket(marketId: string): Promise<MarketCatalogMarket | null> {
+    this.getMarketCalls.push(marketId);
     return marketId === market.canonicalEventId || marketId === market.canonicalMarketIds[0] ? market : null;
   }
 
@@ -432,6 +435,66 @@ describe("market catalog routes", () => {
     expect(second.json()).toMatchObject({
       count: 1,
       markets: [{ quoteReadyVenueCount: 1 }]
+    });
+
+    await app.close();
+  });
+
+  it("serves market details from the shared snapshot cache without hitting the repository", async () => {
+    const repository = new FakeMarketCatalogRepository();
+    const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    snapshotCache.values.set(marketCatalogDetailCacheKey(`${market.canonicalMarketIds[0]}:POLYMARKET`), {
+      market,
+      materialized: true,
+      materializedAt: "2026-06-02T00:00:00.000Z"
+    });
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketCatalogSnapshotCache: snapshotCache
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/markets/${encodeURIComponent(`${market.canonicalMarketIds[0]}:POLYMARKET`)}`
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      market: {
+        canonicalEventId: market.canonicalEventId,
+        canonicalMarketIds: market.canonicalMarketIds,
+        title: market.title
+      }
+    });
+    expect(repository.getMarketCalls).toHaveLength(0);
+
+    await app.close();
+  });
+
+  it("writes market detail snapshots after repository detail lookup", async () => {
+    const repository = new FakeMarketCatalogRepository();
+    const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketCatalogSnapshotCache: snapshotCache
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/markets/${encodeURIComponent(market.canonicalMarketIds[0]!)}`
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(repository.getMarketCalls).toEqual([market.canonicalMarketIds[0]]);
+    expect(snapshotCache.values.get(marketCatalogDetailCacheKey(market.canonicalMarketIds[0]!))).toMatchObject({
+      materialized: true,
+      market: { canonicalEventId: market.canonicalEventId }
+    });
+    expect(snapshotCache.values.get(marketCatalogDetailCacheKey(`${market.canonicalMarketIds[0]}:POLYMARKET`))).toMatchObject({
+      materialized: true,
+      market: { canonicalEventId: market.canonicalEventId }
     });
 
     await app.close();
