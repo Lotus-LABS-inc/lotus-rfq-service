@@ -779,6 +779,64 @@ describe("extended venue quote readers", () => {
     expect(snapshot?.missingFactors).toEqual([]);
   });
 
+  it("Opinion one-sided ask depth is buy-quoteable but not sell-quoteable", () => {
+    const snapshot = normalizeOpinionOrderbook({
+      payload: {
+        result: {
+          bids: [],
+          asks: [{ price: "0.51", size: "10" }]
+        }
+      },
+      venueMarketId: "opinion-market-1",
+      venueOutcomeId: "token-yes",
+      receivedAt: now,
+      topicRate: 0.04
+    });
+
+    const buy = calculateVenueQuote({ snapshot, side: "buy", amount: 1, now });
+    const sell = calculateVenueQuote({ snapshot, side: "sell", amount: 1, now });
+
+    expect(snapshot.blockers).toEqual([]);
+    expect(snapshot.missingFactors).toContain("BID_DEPTH_MISSING");
+    expect(buy.ok).toBe(true);
+    expect(buy.price).toBe(0.51);
+    expect(buy.missingFactors).toContain("BEST_BID_ASK_PARTIAL");
+    expect(sell.ok).toBe(false);
+    expect(sell.blockers).toEqual(expect.arrayContaining([
+      "EXECUTABLE_TOP_PRICE_MISSING",
+      "EXECUTABLE_DEPTH_MISSING"
+    ]));
+  });
+
+  it("Opinion one-sided bid depth is sell-quoteable but not buy-quoteable", () => {
+    const snapshot = normalizeOpinionOrderbook({
+      payload: {
+        result: {
+          bids: [{ price: "0.49", size: "10" }],
+          asks: []
+        }
+      },
+      venueMarketId: "opinion-market-1",
+      venueOutcomeId: "token-yes",
+      receivedAt: now,
+      topicRate: 0.04
+    });
+
+    const buy = calculateVenueQuote({ snapshot, side: "buy", amount: 1, now });
+    const sell = calculateVenueQuote({ snapshot, side: "sell", amount: 1, now });
+
+    expect(snapshot.blockers).toEqual([]);
+    expect(snapshot.missingFactors).toContain("ASK_DEPTH_MISSING");
+    expect(sell.ok).toBe(true);
+    expect(sell.price).toBe(0.49);
+    expect(sell.missingFactors).toContain("BEST_BID_ASK_PARTIAL");
+    expect(buy.ok).toBe(false);
+    expect(buy.blockers).toEqual(expect.arrayContaining([
+      "EXECUTABLE_TOP_PRICE_MISSING",
+      "EXECUTABLE_DEPTH_MISSING"
+    ]));
+  });
+
   it("Opinion client uses apikey auth and retries transient token orderbook failures", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockRejectedValueOnce(new Error("fetch failed: connection timed out"))

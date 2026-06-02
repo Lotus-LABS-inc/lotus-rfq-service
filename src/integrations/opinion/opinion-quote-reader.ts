@@ -63,7 +63,12 @@ export const normalizeOpinionOrderbook = (input: {
   const record = unwrapRecord(input.payload);
   const bids = normalizeLevels(record.bids);
   const asks = normalizeLevels(record.asks);
-  const blockers = bids.length === 0 || asks.length === 0 ? ["QUOTE_PROVIDER_EMPTY_BOOK"] : [];
+  const blockers = bids.length === 0 && asks.length === 0 ? ["QUOTE_PROVIDER_EMPTY_BOOK"] : [];
+  const missingFactors = [
+    ...(input.feeBps === undefined && input.topicRate === undefined ? ["FEE_DISCOVERY"] : []),
+    ...(bids.length === 0 && asks.length > 0 ? ["BID_DEPTH_MISSING"] : []),
+    ...(asks.length === 0 && bids.length > 0 ? ["ASK_DEPTH_MISSING"] : [])
+  ];
   return {
     venue: "OPINION",
     venueMarketId: input.venueMarketId,
@@ -77,7 +82,7 @@ export const normalizeOpinionOrderbook = (input: {
     ...(input.feeBps !== undefined ? { feeBps: input.feeBps, staticFeeApproved: true } : {}),
     ...(input.feeBps === undefined && input.topicRate !== undefined ? { opinionTopicRate: input.topicRate } : {}),
     settlementEvidenceSupported: true,
-    missingFactors: input.feeBps === undefined && input.topicRate === undefined ? ["FEE_DISCOVERY"] : [],
+    missingFactors,
     blockers,
     streamResynced: true,
     metadata: {

@@ -537,11 +537,15 @@ export const calculateVenueQuote = (input: QuoteCalculationInput): QuoteCalculat
   const asks = normalizeBook(input.snapshot.asks, "asc");
   const bestBid = bids[0]?.price ?? null;
   const bestAsk = asks[0]?.price ?? null;
-  if (bestBid === null || bestAsk === null) {
-    blockers.push("BEST_BID_ASK_MISSING");
-  }
 
   const bookSide = input.side === "buy" ? asks : bids;
+  const executableTopPrice = input.side === "buy" ? bestAsk : bestBid;
+  if (executableTopPrice === null) {
+    blockers.push("EXECUTABLE_TOP_PRICE_MISSING");
+  }
+  if (bestBid === null || bestAsk === null) {
+    missingFactors.push("BEST_BID_ASK_PARTIAL");
+  }
   const fill = walkBook(bookSide, input.amount);
   if (fill.filledSize.lte(0)) {
     blockers.push("EXECUTABLE_DEPTH_MISSING");
@@ -551,7 +555,7 @@ export const calculateVenueQuote = (input: QuoteCalculationInput): QuoteCalculat
   }
 
   const weightedPrice = fill.filledSize.gt(0) ? fill.notional.div(fill.filledSize) : new Decimal(0);
-  const topPrice = input.side === "buy" ? bestAsk : bestBid;
+  const topPrice = executableTopPrice;
   const spreadBps = bestBid !== null && bestAsk !== null
     ? bps(new Decimal(bestAsk).minus(bestBid), new Decimal(bestBid).plus(bestAsk).div(2))
     : new Decimal(0);
