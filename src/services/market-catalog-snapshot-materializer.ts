@@ -163,7 +163,7 @@ export class MarketCatalogSnapshotMaterializer {
     }
 
     const fullKey = `markets:${stableQueryCacheKey(query)}`;
-    if (query.quoteReadyOnly && await this.wouldUnderfillExistingSnapshot(fullKey, visibleMarkets.length)) {
+    if (query.quoteReadyOnly && await this.wouldUnderfillExistingSnapshot(query, fullKey, visibleMarkets.length)) {
       return "skipped_underfilled_quote_ready";
     }
 
@@ -183,18 +183,54 @@ export class MarketCatalogSnapshotMaterializer {
     return 2;
   }
 
-  private async wouldUnderfillExistingSnapshot(key: string, nextCount: number): Promise<boolean> {
+  private async wouldUnderfillExistingSnapshot(
+    query: MarketCatalogMaterializedQuery,
+    fullKey: string,
+    nextCount: number
+  ): Promise<boolean> {
     try {
-      const existing = await this.deps.snapshotCache.get<{ count?: unknown; markets?: unknown }>(key);
+      const existing = await this.deps.snapshotCache.get<{ count?: unknown; markets?: unknown }>(fullKey);
       const existingCount = typeof existing?.count === "number"
         ? existing.count
         : Array.isArray(existing?.markets)
           ? existing.markets.length
           : 0;
-      return existingCount > nextCount;
+      if (existingCount <= nextCount) {
+        return false;
+      }
+      if (existing && Array.isArray(existing.markets)) {
+        await this.ensureCompactSnapshotFromExisting(query, existing);
+      }
+      return true;
     } catch {
       return false;
     }
+  }
+
+  private async ensureCompactSnapshotFromExisting(
+    query: MarketCatalogMaterializedQuery,
+    existing: { count?: unknown; markets?: unknown }
+  ): Promise<void> {
+    const compactKey = `markets:${stableQueryCacheKey({ ...query, view: "compact" })}`;
+    const currentCompact = await this.deps.snapshotCache.get<{ count?: unknown; markets?: unknown }>(compactKey);
+    const currentCompactCount = typeof currentCompact?.count === "number"
+      ? currentCompact.count
+      : Array.isArray(currentCompact?.markets)
+        ? currentCompact.markets.length
+        : 0;
+    const existingMarkets = Array.isArray(existing.markets)
+      ? existing.markets
+      : [];
+    if (currentCompactCount >= existingMarkets.length || existingMarkets.length === 0) {
+      return;
+    }
+    await this.deps.snapshotCache.set(compactKey, {
+      markets: formatMarketCatalogListMarkets(existingMarkets as MarketCatalogMarket[], "compact"),
+      count: existingMarkets.length,
+      materialized: true,
+      materializedAt: new Date().toISOString(),
+      view: "compact"
+    }, this.config.cacheTtlMs);
   }
 
   private async waitForIdle(): Promise<void> {

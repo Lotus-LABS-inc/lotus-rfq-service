@@ -212,8 +212,8 @@ describe("MarketCatalogSnapshotMaterializer", () => {
       count: 2,
       materialized: true,
       markets: [
-        { canonicalMarketIds: ["market-1"] },
-        { canonicalMarketIds: ["market-2"] }
+        baseMarket,
+        { ...baseMarket, canonicalMarketIds: ["market-2"], canonicalEventId: "event-2", title: "Event 2" }
       ]
     });
     const materializer = new MarketCatalogSnapshotMaterializer({
@@ -245,5 +245,21 @@ describe("MarketCatalogSnapshotMaterializer", () => {
         { canonicalMarketIds: ["market-2"] }
       ]
     });
+    const compactKey = `markets:${stableQueryCacheKey({
+      category: "Crypto",
+      limit: 80,
+      quoteReadyOnly: true,
+      view: "compact"
+    })}`;
+    expect(snapshotCache.values.get(compactKey)).toMatchObject({
+      count: 2,
+      materialized: true,
+      view: "compact",
+      markets: [
+        { canonicalMarketIds: ["market-1"] },
+        { canonicalMarketIds: ["market-2"] }
+      ]
+    });
+    expect(JSON.stringify(snapshotCache.values.get(compactKey))).not.toContain("venueMarkets");
   });
 });
