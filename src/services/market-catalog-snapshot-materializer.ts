@@ -79,13 +79,15 @@ export class MarketCatalogSnapshotMaterializer {
     this.timer.unref?.();
   }
 
-  public stop(): void {
+  public async stop(): Promise<void> {
     this.stopped = true;
     if (!this.timer) {
+      await this.waitForIdle();
       return;
     }
     clearInterval(this.timer);
     this.timer = null;
+    await this.waitForIdle();
   }
 
   public async runOnce(): Promise<MarketCatalogSnapshotMaterializerRunResult> {
@@ -166,7 +168,17 @@ export class MarketCatalogSnapshotMaterializer {
     }, this.config.cacheTtlMs);
     return 2;
   }
+
+  private async waitForIdle(): Promise<void> {
+    for (let attempt = 0; attempt < 100 && this.running; attempt += 1) {
+      await sleep(50);
+    }
+  }
 }
+
+const sleep = async (durationMs: number): Promise<void> => {
+  await new Promise((resolve) => setTimeout(resolve, durationMs));
+};
 
 interface MarketCatalogMaterializedQuery {
   limit: number;

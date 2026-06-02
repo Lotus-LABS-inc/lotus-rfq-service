@@ -1001,7 +1001,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     );
     marketOrderbookRecorder.start();
     app.addHook("onClose", async () => {
-      marketOrderbookRecorder.stop();
+      await marketOrderbookRecorder.stop();
     });
     const marketCatalogSnapshotMaterializer = new MarketCatalogSnapshotMaterializer({
       marketCatalogRepository,
@@ -1011,7 +1011,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     });
     marketCatalogSnapshotMaterializer.start();
     app.addHook("onClose", async () => {
-      marketCatalogSnapshotMaterializer.stop();
+      await marketCatalogSnapshotMaterializer.stop();
     });
   }
 

@@ -401,50 +401,60 @@ export class PgSignedTradePositionRecorder implements SignedTradePositionRecorde
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      const existingApplication = await client.query<{ application_id: string; fill_state: { filledSize?: string; offchainFilled?: boolean } }>(
-        `SELECT application_id, fill_state
-         FROM signed_trade_bundle_position_applications
-         WHERE execution_id = $1
-           AND user_id = $2
-           AND leg_index = $3
-           AND venue_order_id = $4
-         FOR UPDATE`,
+      const nextFillSize = Number(fillSize);
+      const insertedApplication = await client.query<{ fill_state: { filledSize?: string; offchainFilled?: boolean } }>(
+        `INSERT INTO signed_trade_bundle_position_applications (
+          execution_id,
+          user_id,
+          leg_index,
+          venue,
+          venue_order_id,
+          fill_state
+        ) VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+        ON CONFLICT (execution_id, user_id, leg_index, venue_order_id) DO NOTHING
+        RETURNING fill_state`,
         [
           input.executionId,
           input.userId,
           input.legIndex,
-          input.venueOrderId
+          input.routeLeg.venue.toUpperCase(),
+          input.venueOrderId,
+          JSON.stringify(input.fillState)
         ]
       );
-      const previousFillSize = existingApplication.rowCount && existingApplication.rows[0]?.fill_state
-        ? Number(positionSizeFromFill(existingApplication.rows[0].fill_state, input.routeLeg.size))
-        : 0;
-      const nextFillSize = Number(fillSize);
+      const existingApplication = insertedApplication.rowCount && insertedApplication.rows[0]?.fill_state
+        ? insertedApplication
+        : await client.query<{ fill_state: { filledSize?: string; offchainFilled?: boolean } }>(
+          `SELECT fill_state
+           FROM signed_trade_bundle_position_applications
+           WHERE execution_id = $1
+             AND user_id = $2
+             AND leg_index = $3
+             AND venue_order_id = $4
+           FOR UPDATE`,
+          [
+            input.executionId,
+            input.userId,
+            input.legIndex,
+            input.venueOrderId
+          ]
+        );
+      const insertedNewApplication = Boolean(insertedApplication.rowCount && insertedApplication.rows[0]?.fill_state);
+      if (!insertedNewApplication && existingApplication.rowCount === 0) {
+        await client.query("COMMIT");
+        return;
+      }
+      const previousFillSize = insertedNewApplication
+        ? 0
+        : existingApplication.rowCount && existingApplication.rows[0]?.fill_state
+          ? Number(positionSizeFromFill(existingApplication.rows[0].fill_state, input.routeLeg.size))
+          : 0;
       const deltaFillSize = Math.max(0, nextFillSize - previousFillSize);
       if (deltaFillSize <= 0 || !Number.isFinite(deltaFillSize)) {
         await client.query("COMMIT");
         return;
       }
-      if (existingApplication.rowCount === 0) {
-        await client.query(
-          `INSERT INTO signed_trade_bundle_position_applications (
-            execution_id,
-            user_id,
-            leg_index,
-            venue,
-            venue_order_id,
-            fill_state
-          ) VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
-          [
-            input.executionId,
-            input.userId,
-            input.legIndex,
-            input.routeLeg.venue.toUpperCase(),
-            input.venueOrderId,
-            JSON.stringify(input.fillState)
-          ]
-        );
-      } else {
+      if (!insertedNewApplication) {
         await client.query(
           `UPDATE signed_trade_bundle_position_applications
            SET fill_state = $5::jsonb

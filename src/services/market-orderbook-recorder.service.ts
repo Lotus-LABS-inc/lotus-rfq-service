@@ -59,6 +59,7 @@ export const buildMarketOrderbookRecorderConfig = (): MarketOrderbookRecorderCon
 export class MarketOrderbookRecorder {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private stopped = false;
   private marketOffset = 0;
   private readonly venueCooldownUntil = new Map<string, number>();
 
@@ -74,6 +75,7 @@ export class MarketOrderbookRecorder {
     if (this.timer) {
       return;
     }
+    this.stopped = false;
     this.logger.info({
       intervalMs: this.config.intervalMs,
       marketBatchSize: this.config.marketBatchSize,
@@ -88,17 +90,23 @@ export class MarketOrderbookRecorder {
     void this.runOnce();
   }
 
-  public stop(): void {
+  public async stop(): Promise<void> {
+    this.stopped = true;
     if (!this.timer) {
+      await this.waitForIdle();
       return;
     }
     clearInterval(this.timer);
     this.timer = null;
     this.logger.info({}, "Market orderbook recorder stopped.");
+    await this.waitForIdle();
   }
 
   public async runOnce(): Promise<MarketOrderbookRecorderRunResult> {
     const empty = emptyResult();
+    if (this.stopped) {
+      return empty;
+    }
     if (this.running) {
       this.logger.warn({}, "Market orderbook recorder tick skipped because the previous tick is still running.");
       return empty;
@@ -134,12 +142,18 @@ export class MarketOrderbookRecorder {
 
       marketLoop:
       for (const market of markets) {
+        if (this.stopped) {
+          break;
+        }
         if (market.status !== "OPEN") {
           result.skippedClosedMarkets += 1;
           continue;
         }
 
         for (const sample of buildMarketSamples(market)) {
+          if (this.stopped) {
+            break marketLoop;
+          }
           if (result.sampledOutcomes >= this.config.maxSamplesPerTick) {
             break marketLoop;
           }
@@ -155,6 +169,9 @@ export class MarketOrderbookRecorder {
               side: "buy",
               quantity: 1
             });
+            if (this.stopped) {
+              break marketLoop;
+            }
             const snapshots = report.snapshots.flatMap((snapshot) =>
               toSnapshotInput({
                 canonicalEventId: market.canonicalEventId,
@@ -227,7 +244,17 @@ export class MarketOrderbookRecorder {
     }
     this.venueCooldownUntil.set(normalizeVenue(venue), Date.now() + cooldownMs);
   }
+
+  private async waitForIdle(): Promise<void> {
+    for (let attempt = 0; attempt < 100 && this.running; attempt += 1) {
+      await sleep(50);
+    }
+  }
 }
+
+const sleep = async (durationMs: number): Promise<void> => {
+  await new Promise((resolve) => setTimeout(resolve, durationMs));
+};
 
 const buildMarketSamples = (market: MarketCatalogMarket): Array<{ canonicalMarketId: string; outcomeId: string | null }> => {
   const canonicalMarketIds = market.canonicalMarketIds.length > 0 ? market.canonicalMarketIds : [market.canonicalEventId];

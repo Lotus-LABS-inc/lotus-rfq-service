@@ -151,7 +151,7 @@ describe("MarketCatalogSnapshotMaterializer", () => {
       config: { limits: [80], routeCoverages: ["all"], intervalMs: 60_000 }
     });
 
-    materializer.stop();
+    await materializer.stop();
     const result = await materializer.runOnce();
 
     expect(result).toEqual({ attempted: 0, written: 0, skippedEmptyQuoteReady: 0, failed: 0 });

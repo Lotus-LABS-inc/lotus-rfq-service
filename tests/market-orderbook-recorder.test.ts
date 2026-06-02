@@ -174,6 +174,53 @@ describe("MarketOrderbookRecorder", () => {
     expect(inserted).toHaveLength(1);
   });
 
+  it("does not run recording after stop is requested", async () => {
+    const listMarkets = async () => [marketFixture("OPEN")];
+    let listMarketsCalled = false;
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => {
+          listMarketsCalled = true;
+          return listMarkets();
+        }
+      },
+      {
+        getQuoteSnapshotReport: async () => ({
+          snapshots: [],
+          blocked: []
+        })
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        maxSamplesPerTick: 40,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    await recorder.stop();
+    const result = await recorder.runOnce();
+
+    expect(result).toMatchObject({
+      scannedMarkets: 0,
+      sampledOutcomes: 0,
+      insertedSnapshots: 0
+    });
+    expect(listMarketsCalled).toBe(false);
+  });
+
   it("records quote blockers and cools down fully blocked venue samples", async () => {
     const inserted: VenueOrderbookSnapshotInput[] = [];
     const recorder = new MarketOrderbookRecorder(
