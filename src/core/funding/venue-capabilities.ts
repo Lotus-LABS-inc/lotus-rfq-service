@@ -67,10 +67,10 @@ export const buildVenueCapabilityMatrix = (config: VenueCapabilityConfig = {}): 
   const limitlessPreferredChain = envValue(env, "LIMITLESS_FUNDING_PREFERRED_CHAIN") ?? "BASE";
   const limitlessPreferredChainId = Number.parseInt(envValue(env, "LIMITLESS_FUNDING_PREFERRED_CHAIN_ID") ?? "8453", 10);
   const limitlessUsdcAddress = envValue(env, "LIMITLESS_USDC_TOKEN_ADDRESS") ?? "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-  const opinionPreferredChain = envValue(env, "OPINION_FUNDING_PREFERRED_CHAIN") ?? "POLYGON";
-  const opinionPreferredChainId = Number.parseInt(envValue(env, "OPINION_FUNDING_PREFERRED_CHAIN_ID") ?? "137", 10);
+  const opinionPreferredChain = envValue(env, "OPINION_FUNDING_PREFERRED_CHAIN") ?? "BNB";
+  const opinionPreferredChainId = Number.parseInt(envValue(env, "OPINION_FUNDING_PREFERRED_CHAIN_ID") ?? "56", 10);
   const opinionUsdcAddress = envValue(env, "OPINION_USDC_TOKEN_ADDRESS") ?? polygonUsdcAddress;
-  const opinionPreferredToken = envValue(env, "OPINION_FUNDING_PREFERRED_TOKEN") ?? "USDC";
+  const opinionPreferredToken = envValue(env, "OPINION_FUNDING_PREFERRED_TOKEN") ?? "USDT";
   const opinionPreferredChainKey = normalizeChainKey(opinionPreferredChain);
   const opinionPreferredTokenAddress = opinionPreferredToken === "USDT"
     ? envValue(env, "OPINION_USDT_TOKEN_ADDRESS") ?? envValue(env, "OPINION_INTERNAL_WITHDRAWAL_EVIDENCE_USDT_ADDRESS") ?? bscUsdtAddress

@@ -1936,7 +1936,7 @@ describe("execution signed bundle routes", () => {
     });
   });
 
-  it("does not live-mark user-wide positions by default", async () => {
+  it("seeds a bounded live mark for user-wide positions by default", async () => {
     const app = Fastify();
     const positionRepository = {
       listVerifiedPositions: vi.fn(),
@@ -1956,9 +1956,15 @@ describe("execution signed bundle routes", () => {
       }]))
     };
     const liveCandidateProvider = {
-      getCandidates: vi.fn(async () => {
-        throw new Error("unexpected live mark read");
-      })
+      getCandidates: vi.fn(async (input) => ({
+        generatedAt: "2026-05-06T00:00:00.000Z",
+        marketId: input.marketId,
+        outcomeId: input.outcomeId,
+        amount: input.amount,
+        source: "LIVE_QUOTE_SOURCE" as const,
+        candidates: [{ venue: "POLYMARKET", price: 0.5, availableSize: "10" }],
+        blocked: []
+      }))
     };
     await registerExecutionRoutes(app, async (request) => {
       request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
@@ -1972,13 +1978,14 @@ describe("execution signed bundle routes", () => {
     const response = await app.inject({ method: "GET", url: "/execution/positions?limit=25" });
 
     expect(response.statusCode).toBe(200);
-    expect(liveCandidateProvider.getCandidates).not.toHaveBeenCalled();
+    expect(liveCandidateProvider.getCandidates).toHaveBeenCalledTimes(1);
     expect(response.json()).toMatchObject({
       markPolicy: "CACHE_FIRST_DISPLAY_MARKS",
       positions: [{
         positionId: "cached-display-position",
-        markFreshness: "unavailable",
-        markBlocker: "LIVE_MARK_DEFERRED"
+        markFreshness: "live",
+        markPrice: 0.5,
+        markBlocker: null
       }]
     });
   });
@@ -2185,7 +2192,7 @@ describe("execution signed bundle routes", () => {
     });
   });
 
-  it("serves portfolio summary from cached display marks by default without live quote fanout", async () => {
+  it("serves portfolio summary with bounded cached-mode live mark seeding", async () => {
     const app = Fastify();
     const positionRepository = {
       listVerifiedPositions: vi.fn(),
@@ -2205,9 +2212,15 @@ describe("execution signed bundle routes", () => {
       }]))
     };
     const liveCandidateProvider = {
-      getCandidates: vi.fn(async () => {
-        throw new Error("unexpected live mark read");
-      })
+      getCandidates: vi.fn(async (input) => ({
+        generatedAt: "2026-05-06T00:00:00.000Z",
+        marketId: input.marketId,
+        outcomeId: input.outcomeId,
+        amount: input.amount,
+        source: "LIVE_QUOTE_SOURCE" as const,
+        candidates: [{ venue: "POLYMARKET", price: 0.5, availableSize: "10" }],
+        blocked: []
+      }))
     };
     await registerExecutionRoutes(app, async (request) => {
       request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
@@ -2221,17 +2234,17 @@ describe("execution signed bundle routes", () => {
     const response = await app.inject({ method: "GET", url: "/execution/portfolio/summary" });
 
     expect(response.statusCode).toBe(200);
-    expect(liveCandidateProvider.getCandidates).not.toHaveBeenCalled();
+    expect(liveCandidateProvider.getCandidates).toHaveBeenCalledTimes(1);
     expect(response.json()).toMatchObject({
       markPolicy: "CACHE_FIRST_DISPLAY_MARKS",
       positionCount: 1,
-      markedPositionCount: 0,
-      unavailableMarkCount: 1,
+      markedPositionCount: 1,
+      unavailableMarkCount: 0,
       positions: [{
         positionId: "cached-display-position",
-        markPrice: null,
-        markFreshness: "unavailable",
-        markBlocker: "LIVE_MARK_DEFERRED"
+        markPrice: 0.5,
+        markFreshness: "live",
+        markBlocker: null
       }]
     });
   });

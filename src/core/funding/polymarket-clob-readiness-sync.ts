@@ -61,7 +61,7 @@ class PolymarketClobReadinessSyncError extends Error {
 export const buildPolymarketClobReadinessSyncConfigFromEnv = (
   env: NodeJS.ProcessEnv = process.env
 ): PolymarketClobReadinessSyncConfig => ({
-  clobHost: env.POLYMARKET_CLOB_HOST ?? env.POLY_CLOB_HOST,
+  clobHost: env.POLYMARKET_CLOB_HOST ?? env.POLY_CLOB_HOST ?? "https://clob.polymarket.com",
   chainId: env.POLYMARKET_CHAIN_ID ?? env.POLY_CHAIN_ID,
   builderCode: env.POLYMARKET_BUILDER_CODE ?? env.POLY_BUILDER_CODE
 });

@@ -1703,7 +1703,11 @@ export class FundingService {
       return null;
     }
     const capability = buildVenueCapabilityMatrix({ env: this.config.env })[venue];
-    if (capability.readinessStatus !== "READY" || !["BASE", "BSC", "BNB"].includes(normalizeFundingChain(capability.preferredChain))) {
+    if (!["BASE", "BSC", "BNB"].includes(normalizeFundingChain(capability.preferredChain))) {
+      return null;
+    }
+    const account = await this.userVenueAccountReader?.findAccount({ userId, venue });
+    if (account && account.status !== "ACTIVE") {
       return null;
     }
     const wallet = await this.userWalletService.resolveUserTurnkeyEvmFundingWallet(userId);

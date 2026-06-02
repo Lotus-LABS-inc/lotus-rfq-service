@@ -57,6 +57,7 @@ import {
   MockPolymarketBridgeWithdrawalClient,
   PolymarketBridgeWithdrawalAdapter
 } from "../src/core/funding/polymarket-bridge-withdrawal-adapter.js";
+import { buildPolymarketClobReadinessSyncConfigFromEnv } from "../src/core/funding/polymarket-clob-readiness-sync.js";
 import {
   PredictFunWithdrawalAdapter,
   getPredictFunWithdrawalConfigFromEnv
@@ -687,7 +688,8 @@ describe("Funding v0 domain", () => {
     expect(matrix.LIMITLESS).toMatchObject({
       supportedChains: expect.arrayContaining(["SOLANA", "BASE", "8453"])
     });
-    expect(matrix.OPINION.supportedChains).toEqual(expect.arrayContaining(["SOLANA", "BASE", "8453"]));
+    expect(matrix.OPINION.supportedChains).toEqual(expect.arrayContaining(["SOLANA", "BNB", "BSC", "56"]));
+    expect(matrix.OPINION.supportedTokens).toEqual(["USDT"]);
     expect(matrix.MYRIAD.supportedChains).toEqual(expect.arrayContaining(["SOLANA", "BASE", "8453"]));
     expect(matrix.PREDICT_FUN.supportedChains).toEqual(expect.arrayContaining(["SOLANA", "BSC", "BNB", "56"]));
     expect(matrix.OPINION).toMatchObject({
@@ -728,7 +730,7 @@ describe("Funding v0 domain", () => {
       userSignedWithdrawalSupported: false
     });
     expect(buildVenueCapabilityMatrix({ env: withdrawalEnv }).OPINION.withdrawalDestinations).toEqual(expect.arrayContaining([
-      expect.objectContaining({ chain: "SOLANA", token: "USDC", supported: false })
+      expect.objectContaining({ chain: "SOLANA", token: "USDT", supported: false })
     ]));
     expect(buildVenueCapabilityMatrix({
       env: {
@@ -736,7 +738,7 @@ describe("Funding v0 domain", () => {
         OPINION_WITHDRAWAL_BRIDGE_BACK_ENABLED: "true"
       } as NodeJS.ProcessEnv
     }).OPINION.withdrawalDestinations).toEqual(expect.arrayContaining([
-      expect.objectContaining({ chain: "SOLANA", token: "USDC", supported: true })
+      expect.objectContaining({ chain: "SOLANA", token: "USDT", supported: true })
     ]));
     expect(buildVenueCapabilityMatrix({
       env: {
@@ -839,6 +841,14 @@ describe("Funding v0 domain", () => {
     });
     expect(JSON.stringify(service.listVenueCapabilities())).not.toContain(env.POLYMARKET_FUNDING_DESTINATION_ADDRESS);
     expect(JSON.stringify(service.listVenueCapabilities())).not.toContain(env.OPINION_FUNDING_DESTINATION_ADDRESS);
+  });
+
+  it("uses the public Polymarket CLOB host default for activation readiness sync", () => {
+    expect(buildPolymarketClobReadinessSyncConfigFromEnv({} as NodeJS.ProcessEnv).clobHost)
+      .toBe("https://clob.polymarket.com");
+    expect(buildPolymarketClobReadinessSyncConfigFromEnv({
+      POLY_CLOB_HOST: "https://clob.polymarket.test"
+    } as NodeJS.ProcessEnv).clobHost).toBe("https://clob.polymarket.test");
   });
 
   it("creates split-capable intents, quotes route legs, and blocks stale replay", async () => {
@@ -1283,7 +1293,10 @@ describe("Funding v0 domain", () => {
         liveSubmitEnabled: false,
         env: {
           ...env,
-          OPINION_FUNDING_DESTINATION_MODE: "USER_VENUE_DEPOSIT_WALLET"
+          OPINION_FUNDING_DESTINATION_MODE: "USER_VENUE_DEPOSIT_WALLET",
+          OPINION_FUNDING_PREFERRED_CHAIN: "POLYGON",
+          OPINION_FUNDING_PREFERRED_CHAIN_ID: "137",
+          OPINION_FUNDING_PREFERRED_TOKEN: "USDC"
         } as NodeJS.ProcessEnv
       },
       new Map(),
