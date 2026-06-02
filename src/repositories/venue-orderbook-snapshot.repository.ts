@@ -389,18 +389,19 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
                 normalized_venue
            FROM annotated
           WHERE display_ready
+            AND fresh
        ),
        rolled AS (
          SELECT annotated.canonical_market_id,
                 MAX(annotated.received_at) AS last_quote_at,
                 COUNT(DISTINCT annotated.normalized_venue) FILTER (
                   WHERE annotated.display_ready
-                ) AS ready_venue_count,
+                ) AS display_ready_venue_count,
                 COUNT(DISTINCT annotated.normalized_venue) FILTER (
                   WHERE annotated.display_ready AND annotated.fresh
                 ) AS fresh_ready_venue_count,
                 array_agg(DISTINCT annotated.normalized_venue) FILTER (
-                  WHERE annotated.display_ready
+                  WHERE annotated.display_ready AND annotated.fresh
                 ) AS ready_venues,
                 COUNT(DISTINCT annotated.normalized_venue) FILTER (
                   WHERE annotated.quote_blocked
@@ -428,12 +429,12 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
        )
        SELECT canonical_market_id,
               CASE
-                WHEN ready_venue_count > 0 AND fresh_ready_venue_count = ready_venue_count AND blocked_venue_count = 0 THEN 'live'
-                WHEN ready_venue_count > 0 AND fresh_ready_venue_count > 0 THEN 'partial'
-                WHEN ready_venue_count > 0 THEN 'stale'
+                WHEN display_ready_venue_count > 0 AND fresh_ready_venue_count = display_ready_venue_count AND blocked_venue_count = 0 THEN 'live'
+                WHEN fresh_ready_venue_count > 0 THEN 'partial'
+                WHEN display_ready_venue_count > 0 THEN 'stale'
                 ELSE 'unavailable'
               END AS quote_status,
-              ready_venue_count::text AS quote_ready_venue_count,
+              fresh_ready_venue_count::text AS quote_ready_venue_count,
               COALESCE(ready_venues, '{}'::text[]) AS quote_ready_venues,
               COALESCE(quote_blockers, '[]'::jsonb) AS quote_blockers,
               last_quote_at
