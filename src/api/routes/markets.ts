@@ -4,7 +4,11 @@ import type { MarketCatalogMarket, MarketCatalogRepository } from "../../reposit
 import type { MarketQuoteReadinessSnapshot } from "../../repositories/venue-orderbook-snapshot.repository.js";
 import type { MarketCatalogSnapshotCache } from "../../services/market-catalog-snapshot-cache.js";
 import type { LiveMarketDataViewService, MarketBatchQuoteResponse, MarketChartTimeframe } from "../../services/market-data-view.service.js";
-import { formatMarketCatalogListMarkets } from "../../services/market-catalog-snapshot-materializer.js";
+import {
+  formatMarketCatalogListMarkets,
+  marketCatalogDetailAliasKeys,
+  marketCatalogDetailCacheKey
+} from "../../services/market-catalog-snapshot-materializer.js";
 
 const routeCoverageSchema = z.enum(["all", "single", "pair", "tri", "strict_all"]);
 const marketListViewSchema = z.enum(["full", "compact"]);
@@ -72,12 +76,14 @@ const marketQuoteReadinessCache = new Map<string, CachedMarketQuoteReadiness>();
 const marketCatalogResponseCache = new Map<string, { expiresAtMs: number; staleUntilMs: number; value: unknown }>();
 const marketCatalogResponsePending = new Map<string, Promise<unknown>>();
 const marketDetailCache = new Map<string, { expiresAtMs: number; value: MarketCatalogMarket | null }>();
+const marketDetailPending = new Map<string, Promise<MarketCatalogMarket | null>>();
 
 export const clearMarketQuoteReadinessCacheForTests = (): void => {
   marketQuoteReadinessCache.clear();
   marketCatalogResponseCache.clear();
   marketCatalogResponsePending.clear();
   marketDetailCache.clear();
+  marketDetailPending.clear();
 };
 
 export interface MarketCatalogRouteDeps {
@@ -220,7 +226,7 @@ export const registerMarketCatalogRoutes = async (
 
   app.get("/markets/:marketId", async (request, reply) => {
     const { marketId } = request.params as { marketId: string };
-    const market = await resolveCachedCatalogMarket(deps.marketCatalogRepository, marketId);
+    const market = await resolveCachedCatalogMarket(deps.marketCatalogRepository, marketId, deps.marketCatalogSnapshotCache);
     if (!market) {
       return reply.status(404).send({
         code: "MARKET_NOT_FOUND",
@@ -232,7 +238,7 @@ export const registerMarketCatalogRoutes = async (
 
   app.get("/markets/:marketId/outcomes", async (request, reply) => {
     const { marketId } = request.params as { marketId: string };
-    const market = await resolveCachedCatalogMarket(deps.marketCatalogRepository, marketId);
+    const market = await resolveCachedCatalogMarket(deps.marketCatalogRepository, marketId, deps.marketCatalogSnapshotCache);
     if (!market) {
       return reply.status(404).send({
         code: "MARKET_NOT_FOUND",
@@ -303,7 +309,7 @@ export const registerMarketCatalogRoutes = async (
       });
     }
     const { marketId } = request.params as { marketId: string };
-    const marketResult = await resolveCachedCatalogMarketForChart(deps.marketCatalogRepository, marketId);
+    const marketResult = await resolveCachedCatalogMarketForChart(deps.marketCatalogRepository, marketId, deps.marketCatalogSnapshotCache);
     if (marketResult.ok && !marketResult.market) {
       return reply.status(404).send({
         code: "MARKET_NOT_FOUND",
@@ -335,7 +341,7 @@ export const registerMarketCatalogRoutes = async (
       });
     }
     const { marketId } = request.params as { marketId: string };
-    const marketResult = await resolveCachedCatalogMarketForChart(deps.marketCatalogRepository, marketId);
+    const marketResult = await resolveCachedCatalogMarketForChart(deps.marketCatalogRepository, marketId, deps.marketCatalogSnapshotCache);
     if (marketResult.ok && !marketResult.market) {
       return reply.status(404).send({
         code: "MARKET_NOT_FOUND",
@@ -769,24 +775,30 @@ const routeCoverageMatches = (
 
 const resolveCachedCatalogMarket = async (
   repository: Pick<MarketCatalogRepository, "getMarket">,
-  marketId: string
+  marketId: string,
+  sharedCache?: MarketCatalogSnapshotCache | undefined
 ) => {
   const now = Date.now();
   const cached = marketDetailCache.get(marketId);
   if (cached && cached.expiresAtMs >= now) {
     return cached.value;
   }
-  const value = await resolveCatalogMarket(repository, marketId);
-  marketDetailCache.set(marketId, {
-    value,
-    expiresAtMs: now + resolveMarketDetailCacheMs(process.env.MARKET_DETAIL_CACHE_MS)
-  });
-  return value;
+  const pending = marketDetailPending.get(marketId);
+  if (pending) {
+    return await pending;
+  }
+  const promise = resolveCachedCatalogMarketUncoalesced(repository, marketId, sharedCache)
+    .finally(() => {
+      marketDetailPending.delete(marketId);
+    });
+  marketDetailPending.set(marketId, promise);
+  return await promise;
 };
 
 const resolveCachedCatalogMarketForChart = async (
   repository: Pick<MarketCatalogRepository, "getMarket">,
-  marketId: string
+  marketId: string,
+  sharedCache?: MarketCatalogSnapshotCache | undefined
 ): Promise<
   | { ok: true; market: Awaited<ReturnType<MarketCatalogRepository["getMarket"]>> }
   | { ok: false; reason: "timeout" | "error" }
@@ -794,7 +806,7 @@ const resolveCachedCatalogMarketForChart = async (
   let timeout: NodeJS.Timeout | null = null;
   try {
     const value = await Promise.race([
-      resolveCachedCatalogMarket(repository, marketId),
+      resolveCachedCatalogMarket(repository, marketId, sharedCache),
       new Promise<typeof MARKET_DETAIL_TIMEOUT>((resolve) => {
         timeout = setTimeout(() => resolve(MARKET_DETAIL_TIMEOUT), DEFAULT_MARKET_CHART_DETAIL_TIMEOUT_MS);
       })
@@ -811,6 +823,130 @@ const resolveCachedCatalogMarketForChart = async (
     }
   }
 };
+
+interface MarketCatalogDetailSnapshot {
+  market?: MarketCatalogMarket | null | undefined;
+  materialized?: boolean | undefined;
+  materializedAt?: string | undefined;
+}
+
+const resolveCachedCatalogMarketUncoalesced = async (
+  repository: Pick<MarketCatalogRepository, "getMarket">,
+  marketId: string,
+  sharedCache?: MarketCatalogSnapshotCache | undefined
+): Promise<MarketCatalogMarket | null> => {
+  const cacheTtlMs = resolveMarketDetailCacheMs(process.env.MARKET_DETAIL_CACHE_MS);
+  const shared = await readSharedMarketDetailSnapshot(sharedCache, marketId);
+  if (shared !== undefined) {
+    cacheMarketDetailLocally(marketId, shared, cacheTtlMs);
+    return shared;
+  }
+  const value = await resolveCatalogMarket(repository, marketId);
+  cacheMarketDetailLocally(marketId, value, cacheTtlMs);
+  if (value && sharedCache) {
+    void writeSharedMarketDetailSnapshots(sharedCache, value, cacheTtlMs).catch(() => undefined);
+  }
+  return value;
+};
+
+const readSharedMarketDetailSnapshot = async (
+  sharedCache: MarketCatalogSnapshotCache | undefined,
+  marketId: string
+): Promise<MarketCatalogMarket | null | undefined> => {
+  if (!sharedCache) {
+    return undefined;
+  }
+  try {
+    for (const key of marketDetailCandidateCacheKeys(marketId)) {
+      const cached = await sharedCache.get<MarketCatalogDetailSnapshot | MarketCatalogMarket>(key);
+      if (!cached) {
+        continue;
+      }
+      const market = isMarketCatalogDetailSnapshot(cached) ? cached.market : cached;
+      if (market === null || isMarketCatalogMarketLike(market)) {
+        return market;
+      }
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+};
+
+const writeSharedMarketDetailSnapshots = async (
+  sharedCache: MarketCatalogSnapshotCache,
+  market: MarketCatalogMarket,
+  ttlMs: number
+): Promise<void> => {
+  const payload: MarketCatalogDetailSnapshot = {
+    market,
+    materialized: true,
+    materializedAt: new Date().toISOString()
+  };
+  for (const key of marketCatalogDetailAliasKeys(market)) {
+    await sharedCache.set(key, payload, ttlMs);
+  }
+};
+
+const cacheMarketDetailLocally = (
+  marketId: string,
+  value: MarketCatalogMarket | null,
+  ttlMs: number
+): void => {
+  marketDetailCache.set(marketId, {
+    value,
+    expiresAtMs: Date.now() + ttlMs
+  });
+  if (value) {
+    for (const key of marketDetailLocalAliasIds(value)) {
+      marketDetailCache.set(key, {
+        value,
+        expiresAtMs: Date.now() + ttlMs
+      });
+    }
+  }
+};
+
+const marketDetailCandidateCacheKeys = (marketId: string): string[] =>
+  marketDetailCandidateIds(marketId).map(marketCatalogDetailCacheKey);
+
+const marketDetailCandidateIds = (marketId: string): string[] => {
+  const aliases = new Set<string>();
+  const add = (value: string): void => {
+    const trimmed = value.trim();
+    if (trimmed) aliases.add(trimmed);
+  };
+  add(marketId);
+  const decoded = safeDecodeURIComponent(marketId);
+  add(decoded);
+  for (const value of [marketId, decoded]) {
+    const withoutVenueSuffix = value.replace(VENUE_SUFFIX_PATTERN, "");
+    add(withoutVenueSuffix);
+  }
+  return [...aliases];
+};
+
+const marketDetailLocalAliasIds = (market: MarketCatalogMarket): string[] =>
+  marketCatalogDetailAliasKeys(market).map((key) => key.replace(/^market-detail:/, ""));
+
+const safeDecodeURIComponent = (value: string): string => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
+const isMarketCatalogDetailSnapshot = (
+  value: MarketCatalogDetailSnapshot | MarketCatalogMarket
+): value is MarketCatalogDetailSnapshot =>
+  Object.prototype.hasOwnProperty.call(value, "market");
+
+const isMarketCatalogMarketLike = (value: unknown): value is MarketCatalogMarket =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as { canonicalEventId?: unknown }).canonicalEventId === "string" &&
+  Array.isArray((value as { canonicalMarketIds?: unknown }).canonicalMarketIds);
 
 const resolveMarketDetailCacheMs = (value: string | undefined): number => {
   if (value === undefined || value.trim().length === 0) {

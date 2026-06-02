@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { MarketCatalogMarket, MarketCatalogRepository } from "../src/repositories/market-catalog.repository.js";
 import type { MarketCatalogSnapshotCache } from "../src/services/market-catalog-snapshot-cache.js";
 import {
+  marketCatalogDetailCacheKey,
   MarketCatalogSnapshotMaterializer,
   stableQueryCacheKey
 } from "../src/services/market-catalog-snapshot-materializer.js";
@@ -96,6 +97,14 @@ describe("MarketCatalogSnapshotMaterializer", () => {
       markets: [{ quoteReadyVenueCount: 2, quoteReadyVenues: ["LIMITLESS", "POLYMARKET"] }]
     });
     expect(JSON.stringify(snapshotCache.values.get(compactAllMarketKey))).not.toContain("venueMarkets");
+    expect(snapshotCache.values.get(marketCatalogDetailCacheKey("market-1"))).toMatchObject({
+      materialized: true,
+      market: { canonicalMarketIds: ["market-1"], quoteReadyVenueCount: 2 }
+    });
+    expect(snapshotCache.values.get(marketCatalogDetailCacheKey("market-1:POLYMARKET"))).toMatchObject({
+      materialized: true,
+      market: { canonicalMarketIds: ["market-1"], quoteReadyVenueCount: 2 }
+    });
     const key = `markets:${stableQueryCacheKey({ limit: 80, quoteReadyOnly: true, routeCoverage: "pair" })}`;
     expect(snapshotCache.values.get(key)).toMatchObject({
       count: 1,

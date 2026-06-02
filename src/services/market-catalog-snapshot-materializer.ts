@@ -107,6 +107,7 @@ export class MarketCatalogSnapshotMaterializer {
       failed: 0
     };
     try {
+      const detailKeysWritten = new Set<string>();
       for (const limit of this.config.limits) {
         for (const category of [undefined, ...this.config.categories] as const) {
           const baseQueries = [
@@ -125,7 +126,7 @@ export class MarketCatalogSnapshotMaterializer {
             }
             result.attempted += 1;
             try {
-              const written = await this.materializeMarketQuery(query);
+              const written = await this.materializeMarketQuery(query, detailKeysWritten);
               if (typeof written === "number") result.written += written;
               if (written === "skipped_empty_quote_ready") result.skippedEmptyQuoteReady += 1;
               if (written === "skipped_underfilled_quote_ready") result.skippedUnderfilledQuoteReady += 1;
@@ -143,7 +144,10 @@ export class MarketCatalogSnapshotMaterializer {
     }
   }
 
-  private async materializeMarketQuery(query: MarketCatalogMaterializedQuery): Promise<number | "skipped_empty_quote_ready" | "skipped_underfilled_quote_ready"> {
+  private async materializeMarketQuery(
+    query: MarketCatalogMaterializedQuery,
+    detailKeysWritten: Set<string>
+  ): Promise<number | "skipped_empty_quote_ready" | "skipped_underfilled_quote_ready"> {
     const markets = await this.deps.marketCatalogRepository.listMarkets({
       limit: resolveFetchLimit(query.limit, query),
       ...(query.category ? { category: query.category } : {})
@@ -180,7 +184,28 @@ export class MarketCatalogSnapshotMaterializer {
       materializedAt: new Date().toISOString(),
       view: "compact"
     }, this.config.cacheTtlMs);
+    await this.materializeMarketDetailSnapshots(visibleMarkets, detailKeysWritten);
     return 2;
+  }
+
+  private async materializeMarketDetailSnapshots(
+    markets: readonly MarketCatalogMarket[],
+    detailKeysWritten: Set<string>
+  ): Promise<void> {
+    for (const market of markets) {
+      const payload = {
+        market,
+        materialized: true,
+        materializedAt: new Date().toISOString()
+      };
+      for (const key of marketCatalogDetailAliasKeys(market)) {
+        if (detailKeysWritten.has(key)) {
+          continue;
+        }
+        detailKeysWritten.add(key);
+        await this.deps.snapshotCache.set(key, payload, this.config.cacheTtlMs);
+      }
+    }
   }
 
   private async wouldUnderfillExistingSnapshot(
@@ -296,6 +321,37 @@ export interface CompactMarketCatalogMarket {
   lastQuoteAt?: string | null | undefined;
   updatedAt: string;
 }
+
+export const marketCatalogDetailCacheKey = (marketId: string): string =>
+  `market-detail:${marketId}`;
+
+export const marketCatalogDetailAliasKeys = (market: MarketCatalogMarket): string[] => {
+  const aliases = new Set<string>();
+  const addAlias = (value: string | null | undefined): void => {
+    const trimmed = value?.trim();
+    if (trimmed) {
+      aliases.add(marketCatalogDetailCacheKey(trimmed));
+    }
+  };
+  addAlias(market.canonicalEventId);
+  addAlias(market.eventId);
+  for (const canonicalMarketId of market.canonicalMarketIds) {
+    addAlias(canonicalMarketId);
+    for (const venue of market.venues) {
+      addAlias(`${canonicalMarketId}:${venue}`);
+    }
+    if (!canonicalMarketId.toUpperCase().startsWith("FRONTEND_CURATED:")) {
+      for (const venue of market.venues) {
+        addAlias(`FRONTEND_CURATED:${canonicalMarketId}:${venue}`);
+      }
+    }
+  }
+  for (const venueMarket of market.venueMarkets) {
+    addAlias(venueMarket.venueMarketId);
+    addAlias(venueMarket.venueMarketProfileId);
+  }
+  return [...aliases];
+};
 
 export const formatMarketCatalogListMarkets = (
   markets: readonly MarketCatalogMarket[],
