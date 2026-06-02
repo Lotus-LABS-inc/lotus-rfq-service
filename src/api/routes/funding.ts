@@ -91,12 +91,30 @@ export interface FundingRouteOptions {
   intentCreateRateLimiter?: RateLimiter | undefined;
 }
 
+const FUNDING_DISPLAY_CACHE_MS = 10_000;
+const FUNDING_DISPLAY_STALE_MS = 90_000;
+
+type FundingDisplayCacheEntry<T> = {
+  expiresAt: number;
+  staleUntil: number;
+  value?: T | undefined;
+  promise?: Promise<T> | undefined;
+};
+
+const venueBalanceDisplayCache = new Map<string, FundingDisplayCacheEntry<VenueBalanceView[]>>();
+const venueActivationDisplayCache = new Map<string, FundingDisplayCacheEntry<VenueBalanceActivationAction[]>>();
+
 export const registerFundingRoutes = async (
   app: FastifyInstance,
   authMiddleware: preHandlerHookHandler,
   handlers: FundingRouteHandlers,
   options: FundingRouteOptions = {}
 ): Promise<void> => {
+  app.addHook("onClose", async () => {
+    venueBalanceDisplayCache.clear();
+    venueActivationDisplayCache.clear();
+  });
+
   app.post("/funding/intents", { preHandler: authMiddleware }, async (request, reply) => {
     const parsed = CreateFundingIntentSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -216,13 +234,31 @@ export const registerFundingRoutes = async (
   });
 
   app.get("/funding/venue-balances", { preHandler: authMiddleware }, async (request, reply) => {
-    const balances = await handlers.listVenueBalances(request.user.userId);
-    return reply.status(200).send({ balances });
+    const cacheKey = `venue-balances:${request.user.userId}`;
+    const result = await getCachedFundingDisplayData(
+      venueBalanceDisplayCache,
+      cacheKey,
+      () => handlers.listVenueBalances(request.user.userId)
+    );
+    return reply.status(200).send({
+      balances: result.value,
+      cache: result.cache,
+      generatedAt: result.generatedAt
+    });
   });
 
   app.get("/funding/venue-activations", { preHandler: authMiddleware }, async (request, reply) => {
-    const activations = await handlers.listVenueActivations(request.user.userId);
-    return reply.status(200).send({ activations });
+    const cacheKey = `venue-activations:${request.user.userId}`;
+    const result = await getCachedFundingDisplayData(
+      venueActivationDisplayCache,
+      cacheKey,
+      () => handlers.listVenueActivations(request.user.userId)
+    );
+    return reply.status(200).send({
+      activations: result.value,
+      cache: result.cache,
+      generatedAt: result.generatedAt
+    });
   });
 
   app.post("/funding/venue-activations/polymarket/prepare", { preHandler: authMiddleware }, async (request, reply) => {
@@ -566,6 +602,80 @@ const handleFundingError = (error: unknown, reply: FastifyReply) => {
     });
   }
   throw error;
+};
+
+const getCachedFundingDisplayData = async <T>(
+  cache: Map<string, FundingDisplayCacheEntry<T>>,
+  key: string,
+  load: () => Promise<T>,
+  now = Date.now()
+): Promise<{ value: T; cache: "hit" | "miss" | "stale"; generatedAt: string }> => {
+  const cached = cache.get(key);
+  if (cached?.value !== undefined && cached.expiresAt > now) {
+    return { value: cached.value, cache: "hit", generatedAt: new Date(now).toISOString() };
+  }
+  if (cached?.promise) {
+    const value = await cached.promise;
+    return { value, cache: "hit", generatedAt: new Date().toISOString() };
+  }
+
+  const promise = load()
+    .then((value) => {
+      const updatedAt = Date.now();
+      cache.set(key, {
+        value,
+        expiresAt: updatedAt + FUNDING_DISPLAY_CACHE_MS,
+        staleUntil: updatedAt + FUNDING_DISPLAY_STALE_MS
+      });
+      return value;
+    })
+    .catch((error) => {
+      const fallback = cache.get(key);
+      if (fallback?.value !== undefined && fallback.staleUntil > Date.now()) {
+        cache.set(key, {
+          ...fallback,
+          promise: undefined
+        });
+        return fallback.value;
+      }
+      cache.delete(key);
+      throw error;
+    })
+    .finally(() => {
+      const current = cache.get(key);
+      if (current?.promise === promise) {
+        cache.set(key, {
+          ...current,
+          promise: undefined
+        });
+      }
+    });
+
+  cache.set(key, {
+    ...(cached?.value !== undefined ? { value: cached.value } : {}),
+    expiresAt: cached?.expiresAt ?? 0,
+    staleUntil: cached?.staleUntil ?? 0,
+    promise
+  });
+
+  try {
+    const value = await promise;
+    const current = cache.get(key);
+    const servedStale = cached?.value !== undefined && current?.value === cached.value && current.expiresAt <= now && current.staleUntil > now;
+    return {
+      value,
+      cache: servedStale ? "stale" : "miss",
+      generatedAt: new Date().toISOString()
+    };
+  } catch (error) {
+    const fallback = cached?.value !== undefined && cached.staleUntil > Date.now()
+      ? cached.value
+      : undefined;
+    if (fallback !== undefined) {
+      return { value: fallback, cache: "stale", generatedAt: new Date().toISOString() };
+    }
+    throw error;
+  }
 };
 
 const consumeIntentCreateRateLimit = async (

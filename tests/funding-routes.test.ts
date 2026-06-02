@@ -1,9 +1,9 @@
 import Fastify from "fastify";
 import fastifyJwt from "@fastify/jwt";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { registerFundingRoutes } from "../src/api/routes/funding.js";
-import type { FundingIntentView, WithdrawalIntentView } from "../src/core/funding/types.js";
+import { registerFundingRoutes, type FundingRouteHandlers } from "../src/api/routes/funding.js";
+import type { FundingIntentView, VenueBalanceView, WithdrawalIntentView } from "../src/core/funding/types.js";
 import type { RateLimiter, RateLimitInput, RateLimitResult } from "../src/api/rate-limiter.js";
 
 const view = (userId = "user-1"): FundingIntentView => ({
@@ -63,7 +63,15 @@ class FakeRateLimiter implements RateLimiter {
   }
 }
 
-const buildApp = async (options: { rateLimiter?: RateLimiter } = {}) => {
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+const buildApp = async (options: {
+  rateLimiter?: RateLimiter;
+  listVenueBalances?: FundingRouteHandlers["listVenueBalances"];
+  listVenueActivations?: FundingRouteHandlers["listVenueActivations"];
+} = {}) => {
   const app = Fastify({ logger: false });
   await app.register(fastifyJwt, { secret: "test-secret" });
   const auth = async (request: any, reply: any) => {
@@ -94,15 +102,15 @@ const buildApp = async (options: { rateLimiter?: RateLimiter } = {}) => {
       depositAddressConfigured: true,
       notes: "safe"
     }]),
-    listVenueBalances: async () => ([{
+    listVenueBalances: options.listVenueBalances ?? (async () => ([{
       venue: "POLYMARKET",
       token: "USDC",
       readyAmount: "100",
       pendingWithdrawalAmount: "0",
       availableAmount: "100",
       updatedAt: "2026-04-25T00:00:00.000Z"
-    }]),
-    listVenueActivations: async () => ([{
+    }])),
+    listVenueActivations: options.listVenueActivations ?? (async () => ([{
       venue: "POLYMARKET",
       activationRequired: true,
       mode: "VENUE_UI_OR_RELAYER",
@@ -132,7 +140,7 @@ const buildApp = async (options: { rateLimiter?: RateLimiter } = {}) => {
       transactionRequest: null,
       instructions: ["Predict.fun does not require a separate balance activation step."],
       blockers: []
-    }]),
+    }])),
     preparePolymarketActivation: async () => ({
       ownerAddress: "0x2222222222222222222222222222222222222222",
       depositWalletAddress: "0x1111111111111111111111111111111111111111",
@@ -593,6 +601,80 @@ describe("Funding routes", () => {
     expect(withdrawalReceipt.body).not.toContain("privateKey");
     expect(created.body).not.toContain("secret");
     expect(created.body).not.toContain("transactionRequest");
+    await app.close();
+  });
+
+  it("coalesces concurrent venue balance refreshes for the same user", async () => {
+    let calls = 0;
+    let resolveBalances!: (value: VenueBalanceView[]) => void;
+    const pendingBalances = new Promise<VenueBalanceView[]>((resolve) => {
+      resolveBalances = resolve;
+    });
+    const app = await buildApp({
+      listVenueBalances: async () => {
+        calls += 1;
+        return pendingBalances;
+      }
+    });
+    const token = app.jwt.sign({ userId: "funding-cache-user", role: "USER" });
+    const headers = { authorization: `Bearer ${token}` };
+
+    const first = app.inject({ method: "GET", url: "/funding/venue-balances", headers });
+    const second = app.inject({ method: "GET", url: "/funding/venue-balances", headers });
+    resolveBalances([{
+      venue: "POLYMARKET",
+      token: "USDC",
+      readyAmount: "100",
+      pendingWithdrawalAmount: "0",
+      availableAmount: "100",
+      updatedAt: "2026-04-25T00:00:00.000Z"
+    }]);
+
+    const responses = await Promise.all([first, second]);
+    expect(calls).toBe(1);
+    expect(responses.map((response) => response.statusCode)).toEqual([200, 200]);
+    expect(responses[0].json()).toMatchObject({ balances: [{ venue: "POLYMARKET", availableAmount: "100" }] });
+    expect(responses[1].json()).toMatchObject({ balances: [{ venue: "POLYMARKET", availableAmount: "100" }] });
+    await app.close();
+  });
+
+  it("serves last-good venue balances when a transient refresh fails", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-25T00:00:00.000Z"));
+    let fail = false;
+    const app = await buildApp({
+      listVenueBalances: async () => {
+        if (fail) {
+          throw new Error("database pool timeout");
+        }
+        return [{
+          venue: "POLYMARKET",
+          token: "USDC",
+          readyAmount: "100",
+          pendingWithdrawalAmount: "0",
+          availableAmount: "100",
+          updatedAt: "2026-04-25T00:00:00.000Z"
+        }];
+      }
+    });
+    const token = app.jwt.sign({ userId: "funding-stale-user", role: "USER" });
+    const headers = { authorization: `Bearer ${token}` };
+
+    const fresh = await app.inject({ method: "GET", url: "/funding/venue-balances", headers });
+    expect(fresh.statusCode).toBe(200);
+    expect(fresh.json()).toMatchObject({
+      balances: [{ venue: "POLYMARKET", availableAmount: "100" }],
+      cache: "miss"
+    });
+
+    fail = true;
+    vi.setSystemTime(new Date("2026-04-25T00:00:11.000Z"));
+    const stale = await app.inject({ method: "GET", url: "/funding/venue-balances", headers });
+    expect(stale.statusCode).toBe(200);
+    expect(stale.json()).toMatchObject({
+      balances: [{ venue: "POLYMARKET", availableAmount: "100" }],
+      cache: "stale"
+    });
     await app.close();
   });
 });
