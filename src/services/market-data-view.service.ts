@@ -152,6 +152,8 @@ interface StoredChartPoint {
 
 const MAX_STORED_POINTS = 20_000;
 const MAX_HISTORY_MS = 31 * 24 * 60 * 60 * 1000;
+const ORDERBOOK_CACHE_MS = 3_000;
+const ORDERBOOK_LIVE_TIMEOUT_MS = 900;
 const BATCH_QUOTE_CACHE_MS = 3_000;
 const BATCH_QUOTE_LIVE_TIMEOUT_MS = 700;
 const CHART_CACHE_MS = 10_000;
@@ -161,21 +163,26 @@ const VENUE_COLORS = ["#3B82F6", "#10B981", "#8B5CF6", "#F59E0B", "#EC4899", "#2
 
 export class LiveMarketDataViewService {
   private readonly chartPoints: StoredChartPoint[] = [];
+  private readonly orderbookCache = new Map<string, { expiresAt: number; response?: MarketOrderbookResponse; promise?: Promise<MarketOrderbookResponse> }>();
+  private readonly lastGoodOrderbooks = new Map<string, MarketOrderbookResponse>();
   private readonly batchQuoteCache = new Map<string, { expiresAt: number; item?: MarketBatchQuoteItem; promise?: Promise<MarketBatchQuoteItem> }>();
   private readonly chartCache = new Map<string, { expiresAt: number; response: MarketChartResponse }>();
   private readonly lastGoodBatchQuotes = new Map<string, MarketBatchQuoteItem>();
   private readonly now: () => Date;
+  private readonly orderbookLiveTimeoutMs: number;
   private readonly batchQuoteLiveTimeoutMs: number;
 
   public constructor(
     private readonly quoteSource: MarketDataQuoteSource,
     options: {
       now?: () => Date;
+      orderbookLiveTimeoutMs?: number | undefined;
       batchQuoteLiveTimeoutMs?: number | undefined;
       historicalChartSource?: MarketHistoricalChartSource | undefined;
     } = {}
   ) {
     this.now = options.now ?? (() => new Date());
+    this.orderbookLiveTimeoutMs = Math.max(50, Math.min(options.orderbookLiveTimeoutMs ?? ORDERBOOK_LIVE_TIMEOUT_MS, 5_000));
     this.batchQuoteLiveTimeoutMs = Math.max(50, Math.min(options.batchQuoteLiveTimeoutMs ?? BATCH_QUOTE_LIVE_TIMEOUT_MS, 5_000));
     this.historicalChartSource = options.historicalChartSource;
   }
@@ -190,6 +197,67 @@ export class LiveMarketDataViewService {
   }): Promise<MarketOrderbookResponse> {
     const generatedAt = this.now();
     const depth = clampDepth(input.depth);
+    const key = orderbookCacheKey(input.marketId, input.outcomeId ?? null, input.venue ?? null, depth);
+    const cached = this.orderbookCache.get(key);
+    if (cached && cached.expiresAt > generatedAt.getTime()) {
+      if (cached.response) {
+        return {
+          ...cached.response,
+          generatedAt: generatedAt.toISOString()
+        };
+      }
+      if (cached.promise) {
+        return cached.promise;
+      }
+    }
+
+    const livePromise = this.loadOrderbook(input, generatedAt, depth)
+      .catch((error) => unavailableOrderbook({
+        input,
+        generatedAt,
+        depth,
+        reason: error instanceof Error && error.message ? "LIVE_ORDERBOOK_UNAVAILABLE" : "MARKET_ORDERBOOK_UNAVAILABLE"
+      }));
+    const promise = withTimeout(
+      livePromise,
+      this.orderbookLiveTimeoutMs,
+      unavailableOrderbook({
+        input,
+        generatedAt,
+        depth,
+        reason: "MARKET_ORDERBOOK_TIMEOUT"
+      })
+    );
+    void livePromise
+      .then((orderbook) => {
+        const output = isDisplayUsableOrderbook(orderbook)
+          ? orderbook
+          : this.staleOrderbookFromLastGood(key, orderbook, this.now()) ?? orderbook;
+        if (isDisplayUsableOrderbook(output)) {
+          this.lastGoodOrderbooks.set(key, output);
+        }
+        this.orderbookCache.set(key, { expiresAt: this.now().getTime() + ORDERBOOK_CACHE_MS, response: output });
+      })
+      .catch(() => undefined);
+    this.orderbookCache.set(key, { expiresAt: generatedAt.getTime() + ORDERBOOK_CACHE_MS, promise });
+
+    const orderbook = await promise;
+    const output = isDisplayUsableOrderbook(orderbook)
+      ? orderbook
+      : this.staleOrderbookFromLastGood(key, orderbook, generatedAt) ?? orderbook;
+    if (isDisplayUsableOrderbook(output)) {
+      this.lastGoodOrderbooks.set(key, output);
+    }
+    this.orderbookCache.set(key, { expiresAt: generatedAt.getTime() + ORDERBOOK_CACHE_MS, response: output });
+    return output;
+  }
+
+  private async loadOrderbook(input: {
+    marketId: string;
+    outcomeId?: string | undefined;
+    depth?: number | undefined;
+    venue?: string | undefined;
+  }, generatedAt: Date, depth: number): Promise<MarketOrderbookResponse> {
     const report = await this.quoteSource.getQuoteSnapshotReport({
       canonicalMarketId: input.marketId,
       ...(input.outcomeId ? { canonicalOutcomeId: input.outcomeId } : {}),
@@ -234,6 +302,24 @@ export class LiveMarketDataViewService {
       spread,
       status,
       blockers: [...blockers]
+    };
+  }
+
+  private staleOrderbookFromLastGood(key: string, current: MarketOrderbookResponse, generatedAt: Date): MarketOrderbookResponse | null {
+    const lastGood = this.lastGoodOrderbooks.get(key);
+    if (!lastGood) return null;
+    return {
+      ...lastGood,
+      generatedAt: generatedAt.toISOString(),
+      status: lastGood.status === "live" ? "stale" : lastGood.status,
+      blockers: [
+        ...current.blockers,
+        {
+          venue: "LOTUS",
+          reason: "LAST_GOOD_ORDERBOOK_USED",
+          detailsCode: lastGood.generatedAt
+        }
+      ]
     };
   }
 
@@ -583,6 +669,45 @@ const unavailableChartOrderbook = (
   status: "unavailable",
   blockers: [{ venue: "LOTUS", reason }]
 });
+
+const unavailableOrderbook = (input: {
+  input: {
+    marketId: string;
+    outcomeId?: string | undefined;
+    venue?: string | undefined;
+  };
+  generatedAt: Date;
+  depth: number;
+  reason: string;
+}): MarketOrderbookResponse => ({
+  marketId: input.input.marketId,
+  outcomeId: input.input.outcomeId ?? null,
+  generatedAt: input.generatedAt.toISOString(),
+  depth: input.depth,
+  venues: [],
+  bids: [],
+  asks: [],
+  bestBid: null,
+  bestAsk: null,
+  midpoint: null,
+  spread: null,
+  status: "unavailable",
+  blockers: [{
+    venue: input.input.venue?.trim().toUpperCase() || "LOTUS",
+    reason: input.reason
+  }]
+});
+
+const orderbookCacheKey = (
+  marketId: string,
+  outcomeId: string | null,
+  venue: string | null,
+  depth: number
+): string => `${marketId}\u0000${outcomeId ?? ""}\u0000${venue?.trim().toUpperCase() ?? ""}\u0000${depth}`;
+
+const isDisplayUsableOrderbook = (orderbook: MarketOrderbookResponse): boolean =>
+  orderbook.venues.length > 0 &&
+  (orderbook.status === "live" || orderbook.status === "partial" || orderbook.status === "stale");
 
 const chartCacheKey = (input: {
   marketId: string;

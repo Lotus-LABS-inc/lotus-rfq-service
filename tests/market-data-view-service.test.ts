@@ -63,6 +63,86 @@ describe("LiveMarketDataViewService", () => {
     expect(orderbook.venues[0]?.snapshotStatus).toBe("stale");
   });
 
+  it("bounds slow orderbook reads so terminal loads do not wait on venue fanout", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    const service = new LiveMarketDataViewService(
+      {
+        getQuoteSnapshotReport: async () => await new Promise(() => undefined)
+      },
+      {
+        now: () => now,
+        orderbookLiveTimeoutMs: 10
+      }
+    );
+
+    const started = Date.now();
+    const orderbook = await service.getOrderbook({
+      marketId: "market-slow",
+      outcomeId: "YES"
+    });
+    const elapsedMs = Date.now() - started;
+
+    expect(elapsedMs).toBeLessThan(300);
+    expect(orderbook.status).toBe("unavailable");
+    expect(orderbook.blockers[0]).toMatchObject({
+      venue: "LOTUS",
+      reason: "MARKET_ORDERBOOK_TIMEOUT"
+    });
+  });
+
+  it("serves last-good orderbook display data when a later live refresh times out", async () => {
+    let now = new Date("2026-05-10T12:00:00.000Z");
+    let calls = 0;
+    const service = new LiveMarketDataViewService(
+      {
+        getQuoteSnapshotReport: async () => {
+          calls += 1;
+          if (calls > 1) {
+            return await new Promise(() => undefined);
+          }
+          return {
+            snapshots: [{
+              venue: "POLYMARKET",
+              venueMarketId: "poly-1",
+              venueOutcomeId: "yes",
+              source: "REST",
+              quoteQuality: "FULL_DEPTH_REST",
+              sourceTimestamp: now,
+              receivedAt: now,
+              bids: [{ price: "0.50", size: "100" }],
+              asks: [{ price: "0.53", size: "100" }],
+              blockers: [],
+              missingFactors: []
+            }],
+            blocked: []
+          };
+        }
+      },
+      {
+        now: () => now,
+        orderbookLiveTimeoutMs: 10
+      }
+    );
+
+    const first = await service.getOrderbook({
+      marketId: "market-1",
+      outcomeId: "YES"
+    });
+    now = new Date(now.getTime() + 4_000);
+    const second = await service.getOrderbook({
+      marketId: "market-1",
+      outcomeId: "YES"
+    });
+
+    expect(first.status).toBe("stale");
+    expect(first.bestAsk).toBe("0.53");
+    expect(second.status).toBe("stale");
+    expect(second.bestAsk).toBe("0.53");
+    expect(second.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ venue: "LOTUS", reason: "LAST_GOOD_ORDERBOOK_USED" })
+    ]));
+  });
+
   it("merges historical chart movement with the live point and inverts binary No history", async () => {
     const now = new Date("2026-05-10T12:00:00.000Z");
     const service = new LiveMarketDataViewService(
