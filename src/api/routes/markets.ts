@@ -1,7 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { MarketCatalogMarket, MarketCatalogRepository } from "../../repositories/market-catalog.repository.js";
-import type { MarketQuoteReadinessSnapshot } from "../../repositories/venue-orderbook-snapshot.repository.js";
+import {
+  DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS,
+  type MarketQuoteReadinessSnapshot
+} from "../../repositories/venue-orderbook-snapshot.repository.js";
 import type { MarketCatalogSnapshotCache } from "../../services/market-catalog-snapshot-cache.js";
 import type { LiveMarketDataViewService, MarketBatchQuoteResponse, MarketChartTimeframe } from "../../services/market-data-view.service.js";
 import {
@@ -57,7 +60,7 @@ const batchQuotesRequestSchema = z.object({
 
 const VENUE_SUFFIX_PATTERN = /:(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$/i;
 const DEFAULT_MARKET_QUOTE_READINESS_TIMEOUT_MS = 5_000;
-const DEFAULT_MARKET_QUOTE_READINESS_STALE_CACHE_MS = 600_000;
+const DEFAULT_MARKET_QUOTE_READINESS_STALE_CACHE_MS = DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS;
 const DEFAULT_MARKET_LIST_OVERFETCH_MULTIPLIER = 4;
 const DEFAULT_MARKET_LIST_OVERFETCH_CAP = 1_000;
 const DEFAULT_MARKET_CATALOG_RESPONSE_CACHE_MS = 300_000;
@@ -580,13 +583,26 @@ const isTradableMarketListItem = (value: unknown): boolean => {
   if (typeof value !== "object" || value === null) {
     return false;
   }
-  const record = value as { quoteStatus?: unknown; quoteReadyVenueCount?: unknown };
+  const record = value as { quoteStatus?: unknown; quoteReadyVenueCount?: unknown; lastQuoteAt?: unknown };
   const quoteReadyVenueCount = typeof record.quoteReadyVenueCount === "number"
     ? record.quoteReadyVenueCount
     : typeof record.quoteReadyVenueCount === "string"
       ? Number(record.quoteReadyVenueCount)
       : 0;
-  return quoteReadyVenueCount > 0 && (record.quoteStatus === "live" || record.quoteStatus === "partial");
+  return quoteReadyVenueCount > 0
+    && (record.quoteStatus === "live" || record.quoteStatus === "partial")
+    && hasRecentQuoteTimestamp(record.lastQuoteAt);
+};
+
+const hasRecentQuoteTimestamp = (value: unknown): boolean => {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return false;
+  }
+  const timestampMs = Date.parse(value);
+  if (!Number.isFinite(timestampMs)) {
+    return false;
+  }
+  return Date.now() - timestampMs <= DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS;
 };
 
 const cacheMarketCatalogResponse = <T>(
@@ -762,18 +778,24 @@ const aggregateMarketQuoteReadiness = (
 const pickMarketQuoteStatus = (
   readiness: readonly MarketQuoteReadinessSnapshot[]
 ): MarketCatalogMarket["quoteStatus"] => {
+  const tradableStatuses = new Set(readiness
+    .filter(isTradableReadinessSnapshot)
+    .map((item) => item.quoteStatus));
+  if (tradableStatuses.has("live")) return "live";
+  if (tradableStatuses.has("partial")) return "partial";
   const statuses = new Set(readiness.map((item) => item.quoteStatus));
-  if (statuses.has("live")) return "live";
-  if (statuses.has("partial")) return "partial";
-  if (statuses.has("stale")) return "stale";
+  if (statuses.has("live") || statuses.has("partial") || statuses.has("stale")) return "stale";
   return "unavailable";
 };
 
 const isTradableReadinessSnapshot = (snapshot: MarketQuoteReadinessSnapshot): boolean =>
-  snapshot.quoteStatus === "live" || snapshot.quoteStatus === "partial";
+  (snapshot.quoteStatus === "live" || snapshot.quoteStatus === "partial")
+  && hasRecentQuoteTimestamp(snapshot.lastQuoteAt);
 
 const isQuoteReadyMarket = (market: MarketCatalogMarket): boolean =>
-  (market.quoteReadyVenueCount ?? 0) > 0 && (market.quoteStatus === "live" || market.quoteStatus === "partial");
+  (market.quoteReadyVenueCount ?? 0) > 0
+  && (market.quoteStatus === "live" || market.quoteStatus === "partial")
+  && hasRecentQuoteTimestamp(market.lastQuoteAt);
 
 const shouldOverfetchMarkets = (query: z.infer<typeof listQuerySchema>): boolean =>
   query.quoteReadyOnly === true || (query.routeCoverage !== undefined && query.routeCoverage !== "all");

@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { clearMarketQuoteReadinessCacheForTests, registerMarketCatalogRoutes } from "../src/api/routes/markets.js";
 import type {
@@ -159,7 +159,13 @@ class FakeMarketCatalogSnapshotCache implements MarketCatalogSnapshotCache {
 }
 
 describe("market catalog routes", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-05-21T23:41:16.000Z"));
+  });
+
   afterEach(() => {
+    vi.useRealTimers();
     delete process.env.MARKET_QUOTE_READINESS_TIMEOUT_MS;
     delete process.env.MARKET_QUOTE_READINESS_STALE_CACHE_MS;
     delete process.env.MARKET_LIST_OVERFETCH_MULTIPLIER;
@@ -503,7 +509,8 @@ describe("market catalog routes", () => {
       ...market,
       quoteStatus: "live" as const,
       quoteReadyVenueCount: 1,
-      quoteReadyVenues: ["POLYMARKET"]
+      quoteReadyVenues: ["POLYMARKET"],
+      lastQuoteAt: "2026-05-21T23:41:15.000Z"
     };
     snapshotCache.values.set("markets:{\"limit\":80,\"quoteReadyOnly\":true}", {
       markets: [liveMarket, { ...liveMarket, canonicalEventId: "22222222-2222-5222-8222-222222222222", eventId: "event:two" }],
@@ -533,6 +540,46 @@ describe("market catalog routes", () => {
       count: 1,
       materialized: true,
       markets: [{ canonicalEventId: market.canonicalEventId }]
+    });
+
+    await app.close();
+  });
+
+  it("does not serve stale quote-ready markets from shared snapshots", async () => {
+    const repository = new FakeMarketCatalogRepository();
+    const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    snapshotCache.values.set("markets:{\"limit\":10,\"quoteReadyOnly\":true}", {
+      markets: [{
+        ...market,
+        quoteStatus: "live" as const,
+        quoteReadyVenueCount: 1,
+        quoteReadyVenues: ["POLYMARKET"],
+        lastQuoteAt: "2026-05-21T23:40:00.000Z"
+      }],
+      count: 1,
+      materialized: true
+    });
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketCatalogSnapshotCache: snapshotCache,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [];
+        }
+      }
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=10"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(repository.filters).toHaveLength(0);
+    expect(response.json()).toMatchObject({
+      count: 0,
+      markets: []
     });
 
     await app.close();

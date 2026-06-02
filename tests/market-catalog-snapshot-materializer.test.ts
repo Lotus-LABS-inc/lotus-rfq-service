@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MarketCatalogMarket, MarketCatalogRepository } from "../src/repositories/market-catalog.repository.js";
 import type { MarketCatalogSnapshotCache } from "../src/services/market-catalog-snapshot-cache.js";
 import {
@@ -58,6 +58,15 @@ class FakeSnapshotCache implements MarketCatalogSnapshotCache {
 }
 
 describe("MarketCatalogSnapshotMaterializer", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-01T00:00:01.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("prebuilds quote-ready market snapshots for frontend catalog keys", async () => {
     const snapshotCache = new FakeSnapshotCache();
     const repository: Pick<MarketCatalogRepository, "listMarkets"> = {
@@ -275,7 +284,8 @@ describe("MarketCatalogSnapshotMaterializer", () => {
       category: "SPORTS",
       quoteStatus: "live",
       quoteReadyVenueCount: 2,
-      quoteReadyVenues: ["LIMITLESS", "POLYMARKET"]
+      quoteReadyVenues: ["LIMITLESS", "POLYMARKET"],
+      lastQuoteAt: "2026-06-01T00:00:00.000Z"
     };
     await snapshotCache.set(`markets:${stableQueryCacheKey({ limit: 80, quoteReadyOnly: true })}`, {
       count: 1,
@@ -313,7 +323,8 @@ describe("MarketCatalogSnapshotMaterializer", () => {
       category: "POLITICS",
       quoteStatus: "live",
       quoteReadyVenueCount: 2,
-      quoteReadyVenues: ["LIMITLESS", "POLYMARKET"]
+      quoteReadyVenues: ["LIMITLESS", "POLYMARKET"],
+      lastQuoteAt: "2026-06-01T00:00:00.000Z"
     };
     const politicsMarketTwo: MarketCatalogMarket = {
       ...baseMarket,
@@ -323,7 +334,8 @@ describe("MarketCatalogSnapshotMaterializer", () => {
       category: "POLITICS",
       quoteStatus: "live",
       quoteReadyVenueCount: 2,
-      quoteReadyVenues: ["LIMITLESS", "POLYMARKET"]
+      quoteReadyVenues: ["LIMITLESS", "POLYMARKET"],
+      lastQuoteAt: "2026-06-01T00:00:00.000Z"
     };
     await snapshotCache.set(`markets:${stableQueryCacheKey({ limit: 80, quoteReadyOnly: true })}`, {
       count: 2,
