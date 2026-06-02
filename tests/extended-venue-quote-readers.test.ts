@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { calculateVenueQuote, QuoteSnapshotCache } from "../src/core/sor/quote-snapshot.js";
 import { normalizeMyriadQuote } from "../src/integrations/myriad/myriad-quote-reader.js";
+import { OpinionClient } from "../src/integrations/opinion/opinion-client.js";
 import { normalizeOpinionOrderbook, OpinionQuoteReader, parseOpinionTopicRate } from "../src/integrations/opinion/opinion-quote-reader.js";
 import { normalizePredictOrderbook, PredictQuoteReader } from "../src/integrations/predict/predict-quote-reader.js";
 import { LimitlessQuoteReader } from "../src/integrations/limitless/limitless-quote-reader.js";
@@ -679,6 +680,50 @@ describe("extended venue quote readers", () => {
 
     expect(snapshot?.opinionTopicRate).toBe(0.04);
     expect(snapshot?.missingFactors).toEqual([]);
+  });
+
+  it("Opinion client uses apikey auth and retries transient token orderbook failures", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new Error("fetch failed: connection timed out"))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        result: {
+          bids: [{ price: "0.49", size: "10" }],
+          asks: [{ price: "0.51", size: "10" }]
+        }
+      }), { status: 200 }));
+    const client = new OpinionClient({
+      baseUrl: "https://openapi.opinion.trade/openapi",
+      apiKey: "opinion-key",
+      requestTimeoutMs: 100,
+      maxRetries: 1
+    });
+
+    await expect(client.getTokenOrderbook({ tokenId: "token-yes" })).resolves.toMatchObject({
+      result: {
+        bids: [{ price: "0.49", size: "10" }]
+      }
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const firstRequest = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(firstRequest?.headers).toMatchObject({ apikey: "opinion-key" });
+    fetchMock.mockRestore();
+  });
+
+  it("Opinion client does not retry unauthorized token orderbook reads", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Unauthorized" }), { status: 401 }));
+    const client = new OpinionClient({
+      baseUrl: "https://openapi.opinion.trade/openapi",
+      apiKey: "bad-opinion-key",
+      requestTimeoutMs: 100,
+      maxRetries: 2
+    });
+
+    await expect(client.getTokenOrderbook({ tokenId: "token-yes" })).rejects.toMatchObject({ status: 401 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fetchMock.mockRestore();
   });
 
   it("normalizes Myriad quote responses as indicative executable depth with exact fee", () => {
