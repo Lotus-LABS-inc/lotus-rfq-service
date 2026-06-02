@@ -10,6 +10,7 @@ import type { NormalizedQuoteLevel, NormalizedVenueQuoteSnapshot } from "../core
 export interface MarketOrderbookRecorderConfig {
   intervalMs: number;
   marketBatchSize: number;
+  activeMarketBatchSize?: number;
   priorityMarketBatchSize?: number;
   priorityVenues?: readonly string[];
   maxSamplesPerTick: number;
@@ -30,6 +31,7 @@ export interface MarketOrderbookRecorderLogger {
 
 export interface MarketOrderbookRecorderRunResult {
   marketOffset: number;
+  activeMarkets: number;
   scannedMarkets: number;
   skippedClosedMarkets: number;
   sampledOutcomes: number;
@@ -45,6 +47,7 @@ export interface MarketOrderbookRecorderRunResult {
 const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
   intervalMs: 60_000,
   marketBatchSize: 15,
+  activeMarketBatchSize: 120,
   priorityMarketBatchSize: 8,
   priorityVenues: ["OPINION"] as readonly string[],
   maxSamplesPerTick: 45,
@@ -84,7 +87,14 @@ export class MarketOrderbookRecorder {
     private readonly quoteSource: MarketDataQuoteSource,
     private readonly snapshotRepository: Pick<VenueOrderbookSnapshotRepository, "insertMany" | "cleanupSnapshots">,
     private readonly logger: MarketOrderbookRecorderLogger,
-    private readonly config: MarketOrderbookRecorderConfig
+    private readonly config: MarketOrderbookRecorderConfig,
+    private readonly activeMarketSource?: {
+      listActiveMarketsFromRedis(input?: { limit?: number | undefined }): Promise<Array<{
+        canonicalMarketId: string;
+        canonicalOutcomeId?: string | undefined;
+        lastSeenAt: Date;
+      }>>;
+    } | undefined
   ) {}
 
   public start(): void {
@@ -95,6 +105,7 @@ export class MarketOrderbookRecorder {
     this.logger.info({
       intervalMs: this.config.intervalMs,
       marketBatchSize: this.config.marketBatchSize,
+      activeMarketBatchSize: this.config.activeMarketBatchSize ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.activeMarketBatchSize,
       priorityMarketBatchSize: this.config.priorityMarketBatchSize ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityMarketBatchSize,
       priorityVenues: this.config.priorityVenues ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityVenues,
       maxSamplesPerTick: this.config.maxSamplesPerTick,
@@ -144,6 +155,7 @@ export class MarketOrderbookRecorder {
         Math.floor(this.config.sampleConcurrency ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.sampleConcurrency)
       );
       const cleanup = await this.cleanupSnapshotsIfDue(tickStartedAt);
+      const activeMarkets = await this.listActiveMarkets();
       const priorityMarkets = await this.listPriorityMarkets();
       const marketOffset = this.marketOffset;
       let markets = await this.marketCatalogRepository.listMarkets({
@@ -157,11 +169,12 @@ export class MarketOrderbookRecorder {
       this.marketOffset = markets.length < this.config.marketBatchSize
         ? 0
         : this.marketOffset + this.config.marketBatchSize;
-      if (priorityMarkets.length > 0) {
-        markets = uniqueMarketsByEventAndMarketIds([...priorityMarkets, ...markets]);
+      if (activeMarkets.length > 0 || priorityMarkets.length > 0) {
+        markets = uniqueMarketsByEventAndMarketIds([...activeMarkets, ...priorityMarkets, ...markets]);
       }
       const result: MarketOrderbookRecorderRunResult = {
         marketOffset,
+        activeMarkets: activeMarkets.length,
         scannedMarkets: markets.length,
         skippedClosedMarkets: 0,
         sampledOutcomes: 0,
@@ -371,6 +384,31 @@ export class MarketOrderbookRecorder {
     const selected = wrapSlice(priorityMarkets, this.priorityMarketOffset, priorityMarketBatchSize);
     this.priorityMarketOffset = (this.priorityMarketOffset + priorityMarketBatchSize) % priorityMarkets.length;
     return selected;
+  }
+
+  private async listActiveMarkets(): Promise<MarketCatalogMarket[]> {
+    if (!this.activeMarketSource) {
+      return [];
+    }
+    const activeMarketBatchSize = this.config.activeMarketBatchSize ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.activeMarketBatchSize;
+    if (activeMarketBatchSize <= 0) {
+      return [];
+    }
+    const activeTargets = await this.activeMarketSource.listActiveMarketsFromRedis({
+      limit: activeMarketBatchSize
+    });
+    if (activeTargets.length === 0) {
+      return [];
+    }
+    const activeIds = new Set(activeTargets.map((target) => target.canonicalMarketId));
+    const catalogWindow = await this.marketCatalogRepository.listMarkets({
+      limit: Math.max(250, activeMarketBatchSize),
+      offset: 0
+    });
+    return catalogWindow.filter((market) =>
+      market.canonicalMarketIds.some((canonicalMarketId) => activeIds.has(canonicalMarketId)) ||
+      activeIds.has(market.canonicalEventId)
+    );
   }
 
   private async cleanupSnapshotsIfDue(nowMs: number): Promise<Pick<
@@ -590,6 +628,7 @@ const decimal = (value: string | number | null | undefined): InstanceType<typeof
 
 const emptyResult = (): MarketOrderbookRecorderRunResult => ({
   marketOffset: 0,
+  activeMarkets: 0,
   scannedMarkets: 0,
   skippedClosedMarkets: 0,
   sampledOutcomes: 0,
