@@ -499,8 +499,14 @@ describe("market catalog routes", () => {
   it("serves smaller quote-ready market lists from larger shared snapshots", async () => {
     const repository = new FakeMarketCatalogRepository();
     const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    const liveMarket = {
+      ...market,
+      quoteStatus: "live" as const,
+      quoteReadyVenueCount: 1,
+      quoteReadyVenues: ["POLYMARKET"]
+    };
     snapshotCache.values.set("markets:{\"limit\":80,\"quoteReadyOnly\":true}", {
-      markets: [market, { ...market, canonicalEventId: "22222222-2222-5222-8222-222222222222", eventId: "event:two" }],
+      markets: [liveMarket, { ...liveMarket, canonicalEventId: "22222222-2222-5222-8222-222222222222", eventId: "event:two" }],
       count: 2,
       materialized: true
     });
