@@ -202,13 +202,16 @@ export class QuoteSnapshotCache {
 
 export class CompositeVenueQuoteSource {
   private readonly readerByVenue: ReadonlyMap<string, VenueQuoteSnapshotReader>;
+  private readonly readerTimeoutMs: number;
 
   public constructor(
     readers: readonly VenueQuoteSnapshotReader[],
     private readonly mappingResolver: VenueQuoteMappingResolver,
     private readonly now: () => Date = () => new Date(),
-    private readonly hotSnapshotStore?: HotVenueQuoteSnapshotStore | undefined
+    private readonly hotSnapshotStore?: HotVenueQuoteSnapshotStore | undefined,
+    options: { readerTimeoutMs?: number | undefined } = {}
   ) {
+    this.readerTimeoutMs = Math.max(250, Math.min(options.readerTimeoutMs ?? 2_500, 10_000));
     this.readerByVenue = new Map(readers.flatMap((reader) => {
       const venue = reader.venue.toUpperCase();
       return venue === "PREDICT_FUN"
@@ -369,14 +372,18 @@ export class CompositeVenueQuoteSource {
           });
           return { snapshot: hotSnapshot, blocker: null };
         }
-        const snapshot = await reader.getQuoteSnapshot({
-          canonicalMarketId: input.canonicalMarketId,
-          ...(input.canonicalOutcomeId ? { canonicalOutcomeId: input.canonicalOutcomeId } : {}),
-          venueMarketId: mapping.venueMarketId,
-          ...(mapping.venueOutcomeId ? { venueOutcomeId: mapping.venueOutcomeId } : {}),
-          side: input.side,
-          quantity: input.quantity
-        });
+        const snapshot = await withQuoteReaderTimeout(
+          reader.getQuoteSnapshot({
+            canonicalMarketId: input.canonicalMarketId,
+            ...(input.canonicalOutcomeId ? { canonicalOutcomeId: input.canonicalOutcomeId } : {}),
+            venueMarketId: mapping.venueMarketId,
+            ...(mapping.venueOutcomeId ? { venueOutcomeId: mapping.venueOutcomeId } : {}),
+            side: input.side,
+            quantity: input.quantity
+          }),
+          this.readerTimeoutMs,
+          mapping.venue
+        );
         if (!snapshot) {
           recordLatencyDuration("venue_quote_fetch", performance.now() - startedAt, {
             canonicalMarketId: input.canonicalMarketId,
@@ -721,6 +728,28 @@ const quoteMappingBlockers = (input: {
   }
   blockers.push(...(input.providerBlockers ?? []));
   return [...new Set(blockers)];
+};
+
+class QuoteReaderTimeoutError extends Error {
+  public constructor(venue: string, timeoutMs: number) {
+    super(`${venue} quote reader timeout after ${timeoutMs}ms.`);
+    this.name = "QuoteReaderTimeoutError";
+  }
+}
+
+const withQuoteReaderTimeout = async <T>(promise: Promise<T>, timeoutMs: number, venue: string): Promise<T> => {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new QuoteReaderTimeoutError(venue, timeoutMs)), timeoutMs);
+        timeout.unref?.();
+      })
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 };
 
 const classifyQuoteReaderError = (error: unknown): { reason: string; detailsCode?: string | undefined } => {

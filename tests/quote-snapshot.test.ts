@@ -565,6 +565,68 @@ describe("venue quote mapping resolvers", () => {
     expect(report.blocked.every((blocker) => blocker.reason !== "QUOTE_READER_FAILED")).toBe(true);
   });
 
+  it("does not let a slow venue reader block faster venue snapshots", async () => {
+    const slowReader: VenueQuoteSnapshotReader = {
+      venue: "LIMITLESS",
+      async getQuoteSnapshot() {
+        return await new Promise(() => undefined);
+      }
+    };
+    const fastReader: VenueQuoteSnapshotReader = {
+      venue: "POLYMARKET",
+      async getQuoteSnapshot() {
+        return {
+          venue: "POLYMARKET",
+          venueMarketId: "poly-fast",
+          venueOutcomeId: "yes-token",
+          source: "REST",
+          quoteQuality: "FULL_DEPTH_REST",
+          sourceTimestamp: null,
+          receivedAt: new Date("2026-05-10T12:00:00.000Z"),
+          bids: [{ price: "0.49", size: "10" }],
+          asks: [{ price: "0.51", size: "12" }],
+          blockers: [],
+          missingFactors: []
+        };
+      }
+    };
+    const source = new CompositeVenueQuoteSource([slowReader, fastReader], new SharedCoreVenueQuoteMappingResolver({
+      async loadApprovedVenueMappings() {
+        return [
+          {
+            venue: "LIMITLESS",
+            venue_market_id: "LIMITLESS:slow-market:canonical",
+            normalized_payload: { venueMarketId: "slow-market", quoteTokenId: "yes-token" },
+            raw_source_payload: {}
+          },
+          {
+            venue: "POLYMARKET",
+            venue_market_id: "POLYMARKET:poly-fast:canonical",
+            normalized_payload: { venueMarketId: "poly-fast", quoteTokenId: "yes-token" },
+            raw_source_payload: {}
+          }
+        ];
+      },
+      async listApprovedVenueMappings() {
+        return [];
+      }
+    }), () => new Date("2026-05-10T12:00:00.000Z"), undefined, { readerTimeoutMs: 1 });
+
+    const report = await source.getQuoteSnapshotReport({
+      canonicalMarketId: "canonical",
+      canonicalOutcomeId: "YES",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(report.snapshots).toHaveLength(1);
+    expect(report.snapshots[0]?.venue).toBe("POLYMARKET");
+    expect(report.blocked).toEqual([expect.objectContaining({
+      venue: "LIMITLESS",
+      reason: "QUOTE_PROVIDER_TIMEOUT"
+    })]);
+  });
+
   it("keeps Predict 401 quote failures typed with an operator-safe auth details code", async () => {
     const predictReader: VenueQuoteSnapshotReader = {
       venue: "PREDICT_FUN",
