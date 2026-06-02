@@ -21,7 +21,7 @@ import type { UserVenueAccount } from "../core/execution/user-venue-accounts.js"
 import { withLatencyStage } from "../observability/latency.js";
 import type { ExecutableRouteLeg, ExecutableRouteService, ExecutableTradeQuote } from "./executable-routing.js";
 import type { ExecutionLegV0 } from "./types.js";
-import type { ExecutionVenueAdapterRegistry, PreparedVenueOrder, VenueFillState, VenueOrderLookupContext, VenueSettlementState, VenueSubmitResult } from "./venue-adapter.js";
+import { VenueExecutionNotConfiguredError, type ExecutionVenueAdapterRegistry, type PreparedVenueOrder, type VenueFillState, type VenueOrderLookupContext, type VenueSettlementState, type VenueSubmitResult } from "./venue-adapter.js";
 
 export type TradeSignatureKind = "EIP712" | "MESSAGE";
 
@@ -611,14 +611,28 @@ export class SignedTradeBundleService {
     }
     if (leg.venue.toUpperCase() === "PREDICT_FUN" && quote.side === "sell") {
       const executionLeg = this.toExecutionLeg(quote, leg, index);
-      const prepared = await this.adapters.get(leg.venue).prepareOrder(executionLeg);
+      const prepared = await this.prepareVenueOrderForReadiness(leg.venue, executionLeg);
+      if (!prepared) {
+        return {
+          ...base,
+          status: "blocked",
+          blockers: ["Predict.fun execution adapter is not configured for live submission."]
+        };
+      }
       return this.predictFunConditionalTokenReadiness(base, binding.venueAccountAddress, leg, recordField(prepared.payload, "predictOrderMetadata") ?? {});
     }
     if (leg.venue.toUpperCase() !== "PREDICT_FUN" || quote.side !== "buy") {
       return base;
     }
     const executionLeg = this.toExecutionLeg(quote, leg, index);
-    const prepared = await this.adapters.get(leg.venue).prepareOrder(executionLeg);
+    const prepared = await this.prepareVenueOrderForReadiness(leg.venue, executionLeg);
+    if (!prepared) {
+      return {
+        ...base,
+        status: "blocked",
+        blockers: ["Predict.fun execution adapter is not configured for live submission."]
+      };
+    }
     const readiness = await this.predictFunCollateralReadiness(base, binding.venueAccountAddress, requiredNotional, recordField(prepared.payload, "predictOrderMetadata") ?? {});
     if (readiness.status === "fresh" && !this.venueAccounts.getPredictFunJwt?.(quote.userId)) {
       return {
@@ -628,6 +642,20 @@ export class SignedTradeBundleService {
       };
     }
     return readiness;
+  }
+
+  private async prepareVenueOrderForReadiness(
+    venue: string,
+    executionLeg: ExecutionLegV0
+  ): Promise<PreparedVenueOrder | null> {
+    try {
+      return await this.adapters.get(venue).prepareOrder(executionLeg);
+    } catch (error) {
+      if (error instanceof VenueExecutionNotConfiguredError) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   private async polymarketCollateralReadiness(
