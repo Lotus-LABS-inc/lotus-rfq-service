@@ -56,6 +56,7 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
 } as const;
 const RATE_LIMIT_COOLDOWN_MS = 5 * 60_000;
 const PROVIDER_AUTH_COOLDOWN_MS = 15 * 60_000;
+const SAMPLE_TIMEOUT_COOLDOWN_MS = 5 * 60_000;
 
 export const buildMarketOrderbookRecorderConfig = (): MarketOrderbookRecorderConfig => {
   // Worker-owned duty: do not add per-duty env flags such as
@@ -74,6 +75,7 @@ export class MarketOrderbookRecorder {
   private priorityMarketOffset = 0;
   private lastCleanupAt = Date.now();
   private readonly venueCooldownUntil = new Map<string, number>();
+  private readonly sampleCooldownUntil = new Map<string, number>();
 
   public constructor(
     private readonly marketCatalogRepository: Pick<MarketCatalogRepository, "listMarkets">,
@@ -191,6 +193,10 @@ export class MarketOrderbookRecorder {
             result.skippedCooldownSamples += 1;
             continue;
           }
+          if (this.isSampleCoolingDown(sample)) {
+            result.skippedCooldownSamples += 1;
+            continue;
+          }
           result.sampledOutcomes += 1;
           try {
             const report = await withRecorderTimeout(
@@ -231,6 +237,9 @@ export class MarketOrderbookRecorder {
               ...blockedSnapshots
             ]);
           } catch (error) {
+            if (error instanceof RecorderSampleTimeoutError) {
+              this.applySampleCooldown(sample);
+            }
             result.failedSamples += 1;
             this.logger.warn({
               canonicalEventId: market.canonicalEventId,
@@ -276,6 +285,14 @@ export class MarketOrderbookRecorder {
       return;
     }
     this.venueCooldownUntil.set(normalizeVenue(venue), Date.now() + cooldownMs);
+  }
+
+  private isSampleCoolingDown(sample: { canonicalMarketId: string; outcomeId?: string | null | undefined }): boolean {
+    return (this.sampleCooldownUntil.get(sampleCooldownKey(sample)) ?? 0) > Date.now();
+  }
+
+  private applySampleCooldown(sample: { canonicalMarketId: string; outcomeId?: string | null | undefined }): void {
+    this.sampleCooldownUntil.set(sampleCooldownKey(sample), Date.now() + SAMPLE_TIMEOUT_COOLDOWN_MS);
   }
 
   private async listPriorityMarkets(): Promise<MarketCatalogMarket[]> {
@@ -579,6 +596,9 @@ const wrapSlice = <T>(values: readonly T[], offset: number, limit: number): T[] 
   }
   return selected;
 };
+
+const sampleCooldownKey = (sample: { canonicalMarketId: string; outcomeId?: string | null | undefined }): string =>
+  `${sample.canonicalMarketId}:${sample.outcomeId ?? ""}`;
 
 const providerCooldownMsForReason = (reason: string, baseCooldownMs: number): number => {
   if (reason.includes("QUOTE_PROVIDER_HTTP_429")) {

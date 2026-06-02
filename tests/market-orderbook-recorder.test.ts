@@ -238,7 +238,7 @@ describe("MarketOrderbookRecorder", () => {
     expect(sampledMarketIds).toEqual(["market-opinion", "market-opinion", "market-1", "market-1"]);
   });
 
-  it("bounds hung quote source samples so recorder ticks cannot stall indefinitely", async () => {
+  it("bounds and cools down hung quote source samples so recorder ticks cannot stall indefinitely", async () => {
     const recorder = new MarketOrderbookRecorder(
       {
         listMarkets: async () => [marketFixture("OPEN")]
@@ -270,12 +270,16 @@ describe("MarketOrderbookRecorder", () => {
       }
     );
 
-    const result = await recorder.runOnce();
+    const first = await recorder.runOnce();
+    const second = await recorder.runOnce();
 
-    expect(result.scannedMarkets).toBe(1);
-    expect(result.sampledOutcomes).toBeGreaterThan(0);
-    expect(result.failedSamples).toBeGreaterThan(0);
-    expect(result.insertedSnapshots).toBe(0);
+    expect(first.scannedMarkets).toBe(1);
+    expect(first.sampledOutcomes).toBeGreaterThan(0);
+    expect(first.failedSamples).toBeGreaterThan(0);
+    expect(first.insertedSnapshots).toBe(0);
+    expect(second.sampledOutcomes).toBe(0);
+    expect(second.failedSamples).toBe(0);
+    expect(second.skippedCooldownSamples).toBe(2);
   });
 
   it("does not run recording after stop is requested", async () => {
