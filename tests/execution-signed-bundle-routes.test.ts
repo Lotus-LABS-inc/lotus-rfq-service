@@ -2705,6 +2705,54 @@ describe("execution signed bundle routes", () => {
     });
   });
 
+  it("returns a bounded deferred live-candidate response when venue probing is slow", async () => {
+    const app = Fastify();
+    const liveCandidateProvider = {
+      getCandidates: vi.fn(async () => {
+        await new Promise(() => undefined);
+        throw new Error("unreachable");
+      })
+    };
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: {
+        quote: vi.fn(),
+        getQuote: vi.fn()
+      } as never,
+      sellQuoteService: {
+        prepareExit: vi.fn()
+      } as never,
+      liveCandidateProvider
+    });
+
+    const startedAt = Date.now();
+    const response = await app.inject({
+      method: "POST",
+      url: "/execution/live-candidates",
+      payload: {
+        side: "buy",
+        marketId: "canonical-market-slow",
+        outcomeId: "YES",
+        amount: "1"
+      }
+    });
+
+    expect(Date.now() - startedAt).toBeLessThan(1_500);
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      code: "NO_LIVE_EXECUTION_CANDIDATES",
+      source: "LIVE_QUOTE_SOURCE",
+      candidates: [],
+      blocked: [{
+        venue: "LOTUS",
+        reason: "LIVE_CANDIDATES_REFRESH_DEFERRED",
+        detailsCode: "request_time_budget_exhausted"
+      }]
+    });
+    expect(liveCandidateProvider.getCandidates).toHaveBeenCalledTimes(1);
+  });
+
   it("builds live candidates only when executable venue ids are present", () => {
     const response = buildLiveExecutionCandidatesResponse({
       generatedAt: new Date("2026-05-06T00:00:00.000Z"),

@@ -218,7 +218,9 @@ export interface MarkedExecutionPosition extends VerifiedExecutionPosition {
   markBlocker: string | null;
 }
 
-const LIVE_CANDIDATE_CACHE_MS = 2_000;
+const LIVE_CANDIDATE_CACHE_MS = 5_000;
+const LIVE_CANDIDATE_STALE_MS = 45_000;
+const LIVE_CANDIDATE_RESPONSE_TIMEOUT_MS = 850;
 const POSITION_MARK_CACHE_MS = 15_000;
 const POSITION_MARK_LIVE_TIMEOUT_MS = 700;
 const POSITION_MARK_LIVE_READ_BUDGET = 20;
@@ -234,7 +236,12 @@ const RATE_LIMITS: Record<string, number> = {
   liveCandidates: 80
 };
 
-const liveCandidateCache = new Map<string, { expiresAt: number; promise: Promise<LiveExecutionCandidatesResponse> }>();
+const liveCandidateCache = new Map<string, {
+  expiresAt: number;
+  staleUntil: number;
+  value?: LiveExecutionCandidatesResponse | undefined;
+  promise?: Promise<LiveExecutionCandidatesResponse> | undefined;
+}>();
 const positionMarkCache = new Map<string, { expiresAt: number; position: MarkedExecutionPosition }>();
 const routeRateLimitBuckets = new Map<string, { resetAt: number; count: number }>();
 
@@ -1092,7 +1099,7 @@ const consumeRouteRateLimit = (userId: string, action: keyof typeof RATE_LIMITS)
   return true;
 };
 
-const getCachedLiveCandidates = (
+const getCachedLiveCandidates = async (
   provider: LiveExecutionCandidateProvider,
   userId: string,
   input: {
@@ -1113,15 +1120,107 @@ const getCachedLiveCandidates = (
     [...(input.venues ?? [])].map((venue) => venue.toUpperCase()).sort().join(",")
   ].join("\u0000");
   const cached = liveCandidateCache.get(key);
-  if (cached && cached.expiresAt > now) {
-    return cached.promise;
+  if (cached?.value && cached.expiresAt > now) {
+    return cached.value;
+  }
+  if (cached?.promise) {
+    if (cached.value && cached.staleUntil > now) {
+      return withDeferredLiveCandidateBlocker(cached.value, "LIVE_CANDIDATES_REFRESH_IN_PROGRESS");
+    }
+    return withTimeout(
+      cached.promise,
+      LIVE_CANDIDATE_RESPONSE_TIMEOUT_MS,
+      cached.value && cached.staleUntil > now
+        ? withDeferredLiveCandidateBlocker(cached.value, "LIVE_CANDIDATES_REFRESH_DEFERRED")
+        : deferredLiveCandidates(input, "LIVE_CANDIDATES_REFRESH_DEFERRED")
+    );
   }
   const promise = provider.getCandidates({ userId, ...input });
-  liveCandidateCache.set(key, { expiresAt: now + LIVE_CANDIDATE_CACHE_MS, promise });
-  void promise.catch(() => {
-    liveCandidateCache.delete(key);
+  liveCandidateCache.set(key, {
+    ...(cached?.value ? { value: cached.value } : {}),
+    expiresAt: cached?.expiresAt ?? 0,
+    staleUntil: cached?.staleUntil ?? 0,
+    promise
   });
-  return promise;
+  void promise
+    .then((value) => {
+      const resolvedAt = Date.now();
+      liveCandidateCache.set(key, {
+        value,
+        expiresAt: resolvedAt + LIVE_CANDIDATE_CACHE_MS,
+        staleUntil: resolvedAt + LIVE_CANDIDATE_STALE_MS
+      });
+    })
+    .catch(() => {
+      const current = liveCandidateCache.get(key);
+      if (current?.value && current.staleUntil > Date.now()) {
+        liveCandidateCache.set(key, {
+          value: current.value,
+          expiresAt: 0,
+          staleUntil: current.staleUntil
+        });
+        return;
+      }
+      liveCandidateCache.delete(key);
+    });
+  const fallback = cached?.value && cached.staleUntil > now
+    ? withDeferredLiveCandidateBlocker(cached.value, "LIVE_CANDIDATES_REFRESH_DEFERRED")
+    : deferredLiveCandidates(input, "LIVE_CANDIDATES_REFRESH_DEFERRED");
+  return withTimeout(promise, LIVE_CANDIDATE_RESPONSE_TIMEOUT_MS, fallback);
+};
+
+const deferredLiveCandidates = (
+  input: {
+    marketId: string;
+    outcomeId: string;
+    amount: string;
+  },
+  reason: string
+): LiveExecutionCandidatesResponse => ({
+  generatedAt: new Date().toISOString(),
+  marketId: input.marketId,
+  outcomeId: input.outcomeId,
+  amount: input.amount,
+  source: "LIVE_QUOTE_SOURCE",
+  candidates: [],
+  blocked: [{
+    venue: "LOTUS",
+    reason,
+    detailsCode: "request_time_budget_exhausted"
+  }]
+});
+
+const withDeferredLiveCandidateBlocker = (
+  response: LiveExecutionCandidatesResponse,
+  reason: string
+): LiveExecutionCandidatesResponse => ({
+  ...response,
+  generatedAt: new Date().toISOString(),
+  blocked: [
+    ...response.blocked,
+    {
+      venue: "LOTUS",
+      reason,
+      detailsCode: response.generatedAt
+    }
+  ]
+});
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timeout = setTimeout(() => resolve(fallback), timeoutMs);
+        timeout.unref?.();
+      })
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 };
 
 const getCachedExecutionDisplayData = async <T extends Record<string, unknown>>(
