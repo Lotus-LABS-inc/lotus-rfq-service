@@ -1,5 +1,8 @@
 import type { MarketCatalogMarket, MarketCatalogRepository } from "../repositories/market-catalog.repository.js";
-import type { MarketQuoteReadinessSnapshot } from "../repositories/venue-orderbook-snapshot.repository.js";
+import {
+  DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS,
+  type MarketQuoteReadinessSnapshot
+} from "../repositories/venue-orderbook-snapshot.repository.js";
 import type { MarketCatalogSnapshotCache } from "./market-catalog-snapshot-cache.js";
 
 type RouteCoverage = "all" | "single" | "pair" | "tri" | "strict_all";
@@ -543,18 +546,35 @@ const aggregateMarketQuoteReadiness = (
 };
 
 const pickMarketQuoteStatus = (readiness: readonly MarketQuoteReadinessSnapshot[]): MarketCatalogMarket["quoteStatus"] => {
+  const tradableStatuses = new Set(readiness
+    .filter(isTradableReadinessSnapshot)
+    .map((item) => item.quoteStatus));
+  if (tradableStatuses.has("live")) return "live";
+  if (tradableStatuses.has("partial")) return "partial";
   const statuses = new Set(readiness.map((item) => item.quoteStatus));
-  if (statuses.has("live")) return "live";
-  if (statuses.has("partial")) return "partial";
-  if (statuses.has("stale")) return "stale";
+  if (statuses.has("live") || statuses.has("partial") || statuses.has("stale")) return "stale";
   return "unavailable";
 };
 
 const isTradableReadinessSnapshot = (snapshot: MarketQuoteReadinessSnapshot): boolean =>
-  snapshot.quoteStatus === "live" || snapshot.quoteStatus === "partial";
+  (snapshot.quoteStatus === "live" || snapshot.quoteStatus === "partial")
+  && hasRecentQuoteTimestamp(snapshot.lastQuoteAt);
 
 const isQuoteReadyMarket = (market: MarketCatalogMarket): boolean =>
-  (market.quoteReadyVenueCount ?? 0) > 0 && (market.quoteStatus === "live" || market.quoteStatus === "partial");
+  (market.quoteReadyVenueCount ?? 0) > 0
+  && (market.quoteStatus === "live" || market.quoteStatus === "partial")
+  && hasRecentQuoteTimestamp(market.lastQuoteAt);
+
+const hasRecentQuoteTimestamp = (value: unknown): boolean => {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return false;
+  }
+  const timestampMs = Date.parse(value);
+  if (!Number.isFinite(timestampMs)) {
+    return false;
+  }
+  return Date.now() - timestampMs <= DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS;
+};
 
 const marketIdentityKey = (market: MarketCatalogMarket): string =>
   `${market.canonicalEventId}\u0000${market.canonicalMarketIds.join("\u0001")}`;

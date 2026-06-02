@@ -46,6 +46,8 @@ export interface MarketQuoteReadinessSnapshot {
   lastQuoteAt: string | null;
 }
 
+export const DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS = 15_000;
+
 export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSource {
   public constructor(private readonly pool: Pool) {}
 
@@ -338,7 +340,7 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
     if (canonicalMarketIds.length === 0) {
       return [];
     }
-    const maxAgeMs = input.maxAgeMs ?? 5 * 60 * 1000;
+    const maxAgeMs = input.maxAgeMs ?? DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS;
     const lookbackMs = Math.max(maxAgeMs, 30 * 60 * 1000);
     const client = await this.pool.connect();
     try {
