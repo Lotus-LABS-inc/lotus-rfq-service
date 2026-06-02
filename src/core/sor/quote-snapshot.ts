@@ -103,6 +103,7 @@ export interface HotVenueQuoteSnapshotStore {
     venueMarketId: string;
     venueOutcomeId?: string | undefined;
     maxAgeMs: number;
+    includeDbFallback?: boolean | undefined;
   }): Promise<NormalizedVenueQuoteSnapshot | null>;
 }
 
@@ -518,7 +519,8 @@ export class CompositeVenueQuoteSource {
         venue: input.venue,
         venueMarketId: input.venueMarketId,
         ...(input.venueOutcomeId ? { venueOutcomeId: input.venueOutcomeId } : {}),
-        maxAgeMs
+        maxAgeMs,
+        includeDbFallback: false
       });
     }
     return this.hotSnapshotStore.get(input);

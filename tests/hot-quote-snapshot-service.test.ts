@@ -140,6 +140,31 @@ describe("HotQuoteSnapshotService", () => {
     expect(result?.metadata?.hotSnapshotSource).toBe("db_last_good");
   });
 
+  it("can skip DB fallback for display reads so UI quote routes do not block on Supabase", async () => {
+    let dbCalls = 0;
+    const service = new HotQuoteSnapshotService({
+      memoryCache: new QuoteSnapshotCache(),
+      dbFallback: {
+        async getLatestSnapshot() {
+          dbCalls += 1;
+          return snapshot({ source: "REST", quoteQuality: "FULL_DEPTH_REST" });
+        }
+      },
+      now: () => now
+    });
+
+    const result = await service.getDisplay({
+      venue: "POLYMARKET",
+      venueMarketId: "market-1",
+      venueOutcomeId: "yes",
+      maxAgeMs: 45_000,
+      includeDbFallback: false
+    });
+
+    expect(result).toBeNull();
+    expect(dbCalls).toBe(0);
+  });
+
   it("tracks active markets and expires idle entries", () => {
     let current = now;
     const service = new HotQuoteSnapshotService({

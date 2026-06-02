@@ -143,6 +143,7 @@ export class HotQuoteSnapshotService {
     venueMarketId: string;
     venueOutcomeId?: string | undefined;
     maxAgeMs: number;
+    includeDbFallback?: boolean | undefined;
   }): Promise<NormalizedVenueQuoteSnapshot | null> {
     const maxAgeMs = Math.max(this.config.staleAfterMs, Math.min(input.maxAgeMs, 5 * 60_000));
     const memory = this.deps.memoryCache.get(input);
@@ -156,10 +157,12 @@ export class HotQuoteSnapshotService {
       return annotateSnapshot(redis, "redis", this.now());
     }
 
-    const db = await this.readDb(input, maxAgeMs);
-    if (db) {
-      this.deps.memoryCache.put(db);
-      return annotateSnapshot(db, "db_last_good", this.now());
+    if (input.includeDbFallback !== false) {
+      const db = await this.readDb(input, maxAgeMs);
+      if (db) {
+        this.deps.memoryCache.put(db);
+        return annotateSnapshot(db, "db_last_good", this.now());
+      }
     }
 
     return null;
