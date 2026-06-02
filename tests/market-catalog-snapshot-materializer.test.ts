@@ -265,6 +265,44 @@ describe("MarketCatalogSnapshotMaterializer", () => {
     expect(listMarkets).toHaveBeenCalledWith({ limit: 80 });
   });
 
+  it("recovers empty category quote-ready materialization from the global snapshot", async () => {
+    const snapshotCache = new FakeSnapshotCache();
+    const sportsMarket: MarketCatalogMarket = {
+      ...baseMarket,
+      canonicalEventId: "event-sports",
+      canonicalMarketIds: ["market-sports"],
+      title: "Sports Market",
+      category: "SPORTS",
+      quoteStatus: "stale",
+      quoteReadyVenueCount: 2,
+      quoteReadyVenues: ["LIMITLESS", "POLYMARKET"]
+    };
+    await snapshotCache.set(`markets:${stableQueryCacheKey({ limit: 80, quoteReadyOnly: true })}`, {
+      count: 1,
+      materialized: true,
+      markets: [sportsMarket]
+    });
+    const materializer = new MarketCatalogSnapshotMaterializer({
+      marketCatalogRepository: {
+        listMarkets: vi.fn(async () => [])
+      },
+      marketQuoteReadinessSource: {
+        listLatestMarketQuoteReadiness: vi.fn(async () => [])
+      },
+      snapshotCache,
+      logger: { info: vi.fn(), warn: vi.fn() },
+      config: { limits: [80], routeCoverages: ["all"], categories: ["Sports"], intervalMs: 60_000 }
+    });
+
+    const result = await materializer.runOnce();
+
+    expect(result.skippedEmptyQuoteReady).toBeGreaterThan(0);
+    expect(snapshotCache.values.get(`markets:${stableQueryCacheKey({ category: "Sports", limit: 80, quoteReadyOnly: true })}`)).toMatchObject({
+      count: 1,
+      markets: [{ canonicalMarketIds: ["market-sports"], category: "SPORTS" }]
+    });
+  });
+
   it("does not overwrite larger quote-ready snapshots with transient underfilled materialization", async () => {
     const snapshotCache = new FakeSnapshotCache();
     const key = `markets:${stableQueryCacheKey({
