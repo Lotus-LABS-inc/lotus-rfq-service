@@ -993,7 +993,7 @@ describe("execution signed bundle routes", () => {
     expect(prepare).not.toHaveBeenCalled();
   });
 
-  it("blocks Polymarket sell FOK when no slippage tick buffer remains", async () => {
+  it("allows Polymarket sell FOK at the signed slippage boundary", async () => {
     const quote = sellQuote();
     await expect(assertPolymarketFokStillExecutable({
       userId: "user-1",
@@ -1010,6 +1010,32 @@ describe("execution signed bundle routes", () => {
             venueMarketId: quote.legs[0]!.venueMarketId,
             venueOutcomeId: quote.legs[0]!.venueOutcomeId,
             price: 0.985,
+            availableSize: "10",
+            requiresUserSignature: true
+          }],
+          blocked: []
+        }))
+      }
+    })).resolves.toBeUndefined();
+  });
+
+  it("blocks Polymarket sell FOK below the signed slippage boundary", async () => {
+    const quote = sellQuote();
+    await expect(assertPolymarketFokStillExecutable({
+      userId: "user-1",
+      quote,
+      slippageToleranceBps: 50,
+      liveCandidateProvider: {
+        getCandidates: vi.fn(async () => ({
+          generatedAt: new Date().toISOString(),
+          marketId: quote.marketId,
+          outcomeId: quote.outcomeId,
+          amount: quote.legs[0]!.size,
+          candidates: [{
+            venue: "POLYMARKET",
+            venueMarketId: quote.legs[0]!.venueMarketId,
+            venueOutcomeId: quote.legs[0]!.venueOutcomeId,
+            price: 0.984,
             availableSize: "10",
             requiresUserSignature: true
           }],
