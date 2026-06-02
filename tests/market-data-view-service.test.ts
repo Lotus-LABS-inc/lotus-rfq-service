@@ -84,7 +84,7 @@ describe("LiveMarketDataViewService", () => {
     });
   });
 
-  it("marks all-stale orderbook snapshots as stale display data", async () => {
+  it("does not expose all-stale orderbook snapshots as tradable depth", async () => {
     const now = new Date("2026-05-10T12:00:05.000Z");
     const staleAt = new Date("2026-05-10T12:00:00.000Z");
     const service = new LiveMarketDataViewService({
@@ -116,8 +116,12 @@ describe("LiveMarketDataViewService", () => {
       outcomeId: "YES"
     });
 
-    expect(orderbook.status).toBe("stale");
-    expect(orderbook.venues[0]?.snapshotStatus).toBe("stale");
+    expect(orderbook.status).toBe("blocked");
+    expect(orderbook.venues).toEqual([]);
+    expect(orderbook.bestAsk).toBeNull();
+    expect(orderbook.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ venue: "POLYMARKET", reason: "LIVE_ORDERBOOK_REQUIRED" })
+    ]));
   });
 
   it("bounds slow orderbook reads so terminal loads do not wait on venue fanout", async () => {
@@ -147,7 +151,7 @@ describe("LiveMarketDataViewService", () => {
     });
   });
 
-  it("serves last-good orderbook display data when a later live refresh times out", async () => {
+  it("does not serve last-good orderbook prices when a later live refresh times out", async () => {
     let now = new Date("2026-05-10T12:00:00.000Z");
     let calls = 0;
     const service = new LiveMarketDataViewService(
@@ -191,12 +195,12 @@ describe("LiveMarketDataViewService", () => {
       outcomeId: "YES"
     });
 
-    expect(first.status).toBe("stale");
+    expect(first.status).toBe("live");
     expect(first.bestAsk).toBe("0.53");
-    expect(second.status).toBe("stale");
-    expect(second.bestAsk).toBe("0.53");
+    expect(second.status).toBe("unavailable");
+    expect(second.bestAsk).toBeNull();
     expect(second.blockers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ venue: "LOTUS", reason: "LAST_GOOD_ORDERBOOK_USED" })
+      expect.objectContaining({ venue: "LOTUS", reason: "MARKET_ORDERBOOK_REFRESH_DEFERRED" })
     ]));
   });
 
@@ -393,7 +397,7 @@ describe("LiveMarketDataViewService", () => {
     expect(responses[1].quotes[0]?.bestVenuePrice).toBe("0.53");
   });
 
-  it("serves stale batch quote cache immediately while refreshing in the background", async () => {
+  it("does not serve stale batch quote cache as a live price while refreshing in the background", async () => {
     let now = new Date("2026-05-10T12:00:00.000Z");
     let calls = 0;
     let resolveRefresh!: (value: any) => void;
@@ -444,10 +448,10 @@ describe("LiveMarketDataViewService", () => {
     expect(elapsedMs).toBeLessThan(100);
     expect(calls).toBe(2);
     expect(second.quotes[0]).toMatchObject({
-      status: "stale",
-      bestVenue: "POLYMARKET",
-      bestVenuePrice: "0.53",
-      blockers: [{ venue: "LOTUS", reason: "LAST_GOOD_QUOTE_USED" }]
+      status: "unavailable",
+      bestVenue: null,
+      bestVenuePrice: null,
+      blockers: [{ venue: "LOTUS", reason: "MARKET_BATCH_QUOTE_REFRESHING" }]
     });
 
     resolveRefresh({

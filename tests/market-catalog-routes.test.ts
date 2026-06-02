@@ -348,7 +348,7 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
-  it("uses stale last-good quote readiness when a later snapshot read times out", async () => {
+  it("does not count stale last-good quote readiness as quote-ready when a later snapshot read times out", async () => {
     process.env.MARKET_QUOTE_READINESS_TIMEOUT_MS = "1";
     const app = Fastify({ logger: false });
     let shouldTimeout = false;
@@ -384,14 +384,10 @@ describe("market catalog routes", () => {
     expect(warm.statusCode).toBe(200);
     expect(degraded.statusCode).toBe(200);
     expect(degraded.json()).toMatchObject({
-      count: 1,
+      count: 0,
       quoteReadinessDegraded: true,
       quoteReadinessReason: "timeout",
-      markets: [{
-        quoteStatus: "stale",
-        quoteReadyVenueCount: 1,
-        quoteReadyVenues: ["POLYMARKET"]
-      }]
+      markets: []
     });
 
     await app.close();
@@ -612,7 +608,7 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
-  it("materializes degraded quote-ready responses when stale readiness still returns markets", async () => {
+  it("does not materialize degraded quote-ready responses when only stale readiness remains", async () => {
     process.env.MARKET_QUOTE_READINESS_TIMEOUT_MS = "1";
     const repository = new FakeMarketCatalogRepository();
     const snapshotCache = new FakeMarketCatalogSnapshotCache();
@@ -650,13 +646,13 @@ describe("market catalog routes", () => {
 
     expect(warm.statusCode).toBe(200);
     expect(degraded.statusCode).toBe(200);
-    expect(snapshotCache.setCount).toBe(2);
+    expect(snapshotCache.setCount).toBe(1);
     expect(repository.filters).toHaveLength(2);
     expect(degraded.json()).toMatchObject({
-      count: 1,
+      count: 0,
       quoteReadinessDegraded: true,
       quoteReadinessReason: "timeout",
-      markets: [{ quoteReadyVenueCount: 1 }]
+      markets: []
     });
 
     await app.close();

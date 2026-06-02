@@ -519,7 +519,8 @@ const aggregateMarketQuoteReadiness = (
       lastQuoteAt: null
     };
   }
-  const quoteReadyVenues = [...new Set(readiness
+  const tradableReadiness = readiness.filter(isTradableReadinessSnapshot);
+  const quoteReadyVenues = [...new Set(tradableReadiness
     .flatMap((item) => item.quoteReadyVenues.length > 0 ? item.quoteReadyVenues : [])
     .map((venue) => venue.trim().toUpperCase())
     .filter(Boolean))].sort();
@@ -527,7 +528,7 @@ const aggregateMarketQuoteReadiness = (
     quoteStatus: pickMarketQuoteStatus(readiness),
     quoteReadyVenueCount: quoteReadyVenues.length > 0
       ? quoteReadyVenues.length
-      : readiness.reduce((sum, item) => sum + item.quoteReadyVenueCount, 0),
+      : tradableReadiness.reduce((sum, item) => sum + item.quoteReadyVenueCount, 0),
     quoteReadyVenues,
     quoteBlockers: [...new Map(readiness
       .flatMap((item) => item.quoteBlockers)
@@ -549,8 +550,11 @@ const pickMarketQuoteStatus = (readiness: readonly MarketQuoteReadinessSnapshot[
   return "unavailable";
 };
 
+const isTradableReadinessSnapshot = (snapshot: MarketQuoteReadinessSnapshot): boolean =>
+  snapshot.quoteStatus === "live" || snapshot.quoteStatus === "partial";
+
 const isQuoteReadyMarket = (market: MarketCatalogMarket): boolean =>
-  (market.quoteReadyVenueCount ?? 0) > 0 && market.quoteStatus !== "unavailable";
+  (market.quoteReadyVenueCount ?? 0) > 0 && (market.quoteStatus === "live" || market.quoteStatus === "partial");
 
 const marketIdentityKey = (market: MarketCatalogMarket): string =>
   `${market.canonicalEventId}\u0000${market.canonicalMarketIds.join("\u0001")}`;
