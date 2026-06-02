@@ -143,7 +143,7 @@ describe("LiveMarketDataViewService", () => {
     expect(orderbook.status).toBe("unavailable");
     expect(orderbook.blockers[0]).toMatchObject({
       venue: "LOTUS",
-      reason: "MARKET_ORDERBOOK_TIMEOUT"
+      reason: "MARKET_ORDERBOOK_REFRESH_DEFERRED"
     });
   });
 
@@ -313,7 +313,7 @@ describe("LiveMarketDataViewService", () => {
     expect(elapsedMs).toBeLessThan(300);
     expect(first.quotes[0]).toMatchObject({
       status: "unavailable",
-      blockers: [{ venue: "LOTUS", reason: "MARKET_BATCH_QUOTE_TIMEOUT" }]
+      blockers: [{ venue: "LOTUS", reason: "MARKET_BATCH_QUOTE_REFRESH_DEFERRED" }]
     });
 
     resolveReport({

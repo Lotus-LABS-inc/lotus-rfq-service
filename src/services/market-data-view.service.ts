@@ -155,10 +155,10 @@ interface StoredChartPoint {
 const MAX_STORED_POINTS = 20_000;
 const MAX_HISTORY_MS = 31 * 24 * 60 * 60 * 1000;
 const ORDERBOOK_CACHE_MS = 3_000;
-const ORDERBOOK_LIVE_TIMEOUT_MS = 900;
+const ORDERBOOK_LIVE_TIMEOUT_MS = 250;
 const ORDERBOOK_DISPLAY_SNAPSHOT_MAX_AGE_MS = 45_000;
 const BATCH_QUOTE_CACHE_MS = 3_000;
-const BATCH_QUOTE_LIVE_TIMEOUT_MS = 700;
+const BATCH_QUOTE_LIVE_TIMEOUT_MS = 150;
 const BATCH_QUOTE_DISPLAY_SNAPSHOT_MAX_AGE_MS = 45_000;
 const CHART_CACHE_MS = 10_000;
 const CHART_LIVE_POINT_TIMEOUT_MS = 50;
@@ -229,7 +229,7 @@ export class LiveMarketDataViewService {
         input,
         generatedAt,
         depth,
-        reason: "MARKET_ORDERBOOK_TIMEOUT"
+        reason: "MARKET_ORDERBOOK_REFRESH_DEFERRED"
       })
     );
     void livePromise
@@ -252,7 +252,11 @@ export class LiveMarketDataViewService {
     if (isDisplayUsableOrderbook(output)) {
       this.lastGoodOrderbooks.set(key, output);
     }
-    this.orderbookCache.set(key, { expiresAt: generatedAt.getTime() + ORDERBOOK_CACHE_MS, response: output });
+    if (isDeferredOrderbook(output)) {
+      this.orderbookCache.delete(key);
+    } else {
+      this.orderbookCache.set(key, { expiresAt: generatedAt.getTime() + ORDERBOOK_CACHE_MS, response: output });
+    }
     return output;
   }
 
@@ -350,7 +354,7 @@ export class LiveMarketDataViewService {
           item,
           side,
           generatedAt,
-          reason: "MARKET_BATCH_QUOTE_TIMEOUT"
+          reason: "MARKET_BATCH_QUOTE_REFRESH_DEFERRED"
         })
       );
       void livePromise
@@ -372,7 +376,11 @@ export class LiveMarketDataViewService {
       if (output.status === "live" || output.status === "partial") {
         this.lastGoodBatchQuotes.set(key, output);
       }
-      this.batchQuoteCache.set(key, { expiresAt: generatedAt.getTime() + BATCH_QUOTE_CACHE_MS, item: output });
+      if (isDeferredBatchQuote(output)) {
+        this.batchQuoteCache.delete(key);
+      } else {
+        this.batchQuoteCache.set(key, { expiresAt: generatedAt.getTime() + BATCH_QUOTE_CACHE_MS, item: output });
+      }
       return output;
     }));
     return {
@@ -716,6 +724,14 @@ const orderbookCacheKey = (
 const isDisplayUsableOrderbook = (orderbook: MarketOrderbookResponse): boolean =>
   orderbook.venues.length > 0 &&
   (orderbook.status === "live" || orderbook.status === "partial" || orderbook.status === "stale");
+
+const isDeferredOrderbook = (orderbook: MarketOrderbookResponse): boolean =>
+  orderbook.status === "unavailable" &&
+  orderbook.blockers.some((blocker) => blocker.venue === "LOTUS" && blocker.reason === "MARKET_ORDERBOOK_REFRESH_DEFERRED");
+
+const isDeferredBatchQuote = (quote: MarketBatchQuoteItem): boolean =>
+  quote.status === "unavailable" &&
+  quote.blockers.some((blocker) => blocker.venue === "LOTUS" && blocker.reason === "MARKET_BATCH_QUOTE_REFRESH_DEFERRED");
 
 const chartCacheKey = (input: {
   marketId: string;
