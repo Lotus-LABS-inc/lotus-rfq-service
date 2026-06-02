@@ -19,7 +19,7 @@ export interface HotQuoteSnapshotDbFallback {
 
 export interface HotQuoteSnapshotServiceConfig {
   memoryCache: QuoteSnapshotCache;
-  redis?: Pick<RedisClient, "get" | "set" | "publish" | "zadd" | "zrem" | "zrangebyscore"> | undefined;
+  redis?: Pick<RedisClient, "get" | "set" | "publish" | "zadd" | "zrem" | "zrangebyscore" | "zrevrangebyscore"> | undefined;
   dbFallback?: HotQuoteSnapshotDbFallback | undefined;
   logger?: Pick<Logger, "warn" | "debug"> | undefined;
   now?: () => Date;
@@ -83,14 +83,23 @@ export class HotQuoteSnapshotService {
     const nowMs = this.now().getTime();
     const limit = Math.max(1, Math.min(input.limit ?? 500, 2_000));
     try {
-      const keys = await this.deps.redis.zrangebyscore(
-        REDIS_ACTIVE_MARKETS_INDEX,
-        nowMs,
-        "+inf",
-        "LIMIT",
-        0,
-        limit
-      );
+      const keys = this.deps.redis.zrevrangebyscore
+        ? await this.deps.redis.zrevrangebyscore(
+          REDIS_ACTIVE_MARKETS_INDEX,
+          "+inf",
+          nowMs,
+          "LIMIT",
+          0,
+          limit
+        )
+        : (await this.deps.redis.zrangebyscore(
+          REDIS_ACTIVE_MARKETS_INDEX,
+          nowMs,
+          "+inf",
+          "LIMIT",
+          0,
+          limit
+        )).reverse();
       const results: Array<{ canonicalMarketId: string; canonicalOutcomeId?: string | undefined; lastSeenAt: Date }> = [];
       for (const key of keys) {
         const raw = await this.deps.redis.get(key);

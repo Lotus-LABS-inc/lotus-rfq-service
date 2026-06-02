@@ -68,6 +68,23 @@ class FakeRedis {
       .map(([member]) => member);
     return limitLiteral === "LIMIT" ? values.slice(offset ?? 0, (offset ?? 0) + (count ?? values.length)) : values;
   }
+
+  public async zrevrangebyscore(
+    key: string,
+    max: number | string,
+    min: number | string,
+    limitLiteral?: "LIMIT",
+    offset?: number,
+    count?: number
+  ): Promise<string[]> {
+    const minNumber = typeof min === "number" ? min : Number.NEGATIVE_INFINITY;
+    const maxNumber = max === "+inf" ? Number.POSITIVE_INFINITY : Number(max);
+    const values = [...(this.scores.get(key)?.entries() ?? [])]
+      .filter(([, score]) => score >= minNumber && score <= maxNumber)
+      .sort((left, right) => right[1] - left[1])
+      .map(([member]) => member);
+    return limitLiteral === "LIMIT" ? values.slice(offset ?? 0, (offset ?? 0) + (count ?? values.length)) : values;
+  }
 }
 
 describe("HotQuoteSnapshotService", () => {
@@ -241,6 +258,27 @@ describe("HotQuoteSnapshotService", () => {
       canonicalOutcomeId: "YES",
       lastSeenAt: now
     }]);
+  });
+
+  it("lists newest Redis-active markets first so opened pages get stream priority", async () => {
+    const redis = new FakeRedis();
+    let current = now;
+    const service = new HotQuoteSnapshotService({
+      memoryCache: new QuoteSnapshotCache(),
+      redis,
+      now: () => current,
+      config: { activeMarketTtlMs: 60_000 }
+    });
+
+    service.touch({ canonicalMarketId: "older-market" });
+    current = new Date(now.getTime() + 1_000);
+    service.touch({ canonicalMarketId: "newer-market" });
+    await vi.waitFor(() => {
+      expect(redis.scores.size).toBeGreaterThan(0);
+    });
+
+    const result = await service.listActiveMarketsFromRedis({ limit: 2 });
+    expect(result.map((entry) => entry.canonicalMarketId)).toEqual(["newer-market", "older-market"]);
   });
 
   it("lets CompositeVenueQuoteSource use hot snapshots before live readers and refill hot cache from REST", async () => {

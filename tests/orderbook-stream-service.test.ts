@@ -108,7 +108,8 @@ describe("OrderbookStreamService", () => {
       connectors: [connector],
       publisher: { publish: vi.fn(async () => 1) },
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-      now: () => now
+      now: () => now,
+      config: { subscriptionHoldMs: 0 }
     });
 
     await expect(service.runOnce()).resolves.toMatchObject({ subscribed: 1, unsubscribed: 0 });
@@ -343,5 +344,74 @@ describe("OrderbookStreamService", () => {
     await service.runOnce();
 
     expect(connector.subscribed).toHaveLength(1);
+  });
+
+  it("holds subscriptions through brief active-market gaps instead of churning venue sockets", async () => {
+    let active = true;
+    const connector = new FakeConnector("POLYMARKET");
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return active
+            ? [{ canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: now }]
+            : [];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness() {
+          return [{
+            venue: "POLYMARKET",
+            approvedVenueMarketId: "approved-1",
+            venueMarketId: "market-1",
+            venueOutcomeId: "token-yes",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors: [connector],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now,
+      config: { subscriptionHoldMs: 60_000 }
+    });
+
+    await service.runOnce();
+    active = false;
+    await expect(service.runOnce()).resolves.toMatchObject({ unsubscribed: 0, retainedSubscriptions: 1 });
+    expect(connector.unsubscribed).toEqual([]);
+  });
+
+  it("does not mark failed venue subscriptions active so later ticks can retry", async () => {
+    const failing = new FailingSubscribeConnector("LIMITLESS");
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [{ canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: now }];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness() {
+          return [{
+            venue: "LIMITLESS",
+            approvedVenueMarketId: "approved-limitless",
+            venueMarketId: "limitless-market",
+            venueOutcomeId: "YES",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors: [failing],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ subscribed: 0, pendingSubscriptions: 1 });
+    await expect(service.runOnce()).resolves.toMatchObject({ subscribed: 0, pendingSubscriptions: 1 });
+    expect(failing.subscribed).toHaveLength(0);
   });
 });

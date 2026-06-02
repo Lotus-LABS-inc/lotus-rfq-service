@@ -34,6 +34,7 @@ export interface RedisClient {
   zrem(key: string, member: string): Promise<number>;
   zrange?(key: string, start: number, stop: number): Promise<string[]>;
   zrangebyscore(key: string, min: number | string, max: number | string, limitLiteral?: "LIMIT", offset?: number, count?: number): Promise<string[]>;
+  zrevrangebyscore?(key: string, max: number | string, min: number | string, limitLiteral?: "LIMIT", offset?: number, count?: number): Promise<string[]>;
   zrevrange(key: string, start: number, stop: number): Promise<string[]>;
   hset(key: string, field: string, value: string): Promise<number>;
   hget(key: string, field: string): Promise<string | null>;

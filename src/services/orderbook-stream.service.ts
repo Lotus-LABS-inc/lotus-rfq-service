@@ -35,6 +35,11 @@ export interface VenueOrderbookStreamConnector {
 export interface OrderbookStreamServiceConfig {
   pollIntervalMs: number;
   activeMarketLimit: number;
+  maxSubscribeTargetsPerTick: number;
+  maxUnsubscribeTargetsPerTick: number;
+  maxTargetsPerConnectorCall: number;
+  subscriptionHoldMs: number;
+  summaryLogIntervalMs: number;
 }
 
 export interface OrderbookStreamServiceDeps {
@@ -55,11 +60,18 @@ export interface OrderbookStreamServiceRunResult {
   subscribed: number;
   unsubscribed: number;
   unsupportedVenueTargets: number;
+  retainedSubscriptions: number;
+  pendingSubscriptions: number;
 }
 
 const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
   pollIntervalMs: 1_000,
-  activeMarketLimit: 500
+  activeMarketLimit: 500,
+  maxSubscribeTargetsPerTick: 160,
+  maxUnsubscribeTargetsPerTick: 40,
+  maxTargetsPerConnectorCall: 40,
+  subscriptionHoldMs: 120_000,
+  summaryLogIntervalMs: 15_000
 };
 
 export const ORDERBOOK_GATEWAY_REDIS_CHANNEL = "rfq:gateway:events";
@@ -69,7 +81,8 @@ export class OrderbookStreamService {
   private readonly now: () => Date;
   private readonly redisChannel: string;
   private readonly connectorsByVenue: ReadonlyMap<string, VenueOrderbookStreamConnector>;
-  private readonly activeSubscriptionKeys = new Set<string>();
+  private readonly activeSubscriptions = new Map<string, { target: VenueOrderbookSubscriptionTarget; lastDesiredAt: number }>();
+  private lastSummaryLogAt = 0;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
 
@@ -106,7 +119,7 @@ export class OrderbookStreamService {
     }
     const disconnects = [...this.connectorsByVenue.values()].map((connector) => connector.disconnect());
     await Promise.allSettled(disconnects);
-    this.activeSubscriptionKeys.clear();
+    this.activeSubscriptions.clear();
     this.deps.logger.info({}, "Orderbook stream service stopped.");
   }
 
@@ -124,26 +137,46 @@ export class OrderbookStreamService {
       const resolvedTargets = await this.resolveTargets(activeMarkets);
       const desiredTargets = resolvedTargets.filter((target) => this.connectorsByVenue.has(normalizeVenue(target.venue)));
       const desiredKeys = new Set(desiredTargets.map(subscriptionKey));
-      const staleKeys = [...this.activeSubscriptionKeys].filter((key) => !desiredKeys.has(key));
-      const newTargets = desiredTargets.filter((target) => !this.activeSubscriptionKeys.has(subscriptionKey(target)));
-
-      await this.unsubscribe(staleKeys);
-      await this.subscribe(newTargets);
-
-      for (const key of staleKeys) {
-        this.activeSubscriptionKeys.delete(key);
+      const nowMs = this.now().getTime();
+      for (const target of desiredTargets) {
+        const key = subscriptionKey(target);
+        const current = this.activeSubscriptions.get(key);
+        if (current) {
+          current.lastDesiredAt = nowMs;
+        }
       }
-      for (const target of newTargets) {
-        this.activeSubscriptionKeys.add(subscriptionKey(target));
+      const staleKeys = [...this.activeSubscriptions.entries()]
+        .filter(([key, record]) => !desiredKeys.has(key) && nowMs - record.lastDesiredAt >= this.config.subscriptionHoldMs)
+        .map(([key]) => key)
+        .slice(0, this.config.maxUnsubscribeTargetsPerTick);
+      const retainedSubscriptions = [...this.activeSubscriptions.entries()]
+        .filter(([key]) => !desiredKeys.has(key))
+        .length - staleKeys.length;
+      const newTargets = desiredTargets
+        .filter((target) => !this.activeSubscriptions.has(subscriptionKey(target)))
+        .slice(0, this.config.maxSubscribeTargetsPerTick);
+
+      const unsubscribedKeys = await this.unsubscribe(staleKeys);
+      const subscribedTargets = await this.subscribe(newTargets);
+
+      for (const key of unsubscribedKeys) {
+        this.activeSubscriptions.delete(key);
+      }
+      for (const target of subscribedTargets) {
+        this.activeSubscriptions.set(subscriptionKey(target), { target, lastDesiredAt: nowMs });
       }
 
-      return {
+      const result = {
         activeMarkets: activeMarkets.length,
         desiredSubscriptions: desiredTargets.length,
-        subscribed: newTargets.length,
-        unsubscribed: staleKeys.length,
-        unsupportedVenueTargets: resolvedTargets.length - desiredTargets.length
+        subscribed: subscribedTargets.length,
+        unsubscribed: unsubscribedKeys.length,
+        unsupportedVenueTargets: resolvedTargets.length - desiredTargets.length,
+        retainedSubscriptions: Math.max(0, retainedSubscriptions),
+        pendingSubscriptions: Math.max(0, desiredTargets.length - this.activeSubscriptions.size)
       };
+      this.logSummary(result);
+      return result;
     } catch (error) {
       this.deps.logger.warn({ err: error }, "Orderbook stream service tick failed.");
       return empty;
@@ -157,7 +190,7 @@ export class OrderbookStreamService {
     const results: VenueOrderbookSubscriptionTarget[][] = [];
     for (const market of activeMarkets) {
       const readiness = batchReadiness
-        ? batchReadiness.get(market.canonicalMarketId) ?? []
+        ? batchReadiness.get(market.canonicalMarketId) ?? await this.loadSingleReadiness(market)
         : await this.loadSingleReadiness(market);
       const targets = readiness
         .filter(isQuoteReadyMapping)
@@ -195,24 +228,29 @@ export class OrderbookStreamService {
     });
   }
 
-  private async subscribe(targets: readonly VenueOrderbookSubscriptionTarget[]): Promise<void> {
+  private async subscribe(targets: readonly VenueOrderbookSubscriptionTarget[]): Promise<readonly VenueOrderbookSubscriptionTarget[]> {
     const grouped = groupByVenue(targets);
+    const succeeded: VenueOrderbookSubscriptionTarget[] = [];
     await Promise.all([...grouped.entries()].map(async ([venue, venueTargets]) => {
       const connector = this.connectorsByVenue.get(venue);
       if (!connector) {
         return;
       }
-      try {
-        await connector.subscribe(venueTargets, (snapshot, target) => {
-          this.onSnapshot(snapshot, target);
-        });
-      } catch (error) {
-        this.deps.logger.warn({ err: error, venue, targetCount: venueTargets.length }, "Venue orderbook subscribe failed.");
+      for (const chunk of chunks(venueTargets, this.config.maxTargetsPerConnectorCall)) {
+        try {
+          await connector.subscribe(chunk, (snapshot, target) => {
+            this.onSnapshot(snapshot, target);
+          });
+          succeeded.push(...chunk);
+        } catch (error) {
+          this.deps.logger.warn({ err: error, venue, targetCount: chunk.length }, "Venue orderbook subscribe failed.");
+        }
       }
     }));
+    return succeeded;
   }
 
-  private async unsubscribe(subscriptionKeys: readonly string[]): Promise<void> {
+  private async unsubscribe(subscriptionKeys: readonly string[]): Promise<readonly string[]> {
     const keysByVenue = new Map<string, string[]>();
     for (const key of subscriptionKeys) {
       const venue = key.split("|", 1)[0] ?? "";
@@ -220,17 +258,22 @@ export class OrderbookStreamService {
       bucket.push(key);
       keysByVenue.set(venue, bucket);
     }
+    const succeeded: string[] = [];
     await Promise.all([...keysByVenue.entries()].map(async ([venue, keys]) => {
       const connector = this.connectorsByVenue.get(venue);
       if (!connector) {
         return;
       }
-      try {
-        await connector.unsubscribe(keys);
-      } catch (error) {
-        this.deps.logger.warn({ err: error, venue, targetCount: keys.length }, "Venue orderbook unsubscribe failed.");
+      for (const chunk of chunks(keys, this.config.maxTargetsPerConnectorCall)) {
+        try {
+          await connector.unsubscribe(chunk);
+          succeeded.push(...chunk);
+        } catch (error) {
+          this.deps.logger.warn({ err: error, venue, targetCount: chunk.length }, "Venue orderbook unsubscribe failed.");
+        }
       }
     }));
+    return succeeded;
   }
 
   private onSnapshot(snapshot: NormalizedVenueQuoteSnapshot, target: VenueOrderbookSubscriptionTarget): void {
@@ -271,6 +314,19 @@ export class OrderbookStreamService {
       this.deps.logger.warn({ err: error, venue: snapshot.venue }, "Orderbook stream gateway publish failed.");
     }
   }
+
+  private logSummary(result: OrderbookStreamServiceRunResult): void {
+    const nowMs = this.now().getTime();
+    const hasChanges = result.subscribed > 0 || result.unsubscribed > 0 || result.pendingSubscriptions > 0;
+    if (!hasChanges && nowMs - this.lastSummaryLogAt < this.config.summaryLogIntervalMs) {
+      return;
+    }
+    this.lastSummaryLogAt = nowMs;
+    this.deps.logger.info({
+      ...result,
+      activeSubscriptions: this.activeSubscriptions.size
+    }, "Orderbook stream service tick completed.");
+  }
 }
 
 export const marketOrderbookTopic = (canonicalMarketId: string, canonicalOutcomeId?: string | undefined): string =>
@@ -309,6 +365,15 @@ const groupByVenue = (targets: readonly VenueOrderbookSubscriptionTarget[]): Rea
   return grouped;
 };
 
+const chunks = <T>(values: readonly T[], size: number): T[][] => {
+  const chunkSize = Math.max(1, size);
+  const result: T[][] = [];
+  for (let index = 0; index < values.length; index += chunkSize) {
+    result.push(values.slice(index, index + chunkSize));
+  }
+  return result;
+};
+
 const readinessByCanonicalMarket = (
   rows: readonly SharedCoreQuoteReadinessMarket[]
 ): ReadonlyMap<string, readonly VenueQuoteMappingReadiness[]> => {
@@ -342,5 +407,7 @@ const emptyResult = (): OrderbookStreamServiceRunResult => ({
   desiredSubscriptions: 0,
   subscribed: 0,
   unsubscribed: 0,
-  unsupportedVenueTargets: 0
+  unsupportedVenueTargets: 0,
+  retainedSubscriptions: 0,
+  pendingSubscriptions: 0
 });

@@ -39,6 +39,7 @@ const createRedisStub = (): RedisClient => {
     zadd: async () => 1,
     zrem: async () => 1,
     zrangebyscore: async (key: string, min: number | string, max: number | string, limitLiteral?: "LIMIT", offset?: number, count?: number) => [],
+    zrevrangebyscore: async (key: string, max: number | string, min: number | string, limitLiteral?: "LIMIT", offset?: number, count?: number) => [],
     zrevrange: async () => [],
     hset: async () => 1,
     hget: async () => null,

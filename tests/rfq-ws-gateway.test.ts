@@ -123,6 +123,10 @@ class FakeRedisClient implements RedisClient {
     return [];
   }
 
+  public async zrevrangebyscore(key: string, max: number | string, min: number | string, limitLiteral?: "LIMIT", offset?: number, count?: number): Promise<string[]> {
+    return [];
+  }
+
   public async zrevrange(): Promise<string[]> {
     return [];
   }
