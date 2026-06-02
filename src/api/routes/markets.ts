@@ -638,7 +638,7 @@ const isCacheableMarketCatalogResponseForKey = (
     return true;
   }
   const markets = Array.isArray(value.markets) ? value.markets : [];
-  return markets.length > 0;
+  return markets.some(isTradableMarketListItem);
 };
 
 const isQuoteReadyMarketCatalogCacheKey = (key: string): boolean =>
