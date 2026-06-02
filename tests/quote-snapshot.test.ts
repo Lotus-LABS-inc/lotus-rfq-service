@@ -353,6 +353,55 @@ describe("venue quote readers", () => {
 });
 
 describe("venue quote mapping resolvers", () => {
+  it("caches and coalesces approved venue mapping readiness lookups", async () => {
+    let calls = 0;
+    let now = new Date("2026-05-10T12:00:00.000Z");
+    let resolveRows!: (rows: any[]) => void;
+    const pendingRows = new Promise<any[]>((resolve) => {
+      resolveRows = resolve;
+    });
+    const resolver = new SharedCoreVenueQuoteMappingResolver({
+      async loadApprovedVenueMappings() {
+        calls += 1;
+        if (calls === 1) {
+          return pendingRows;
+        }
+        return [{
+          venue: "LIMITLESS",
+          venue_market_id: "LIMITLESS:market-2:curated",
+          normalized_payload: { venueMarketId: "market-2" },
+          raw_source_payload: {}
+        }];
+      },
+      async listApprovedVenueMappings() {
+        return [];
+      }
+    }, {
+      cacheTtlMs: 1_000,
+      now: () => now
+    });
+
+    const first = resolver.getReadiness({ canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES" });
+    const second = resolver.getReadiness({ canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES" });
+    resolveRows([{
+      venue: "LIMITLESS",
+      venue_market_id: "LIMITLESS:market-1:curated",
+      normalized_payload: { venueMarketId: "market-1" },
+      raw_source_payload: {}
+    }]);
+
+    const [firstRows, secondRows] = await Promise.all([first, second]);
+    const cachedRows = await resolver.getReadiness({ canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES" });
+    now = new Date("2026-05-10T12:00:02.000Z");
+    const refreshedRows = await resolver.getReadiness({ canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES" });
+
+    expect(calls).toBe(2);
+    expect(firstRows[0]?.venueMarketId).toBe("market-1");
+    expect(secondRows[0]?.venueMarketId).toBe("market-1");
+    expect(cachedRows[0]?.venueMarketId).toBe("market-1");
+    expect(refreshedRows[0]?.venueMarketId).toBe("market-2");
+  });
+
   it("resolves approved frontend-curated DB venue mappings back to raw venue ids", async () => {
     const resolver = new SharedCoreVenueQuoteMappingResolver({
       async loadApprovedVenueMappings() {
