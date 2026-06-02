@@ -303,8 +303,8 @@ export const registerMarketCatalogRoutes = async (
       });
     }
     const { marketId } = request.params as { marketId: string };
-    const market = await resolveCachedCatalogMarket(deps.marketCatalogRepository, marketId);
-    if (!market) {
+    const marketResult = await resolveCachedCatalogMarketForChart(deps.marketCatalogRepository, marketId);
+    if (marketResult.ok && !marketResult.market) {
       return reply.status(404).send({
         code: "MARKET_NOT_FOUND",
         message: "Market was not found."
