@@ -18,6 +18,8 @@ describe("MarketOrderbookRecorder", () => {
     expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
       intervalMs: 60_000,
       marketBatchSize: 15,
+      priorityMarketBatchSize: 8,
+      priorityVenues: ["OPINION"],
       maxSamplesPerTick: 60
     });
   });
@@ -29,6 +31,8 @@ describe("MarketOrderbookRecorder", () => {
       expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
         intervalMs: 60_000,
         marketBatchSize: 15,
+        priorityMarketBatchSize: 8,
+        priorityVenues: ["OPINION"],
         maxSamplesPerTick: 60
       });
       expect(buildMarketOrderbookRecorderConfig()).not.toHaveProperty("enabled");
@@ -172,6 +176,59 @@ describe("MarketOrderbookRecorder", () => {
     expect(result.sampledOutcomes).toBe(1);
     expect(result.insertedSnapshots).toBe(1);
     expect(inserted).toHaveLength(1);
+  });
+
+  it("samples priority Opinion markets even when the normal catalog page has not reached them", async () => {
+    const sampledMarketIds: string[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async (filter) => (filter?.limit ?? 0) >= 250
+          ? [{
+              ...opinionMarketFixture(),
+              canonicalEventId: "event-opinion",
+              canonicalMarketIds: ["market-opinion"],
+              venueMarkets: opinionMarketFixture().venueMarkets.map((venueMarket) => ({
+                ...venueMarket,
+                canonicalMarketId: "market-opinion"
+              }))
+            }]
+          : [marketFixture("OPEN")]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalMarketId }) => {
+          sampledMarketIds.push(canonicalMarketId);
+          return {
+            snapshots: [],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 1,
+        priorityMarketBatchSize: 1,
+        priorityVenues: ["OPINION"],
+        maxSamplesPerTick: 40,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.scannedMarkets).toBe(2);
+    expect(sampledMarketIds).toEqual(["market-opinion", "market-opinion", "market-1", "market-1"]);
   });
 
   it("does not run recording after stop is requested", async () => {

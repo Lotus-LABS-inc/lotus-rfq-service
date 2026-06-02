@@ -10,6 +10,8 @@ import type { NormalizedQuoteLevel, NormalizedVenueQuoteSnapshot } from "../core
 export interface MarketOrderbookRecorderConfig {
   intervalMs: number;
   marketBatchSize: number;
+  priorityMarketBatchSize?: number;
+  priorityVenues?: readonly string[];
   maxSamplesPerTick: number;
   retentionHours: number;
   levelsPerSide: number;
@@ -39,6 +41,8 @@ export interface MarketOrderbookRecorderRunResult {
 const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
   intervalMs: 60_000,
   marketBatchSize: 15,
+  priorityMarketBatchSize: 8,
+  priorityVenues: ["OPINION"] as readonly string[],
   maxSamplesPerTick: 60,
   retentionHours: 720,
   levelsPerSide: 25,
@@ -61,6 +65,7 @@ export class MarketOrderbookRecorder {
   private running = false;
   private stopped = false;
   private marketOffset = 0;
+  private priorityMarketOffset = 0;
   private readonly venueCooldownUntil = new Map<string, number>();
 
   public constructor(
@@ -79,6 +84,8 @@ export class MarketOrderbookRecorder {
     this.logger.info({
       intervalMs: this.config.intervalMs,
       marketBatchSize: this.config.marketBatchSize,
+      priorityMarketBatchSize: this.config.priorityMarketBatchSize ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityMarketBatchSize,
+      priorityVenues: this.config.priorityVenues ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityVenues,
       maxSamplesPerTick: this.config.maxSamplesPerTick,
       retentionHours: this.config.retentionHours,
       levelsPerSide: this.config.levelsPerSide
@@ -117,6 +124,7 @@ export class MarketOrderbookRecorder {
       const cleanup = await this.snapshotRepository.cleanupSnapshots({
         olderThan: new Date(Date.now() - this.config.retentionHours * 60 * 60 * 1000)
       });
+      const priorityMarkets = await this.listPriorityMarkets();
       const marketOffset = this.marketOffset;
       let markets = await this.marketCatalogRepository.listMarkets({
         limit: this.config.marketBatchSize,
@@ -129,6 +137,9 @@ export class MarketOrderbookRecorder {
       this.marketOffset = markets.length < this.config.marketBatchSize
         ? 0
         : this.marketOffset + this.config.marketBatchSize;
+      if (priorityMarkets.length > 0) {
+        markets = uniqueMarketsByEventAndMarketIds([...priorityMarkets, ...markets]);
+      }
       const result: MarketOrderbookRecorderRunResult = {
         marketOffset,
         scannedMarkets: markets.length,
@@ -243,6 +254,33 @@ export class MarketOrderbookRecorder {
       return;
     }
     this.venueCooldownUntil.set(normalizeVenue(venue), Date.now() + cooldownMs);
+  }
+
+  private async listPriorityMarkets(): Promise<MarketCatalogMarket[]> {
+    const priorityMarketBatchSize = this.config.priorityMarketBatchSize ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityMarketBatchSize;
+    const priorityVenues = this.config.priorityVenues ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityVenues;
+    if (priorityMarketBatchSize <= 0 || priorityVenues.length === 0) {
+      return [];
+    }
+
+    const catalogWindow = await this.marketCatalogRepository.listMarkets({
+      limit: Math.max(250, priorityMarketBatchSize),
+      offset: 0
+    });
+    const priorityMarkets = catalogWindow.filter((market) =>
+      market.status === "OPEN" && marketIncludesAnyVenue(market, priorityVenues)
+    );
+    if (priorityMarkets.length === 0) {
+      this.priorityMarketOffset = 0;
+      return [];
+    }
+
+    if (this.priorityMarketOffset >= priorityMarkets.length) {
+      this.priorityMarketOffset = 0;
+    }
+    const selected = wrapSlice(priorityMarkets, this.priorityMarketOffset, priorityMarketBatchSize);
+    this.priorityMarketOffset = (this.priorityMarketOffset + priorityMarketBatchSize) % priorityMarkets.length;
+    return selected;
   }
 
   private async waitForIdle(): Promise<void> {
@@ -429,6 +467,40 @@ const emptyResult = (): MarketOrderbookRecorderRunResult => ({
 const normalizeVenue = (venue: string): string => {
   const normalized = venue.trim().toUpperCase();
   return normalized === "PREDICT" ? "PREDICT_FUN" : normalized;
+};
+
+const marketIncludesAnyVenue = (
+  market: MarketCatalogMarket,
+  venues: readonly string[]
+): boolean => {
+  const normalizedVenues = new Set(venues.map(normalizeVenue));
+  return market.venueMarkets.some((venueMarket) => normalizedVenues.has(normalizeVenue(venueMarket.venue))) ||
+    market.venues.some((venue) => normalizedVenues.has(normalizeVenue(venue)));
+};
+
+const uniqueMarketsByEventAndMarketIds = (markets: readonly MarketCatalogMarket[]): MarketCatalogMarket[] => {
+  const seen = new Set<string>();
+  const unique: MarketCatalogMarket[] = [];
+  for (const market of markets) {
+    const key = `${market.canonicalEventId}:${market.canonicalMarketIds.join("|") || market.eventId}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    unique.push(market);
+  }
+  return unique;
+};
+
+const wrapSlice = <T>(values: readonly T[], offset: number, limit: number): T[] => {
+  if (limit <= 0 || values.length === 0) {
+    return [];
+  }
+  const selected: T[] = [];
+  for (let index = 0; index < Math.min(limit, values.length); index += 1) {
+    selected.push(values[(offset + index) % values.length]!);
+  }
+  return selected;
 };
 
 const providerCooldownMsForReason = (reason: string, baseCooldownMs: number): number => {
