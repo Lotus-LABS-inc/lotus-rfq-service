@@ -218,9 +218,9 @@ export interface MarkedExecutionPosition extends VerifiedExecutionPosition {
   markBlocker: string | null;
 }
 
-const LIVE_CANDIDATE_CACHE_MS = 5_000;
-const LIVE_CANDIDATE_STALE_MS = 45_000;
-const LIVE_CANDIDATE_RESPONSE_TIMEOUT_MS = 850;
+const LIVE_CANDIDATE_CACHE_MS = 10_000;
+const LIVE_CANDIDATE_STALE_MS = 90_000;
+const LIVE_CANDIDATE_RESPONSE_TIMEOUT_MS = 500;
 const POSITION_MARK_CACHE_MS = 15_000;
 const POSITION_MARK_LIVE_TIMEOUT_MS = 700;
 const POSITION_MARK_LIVE_READ_BUDGET = 20;

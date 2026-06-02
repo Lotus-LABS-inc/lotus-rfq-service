@@ -2738,7 +2738,7 @@ describe("execution signed bundle routes", () => {
       }
     });
 
-    expect(Date.now() - startedAt).toBeLessThan(1_500);
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
     expect(response.statusCode).toBe(409);
     expect(response.json()).toMatchObject({
       code: "NO_LIVE_EXECUTION_CANDIDATES",

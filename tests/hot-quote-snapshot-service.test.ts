@@ -165,6 +165,43 @@ describe("HotQuoteSnapshotService", () => {
     expect(dbCalls).toBe(0);
   });
 
+  it("keeps display snapshots available across recorder gaps without making strict hot reads stale-tolerant", async () => {
+    const redis = new FakeRedis();
+    const writer = new HotQuoteSnapshotService({
+      memoryCache: new QuoteSnapshotCache(),
+      redis,
+      now: () => now
+    });
+    writer.put(snapshot());
+
+    await vi.waitFor(() => {
+      expect(redis.values.size).toBeGreaterThan(0);
+    });
+
+    const later = new Date(now.getTime() + 60_000);
+    const reader = new HotQuoteSnapshotService({
+      memoryCache: new QuoteSnapshotCache(),
+      redis,
+      now: () => later
+    });
+
+    await expect(reader.get({
+      venue: "POLYMARKET",
+      venueMarketId: "market-1",
+      venueOutcomeId: "yes"
+    })).resolves.toBeNull();
+
+    const display = await reader.getDisplay({
+      venue: "POLYMARKET",
+      venueMarketId: "market-1",
+      venueOutcomeId: "yes",
+      maxAgeMs: 120_000,
+      includeDbFallback: false
+    });
+    expect(display?.metadata?.hotSnapshotSource).toBe("redis");
+    expect(display?.metadata?.hotSnapshotFreshnessMs).toBe(60_000);
+  });
+
   it("tracks active markets and expires idle entries", () => {
     let current = now;
     const service = new HotQuoteSnapshotService({
