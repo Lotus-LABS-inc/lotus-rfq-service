@@ -67,6 +67,7 @@ const DEFAULT_MARKET_CATALOG_RESPONSE_CACHE_MS = 300_000;
 const DEFAULT_MARKET_CATALOG_RESPONSE_STALE_CACHE_MS = 900_000;
 const DEFAULT_MARKET_DETAIL_CACHE_MS = 300_000;
 const DEFAULT_MARKET_CHART_DETAIL_TIMEOUT_MS = 50;
+const DEFAULT_MARKET_CATALOG_ACTIVITY_TOUCH_LIMIT = 60;
 const MARKET_QUOTE_READINESS_TIMEOUT = Symbol("MARKET_QUOTE_READINESS_TIMEOUT");
 const MARKET_DETAIL_TIMEOUT = Symbol("MARKET_DETAIL_TIMEOUT");
 
@@ -135,7 +136,7 @@ export const registerMarketCatalogRoutes = async (
           ...(parsed.data.search !== undefined ? { search: parsed.data.search } : {}),
           ...(marketLimit !== undefined ? { limit: marketLimit } : {})
         });
-        touchMarketCatalogActivity(markets, deps.marketActivityTracker);
+        touchMarketCatalogActivity(markets, deps.marketActivityTracker, DEFAULT_MARKET_CATALOG_ACTIVITY_TOUCH_LIMIT);
         const enriched = await enrichMarketsWithQuoteReadiness(markets, deps.marketQuoteReadinessSource);
         const routeCoverage = parsed.data.routeCoverage ?? "all";
         const visibleMarkets = enriched.markets
@@ -386,12 +387,15 @@ const resolveOutcomeLabel = (
 
 const touchMarketCatalogActivity = (
   markets: readonly MarketCatalogMarket[],
-  tracker: MarketCatalogRouteDeps["marketActivityTracker"]
+  tracker: MarketCatalogRouteDeps["marketActivityTracker"],
+  maxMarkets: number = DEFAULT_MARKET_CATALOG_ACTIVITY_TOUCH_LIMIT
 ): void => {
   if (!tracker) {
     return;
   }
-  const canonicalMarketIds = new Set(markets.flatMap((market) => market.canonicalMarketIds));
+  const canonicalMarketIds = new Set(markets
+    .slice(0, Math.max(0, maxMarkets))
+    .flatMap((market) => market.canonicalMarketIds));
   for (const canonicalMarketId of canonicalMarketIds) {
     if (canonicalMarketId.trim().length === 0) {
       continue;
