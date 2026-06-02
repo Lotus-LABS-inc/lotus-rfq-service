@@ -374,16 +374,32 @@ async function buildPredictRepairCandidates(rows: readonly PredictBlockedRow[]):
   let searchedRows = 0;
   for (const row of rows) {
     if (args.hidePredictVenueMarketIds.some((id) => samePredictVenueMarketId(id, row.venue_market_id))) {
-      results.push(toPredictUnresolved(row, "PREDICT_OPERATOR_CONFIRMED_NON_REPAIRABLE"));
+      results.push(toPredictUnresolved(row, "OPERATOR_SELECTED_FOR_QUOTE_DISABLE"));
       continue;
     }
     const currentId = extractNumericMarketId(row.venue_market_id);
+    const currentSlug = extractPredictSlug(row.venue_market_id);
     let currentLookupReason: string | null = null;
     if (currentId) {
       try {
         const current = await adapter.getMarketById(currentId);
         if (isActivePredictMarket(current) && hasExecutablePredictToken(current)) {
           results.push(toPredictRepair(row, current, args.apply ? "UPDATED" : "PLANNED", "CURRENT_MARKET_ID_RECOVERED"));
+          continue;
+        }
+        currentLookupReason = `CURRENT_MARKET_INACTIVE_${normalizeReasonToken(current.status ?? "UNKNOWN")}`;
+      } catch (error) {
+        if (!(error instanceof PredictClientError && (error.status === 400 || error.status === 404))) {
+          results.push(toPredictUnresolved(row, `CURRENT_MARKET_LOOKUP_FAILED_${error instanceof PredictClientError ? error.status ?? "NETWORK" : "UNKNOWN"}`));
+          continue;
+        }
+        currentLookupReason = `CURRENT_MARKET_LOOKUP_FAILED_${error.status}`;
+      }
+    } else if (currentSlug) {
+      try {
+        const current = await adapter.getMarketById(currentSlug);
+        if (isActivePredictMarket(current) && hasExecutablePredictToken(current)) {
+          results.push(toPredictRepair(row, current, args.apply ? "UPDATED" : "PLANNED", "CURRENT_MARKET_SLUG_RECOVERED"));
           continue;
         }
         currentLookupReason = `CURRENT_MARKET_INACTIVE_${normalizeReasonToken(current.status ?? "UNKNOWN")}`;
@@ -687,7 +703,12 @@ function samePredictVenueMarketId(left: string, right: string): boolean {
   }
   const leftNumeric = extractNumericMarketId(leftTrimmed);
   const rightNumeric = extractNumericMarketId(rightTrimmed);
-  return leftNumeric !== null && leftNumeric === rightNumeric;
+  if (leftNumeric !== null && leftNumeric === rightNumeric) {
+    return true;
+  }
+  const leftSlug = extractPredictSlug(leftTrimmed);
+  const rightSlug = extractPredictSlug(rightTrimmed);
+  return leftSlug !== null && leftSlug.toLowerCase() === rightSlug?.toLowerCase();
 }
 
 function buildPredictLinkHints(row: PredictBlockedRow): PredictRepairCandidate["linkHints"] {
