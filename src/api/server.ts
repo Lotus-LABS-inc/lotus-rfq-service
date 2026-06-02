@@ -2230,6 +2230,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     marketCatalogRepository,
     marketQuoteReadinessSource,
     marketCatalogSnapshotCache,
+    marketActivityTracker: hotQuoteSnapshots,
     marketDataViewService
   });
   await registerUserWalletRoutes(app, userAuthMiddleware, {
