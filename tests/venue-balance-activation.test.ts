@@ -76,7 +76,8 @@ describe("venue balance activation actions", () => {
         POLYMARKET_RELAYER_URL: "https://relayer.example",
         POLYMARKET_BUILDER_API_KEY: "key",
         POLYMARKET_BUILDER_API_SECRET: "secret",
-        POLYMARKET_BUILDER_API_PASSPHRASE: "passphrase"
+        POLYMARKET_BUILDER_API_PASSPHRASE: "passphrase",
+        POLYMARKET_BALANCE_ACTIVATION_SPENDER_ADDRESS: "0x4444444444444444444444444444444444444444"
       }
     });
 
@@ -90,6 +91,55 @@ describe("venue balance activation actions", () => {
       lastSubmitted: true
     });
     expect(activations[0]?.instructions.join(" ")).toContain("CLOB collateral");
+  });
+
+  it("does not mark Polymarket relayer activation ready without a CLOB pUSD approval spender", () => {
+    const activations = buildVenueBalanceActivationActions({
+      balances: [balance("PREDICT_FUN", "USDT")],
+      venueAccounts: [account("POLYMARKET"), account("PREDICT_FUN")],
+      env: {
+        POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED: "true",
+        POLYMARKET_RELAYER_URL: "https://relayer.example",
+        POLYMARKET_BUILDER_API_KEY: "key",
+        POLYMARKET_BUILDER_API_SECRET: "secret",
+        POLYMARKET_BUILDER_API_PASSPHRASE: "passphrase"
+      }
+    });
+
+    const polymarket = activations.find((activation) => activation.venue === "POLYMARKET");
+    expect(polymarket).toMatchObject({
+      venue: "POLYMARKET",
+      activationRequired: true,
+      mode: "VENUE_UI_OR_RELAYER",
+      status: "CONFIG_REQUIRED",
+      transactionRequest: null
+    });
+    expect(polymarket?.blockers).toContain("Polymarket CLOB pUSD approval spender is not configured or discoverable.");
+  });
+
+  it("accepts Polymarket relayer and builder env aliases when the approval spender is configured", () => {
+    const activations = buildVenueBalanceActivationActions({
+      balances: [balance("PREDICT_FUN", "USDT")],
+      venueAccounts: [account("POLYMARKET"), account("PREDICT_FUN")],
+      env: {
+        POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED: "true",
+        POLY_RELAYER_HOST: "https://relayer.example",
+        BUILDER_API_KEY: "key",
+        BUILDER_SECRET: "secret",
+        BUILDER_PASS_PHRASE: "passphrase",
+        POLYMARKET_BALANCE_ACTIVATION_SPENDER_ADDRESS: "0x4444444444444444444444444444444444444444"
+      }
+    });
+
+    const polymarket = activations.find((activation) => activation.venue === "POLYMARKET");
+    expect(polymarket).toMatchObject({
+      venue: "POLYMARKET",
+      activationRequired: true,
+      mode: "VENUE_UI_OR_RELAYER",
+      status: "READY",
+      transactionRequest: null,
+      spenderAddress: "0x4444444444444444444444444444444444444444"
+    });
   });
 
   it("builds an ERC20 approval only when operator-approved spender config is present", () => {

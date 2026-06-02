@@ -86,6 +86,37 @@ const parsePositiveInt = (value: string | null): number | null => {
 const isHexAddress = (value: string | null): value is string =>
   Boolean(value && /^0x[a-fA-F0-9]{40}$/.test(value));
 
+export const hasPolymarketActivationConfiguredApprovalSpender = (
+  env: NodeJS.ProcessEnv
+): boolean =>
+  isHexAddress(envValue(env, "POLYMARKET_BALANCE_ACTIVATION_SPENDER_ADDRESS")) ||
+  isHexAddress(envValue(env, "POLYMARKET_NEG_RISK_BALANCE_ACTIVATION_SPENDER_ADDRESS"));
+
+export const hasPolymarketActivationDiscoveredApprovalSpender = (
+  spenders: readonly { spenderAddress?: string | null }[] | null | undefined
+): boolean =>
+  Array.isArray(spenders) && spenders.some((spender) => isHexAddress(spender.spenderAddress ?? null));
+
+export const hasPolymarketActivationApprovalSpender = (
+  env: NodeJS.ProcessEnv,
+  spenders: readonly { spenderAddress?: string | null }[] | null | undefined
+): boolean =>
+  hasPolymarketActivationConfiguredApprovalSpender(env) ||
+  hasPolymarketActivationDiscoveredApprovalSpender(spenders);
+
+const polymarketRelayerUrlConfigured = (env: NodeJS.ProcessEnv): boolean =>
+  envValue(env, "POLYMARKET_RELAYER_URL") !== null ||
+  envValue(env, "POLYMARKET_RELAYER_HOST") !== null ||
+  envValue(env, "POLY_RELAYER_HOST") !== null;
+
+const polymarketBuilderCredentialsConfigured = (env: NodeJS.ProcessEnv): boolean =>
+  (envValue(env, "POLYMARKET_BUILDER_API_KEY") ?? envValue(env, "BUILDER_API_KEY")) !== null &&
+  (envValue(env, "POLYMARKET_BUILDER_API_SECRET") ?? envValue(env, "BUILDER_SECRET")) !== null &&
+  (envValue(env, "POLYMARKET_BUILDER_API_PASSPHRASE") ?? envValue(env, "BUILDER_PASS_PHRASE")) !== null;
+
+const polymarketActivationMissingSpenderBlocker =
+  "Polymarket CLOB pUSD approval spender is not configured or discoverable.";
+
 const encodeApprove = (spender: string, amount: string): string => {
   const cleanSpender = spender.toLowerCase().replace(/^0x/, "").padStart(64, "0");
   const cleanAmount = BigInt(amount).toString(16).padStart(64, "0");
@@ -219,12 +250,18 @@ const buildRelayerAction = (
     return buildNotRequiredAction(venue, account, balance);
   }
 
-  const polymarketReady = venue === "POLYMARKET" &&
-    envValue(env, "POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED") === "true" &&
-    envValue(env, "POLYMARKET_RELAYER_URL") !== null &&
-    envValue(env, "POLYMARKET_BUILDER_API_KEY") !== null &&
-    envValue(env, "POLYMARKET_BUILDER_API_SECRET") !== null &&
-    envValue(env, "POLYMARKET_BUILDER_API_PASSPHRASE") !== null;
+  const polymarketAutomationEnabled = venue === "POLYMARKET" &&
+    envValue(env, "POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED") === "true";
+  const polymarketReady = polymarketAutomationEnabled &&
+    polymarketRelayerUrlConfigured(env) &&
+    polymarketBuilderCredentialsConfigured(env) &&
+    hasPolymarketActivationConfiguredApprovalSpender(env);
+  const polymarketBlockers = [
+    polymarketAutomationEnabled && !hasPolymarketActivationConfiguredApprovalSpender(env)
+      ? polymarketActivationMissingSpenderBlocker
+      : null,
+    !polymarketReady ? `${venue} activation transaction is not configured for backend-safe preparation.` : null
+  ].filter((value): value is string => value !== null);
   return {
     venue,
     activationRequired: true,
@@ -245,11 +282,13 @@ const buildRelayerAction = (
             : "Use the Polymarket activation button. Lotus will prepare a safe deposit-wallet relayer batch for your Turnkey wallet to sign."
         ]
       : [
-          `${venue} activation requires the official venue relayer/UI path or an operator-reviewed activation endpoint.`,
+          venue === "POLYMARKET"
+            ? "Polymarket activation requires relayer credentials and an operator-reviewed CLOB pUSD approval spender."
+            : `${venue} activation requires the official venue relayer/UI path or an operator-reviewed activation endpoint.`,
           "Lotus will not guess or accept arbitrary spender addresses from the frontend."
         ],
     blockers: account
-      ? polymarketReady ? [] : [`${venue} activation transaction is not configured for backend-safe preparation.`]
+      ? polymarketReady ? [] : polymarketBlockers
       : [`${venue} active venue account is required before activation.`],
     ...(venue === "POLYMARKET" ? { lastSubmitted: activationExecuted } : {})
   };

@@ -22,7 +22,10 @@ import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerMarketCatalogRoutes } from "./routes/markets.js";
 import { RedisMarketCatalogSnapshotCache } from "../services/market-catalog-snapshot-cache.js";
 import { MarketCatalogSnapshotMaterializer } from "../services/market-catalog-snapshot-materializer.js";
-import { buildVenueBalanceActivationActions } from "../core/funding/venue-activation.js";
+import {
+  buildVenueBalanceActivationActions,
+  hasPolymarketActivationApprovalSpender
+} from "../core/funding/venue-activation.js";
 import { registerUserWithdrawalWalletRoutes } from "./routes/user-withdrawal-wallets.js";
 import { registerUserWalletRoutes, toSafeWallet } from "./routes/user-wallets.js";
 import { registerUserVenueAccountRoutes } from "./routes/user-venue-accounts.js";
@@ -1749,6 +1752,20 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         polymarket.bridgedUsdcBalance = balance.bridgedUsdcBalance;
         polymarket.clobAllowanceSpenders = balance.clobAllowanceSpenders;
         polymarket.approvalSpenderSource = balance.approvalSpenderSource;
+        const hasActivationApprovalSpender = hasPolymarketActivationApprovalSpender(
+          process.env,
+          balance.clobAllowanceSpenders
+        );
+        const requireActivationApprovalSpender = () => {
+          polymarket.status = polymarket.status === "ACCOUNT_REQUIRED" ? polymarket.status : "CONFIG_REQUIRED";
+          polymarket.readinessReason = "POLYMARKET_CLOB_APPROVAL_SPENDER_UNAVAILABLE";
+          polymarket.instructions = [
+            "Polymarket activation needs a current CLOB pUSD approval spender discovered from Polymarket or an operator-reviewed fallback spender in backend config."
+          ];
+          polymarket.blockers = [
+            "Polymarket CLOB pUSD approval spender is not configured or discoverable."
+          ];
+        };
         const bridgedUsdc = Number(balance.bridgedUsdcBalance ?? "0");
         const onchainPusd = Number(balance.onchainPusdBalance ?? "0");
         const usable = Number(balance.usableBalance);
@@ -1766,12 +1783,16 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         } else if (Number.isFinite(bridgedUsdc) && bridgedUsdc > 0) {
           polymarket.activationRequired = true;
           polymarket.mode = "VENUE_UI_OR_RELAYER";
-          polymarket.status = polymarket.status === "ACCOUNT_REQUIRED" ? polymarket.status : "READY";
           polymarket.tokenSymbol = "pUSD";
-          polymarket.readinessReason = "POLYMARKET_USDCE_ACTIVATION_REQUIRED";
-          polymarket.instructions = [
-            "USDC.e has arrived in the Polymarket deposit wallet, but it must be activated into Polymarket spendable pUSD/CLOB collateral before trading."
-          ];
+          if (hasActivationApprovalSpender) {
+            polymarket.status = polymarket.status === "ACCOUNT_REQUIRED" ? polymarket.status : "READY";
+            polymarket.readinessReason = "POLYMARKET_USDCE_ACTIVATION_REQUIRED";
+            polymarket.instructions = [
+              "USDC.e has arrived in the Polymarket deposit wallet, but it must be activated into Polymarket spendable pUSD/CLOB collateral before trading."
+            ];
+          } else {
+            requireActivationApprovalSpender();
+          }
         } else if (
           balance.usableBalanceSource === "ONCHAIN_CLOB_SPENDER_ALLOWANCE" &&
           Number.isFinite(onchainPusd) &&
@@ -1789,14 +1810,18 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         } else if (Number.isFinite(onchainPusd) && onchainPusd > 0) {
           polymarket.activationRequired = true;
           polymarket.mode = "VENUE_UI_OR_RELAYER";
-          polymarket.status = polymarket.status === "ACCOUNT_REQUIRED" ? polymarket.status : "READY";
           polymarket.tokenSymbol = "pUSD";
-          polymarket.readinessReason = "POLYMARKET_CLOB_APPROVAL_REQUIRED";
-          polymarket.instructions = [
-            balance.approvalSpenderSource === "CLOB_ALLOWANCE_MAP"
-              ? "pUSD is present in the Polymarket deposit wallet, but current Polymarket CLOB allowance is not ready. Activate again to approve the current CLOB trading spenders; a previous activation may have approved a legacy spender."
-              : "pUSD is present in the Polymarket deposit wallet, but Lotus could not discover current CLOB spenders. Activate will use the operator-reviewed fallback spender config."
-          ];
+          if (hasActivationApprovalSpender) {
+            polymarket.status = polymarket.status === "ACCOUNT_REQUIRED" ? polymarket.status : "READY";
+            polymarket.readinessReason = "POLYMARKET_CLOB_APPROVAL_REQUIRED";
+            polymarket.instructions = [
+              balance.approvalSpenderSource === "CLOB_ALLOWANCE_MAP"
+                ? "pUSD is present in the Polymarket deposit wallet, but current Polymarket CLOB allowance is not ready. Activate again to approve the current CLOB trading spenders; a previous activation may have approved a legacy spender."
+                : "pUSD is present in the Polymarket deposit wallet, but Lotus could not discover current CLOB spenders. Activate will use the operator-reviewed fallback spender config."
+            ];
+          } else {
+            requireActivationApprovalSpender();
+          }
         }
       } catch {
         // Activation listing remains durable even when live balance reads are temporarily unavailable.
