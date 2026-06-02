@@ -576,7 +576,7 @@ describe("market catalog routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(repository.filters).toHaveLength(0);
+    expect(repository.filters).toHaveLength(1);
     expect(response.json()).toMatchObject({
       count: 0,
       markets: []
