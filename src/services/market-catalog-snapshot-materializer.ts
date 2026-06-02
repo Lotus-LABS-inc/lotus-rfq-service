@@ -109,7 +109,7 @@ export class MarketCatalogSnapshotMaterializer {
     try {
       const detailKeysWritten = new Set<string>();
       for (const limit of this.config.limits) {
-        for (const category of [undefined, ...this.config.categories] as const) {
+        for (const category of [...this.config.categories, undefined] as const) {
           const baseQueries = [
             withOptionalCategory({ limit }, category),
             withOptionalCategory({ limit, quoteReadyOnly: false as const }, category),
@@ -157,10 +157,11 @@ export class MarketCatalogSnapshotMaterializer {
     });
     const enriched = enrichMarketsWithReadiness(markets, readiness);
     const routeCoverage = query.routeCoverage ?? "all";
-    const visibleMarkets = enriched
+    const baseVisibleMarkets = enriched
       .filter((market) => !query.quoteReadyOnly || isQuoteReadyMarket(market))
       .filter((market) => routeCoverageMatches(market, routeCoverage))
       .slice(0, query.limit);
+    const visibleMarkets = await this.mergeGlobalQuoteReadyCategorySnapshots(query, baseVisibleMarkets, routeCoverage);
 
     if (query.quoteReadyOnly && visibleMarkets.length === 0) {
       return "skipped_empty_quote_ready";
@@ -206,6 +207,35 @@ export class MarketCatalogSnapshotMaterializer {
         await this.deps.snapshotCache.set(key, payload, this.config.cacheTtlMs);
       }
     }
+  }
+
+  private async mergeGlobalQuoteReadyCategorySnapshots(
+    query: MarketCatalogMaterializedQuery,
+    visibleMarkets: readonly MarketCatalogMarket[],
+    routeCoverage: RouteCoverage
+  ): Promise<MarketCatalogMarket[]> {
+    if (query.category || !query.quoteReadyOnly || this.config.categories.length === 0) {
+      return [...visibleMarkets];
+    }
+    const byKey = new Map(visibleMarkets.map((market) => [marketIdentityKey(market), market] as const));
+    for (const category of this.config.categories) {
+      const categoryKey = `markets:${stableQueryCacheKey({ ...query, category })}`;
+      try {
+        const cached = await this.deps.snapshotCache.get<{ markets?: unknown }>(categoryKey);
+        const markets = Array.isArray(cached?.markets)
+          ? cached.markets.filter(isMarketCatalogMarket)
+          : [];
+        for (const market of markets) {
+          if (!isQuoteReadyMarket(market) || !routeCoverageMatches(market, routeCoverage)) {
+            continue;
+          }
+          byKey.set(marketIdentityKey(market), market);
+        }
+      } catch {
+        // Category snapshots are display fallbacks only. A cache miss should not block materialization.
+      }
+    }
+    return [...byKey.values()].slice(0, query.limit);
   }
 
   private async wouldUnderfillExistingSnapshot(
@@ -469,6 +499,15 @@ const pickMarketQuoteStatus = (readiness: readonly MarketQuoteReadinessSnapshot[
 
 const isQuoteReadyMarket = (market: MarketCatalogMarket): boolean =>
   (market.quoteReadyVenueCount ?? 0) > 0 && market.quoteStatus !== "unavailable";
+
+const marketIdentityKey = (market: MarketCatalogMarket): string =>
+  `${market.canonicalEventId}\u0000${market.canonicalMarketIds.join("\u0001")}`;
+
+const isMarketCatalogMarket = (value: unknown): value is MarketCatalogMarket =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as { canonicalEventId?: unknown }).canonicalEventId === "string" &&
+  Array.isArray((value as { canonicalMarketIds?: unknown }).canonicalMarketIds);
 
 const routeCoverageMatches = (market: MarketCatalogMarket, routeCoverage: RouteCoverage): boolean => {
   const readyVenueCount = market.quoteReadyVenueCount ?? 0;
