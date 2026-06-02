@@ -1135,6 +1135,9 @@ const getCachedExecutionDisplayData = async <T extends Record<string, unknown>>(
     return { value: cached.value, cache: "hit", generatedAt: new Date(now).toISOString() };
   }
   if (cached?.promise) {
+    if (cached.value !== undefined && cached.staleUntil > now) {
+      return { value: cached.value, cache: "stale", generatedAt: new Date(now).toISOString() };
+    }
     const value = await cached.promise;
     return { value, cache: "hit", generatedAt: new Date().toISOString() };
   }
@@ -1177,6 +1180,15 @@ const getCachedExecutionDisplayData = async <T extends Record<string, unknown>>(
     staleUntil: cached?.staleUntil ?? 0,
     promise
   });
+
+  if (cached?.value !== undefined && cached.staleUntil > now) {
+    void promise.catch(() => undefined);
+    return {
+      value: cached.value,
+      cache: "stale",
+      generatedAt: new Date(now).toISOString()
+    };
+  }
 
   try {
     const value = await promise;

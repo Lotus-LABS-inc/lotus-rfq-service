@@ -104,6 +104,11 @@ type FundingDisplayCacheEntry<T> = {
 const venueBalanceDisplayCache = new Map<string, FundingDisplayCacheEntry<VenueBalanceView[]>>();
 const venueActivationDisplayCache = new Map<string, FundingDisplayCacheEntry<VenueBalanceActivationAction[]>>();
 
+const invalidateFundingDisplayCaches = (userId: string): void => {
+  venueBalanceDisplayCache.delete(`venue-balances:${userId}`);
+  venueActivationDisplayCache.delete(`venue-activations:${userId}`);
+};
+
 export const registerFundingRoutes = async (
   app: FastifyInstance,
   authMiddleware: preHandlerHookHandler,
@@ -301,6 +306,7 @@ export const registerFundingRoutes = async (
     }
     try {
       const activation = await handlers.submitPolymarketActivation(request.user.userId, parsed.data);
+      invalidateFundingDisplayCaches(request.user.userId);
       return reply.status(202).send({ activation });
     } catch (error) {
       return handleFundingError(error, reply);
@@ -339,6 +345,7 @@ export const registerFundingRoutes = async (
     }
     try {
       const sync = await handlers.submitPolymarketClobSync(request.user.userId, parsed.data);
+      invalidateFundingDisplayCaches(request.user.userId);
       return reply.status(202).send({ sync });
     } catch (error) {
       return handleFundingError(error, reply);
@@ -615,6 +622,9 @@ const getCachedFundingDisplayData = async <T>(
     return { value: cached.value, cache: "hit", generatedAt: new Date(now).toISOString() };
   }
   if (cached?.promise) {
+    if (cached.value !== undefined && cached.staleUntil > now) {
+      return { value: cached.value, cache: "stale", generatedAt: new Date(now).toISOString() };
+    }
     const value = await cached.promise;
     return { value, cache: "hit", generatedAt: new Date().toISOString() };
   }
@@ -657,6 +667,15 @@ const getCachedFundingDisplayData = async <T>(
     staleUntil: cached?.staleUntil ?? 0,
     promise
   });
+
+  if (cached?.value !== undefined && cached.staleUntil > now) {
+    void promise.catch(() => undefined);
+    return {
+      value: cached.value,
+      cache: "stale",
+      generatedAt: new Date(now).toISOString()
+    };
+  }
 
   try {
     const value = await promise;

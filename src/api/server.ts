@@ -379,7 +379,8 @@ const hasPolymarketCLOBTradeReadyBalance = (
   amount: string | null | undefined
 ): boolean => isPolymarketCLOBTradeReadySource(source) && isPositiveAmount(amount);
 
-const POLYMARKET_CLOB_SYNC_CONFIRMATION_MAX_AGE_MS = 5 * 60 * 1000;
+// Display-only fallback: execution still performs live CLOB readiness checks before submit.
+const POLYMARKET_CLOB_SYNC_CONFIRMATION_MAX_AGE_MS = 60 * 60 * 1000;
 
 const isPositiveAmount = (value: string | null | undefined): boolean => {
   if (typeof value !== "string" || !/^\d+(?:\.\d+)?$/.test(value.trim())) {
@@ -813,6 +814,27 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       usableBalanceSource: polymarket.usableBalanceSource,
       approvalSpenderSource: polymarket.approvalSpenderSource
     };
+  };
+  const applyPolymarketClobConfirmationActivation = (
+    polymarket: ReturnType<typeof buildVenueBalanceActivationActions>[number],
+    balance: PolymarketFundingBalanceReadOutput,
+    freshness: "live" | "stale"
+  ): void => {
+    polymarket.clobCollateralBalance = balance.collateralBalance;
+    polymarket.clobCollateralAllowance = balance.collateralAllowance;
+    polymarket.clobAllowanceSpenders = balance.clobAllowanceSpenders;
+    polymarket.approvalSpenderSource = balance.approvalSpenderSource;
+    polymarket.activationRequired = false;
+    polymarket.mode = "NOT_REQUIRED";
+    polymarket.status = "NOT_REQUIRED";
+    polymarket.tokenSymbol = "pUSD";
+    polymarket.readinessReason = "POLYMARKET_CLOB_COLLATERAL_CONFIRMED";
+    polymarket.instructions = [
+      freshness === "live"
+        ? "Polymarket CLOB collateral is confirmed and available for live routes."
+        : "Polymarket CLOB collateral was recently confirmed and is available for live routes."
+    ];
+    polymarket.blockers = [];
   };
   const internalWithdrawalEvidenceReadService = new InternalWithdrawalEvidenceReadService({ env: process.env });
   const failureRecoveryManager = new FailureRecoveryManager(dependencies.pgPool);
@@ -1772,7 +1794,18 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         parseOptionalNumber(process.env.POLYMARKET_VENUE_BALANCE_READ_TIMEOUT_MS)
           ?? DEFAULT_POLYMARKET_VENUE_BALANCE_READ_TIMEOUT_MS
       );
-      const spendableBalance = buildPolymarketVenueBalanceView(polymarket, balances, "live");
+      const sourceReady = hasPolymarketCLOBTradeReadyBalance(
+        polymarket.usableBalanceSource,
+        polymarket.usableBalance
+      );
+      const displayBalance = sourceReady
+        ? polymarket
+        : await readRecentPolymarketClobConfirmationBalanceForUser(userId).catch(() => null) ?? polymarket;
+      const spendableBalance = buildPolymarketVenueBalanceView(
+        displayBalance,
+        balances,
+        sourceReady ? "live" : displayBalance === polymarket ? "live" : "stale"
+      );
       const withoutPolymarket = balances.filter((balance) =>
         !(balance.venue === "POLYMARKET" && balance.token.toUpperCase() === "USDC")
       );
@@ -1844,69 +1877,59 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           balance.usableBalance
         );
         if (sourceReady && Number.isFinite(usable) && usable > 0) {
-          polymarket.activationRequired = false;
-          polymarket.mode = "NOT_REQUIRED";
-          polymarket.status = "NOT_REQUIRED";
-          polymarket.readinessReason = "POLYMARKET_CLOB_COLLATERAL_CONFIRMED";
-          polymarket.instructions = ["Polymarket CLOB collateral is confirmed and available for live routes."];
-          polymarket.blockers = [];
-        } else if (Number.isFinite(bridgedUsdc) && bridgedUsdc > 0) {
-          polymarket.activationRequired = true;
-          polymarket.mode = "VENUE_UI_OR_RELAYER";
-          polymarket.tokenSymbol = "pUSD";
-          if (hasActivationApprovalSpender) {
-            polymarket.status = polymarket.status === "ACCOUNT_REQUIRED" ? polymarket.status : "READY";
-            polymarket.readinessReason = "POLYMARKET_USDCE_ACTIVATION_REQUIRED";
+          applyPolymarketClobConfirmationActivation(polymarket, balance, "live");
+        } else {
+          const confirmationBalance = await readRecentPolymarketClobConfirmationBalanceForUser(userId).catch(() => null);
+          if (confirmationBalance) {
+            applyPolymarketClobConfirmationActivation(polymarket, confirmationBalance, "stale");
+          } else if (Number.isFinite(bridgedUsdc) && bridgedUsdc > 0) {
+            polymarket.activationRequired = true;
+            polymarket.mode = "VENUE_UI_OR_RELAYER";
+            polymarket.tokenSymbol = "pUSD";
+            if (hasActivationApprovalSpender) {
+              polymarket.status = polymarket.status === "ACCOUNT_REQUIRED" ? polymarket.status : "READY";
+              polymarket.readinessReason = "POLYMARKET_USDCE_ACTIVATION_REQUIRED";
+              polymarket.instructions = [
+                "USDC.e has arrived in the Polymarket deposit wallet, but it must be activated into Polymarket spendable pUSD/CLOB collateral before trading."
+              ];
+            } else {
+              requireActivationApprovalSpender();
+            }
+          } else if (
+            balance.usableBalanceSource === "ONCHAIN_CLOB_SPENDER_ALLOWANCE" &&
+            Number.isFinite(onchainPusd) &&
+            onchainPusd > 0
+          ) {
+            polymarket.activationRequired = false;
+            polymarket.mode = "NOT_REQUIRED";
+            polymarket.status = "SYNC_PENDING";
+            polymarket.tokenSymbol = "pUSD";
+            polymarket.readinessReason = "POLYMARKET_CLOB_SYNC_PENDING";
             polymarket.instructions = [
-              "USDC.e has arrived in the Polymarket deposit wallet, but it must be activated into Polymarket spendable pUSD/CLOB collateral before trading."
+              "pUSD is approved on-chain for the current Polymarket CLOB spenders, but Polymarket CLOB has not confirmed spendable collateral yet. Lotus will not submit Polymarket orders until CLOB confirms readiness."
             ];
-          } else {
-            requireActivationApprovalSpender();
-          }
-        } else if (
-          balance.usableBalanceSource === "ONCHAIN_CLOB_SPENDER_ALLOWANCE" &&
-          Number.isFinite(onchainPusd) &&
-          onchainPusd > 0
-        ) {
-          polymarket.activationRequired = false;
-          polymarket.mode = "NOT_REQUIRED";
-          polymarket.status = "SYNC_PENDING";
-          polymarket.tokenSymbol = "pUSD";
-          polymarket.readinessReason = "POLYMARKET_CLOB_SYNC_PENDING";
-          polymarket.instructions = [
-            "pUSD is approved on-chain for the current Polymarket CLOB spenders, but Polymarket CLOB has not confirmed spendable collateral yet. Lotus will not submit Polymarket orders until CLOB confirms readiness."
-          ];
-          polymarket.blockers = [];
-        } else if (Number.isFinite(onchainPusd) && onchainPusd > 0) {
-          polymarket.activationRequired = true;
-          polymarket.mode = "VENUE_UI_OR_RELAYER";
-          polymarket.tokenSymbol = "pUSD";
-          if (hasActivationApprovalSpender) {
-            polymarket.status = polymarket.status === "ACCOUNT_REQUIRED" ? polymarket.status : "READY";
-            polymarket.readinessReason = "POLYMARKET_CLOB_APPROVAL_REQUIRED";
-            polymarket.instructions = [
-              balance.approvalSpenderSource === "CLOB_ALLOWANCE_MAP"
-                ? "pUSD is present in the Polymarket deposit wallet, but current Polymarket CLOB allowance is not ready. Activate again to approve the current CLOB trading spenders; a previous activation may have approved a legacy spender."
-                : "pUSD is present in the Polymarket deposit wallet, but Lotus could not discover current CLOB spenders. Activate will use the operator-reviewed fallback spender config."
-            ];
-          } else {
-            requireActivationApprovalSpender();
+            polymarket.blockers = [];
+          } else if (Number.isFinite(onchainPusd) && onchainPusd > 0) {
+            polymarket.activationRequired = true;
+            polymarket.mode = "VENUE_UI_OR_RELAYER";
+            polymarket.tokenSymbol = "pUSD";
+            if (hasActivationApprovalSpender) {
+              polymarket.status = polymarket.status === "ACCOUNT_REQUIRED" ? polymarket.status : "READY";
+              polymarket.readinessReason = "POLYMARKET_CLOB_APPROVAL_REQUIRED";
+              polymarket.instructions = [
+                balance.approvalSpenderSource === "CLOB_ALLOWANCE_MAP"
+                  ? "pUSD is present in the Polymarket deposit wallet, but current Polymarket CLOB allowance is not ready. Activate again to approve the current CLOB trading spenders; a previous activation may have approved a legacy spender."
+                  : "pUSD is present in the Polymarket deposit wallet, but Lotus could not discover current CLOB spenders. Activate will use the operator-reviewed fallback spender config."
+              ];
+            } else {
+              requireActivationApprovalSpender();
+            }
           }
         }
       } catch {
         const balance = await readRecentPolymarketClobConfirmationBalanceForUser(userId).catch(() => null);
         if (balance) {
-          polymarket.clobCollateralBalance = balance.collateralBalance;
-          polymarket.clobCollateralAllowance = balance.collateralAllowance;
-          polymarket.clobAllowanceSpenders = balance.clobAllowanceSpenders;
-          polymarket.approvalSpenderSource = balance.approvalSpenderSource;
-          polymarket.activationRequired = false;
-          polymarket.mode = "NOT_REQUIRED";
-          polymarket.status = "NOT_REQUIRED";
-          polymarket.tokenSymbol = "pUSD";
-          polymarket.readinessReason = "POLYMARKET_CLOB_COLLATERAL_CONFIRMED";
-          polymarket.instructions = ["Polymarket CLOB collateral was recently confirmed and is available for live routes."];
-          polymarket.blockers = [];
+          applyPolymarketClobConfirmationActivation(polymarket, balance, "stale");
         }
       }
     }

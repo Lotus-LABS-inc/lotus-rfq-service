@@ -54,6 +54,7 @@ export interface UserVenueAccountRepository {
     venueAccountBindingId?: string | null;
     eventType: string;
     payload: Record<string, unknown>;
+    skipDuplicateCoalesce?: boolean | undefined;
   }): Promise<string>;
   findLatestAccountAuditEvent(input: {
     userId: string;
@@ -300,6 +301,7 @@ export class UserVenueAccountService {
       userId: input.userId,
       venueAccountBindingId: account.venueAccountBindingId,
       eventType: "POLYMARKET_CLOB_READINESS_SYNC_CONFIRMED",
+      skipDuplicateCoalesce: true,
       payload: {
         venue: "POLYMARKET",
         status: input.status,

@@ -677,4 +677,55 @@ describe("Funding routes", () => {
     });
     await app.close();
   });
+
+  it("invalidates venue balance cache after Polymarket CLOB sync succeeds", async () => {
+    let calls = 0;
+    const app = await buildApp({
+      listVenueBalances: async () => {
+        calls += 1;
+        return [{
+          venue: "POLYMARKET",
+          token: "USDC",
+          readyAmount: calls === 1 ? "0" : "100",
+          pendingWithdrawalAmount: "0",
+          availableAmount: calls === 1 ? "0" : "100",
+          updatedAt: "2026-04-25T00:00:00.000Z"
+        }];
+      }
+    });
+    const token = app.jwt.sign({ userId: "funding-clob-sync-user", role: "USER" });
+    const headers = { authorization: `Bearer ${token}` };
+
+    const beforeSync = await app.inject({ method: "GET", url: "/funding/venue-balances", headers });
+    expect(beforeSync.statusCode).toBe(200);
+    expect(beforeSync.json()).toMatchObject({
+      balances: [{ venue: "POLYMARKET", availableAmount: "0" }],
+      cache: "miss"
+    });
+
+    const sync = await app.inject({
+      method: "POST",
+      url: "/funding/venue-activations/polymarket/clob-sync/submit",
+      headers,
+      payload: {
+        signedPayload: {
+          signer: "0x2222222222222222222222222222222222222222",
+          account: "0x1111111111111111111111111111111111111111",
+          signature: `0x${"1".repeat(130)}`,
+          typedData: { primaryType: "ClobAuth" },
+          data: { address: "0x2222222222222222222222222222222222222222" }
+        }
+      }
+    });
+    expect(sync.statusCode).toBe(202);
+
+    const afterSync = await app.inject({ method: "GET", url: "/funding/venue-balances", headers });
+    expect(afterSync.statusCode).toBe(200);
+    expect(calls).toBe(2);
+    expect(afterSync.json()).toMatchObject({
+      balances: [{ venue: "POLYMARKET", availableAmount: "100" }],
+      cache: "miss"
+    });
+    await app.close();
+  });
 });

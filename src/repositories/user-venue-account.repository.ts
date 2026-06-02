@@ -118,10 +118,13 @@ export class UserVenueAccountRepository implements UserVenueAccountRepositoryCon
     venueAccountBindingId?: string | null;
     eventType: string;
     payload: Record<string, unknown>;
+    skipDuplicateCoalesce?: boolean | undefined;
   }): Promise<string> {
-    const duplicate = await this.findRecentDuplicateAccountAuditEvent(input);
-    if (duplicate) {
-      return duplicate;
+    if (!input.skipDuplicateCoalesce) {
+      const duplicate = await this.findRecentDuplicateAccountAuditEvent(input);
+      if (duplicate) {
+        return duplicate;
+      }
     }
     const result = await this.pool.query<{ id: string }>(
       `INSERT INTO user_venue_account_audit_events (user_id, venue_account_id, event_type, payload)

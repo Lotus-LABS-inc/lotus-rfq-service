@@ -69,6 +69,7 @@ class InMemoryVenueAccountRepository implements UserVenueAccountRepository {
     venueAccountBindingId?: string | null;
     eventType: string;
     payload: Record<string, unknown>;
+    skipDuplicateCoalesce?: boolean | undefined;
   }): Promise<string> {
     this.auditEvents.push(input);
     return `audit-${this.auditEvents.length}`;
