@@ -518,7 +518,7 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
       const background = producer()
     .then((value) => {
       value = scrubMarketCatalogResponseForKey(key, value);
-      if (options.cacheDegraded !== false || isCacheableMarketCatalogResponse(value)) {
+      if (options.cacheDegraded !== false || isCacheableMarketCatalogResponseForKey(key, value)) {
         cacheMarketCatalogResponse(key, value, cacheTtlMs, staleCacheTtlMs);
         void options.sharedCache?.set(key, value, cacheTtlMs).catch(() => undefined);
           }
@@ -538,7 +538,7 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
   const promise = producer()
     .then((value) => {
       value = scrubMarketCatalogResponseForKey(key, value);
-      if (options.cacheDegraded !== false || isCacheableMarketCatalogResponse(value)) {
+      if (options.cacheDegraded !== false || isCacheableMarketCatalogResponseForKey(key, value)) {
         cacheMarketCatalogResponse(key, value, cacheTtlMs, staleCacheTtlMs);
         if (isCacheableMarketCatalogResponseForKey(key, value)) {
           void options.sharedCache?.set(key, value, cacheTtlMs).catch(() => undefined);
