@@ -22,6 +22,7 @@ export interface MarketCatalogSnapshotMaterializerRunResult {
   attempted: number;
   written: number;
   skippedEmptyQuoteReady: number;
+  skippedUnderfilledQuoteReady: number;
   failed: number;
 }
 
@@ -95,13 +96,14 @@ export class MarketCatalogSnapshotMaterializer {
 
   public async runOnce(): Promise<MarketCatalogSnapshotMaterializerRunResult> {
     if (this.stopped || this.running) {
-      return { attempted: 0, written: 0, skippedEmptyQuoteReady: 0, failed: 0 };
+      return { attempted: 0, written: 0, skippedEmptyQuoteReady: 0, skippedUnderfilledQuoteReady: 0, failed: 0 };
     }
     this.running = true;
     const result: MarketCatalogSnapshotMaterializerRunResult = {
       attempted: 0,
       written: 0,
       skippedEmptyQuoteReady: 0,
+      skippedUnderfilledQuoteReady: 0,
       failed: 0
     };
     try {
@@ -126,6 +128,7 @@ export class MarketCatalogSnapshotMaterializer {
               const written = await this.materializeMarketQuery(query);
               if (typeof written === "number") result.written += written;
               if (written === "skipped_empty_quote_ready") result.skippedEmptyQuoteReady += 1;
+              if (written === "skipped_underfilled_quote_ready") result.skippedUnderfilledQuoteReady += 1;
             } catch (error) {
               result.failed += 1;
               this.deps.logger.warn({ err: error, query }, "Market catalog snapshot query materialization failed.");
@@ -140,7 +143,7 @@ export class MarketCatalogSnapshotMaterializer {
     }
   }
 
-  private async materializeMarketQuery(query: MarketCatalogMaterializedQuery): Promise<number | "skipped_empty_quote_ready"> {
+  private async materializeMarketQuery(query: MarketCatalogMaterializedQuery): Promise<number | "skipped_empty_quote_ready" | "skipped_underfilled_quote_ready"> {
     const markets = await this.deps.marketCatalogRepository.listMarkets({
       limit: resolveFetchLimit(query.limit, query),
       ...(query.category ? { category: query.category } : {})
@@ -159,7 +162,12 @@ export class MarketCatalogSnapshotMaterializer {
       return "skipped_empty_quote_ready";
     }
 
-    await this.deps.snapshotCache.set(`markets:${stableQueryCacheKey(query)}`, {
+    const fullKey = `markets:${stableQueryCacheKey(query)}`;
+    if (query.quoteReadyOnly && await this.wouldUnderfillExistingSnapshot(fullKey, visibleMarkets.length)) {
+      return "skipped_underfilled_quote_ready";
+    }
+
+    await this.deps.snapshotCache.set(fullKey, {
       markets: formatMarketCatalogListMarkets(visibleMarkets, undefined),
       count: visibleMarkets.length,
       materialized: true,
@@ -173,6 +181,20 @@ export class MarketCatalogSnapshotMaterializer {
       view: "compact"
     }, this.config.cacheTtlMs);
     return 2;
+  }
+
+  private async wouldUnderfillExistingSnapshot(key: string, nextCount: number): Promise<boolean> {
+    try {
+      const existing = await this.deps.snapshotCache.get<{ count?: unknown; markets?: unknown }>(key);
+      const existingCount = typeof existing?.count === "number"
+        ? existing.count
+        : Array.isArray(existing?.markets)
+          ? existing.markets.length
+          : 0;
+      return existingCount > nextCount;
+    } catch {
+      return false;
+    }
   }
 
   private async waitForIdle(): Promise<void> {
