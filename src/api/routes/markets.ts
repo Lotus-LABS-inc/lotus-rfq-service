@@ -483,10 +483,10 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
   const now = Date.now();
   const cached = marketCatalogResponseCache.get(key);
   if (cached && cached.expiresAtMs >= now) {
-    return cached.value as T;
+    return scrubMarketCatalogResponseForKey(key, cached.value as T);
   }
   const staleCached = cached && cached.staleUntilMs >= now
-    ? cached.value as T
+    ? scrubMarketCatalogResponseForKey(key, cached.value as T)
     : null;
   const cacheTtlMs = resolveMarketCatalogResponseCacheMs(process.env.MARKET_CATALOG_RESPONSE_CACHE_MS);
   const staleCacheTtlMs = resolveMarketCatalogResponseStaleCacheMs(process.env.MARKET_CATALOG_RESPONSE_STALE_CACHE_MS);
@@ -494,13 +494,14 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
     try {
       const shared = await options.sharedCache.get<T>(key);
       if (shared && isCacheableMarketCatalogResponseForKey(key, shared)) {
-        cacheMarketCatalogResponse(key, shared, cacheTtlMs, staleCacheTtlMs);
-        return shared;
+        const scrubbed = scrubMarketCatalogResponseForKey(key, shared);
+        cacheMarketCatalogResponse(key, scrubbed, cacheTtlMs, staleCacheTtlMs);
+        return scrubbed;
       }
       for (const fallback of options.sharedFallbacks ?? []) {
         const fallbackShared = await options.sharedCache.get<T>(fallback.key);
         if (fallbackShared && isCacheableMarketCatalogResponseForKey(fallback.key, fallbackShared)) {
-          const sliced = sliceMarketCatalogResponse(fallbackShared, fallback.limit);
+          const sliced = scrubMarketCatalogResponseForKey(key, sliceMarketCatalogResponse(fallbackShared, fallback.limit));
           cacheMarketCatalogResponse(key, sliced, cacheTtlMs, staleCacheTtlMs);
           return sliced;
         }
@@ -512,10 +513,11 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
   if (staleCached) {
     if (!marketCatalogResponsePending.has(key)) {
       const background = producer()
-        .then((value) => {
-          if (options.cacheDegraded !== false || isCacheableMarketCatalogResponse(value)) {
-            cacheMarketCatalogResponse(key, value, cacheTtlMs, staleCacheTtlMs);
-            void options.sharedCache?.set(key, value, cacheTtlMs).catch(() => undefined);
+    .then((value) => {
+      value = scrubMarketCatalogResponseForKey(key, value);
+      if (options.cacheDegraded !== false || isCacheableMarketCatalogResponse(value)) {
+        cacheMarketCatalogResponse(key, value, cacheTtlMs, staleCacheTtlMs);
+        void options.sharedCache?.set(key, value, cacheTtlMs).catch(() => undefined);
           }
         })
         .catch(() => undefined)
@@ -532,6 +534,7 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
   }
   const promise = producer()
     .then((value) => {
+      value = scrubMarketCatalogResponseForKey(key, value);
       if (options.cacheDegraded !== false || isCacheableMarketCatalogResponse(value)) {
         cacheMarketCatalogResponse(key, value, cacheTtlMs, staleCacheTtlMs);
         if (isCacheableMarketCatalogResponseForKey(key, value)) {
@@ -560,6 +563,31 @@ const markMarketCatalogResponseFromStaleCache = <T extends Record<string, unknow
   quoteReadinessDegraded: true,
   quoteReadinessReason: "stale_cache"
 });
+
+const scrubMarketCatalogResponseForKey = <T extends Record<string, unknown>>(key: string, value: T): T => {
+  if (!isQuoteReadyMarketCatalogCacheKey(key) || !Array.isArray(value.markets)) {
+    return value;
+  }
+  const markets = value.markets.filter(isTradableMarketListItem);
+  return {
+    ...value,
+    markets,
+    count: markets.length
+  };
+};
+
+const isTradableMarketListItem = (value: unknown): boolean => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const record = value as { quoteStatus?: unknown; quoteReadyVenueCount?: unknown };
+  const quoteReadyVenueCount = typeof record.quoteReadyVenueCount === "number"
+    ? record.quoteReadyVenueCount
+    : typeof record.quoteReadyVenueCount === "string"
+      ? Number(record.quoteReadyVenueCount)
+      : 0;
+  return quoteReadyVenueCount > 0 && (record.quoteStatus === "live" || record.quoteStatus === "partial");
+};
 
 const cacheMarketCatalogResponse = <T>(
   key: string,
