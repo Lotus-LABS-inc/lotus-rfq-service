@@ -45,15 +45,15 @@ export interface MarketOrderbookRecorderRunResult {
 }
 
 const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
-  intervalMs: 60_000,
-  marketBatchSize: 15,
-  activeMarketBatchSize: 120,
-  priorityMarketBatchSize: 8,
+  intervalMs: 10_000,
+  marketBatchSize: 10,
+  activeMarketBatchSize: 80,
+  priorityMarketBatchSize: 4,
   priorityVenues: ["OPINION"] as readonly string[],
-  maxSamplesPerTick: 45,
-  sampleConcurrency: 3,
-  maxTickDurationMs: 45_000,
-  sampleTimeoutMs: 6_000,
+  maxSamplesPerTick: 80,
+  sampleConcurrency: 6,
+  maxTickDurationMs: 9_000,
+  sampleTimeoutMs: 2_500,
   cleanupIntervalMs: 30 * 60_000,
   retentionHours: 720,
   levelsPerSide: 25,
