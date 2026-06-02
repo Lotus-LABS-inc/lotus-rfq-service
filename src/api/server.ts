@@ -483,10 +483,14 @@ const parseAdminMagicLinkTtlSeconds = (value: string | undefined): number => {
 
 const DEFAULT_POLYMARKET_VENUE_BALANCE_READ_TIMEOUT_MS = 2_500;
 const VENUE_BALANCE_READ_TIMEOUT = Symbol("VENUE_BALANCE_READ_TIMEOUT");
+const LOTUS_FASTIFY_MAX_PARAM_LENGTH = 2_048;
 
 export const buildServer = async (dependencies: ServerDependencies): Promise<FastifyInstance> => {
   const app = Fastify({
-    logger: false
+    logger: false,
+    routerOptions: {
+      maxParamLength: LOTUS_FASTIFY_MAX_PARAM_LENGTH
+    }
   });
   const runtimeMode = dependencies.runtimeMode ?? "api";
   const backgroundWorkersEnabled = runtimeMode === "worker";
