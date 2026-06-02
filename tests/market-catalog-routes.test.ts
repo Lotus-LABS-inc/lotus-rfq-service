@@ -1540,6 +1540,25 @@ describe("market catalog routes", () => {
     expect(queries[0]?.params?.[0]).toBe("FRONTEND_CURATED:CANONICAL|YES");
   });
 
+  it("looks up frontend-curated market details with normalized DB proposition-key casing", async () => {
+    const queries: Array<{ sql: string; params?: unknown[] }> = [];
+    const pool = {
+      query: async (sql: string, params?: unknown[]) => {
+        queries.push(params ? { sql, params } : { sql });
+        return { rows: [] };
+      }
+    };
+
+    const repository = new PgMarketCatalogRepository(pool as never);
+    await repository.getMarket("FRONTEND_CURATED:CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|1000000000|1B:POLYMARKET");
+
+    expect(queries[0]?.params?.[0]).toEqual(expect.arrayContaining([
+      "FRONTEND_CURATED:CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|1000000000|1B:POLYMARKET",
+      "FRONTEND_CURATED:CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|1000000000|1B",
+      "frontend-curated:CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|1000000000|1B"
+    ]));
+  });
+
   it("excludes quote-disabled venue profiles from shared-core batch mappings", async () => {
     const queries: Array<{ sql: string; params?: unknown[] }> = [];
     const pool = {

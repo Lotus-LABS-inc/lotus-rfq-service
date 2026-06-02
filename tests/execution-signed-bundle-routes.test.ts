@@ -11,6 +11,7 @@ import {
   type ExecutionOrderRepository
 } from "../src/execution-system/execution-order-orchestrator.js";
 import type { SignedTradeExecutionStatus } from "../src/execution-system/signed-trade-bundle.js";
+import { VenueExecutionNotConfiguredError } from "../src/execution-system/venue-adapter.js";
 
 describe("execution signed bundle routes", () => {
   afterEach(() => {
@@ -1153,6 +1154,61 @@ describe("execution signed bundle routes", () => {
       state: "NEEDS_VENUE_SETUP",
       primaryAction: { type: "ENABLE_VENUE" },
       quoteId: null
+    });
+  });
+
+  it("returns a blocked preview when a routed venue execution adapter is not configured", async () => {
+    const app = Fastify({ logger: false });
+    const quote = buyQuote("PREDICT_FUN", true);
+    const service = new ExecutionOrderOrchestratorV1(
+      new MemoryExecutionOrderRepository(),
+      {
+        quote: vi.fn(async () => ({ quote, rejectedCandidates: [], internalCandidateCount: 1 })),
+        getQuote: vi.fn(async () => quote)
+      } as never,
+      { prepareExit: vi.fn() } as never,
+      {
+        getLiveReadiness: vi.fn(async () => {
+          throw new VenueExecutionNotConfiguredError("PREDICT_FUN");
+        }),
+        prepare: vi.fn(),
+        submit: vi.fn(),
+        getExecutionStatus: vi.fn(async () => null)
+      } as never,
+      {
+        getCandidates: vi.fn(async () => ({
+          generatedAt: new Date().toISOString(),
+          marketId: "market-1",
+          outcomeId: "YES",
+          amount: "1",
+          candidates: [{ venue: "PREDICT_FUN", price: 0.5, availableSize: "10", requiresUserSignature: true }],
+          blocked: []
+        }))
+      }
+    );
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: { quote: vi.fn(), getQuote: vi.fn() } as never,
+      sellQuoteService: { prepareExit: vi.fn() } as never,
+      executionOrderService: service
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/execution/orders/preview",
+      payload: { marketId: "market-1", outcomeId: "YES", side: "buy", amount: "1", venuePreference: "PREDICT_FUN" }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      state: "BLOCKED_ACTION_REQUIRED",
+      primaryAction: { type: "NONE" },
+      blockers: [{
+        code: "VENUE_EXECUTION_NOT_CONFIGURED",
+        venue: "PREDICT_FUN",
+        actionable: true
+      }]
     });
   });
 

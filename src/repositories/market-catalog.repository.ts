@@ -1657,7 +1657,11 @@ const marketLookupCandidates = (marketId: string): string[] => {
   const trimmed = marketId.trim();
   if (!trimmed) return [marketId];
   const withoutVenueSuffix = trimmed.replace(VENUE_SUFFIX_PATTERN, "");
-  return withoutVenueSuffix === trimmed ? [trimmed] : [trimmed, withoutVenueSuffix];
+  const candidates = withoutVenueSuffix === trimmed ? [trimmed] : [trimmed, withoutVenueSuffix];
+  return [...new Set(candidates.flatMap((candidate) => [
+    candidate,
+    candidate.replace(/^FRONTEND_CURATED:/i, "frontend-curated:")
+  ]))];
 };
 
 const marketStatus = (expiresAt: string | null, resolvesAt: string | null): MarketCatalogMarket["status"] => {

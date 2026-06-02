@@ -16,6 +16,7 @@ import {
   type SignedTradeLegPayload,
   type TradeSignatureRequest
 } from "./signed-trade-bundle.js";
+import { VenueExecutionNotConfiguredError } from "./venue-adapter.js";
 
 export const EXECUTION_ORCHESTRATOR_V1_ENABLED = true;
 
@@ -221,7 +222,7 @@ export class ExecutionOrderOrchestratorV1 {
     }
 
     const quote = await this.createQuote(input, candidates.candidates);
-    const readiness = await this.readReadiness(input.userId, quote.quoteId, {
+    const readiness = await this.readReadinessForQuote(input.userId, quote, {
       orderPolicy: input.orderPolicy ?? DEFAULT_EXECUTION_ORDER_POLICY,
       slippageToleranceBps: normalizeSlippageToleranceBps(input.slippageToleranceBps)
     });
@@ -463,13 +464,29 @@ export class ExecutionOrderOrchestratorV1 {
     return this.signedTradeBundleService.getLiveReadiness({ userId, quoteId, ...policy });
   }
 
+  private async readReadinessForQuote(
+    userId: string,
+    quote: ExecutableTradeQuote,
+    policy?: { orderPolicy: ExecutionOrderPolicy; slippageToleranceBps: number } | undefined
+  ): Promise<LiveSubmitReadinessSnapshot | null> {
+    try {
+      return await this.readReadiness(userId, quote.quoteId, policy);
+    } catch (error) {
+      const blockedReadiness = readinessFromVenueConfigurationError(quote, error);
+      if (blockedReadiness) {
+        return blockedReadiness;
+      }
+      throw error;
+    }
+  }
+
   private async requireFreshReadiness(
     userId: string,
     quoteId: string,
     quote: ExecutableTradeQuote,
     order: ExecutionOrderRecord
   ): Promise<LiveSubmitReadinessSnapshot> {
-    const readiness = await this.readReadiness(userId, quoteId, {
+    const readiness = await this.readReadinessForQuote(userId, quote, {
       orderPolicy: order.orderPolicy,
       slippageToleranceBps: order.slippageToleranceBps
     });
@@ -934,6 +951,61 @@ const buildVenueCapabilities = (
         blockers: capabilityBlockers
       };
     })
+  };
+};
+
+const readinessFromVenueConfigurationError = (
+  quote: ExecutableTradeQuote,
+  error: unknown
+): LiveSubmitReadinessSnapshot | null => {
+  const message = error instanceof Error ? error.message : "";
+  if (!(error instanceof VenueExecutionNotConfiguredError) && !/execution adapter is not configured for live submission/i.test(message)) {
+    return null;
+  }
+  const generatedAt = new Date().toISOString();
+  const blockedVenues = new Set(
+    quote.legs
+      .filter((leg) => message.toUpperCase().includes(leg.venue.toUpperCase()))
+      .map((leg) => leg.venue.toUpperCase())
+  );
+  const fallbackVenue = quote.legs[0]?.venue.toUpperCase();
+  if (blockedVenues.size === 0 && fallbackVenue) {
+    blockedVenues.add(fallbackVenue);
+  }
+  const venues = quote.legs.map((leg) => {
+    const venue = leg.venue.toUpperCase();
+    const blocked = blockedVenues.has(venue);
+    return {
+      venue,
+      status: blocked ? "blocked" as const : "stale" as const,
+      checkedAt: generatedAt,
+      blockers: blocked ? [message || `${venue} execution adapter is not configured for live submission.`] : [],
+      readinessCode: blocked ? "VENUE_EXECUTION_NOT_CONFIGURED" : "VENUE_READINESS_DEFERRED",
+      retryable: false,
+      requiresUserSync: false,
+      account: {
+        walletAddress: null,
+        venueAccountAddress: null,
+        ownerAddress: null
+      },
+      collateral: {
+        requiredNotional: null,
+        balance: null,
+        allowance: null,
+        tokenSymbol: null,
+        tokenAddress: null,
+        spenderAddress: null,
+        chainId: null
+      }
+    };
+  });
+  return {
+    quoteId: quote.quoteId,
+    generatedAt,
+    expiresAt: quote.expiresAt,
+    status: "blocked",
+    blockers: venues.flatMap((venue) => venue.blockers.map((blocker) => `${venue.venue}: ${blocker}`)),
+    venues
   };
 };
 
