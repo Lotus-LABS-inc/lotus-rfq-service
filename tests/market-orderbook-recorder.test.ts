@@ -20,10 +20,10 @@ describe("MarketOrderbookRecorder", () => {
       marketBatchSize: 15,
       priorityMarketBatchSize: 8,
       priorityVenues: ["OPINION"],
-      maxSamplesPerTick: 60,
-      sampleConcurrency: 4,
+      maxSamplesPerTick: 45,
+      sampleConcurrency: 3,
       maxTickDurationMs: 45_000,
-      sampleTimeoutMs: 2_500,
+      sampleTimeoutMs: 6_000,
       cleanupIntervalMs: 30 * 60_000
     });
   });
@@ -37,10 +37,10 @@ describe("MarketOrderbookRecorder", () => {
         marketBatchSize: 15,
         priorityMarketBatchSize: 8,
         priorityVenues: ["OPINION"],
-        maxSamplesPerTick: 60,
-        sampleConcurrency: 4,
+        maxSamplesPerTick: 45,
+        sampleConcurrency: 3,
         maxTickDurationMs: 45_000,
-        sampleTimeoutMs: 2_500,
+        sampleTimeoutMs: 6_000,
         cleanupIntervalMs: 30 * 60_000
       });
       expect(buildMarketOrderbookRecorderConfig()).not.toHaveProperty("enabled");
