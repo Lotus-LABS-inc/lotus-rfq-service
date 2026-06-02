@@ -55,7 +55,7 @@ const VENUE_SUFFIX_PATTERN = /:(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION
 const DEFAULT_MARKET_QUOTE_READINESS_TIMEOUT_MS = 5_000;
 const DEFAULT_MARKET_QUOTE_READINESS_STALE_CACHE_MS = 600_000;
 const DEFAULT_MARKET_LIST_OVERFETCH_MULTIPLIER = 4;
-const DEFAULT_MARKET_LIST_OVERFETCH_CAP = 500;
+const DEFAULT_MARKET_LIST_OVERFETCH_CAP = 1_000;
 const DEFAULT_MARKET_CATALOG_RESPONSE_CACHE_MS = 300_000;
 const DEFAULT_MARKET_CATALOG_RESPONSE_STALE_CACHE_MS = 900_000;
 const DEFAULT_MARKET_DETAIL_CACHE_MS = 300_000;
@@ -743,26 +743,10 @@ const shouldOverfetchMarkets = (query: z.infer<typeof listQuerySchema>): boolean
 const resolveMarketFetchLimit = (limit: number, query: z.infer<typeof listQuerySchema>): number =>
   shouldOverfetchMarkets(query)
     ? Math.min(
-      Math.max(limit * resolveMarketListOverfetchMultiplier(process.env.MARKET_LIST_OVERFETCH_MULTIPLIER), 250),
-      resolveMarketListOverfetchCap(process.env.MARKET_LIST_OVERFETCH_CAP)
+      Math.max(limit * DEFAULT_MARKET_LIST_OVERFETCH_MULTIPLIER, 250),
+      DEFAULT_MARKET_LIST_OVERFETCH_CAP
     )
     : limit;
-
-const resolveMarketListOverfetchMultiplier = (value: string | undefined): number => {
-  if (value === undefined || value.trim().length === 0) {
-    return DEFAULT_MARKET_LIST_OVERFETCH_MULTIPLIER;
-  }
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 10) : DEFAULT_MARKET_LIST_OVERFETCH_MULTIPLIER;
-};
-
-const resolveMarketListOverfetchCap = (value: string | undefined): number => {
-  if (value === undefined || value.trim().length === 0) {
-    return DEFAULT_MARKET_LIST_OVERFETCH_CAP;
-  }
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed >= 250 ? Math.min(parsed, 1000) : DEFAULT_MARKET_LIST_OVERFETCH_CAP;
-};
 
 const routeCoverageMatches = (
   market: MarketCatalogMarket,

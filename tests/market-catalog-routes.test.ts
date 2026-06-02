@@ -645,6 +645,40 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
+  it("uses a code-owned 1000 row cap for large quote-ready catalog windows", async () => {
+    const app = Fastify({ logger: false });
+    const repository = new FakeMarketCatalogRepository();
+    repository.listMarkets = async (filter = {}) => {
+      repository.filters.push(filter);
+      return [market];
+    };
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: []
+          }];
+        }
+      }
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&routeCoverage=tri&limit=250"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(repository.filters[0]).toMatchObject({ limit: 1000 });
+
+    await app.close();
+  });
+
   it("filters quote-ready markets by pair tri and strict-all coverage", async () => {
     const pairMarket = {
       ...market,
