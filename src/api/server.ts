@@ -20,7 +20,10 @@ import { buildLiveExecutionCandidatesResponse, registerExecutionRoutes } from ".
 import { registerTurnkeyAuthRoutes } from "./routes/turnkey-auth.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerMarketCatalogRoutes } from "./routes/markets.js";
-import { RedisMarketCatalogSnapshotCache } from "../services/market-catalog-snapshot-cache.js";
+import {
+  RedisMarketCatalogSnapshotCache,
+  resolveMarketCatalogSnapshotCacheKeyPrefix
+} from "../services/market-catalog-snapshot-cache.js";
 import { MarketCatalogSnapshotMaterializer } from "../services/market-catalog-snapshot-materializer.js";
 import {
   buildVenueBalanceActivationActions,
@@ -1106,7 +1109,15 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       }
     }
   });
-  const marketCatalogSnapshotCache = new RedisMarketCatalogSnapshotCache(dependencies.redisClient);
+  const marketCatalogSnapshotCache = new RedisMarketCatalogSnapshotCache(dependencies.redisClient, {
+    keyPrefix: resolveMarketCatalogSnapshotCacheKeyPrefix({
+      lotusDeployEnv: process.env.LOTUS_DEPLOY_ENV,
+      lotusEnv: process.env.LOTUS_ENV,
+      appEnv: process.env.APP_ENV,
+      nodeEnv: process.env.NODE_ENV,
+      canonicalServiceBaseUrl: dependencies.canonicalServiceBaseUrl
+    })
+  });
   if (backgroundWorkersEnabled) {
     const marketOrderbookRecorder = new MarketOrderbookRecorder(
       marketCatalogRepository,

@@ -742,6 +742,13 @@ recorder/materializer duties are expected to run. This keeps
 `/markets?quoteReadyOnly=true` backed by fresh/stable Redis/materialized
 snapshots instead of stale DB rows.
 
+Redis market catalog snapshots are deploy-namespaced in code from
+`LOTUS_DEPLOY_ENV`, `LOTUS_ENV`, `APP_ENV`, or the public service hostname. Keep
+`LOTUS_DEPLOY_ENV=prod` in production env files and
+`LOTUS_DEPLOY_ENV=staging` in staging env files. Prod and staging may share the
+same local Redis server only if their snapshot prefixes remain separated; do not
+revert to the legacy `lotus:market-catalog-snapshot:*` shared prefix.
+
 Supabase session-pool protection:
 
 ```text
