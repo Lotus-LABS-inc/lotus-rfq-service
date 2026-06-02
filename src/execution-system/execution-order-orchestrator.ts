@@ -1080,8 +1080,7 @@ export const assertPolymarketFokStillExecutable = async (input: {
           "Polymarket FOK route could not derive a signed limit price. Refresh route before signing."
         );
       }
-      const guardMaxPrice = maxPrice.minus(polymarketFokGuardTickMargin(leg, input.slippageToleranceBps));
-      if (!Number.isFinite(candidate.price) || new Decimal(candidate.price).gt(guardMaxPrice.plus("0.000000001"))) {
+      if (!Number.isFinite(candidate.price) || new Decimal(candidate.price).gt(maxPrice.plus("0.000000001"))) {
         throw new SignedTradeBundleError(
           "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
           "Polymarket FOK price moved before execution. Refresh route and retry."
@@ -1098,8 +1097,7 @@ export const assertPolymarketFokStillExecutable = async (input: {
         "Polymarket FOK route could not derive a signed sell limit price. Refresh route before signing."
       );
     }
-    const guardMinPrice = minPrice.plus(polymarketFokGuardTickMargin(leg, input.slippageToleranceBps));
-    if (!Number.isFinite(candidate.price) || new Decimal(candidate.price).lt(guardMinPrice.minus("0.000000001"))) {
+    if (!Number.isFinite(candidate.price) || new Decimal(candidate.price).lt(minPrice.minus("0.000000001"))) {
       throw new SignedTradeBundleError(
         "POLYMARKET_FOK_ROUTE_NOT_EXECUTABLE",
         "Polymarket FOK sell price moved before execution. Refresh route and retry."
@@ -1436,16 +1434,6 @@ const polymarketRouteFokSellLimitPrice = (
   const minPrice = tick;
   const cushioned = new Decimal(leg.price).times(new Decimal(1).minus(new Decimal(bps).div(10_000)));
   return Decimal.max(minPrice, cushioned).div(tick).floor().times(tick);
-};
-
-const polymarketFokGuardTickMargin = (
-  leg: ExecutableTradeQuote["legs"][number],
-  slippageToleranceBps: number | undefined
-): InstanceType<typeof Decimal> => {
-  if (normalizeSlippageToleranceBps(slippageToleranceBps) <= 0) {
-    return new Decimal(0);
-  }
-  return new Decimal(polymarketTickSizeFromMetadata(leg.metadata) ?? "0.001");
 };
 
 const polymarketTickSizeFromMetadata = (metadata: Readonly<Record<string, unknown>> | undefined): string | null => {
