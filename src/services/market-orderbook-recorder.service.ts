@@ -423,7 +423,7 @@ const withRecorderTimeout = async <T>(promise: Promise<T>, timeoutMs: number): P
   }
 };
 
-type MarketOrderbookRecorderSample = { canonicalMarketId: string; outcomeId: string | null };
+type MarketOrderbookRecorderSample = { canonicalMarketId: string; outcomeId: string };
 
 const buildMarketSamples = (market: MarketCatalogMarket): MarketOrderbookRecorderSample[] => {
   const canonicalMarketIds = market.canonicalMarketIds.length > 0 ? market.canonicalMarketIds : [market.canonicalEventId];
@@ -435,9 +435,7 @@ const buildMarketSamples = (market: MarketCatalogMarket): MarketOrderbookRecorde
         .filter((outcome) => outcome.id.trim().length > 0)
         .map((outcome) => [outcome.label.trim().toLowerCase(), outcome.id.trim()] as const)
     ).values()];
-    return outcomeIds.length > 0
-      ? outcomeIds.map((outcomeId) => ({ canonicalMarketId, outcomeId }))
-      : [{ canonicalMarketId, outcomeId: null }];
+    return outcomeIds.map((outcomeId) => ({ canonicalMarketId, outcomeId }));
   });
 };
 
