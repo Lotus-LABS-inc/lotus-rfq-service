@@ -303,6 +303,63 @@ describe("MarketCatalogSnapshotMaterializer", () => {
     });
   });
 
+  it("merges underfilled category quote-ready materialization from the global snapshot", async () => {
+    const snapshotCache = new FakeSnapshotCache();
+    const politicsMarketOne: MarketCatalogMarket = {
+      ...baseMarket,
+      canonicalEventId: "event-politics-1",
+      canonicalMarketIds: ["market-politics-1"],
+      title: "Politics Market 1",
+      category: "POLITICS",
+      quoteStatus: "live",
+      quoteReadyVenueCount: 2,
+      quoteReadyVenues: ["LIMITLESS", "POLYMARKET"]
+    };
+    const politicsMarketTwo: MarketCatalogMarket = {
+      ...baseMarket,
+      canonicalEventId: "event-politics-2",
+      canonicalMarketIds: ["market-politics-2"],
+      title: "Politics Market 2",
+      category: "POLITICS",
+      quoteStatus: "stale",
+      quoteReadyVenueCount: 2,
+      quoteReadyVenues: ["LIMITLESS", "POLYMARKET"]
+    };
+    await snapshotCache.set(`markets:${stableQueryCacheKey({ limit: 80, quoteReadyOnly: true })}`, {
+      count: 2,
+      materialized: true,
+      markets: [politicsMarketOne, politicsMarketTwo]
+    });
+    const materializer = new MarketCatalogSnapshotMaterializer({
+      marketCatalogRepository: {
+        listMarkets: vi.fn(async () => [politicsMarketOne])
+      },
+      marketQuoteReadinessSource: {
+        listLatestMarketQuoteReadiness: vi.fn(async () => [{
+          canonicalMarketId: "market-politics-1",
+          quoteStatus: "live" as const,
+          quoteReadyVenueCount: 2,
+          quoteReadyVenues: ["POLYMARKET", "LIMITLESS"],
+          quoteBlockers: [],
+          lastQuoteAt: "2026-06-01T00:00:00.000Z"
+        }])
+      },
+      snapshotCache,
+      logger: { info: vi.fn(), warn: vi.fn() },
+      config: { limits: [80], routeCoverages: ["all"], categories: ["Politics"], intervalMs: 60_000 }
+    });
+
+    await materializer.runOnce();
+
+    expect(snapshotCache.values.get(`markets:${stableQueryCacheKey({ category: "Politics", limit: 80, quoteReadyOnly: true })}`)).toMatchObject({
+      count: 2,
+      markets: [
+        { canonicalMarketIds: ["market-politics-1"], category: "POLITICS" },
+        { canonicalMarketIds: ["market-politics-2"], category: "POLITICS" }
+      ]
+    });
+  });
+
   it("does not overwrite larger quote-ready snapshots with transient underfilled materialization", async () => {
     const snapshotCache = new FakeSnapshotCache();
     const key = `markets:${stableQueryCacheKey({
