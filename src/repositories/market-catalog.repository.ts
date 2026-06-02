@@ -245,6 +245,7 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 1000;
 const MAX_EVENT_SOURCE_LIMIT = 1000;
 const FRONTEND_SHARED_CORE_APPROVAL_SOURCE = "frontend-curated-catalog";
+const QUOTE_ENABLED_VENUE_PROFILE_CONDITION = "COALESCE(vmp.normalized_payload->>'quoteDisabled', 'false') <> 'true'";
 
 export class MarketCatalogRepository {
   public constructor(private readonly pool: Pool) {}
@@ -276,6 +277,7 @@ export class MarketCatalogRepository {
            ON cem.canonical_event_id = ce.id
          LEFT JOIN venue_market_profiles vmp
            ON vmp.canonical_event_id = ce.id
+          AND ${QUOTE_ENABLED_VENUE_PROFILE_CONDITION}
         WHERE cem.id IS NOT NULL OR vmp.id IS NOT NULL
           AND NOT EXISTS (
             SELECT 1
@@ -326,6 +328,7 @@ export class MarketCatalogRepository {
           SELECT 1
             FROM venue_market_profiles vmp_search
            WHERE vmp_search.canonical_event_id = ce.id
+             AND COALESCE(vmp_search.normalized_payload->>'quoteDisabled', 'false') <> 'true'
              AND lower(vmp_search.title) LIKE $${params.length}
         )
       )`);
@@ -365,7 +368,8 @@ export class MarketCatalogRepository {
          LEFT JOIN canonical_executable_market_members mem
            ON mem.canonical_executable_market_id = cem.id
          LEFT JOIN venue_market_profiles vmp
-           ON vmp.id = mem.venue_market_profile_id OR vmp.canonical_event_id = ce.id
+           ON (vmp.id = mem.venue_market_profile_id OR vmp.canonical_event_id = ce.id)
+          AND ${QUOTE_ENABLED_VENUE_PROFILE_CONDITION}
          ${where}
           ${where ? "AND" : "WHERE"} (cem.id IS NOT NULL OR vmp.id IS NOT NULL)
         GROUP BY ce.id
@@ -429,7 +433,8 @@ export class MarketCatalogRepository {
          LEFT JOIN canonical_executable_market_members mem
            ON mem.canonical_executable_market_id = cem.id
          LEFT JOIN venue_market_profiles vmp
-           ON vmp.id = mem.venue_market_profile_id OR vmp.canonical_event_id = ce.id
+           ON (vmp.id = mem.venue_market_profile_id OR vmp.canonical_event_id = ce.id)
+          AND ${QUOTE_ENABLED_VENUE_PROFILE_CONDITION}
         WHERE (ce.id::text = ANY($1::text[]) OR cem.id = ANY($1::text[]) OR ce.proposition_key = ANY($1::text[]))
           AND NOT EXISTS (
             SELECT 1
@@ -491,6 +496,7 @@ export class MarketCatalogRepository {
          FROM canonical_events ce
          JOIN venue_market_profiles vmp
            ON vmp.canonical_event_id = ce.id
+          AND ${QUOTE_ENABLED_VENUE_PROFILE_CONDITION}
          LEFT JOIN venue_resolution_profiles vrp
            ON vrp.venue_market_profile_id = vmp.id
          LEFT JOIN canonical_executable_market_members mem
@@ -560,6 +566,7 @@ export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingL
          AND fma.metadata->>'source' = $2
        JOIN venue_market_profiles vmp
           ON vmp.canonical_event_id = se.id
+         AND ${QUOTE_ENABLED_VENUE_PROFILE_CONDITION}
        ORDER BY vmp.venue`,
       [
         input.canonicalMarketId,
@@ -615,6 +622,7 @@ export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingL
           ON cem.canonical_event_id = ce.id
         JOIN venue_market_profiles vmp
           ON vmp.canonical_event_id = ce.id
+         AND ${QUOTE_ENABLED_VENUE_PROFILE_CONDITION}
        ORDER BY ce.title, vmp.venue`,
       [
         Math.max(1, Math.min(1000, Math.floor(input.limit))),

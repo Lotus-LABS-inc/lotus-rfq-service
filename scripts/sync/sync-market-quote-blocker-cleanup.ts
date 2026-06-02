@@ -57,7 +57,7 @@ interface PredictRepairCandidate {
   title: string;
   currentVenueMarketId: string;
   blockers: string[];
-  status: "UPDATED" | "PLANNED" | "NEEDS_OPERATOR_LINK" | "HIDDEN" | "SKIPPED";
+  status: "UPDATED" | "PLANNED" | "NEEDS_OPERATOR_LINK" | "DISABLED" | "SKIPPED";
   reason: string;
   candidate: {
     venueMarketId: string;
@@ -69,6 +69,7 @@ interface PredictRepairCandidate {
   } | null;
   linkHints: {
     currentNumericMarketId: string | null;
+    currentSlug: string | null;
     storedVenueMarketId: string;
     searchTerm: string;
     requestedVenueUrl: string | null;
@@ -152,7 +153,7 @@ try {
       predictRowsScanned: predictRows.length,
       predictRowsUpdatedOrPlanned: predictRepairs.filter((row) => row.status === "PLANNED" || row.status === "UPDATED").length,
       predictRowsNeedingOperatorLinks: predictRepairs.filter((row) => row.status === "NEEDS_OPERATOR_LINK").length,
-      predictRowsHiddenOrPlanned: predictRepairs.filter((row) => row.status === "HIDDEN").length,
+      predictRowsHiddenOrPlanned: predictRepairs.filter((row) => row.status === "DISABLED").length,
       operatorConfirmedEventsHiddenOrPlanned: args.hideFrontendCuratedKeys.length
     },
     safety: {
@@ -178,7 +179,7 @@ try {
   console.log(`predictRowsScanned=${artifact.summary.predictRowsScanned}`);
   console.log(`predictRowsUpdatedOrPlanned=${artifact.summary.predictRowsUpdatedOrPlanned}`);
   console.log(`predictRowsNeedingOperatorLinks=${artifact.summary.predictRowsNeedingOperatorLinks}`);
-  console.log(`predictRowsHiddenOrPlanned=${artifact.summary.predictRowsHiddenOrPlanned}`);
+  console.log(`predictRowsQuoteDisabledOrPlanned=${artifact.summary.predictRowsHiddenOrPlanned}`);
   console.log(`operatorConfirmedEventsHiddenOrPlanned=${artifact.summary.operatorConfirmedEventsHiddenOrPlanned}`);
 } finally {
   await pool.end();
@@ -195,7 +196,7 @@ function parseArgs(): ParsedArgs {
   }
   const lookbackMinutes = Number.parseInt(values.get("lookbackMinutes") ?? "60", 10);
   const predictLimit = Number.parseInt(values.get("predictLimit") ?? "200", 10);
-  const predictSearchLimit = Number.parseInt(values.get("predictSearchLimit") ?? "20", 10);
+  const predictSearchLimit = Number.parseInt(values.get("predictSearchLimit") ?? "0", 10);
   const predictTimeoutMs = Number.parseInt(values.get("predictTimeoutMs") ?? "8_000".replace("_", ""), 10);
   const predictEnvironment = (values.get("predictEnvironment") ?? "mainnet") as PredictEnvironment;
   const hidePredictVenueMarketIds = parseCsv(values.get("hidePredictVenueMarketIds"));
@@ -325,6 +326,7 @@ async function listPredictBlockedRows(db: Pool, lookbackMinutes: number, limit: 
           vmp.venue_market_id = recent_predict_blockers.venue_market_id
           OR vmp.venue_market_id = replace(recent_predict_blockers.venue_market_id, 'PREDICT:', '')
           OR regexp_replace(vmp.venue_market_id, '^PREDICT:?([0-9]+).*$','\\1') = recent_predict_blockers.venue_market_id
+          OR vmp.venue_market_id ILIKE ('PREDICT:' || recent_predict_blockers.venue_market_id || ':%')
         )
        JOIN canonical_events ce
          ON ce.id = vmp.canonical_event_id
@@ -376,6 +378,7 @@ async function buildPredictRepairCandidates(rows: readonly PredictBlockedRow[]):
       continue;
     }
     const currentId = extractNumericMarketId(row.venue_market_id);
+    let currentLookupReason: string | null = null;
     if (currentId) {
       try {
         const current = await adapter.getMarketById(currentId);
@@ -383,16 +386,18 @@ async function buildPredictRepairCandidates(rows: readonly PredictBlockedRow[]):
           results.push(toPredictRepair(row, current, args.apply ? "UPDATED" : "PLANNED", "CURRENT_MARKET_ID_RECOVERED"));
           continue;
         }
+        currentLookupReason = `CURRENT_MARKET_INACTIVE_${normalizeReasonToken(current.status ?? "UNKNOWN")}`;
       } catch (error) {
         if (!(error instanceof PredictClientError && (error.status === 400 || error.status === 404))) {
           results.push(toPredictUnresolved(row, `CURRENT_MARKET_LOOKUP_FAILED_${error instanceof PredictClientError ? error.status ?? "NETWORK" : "UNKNOWN"}`));
           continue;
         }
+        currentLookupReason = `CURRENT_MARKET_LOOKUP_FAILED_${error.status}`;
       }
     }
 
     if (searchedRows >= args.predictSearchLimit) {
-      results.push(toPredictUnresolved(row, "PREDICT_OPERATOR_LINK_REQUIRED_SEARCH_LIMIT_REACHED"));
+      results.push(toPredictUnresolved(row, currentLookupReason ?? "PREDICT_OPERATOR_LINK_REQUIRED_SEARCH_LIMIT_REACHED"));
       continue;
     }
     searchedRows += 1;
@@ -401,7 +406,12 @@ async function buildPredictRepairCandidates(rows: readonly PredictBlockedRow[]):
       results.push(toPredictRepair(row, candidates[0]!, args.apply ? "UPDATED" : "PLANNED", "SINGLE_ACTIVE_EXACT_TITLE_MATCH"));
       continue;
     }
-    results.push(toPredictUnresolved(row, candidates.length === 0 ? "NO_ACTIVE_EXACT_TITLE_MATCH" : "AMBIGUOUS_ACTIVE_EXACT_TITLE_MATCH"));
+    results.push(toPredictUnresolved(
+      row,
+      candidates.length === 0
+        ? currentLookupReason ?? "NO_ACTIVE_EXACT_TITLE_MATCH"
+        : "AMBIGUOUS_ACTIVE_EXACT_TITLE_MATCH"
+    ));
   }
   return results;
 }
@@ -534,25 +544,27 @@ async function applyPredictRepairs(db: Pool, rows: readonly PredictRepairCandida
 
 async function hidePredictNonRepairableRows(db: Pool, rows: readonly PredictRepairCandidate[]): Promise<void> {
   const rowsToHide = rows.filter((row) =>
-    row.status === "HIDDEN" &&
+    row.status === "DISABLED" &&
     args.hidePredictVenueMarketIds.some((id) => samePredictVenueMarketId(id, row.currentVenueMarketId))
   );
   for (const row of rowsToHide) {
     await db.query(
-      `UPDATE frontend_market_approvals
-          SET status = 'HIDDEN',
-              approval_reason = 'hidden because operator confirmed the linked Predict market is inactive or does not contain the curated outcome',
-              metadata = metadata || $2::jsonb,
+      `UPDATE venue_market_profiles
+          SET normalized_payload = normalized_payload || $2::jsonb,
+              mapping_lineage = (
+                SELECT jsonb_agg(DISTINCT value)
+                  FROM jsonb_array_elements(mapping_lineage || '["predict-market-quote-blocker-cleanup:quote-disabled"]'::jsonb)
+              ),
               updated_at = now()
-        WHERE canonical_event_id = $1::uuid
-          AND status = 'APPROVED'
-          AND metadata->>'source' = 'frontend-curated-catalog'`,
+        WHERE id = $1
+          AND venue IN ('PREDICT', 'PREDICT_FUN')`,
       [
-        row.canonicalEventId,
+        row.profileId,
         JSON.stringify({
-          hiddenBy: "sync-market-quote-blocker-cleanup",
-          hiddenAt: generatedAt,
-          hiddenReason: "PREDICT_OPERATOR_CONFIRMED_NON_REPAIRABLE",
+          quoteDisabled: true,
+          quoteDisabledBy: "sync-market-quote-blocker-cleanup",
+          quoteDisabledAt: generatedAt,
+          quoteDisabledReason: "PREDICT_OPERATOR_CONFIRMED_NON_REPAIRABLE",
           currentVenueMarketId: row.currentVenueMarketId,
           latestBlockers: row.blockers
         })
@@ -564,6 +576,7 @@ async function hidePredictNonRepairableRows(db: Pool, rows: readonly PredictRepa
           AND (
             venue_market_id = $1
             OR venue_market_id = regexp_replace($1, '^PREDICT:?([0-9]+).*$', '\\1')
+            OR venue_market_id = regexp_replace($1, '^PREDICT:([^:]+):.*$', '\\1')
           )`,
       [row.currentVenueMarketId]
     );
@@ -573,6 +586,7 @@ async function hidePredictNonRepairableRows(db: Pool, rows: readonly PredictRepa
           AND (
             venue_market_id = $1
             OR venue_market_id = regexp_replace($1, '^PREDICT:?([0-9]+).*$', '\\1')
+            OR venue_market_id = regexp_replace($1, '^PREDICT:([^:]+):.*$', '\\1')
           )`,
       [row.currentVenueMarketId]
     );
@@ -658,7 +672,7 @@ function toPredictUnresolved(row: PredictBlockedRow, reason: string): PredictRep
     title: row.title,
     currentVenueMarketId: row.venue_market_id,
     blockers: parseStringArray(row.blockers),
-    status: shouldHide ? "HIDDEN" : "NEEDS_OPERATOR_LINK",
+    status: shouldHide ? "DISABLED" : "NEEDS_OPERATOR_LINK",
     reason: shouldHide ? `PREDICT_OPERATOR_CONFIRMED_NON_REPAIRABLE:${reason}` : reason,
     candidate: null,
     linkHints: buildPredictLinkHints(row)
@@ -677,11 +691,21 @@ function samePredictVenueMarketId(left: string, right: string): boolean {
 }
 
 function buildPredictLinkHints(row: PredictBlockedRow): PredictRepairCandidate["linkHints"] {
+  const sourceUrl = extractPayloadString(row.normalized_payload, "sourceUrl")
+    ?? extractPayloadString(row.raw_source_payload, "sourceUrl")
+    ?? extractPayloadString(row.normalized_payload, "url")
+    ?? extractPayloadString(row.raw_source_payload, "url");
+  const slug = extractPredictSlug(row.venue_market_id)
+    ?? extractPayloadString(row.normalized_payload, "marketSlug")
+    ?? extractPayloadString(row.raw_source_payload, "marketSlug")
+    ?? extractPayloadString(row.normalized_payload, "slug")
+    ?? extractPayloadString(row.raw_source_payload, "slug");
   return {
     currentNumericMarketId: extractNumericMarketId(row.venue_market_id),
+    currentSlug: slug,
     storedVenueMarketId: row.venue_market_id,
     searchTerm: row.title || row.event_title || row.proposition_key,
-    requestedVenueUrl: null
+    requestedVenueUrl: sourceUrl ?? (slug ? `https://predict.fun/market/${slug}` : null)
   };
 }
 
@@ -722,6 +746,41 @@ function extractNumericMarketId(value: string): string | null {
   }
   const prefixed = value.trim().match(/^PREDICT:?(\d+)/i);
   return prefixed?.[1] ?? null;
+}
+
+function extractPredictSlug(value: string): string | null {
+  const trimmed = value.trim();
+  const prefixed = trimmed.match(/^PREDICT:([^:]+):/i);
+  const candidate = prefixed?.[1] ?? (/^[a-z0-9][a-z0-9-]+$/i.test(trimmed) ? trimmed : null);
+  return candidate && !/^\d+$/.test(candidate) ? candidate : null;
+}
+
+function extractPayloadString(payload: unknown, key: string): string | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const record = payload as Record<string, unknown>;
+  const direct = record[key];
+  if (typeof direct === "string" && direct.trim().length > 0) {
+    return direct.trim();
+  }
+  for (const value of Object.values(record)) {
+    if (typeof value === "object" && value !== null) {
+      const nested = extractPayloadString(value, key);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+  return null;
+}
+
+function normalizeReasonToken(value: string): string {
+  return value
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "") || "UNKNOWN";
 }
 
 function fetchWithTimeout(timeoutMs: number): typeof fetch {
@@ -789,7 +848,7 @@ function renderMarkdown(artifact: CleanupArtifact): string {
     `- Predict rows scanned: ${artifact.summary.predictRowsScanned}`,
     `- Predict rows ${artifact.mode === "APPLY" ? "updated" : "planned"}: ${artifact.summary.predictRowsUpdatedOrPlanned}`,
     `- Predict rows needing operator links: ${artifact.summary.predictRowsNeedingOperatorLinks}`,
-    `- Predict rows ${artifact.mode === "APPLY" ? "hidden" : "planned hidden"}: ${artifact.summary.predictRowsHiddenOrPlanned}`,
+    `- Predict rows ${artifact.mode === "APPLY" ? "quote-disabled" : "planned quote-disabled"}: ${artifact.summary.predictRowsHiddenOrPlanned}`,
     `- Operator-confirmed events ${artifact.mode === "APPLY" ? "hidden" : "planned hidden"}: ${artifact.summary.operatorConfirmedEventsHiddenOrPlanned}`,
     "",
     "## Polymarket Closed Events",
@@ -804,11 +863,11 @@ function renderMarkdown(artifact: CleanupArtifact): string {
     ...(artifact.predictRepairCandidates.length === 0
       ? ["- none"]
       : artifact.predictRepairCandidates.map((row) =>
-        `- ${row.status}: ${row.title} current=${row.currentVenueMarketId} reason=${row.reason}${row.candidate ? ` candidate=${row.candidate.venueMarketId}` : ""} search="${row.linkHints.searchTerm}"`)),
+        `- ${row.status}: ${row.title} current=${row.currentVenueMarketId} reason=${row.reason}${row.candidate ? ` candidate=${row.candidate.venueMarketId}` : ""} search="${row.linkHints.searchTerm}"${row.linkHints.requestedVenueUrl ? ` url=${row.linkHints.requestedVenueUrl}` : ""}`)),
     "",
     "## Safety Notes",
     "",
-    "- This cleanup hides stale frontend-approved markets; it does not delete canonical history.",
+    "- This cleanup hides only all-blocked closed frontend markets; confirmed Predict venue blockers are quote-disabled per venue profile.",
     "- Predict repair applies only to one active exact-title match.",
     "- No execution adapters, funding gates, approved lanes, scope tokens, or settlement logic are changed.",
     "- Artifacts do not include API keys, auth headers, signatures, or raw provider payloads.",

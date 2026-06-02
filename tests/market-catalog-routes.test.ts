@@ -1536,6 +1536,24 @@ describe("market catalog routes", () => {
 
     expect(rows).toHaveLength(1);
     expect(queries[0]?.sql).toContain("regexp_replace(cem.id");
+    expect(queries[0]?.sql).toContain("quoteDisabled");
     expect(queries[0]?.params?.[0]).toBe("FRONTEND_CURATED:CANONICAL|YES");
+  });
+
+  it("excludes quote-disabled venue profiles from shared-core batch mappings", async () => {
+    const queries: Array<{ sql: string; params?: unknown[] }> = [];
+    const pool = {
+      query: async (sql: string, params?: unknown[]) => {
+        queries.push(params ? { sql, params } : { sql });
+        return { rows: [] };
+      }
+    };
+
+    const repository = new SharedCoreQuoteMappingRepository(pool as never);
+    const rows = await repository.listApprovedVenueMappings({ limit: 25 });
+
+    expect(rows).toHaveLength(0);
+    expect(queries[0]?.sql).toContain("quoteDisabled");
+    expect(queries[0]?.params?.[0]).toBe(25);
   });
 });
