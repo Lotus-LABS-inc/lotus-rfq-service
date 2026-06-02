@@ -1133,7 +1133,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       venueQuoteSource,
       venueOrderbookSnapshotRepository,
       dependencies.logger,
-      buildMarketOrderbookRecorderConfig()
+      buildMarketOrderbookRecorderConfig(),
+      hotQuoteSnapshots
     );
     marketOrderbookRecorder.start();
     app.addHook("onClose", async () => {

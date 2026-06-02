@@ -18,6 +18,7 @@ describe("MarketOrderbookRecorder", () => {
     expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
       intervalMs: 60_000,
       marketBatchSize: 15,
+      activeMarketBatchSize: 120,
       priorityMarketBatchSize: 8,
       priorityVenues: ["OPINION"],
       maxSamplesPerTick: 45,
@@ -35,6 +36,7 @@ describe("MarketOrderbookRecorder", () => {
       expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
         intervalMs: 60_000,
         marketBatchSize: 15,
+        activeMarketBatchSize: 120,
         priorityMarketBatchSize: 8,
         priorityVenues: ["OPINION"],
         maxSamplesPerTick: 45,
@@ -294,6 +296,69 @@ describe("MarketOrderbookRecorder", () => {
 
     expect(result.scannedMarkets).toBe(2);
     expect(sampledMarketIds).toEqual(["market-opinion", "market-opinion", "market-1", "market-1"]);
+  });
+
+  it("samples active UI markets before the normal catalog sweep", async () => {
+    const sampledMarketIds: string[] = [];
+    const activeMarket = {
+      ...marketFixture("OPEN"),
+      canonicalEventId: "event-active",
+      canonicalMarketIds: ["market-active"],
+      venueMarkets: marketFixture("OPEN").venueMarkets.map((venueMarket) => ({
+        ...venueMarket,
+        canonicalMarketId: "market-active"
+      }))
+    };
+    const normalMarket = marketFixture("OPEN");
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async (filter) => (filter?.limit ?? 0) >= 250
+          ? [activeMarket, normalMarket]
+          : [normalMarket]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalMarketId }) => {
+          sampledMarketIds.push(canonicalMarketId);
+          return {
+            snapshots: [],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 1,
+        activeMarketBatchSize: 10,
+        priorityMarketBatchSize: 0,
+        priorityVenues: [],
+        maxSamplesPerTick: 40,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      },
+      {
+        listActiveMarketsFromRedis: async () => [{
+          canonicalMarketId: "market-active",
+          canonicalOutcomeId: "YES",
+          lastSeenAt: new Date("2026-05-10T12:00:00.000Z")
+        }]
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.activeMarkets).toBe(1);
+    expect(sampledMarketIds).toEqual(["market-active", "market-active", "market-1", "market-1"]);
   });
 
   it("bounds and cools down hung quote source samples so recorder ticks cannot stall indefinitely", async () => {
