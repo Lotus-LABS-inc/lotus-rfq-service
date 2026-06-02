@@ -751,6 +751,69 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       usableBalanceSource: "USER_CLOB_SYNC_CONFIRMED"
     };
   };
+  const readRecentPolymarketClobConfirmationBalanceForUser = async (
+    userId: string
+  ): Promise<PolymarketFundingBalanceReadOutput | null> => {
+    const confirmation = await userVenueAccountService.getLatestPolymarketClobReadinessConfirmation(userId);
+    if (
+      !confirmation ||
+      !isRecentPolymarketClobSyncConfirmation(confirmation.confirmedAt) ||
+      !isPositiveAmount(confirmation.readyAmount)
+    ) {
+      return null;
+    }
+    return {
+      usableBalance: confirmation.readyAmount,
+      collateralBalance: confirmation.clobCollateralBalance,
+      collateralAllowance: confirmation.clobCollateralAllowance,
+      clobAllowanceSpenders: confirmation.clobAllowanceSpenders,
+      approvalSpenderSource: confirmation.clobAllowanceSpenders.length > 0 ? "CLOB_ALLOWANCE_MAP" : "UNAVAILABLE",
+      onchainPusdBalance: null,
+      onchainPusdAllowance: null,
+      bridgedUsdcBalance: null,
+      usableBalanceSource: "USER_CLOB_SYNC_CONFIRMED"
+    };
+  };
+  const buildPolymarketVenueBalanceView = (
+    polymarket: PolymarketFundingBalanceReadOutput,
+    balances: readonly VenueBalanceView[],
+    freshness: "live" | "stale"
+  ): VenueBalanceView => {
+    const sourceReady = hasPolymarketCLOBTradeReadyBalance(
+      polymarket.usableBalanceSource,
+      polymarket.usableBalance
+    );
+    const usableAmount = sourceReady ? polymarket.usableBalance : "0";
+    const pendingWithdrawalAmount = balances.find((balance) =>
+      balance.venue === "POLYMARKET" && balance.token.toUpperCase() === "USDC"
+    )?.pendingWithdrawalAmount ?? "0";
+    const usable = Number(usableAmount);
+    const pending = Number(pendingWithdrawalAmount);
+    const availableAmount = Number.isFinite(usable) && Number.isFinite(pending)
+      ? String(Math.max(usable - pending, 0))
+      : usableAmount;
+    return {
+      venue: "POLYMARKET",
+      token: "USDC",
+      readyAmount: usableAmount,
+      pendingWithdrawalAmount,
+      availableAmount,
+      updatedAt: new Date().toISOString(),
+      balanceSource: polymarket.usableBalanceSource === "USER_CLOB_SYNC_CONFIRMED"
+        ? "POLYMARKET_CLOB_SYNC_CONFIRMED"
+        : "POLYMARKET_CLOB_READ",
+      balanceFreshness: freshness,
+      readinessReason: sourceReady
+        ? "POLYMARKET_CLOB_COLLATERAL_CONFIRMED"
+        : polymarket.usableBalanceSource === "ONCHAIN_CLOB_SPENDER_ALLOWANCE"
+          ? "POLYMARKET_CLOB_SYNC_PENDING"
+          : polymarket.usableBalanceSource === "ONCHAIN_PUSD_ALLOWANCE"
+          ? "POLYMARKET_CLOB_APPROVAL_REQUIRED"
+          : "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
+      usableBalanceSource: polymarket.usableBalanceSource,
+      approvalSpenderSource: polymarket.approvalSpenderSource
+    };
+  };
   const internalWithdrawalEvidenceReadService = new InternalWithdrawalEvidenceReadService({ env: process.env });
   const failureRecoveryManager = new FailureRecoveryManager(dependencies.pgPool);
   const executionControlRepository = new ExecutionControlRepository(dependencies.pgPool);
@@ -1709,45 +1772,20 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         parseOptionalNumber(process.env.POLYMARKET_VENUE_BALANCE_READ_TIMEOUT_MS)
           ?? DEFAULT_POLYMARKET_VENUE_BALANCE_READ_TIMEOUT_MS
       );
-      const sourceReady = hasPolymarketCLOBTradeReadyBalance(
-        polymarket.usableBalanceSource,
-        polymarket.usableBalance
-      );
-      const usableAmount = sourceReady ? polymarket.usableBalance : "0";
-      const pendingWithdrawalAmount = balances.find((balance) =>
-        balance.venue === "POLYMARKET" && balance.token.toUpperCase() === "USDC"
-      )?.pendingWithdrawalAmount ?? "0";
-      const usable = Number(usableAmount);
-      const pending = Number(pendingWithdrawalAmount);
-      const availableAmount = Number.isFinite(usable) && Number.isFinite(pending)
-        ? String(Math.max(usable - pending, 0))
-        : usableAmount;
-      const spendableBalance: VenueBalanceView = {
-        venue: "POLYMARKET",
-        token: "USDC",
-        readyAmount: usableAmount,
-        pendingWithdrawalAmount,
-        availableAmount,
-        updatedAt: new Date().toISOString(),
-        balanceSource: polymarket.usableBalanceSource === "USER_CLOB_SYNC_CONFIRMED"
-          ? "POLYMARKET_CLOB_SYNC_CONFIRMED"
-          : "POLYMARKET_CLOB_READ",
-        balanceFreshness: "live",
-        readinessReason: sourceReady
-          ? "POLYMARKET_CLOB_COLLATERAL_CONFIRMED"
-          : polymarket.usableBalanceSource === "ONCHAIN_CLOB_SPENDER_ALLOWANCE"
-            ? "POLYMARKET_CLOB_SYNC_PENDING"
-            : polymarket.usableBalanceSource === "ONCHAIN_PUSD_ALLOWANCE"
-            ? "POLYMARKET_CLOB_APPROVAL_REQUIRED"
-            : "POLYMARKET_CLOB_COLLATERAL_NOT_READY",
-        usableBalanceSource: polymarket.usableBalanceSource,
-        approvalSpenderSource: polymarket.approvalSpenderSource
-      };
+      const spendableBalance = buildPolymarketVenueBalanceView(polymarket, balances, "live");
       const withoutPolymarket = balances.filter((balance) =>
         !(balance.venue === "POLYMARKET" && balance.token.toUpperCase() === "USDC")
       );
       return [spendableBalance, ...withoutPolymarket];
     } catch {
+      const confirmationBalance = await readRecentPolymarketClobConfirmationBalanceForUser(userId).catch(() => null);
+      if (confirmationBalance) {
+        const spendableBalance = buildPolymarketVenueBalanceView(confirmationBalance, balances, "stale");
+        const withoutPolymarket = balances.filter((balance) =>
+          !(balance.venue === "POLYMARKET" && balance.token.toUpperCase() === "USDC")
+        );
+        return [spendableBalance, ...withoutPolymarket];
+      }
       return balances.map((balance) => balance.venue === "POLYMARKET"
         ? {
             ...balance,
@@ -1768,11 +1806,15 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     const polymarket = activations.find((activation) => activation.venue === "POLYMARKET");
     if (polymarket) {
       try {
-        const balance = await readPolymarketUsableBalanceForUser({
-          userId,
-          fundingIntentId: "activation-status",
-          routeLegId: "activation-status"
-        });
+        const balance = await withTimeout(
+          readPolymarketUsableBalanceForUser({
+            userId,
+            fundingIntentId: "activation-status",
+            routeLegId: "activation-status"
+          }),
+          parseOptionalNumber(process.env.POLYMARKET_VENUE_BALANCE_READ_TIMEOUT_MS)
+            ?? DEFAULT_POLYMARKET_VENUE_BALANCE_READ_TIMEOUT_MS
+        );
         polymarket.clobCollateralBalance = balance.collateralBalance;
         polymarket.clobCollateralAllowance = balance.collateralAllowance;
         polymarket.onchainPusdBalance = balance.onchainPusdBalance;
@@ -1852,7 +1894,20 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           }
         }
       } catch {
-        // Activation listing remains durable even when live balance reads are temporarily unavailable.
+        const balance = await readRecentPolymarketClobConfirmationBalanceForUser(userId).catch(() => null);
+        if (balance) {
+          polymarket.clobCollateralBalance = balance.collateralBalance;
+          polymarket.clobCollateralAllowance = balance.collateralAllowance;
+          polymarket.clobAllowanceSpenders = balance.clobAllowanceSpenders;
+          polymarket.approvalSpenderSource = balance.approvalSpenderSource;
+          polymarket.activationRequired = false;
+          polymarket.mode = "NOT_REQUIRED";
+          polymarket.status = "NOT_REQUIRED";
+          polymarket.tokenSymbol = "pUSD";
+          polymarket.readinessReason = "POLYMARKET_CLOB_COLLATERAL_CONFIRMED";
+          polymarket.instructions = ["Polymarket CLOB collateral was recently confirmed and is available for live routes."];
+          polymarket.blockers = [];
+        }
       }
     }
     return activations;
