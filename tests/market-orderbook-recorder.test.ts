@@ -16,9 +16,9 @@ const logger: MarketOrderbookRecorderLogger = {
 describe("MarketOrderbookRecorder", () => {
   it("enables recording by default for worker-owned runtime config", () => {
     expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
-      intervalMs: 120_000,
-      marketBatchSize: 5,
-      maxSamplesPerTick: 20
+      intervalMs: 60_000,
+      marketBatchSize: 15,
+      maxSamplesPerTick: 60
     });
   });
 
@@ -27,9 +27,9 @@ describe("MarketOrderbookRecorder", () => {
     process.env.MARKET_ORDERBOOK_RECORDER_ENABLED = "false";
     try {
       expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
-        intervalMs: 120_000,
-        marketBatchSize: 5,
-        maxSamplesPerTick: 20
+        intervalMs: 60_000,
+        marketBatchSize: 15,
+        maxSamplesPerTick: 60
       });
       expect(buildMarketOrderbookRecorderConfig()).not.toHaveProperty("enabled");
     } finally {

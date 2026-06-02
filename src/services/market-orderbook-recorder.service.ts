@@ -37,9 +37,9 @@ export interface MarketOrderbookRecorderRunResult {
 }
 
 const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
-  intervalMs: 120_000,
-  marketBatchSize: 5,
-  maxSamplesPerTick: 20,
+  intervalMs: 60_000,
+  marketBatchSize: 15,
+  maxSamplesPerTick: 60,
   retentionHours: 720,
   levelsPerSide: 25,
   quoteProviderCooldownMs: 30_000
