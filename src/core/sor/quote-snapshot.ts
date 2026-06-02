@@ -165,6 +165,7 @@ export interface SharedCoreQuoteMappingLoader {
 }
 
 const supportedQuoteVenues = new Set(["POLYMARKET", "LIMITLESS", "PREDICT", "PREDICT_FUN", "OPINION", "MYRIAD"]);
+const DEFAULT_MAPPING_READINESS_CACHE_TTL_MS = 60_000;
 
 export interface CalculatedVenueQuoteSnapshot {
   venue: string;
@@ -527,9 +528,27 @@ export class CompositeVenueQuoteSource {
 const clampReaderTimeoutMs = (timeoutMs: number): number =>
   Math.max(250, Math.min(timeoutMs, 10_000));
 
+const mappingReadinessCacheKey = (
+  canonicalMarketId: string,
+  canonicalOutcomeId: string | undefined
+): string => `${canonicalMarketId}\u0000${canonicalOutcomeId ?? ""}`;
+
+const resolveMappingReadinessCacheTtlMs = (cacheTtlMs: number | undefined): number =>
+  Math.max(100, Math.min(cacheTtlMs ?? DEFAULT_MAPPING_READINESS_CACHE_TTL_MS, 10 * 60_000));
+
 export class SharedCoreVenueQuoteMappingResolver implements VenueQuoteMappingResolver {
+  private readonly readinessCache = new Map<string, {
+    expiresAtMs: number;
+    value?: readonly VenueQuoteMappingReadiness[] | undefined;
+    promise?: Promise<readonly VenueQuoteMappingReadiness[]> | undefined;
+  }>();
+
   public constructor(
-    private readonly loader: SharedCoreQuoteMappingLoader
+    private readonly loader: SharedCoreQuoteMappingLoader,
+    private readonly options: {
+      cacheTtlMs?: number | undefined;
+      now?: () => Date;
+    } = {}
   ) {}
 
   public async resolve(input: {
@@ -547,6 +566,36 @@ export class SharedCoreVenueQuoteMappingResolver implements VenueQuoteMappingRes
   }
 
   public async getReadiness(input: {
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+  }): Promise<readonly VenueQuoteMappingReadiness[]> {
+    const cacheKey = mappingReadinessCacheKey(input.canonicalMarketId, input.canonicalOutcomeId);
+    const nowMs = (this.options.now ?? (() => new Date()))().getTime();
+    const cached = this.readinessCache.get(cacheKey);
+    if (cached && cached.expiresAtMs > nowMs) {
+      if (cached.value) {
+        return cached.value;
+      }
+      if (cached.promise) {
+        return cached.promise;
+      }
+    }
+
+    const expiresAtMs = nowMs + resolveMappingReadinessCacheTtlMs(this.options.cacheTtlMs);
+    const promise = this.loadReadiness(input)
+      .then((value) => {
+        this.readinessCache.set(cacheKey, { expiresAtMs, value });
+        return value;
+      })
+      .catch((error) => {
+        this.readinessCache.delete(cacheKey);
+        throw error;
+      });
+    this.readinessCache.set(cacheKey, { expiresAtMs, promise });
+    return promise;
+  }
+
+  private async loadReadiness(input: {
     canonicalMarketId: string;
     canonicalOutcomeId?: string | undefined;
   }): Promise<readonly VenueQuoteMappingReadiness[]> {
