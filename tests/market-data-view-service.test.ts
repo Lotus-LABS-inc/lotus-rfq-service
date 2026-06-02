@@ -151,6 +151,111 @@ describe("LiveMarketDataViewService", () => {
     });
   });
 
+  it("bounds batch quote reads and refreshes cache after a slow live response resolves", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    let resolveReport!: (value: any) => void;
+    const pendingReport = new Promise<any>((resolve) => {
+      resolveReport = resolve;
+    });
+    const service = new LiveMarketDataViewService(
+      {
+        getQuoteSnapshotReport: async () => pendingReport
+      },
+      {
+        now: () => now,
+        batchQuoteLiveTimeoutMs: 10
+      }
+    );
+
+    const started = Date.now();
+    const first = await service.getBatchQuotes({
+      items: [{ marketId: "market-slow", outcomeId: "YES", side: "buy", amount: "1" }]
+    });
+    const elapsedMs = Date.now() - started;
+
+    expect(elapsedMs).toBeLessThan(300);
+    expect(first.quotes[0]).toMatchObject({
+      status: "unavailable",
+      blockers: [{ venue: "LOTUS", reason: "MARKET_BATCH_QUOTE_TIMEOUT" }]
+    });
+
+    resolveReport({
+      snapshots: [{
+        venue: "POLYMARKET",
+        venueMarketId: "poly-1",
+        venueOutcomeId: "yes",
+        source: "REST",
+        quoteQuality: "FULL_DEPTH_REST",
+        sourceTimestamp: now,
+        receivedAt: now,
+        bids: [{ price: "0.50", size: "100" }],
+        asks: [{ price: "0.53", size: "100" }],
+        blockers: [],
+        missingFactors: []
+      }],
+      blocked: []
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const second = await service.getBatchQuotes({
+      items: [{ marketId: "market-slow", outcomeId: "YES", side: "buy", amount: "1" }]
+    });
+    expect(second.quotes[0]).toMatchObject({
+      status: "live",
+      bestVenue: "POLYMARKET",
+      bestVenuePrice: "0.53"
+    });
+  });
+
+  it("coalesces duplicate concurrent batch quote items", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    let calls = 0;
+    let resolveReport!: (value: any) => void;
+    const pendingReport = new Promise<any>((resolve) => {
+      resolveReport = resolve;
+    });
+    const service = new LiveMarketDataViewService(
+      {
+        getQuoteSnapshotReport: async () => {
+          calls += 1;
+          return pendingReport;
+        }
+      },
+      {
+        now: () => now,
+        batchQuoteLiveTimeoutMs: 500
+      }
+    );
+
+    const first = service.getBatchQuotes({
+      items: [{ marketId: "market-1", outcomeId: "YES", side: "buy", amount: "1" }]
+    });
+    const second = service.getBatchQuotes({
+      items: [{ marketId: "market-1", outcomeId: "YES", side: "buy", amount: "1" }]
+    });
+    resolveReport({
+      snapshots: [{
+        venue: "POLYMARKET",
+        venueMarketId: "poly-1",
+        venueOutcomeId: "yes",
+        source: "REST",
+        quoteQuality: "FULL_DEPTH_REST",
+        sourceTimestamp: now,
+        receivedAt: now,
+        bids: [{ price: "0.50", size: "100" }],
+        asks: [{ price: "0.53", size: "100" }],
+        blockers: [],
+        missingFactors: []
+      }],
+      blocked: []
+    });
+
+    const responses = await Promise.all([first, second]);
+    expect(calls).toBe(1);
+    expect(responses[0].quotes[0]?.bestVenuePrice).toBe("0.53");
+    expect(responses[1].quotes[0]?.bestVenuePrice).toBe("0.53");
+  });
+
   it("bounds chart reads when live orderbook and stored history are slow", async () => {
     const now = new Date("2026-05-10T12:00:00.000Z");
     const service = new LiveMarketDataViewService(

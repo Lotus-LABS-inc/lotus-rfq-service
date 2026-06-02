@@ -379,6 +379,8 @@ const hasPolymarketCLOBTradeReadyBalance = (
   amount: string | null | undefined
 ): boolean => isPolymarketCLOBTradeReadySource(source) && isPositiveAmount(amount);
 
+const POLYMARKET_CLOB_SYNC_CONFIRMATION_MAX_AGE_MS = 5 * 60 * 1000;
+
 const isPositiveAmount = (value: string | null | undefined): boolean => {
   if (typeof value !== "string" || !/^\d+(?:\.\d+)?$/.test(value.trim())) {
     return false;
@@ -394,6 +396,11 @@ const minAmountString = (left: string, right: string): string => {
     return left;
   }
   return String(Math.min(leftNumber, rightNumber));
+};
+
+const isRecentPolymarketClobSyncConfirmation = (confirmedAt: string, now = Date.now()): boolean => {
+  const timestamp = Date.parse(confirmedAt);
+  return Number.isFinite(timestamp) && now - timestamp <= POLYMARKET_CLOB_SYNC_CONFIRMATION_MAX_AGE_MS;
 };
 
 export interface ServerDependencies {
@@ -694,12 +701,33 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     fundingIntentId: string;
     routeLegId: string;
   }): Promise<PolymarketFundingBalanceReadOutput> => {
-    const balance = await polymarketFundingBalanceReadService.readUsableBalance(input);
+    const confirmation = await userVenueAccountService.getLatestPolymarketClobReadinessConfirmation(input.userId);
+    const freshConfirmation = confirmation && isRecentPolymarketClobSyncConfirmation(confirmation.confirmedAt)
+      ? confirmation
+      : null;
+    let balance: PolymarketFundingBalanceReadOutput;
+    try {
+      balance = await polymarketFundingBalanceReadService.readUsableBalance(input);
+    } catch (error) {
+      if (!freshConfirmation || !isPositiveAmount(freshConfirmation.readyAmount)) {
+        throw error;
+      }
+      return {
+        usableBalance: freshConfirmation.readyAmount,
+        collateralBalance: freshConfirmation.clobCollateralBalance,
+        collateralAllowance: freshConfirmation.clobCollateralAllowance,
+        clobAllowanceSpenders: freshConfirmation.clobAllowanceSpenders,
+        approvalSpenderSource: freshConfirmation.clobAllowanceSpenders.length > 0 ? "CLOB_ALLOWANCE_MAP" : "UNAVAILABLE",
+        onchainPusdBalance: null,
+        onchainPusdAllowance: null,
+        bridgedUsdcBalance: null,
+        usableBalanceSource: "USER_CLOB_SYNC_CONFIRMED"
+      };
+    }
     if (hasPolymarketCLOBTradeReadyBalance(balance.usableBalanceSource, balance.usableBalance)) {
       return balance;
     }
-    const confirmation = await userVenueAccountService.getLatestPolymarketClobReadinessConfirmation(input.userId);
-    if (!confirmation || !isPositiveAmount(confirmation.readyAmount)) {
+    if (!freshConfirmation || !isPositiveAmount(freshConfirmation.readyAmount)) {
       return balance;
     }
     const boundedLiveAmount =
@@ -707,18 +735,18 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         ? balance.usableBalance
         : isPositiveAmount(balance.onchainPusdBalance) && isPositiveAmount(balance.onchainPusdAllowance)
           ? minAmountString(balance.onchainPusdBalance ?? "0", balance.onchainPusdAllowance ?? "0")
-          : confirmation.readyAmount;
-    const usableBalance = minAmountString(boundedLiveAmount, confirmation.readyAmount);
+          : freshConfirmation.readyAmount;
+    const usableBalance = minAmountString(boundedLiveAmount, freshConfirmation.readyAmount);
     if (!isPositiveAmount(usableBalance)) {
       return balance;
     }
     return {
       ...balance,
       usableBalance,
-      collateralBalance: confirmation.clobCollateralBalance,
-      collateralAllowance: confirmation.clobCollateralAllowance,
-      clobAllowanceSpenders: confirmation.clobAllowanceSpenders.length > 0
-        ? confirmation.clobAllowanceSpenders
+      collateralBalance: freshConfirmation.clobCollateralBalance,
+      collateralAllowance: freshConfirmation.clobCollateralAllowance,
+      clobAllowanceSpenders: freshConfirmation.clobAllowanceSpenders.length > 0
+        ? freshConfirmation.clobAllowanceSpenders
         : balance.clobAllowanceSpenders,
       usableBalanceSource: "USER_CLOB_SYNC_CONFIRMED"
     };
@@ -2019,6 +2047,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         relayerState: activation.relayerState,
         transactionHash: activation.transactionHash
       });
+      accountSnapshotCache.delete(userId);
       return activation;
     },
     preparePolymarketClobSync: async (userId) => {
@@ -2061,6 +2090,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           ownerAddress: sync.ownerAddress,
           signerAddress: sync.signerAddress
         });
+        accountSnapshotCache.delete(userId);
         return sync;
       } catch (error) {
         const message = error instanceof Error

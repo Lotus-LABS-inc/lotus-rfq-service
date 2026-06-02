@@ -153,6 +153,7 @@ interface StoredChartPoint {
 const MAX_STORED_POINTS = 20_000;
 const MAX_HISTORY_MS = 31 * 24 * 60 * 60 * 1000;
 const BATCH_QUOTE_CACHE_MS = 3_000;
+const BATCH_QUOTE_LIVE_TIMEOUT_MS = 700;
 const CHART_CACHE_MS = 10_000;
 const CHART_LIVE_POINT_TIMEOUT_MS = 50;
 const CHART_HISTORICAL_POINTS_TIMEOUT_MS = 150;
@@ -164,15 +165,18 @@ export class LiveMarketDataViewService {
   private readonly chartCache = new Map<string, { expiresAt: number; response: MarketChartResponse }>();
   private readonly lastGoodBatchQuotes = new Map<string, MarketBatchQuoteItem>();
   private readonly now: () => Date;
+  private readonly batchQuoteLiveTimeoutMs: number;
 
   public constructor(
     private readonly quoteSource: MarketDataQuoteSource,
     options: {
       now?: () => Date;
+      batchQuoteLiveTimeoutMs?: number | undefined;
       historicalChartSource?: MarketHistoricalChartSource | undefined;
     } = {}
   ) {
     this.now = options.now ?? (() => new Date());
+    this.batchQuoteLiveTimeoutMs = Math.max(50, Math.min(options.batchQuoteLiveTimeoutMs ?? BATCH_QUOTE_LIVE_TIMEOUT_MS, 5_000));
     this.historicalChartSource = options.historicalChartSource;
   }
 
@@ -246,7 +250,28 @@ export class LiveMarketDataViewService {
         if (cached.item) return cached.item;
         if (cached.promise) return cached.promise;
       }
-      const promise = this.loadBatchQuoteItem({ item, side, quantity, generatedAt });
+      const livePromise = this.loadBatchQuoteItem({ item, side, quantity, generatedAt });
+      const promise = withTimeout(
+        livePromise,
+        this.batchQuoteLiveTimeoutMs,
+        unavailableBatchQuoteItem({
+          item,
+          side,
+          generatedAt,
+          reason: "MARKET_BATCH_QUOTE_TIMEOUT"
+        })
+      );
+      void livePromise
+        .then((quote) => {
+          const output = quote.status === "unavailable"
+            ? this.staleBatchQuoteFromLastGood(key, quote, this.now()) ?? quote
+            : quote;
+          if (output.status === "live" || output.status === "partial") {
+            this.lastGoodBatchQuotes.set(key, output);
+          }
+          this.batchQuoteCache.set(key, { expiresAt: this.now().getTime() + BATCH_QUOTE_CACHE_MS, item: output });
+        })
+        .catch(() => undefined);
       this.batchQuoteCache.set(key, { expiresAt: generatedAt.getTime() + BATCH_QUOTE_CACHE_MS, promise });
       const quote = await promise;
       const output = quote.status === "unavailable"
@@ -304,24 +329,12 @@ export class LiveMarketDataViewService {
         now: input.generatedAt
       });
     } catch (error) {
-      return {
-        marketId: input.item.marketId,
-        outcomeId: input.item.outcomeId,
+      return unavailableBatchQuoteItem({
+        item: input.item,
         side: input.side,
-        generatedAt: input.generatedAt.toISOString(),
-        status: "unavailable" as const,
-        bestVenue: null,
-        bestVenuePrice: null,
-        unifiedAveragePrice: null,
-        liquidity: "0",
-        spread: null,
-        freshnessMs: null,
-        venues: [],
-        blockers: [{
-          venue: "LOTUS",
-          reason: error instanceof Error ? error.message : "MARKET_BATCH_QUOTE_UNAVAILABLE"
-        }]
-      };
+        generatedAt: input.generatedAt,
+        reason: error instanceof Error ? error.message : "MARKET_BATCH_QUOTE_UNAVAILABLE"
+      });
     }
   }
 
@@ -526,6 +539,30 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, fallback: 
     if (timeout) clearTimeout(timeout);
   }
 };
+
+const unavailableBatchQuoteItem = (input: {
+  item: MarketBatchQuoteRequestItem;
+  side: "buy" | "sell";
+  generatedAt: Date;
+  reason: string;
+}): MarketBatchQuoteItem => ({
+  marketId: input.item.marketId,
+  outcomeId: input.item.outcomeId,
+  side: input.side,
+  generatedAt: input.generatedAt.toISOString(),
+  status: "unavailable",
+  bestVenue: null,
+  bestVenuePrice: null,
+  unifiedAveragePrice: null,
+  liquidity: "0",
+  spread: null,
+  freshnessMs: null,
+  venues: [],
+  blockers: [{
+    venue: "LOTUS",
+    reason: input.reason
+  }]
+});
 
 const unavailableChartOrderbook = (
   input: { marketId: string; outcomeId?: string | undefined },
