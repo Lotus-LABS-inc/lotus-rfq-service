@@ -22,6 +22,9 @@ export class PredictQuoteReader implements VenueQuoteSnapshotReader {
   private readonly inFlight = new Map<string, Promise<NormalizedVenueQuoteSnapshot | null>>();
   private readonly failureCooldowns = new Map<string, { until: number; error: unknown }>();
   private readonly statsCache = new Map<string, { until: number; feeBps: number | undefined }>();
+  private readonly statsInFlight = new Map<string, Promise<number | undefined>>();
+  private readonly marketDetailCache = new Map<string, { until: number; detail: unknown }>();
+  private readonly marketDetailInFlight = new Map<string, Promise<unknown>>();
 
   public constructor(private readonly config: PredictQuoteReaderConfig) {
     this.now = config.now ?? (() => new Date());
@@ -58,24 +61,15 @@ export class PredictQuoteReader implements VenueQuoteSnapshotReader {
       const cachedStats = this.statsCache.get(input.venueMarketId);
       const shouldFetchStats = this.config.feeBps === undefined && (!cachedStats || cachedStats.until <= Date.now());
       const shouldFetchMarketDetail = shouldResolvePredictMarketDetail(input);
-      const [orderbook, stats, marketDetail] = await Promise.all([
+      const [orderbook, venueFeeBps, marketDetail] = await Promise.all([
         this.config.client.getMarketOrderbook(input.venueMarketId),
         shouldFetchStats
-          ? this.config.client.getMarketStatistics(input.venueMarketId).catch(() => null)
-          : Promise.resolve(null),
+          ? this.getCachedStats(input.venueMarketId)
+          : Promise.resolve(cachedStats?.feeBps),
         shouldFetchMarketDetail
-          ? (this.config.client.getMarketById?.(input.venueMarketId).catch(() => null) ?? Promise.resolve(null))
+          ? this.getCachedMarketDetail(input.venueMarketId)
           : Promise.resolve(null)
       ]);
-      const statsRecord = asRecord(stats);
-      const parsedVenueFeeBps = parseOptionalNumber(statsRecord.feeRateBps ?? statsRecord.fee_rate_bps);
-      if (stats !== null && this.config.feeBps === undefined) {
-        this.statsCache.set(input.venueMarketId, {
-          until: Date.now() + PREDICT_STATS_CACHE_TTL_MS,
-          feeBps: parsedVenueFeeBps
-        });
-      }
-      const venueFeeBps = this.config.feeBps ?? parsedVenueFeeBps ?? cachedStats?.feeBps;
       const outcomeResolution = resolvePredictOutcome(input.venueOutcomeId, input.canonicalOutcomeId, marketDetail);
       return normalizePredictOrderbook({
         payload: orderbook,
@@ -98,6 +92,64 @@ export class PredictQuoteReader implements VenueQuoteSnapshotReader {
       }
       throw error;
     }
+  }
+
+  private getCachedStats(marketId: string): Promise<number | undefined> {
+    const cached = this.statsCache.get(marketId);
+    if (cached && cached.until > Date.now()) {
+      return Promise.resolve(cached.feeBps);
+    }
+    const existing = this.statsInFlight.get(marketId);
+    if (existing) {
+      return existing;
+    }
+    const pending = this.config.client.getMarketStatistics(marketId)
+      .then((stats) => {
+        const statsRecord = asRecord(stats);
+        return parseOptionalNumber(statsRecord.feeRateBps ?? statsRecord.fee_rate_bps);
+      })
+      .catch(() => undefined)
+      .then((feeBps) => {
+        this.statsCache.set(marketId, {
+          until: Date.now() + PREDICT_STATS_CACHE_TTL_MS,
+          feeBps
+        });
+        return feeBps;
+      })
+      .finally(() => {
+        this.statsInFlight.delete(marketId);
+      });
+    this.statsInFlight.set(marketId, pending);
+    return pending;
+  }
+
+  private getCachedMarketDetail(marketId: string): Promise<unknown> {
+    const cached = this.marketDetailCache.get(marketId);
+    if (cached && cached.until > Date.now()) {
+      return Promise.resolve(cached.detail);
+    }
+    const existing = this.marketDetailInFlight.get(marketId);
+    if (existing) {
+      return existing;
+    }
+    const fetchMarketDetail = this.config.client.getMarketById;
+    if (!fetchMarketDetail) {
+      return Promise.resolve(null);
+    }
+    const pending = fetchMarketDetail.call(this.config.client, marketId)
+      .catch(() => null)
+      .then((detail) => {
+        this.marketDetailCache.set(marketId, {
+          until: Date.now() + PREDICT_MARKET_DETAIL_CACHE_TTL_MS,
+          detail
+        });
+        return detail;
+      })
+      .finally(() => {
+        this.marketDetailInFlight.delete(marketId);
+      });
+    this.marketDetailInFlight.set(marketId, pending);
+    return pending;
   }
 }
 
@@ -233,6 +285,7 @@ const shouldResolvePredictMarketDetail = (input: VenueQuoteSnapshotReaderInput):
   !input.venueOutcomeId || !looksLikeNumericId(input.venueOutcomeId);
 
 const PREDICT_STATS_CACHE_TTL_MS = 5 * 60_000;
+const PREDICT_MARKET_DETAIL_CACHE_TTL_MS = 5 * 60_000;
 
 const predictSnapshotKey = (input: VenueQuoteSnapshotReaderInput): string =>
   [

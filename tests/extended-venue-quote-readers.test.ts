@@ -132,6 +132,63 @@ describe("extended venue quote readers", () => {
     expect(statsCalls).toBe(1);
   });
 
+  it("Predict reader coalesces concurrent stats and market-detail reads for same-market outcomes", async () => {
+    let orderbookCalls = 0;
+    let statsCalls = 0;
+    let detailCalls = 0;
+    const reader = new PredictQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      environment: "mainnet",
+      now: () => now,
+      client: {
+        async getMarketOrderbook() {
+          orderbookCalls += 1;
+          return { bids: [{ price: "0.4", size: "10" }], asks: [{ price: "0.42", size: "10" }] };
+        },
+        async getMarketStatistics() {
+          statsCalls += 1;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          return { feeRateBps: "35" };
+        },
+        async getMarketById() {
+          detailCalls += 1;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          return {
+            outcomes: [
+              { label: "Yes", tokenId: "1001" },
+              { label: "No", tokenId: "1002" }
+            ]
+          };
+        }
+      } as never
+    });
+
+    const [yes, no] = await Promise.all([
+      reader.getQuoteSnapshot({
+        canonicalMarketId: "canonical-1",
+        canonicalOutcomeId: "YES",
+        venueMarketId: "predict-market-1",
+        venueOutcomeId: "YES",
+        side: "buy",
+        quantity: 1
+      }),
+      reader.getQuoteSnapshot({
+        canonicalMarketId: "canonical-1",
+        canonicalOutcomeId: "NO",
+        venueMarketId: "predict-market-1",
+        venueOutcomeId: "NO",
+        side: "buy",
+        quantity: 1
+      })
+    ]);
+
+    expect(yes?.venueOutcomeId).toBe("1001");
+    expect(no?.venueOutcomeId).toBe("1002");
+    expect(orderbookCalls).toBe(2);
+    expect(statsCalls).toBe(1);
+    expect(detailCalls).toBe(1);
+  });
+
   it("Predict reader avoids optional stats and market-detail calls when static fee and token id are already known", async () => {
     let orderbookCalls = 0;
     let statsCalls = 0;
