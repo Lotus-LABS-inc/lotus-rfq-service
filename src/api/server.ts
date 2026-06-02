@@ -25,6 +25,7 @@ import {
   resolveMarketCatalogSnapshotCacheKeyPrefix
 } from "../services/market-catalog-snapshot-cache.js";
 import { MarketCatalogSnapshotMaterializer } from "../services/market-catalog-snapshot-materializer.js";
+import { HotMarketQuoteReadinessSource } from "../services/hot-market-quote-readiness.service.js";
 import {
   buildVenueBalanceActivationActions,
   hasPolymarketActivationApprovalSpender
@@ -1039,6 +1040,14 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     dbFallback: venueOrderbookSnapshotRepository,
     logger: dependencies.logger
   });
+  const sharedCoreQuoteMappingResolver = new SharedCoreVenueQuoteMappingResolver(
+    new SharedCoreQuoteMappingRepository(dependencies.pgPool)
+  );
+  const marketQuoteReadinessSource = new HotMarketQuoteReadinessSource({
+    mappingResolver: sharedCoreQuoteMappingResolver,
+    hotSnapshots: hotQuoteSnapshots,
+    fallbackSource: venueOrderbookSnapshotRepository
+  });
   const polymarketClobHost = process.env.POLYMARKET_CLOB_HOST ?? process.env.POLY_CLOB_HOST ?? "https://clob.polymarket.com";
   const polymarketGammaBaseUrl = process.env.POLYMARKET_GAMMA_BASE_URL ?? "https://gamma-api.polymarket.com";
   const limitlessBaseUrl = process.env.LIMITLESS_BASE_URL ?? "https://api.limitless.exchange";
@@ -1098,7 +1107,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       }),
       streamCache: myriadQuoteCache
     })
-  ], new SharedCoreVenueQuoteMappingResolver(new SharedCoreQuoteMappingRepository(dependencies.pgPool)), () => new Date(), hotQuoteSnapshots, {
+  ], sharedCoreQuoteMappingResolver, () => new Date(), hotQuoteSnapshots, {
     readerTimeoutMs: 2_000,
     perVenueReaderTimeoutMs: {
       OPINION: 5_000
@@ -1142,7 +1151,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     });
     const marketCatalogSnapshotMaterializer = new MarketCatalogSnapshotMaterializer({
       marketCatalogRepository,
-      marketQuoteReadinessSource: venueOrderbookSnapshotRepository,
+      marketQuoteReadinessSource,
       snapshotCache: marketCatalogSnapshotCache,
       logger: dependencies.logger
     });
@@ -2219,7 +2228,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   });
   await registerMarketCatalogRoutes(app, {
     marketCatalogRepository,
-    marketQuoteReadinessSource: venueOrderbookSnapshotRepository,
+    marketQuoteReadinessSource,
     marketCatalogSnapshotCache,
     marketDataViewService
   });
