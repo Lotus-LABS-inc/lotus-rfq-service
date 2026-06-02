@@ -11,6 +11,7 @@ const exchangeBodySchema = z.object({
 
 export interface TurnkeyAuthRouteDeps {
   jwtTtlSeconds: number;
+  accountSetupTimeoutMs?: number | undefined;
   verifySessionJwt?: (sessionToken: string) => Promise<boolean>;
   provisionUserAccount?: (input: {
     userId: string;
@@ -34,6 +35,8 @@ type TurnkeySessionPayload = {
   exp?: number;
   expiry?: number;
 };
+
+const DEFAULT_ACCOUNT_SETUP_TIMEOUT_MS = 2_500;
 
 export const registerTurnkeyAuthRoutes = async (
   app: FastifyInstance,
@@ -130,7 +133,11 @@ const provisionUserAccount = async (
     };
   }
   try {
-    return await deps.provisionUserAccount(input);
+    return await withTimeout(
+      deps.provisionUserAccount(input),
+      deps.accountSetupTimeoutMs ?? DEFAULT_ACCOUNT_SETUP_TIMEOUT_MS,
+      "Account setup timed out while issuing the Lotus session."
+    );
   } catch (error) {
     return {
       status: "UNAVAILABLE",
@@ -143,10 +150,25 @@ const provisionUserAccount = async (
 
 const safeProvisioningBlocker = (error: unknown): string => {
   const message = error instanceof Error ? error.message : "Account setup is temporarily unavailable.";
-  if (/turnkey/i.test(message) || /wallet/i.test(message) || /venue/i.test(message)) {
+  if (/turnkey/i.test(message) || /wallet/i.test(message) || /venue/i.test(message) || /timed? ?out|timeout/i.test(message)) {
     return message;
   }
   return "Account setup is temporarily unavailable.";
+};
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return promise;
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 };
 
 const decodeTurnkeySessionPayload = (sessionToken: string): TurnkeySessionPayload => {

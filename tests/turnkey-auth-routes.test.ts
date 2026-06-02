@@ -1,6 +1,6 @@
 import Fastify from "fastify";
 import fastifyJwt from "@fastify/jwt";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerTurnkeyAuthRoutes } from "../src/api/routes/turnkey-auth.js";
 
 const jwtSecret = "test-secret-at-least-thirty-two-characters";
@@ -12,12 +12,14 @@ const setupApp = async (
     walletCount: 2,
     venueAccountCount: 5,
     blockers: []
-  }))
+  })),
+  options: { accountSetupTimeoutMs?: number } = {}
 ) => {
   const app = Fastify({ logger: false });
   await app.register(fastifyJwt, { secret: jwtSecret });
   await registerTurnkeyAuthRoutes(app, {
     jwtTtlSeconds: 3600,
+    accountSetupTimeoutMs: options.accountSetupTimeoutMs,
     verifySessionJwt,
     provisionUserAccount
   });
@@ -32,6 +34,10 @@ const unsignedTurnkeySession = (payload: Record<string, unknown>) => {
 };
 
 describe("Turnkey auth exchange route", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("exchanges a valid Turnkey session for a Lotus user JWT", async () => {
     const { app, verifySessionJwt, provisionUserAccount } = await setupApp();
     const session = unsignedTurnkeySession({
@@ -77,6 +83,52 @@ describe("Turnkey auth exchange route", () => {
     expect(decoded.turnkeyUserId).toBe("turnkey-user-1");
     expect(decoded.turnkeyOrganizationId).toBe("turnkey-org-1");
     await app.close();
+  });
+
+  it("issues a Lotus JWT even when account setup is slow", async () => {
+    vi.useFakeTimers();
+    const provisionUserAccount = vi.fn(async () =>
+      new Promise<{
+        status: "READY";
+        walletCount: number;
+        venueAccountCount: number;
+        blockers: string[];
+      }>(() => undefined)
+    );
+    const { app } = await setupApp(
+      vi.fn(async () => true),
+      provisionUserAccount,
+      { accountSetupTimeoutMs: 50 }
+    );
+    const session = unsignedTurnkeySession({
+      userId: "turnkey-user-1",
+      organizationId: "turnkey-org-1",
+      exp: Math.floor(Date.now() / 1000) + 300
+    });
+
+    const responsePromise = app.inject({
+      method: "POST",
+      url: "/auth/turnkey/exchange",
+      payload: {
+        turnkeySessionToken: session,
+        turnkeyUserId: "turnkey-user-1",
+        turnkeyOrganizationId: "turnkey-org-1"
+      }
+    });
+    await vi.advanceTimersByTimeAsync(51);
+    const response = await responsePromise;
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.userJwt).toEqual(expect.any(String));
+    expect(body.accountSetup).toEqual({
+      status: "UNAVAILABLE",
+      walletCount: 0,
+      venueAccountCount: 0,
+      blockers: ["Account setup timed out while issuing the Lotus session."]
+    });
+    await app.close();
+    vi.useRealTimers();
   });
 
   it("accepts Turnkey's signed session JWT claim names", async () => {
