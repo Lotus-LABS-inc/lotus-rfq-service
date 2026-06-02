@@ -195,6 +195,39 @@ describe("infrastructure scaffold", () => {
     expect(app.server.listening).toBe(false);
     await app.close();
   });
+
+  it("routes long encoded curated market ids through market handlers", async () => {
+    const app = await buildServer({
+      logger: createTestLogger(),
+      redisClient: createRedisStub(),
+      pgPool: {
+        query: async () => ({ rows: [] })
+      } as unknown as Pool,
+      db: {} as AppDb,
+      canonicalServiceBaseUrl: "http://localhost:4001",
+      jwtSecret: "test-secret-at-least-thirty-two-chars",
+      reliabilityWeight: 0.05,
+      latencyWeight: 0.03,
+      failureWeight: 0.08,
+      sorAcceptAonAwait: true,
+      sorAcceptNonAonBackground: true
+    });
+
+    const encodedMarketId =
+      "FRONTEND_CURATED%3ACRYPTO%7CFDV_THRESHOLD_AFTER_LAUNCH%7CEXTENDED%7CONE_DAY_AFTER_LAUNCH%7CABOVE%7C1000000000%7C1B%3APOLYMARKET";
+    const response = await app.inject({
+      method: "GET",
+      url: `/markets/${encodedMarketId}`
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({
+      code: "MARKET_NOT_FOUND",
+      message: "Market was not found."
+    });
+
+    await app.close();
+  });
 });
 
 describe("bootstrap lifecycle", () => {
