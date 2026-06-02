@@ -15,6 +15,7 @@ export interface MarketOrderbookRecorderConfig {
   maxSamplesPerTick: number;
   maxTickDurationMs?: number;
   sampleTimeoutMs?: number;
+  cleanupIntervalMs?: number;
   retentionHours: number;
   levelsPerSide: number;
   quoteProviderCooldownMs: number;
@@ -48,6 +49,7 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
   maxSamplesPerTick: 60,
   maxTickDurationMs: 45_000,
   sampleTimeoutMs: 2_500,
+  cleanupIntervalMs: 30 * 60_000,
   retentionHours: 720,
   levelsPerSide: 25,
   quoteProviderCooldownMs: 30_000
@@ -70,6 +72,7 @@ export class MarketOrderbookRecorder {
   private stopped = false;
   private marketOffset = 0;
   private priorityMarketOffset = 0;
+  private lastCleanupAt = Date.now();
   private readonly venueCooldownUntil = new Map<string, number>();
 
   public constructor(
@@ -93,6 +96,7 @@ export class MarketOrderbookRecorder {
       maxSamplesPerTick: this.config.maxSamplesPerTick,
       maxTickDurationMs: this.config.maxTickDurationMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.maxTickDurationMs,
       sampleTimeoutMs: this.config.sampleTimeoutMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.sampleTimeoutMs,
+      cleanupIntervalMs: this.config.cleanupIntervalMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.cleanupIntervalMs,
       retentionHours: this.config.retentionHours,
       levelsPerSide: this.config.levelsPerSide
     }, "Market orderbook recorder started.");
@@ -130,9 +134,7 @@ export class MarketOrderbookRecorder {
       const tickStartedAt = Date.now();
       const maxTickDurationMs = this.config.maxTickDurationMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.maxTickDurationMs;
       const sampleTimeoutMs = this.config.sampleTimeoutMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.sampleTimeoutMs;
-      const cleanup = await this.snapshotRepository.cleanupSnapshots({
-        olderThan: new Date(Date.now() - this.config.retentionHours * 60 * 60 * 1000)
-      });
+      const cleanup = await this.cleanupSnapshotsIfDue(tickStartedAt);
       const priorityMarkets = await this.listPriorityMarkets();
       const marketOffset = this.marketOffset;
       let markets = await this.marketCatalogRepository.listMarkets({
@@ -301,6 +303,23 @@ export class MarketOrderbookRecorder {
     const selected = wrapSlice(priorityMarkets, this.priorityMarketOffset, priorityMarketBatchSize);
     this.priorityMarketOffset = (this.priorityMarketOffset + priorityMarketBatchSize) % priorityMarkets.length;
     return selected;
+  }
+
+  private async cleanupSnapshotsIfDue(nowMs: number): Promise<Pick<
+    MarketOrderbookRecorderRunResult,
+    | "deletedOldSnapshots"
+    | "deletedClosedMarketSnapshots"
+    | "deletedClosedLatestSnapshots"
+    | "deletedStaleBlockedLatestSnapshots"
+  >> {
+    const cleanupIntervalMs = this.config.cleanupIntervalMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.cleanupIntervalMs;
+    if (cleanupIntervalMs > 0 && nowMs - this.lastCleanupAt < cleanupIntervalMs) {
+      return emptyCleanupResult();
+    }
+    this.lastCleanupAt = nowMs;
+    return this.snapshotRepository.cleanupSnapshots({
+      olderThan: new Date(nowMs - this.config.retentionHours * 60 * 60 * 1000)
+    });
   }
 
   private async waitForIdle(): Promise<void> {
@@ -503,6 +522,19 @@ const emptyResult = (): MarketOrderbookRecorderRunResult => ({
   insertedSnapshots: 0,
   failedSamples: 0,
   skippedCooldownSamples: 0,
+  deletedOldSnapshots: 0,
+  deletedClosedMarketSnapshots: 0,
+  deletedClosedLatestSnapshots: 0,
+  deletedStaleBlockedLatestSnapshots: 0
+});
+
+const emptyCleanupResult = (): Pick<
+  MarketOrderbookRecorderRunResult,
+  | "deletedOldSnapshots"
+  | "deletedClosedMarketSnapshots"
+  | "deletedClosedLatestSnapshots"
+  | "deletedStaleBlockedLatestSnapshots"
+> => ({
   deletedOldSnapshots: 0,
   deletedClosedMarketSnapshots: 0,
   deletedClosedLatestSnapshots: 0,

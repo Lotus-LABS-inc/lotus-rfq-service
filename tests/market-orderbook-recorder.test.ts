@@ -22,7 +22,8 @@ describe("MarketOrderbookRecorder", () => {
       priorityVenues: ["OPINION"],
       maxSamplesPerTick: 60,
       maxTickDurationMs: 45_000,
-      sampleTimeoutMs: 2_500
+      sampleTimeoutMs: 2_500,
+      cleanupIntervalMs: 30 * 60_000
     });
   });
 
@@ -37,7 +38,8 @@ describe("MarketOrderbookRecorder", () => {
         priorityVenues: ["OPINION"],
         maxSamplesPerTick: 60,
         maxTickDurationMs: 45_000,
-        sampleTimeoutMs: 2_500
+        sampleTimeoutMs: 2_500,
+        cleanupIntervalMs: 30 * 60_000
       });
       expect(buildMarketOrderbookRecorderConfig()).not.toHaveProperty("enabled");
     } finally {
@@ -93,6 +95,7 @@ describe("MarketOrderbookRecorder", () => {
         intervalMs: 60_000,
         marketBatchSize: 10,
         maxSamplesPerTick: 40,
+        cleanupIntervalMs: 0,
         retentionHours: 720,
         levelsPerSide: 25,
         quoteProviderCooldownMs: 30_000
@@ -305,6 +308,7 @@ describe("MarketOrderbookRecorder", () => {
         intervalMs: 60_000,
         marketBatchSize: 10,
         maxSamplesPerTick: 40,
+        cleanupIntervalMs: 0,
         retentionHours: 720,
         levelsPerSide: 25,
         quoteProviderCooldownMs: 30_000
