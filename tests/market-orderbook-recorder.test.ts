@@ -21,6 +21,7 @@ describe("MarketOrderbookRecorder", () => {
       priorityMarketBatchSize: 8,
       priorityVenues: ["OPINION"],
       maxSamplesPerTick: 60,
+      sampleConcurrency: 4,
       maxTickDurationMs: 45_000,
       sampleTimeoutMs: 2_500,
       cleanupIntervalMs: 30 * 60_000
@@ -37,6 +38,7 @@ describe("MarketOrderbookRecorder", () => {
         priorityMarketBatchSize: 8,
         priorityVenues: ["OPINION"],
         maxSamplesPerTick: 60,
+        sampleConcurrency: 4,
         maxTickDurationMs: 45_000,
         sampleTimeoutMs: 2_500,
         cleanupIntervalMs: 30 * 60_000
@@ -183,6 +185,62 @@ describe("MarketOrderbookRecorder", () => {
     expect(result.sampledOutcomes).toBe(1);
     expect(result.insertedSnapshots).toBe(1);
     expect(inserted).toHaveLength(1);
+  });
+
+  it("samples outcomes with bounded concurrency so one slow outcome does not block the whole tick", async () => {
+    const startedOutcomes: string[] = [];
+    let releaseYes: (() => void) | undefined;
+    const yesCanFinish = new Promise<void>((resolve) => {
+      releaseYes = resolve;
+    });
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [marketFixture("OPEN")]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalOutcomeId }) => {
+          startedOutcomes.push(canonicalOutcomeId ?? "UNKNOWN");
+          if (canonicalOutcomeId === "YES") {
+            await yesCanFinish;
+          }
+          return {
+            snapshots: [],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 1,
+        priorityMarketBatchSize: 0,
+        priorityVenues: [],
+        maxSamplesPerTick: 2,
+        sampleConcurrency: 2,
+        sampleTimeoutMs: 500,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const run = recorder.runOnce();
+    await waitUntil(() => startedOutcomes.includes("YES") && startedOutcomes.includes("NO"));
+    releaseYes?.();
+    const result = await run;
+
+    expect(result.sampledOutcomes).toBe(2);
+    expect(result.failedSamples).toBe(0);
+    expect(startedOutcomes).toEqual(["YES", "NO"]);
   });
 
   it("samples priority Opinion markets even when the normal catalog page has not reached them", async () => {
@@ -380,7 +438,7 @@ describe("MarketOrderbookRecorder", () => {
     const first = await recorder.runOnce();
     const second = await recorder.runOnce();
 
-    expect(first.insertedSnapshots).toBe(1);
+    expect(first.insertedSnapshots).toBe(2);
     expect(inserted[0]).toMatchObject({
       venue: "LIMITLESS",
       venueMarketId: "limitless-1",
@@ -593,3 +651,13 @@ const opinionMarketFixture = (): MarketCatalogMarket => ({
     ]
   }))
 });
+
+const waitUntil = async (predicate: () => boolean): Promise<void> => {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Timed out waiting for condition.");
+};

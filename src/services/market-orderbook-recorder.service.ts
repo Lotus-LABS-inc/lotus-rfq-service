@@ -13,6 +13,7 @@ export interface MarketOrderbookRecorderConfig {
   priorityMarketBatchSize?: number;
   priorityVenues?: readonly string[];
   maxSamplesPerTick: number;
+  sampleConcurrency?: number;
   maxTickDurationMs?: number;
   sampleTimeoutMs?: number;
   cleanupIntervalMs?: number;
@@ -47,6 +48,7 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
   priorityMarketBatchSize: 8,
   priorityVenues: ["OPINION"] as readonly string[],
   maxSamplesPerTick: 60,
+  sampleConcurrency: 4,
   maxTickDurationMs: 45_000,
   sampleTimeoutMs: 2_500,
   cleanupIntervalMs: 30 * 60_000,
@@ -96,6 +98,7 @@ export class MarketOrderbookRecorder {
       priorityMarketBatchSize: this.config.priorityMarketBatchSize ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityMarketBatchSize,
       priorityVenues: this.config.priorityVenues ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityVenues,
       maxSamplesPerTick: this.config.maxSamplesPerTick,
+      sampleConcurrency: this.config.sampleConcurrency ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.sampleConcurrency,
       maxTickDurationMs: this.config.maxTickDurationMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.maxTickDurationMs,
       sampleTimeoutMs: this.config.sampleTimeoutMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.sampleTimeoutMs,
       cleanupIntervalMs: this.config.cleanupIntervalMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.cleanupIntervalMs,
@@ -136,6 +139,10 @@ export class MarketOrderbookRecorder {
       const tickStartedAt = Date.now();
       const maxTickDurationMs = this.config.maxTickDurationMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.maxTickDurationMs;
       const sampleTimeoutMs = this.config.sampleTimeoutMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.sampleTimeoutMs;
+      const sampleConcurrency = Math.max(
+        1,
+        Math.floor(this.config.sampleConcurrency ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.sampleConcurrency)
+      );
       const cleanup = await this.cleanupSnapshotsIfDue(tickStartedAt);
       const priorityMarkets = await this.listPriorityMarkets();
       const marketOffset = this.marketOffset;
@@ -163,6 +170,10 @@ export class MarketOrderbookRecorder {
         skippedCooldownSamples: 0,
         ...cleanup
       };
+      const scheduledSamples: Array<{
+        market: MarketCatalogMarket;
+        sample: MarketOrderbookRecorderSample;
+      }> = [];
 
       marketLoop:
       for (const market of markets) {
@@ -198,58 +209,37 @@ export class MarketOrderbookRecorder {
             continue;
           }
           result.sampledOutcomes += 1;
-          try {
-            const report = await withRecorderTimeout(
-              this.quoteSource.getQuoteSnapshotReport({
-                canonicalMarketId: sample.canonicalMarketId,
-                ...(sample.outcomeId ? { canonicalOutcomeId: sample.outcomeId } : {}),
-                side: "buy",
-                quantity: 1
-              }),
-              sampleTimeoutMs
-            );
-            if (this.stopped) {
-              break marketLoop;
-            }
-            const snapshots = report.snapshots.flatMap((snapshot) =>
-              toSnapshotInput({
-                canonicalEventId: market.canonicalEventId,
-                canonicalMarketId: sample.canonicalMarketId,
-                canonicalOutcomeId: sample.outcomeId,
-                snapshot,
-                levelsPerSide: this.config.levelsPerSide
-              })
-            );
-            const blockedSnapshots = report.blocked.map((blocker) =>
-              toBlockedSnapshotInput({
-                canonicalEventId: market.canonicalEventId,
-                canonicalMarketId: sample.canonicalMarketId,
-                canonicalOutcomeId: sample.outcomeId,
-                blocker,
-                receivedAt: new Date()
-              })
-            );
-            for (const blocker of report.blocked) {
-              this.applyProviderCooldown(blocker.venue, blocker.reason);
-            }
-            result.insertedSnapshots += await this.snapshotRepository.insertMany([
-              ...snapshots,
-              ...blockedSnapshots
-            ]);
-          } catch (error) {
-            if (error instanceof RecorderSampleTimeoutError) {
-              this.applySampleCooldown(sample);
-            }
-            result.failedSamples += 1;
-            this.logger.warn({
-              canonicalEventId: market.canonicalEventId,
-              canonicalMarketId: sample.canonicalMarketId,
-              outcomeId: sample.outcomeId,
-              errorName: error instanceof Error ? error.name : "UnknownError"
-            }, "Market orderbook recorder failed to sample market outcome.");
-          }
+          scheduledSamples.push({ market, sample });
         }
       }
+
+      let nextSampleIndex = 0;
+      let timeBudgetLogged = false;
+      const workers = Array.from({ length: Math.min(sampleConcurrency, scheduledSamples.length) }, async () => {
+        while (!this.stopped) {
+          if (Date.now() - tickStartedAt >= maxTickDurationMs) {
+            if (!timeBudgetLogged) {
+              timeBudgetLogged = true;
+              this.logger.warn({
+                maxTickDurationMs,
+                sampledOutcomes: result.sampledOutcomes,
+                scannedMarkets: result.scannedMarkets
+              }, "Market orderbook recorder tick stopped early because its time budget was exhausted.");
+            }
+            return;
+          }
+          const sampleIndex = nextSampleIndex;
+          nextSampleIndex += 1;
+          const work = scheduledSamples[sampleIndex];
+          if (!work) {
+            return;
+          }
+          const sampleResult = await this.processSample(work.market, work.sample, sampleTimeoutMs);
+          result.insertedSnapshots += sampleResult.insertedSnapshots;
+          result.failedSamples += sampleResult.failedSamples;
+        }
+      });
+      await Promise.all(workers);
 
       if (
         result.insertedSnapshots > 0 ||
@@ -293,6 +283,64 @@ export class MarketOrderbookRecorder {
 
   private applySampleCooldown(sample: { canonicalMarketId: string; outcomeId?: string | null | undefined }): void {
     this.sampleCooldownUntil.set(sampleCooldownKey(sample), Date.now() + SAMPLE_TIMEOUT_COOLDOWN_MS);
+  }
+
+  private async processSample(
+    market: MarketCatalogMarket,
+    sample: MarketOrderbookRecorderSample,
+    sampleTimeoutMs: number
+  ): Promise<{ insertedSnapshots: number; failedSamples: number }> {
+    try {
+      const report = await withRecorderTimeout(
+        this.quoteSource.getQuoteSnapshotReport({
+          canonicalMarketId: sample.canonicalMarketId,
+          ...(sample.outcomeId ? { canonicalOutcomeId: sample.outcomeId } : {}),
+          side: "buy",
+          quantity: 1
+        }),
+        sampleTimeoutMs
+      );
+      if (this.stopped) {
+        return { insertedSnapshots: 0, failedSamples: 0 };
+      }
+      const snapshots = report.snapshots.flatMap((snapshot) =>
+        toSnapshotInput({
+          canonicalEventId: market.canonicalEventId,
+          canonicalMarketId: sample.canonicalMarketId,
+          canonicalOutcomeId: sample.outcomeId,
+          snapshot,
+          levelsPerSide: this.config.levelsPerSide
+        })
+      );
+      const blockedSnapshots = report.blocked.map((blocker) =>
+        toBlockedSnapshotInput({
+          canonicalEventId: market.canonicalEventId,
+          canonicalMarketId: sample.canonicalMarketId,
+          canonicalOutcomeId: sample.outcomeId,
+          blocker,
+          receivedAt: new Date()
+        })
+      );
+      for (const blocker of report.blocked) {
+        this.applyProviderCooldown(blocker.venue, blocker.reason);
+      }
+      const insertedSnapshots = await this.snapshotRepository.insertMany([
+        ...snapshots,
+        ...blockedSnapshots
+      ]);
+      return { insertedSnapshots, failedSamples: 0 };
+    } catch (error) {
+      if (error instanceof RecorderSampleTimeoutError) {
+        this.applySampleCooldown(sample);
+      }
+      this.logger.warn({
+        canonicalEventId: market.canonicalEventId,
+        canonicalMarketId: sample.canonicalMarketId,
+        outcomeId: sample.outcomeId,
+        errorName: error instanceof Error ? error.name : "UnknownError"
+      }, "Market orderbook recorder failed to sample market outcome.");
+      return { insertedSnapshots: 0, failedSamples: 1 };
+    }
   }
 
   private async listPriorityMarkets(): Promise<MarketCatalogMarket[]> {
@@ -375,9 +423,11 @@ const withRecorderTimeout = async <T>(promise: Promise<T>, timeoutMs: number): P
   }
 };
 
-const buildMarketSamples = (market: MarketCatalogMarket): Array<{ canonicalMarketId: string; outcomeId: string | null }> => {
+type MarketOrderbookRecorderSample = { canonicalMarketId: string; outcomeId: string | null };
+
+const buildMarketSamples = (market: MarketCatalogMarket): MarketOrderbookRecorderSample[] => {
   const canonicalMarketIds = market.canonicalMarketIds.length > 0 ? market.canonicalMarketIds : [market.canonicalEventId];
-  return canonicalMarketIds.flatMap((canonicalMarketId): Array<{ canonicalMarketId: string; outcomeId: string | null }> => {
+  return canonicalMarketIds.flatMap((canonicalMarketId): MarketOrderbookRecorderSample[] => {
     const venueMarkets = market.venueMarkets.filter((venueMarket) => venueMarket.canonicalMarketId === canonicalMarketId);
     const outcomeIds = [...new Map(
       venueMarkets
