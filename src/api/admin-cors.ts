@@ -1,5 +1,10 @@
 import type { FastifyCorsOptions } from "@fastify/cors";
 
+const DEFAULT_DEPLOYED_FRONTEND_ORIGINS = [
+  "https://app.uselotus.xyz",
+  "https://staging.uselotus.xyz",
+  "https://admin.uselotus.xyz"
+] as const;
 const DEFAULT_LOCAL_FRONTEND_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"] as const;
 
 export const parseAdminCorsOrigins = (
@@ -11,11 +16,11 @@ export const parseAdminCorsOrigins = (
     .map((origin) => origin.trim())
     .filter((origin) => origin.length > 0);
 
-  if (nodeEnv === "production") {
-    return configuredOrigins;
-  }
+  const defaults = nodeEnv === "production"
+    ? DEFAULT_DEPLOYED_FRONTEND_ORIGINS
+    : [...DEFAULT_DEPLOYED_FRONTEND_ORIGINS, ...DEFAULT_LOCAL_FRONTEND_ORIGINS];
 
-  return [...new Set([...configuredOrigins, ...DEFAULT_LOCAL_FRONTEND_ORIGINS])];
+  return [...new Set([...configuredOrigins, ...defaults])];
 };
 
 export const buildAdminCorsOptions = (origins: string[]): FastifyCorsOptions => ({

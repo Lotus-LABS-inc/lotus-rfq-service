@@ -7,13 +7,19 @@ describe("admin CORS", () => {
   it("parses exact allowlist origins in production", () => {
     expect(parseAdminCorsOrigins("https://admin.lotus.example, http://localhost:5173 ", "production")).toEqual([
       "https://admin.lotus.example",
-      "http://localhost:5173"
+      "http://localhost:5173",
+      "https://app.uselotus.xyz",
+      "https://staging.uselotus.xyz",
+      "https://admin.uselotus.xyz"
     ]);
   });
 
   it("merges local frontend origins into configured non-production origins", () => {
     expect(parseAdminCorsOrigins("https://admin.lotus.example", "development")).toEqual([
       "https://admin.lotus.example",
+      "https://app.uselotus.xyz",
+      "https://staging.uselotus.xyz",
+      "https://admin.uselotus.xyz",
       "http://localhost:5173",
       "http://127.0.0.1:5173"
     ]);
@@ -21,17 +27,27 @@ describe("admin CORS", () => {
 
   it("defaults to local frontend origins outside production", () => {
     expect(parseAdminCorsOrigins(undefined, "development")).toEqual([
+      "https://app.uselotus.xyz",
+      "https://staging.uselotus.xyz",
+      "https://admin.uselotus.xyz",
       "http://localhost:5173",
       "http://127.0.0.1:5173"
     ]);
     expect(parseAdminCorsOrigins(undefined, "test")).toEqual([
+      "https://app.uselotus.xyz",
+      "https://staging.uselotus.xyz",
+      "https://admin.uselotus.xyz",
       "http://localhost:5173",
       "http://127.0.0.1:5173"
     ]);
   });
 
-  it("does not default browser origins in production", () => {
-    expect(parseAdminCorsOrigins(undefined, "production")).toEqual([]);
+  it("defaults to deployed Lotus browser origins in production", () => {
+    expect(parseAdminCorsOrigins(undefined, "production")).toEqual([
+      "https://app.uselotus.xyz",
+      "https://staging.uselotus.xyz",
+      "https://admin.uselotus.xyz"
+    ]);
   });
 
   it("allows configured admin origins and rejects unknown browser origins", async () => {
