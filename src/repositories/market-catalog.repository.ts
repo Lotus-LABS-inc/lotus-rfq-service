@@ -1656,12 +1656,27 @@ const clampOffset = (value: number | undefined): number => {
 const marketLookupCandidates = (marketId: string): string[] => {
   const trimmed = marketId.trim();
   if (!trimmed) return [marketId];
-  const withoutVenueSuffix = trimmed.replace(VENUE_SUFFIX_PATTERN, "");
-  const candidates = withoutVenueSuffix === trimmed ? [trimmed] : [trimmed, withoutVenueSuffix];
+  const decoded = decodeUriComponentSafe(trimmed);
+  const baseInputs = decoded === trimmed ? [trimmed] : [trimmed, decoded];
+  const candidates = baseInputs.flatMap((candidate) => {
+    const withoutVenueSuffix = candidate.replace(VENUE_SUFFIX_PATTERN, "");
+    return withoutVenueSuffix === candidate ? [candidate] : [candidate, withoutVenueSuffix];
+  });
   return [...new Set(candidates.flatMap((candidate) => [
     candidate,
     candidate.replace(/^FRONTEND_CURATED:/i, "frontend-curated:")
   ]))];
+};
+
+const decodeUriComponentSafe = (value: string): string => {
+  if (!value.includes("%")) {
+    return value;
+  }
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 };
 
 const marketStatus = (expiresAt: string | null, resolvesAt: string | null): MarketCatalogMarket["status"] => {
