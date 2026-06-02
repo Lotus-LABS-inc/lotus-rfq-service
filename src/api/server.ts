@@ -361,7 +361,7 @@ import {
 import { PgNotificationRepository } from "../repositories/notification.repository.js";
 import { MarketCatalogRepository, SharedCoreQuoteMappingRepository } from "../repositories/market-catalog.repository.js";
 import { LiveMarketDataViewService } from "../services/market-data-view.service.js";
-import { HotQuoteSnapshotService } from "../services/hot-quote-snapshot.service.js";
+import { HotQuoteSnapshotService, resolveHotQuoteRedisNamespace } from "../services/hot-quote-snapshot.service.js";
 import {
   buildMarketOrderbookRecorderConfig,
   MarketOrderbookRecorder
@@ -1038,7 +1038,15 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     memoryCache: hotQuoteMemoryCache,
     redis: dependencies.redisClient,
     dbFallback: venueOrderbookSnapshotRepository,
-    logger: dependencies.logger
+    logger: dependencies.logger,
+    config: {
+      redisNamespace: resolveHotQuoteRedisNamespace({
+        LOTUS_DEPLOY_ENV: process.env.LOTUS_DEPLOY_ENV,
+        LOTUS_ENV: process.env.LOTUS_ENV,
+        APP_ENV: process.env.APP_ENV,
+        NODE_ENV: process.env.NODE_ENV
+      })
+    }
   });
   const sharedCoreQuoteMappingResolver = new SharedCoreVenueQuoteMappingResolver(
     new SharedCoreQuoteMappingRepository(dependencies.pgPool)

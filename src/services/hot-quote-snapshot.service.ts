@@ -6,6 +6,7 @@ export interface HotQuoteSnapshotConfig {
   redisTtlMs: number;
   staleAfterMs: number;
   activeMarketTtlMs: number;
+  redisNamespace: string;
 }
 
 export interface HotQuoteSnapshotDbFallback {
@@ -31,12 +32,13 @@ export type HotQuoteSnapshotSource = "memory" | "redis" | "db_last_good";
 const DEFAULT_CONFIG: HotQuoteSnapshotConfig = {
   redisTtlMs: 120_000,
   staleAfterMs: 1_000,
-  activeMarketTtlMs: 180_000
+  activeMarketTtlMs: 180_000,
+  redisNamespace: "default"
 };
 
 const REDIS_KEY_PREFIX = "lotus:quote-snapshot:v1";
-const REDIS_CHANNEL = "lotus:quote-snapshot:updates:v1";
-const REDIS_ACTIVE_MARKETS_INDEX = "lotus:orderbook-active:v1:index";
+const REDIS_CHANNEL_PREFIX = "lotus:quote-snapshot:updates:v1";
+const REDIS_ACTIVE_MARKETS_INDEX_PREFIX = "lotus:orderbook-active:v1:index";
 const REDIS_ACTIVE_MARKETS_KEY_PREFIX = "lotus:orderbook-active:v1:target";
 
 export class HotQuoteSnapshotService {
@@ -46,7 +48,11 @@ export class HotQuoteSnapshotService {
 
   public constructor(private readonly deps: HotQuoteSnapshotServiceConfig) {
     this.now = deps.now ?? (() => new Date());
-    this.config = { ...DEFAULT_CONFIG, ...(deps.config ?? {}) };
+    this.config = {
+      ...DEFAULT_CONFIG,
+      ...(deps.config ?? {}),
+      redisNamespace: sanitizeRedisNamespace(deps.config?.redisNamespace ?? DEFAULT_CONFIG.redisNamespace)
+    };
   }
 
   public touch(input: { canonicalMarketId: string; canonicalOutcomeId?: string | undefined }): void {
@@ -83,9 +89,10 @@ export class HotQuoteSnapshotService {
     const nowMs = this.now().getTime();
     const limit = Math.max(1, Math.min(input.limit ?? 500, 2_000));
     try {
+      const indexKey = activeMarketsIndexKey(this.config.redisNamespace);
       const keys = this.deps.redis.zrevrangebyscore
         ? await this.deps.redis.zrevrangebyscore(
-          REDIS_ACTIVE_MARKETS_INDEX,
+          indexKey,
           "+inf",
           nowMs,
           "LIMIT",
@@ -93,7 +100,7 @@ export class HotQuoteSnapshotService {
           limit
         )
         : (await this.deps.redis.zrangebyscore(
-          REDIS_ACTIVE_MARKETS_INDEX,
+          indexKey,
           nowMs,
           "+inf",
           "LIMIT",
@@ -105,7 +112,7 @@ export class HotQuoteSnapshotService {
         const raw = await this.deps.redis.get(key);
         const parsed = raw ? parseActiveMarket(raw, nowMs, this.config.activeMarketTtlMs) : null;
         if (!parsed) {
-          await this.deps.redis.zrem(REDIS_ACTIVE_MARKETS_INDEX, key);
+          await this.deps.redis.zrem(indexKey, key);
           continue;
         }
         results.push(parsed);
@@ -201,8 +208,8 @@ export class HotQuoteSnapshotService {
     const payload = JSON.stringify(serializeSnapshot(snapshot));
     const ttlMs = Math.max(1, Math.floor(this.config.redisTtlMs));
     try {
-      await this.deps.redis.set(redisKey(snapshot), payload, "PX", ttlMs);
-      await this.deps.redis.publish(REDIS_CHANNEL, JSON.stringify({
+      await this.deps.redis.set(redisKey(snapshot, this.config.redisNamespace), payload, "PX", ttlMs);
+      await this.deps.redis.publish(redisChannel(this.config.redisNamespace), JSON.stringify({
         venue: snapshot.venue.toUpperCase(),
         venueMarketId: snapshot.venueMarketId,
         venueOutcomeId: snapshot.venueOutcomeId ?? null,
@@ -220,7 +227,7 @@ export class HotQuoteSnapshotService {
     if (!this.deps.redis) {
       return;
     }
-    const key = activeRedisKey(input.canonicalMarketId, input.canonicalOutcomeId);
+    const key = activeRedisKey(input.canonicalMarketId, input.canonicalOutcomeId, this.config.redisNamespace);
     const expiresAtMs = touchedAt.getTime() + this.config.activeMarketTtlMs;
     const payload = JSON.stringify({
       canonicalMarketId: input.canonicalMarketId,
@@ -230,7 +237,7 @@ export class HotQuoteSnapshotService {
     });
     try {
       await this.deps.redis.set(key, payload, "PX", Math.max(1, Math.floor(this.config.activeMarketTtlMs)));
-      await this.deps.redis.zadd(REDIS_ACTIVE_MARKETS_INDEX, expiresAtMs, key);
+      await this.deps.redis.zadd(activeMarketsIndexKey(this.config.redisNamespace), expiresAtMs, key);
     } catch (error) {
       this.deps.logger?.warn(
         { err: error, canonicalMarketId: input.canonicalMarketId },
@@ -248,7 +255,7 @@ export class HotQuoteSnapshotService {
       return null;
     }
     try {
-      const raw = await this.deps.redis.get(redisKey(input));
+      const raw = await this.deps.redis.get(redisKey(input, this.config.redisNamespace));
       return raw ? parseSnapshot(raw) : null;
     } catch (error) {
       this.deps.logger?.warn({ err: error, venue: input.venue }, "Hot quote snapshot Redis read failed.");
@@ -275,6 +282,14 @@ export class HotQuoteSnapshotService {
     }
   }
 }
+
+export const resolveHotQuoteRedisNamespace = (source: {
+  LOTUS_DEPLOY_ENV?: string | undefined;
+  LOTUS_ENV?: string | undefined;
+  APP_ENV?: string | undefined;
+  NODE_ENV?: string | undefined;
+}): string =>
+  sanitizeRedisNamespace(source.LOTUS_DEPLOY_ENV ?? source.LOTUS_ENV ?? source.APP_ENV ?? source.NODE_ENV ?? "default");
 
 const serializeSnapshot = (snapshot: NormalizedVenueQuoteSnapshot): Record<string, unknown> => ({
   ...snapshot,
@@ -338,16 +353,27 @@ const annotateSnapshot = (
   }
 });
 
-const redisKey = (input: { venue: string; venueMarketId: string; venueOutcomeId?: string | undefined }): string =>
-  `${REDIS_KEY_PREFIX}:${input.venue.toUpperCase()}:${encode(input.venueMarketId)}:${encode(input.venueOutcomeId ?? "_")}`;
+const redisKey = (input: { venue: string; venueMarketId: string; venueOutcomeId?: string | undefined }, namespace: string): string =>
+  `${REDIS_KEY_PREFIX}:${namespace}:${input.venue.toUpperCase()}:${encode(input.venueMarketId)}:${encode(input.venueOutcomeId ?? "_")}`;
+
+const redisChannel = (namespace: string): string =>
+  `${REDIS_CHANNEL_PREFIX}:${namespace}`;
 
 const encode = (value: string): string => Buffer.from(value, "utf8").toString("base64url");
 
-const activeRedisKey = (canonicalMarketId: string, canonicalOutcomeId: string | undefined): string =>
-  `${REDIS_ACTIVE_MARKETS_KEY_PREFIX}:${encode(activeKey(canonicalMarketId, canonicalOutcomeId))}`;
+const activeMarketsIndexKey = (namespace: string): string =>
+  `${REDIS_ACTIVE_MARKETS_INDEX_PREFIX}:${namespace}`;
+
+const activeRedisKey = (canonicalMarketId: string, canonicalOutcomeId: string | undefined, namespace: string): string =>
+  `${REDIS_ACTIVE_MARKETS_KEY_PREFIX}:${namespace}:${encode(activeKey(canonicalMarketId, canonicalOutcomeId))}`;
 
 const activeKey = (canonicalMarketId: string, canonicalOutcomeId: string | undefined): string =>
   `${canonicalMarketId}\u0000${canonicalOutcomeId ?? ""}`;
+
+const sanitizeRedisNamespace = (value: string): string => {
+  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return normalized || "default";
+};
 
 const parseActiveMarket = (
   raw: string,
