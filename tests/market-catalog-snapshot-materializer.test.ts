@@ -238,7 +238,7 @@ describe("MarketCatalogSnapshotMaterializer", () => {
           },
           {
             canonicalMarketId: "market-sports",
-            quoteStatus: "stale" as const,
+            quoteStatus: "live" as const,
             quoteReadyVenueCount: 2,
             quoteReadyVenues: ["POLYMARKET", "LIMITLESS"],
             quoteBlockers: [],
@@ -273,7 +273,7 @@ describe("MarketCatalogSnapshotMaterializer", () => {
       canonicalMarketIds: ["market-sports"],
       title: "Sports Market",
       category: "SPORTS",
-      quoteStatus: "stale",
+      quoteStatus: "live",
       quoteReadyVenueCount: 2,
       quoteReadyVenues: ["LIMITLESS", "POLYMARKET"]
     };
@@ -321,7 +321,7 @@ describe("MarketCatalogSnapshotMaterializer", () => {
       canonicalMarketIds: ["market-politics-2"],
       title: "Politics Market 2",
       category: "POLITICS",
-      quoteStatus: "stale",
+      quoteStatus: "live",
       quoteReadyVenueCount: 2,
       quoteReadyVenues: ["LIMITLESS", "POLYMARKET"]
     };

@@ -242,9 +242,7 @@ export class LiveMarketDataViewService {
     );
     void livePromise
       .then((orderbook) => {
-        const output = isDisplayUsableOrderbook(orderbook)
-          ? orderbook
-          : this.staleOrderbookFromLastGood(key, orderbook, this.now()) ?? orderbook;
+        const output = orderbook;
         if (isDisplayUsableOrderbook(output)) {
           this.lastGoodOrderbooks.set(key, output);
         }
@@ -254,9 +252,7 @@ export class LiveMarketDataViewService {
     this.orderbookCache.set(key, { expiresAt: generatedAt.getTime() + ORDERBOOK_CACHE_MS, promise });
 
     const orderbook = await promise;
-    const output = isDisplayUsableOrderbook(orderbook)
-      ? orderbook
-      : this.staleOrderbookFromLastGood(key, orderbook, generatedAt) ?? orderbook;
+    const output = orderbook;
     if (isDisplayUsableOrderbook(output)) {
       this.lastGoodOrderbooks.set(key, output);
     }
@@ -286,16 +282,26 @@ export class LiveMarketDataViewService {
     const snapshots = venueFilter
       ? report.snapshots.filter((snapshot) => snapshot.venue.toUpperCase() === venueFilter)
       : report.snapshots;
-    const venues = snapshots.map((snapshot) => sanitizeVenueOrderbook(snapshot, depth));
+    const allVenues = snapshots.map((snapshot) => sanitizeVenueOrderbook(snapshot, depth, generatedAt));
+    const staleVenueBlockers = allVenues
+      .filter((venue) => venue.snapshotStatus === "stale")
+      .map((venue) => ({
+        venue: venue.venue,
+        reason: "LIVE_ORDERBOOK_REQUIRED",
+        venueMarketId: venue.venueMarketId,
+        venueOutcomeId: venue.venueOutcomeId ?? undefined
+      }));
+    const venues = allVenues.filter(isLiveTradableOrderbookVenue);
     const bids = sortLevels(venues.flatMap((venue) => venue.bids), "desc").slice(0, depth);
     const asks = sortLevels(venues.flatMap((venue) => venue.asks), "asc").slice(0, depth);
     const bestBid = bids[0]?.price ?? null;
     const bestAsk = asks[0]?.price ?? null;
     const midpoint = midpointFromBest(bestBid, bestAsk);
     const spread = spreadFromBest(bestBid, bestAsk);
-    const blockers = venueFilter
+    const sourceBlockers = venueFilter
       ? report.blocked.filter((blocker) => blocker.venue.toUpperCase() === venueFilter)
       : report.blocked;
+    const blockers = [...sourceBlockers, ...staleVenueBlockers];
     const status = resolveOrderbookStatus(venues, blockers);
 
     this.recordChartPoint({
@@ -356,7 +362,12 @@ export class LiveMarketDataViewService {
       }
       if (cached?.item && cached.staleUntil > generatedAt.getTime()) {
         this.refreshBatchQuoteInBackground(key, { item, side, quantity, generatedAt });
-        return staleBatchQuoteFromCachedItem(cached.item, generatedAt);
+        return unavailableBatchQuoteItem({
+          item,
+          side,
+          generatedAt,
+          reason: "MARKET_BATCH_QUOTE_REFRESHING"
+        });
       }
       const livePromise = this.loadBatchQuoteItem({ item, side, quantity, generatedAt });
       const promise = withTimeout(
@@ -371,9 +382,7 @@ export class LiveMarketDataViewService {
       );
       void livePromise
         .then((quote) => {
-          const output = quote.status === "unavailable"
-            ? this.staleBatchQuoteFromLastGood(key, quote, this.now()) ?? quote
-            : quote;
+          const output = quote;
           if (output.status === "live" || output.status === "partial") {
             this.lastGoodBatchQuotes.set(key, output);
           }
@@ -386,9 +395,7 @@ export class LiveMarketDataViewService {
         promise
       });
       const quote = await promise;
-      const output = quote.status === "unavailable"
-        ? this.staleBatchQuoteFromLastGood(key, quote, generatedAt) ?? quote
-        : quote;
+      const output = quote;
       if (output.status === "live" || output.status === "partial") {
         this.lastGoodBatchQuotes.set(key, output);
       }
@@ -420,9 +427,7 @@ export class LiveMarketDataViewService {
     }
     const livePromise = this.loadBatchQuoteItem(input)
       .then((quote) => {
-        const output = quote.status === "unavailable"
-          ? this.staleBatchQuoteFromLastGood(key, quote, this.now()) ?? quote
-          : quote;
+        const output = quote;
         if (output.status === "live" || output.status === "partial") {
           this.lastGoodBatchQuotes.set(key, output);
         }
@@ -792,7 +797,10 @@ const orderbookCacheKey = (
 
 const isDisplayUsableOrderbook = (orderbook: MarketOrderbookResponse): boolean =>
   orderbook.venues.length > 0 &&
-  (orderbook.status === "live" || orderbook.status === "partial" || orderbook.status === "stale");
+  (orderbook.status === "live" || orderbook.status === "partial");
+
+const isLiveTradableOrderbookVenue = (venue: MarketOrderbookVenue): boolean =>
+  venue.snapshotStatus === "live" && venue.blockers.length === 0;
 
 const isDeferredOrderbook = (orderbook: MarketOrderbookResponse): boolean =>
   orderbook.status === "unavailable" &&
@@ -837,7 +845,7 @@ const chartCacheKey = (input: {
   timeframe: MarketChartTimeframe;
 }): string => `${input.marketId}\u0000${input.outcomeId ?? ""}\u0000${input.timeframe}`;
 
-const sanitizeVenueOrderbook = (snapshot: NormalizedVenueQuoteSnapshot, depth: number): MarketOrderbookVenue => {
+const sanitizeVenueOrderbook = (snapshot: NormalizedVenueQuoteSnapshot, depth: number, now: Date): MarketOrderbookVenue => {
   const bids = cumulativeLevels(snapshot.venue, snapshot.venueMarketId, snapshot.venueOutcomeId ?? null, sortRawLevels(snapshot.bids, "desc").slice(0, depth));
   const asks = cumulativeLevels(snapshot.venue, snapshot.venueMarketId, snapshot.venueOutcomeId ?? null, sortRawLevels(snapshot.asks, "asc").slice(0, depth));
   const bestBid = bids[0]?.price ?? null;
@@ -848,8 +856,8 @@ const sanitizeVenueOrderbook = (snapshot: NormalizedVenueQuoteSnapshot, depth: n
     venueOutcomeId: snapshot.venueOutcomeId ?? null,
     source: snapshot.source,
     ...hotSnapshotSourceField(snapshot.metadata),
-    freshnessMs: snapshotFreshnessMs(snapshot, new Date()),
-    snapshotStatus: snapshotStatus(snapshot, new Date()),
+    freshnessMs: snapshotFreshnessMs(snapshot, now),
+    snapshotStatus: snapshotStatus(snapshot, now),
     quoteQuality: snapshot.quoteQuality,
     sourceTimestamp: snapshot.sourceTimestamp?.toISOString() ?? null,
     receivedAt: snapshot.receivedAt.toISOString(),
@@ -952,23 +960,28 @@ const buildBatchQuoteItem = (input: {
       blockers: [...new Set([...(snapshot.blockers ?? []), ...(snapshot.missingFactors ?? [])])]
     };
   });
-  const pricedVenues = venues.filter((venue) => venue.price !== null);
+  const liveVenues = venues.filter(isLiveTradableBatchQuoteVenue);
+  const pricedVenues = liveVenues.filter((venue) => venue.price !== null);
   const best = pricedVenues.sort((left, right) => input.side === "buy"
     ? Number(left.price) - Number(right.price)
     : Number(right.price) - Number(left.price)
   )[0];
   const prices = pricedVenues.map((venue) => venue.price).filter((value): value is string => value !== null);
-  const liquidity = venues.reduce((sum, venue) => sum.plus(venue.liquidity), new Decimal(0)).toDecimalPlaces(8).toString();
-  const freshnessValues = venues.map((venue) => venue.freshnessMs).filter((value): value is number => value !== null);
-  const blockers = input.report.blocked;
-  const hasVenueBlockers = venues.some((venue) => venue.blockers.length > 0);
-  const hasLiveVenue = venues.some((venue) => venue.snapshotStatus === "live");
-  const hasStaleVenue = venues.some((venue) => venue.snapshotStatus === "stale");
-  const status = venues.length > 0 && blockers.length === 0 && !hasVenueBlockers && hasLiveVenue
+  const liquidity = liveVenues.reduce((sum, venue) => sum.plus(venue.liquidity), new Decimal(0)).toDecimalPlaces(8).toString();
+  const freshnessValues = liveVenues.map((venue) => venue.freshnessMs).filter((value): value is number => value !== null);
+  const staleVenueBlockers = venues
+    .filter((venue) => venue.snapshotStatus === "stale")
+    .map((venue) => ({
+      venue: venue.venue,
+      reason: "LIVE_QUOTE_REQUIRED",
+      venueMarketId: venue.venueMarketId,
+      venueOutcomeId: venue.venueOutcomeId ?? undefined
+    }));
+  const blockers = [...input.report.blocked, ...staleVenueBlockers];
+  const hasVenueBlockers = liveVenues.some((venue) => venue.blockers.length > 0);
+  const status = liveVenues.length > 0 && blockers.length === 0 && !hasVenueBlockers
     ? "live"
-    : venues.length > 0 && !hasLiveVenue && hasStaleVenue && blockers.length === 0 && !hasVenueBlockers
-      ? "stale"
-      : venues.length > 0
+    : liveVenues.length > 0
         ? "partial"
         : "unavailable";
   return {
@@ -983,10 +996,16 @@ const buildBatchQuoteItem = (input: {
     liquidity,
     spread: averageDecimalStrings(venues.map((venue) => venue.spread)),
     freshnessMs: freshnessValues.length ? Math.max(...freshnessValues) : null,
-    venues,
+    venues: liveVenues,
     blockers: [...blockers]
   };
 };
+
+const isLiveTradableBatchQuoteVenue = (venue: {
+  snapshotStatus: "live" | "stale" | "blocked" | "resyncing";
+  blockers: readonly unknown[];
+}): boolean =>
+  venue.snapshotStatus === "live" && venue.blockers.length === 0;
 
 const batchQuoteCacheKey = (
   marketId: string,
