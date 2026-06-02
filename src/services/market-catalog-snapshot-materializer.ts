@@ -161,16 +161,15 @@ export class MarketCatalogSnapshotMaterializer {
       .filter((market) => !query.quoteReadyOnly || isQuoteReadyMarket(market))
       .filter((market) => routeCoverageMatches(market, routeCoverage))
       .slice(0, query.limit);
-    const visibleMarkets = await this.mergeGlobalQuoteReadyCategorySnapshots(query, baseVisibleMarkets, routeCoverage);
     const fullKey = `markets:${stableQueryCacheKey(query)}`;
+    let visibleMarkets = await this.mergeGlobalQuoteReadyCategorySnapshots(query, baseVisibleMarkets, routeCoverage);
+
+    if (query.quoteReadyOnly) {
+      const recoveredMarkets = await this.recoverQuoteReadyMarketsFromExistingSnapshots(query, fullKey, routeCoverage);
+      visibleMarkets = mergeMarketCatalogMarkets(visibleMarkets, recoveredMarkets, query.limit);
+    }
 
     if (query.quoteReadyOnly && visibleMarkets.length === 0) {
-      const recoveredMarkets = await this.recoverQuoteReadyMarketsFromExistingSnapshots(query, fullKey, routeCoverage);
-      if (recoveredMarkets.length > 0) {
-        await this.writeMarketSnapshots(query, recoveredMarkets);
-        await this.materializeMarketDetailSnapshots(recoveredMarkets, detailKeysWritten);
-        return 2;
-      }
       return "skipped_empty_quote_ready";
     }
 
@@ -555,6 +554,21 @@ const isQuoteReadyMarket = (market: MarketCatalogMarket): boolean =>
 
 const marketIdentityKey = (market: MarketCatalogMarket): string =>
   `${market.canonicalEventId}\u0000${market.canonicalMarketIds.join("\u0001")}`;
+
+const mergeMarketCatalogMarkets = (
+  primary: readonly MarketCatalogMarket[],
+  recovered: readonly MarketCatalogMarket[],
+  limit: number
+): MarketCatalogMarket[] => {
+  if (recovered.length === 0) {
+    return [...primary];
+  }
+  const byKey = new Map(primary.map((market) => [marketIdentityKey(market), market] as const));
+  for (const market of recovered) {
+    byKey.set(marketIdentityKey(market), market);
+  }
+  return [...byKey.values()].slice(0, limit);
+};
 
 const isMarketCatalogMarket = (value: unknown): value is MarketCatalogMarket =>
   typeof value === "object" &&
