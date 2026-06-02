@@ -223,6 +223,8 @@ const POSITION_MARK_CACHE_MS = 15_000;
 const POSITION_MARK_LIVE_TIMEOUT_MS = 700;
 const POSITION_MARK_LIVE_READ_BUDGET = 20;
 const DISPLAY_POSITION_MARK_LIVE_READ_BUDGET = 0;
+const EXECUTION_DISPLAY_CACHE_MS = 3_000;
+const EXECUTION_DISPLAY_STALE_MS = 45_000;
 const ROUTE_RATE_LIMIT_WINDOW_MS = 10_000;
 const RATE_LIMITS: Record<string, number> = {
   preview: 40,
@@ -236,11 +238,27 @@ const liveCandidateCache = new Map<string, { expiresAt: number; promise: Promise
 const positionMarkCache = new Map<string, { expiresAt: number; position: MarkedExecutionPosition }>();
 const routeRateLimitBuckets = new Map<string, { resetAt: number; count: number }>();
 
+type ExecutionDisplayCacheEntry<T> = {
+  expiresAt: number;
+  staleUntil: number;
+  value?: T | undefined;
+  promise?: Promise<T> | undefined;
+};
+
 export const registerExecutionRoutes = async (
   app: FastifyInstance,
   authMiddleware: preHandlerHookHandler,
   deps: ExecutionRouteDeps
 ): Promise<void> => {
+  const executionDisplayCache = new Map<string, ExecutionDisplayCacheEntry<Record<string, unknown>>>();
+
+  app.addHook("onClose", async () => {
+    liveCandidateCache.clear();
+    positionMarkCache.clear();
+    routeRateLimitBuckets.clear();
+    executionDisplayCache.clear();
+  });
+
   app.post("/execution/orders/preview", { preHandler: authMiddleware }, async (request, reply) => {
     if (!EXECUTION_ORCHESTRATOR_V1_ENABLED || !deps.executionOrderService) {
       return reply.status(501).send({
@@ -611,27 +629,34 @@ export const registerExecutionRoutes = async (
       });
     }
     try {
-      const generatedAt = new Date().toISOString();
-      const positions = await deps.positionRepository.listUserVerifiedPositions({
-        userId: request.user.userId,
-        limit: 500
-      });
       const markMode = parsed.data.markMode ?? "cached";
-      const activePositions = positions.filter(isActiveVerifiedPosition);
-      const markedPositions = await markPositions({
-        positions: activePositions,
-        generatedAt,
-        liveCandidateProvider: deps.liveCandidateProvider,
-        userId: request.user.userId,
-        maxLiveReads: markLiveReadBudget(markMode)
-      });
-      const summary = summarizePortfolio(markedPositions);
-      return reply.send({
-        generatedAt,
-        markPolicy: markPolicyLabel(markMode),
-        ...summary,
-        positions: markedPositions
-      });
+      const result = await getCachedExecutionDisplayData(
+        executionDisplayCache,
+        `portfolio-summary:${request.user.userId}:${markMode}`,
+        async () => {
+          const generatedAt = new Date().toISOString();
+          const positions = await deps.positionRepository!.listUserVerifiedPositions!({
+            userId: request.user.userId,
+            limit: 500
+          });
+          const activePositions = positions.filter(isActiveVerifiedPosition);
+          const markedPositions = await markPositions({
+            positions: activePositions,
+            generatedAt,
+            liveCandidateProvider: deps.liveCandidateProvider,
+            userId: request.user.userId,
+            maxLiveReads: markLiveReadBudget(markMode)
+          });
+          const summary = summarizePortfolio(markedPositions);
+          return {
+            generatedAt,
+            markPolicy: markPolicyLabel(markMode),
+            ...summary,
+            positions: markedPositions
+          };
+        }
+      );
+      return reply.send({ ...result.value, cache: result.cache, cacheGeneratedAt: result.generatedAt });
     } catch (error) {
       return sendExecutionDataUnavailable(app, reply, error, "portfolio summary");
     }
@@ -653,32 +678,40 @@ export const registerExecutionRoutes = async (
       });
     }
     try {
-      const generatedAt = new Date().toISOString();
-      const positions = await deps.positionRepository.listUserVerifiedPositions({
-        userId: request.user.userId,
-        limit: 500
-      });
       const markMode = parsed.data.markMode ?? "cached";
-      const activePositions = positions.filter(isActiveVerifiedPosition);
-      const markedPositions = await markPositions({
-        positions: activePositions,
-        generatedAt,
-        liveCandidateProvider: deps.liveCandidateProvider,
-        userId: request.user.userId,
-        maxLiveReads: markLiveReadBudget(markMode)
-      });
-      const summary = summarizePortfolio(markedPositions);
-      return reply.send({
-        generatedAt,
-        range: parsed.data.range ?? "1D",
-        markPolicy: markPolicyLabel(markMode),
-        seriesBasis: "CURRENT_MARK_TO_MARKET_SNAPSHOT",
-        historyAvailable: false,
-        points: [{
-          timestamp: generatedAt,
-          ...summary
-        }]
-      });
+      const range = parsed.data.range ?? "1D";
+      const result = await getCachedExecutionDisplayData(
+        executionDisplayCache,
+        `portfolio-timeseries:${request.user.userId}:${range}:${markMode}`,
+        async () => {
+          const generatedAt = new Date().toISOString();
+          const positions = await deps.positionRepository!.listUserVerifiedPositions!({
+            userId: request.user.userId,
+            limit: 500
+          });
+          const activePositions = positions.filter(isActiveVerifiedPosition);
+          const markedPositions = await markPositions({
+            positions: activePositions,
+            generatedAt,
+            liveCandidateProvider: deps.liveCandidateProvider,
+            userId: request.user.userId,
+            maxLiveReads: markLiveReadBudget(markMode)
+          });
+          const summary = summarizePortfolio(markedPositions);
+          return {
+            generatedAt,
+            range,
+            markPolicy: markPolicyLabel(markMode),
+            seriesBasis: "CURRENT_MARK_TO_MARKET_SNAPSHOT",
+            historyAvailable: false,
+            points: [{
+              timestamp: generatedAt,
+              ...summary
+            }]
+          };
+        }
+      );
+      return reply.send({ ...result.value, cache: result.cache, cacheGeneratedAt: result.generatedAt });
     } catch (error) {
       return sendExecutionDataUnavailable(app, reply, error, "portfolio time-series");
     }
@@ -838,39 +871,54 @@ export const registerExecutionRoutes = async (
     }
     try {
       const query = parsed.data;
-      const positions = query.marketId && query.outcomeId
-        ? await deps.positionRepository.listVerifiedPositions({
-            userId: request.user.userId,
-            marketId: query.marketId,
-            outcomeId: query.outcomeId,
-            ...(query.venue ? { venue: query.venue } : {})
-          })
-        : deps.positionRepository.listUserVerifiedPositions
-          ? await deps.positionRepository.listUserVerifiedPositions({
-              userId: request.user.userId,
-              ...(query.venue ? { venue: query.venue } : {}),
-              ...(query.limit ? { limit: query.limit } : {})
-            })
-          : [];
-      const activePositions = positions.filter(isActiveVerifiedPosition);
-      const generatedAt = new Date().toISOString();
       const markMode = query.markMode ?? (query.marketId && query.outcomeId ? "live" : "cached");
-      const markedPositions = deps.liveCandidateProvider
-        ? await markPositions({
-            positions: activePositions,
+      const result = await getCachedExecutionDisplayData(
+        executionDisplayCache,
+        [
+          "positions",
+          request.user.userId,
+          query.marketId ?? "",
+          query.outcomeId ?? "",
+          query.venue ?? "",
+          query.limit ?? "",
+          markMode
+        ].join("\u0000"),
+        async () => {
+          const positions = query.marketId && query.outcomeId
+            ? await deps.positionRepository!.listVerifiedPositions({
+                userId: request.user.userId,
+                marketId: query.marketId,
+                outcomeId: query.outcomeId,
+                ...(query.venue ? { venue: query.venue } : {})
+              })
+            : deps.positionRepository!.listUserVerifiedPositions
+              ? await deps.positionRepository!.listUserVerifiedPositions({
+                  userId: request.user.userId,
+                  ...(query.venue ? { venue: query.venue } : {}),
+                  ...(query.limit ? { limit: query.limit } : {})
+                })
+              : [];
+          const activePositions = positions.filter(isActiveVerifiedPosition);
+          const generatedAt = new Date().toISOString();
+          const markedPositions = deps.liveCandidateProvider
+            ? await markPositions({
+                positions: activePositions,
+                generatedAt,
+                liveCandidateProvider: deps.liveCandidateProvider,
+                userId: request.user.userId,
+                maxLiveReads: markLiveReadBudget(markMode)
+              })
+            : activePositions;
+          return {
             generatedAt,
-            liveCandidateProvider: deps.liveCandidateProvider,
-            userId: request.user.userId,
-            maxLiveReads: markLiveReadBudget(markMode)
-          })
-        : activePositions;
-      return reply.send({
-        generatedAt,
-        markPolicy: markPolicyLabel(markMode),
-        marketId: query.marketId ?? null,
-        outcomeId: query.outcomeId ?? null,
-        positions: markedPositions
-      });
+            markPolicy: markPolicyLabel(markMode),
+            marketId: query.marketId ?? null,
+            outcomeId: query.outcomeId ?? null,
+            positions: markedPositions
+          };
+        }
+      );
+      return reply.send({ ...result.value, cache: result.cache, cacheGeneratedAt: result.generatedAt });
     } catch (error) {
       return sendExecutionDataUnavailable(app, reply, error, "execution positions");
     }
@@ -1074,6 +1122,83 @@ const getCachedLiveCandidates = (
     liveCandidateCache.delete(key);
   });
   return promise;
+};
+
+const getCachedExecutionDisplayData = async <T extends Record<string, unknown>>(
+  cache: Map<string, ExecutionDisplayCacheEntry<Record<string, unknown>>>,
+  key: string,
+  load: () => Promise<T>,
+  now = Date.now()
+): Promise<{ value: T; cache: "hit" | "miss" | "stale"; generatedAt: string }> => {
+  const cached = cache.get(key) as ExecutionDisplayCacheEntry<T> | undefined;
+  if (cached?.value !== undefined && cached.expiresAt > now) {
+    return { value: cached.value, cache: "hit", generatedAt: new Date(now).toISOString() };
+  }
+  if (cached?.promise) {
+    const value = await cached.promise;
+    return { value, cache: "hit", generatedAt: new Date().toISOString() };
+  }
+
+  const promise = load()
+    .then((value) => {
+      const updatedAt = Date.now();
+      cache.set(key, {
+        value,
+        expiresAt: updatedAt + EXECUTION_DISPLAY_CACHE_MS,
+        staleUntil: updatedAt + EXECUTION_DISPLAY_STALE_MS
+      });
+      return value;
+    })
+    .catch((error) => {
+      const fallback = cache.get(key) as ExecutionDisplayCacheEntry<T> | undefined;
+      if (fallback?.value !== undefined && fallback.staleUntil > Date.now()) {
+        cache.set(key, {
+          ...fallback,
+          promise: undefined
+        });
+        return fallback.value;
+      }
+      cache.delete(key);
+      throw error;
+    })
+    .finally(() => {
+      const current = cache.get(key);
+      if (current?.promise === promise) {
+        cache.set(key, {
+          ...current,
+          promise: undefined
+        });
+      }
+    });
+
+  cache.set(key, {
+    ...(cached?.value !== undefined ? { value: cached.value } : {}),
+    expiresAt: cached?.expiresAt ?? 0,
+    staleUntil: cached?.staleUntil ?? 0,
+    promise
+  });
+
+  try {
+    const value = await promise;
+    const current = cache.get(key) as ExecutionDisplayCacheEntry<T> | undefined;
+    const servedStale = cached?.value !== undefined &&
+      current?.value === cached.value &&
+      current.expiresAt <= now &&
+      current.staleUntil > now;
+    return {
+      value,
+      cache: servedStale ? "stale" : "miss",
+      generatedAt: new Date().toISOString()
+    };
+  } catch (error) {
+    const fallback = cached?.value !== undefined && cached.staleUntil > Date.now()
+      ? cached.value
+      : undefined;
+    if (fallback !== undefined) {
+      return { value: fallback, cache: "stale", generatedAt: new Date().toISOString() };
+    }
+    throw error;
+  }
 };
 
 const normalizeAmountKey = (value: string): string => {

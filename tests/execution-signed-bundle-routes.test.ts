@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildLiveExecutionCandidatesResponse,
   registerExecutionRoutes
@@ -13,6 +13,10 @@ import {
 import type { SignedTradeExecutionStatus } from "../src/execution-system/signed-trade-bundle.js";
 
 describe("execution signed bundle routes", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   class MemoryExecutionOrderRepository implements ExecutionOrderRepository {
     private readonly rows = new Map<string, ExecutionOrderRecord>();
 
@@ -1976,6 +1980,104 @@ describe("execution signed bundle routes", () => {
         markFreshness: "unavailable",
         markBlocker: "LIVE_MARK_DEFERRED"
       }]
+    });
+  });
+
+  it("coalesces concurrent user-wide position display reads", async () => {
+    const app = Fastify();
+    let calls = 0;
+    let resolvePositions!: (positions: any[]) => void;
+    const pendingPositions = new Promise<any[]>((resolve) => {
+      resolvePositions = resolve;
+    });
+    const positionRepository = {
+      listVerifiedPositions: vi.fn(),
+      listUserVerifiedPositions: vi.fn(async () => {
+        calls += 1;
+        return pendingPositions;
+      })
+    };
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: { quote: vi.fn(), getQuote: vi.fn() } as never,
+      sellQuoteService: { prepareExit: vi.fn() } as never,
+      positionRepository
+    });
+
+    const first = app.inject({ method: "GET", url: "/execution/positions?limit=25" });
+    const second = app.inject({ method: "GET", url: "/execution/positions?limit=25" });
+    resolvePositions([{
+      positionId: "coalesced-position",
+      userId: "user-1",
+      venue: "POLYMARKET",
+      marketId: "market-1",
+      outcomeId: "YES",
+      venueAccountAddress: null,
+      verifiedSize: "3",
+      averageEntryPrice: 0.4,
+      sellableSize: "3",
+      lastSettlementEvidenceId: "order-1",
+      status: "VERIFIED" as const,
+      metadata: {}
+    }]);
+
+    const responses = await Promise.all([first, second]);
+    expect(calls).toBe(1);
+    expect(responses.map((response) => response.statusCode)).toEqual([200, 200]);
+    expect(responses[0].json()).toMatchObject({ positions: [{ positionId: "coalesced-position" }] });
+    expect(responses[1].json()).toMatchObject({ positions: [{ positionId: "coalesced-position" }] });
+  });
+
+  it("serves last-good positions when a transient position refresh fails", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-02T00:00:00.000Z"));
+    const app = Fastify({ logger: false });
+    let fail = false;
+    const positionRepository = {
+      listVerifiedPositions: vi.fn(),
+      listUserVerifiedPositions: vi.fn(async () => {
+        if (fail) {
+          throw new Error("database pool timeout");
+        }
+        return [{
+          positionId: "stale-position",
+          userId: "user-1",
+          venue: "POLYMARKET",
+          marketId: "market-1",
+          outcomeId: "YES",
+          venueAccountAddress: null,
+          verifiedSize: "3",
+          averageEntryPrice: 0.4,
+          sellableSize: "3",
+          lastSettlementEvidenceId: "order-1",
+          status: "VERIFIED" as const,
+          metadata: {}
+        }];
+      })
+    };
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: { quote: vi.fn(), getQuote: vi.fn() } as never,
+      sellQuoteService: { prepareExit: vi.fn() } as never,
+      positionRepository
+    });
+
+    const fresh = await app.inject({ method: "GET", url: "/execution/positions?limit=25" });
+    expect(fresh.statusCode).toBe(200);
+    expect(fresh.json()).toMatchObject({
+      cache: "miss",
+      positions: [{ positionId: "stale-position" }]
+    });
+
+    fail = true;
+    vi.setSystemTime(new Date("2026-06-02T00:00:04.000Z"));
+    const stale = await app.inject({ method: "GET", url: "/execution/positions?limit=25" });
+    expect(stale.statusCode).toBe(200);
+    expect(stale.json()).toMatchObject({
+      cache: "stale",
+      positions: [{ positionId: "stale-position" }]
     });
   });
 
