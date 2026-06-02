@@ -138,8 +138,39 @@ export class HotQuoteSnapshotService {
     return null;
   }
 
+  public async getDisplay(input: {
+    venue: string;
+    venueMarketId: string;
+    venueOutcomeId?: string | undefined;
+    maxAgeMs: number;
+  }): Promise<NormalizedVenueQuoteSnapshot | null> {
+    const maxAgeMs = Math.max(this.config.staleAfterMs, Math.min(input.maxAgeMs, 5 * 60_000));
+    const memory = this.deps.memoryCache.get(input);
+    if (memory && this.isWithinAge(memory, maxAgeMs)) {
+      return annotateSnapshot(memory, "memory", this.now());
+    }
+
+    const redis = await this.readRedis(input);
+    if (redis && this.isWithinAge(redis, maxAgeMs)) {
+      this.deps.memoryCache.put(redis);
+      return annotateSnapshot(redis, "redis", this.now());
+    }
+
+    const db = await this.readDb(input, maxAgeMs);
+    if (db) {
+      this.deps.memoryCache.put(db);
+      return annotateSnapshot(db, "db_last_good", this.now());
+    }
+
+    return null;
+  }
+
   private isHot(snapshot: NormalizedVenueQuoteSnapshot): boolean {
-    return this.now().getTime() - snapshot.receivedAt.getTime() <= this.config.staleAfterMs;
+    return this.isWithinAge(snapshot, this.config.staleAfterMs);
+  }
+
+  private isWithinAge(snapshot: NormalizedVenueQuoteSnapshot, maxAgeMs: number): boolean {
+    return this.now().getTime() - snapshot.receivedAt.getTime() <= maxAgeMs;
   }
 
   private pruneInactiveMarkets(): void {
@@ -217,14 +248,14 @@ export class HotQuoteSnapshotService {
     venue: string;
     venueMarketId: string;
     venueOutcomeId?: string | undefined;
-  }): Promise<NormalizedVenueQuoteSnapshot | null> {
+  }, maxAgeMs: number = this.config.redisTtlMs): Promise<NormalizedVenueQuoteSnapshot | null> {
     if (!this.deps.dbFallback) {
       return null;
     }
     try {
       return await this.deps.dbFallback.getLatestSnapshot({
         ...input,
-        maxAgeMs: this.config.redisTtlMs
+        maxAgeMs
       });
     } catch (error) {
       this.deps.logger?.debug?.({ err: error, venue: input.venue }, "Hot quote snapshot DB fallback read failed.");
