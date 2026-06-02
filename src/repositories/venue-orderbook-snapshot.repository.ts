@@ -512,7 +512,16 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
     const staleBlockedLatestResult = await this.pool.query(
       `DELETE FROM venue_orderbook_latest_snapshots
         WHERE COALESCE(jsonb_array_length(blockers), 0) > 0
-          AND received_at < now() - interval '30 minutes'`
+          AND (
+              received_at < now() - interval '30 minutes'
+              OR EXISTS (
+                SELECT 1
+                  FROM jsonb_array_elements_text(blockers) blocker(value)
+                 WHERE blocker.value = 'QUOTE_PROVIDER_TIMEOUT'
+                    OR blocker.value LIKE '%quote_reader_timeout_after_%'
+                    OR blocker.value LIKE '%recorder sample timed out%'
+              )
+          )`
     );
 
     return {

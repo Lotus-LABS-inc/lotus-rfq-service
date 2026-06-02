@@ -509,6 +509,56 @@ describe("MarketOrderbookRecorder", () => {
     expect(second.insertedSnapshots).toBe(2);
   });
 
+  it("does not persist transient quote timeouts as durable readiness blockers", async () => {
+    const inserted: VenueOrderbookSnapshotInput[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [marketFixture("OPEN")]
+      },
+      {
+        getQuoteSnapshotReport: async () => ({
+          snapshots: [],
+          blocked: [{
+            venue: "POLYMARKET",
+            reason: "QUOTE_PROVIDER_TIMEOUT",
+            venueMarketId: "poly-1",
+            detailsCode: "POLYMARKET_quote_reader_timeout_after_2000ms."
+          }]
+        })
+      },
+      {
+        insertMany: async (snapshots) => {
+          inserted.push(...snapshots);
+          return snapshots.length;
+        },
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        maxSamplesPerTick: 40,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const first = await recorder.runOnce();
+    const second = await recorder.runOnce();
+
+    expect(first.sampledOutcomes).toBe(2);
+    expect(first.insertedSnapshots).toBe(0);
+    expect(inserted).toEqual([]);
+    expect(second.sampledOutcomes).toBe(0);
+    expect(second.skippedCooldownSamples).toBe(2);
+  });
+
   it("records Opinion display snapshots as quote-ready when fee discovery is the only missing factor", async () => {
     const inserted: VenueOrderbookSnapshotInput[] = [];
     const recorder = new MarketOrderbookRecorder(

@@ -320,9 +320,12 @@ export class MarketOrderbookRecorder {
           blocker,
           receivedAt: new Date()
         })
-      );
+      ).filter((snapshot): snapshot is VenueOrderbookSnapshotInput => snapshot !== null);
       for (const blocker of report.blocked) {
         this.applyProviderCooldown(blocker.venue, blocker.reason);
+        if (isTransientQuoteReadBlocker(blocker.reason, blocker.detailsCode)) {
+          this.applySampleCooldown(sample);
+        }
       }
       const insertedSnapshots = await this.snapshotRepository.insertMany([
         ...snapshots,
@@ -513,31 +516,36 @@ const toBlockedSnapshotInput = (input: {
     detailsCode?: string | undefined;
   };
   receivedAt: Date;
-}): VenueOrderbookSnapshotInput => ({
-  canonicalEventId: input.canonicalEventId,
-  canonicalMarketId: input.canonicalMarketId,
-  canonicalOutcomeId: input.canonicalOutcomeId,
-  venue: normalizeVenue(input.blocker.venue),
-  venueMarketId: input.blocker.venueMarketId ?? `${normalizeVenue(input.blocker.venue)}:unknown`,
-  venueOutcomeId: input.blocker.venueOutcomeId ?? null,
-  source: "REST",
-  quoteQuality: "DIAGNOSTIC_ONLY",
-  sourceTimestamp: input.receivedAt,
-  receivedAt: input.receivedAt,
-  bestBid: null,
-  bestAsk: null,
-  midpoint: null,
-  spread: null,
-  bidDepth: "0",
-  askDepth: "0",
-  bids: [],
-  asks: [],
-  blockers: [
-    normalizeBlockerReason(input.blocker.reason),
-    ...(input.blocker.detailsCode ? [input.blocker.detailsCode] : [])
-  ],
-  metadataVersion: "venue-orderbook-recorder-blocker-v1"
-});
+}): VenueOrderbookSnapshotInput | null => {
+  if (isTransientQuoteReadBlocker(input.blocker.reason, input.blocker.detailsCode)) {
+    return null;
+  }
+  return {
+    canonicalEventId: input.canonicalEventId,
+    canonicalMarketId: input.canonicalMarketId,
+    canonicalOutcomeId: input.canonicalOutcomeId,
+    venue: normalizeVenue(input.blocker.venue),
+    venueMarketId: input.blocker.venueMarketId ?? `${normalizeVenue(input.blocker.venue)}:unknown`,
+    venueOutcomeId: input.blocker.venueOutcomeId ?? null,
+    source: "REST",
+    quoteQuality: "DIAGNOSTIC_ONLY",
+    sourceTimestamp: input.receivedAt,
+    receivedAt: input.receivedAt,
+    bestBid: null,
+    bestAsk: null,
+    midpoint: null,
+    spread: null,
+    bidDepth: "0",
+    askDepth: "0",
+    bids: [],
+    asks: [],
+    blockers: [
+      normalizeBlockerReason(input.blocker.reason),
+      ...(input.blocker.detailsCode ? [input.blocker.detailsCode] : [])
+    ],
+    metadataVersion: "venue-orderbook-recorder-blocker-v1"
+  };
+};
 
 const normalizeLevels = (
   levels: readonly NormalizedQuoteLevel[],
@@ -650,6 +658,9 @@ const sampleCooldownKey = (sample: { canonicalMarketId: string; outcomeId?: stri
   `${sample.canonicalMarketId}:${sample.outcomeId ?? ""}`;
 
 const providerCooldownMsForReason = (reason: string, baseCooldownMs: number): number => {
+  if (isTransientQuoteReadBlocker(reason)) {
+    return Math.max(baseCooldownMs, SAMPLE_TIMEOUT_COOLDOWN_MS);
+  }
   if (reason.includes("QUOTE_PROVIDER_HTTP_429")) {
     return Math.max(baseCooldownMs, RATE_LIMIT_COOLDOWN_MS);
   }
@@ -664,3 +675,12 @@ const providerCooldownMsForReason = (reason: string, baseCooldownMs: number): nu
 
 const normalizeBlockerReason = (reason: string): string =>
   reason.trim();
+
+const isTransientQuoteReadBlocker = (reason: string, detailsCode?: string | undefined): boolean => {
+  const values = [reason, detailsCode ?? ""].map((value) => value.trim());
+  return values.some((value) =>
+    value === "QUOTE_PROVIDER_TIMEOUT" ||
+    value.includes("quote_reader_timeout_after_") ||
+    value.includes("recorder sample timed out")
+  );
+};
