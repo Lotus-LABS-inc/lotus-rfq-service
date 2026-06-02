@@ -393,6 +393,87 @@ describe("LiveMarketDataViewService", () => {
     expect(responses[1].quotes[0]?.bestVenuePrice).toBe("0.53");
   });
 
+  it("serves stale batch quote cache immediately while refreshing in the background", async () => {
+    let now = new Date("2026-05-10T12:00:00.000Z");
+    let calls = 0;
+    let resolveRefresh!: (value: any) => void;
+    const service = new LiveMarketDataViewService(
+      {
+        getQuoteSnapshotReport: async () => {
+          calls += 1;
+          if (calls === 1) {
+            return {
+              snapshots: [{
+                venue: "POLYMARKET",
+                venueMarketId: "poly-1",
+                venueOutcomeId: "yes",
+                source: "REST",
+                quoteQuality: "FULL_DEPTH_REST",
+                sourceTimestamp: now,
+                receivedAt: now,
+                bids: [{ price: "0.50", size: "100" }],
+                asks: [{ price: "0.53", size: "100" }],
+                blockers: [],
+                missingFactors: []
+              }],
+              blocked: []
+            };
+          }
+          return await new Promise((resolve) => {
+            resolveRefresh = resolve;
+          });
+        }
+      },
+      {
+        now: () => now,
+        batchQuoteLiveTimeoutMs: 500
+      }
+    );
+
+    const first = await service.getBatchQuotes({
+      items: [{ marketId: "market-1", outcomeId: "YES", side: "buy", amount: "1" }]
+    });
+    now = new Date("2026-05-10T12:00:05.000Z");
+    const started = Date.now();
+    const second = await service.getBatchQuotes({
+      items: [{ marketId: "market-1", outcomeId: "YES", side: "buy", amount: "1" }]
+    });
+    const elapsedMs = Date.now() - started;
+
+    expect(first.quotes[0]).toMatchObject({ status: "live", bestVenuePrice: "0.53" });
+    expect(elapsedMs).toBeLessThan(100);
+    expect(calls).toBe(2);
+    expect(second.quotes[0]).toMatchObject({
+      status: "stale",
+      bestVenue: "POLYMARKET",
+      bestVenuePrice: "0.53",
+      blockers: [{ venue: "LOTUS", reason: "LAST_GOOD_QUOTE_USED" }]
+    });
+
+    resolveRefresh({
+      snapshots: [{
+        venue: "POLYMARKET",
+        venueMarketId: "poly-1",
+        venueOutcomeId: "yes",
+        source: "STREAM",
+        quoteQuality: "FULL_DEPTH_STREAM",
+        sourceTimestamp: now,
+        receivedAt: now,
+        bids: [{ price: "0.51", size: "100" }],
+        asks: [{ price: "0.54", size: "100" }],
+        blockers: [],
+        missingFactors: []
+      }],
+      blocked: []
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const refreshed = await service.getBatchQuotes({
+      items: [{ marketId: "market-1", outcomeId: "YES", side: "buy", amount: "1" }]
+    });
+    expect(refreshed.quotes[0]).toMatchObject({ status: "live", bestVenuePrice: "0.54" });
+  });
+
   it("bounds chart reads when live orderbook and stored history are slow", async () => {
     const now = new Date("2026-05-10T12:00:00.000Z");
     const service = new LiveMarketDataViewService(

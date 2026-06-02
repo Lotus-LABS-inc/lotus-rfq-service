@@ -33,5 +33,6 @@ export const buildAdminCorsOptions = (origins: string[]): FastifyCorsOptions => 
   },
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["authorization", "content-type"],
+  maxAge: 600,
   credentials: false
 });
