@@ -627,6 +627,71 @@ describe("venue quote mapping resolvers", () => {
     })]);
   });
 
+  it("supports code-owned per-venue reader timeouts without raising the global timeout", async () => {
+    const opinionReader: VenueQuoteSnapshotReader = {
+      venue: "OPINION",
+      async getQuoteSnapshot() {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return {
+          venue: "OPINION",
+          venueMarketId: "opinion-market",
+          venueOutcomeId: "opinion-token",
+          source: "REST",
+          quoteQuality: "FULL_DEPTH_REST",
+          sourceTimestamp: null,
+          receivedAt: new Date("2026-05-10T12:00:00.000Z"),
+          bids: [{ price: "0.49", size: "10" }],
+          asks: [{ price: "0.51", size: "12" }],
+          blockers: [],
+          missingFactors: []
+        };
+      }
+    };
+    const limitlessReader: VenueQuoteSnapshotReader = {
+      venue: "LIMITLESS",
+      async getQuoteSnapshot() {
+        return await new Promise(() => undefined);
+      }
+    };
+    const source = new CompositeVenueQuoteSource([opinionReader, limitlessReader], new SharedCoreVenueQuoteMappingResolver({
+      async loadApprovedVenueMappings() {
+        return [
+          {
+            venue: "OPINION",
+            venue_market_id: "OPINION:opinion-market:canonical",
+            normalized_payload: { venueMarketId: "opinion-market", quoteTokenId: "opinion-token" },
+            raw_source_payload: {}
+          },
+          {
+            venue: "LIMITLESS",
+            venue_market_id: "LIMITLESS:slow-market:canonical",
+            normalized_payload: { venueMarketId: "slow-market", quoteTokenId: "yes-token" },
+            raw_source_payload: {}
+          }
+        ];
+      },
+      async listApprovedVenueMappings() {
+        return [];
+      }
+    }), () => new Date("2026-05-10T12:00:00.000Z"), undefined, {
+      readerTimeoutMs: 1,
+      perVenueReaderTimeoutMs: { OPINION: 50 }
+    });
+
+    const report = await source.getQuoteSnapshotReport({
+      canonicalMarketId: "canonical",
+      canonicalOutcomeId: "YES",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(report.snapshots.map((snapshot) => snapshot.venue)).toEqual(["OPINION"]);
+    expect(report.blocked).toEqual([expect.objectContaining({
+      venue: "LIMITLESS",
+      reason: "QUOTE_PROVIDER_TIMEOUT"
+    })]);
+  });
+
   it("keeps Predict 401 quote failures typed with an operator-safe auth details code", async () => {
     const predictReader: VenueQuoteSnapshotReader = {
       venue: "PREDICT_FUN",

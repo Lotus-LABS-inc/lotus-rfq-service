@@ -1095,7 +1095,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       streamCache: myriadQuoteCache
     })
   ], new SharedCoreVenueQuoteMappingResolver(new SharedCoreQuoteMappingRepository(dependencies.pgPool)), () => new Date(), hotQuoteSnapshots, {
-    readerTimeoutMs: 2_000
+    readerTimeoutMs: 2_000,
+    perVenueReaderTimeoutMs: {
+      OPINION: 5_000
+    }
   });
   const historicalMarketStateRepository = new HistoricalMarketStateRepository(dependencies.pgPool);
   const marketDataViewService = new LiveMarketDataViewService(venueQuoteSource, {

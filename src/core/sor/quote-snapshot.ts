@@ -203,15 +203,21 @@ export class QuoteSnapshotCache {
 export class CompositeVenueQuoteSource {
   private readonly readerByVenue: ReadonlyMap<string, VenueQuoteSnapshotReader>;
   private readonly readerTimeoutMs: number;
+  private readonly readerTimeoutMsByVenue: ReadonlyMap<string, number>;
 
   public constructor(
     readers: readonly VenueQuoteSnapshotReader[],
     private readonly mappingResolver: VenueQuoteMappingResolver,
     private readonly now: () => Date = () => new Date(),
     private readonly hotSnapshotStore?: HotVenueQuoteSnapshotStore | undefined,
-    options: { readerTimeoutMs?: number | undefined } = {}
+    options: {
+      readerTimeoutMs?: number | undefined;
+      perVenueReaderTimeoutMs?: Readonly<Record<string, number>> | undefined;
+    } = {}
   ) {
     this.readerTimeoutMs = Math.max(250, Math.min(options.readerTimeoutMs ?? 2_500, 10_000));
+    this.readerTimeoutMsByVenue = new Map(Object.entries(options.perVenueReaderTimeoutMs ?? {})
+      .map(([venue, timeoutMs]) => [venue.trim().toUpperCase(), clampReaderTimeoutMs(timeoutMs)] as const));
     this.readerByVenue = new Map(readers.flatMap((reader) => {
       const venue = reader.venue.toUpperCase();
       return venue === "PREDICT_FUN"
@@ -381,7 +387,7 @@ export class CompositeVenueQuoteSource {
             side: input.side,
             quantity: input.quantity
           }),
-          this.readerTimeoutMs,
+          this.resolveReaderTimeoutMs(mapping.venue),
           mapping.venue
         );
         if (!snapshot) {
@@ -461,7 +467,14 @@ export class CompositeVenueQuoteSource {
       blockers: []
     }));
   }
+
+  private resolveReaderTimeoutMs(venue: string): number {
+    return this.readerTimeoutMsByVenue.get(venue.trim().toUpperCase()) ?? this.readerTimeoutMs;
+  }
 }
+
+const clampReaderTimeoutMs = (timeoutMs: number): number =>
+  Math.max(250, Math.min(timeoutMs, 10_000));
 
 export class SharedCoreVenueQuoteMappingResolver implements VenueQuoteMappingResolver {
   public constructor(
