@@ -210,6 +210,61 @@ describe("MarketCatalogSnapshotMaterializer", () => {
     });
   });
 
+  it("merges category quote-ready snapshots into the global quote-ready snapshot", async () => {
+    const snapshotCache = new FakeSnapshotCache();
+    const sportsMarket: MarketCatalogMarket = {
+      ...baseMarket,
+      canonicalEventId: "event-sports",
+      canonicalMarketIds: ["market-sports"],
+      title: "Sports Market",
+      category: "SPORTS"
+    };
+    const listMarkets = vi.fn(async (filter?: { category?: string }) =>
+      filter?.category === "Sports" ? [sportsMarket] : [baseMarket]
+    );
+    const materializer = new MarketCatalogSnapshotMaterializer({
+      marketCatalogRepository: {
+        listMarkets
+      },
+      marketQuoteReadinessSource: {
+        listLatestMarketQuoteReadiness: vi.fn(async () => [
+          {
+            canonicalMarketId: "market-1",
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 2,
+            quoteReadyVenues: ["POLYMARKET", "LIMITLESS"],
+            quoteBlockers: [],
+            lastQuoteAt: "2026-06-01T00:00:00.000Z"
+          },
+          {
+            canonicalMarketId: "market-sports",
+            quoteStatus: "stale" as const,
+            quoteReadyVenueCount: 2,
+            quoteReadyVenues: ["POLYMARKET", "LIMITLESS"],
+            quoteBlockers: [],
+            lastQuoteAt: "2026-06-01T00:00:00.000Z"
+          }
+        ])
+      },
+      snapshotCache,
+      logger: { info: vi.fn(), warn: vi.fn() },
+      config: { limits: [80], routeCoverages: ["all"], categories: ["Sports"], intervalMs: 60_000 }
+    });
+
+    await materializer.runOnce();
+
+    const globalKey = `markets:${stableQueryCacheKey({ limit: 80, quoteReadyOnly: true })}`;
+    expect(snapshotCache.values.get(globalKey)).toMatchObject({
+      count: 2,
+      markets: [
+        { canonicalMarketIds: ["market-1"] },
+        { canonicalMarketIds: ["market-sports"] }
+      ]
+    });
+    expect(listMarkets).toHaveBeenCalledWith({ limit: 80, category: "Sports" });
+    expect(listMarkets).toHaveBeenCalledWith({ limit: 80 });
+  });
+
   it("does not overwrite larger quote-ready snapshots with transient underfilled materialization", async () => {
     const snapshotCache = new FakeSnapshotCache();
     const key = `markets:${stableQueryCacheKey({
