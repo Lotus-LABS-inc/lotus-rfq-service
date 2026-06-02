@@ -1309,11 +1309,12 @@ const lastGoodOrUnavailable = (
 ): MarkedExecutionPosition => {
   const cached = positionMarkCache.get(cacheKey);
   if (cached) {
+    const hasDisplayMark = cached.position.markPrice !== null && cached.position.markValue !== null;
     return {
       ...cached.position,
       markFreshness: "stale",
       markGeneratedAt: generatedAt,
-      markBlocker: blocker
+      markBlocker: hasDisplayMark ? null : blocker
     };
   }
   return unavailableMarkedPosition(position, generatedAt, blocker);

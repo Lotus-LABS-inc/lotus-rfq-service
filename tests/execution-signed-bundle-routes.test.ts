@@ -2249,6 +2249,77 @@ describe("execution signed bundle routes", () => {
     });
   });
 
+  it("serves stale priced position marks without surfacing transient live failures as blockers", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-06T00:00:00.000Z"));
+    const position = {
+      positionId: "stale-priced-display-position",
+      userId: "stale-mark-user",
+      venue: "POLYMARKET",
+      marketId: "stale-priced-display-market",
+      outcomeId: "YES",
+      venueAccountAddress: null,
+      verifiedSize: "2",
+      averageEntryPrice: 0.4,
+      sellableSize: "2",
+      lastSettlementEvidenceId: "order-1",
+      status: "VERIFIED" as const,
+      metadata: {}
+    };
+    const app = Fastify();
+    let failLiveRead = false;
+    const seededProvider = {
+      getCandidates: vi.fn(async (input) => {
+        if (failLiveRead) {
+          throw new Error("venue quote timeout");
+        }
+        return {
+          generatedAt: "2026-05-06T00:00:00.000Z",
+          marketId: input.marketId,
+          outcomeId: input.outcomeId,
+          amount: input.amount,
+          source: "LIVE_QUOTE_SOURCE" as const,
+          candidates: [{ venue: "POLYMARKET", price: 0.5, availableSize: "10" }],
+          blocked: []
+        };
+      })
+    };
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "stale-mark-user", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: { quote: vi.fn(), getQuote: vi.fn() } as never,
+      sellQuoteService: { prepareExit: vi.fn() } as never,
+      positionRepository: {
+        listVerifiedPositions: vi.fn(),
+        listUserVerifiedPositions: vi.fn(async () => [position])
+      },
+      liveCandidateProvider: seededProvider
+    });
+    const seeded = await app.inject({ method: "GET", url: "/execution/portfolio/summary?markMode=live" });
+    expect(seeded.statusCode).toBe(200);
+    expect(seeded.json()).toMatchObject({
+      positions: [{ positionId: "stale-priced-display-position", markFreshness: "live", markBlocker: null }]
+    });
+
+    failLiveRead = true;
+    vi.setSystemTime(new Date("2026-05-06T00:00:46.000Z"));
+
+    const stale = await app.inject({ method: "GET", url: "/execution/portfolio/summary?markMode=live" });
+    expect(stale.statusCode).toBe(200);
+    expect(stale.json()).toMatchObject({
+      markedPositionCount: 1,
+      unavailableMarkCount: 0,
+      positions: [{
+        positionId: "stale-priced-display-position",
+        markPrice: 0.5,
+        markValue: "1",
+        markFreshness: "stale",
+        markBlocker: null
+      }]
+    });
+    await app.close();
+  });
+
   it("bounds portfolio live mark fanout and defers uncached overflow positions", async () => {
     const app = Fastify();
     const positions = Array.from({ length: 25 }, (_, index) => ({
