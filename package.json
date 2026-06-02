@@ -103,6 +103,7 @@
     "report:crypto:final-canary-package": "tsx scripts/reports/report-crypto-final-canary-package.ts",
     "report:execution-system:v0": "tsx scripts/reports/report-execution-system-v0.ts",
     "report:env:audit": "tsx scripts/reports/report-env-audit.ts",
+    "report:vps-runtime-smoke": "tsx scripts/reports/report-vps-runtime-smoke.ts",
     "report:db:hygiene": "tsx scripts/reports/report-db-hygiene.ts",
     "report:latency:baseline": "tsx scripts/reports/report-latency-baseline.ts",
     "report:market:quote-readiness-drift": "tsx scripts/reports/report-market-quote-readiness-drift.ts",
