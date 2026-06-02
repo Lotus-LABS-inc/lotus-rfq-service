@@ -493,7 +493,8 @@ const snapshotBlockersForRecorder = (snapshot: NormalizedVenueQuoteSnapshot): {
     return { blockers: [...blockers, ...missingFactors] };
   }
 
-  const blockingMissingFactors = missingFactors.filter((factor) => factor !== "FEE_DISCOVERY");
+  const nonBlockingOpinionWarnings = new Set(["FEE_DISCOVERY", "BID_DEPTH_MISSING", "ASK_DEPTH_MISSING"]);
+  const blockingMissingFactors = missingFactors.filter((factor) => !nonBlockingOpinionWarnings.has(factor));
   return {
     blockers: [...blockers, ...blockingMissingFactors],
     ...(blockingMissingFactors.length !== missingFactors.length

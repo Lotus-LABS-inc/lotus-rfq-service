@@ -567,6 +567,71 @@ describe("MarketOrderbookRecorder", () => {
       metadataVersion: "venue-orderbook-recorder-opinion-fee-warning-v1"
     });
   });
+
+  it("records one-sided Opinion depth as display-ready without global blockers", async () => {
+    const inserted: VenueOrderbookSnapshotInput[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [opinionMarketFixture()]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalOutcomeId }) => ({
+          snapshots: [{
+            venue: "OPINION",
+            venueMarketId: "3062",
+            venueOutcomeId: canonicalOutcomeId === "NO" ? "token-no" : "token-yes",
+            source: "REST",
+            quoteQuality: "FULL_DEPTH_REST",
+            sourceTimestamp: new Date("2026-05-10T12:00:00.000Z"),
+            receivedAt: new Date("2026-05-10T12:00:01.000Z"),
+            bids: canonicalOutcomeId === "NO" ? [{ price: "0.44", size: "10" }] : [],
+            asks: canonicalOutcomeId === "YES" ? [{ price: "0.46", size: "11" }] : [],
+            blockers: [],
+            missingFactors: canonicalOutcomeId === "NO" ? ["ASK_DEPTH_MISSING"] : ["BID_DEPTH_MISSING"]
+          }],
+          blocked: []
+        })
+      },
+      {
+        insertMany: async (snapshots) => {
+          inserted.push(...snapshots);
+          return snapshots.length;
+        },
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        maxSamplesPerTick: 40,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.insertedSnapshots).toBe(2);
+    expect(inserted.map((snapshot) => snapshot.blockers)).toEqual([[], []]);
+    expect(inserted.find((snapshot) => snapshot.canonicalOutcomeId === "YES")).toMatchObject({
+      bestBid: null,
+      bestAsk: "0.46",
+      bidDepth: "0",
+      askDepth: "11"
+    });
+    expect(inserted.find((snapshot) => snapshot.canonicalOutcomeId === "NO")).toMatchObject({
+      bestBid: "0.44",
+      bestAsk: null,
+      bidDepth: "10",
+      askDepth: "0"
+    });
+  });
 });
 
 const marketFixture = (status: MarketCatalogMarket["status"]): MarketCatalogMarket => ({
