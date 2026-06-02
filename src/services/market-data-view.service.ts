@@ -14,6 +14,8 @@ export interface MarketDataQuoteSource {
     canonicalOutcomeId?: string | undefined;
     side: "buy" | "sell";
     quantity: number;
+    readMode?: "live" | "cached_display" | undefined;
+    displayMaxAgeMs?: number | undefined;
   }): Promise<VenueQuoteSnapshotReport>;
 }
 
@@ -154,8 +156,10 @@ const MAX_STORED_POINTS = 20_000;
 const MAX_HISTORY_MS = 31 * 24 * 60 * 60 * 1000;
 const ORDERBOOK_CACHE_MS = 3_000;
 const ORDERBOOK_LIVE_TIMEOUT_MS = 900;
+const ORDERBOOK_DISPLAY_SNAPSHOT_MAX_AGE_MS = 45_000;
 const BATCH_QUOTE_CACHE_MS = 3_000;
 const BATCH_QUOTE_LIVE_TIMEOUT_MS = 700;
+const BATCH_QUOTE_DISPLAY_SNAPSHOT_MAX_AGE_MS = 45_000;
 const CHART_CACHE_MS = 10_000;
 const CHART_LIVE_POINT_TIMEOUT_MS = 50;
 const CHART_HISTORICAL_POINTS_TIMEOUT_MS = 150;
@@ -262,7 +266,9 @@ export class LiveMarketDataViewService {
       canonicalMarketId: input.marketId,
       ...(input.outcomeId ? { canonicalOutcomeId: input.outcomeId } : {}),
       side: "buy",
-      quantity: 1
+      quantity: 1,
+      readMode: "cached_display",
+      displayMaxAgeMs: ORDERBOOK_DISPLAY_SNAPSHOT_MAX_AGE_MS
     });
     const venueFilter = input.venue?.trim().toUpperCase();
     const snapshots = venueFilter
@@ -404,7 +410,9 @@ export class LiveMarketDataViewService {
         canonicalMarketId: input.item.marketId,
         canonicalOutcomeId: input.item.outcomeId,
         side: input.side,
-        quantity: input.quantity
+        quantity: input.quantity,
+        readMode: "cached_display",
+        displayMaxAgeMs: BATCH_QUOTE_DISPLAY_SNAPSHOT_MAX_AGE_MS
       });
       return buildBatchQuoteItem({
         marketId: input.item.marketId,

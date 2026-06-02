@@ -2,6 +2,63 @@ import { describe, expect, it } from "vitest";
 import { LiveMarketDataViewService } from "../src/services/market-data-view.service.js";
 
 describe("LiveMarketDataViewService", () => {
+  it("uses cache-only quote reads for display orderbooks", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    const calls: unknown[] = [];
+    const service = new LiveMarketDataViewService({
+      getQuoteSnapshotReport: async (input) => {
+        calls.push(input);
+        return {
+          snapshots: [],
+          blocked: [{
+            venue: "POLYMARKET",
+            reason: "QUOTE_SNAPSHOT_CACHE_MISS"
+          }]
+        };
+      }
+    }, { now: () => now });
+
+    const orderbook = await service.getOrderbook({
+      marketId: "market-1",
+      outcomeId: "YES"
+    });
+
+    expect(orderbook.status).toBe("blocked");
+    expect(calls[0]).toMatchObject({
+      canonicalMarketId: "market-1",
+      canonicalOutcomeId: "YES",
+      readMode: "cached_display"
+    });
+  });
+
+  it("uses cache-only quote reads for display batch quotes", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    const calls: unknown[] = [];
+    const service = new LiveMarketDataViewService({
+      getQuoteSnapshotReport: async (input) => {
+        calls.push(input);
+        return {
+          snapshots: [],
+          blocked: [{
+            venue: "LIMITLESS",
+            reason: "QUOTE_SNAPSHOT_CACHE_MISS"
+          }]
+        };
+      }
+    }, { now: () => now });
+
+    const quotes = await service.getBatchQuotes({
+      items: [{ marketId: "market-1", outcomeId: "YES", side: "buy", amount: "1" }]
+    });
+
+    expect(quotes.quotes[0]?.status).toBe("unavailable");
+    expect(calls[0]).toMatchObject({
+      canonicalMarketId: "market-1",
+      canonicalOutcomeId: "YES",
+      readMode: "cached_display"
+    });
+  });
+
   it("returns typed blocked orderbook status when every venue is blocked", async () => {
     const now = new Date("2026-05-10T12:00:00.000Z");
     const service = new LiveMarketDataViewService({

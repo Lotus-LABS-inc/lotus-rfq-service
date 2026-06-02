@@ -98,6 +98,12 @@ export interface HotVenueQuoteSnapshotStore {
     venueMarketId: string;
     venueOutcomeId?: string | undefined;
   }): Promise<NormalizedVenueQuoteSnapshot | null>;
+  getDisplay?(input: {
+    venue: string;
+    venueMarketId: string;
+    venueOutcomeId?: string | undefined;
+    maxAgeMs: number;
+  }): Promise<NormalizedVenueQuoteSnapshot | null>;
 }
 
 export interface VenueQuoteMapping {
@@ -240,6 +246,8 @@ export class CompositeVenueQuoteSource {
     canonicalOutcomeId?: string | undefined;
     side: "buy" | "sell";
     quantity: number;
+    readMode?: "live" | "cached_display" | undefined;
+    displayMaxAgeMs?: number | undefined;
   }): Promise<CalculatedVenueQuoteSnapshotReport> {
     const rawReport = await this.getQuoteSnapshotReport(input);
     const calculatedResults = withLatencyStageSync("quote_aggregation_calculation", {
@@ -316,6 +324,8 @@ export class CompositeVenueQuoteSource {
     canonicalOutcomeId?: string | undefined;
     side: "buy" | "sell";
     quantity: number;
+    readMode?: "live" | "cached_display" | undefined;
+    displayMaxAgeMs?: number | undefined;
   }): Promise<VenueQuoteSnapshotReport> {
     this.hotSnapshotStore?.touch({
       canonicalMarketId: input.canonicalMarketId,
@@ -346,6 +356,40 @@ export class CompositeVenueQuoteSource {
     }> => {
       const startedAt = performance.now();
       try {
+        const readMode = input.readMode ?? "live";
+        const hotSnapshot = await this.readHotSnapshot({
+          venue: mapping.venue,
+          venueMarketId: mapping.venueMarketId,
+          ...(mapping.venueOutcomeId ? { venueOutcomeId: mapping.venueOutcomeId } : {}),
+          ...(readMode === "cached_display" ? { maxAgeMs: input.displayMaxAgeMs ?? 45_000 } : {})
+        });
+        if (hotSnapshot) {
+          recordLatencyDuration("venue_quote_fetch", performance.now() - startedAt, {
+            canonicalMarketId: input.canonicalMarketId,
+            venue: mapping.venue,
+            external: false,
+            cache: "hit"
+          });
+          return { snapshot: hotSnapshot, blocker: null };
+        }
+        if (readMode === "cached_display") {
+          recordLatencyDuration("venue_quote_fetch", performance.now() - startedAt, {
+            canonicalMarketId: input.canonicalMarketId,
+            venue: mapping.venue,
+            external: false,
+            cache: "miss",
+            blockerCategory: "QUOTE_SNAPSHOT_CACHE_MISS"
+          });
+          return {
+            snapshot: null,
+            blocker: {
+              venue: mapping.venue.toUpperCase(),
+              reason: "QUOTE_SNAPSHOT_CACHE_MISS",
+              venueMarketId: mapping.venueMarketId,
+              ...(mapping.venueOutcomeId ? { venueOutcomeId: mapping.venueOutcomeId } : {})
+            }
+          };
+        }
         const reader = this.readerByVenue.get(mapping.venue.toUpperCase());
         if (!reader) {
           recordLatencyDuration("venue_quote_fetch", performance.now() - startedAt, {
@@ -363,20 +407,6 @@ export class CompositeVenueQuoteSource {
               ...(mapping.venueOutcomeId ? { venueOutcomeId: mapping.venueOutcomeId } : {})
             }
           };
-        }
-        const hotSnapshot = await this.hotSnapshotStore?.get({
-          venue: mapping.venue,
-          venueMarketId: mapping.venueMarketId,
-          ...(mapping.venueOutcomeId ? { venueOutcomeId: mapping.venueOutcomeId } : {})
-        });
-        if (hotSnapshot) {
-          recordLatencyDuration("venue_quote_fetch", performance.now() - startedAt, {
-            canonicalMarketId: input.canonicalMarketId,
-            venue: mapping.venue,
-            external: false,
-            cache: "hit"
-          });
-          return { snapshot: hotSnapshot, blocker: null };
         }
         const snapshot = await withQuoteReaderTimeout(
           reader.getQuoteSnapshot({
@@ -470,6 +500,27 @@ export class CompositeVenueQuoteSource {
 
   private resolveReaderTimeoutMs(venue: string): number {
     return this.readerTimeoutMsByVenue.get(venue.trim().toUpperCase()) ?? this.readerTimeoutMs;
+  }
+
+  private async readHotSnapshot(input: {
+    venue: string;
+    venueMarketId: string;
+    venueOutcomeId?: string | undefined;
+    maxAgeMs?: number | undefined;
+  }): Promise<NormalizedVenueQuoteSnapshot | null> {
+    if (!this.hotSnapshotStore) {
+      return null;
+    }
+    const maxAgeMs = input.maxAgeMs;
+    if (maxAgeMs !== undefined && this.hotSnapshotStore.getDisplay) {
+      return this.hotSnapshotStore.getDisplay({
+        venue: input.venue,
+        venueMarketId: input.venueMarketId,
+        ...(input.venueOutcomeId ? { venueOutcomeId: input.venueOutcomeId } : {}),
+        maxAgeMs
+      });
+    }
+    return this.hotSnapshotStore.get(input);
   }
 }
 
