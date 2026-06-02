@@ -1,0 +1,111 @@
+import { describe, expect, it, vi } from "vitest";
+import type { NormalizedVenueQuoteSnapshot } from "../src/core/sor/quote-snapshot.js";
+import { HotMarketQuoteReadinessSource } from "../src/services/hot-market-quote-readiness.service.js";
+
+const now = new Date("2026-06-02T12:00:00.000Z");
+
+const snapshot = (venue: string, venueMarketId: string, venueOutcomeId?: string): NormalizedVenueQuoteSnapshot => ({
+  venue,
+  venueMarketId,
+  ...(venueOutcomeId ? { venueOutcomeId } : {}),
+  source: "STREAM",
+  quoteQuality: "FULL_DEPTH_STREAM",
+  sourceTimestamp: now,
+  receivedAt: now,
+  bids: [{ price: "0.49", size: "10" }],
+  asks: [{ price: "0.51", size: "10" }],
+  missingFactors: [],
+  blockers: [],
+  streamResynced: true,
+  metadata: {}
+});
+
+describe("HotMarketQuoteReadinessSource", () => {
+  it("uses hot snapshots before the DB fallback", async () => {
+    const fallback = vi.fn();
+    const source = new HotMarketQuoteReadinessSource({
+      mappingResolver: {
+        async listApprovedReadiness() {
+          return [{
+            canonicalEventId: "event-1",
+            canonicalMarketIds: ["market-1"],
+            title: "Market 1",
+            category: "Crypto",
+            venues: [{
+              venue: "POLYMARKET",
+              approvedVenueMarketId: "approved-1",
+              venueMarketId: "poly-1",
+              venueOutcomeId: "token-yes",
+              quoteReady: true,
+              blockers: []
+            }]
+          }];
+        }
+      },
+      hotSnapshots: {
+        async getDisplay(input) {
+          return snapshot(input.venue, input.venueMarketId, input.venueOutcomeId);
+        }
+      },
+      fallbackSource: { listLatestMarketQuoteReadiness: fallback }
+    });
+
+    const result = await source.listLatestMarketQuoteReadiness({ canonicalMarketIds: ["market-1"] });
+
+    expect(fallback).not.toHaveBeenCalled();
+    expect(result).toEqual([expect.objectContaining({
+      canonicalMarketId: "market-1",
+      quoteStatus: "live",
+      quoteReadyVenueCount: 1,
+      quoteReadyVenues: ["POLYMARKET"],
+      lastQuoteAt: now.toISOString()
+    })]);
+  });
+
+  it("uses fresh DB fallback only when hot snapshots are missing", async () => {
+    const source = new HotMarketQuoteReadinessSource({
+      mappingResolver: {
+        async listApprovedReadiness() {
+          return [{
+            canonicalEventId: "event-1",
+            canonicalMarketIds: ["market-1"],
+            title: "Market 1",
+            category: "Crypto",
+            venues: [{
+              venue: "LIMITLESS",
+              approvedVenueMarketId: "approved-1",
+              venueMarketId: "limitless-1",
+              venueOutcomeId: "YES",
+              quoteReady: true,
+              blockers: []
+            }]
+          }];
+        }
+      },
+      hotSnapshots: {
+        async getDisplay() {
+          return null;
+        }
+      },
+      fallbackSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: "market-1",
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["LIMITLESS"],
+            quoteBlockers: [],
+            lastQuoteAt: now.toISOString()
+          }];
+        }
+      }
+    });
+
+    await expect(source.listLatestMarketQuoteReadiness({ canonicalMarketIds: ["market-1"] }))
+      .resolves.toEqual([expect.objectContaining({
+        quoteStatus: "live",
+        quoteReadyVenueCount: 1,
+        quoteReadyVenues: ["LIMITLESS"]
+      })]);
+  });
+});
