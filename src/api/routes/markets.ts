@@ -510,10 +510,17 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
   const now = Date.now();
   const cached = marketCatalogResponseCache.get(key);
   if (cached && cached.expiresAtMs >= now) {
-    return scrubMarketCatalogResponseForKey(key, cached.value as T);
+    const scrubbed = scrubMarketCatalogResponseForKey(key, cached.value as T);
+    if (isCacheableMarketCatalogResponseForKey(key, scrubbed)) {
+      return scrubbed;
+    }
+    marketCatalogResponseCache.delete(key);
   }
   const staleCached = cached && cached.staleUntilMs >= now
     ? scrubMarketCatalogResponseForKey(key, cached.value as T)
+    : null;
+  const usableStaleCached = staleCached && isCacheableMarketCatalogResponseForKey(key, staleCached)
+    ? staleCached
     : null;
   const cacheTtlMs = resolveMarketCatalogResponseCacheMs(process.env.MARKET_CATALOG_RESPONSE_CACHE_MS);
   const staleCacheTtlMs = resolveMarketCatalogResponseStaleCacheMs(process.env.MARKET_CATALOG_RESPONSE_STALE_CACHE_MS);
@@ -537,7 +544,7 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
       // Redis is a hot display cache only. Fall through to the DB producer.
     }
   }
-  if (staleCached) {
+  if (usableStaleCached) {
     if (!marketCatalogResponsePending.has(key)) {
       const background = producer()
     .then((value) => {
@@ -553,7 +560,7 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
         });
       marketCatalogResponsePending.set(key, background);
     }
-    return markMarketCatalogResponseFromStaleCache(staleCached);
+    return markMarketCatalogResponseFromStaleCache(usableStaleCached);
   }
   const pending = marketCatalogResponsePending.get(key);
   if (pending) {
@@ -567,14 +574,14 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
         if (isCacheableMarketCatalogResponseForKey(key, value)) {
           void options.sharedCache?.set(key, value, cacheTtlMs).catch(() => undefined);
         }
-      } else if (staleCached) {
-        return markMarketCatalogResponseFromStaleCache(staleCached);
+      } else if (usableStaleCached) {
+        return markMarketCatalogResponseFromStaleCache(usableStaleCached);
       }
       return value;
     })
     .catch((error) => {
-      if (staleCached) {
-        return markMarketCatalogResponseFromStaleCache(staleCached);
+      if (usableStaleCached) {
+        return markMarketCatalogResponseFromStaleCache(usableStaleCached);
       }
       throw error;
     })
