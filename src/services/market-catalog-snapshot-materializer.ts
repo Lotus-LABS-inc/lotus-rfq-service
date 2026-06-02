@@ -43,9 +43,9 @@ export interface MarketCatalogSnapshotMaterializerDeps {
 }
 
 const DEFAULT_CONFIG: MarketCatalogSnapshotMaterializerConfig = {
-  intervalMs: 120_000,
-  cacheTtlMs: 1_800_000,
-  limits: [80, 250],
+  intervalMs: 10_000,
+  cacheTtlMs: 45_000,
+  limits: [250],
   routeCoverages: ["all", "pair", "tri", "strict_all"],
   categories: ["Crypto", "Sports", "Politics", "Esports"]
 };
@@ -113,30 +113,20 @@ export class MarketCatalogSnapshotMaterializer {
       const detailKeysWritten = new Set<string>();
       for (const limit of this.config.limits) {
         for (const category of [...this.config.categories, undefined] as const) {
-          const baseQueries = [
-            withOptionalCategory({ limit }, category),
-            withOptionalCategory({ limit, quoteReadyOnly: false as const }, category),
-            withOptionalCategory({ limit, quoteReadyOnly: false as const, routeCoverage: "all" as const }, category),
-            withOptionalCategory({ limit, quoteReadyOnly: true as const }, category),
-            withOptionalCategory({ limit, quoteReadyOnly: true as const, routeCoverage: "all" as const }, category),
-            ...this.config.routeCoverages
-              .filter((routeCoverage) => routeCoverage !== "all")
-              .map((routeCoverage) => withOptionalCategory({ limit, quoteReadyOnly: true as const, routeCoverage }, category))
-          ];
-          for (const query of baseQueries) {
-            if (this.stopped) {
-              return result;
-            }
-            result.attempted += 1;
-            try {
-              const written = await this.materializeMarketQuery(query, detailKeysWritten);
-              if (typeof written === "number") result.written += written;
-              if (written === "skipped_empty_quote_ready") result.skippedEmptyQuoteReady += 1;
-              if (written === "skipped_underfilled_quote_ready") result.skippedUnderfilledQuoteReady += 1;
-            } catch (error) {
-              result.failed += 1;
-              this.deps.logger.warn({ err: error, query }, "Market catalog snapshot query materialization failed.");
-            }
+          if (this.stopped) {
+            return result;
+          }
+          const queries = buildMaterializedQueries(limit, category, this.config.routeCoverages);
+          result.attempted += queries.length;
+          try {
+            const written = await this.materializeMarketQuerySet(limit, category, queries, detailKeysWritten);
+            result.written += written.written;
+            result.skippedEmptyQuoteReady += written.skippedEmptyQuoteReady;
+            result.skippedUnderfilledQuoteReady += written.skippedUnderfilledQuoteReady;
+            result.failed += written.failed;
+          } catch (error) {
+            result.failed += queries.length;
+            this.deps.logger.warn({ err: error, limit, category }, "Market catalog snapshot query-set materialization failed.");
           }
         }
       }
@@ -147,18 +137,50 @@ export class MarketCatalogSnapshotMaterializer {
     }
   }
 
-  private async materializeMarketQuery(
-    query: MarketCatalogMaterializedQuery,
+  private async materializeMarketQuerySet(
+    limit: number,
+    category: string | undefined,
+    queries: readonly MarketCatalogMaterializedQuery[],
     detailKeysWritten: Set<string>
-  ): Promise<number | "skipped_empty_quote_ready" | "skipped_underfilled_quote_ready"> {
+  ): Promise<{
+    written: number;
+    skippedEmptyQuoteReady: number;
+    skippedUnderfilledQuoteReady: number;
+    failed: number;
+  }> {
     const markets = await this.deps.marketCatalogRepository.listMarkets({
-      limit: resolveFetchLimit(query.limit, query),
-      ...(query.category ? { category: query.category } : {})
+      limit: resolveFetchLimit(limit, { limit, quoteReadyOnly: true, routeCoverage: "all" }),
+      ...(category ? { category } : {})
     });
     const readiness = await this.deps.marketQuoteReadinessSource.listLatestMarketQuoteReadiness({
       canonicalMarketIds: [...new Set(markets.flatMap((market) => market.canonicalMarketIds))]
     });
     const enriched = enrichMarketsWithReadiness(markets, readiness);
+    const result = {
+      written: 0,
+      skippedEmptyQuoteReady: 0,
+      skippedUnderfilledQuoteReady: 0,
+      failed: 0
+    };
+    for (const query of queries) {
+      try {
+        const written = await this.materializeMarketQueryFromEnriched(query, enriched, detailKeysWritten);
+        if (typeof written === "number") result.written += written;
+        if (written === "skipped_empty_quote_ready") result.skippedEmptyQuoteReady += 1;
+        if (written === "skipped_underfilled_quote_ready") result.skippedUnderfilledQuoteReady += 1;
+      } catch (error) {
+        result.failed += 1;
+        this.deps.logger.warn({ err: error, query }, "Market catalog snapshot query materialization failed.");
+      }
+    }
+    return result;
+  }
+
+  private async materializeMarketQueryFromEnriched(
+    query: MarketCatalogMaterializedQuery,
+    enriched: readonly MarketCatalogMarket[],
+    detailKeysWritten: Set<string>
+  ): Promise<number | "skipped_empty_quote_ready" | "skipped_underfilled_quote_ready"> {
     const routeCoverage = query.routeCoverage ?? "all";
     const baseVisibleMarkets = enriched
       .filter((market) => !query.quoteReadyOnly || isQuoteReadyMarket(market))
@@ -300,16 +322,19 @@ export class MarketCatalogSnapshotMaterializer {
   ): Promise<boolean> {
     try {
       const existing = await this.deps.snapshotCache.get<{ count?: unknown; markets?: unknown }>(fullKey);
-      const existingCount = typeof existing?.count === "number"
-        ? existing.count
-        : Array.isArray(existing?.markets)
-          ? existing.markets.length
-          : 0;
+      const existingMarkets = Array.isArray(existing?.markets)
+        ? existing.markets.filter(isMarketCatalogMarket).filter(isQuoteReadyMarket)
+        : [];
+      const existingCount = existingMarkets.length;
       if (existingCount <= nextCount) {
         return false;
       }
-      if (existing && Array.isArray(existing.markets)) {
-        await this.ensureCompactSnapshotFromExisting(query, existing);
+      if (existing && existingMarkets.length > 0) {
+        await this.ensureCompactSnapshotFromExisting(query, {
+          ...existing,
+          count: existingMarkets.length,
+          markets: existingMarkets
+        });
       }
       return true;
     } catch {
@@ -367,6 +392,21 @@ const withOptionalCategory = <T extends { limit: number }>(
   category: string | undefined
 ): T & { category?: string | undefined } =>
   category ? { ...query, category } : query;
+
+const buildMaterializedQueries = (
+  limit: number,
+  category: string | undefined,
+  routeCoverages: readonly RouteCoverage[]
+): MarketCatalogMaterializedQuery[] => [
+  withOptionalCategory({ limit }, category),
+  withOptionalCategory({ limit, quoteReadyOnly: false as const }, category),
+  withOptionalCategory({ limit, quoteReadyOnly: false as const, routeCoverage: "all" as const }, category),
+  withOptionalCategory({ limit, quoteReadyOnly: true as const }, category),
+  withOptionalCategory({ limit, quoteReadyOnly: true as const, routeCoverage: "all" as const }, category),
+  ...routeCoverages
+    .filter((routeCoverage) => routeCoverage !== "all")
+    .map((routeCoverage) => withOptionalCategory({ limit, quoteReadyOnly: true as const, routeCoverage }, category))
+];
 
 export interface CompactMarketCatalogMarket {
   eventId?: string | undefined;

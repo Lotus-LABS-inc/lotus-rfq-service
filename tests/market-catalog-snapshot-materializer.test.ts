@@ -202,8 +202,8 @@ describe("MarketCatalogSnapshotMaterializer", () => {
     const result = await materializer.runOnce();
 
     expect(result).toMatchObject({ attempted: 10, written: 20, failed: 0 });
-    expect(listMarkets).toHaveBeenCalledWith({ limit: 80 });
-    expect(listMarkets).toHaveBeenCalledWith({ limit: 80, category: "Crypto" });
+    expect(listMarkets).toHaveBeenCalledWith({ limit: 320 });
+    expect(listMarkets).toHaveBeenCalledWith({ limit: 320, category: "Crypto" });
     const categoryKey = `markets:${stableQueryCacheKey({
       category: "Crypto",
       limit: 80,
@@ -270,8 +270,8 @@ describe("MarketCatalogSnapshotMaterializer", () => {
         { canonicalMarketIds: ["market-sports"] }
       ]
     });
-    expect(listMarkets).toHaveBeenCalledWith({ limit: 80, category: "Sports" });
-    expect(listMarkets).toHaveBeenCalledWith({ limit: 80 });
+    expect(listMarkets).toHaveBeenCalledWith({ limit: 320, category: "Sports" });
+    expect(listMarkets).toHaveBeenCalledWith({ limit: 320 });
   });
 
   it("recovers empty category quote-ready materialization from the global snapshot", async () => {
@@ -383,8 +383,23 @@ describe("MarketCatalogSnapshotMaterializer", () => {
       count: 2,
       materialized: true,
       markets: [
-        baseMarket,
-        { ...baseMarket, canonicalMarketIds: ["market-2"], canonicalEventId: "event-2", title: "Event 2" }
+        {
+          ...baseMarket,
+          quoteStatus: "live",
+          quoteReadyVenueCount: 2,
+          quoteReadyVenues: ["LIMITLESS", "POLYMARKET"],
+          lastQuoteAt: "2026-06-01T00:00:00.000Z"
+        },
+        {
+          ...baseMarket,
+          canonicalMarketIds: ["market-2"],
+          canonicalEventId: "event-2",
+          title: "Event 2",
+          quoteStatus: "live",
+          quoteReadyVenueCount: 2,
+          quoteReadyVenues: ["LIMITLESS", "POLYMARKET"],
+          lastQuoteAt: "2026-06-01T00:00:00.000Z"
+        }
       ]
     });
     const materializer = new MarketCatalogSnapshotMaterializer({
