@@ -29,9 +29,9 @@ export interface HotQuoteSnapshotServiceConfig {
 export type HotQuoteSnapshotSource = "memory" | "redis" | "db_last_good";
 
 const DEFAULT_CONFIG: HotQuoteSnapshotConfig = {
-  redisTtlMs: 15_000,
+  redisTtlMs: 120_000,
   staleAfterMs: 1_000,
-  activeMarketTtlMs: 60_000
+  activeMarketTtlMs: 180_000
 };
 
 const REDIS_KEY_PREFIX = "lotus:quote-snapshot:v1";
@@ -251,7 +251,7 @@ export class HotQuoteSnapshotService {
     venue: string;
     venueMarketId: string;
     venueOutcomeId?: string | undefined;
-  }, maxAgeMs: number = this.config.redisTtlMs): Promise<NormalizedVenueQuoteSnapshot | null> {
+  }, maxAgeMs: number = this.config.staleAfterMs): Promise<NormalizedVenueQuoteSnapshot | null> {
     if (!this.deps.dbFallback) {
       return null;
     }
