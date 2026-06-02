@@ -47,11 +47,11 @@ export interface MarketOrderbookRecorderRunResult {
 const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
   intervalMs: 10_000,
   marketBatchSize: 10,
-  activeMarketBatchSize: 80,
-  priorityMarketBatchSize: 4,
-  priorityVenues: ["OPINION"] as readonly string[],
-  maxSamplesPerTick: 80,
-  sampleConcurrency: 6,
+  activeMarketBatchSize: 160,
+  priorityMarketBatchSize: 48,
+  priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"] as readonly string[],
+  maxSamplesPerTick: 96,
+  sampleConcurrency: 8,
   maxTickDurationMs: 9_000,
   sampleTimeoutMs: 2_500,
   cleanupIntervalMs: 30 * 60_000,
@@ -183,7 +183,7 @@ export class MarketOrderbookRecorder {
         skippedCooldownSamples: 0,
         ...cleanup
       };
-      const scheduledSamples: Array<{
+      const candidateSamples: Array<{
         market: MarketCatalogMarket;
         sample: MarketOrderbookRecorderSample;
       }> = [];
@@ -202,13 +202,10 @@ export class MarketOrderbookRecorder {
           if (this.stopped) {
             break marketLoop;
           }
-          if (result.sampledOutcomes >= this.config.maxSamplesPerTick) {
-            break marketLoop;
-          }
           if (Date.now() - tickStartedAt >= maxTickDurationMs) {
             this.logger.warn({
               maxTickDurationMs,
-              sampledOutcomes: result.sampledOutcomes,
+              candidateOutcomes: candidateSamples.length,
               scannedMarkets: result.scannedMarkets
             }, "Market orderbook recorder tick stopped early because its time budget was exhausted.");
             break marketLoop;
@@ -221,10 +218,15 @@ export class MarketOrderbookRecorder {
             result.skippedCooldownSamples += 1;
             continue;
           }
-          result.sampledOutcomes += 1;
-          scheduledSamples.push({ market, sample });
+          candidateSamples.push({ market, sample });
         }
       }
+      const scheduledSamples = selectSamplesForTick(
+        candidateSamples,
+        this.config.maxSamplesPerTick,
+        this.config.priorityVenues ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityVenues
+      );
+      result.sampledOutcomes = scheduledSamples.length;
 
       let nextSampleIndex = 0;
       let timeBudgetLogged = false;
@@ -464,20 +466,77 @@ const withRecorderTimeout = async <T>(promise: Promise<T>, timeoutMs: number): P
   }
 };
 
-type MarketOrderbookRecorderSample = { canonicalMarketId: string; outcomeId: string };
+type MarketOrderbookRecorderSample = { canonicalMarketId: string; outcomeId: string; venueKeys: readonly string[] };
 
 const buildMarketSamples = (market: MarketCatalogMarket): MarketOrderbookRecorderSample[] => {
   const canonicalMarketIds = market.canonicalMarketIds.length > 0 ? market.canonicalMarketIds : [market.canonicalEventId];
   return canonicalMarketIds.flatMap((canonicalMarketId): MarketOrderbookRecorderSample[] => {
     const venueMarkets = market.venueMarkets.filter((venueMarket) => venueMarket.canonicalMarketId === canonicalMarketId);
+    const venueKeys = [...new Set(venueMarkets.map((venueMarket) => normalizeVenue(venueMarket.venue)))];
     const outcomeIds = [...new Map(
       venueMarkets
         .flatMap((venueMarket) => venueMarket.outcomes)
         .filter((outcome) => outcome.id.trim().length > 0)
         .map((outcome) => [outcome.label.trim().toLowerCase(), outcome.id.trim()] as const)
     ).values()];
-    return outcomeIds.map((outcomeId) => ({ canonicalMarketId, outcomeId }));
+    return outcomeIds.map((outcomeId) => ({ canonicalMarketId, outcomeId, venueKeys }));
   });
+};
+
+const selectSamplesForTick = <T extends {
+  sample: MarketOrderbookRecorderSample;
+}>(
+  candidates: readonly T[],
+  maxSamples: number,
+  priorityVenues: readonly string[]
+): T[] => {
+  const limit = Math.max(0, Math.floor(maxSamples));
+  if (limit <= 0 || candidates.length === 0) {
+    return [];
+  }
+  const normalizedPriorityVenues = [...new Set(priorityVenues.map(normalizeVenue))];
+  if (normalizedPriorityVenues.length === 0) {
+    return candidates.slice(0, limit);
+  }
+
+  const buckets = new Map<string, T[]>(
+    [...normalizedPriorityVenues, "__OTHER__"].map((venue) => [venue, []])
+  );
+  for (const candidate of candidates) {
+    const venueSet = new Set(candidate.sample.venueKeys.map(normalizeVenue));
+    const bucketKey = normalizedPriorityVenues.find((venue) => venueSet.has(venue)) ?? "__OTHER__";
+    buckets.get(bucketKey)!.push(candidate);
+  }
+
+  const selected: T[] = [];
+  const selectedKeys = new Set<string>();
+  while (selected.length < limit) {
+    let addedThisRound = false;
+    for (const venue of [...normalizedPriorityVenues, "__OTHER__"]) {
+      const bucket = buckets.get(venue);
+      if (!bucket || bucket.length === 0) {
+        continue;
+      }
+      while (bucket.length > 0) {
+        const candidate = bucket.shift()!;
+        const key = sampleCooldownKey(candidate.sample);
+        if (selectedKeys.has(key)) {
+          continue;
+        }
+        selected.push(candidate);
+        selectedKeys.add(key);
+        addedThisRound = true;
+        break;
+      }
+      if (selected.length >= limit) {
+        break;
+      }
+    }
+    if (!addedThisRound) {
+      break;
+    }
+  }
+  return selected;
 };
 
 const toSnapshotInput = (input: {

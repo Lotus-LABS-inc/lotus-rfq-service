@@ -18,11 +18,11 @@ describe("MarketOrderbookRecorder", () => {
     expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
       intervalMs: 10_000,
       marketBatchSize: 10,
-      activeMarketBatchSize: 80,
-      priorityMarketBatchSize: 4,
-      priorityVenues: ["OPINION"],
-      maxSamplesPerTick: 80,
-      sampleConcurrency: 6,
+      activeMarketBatchSize: 160,
+      priorityMarketBatchSize: 48,
+      priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
+      maxSamplesPerTick: 96,
+      sampleConcurrency: 8,
       maxTickDurationMs: 9_000,
       sampleTimeoutMs: 2_500,
       cleanupIntervalMs: 30 * 60_000
@@ -36,11 +36,11 @@ describe("MarketOrderbookRecorder", () => {
       expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
         intervalMs: 10_000,
         marketBatchSize: 10,
-        activeMarketBatchSize: 80,
-        priorityMarketBatchSize: 4,
-        priorityVenues: ["OPINION"],
-        maxSamplesPerTick: 80,
-        sampleConcurrency: 6,
+        activeMarketBatchSize: 160,
+        priorityMarketBatchSize: 48,
+        priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
+        maxSamplesPerTick: 96,
+        sampleConcurrency: 8,
         maxTickDurationMs: 9_000,
         sampleTimeoutMs: 2_500,
         cleanupIntervalMs: 30 * 60_000
@@ -98,6 +98,8 @@ describe("MarketOrderbookRecorder", () => {
       {
         intervalMs: 60_000,
         marketBatchSize: 10,
+        priorityMarketBatchSize: 0,
+        priorityVenues: [],
         maxSamplesPerTick: 40,
         cleanupIntervalMs: 0,
         retentionHours: 720,
@@ -295,7 +297,59 @@ describe("MarketOrderbookRecorder", () => {
     const result = await recorder.runOnce();
 
     expect(result.scannedMarkets).toBe(2);
-    expect(sampledMarketIds).toEqual(["market-opinion", "market-opinion", "market-1", "market-1"]);
+    expect(sampledMarketIds).toEqual(["market-opinion", "market-1", "market-opinion", "market-1"]);
+  });
+
+  it("round-robins capped samples across priority venues so one venue cannot starve the others", async () => {
+    const sampled: string[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [
+          venueMarketFixture("POLYMARKET", "market-poly-1"),
+          venueMarketFixture("POLYMARKET", "market-poly-2"),
+          venueMarketFixture("LIMITLESS", "market-limitless"),
+          venueMarketFixture("OPINION", "market-opinion")
+        ]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalMarketId, canonicalOutcomeId }) => {
+          sampled.push(`${canonicalMarketId}:${canonicalOutcomeId}`);
+          return {
+            snapshots: [],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 4,
+        priorityMarketBatchSize: 0,
+        priorityVenues: ["OPINION", "LIMITLESS", "POLYMARKET"],
+        maxSamplesPerTick: 3,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.sampledOutcomes).toBe(3);
+    expect(sampled).toEqual([
+      "market-opinion:YES",
+      "market-limitless:YES",
+      "market-poly-1:YES"
+    ]);
   });
 
   it("samples active UI markets before the normal catalog sweep", async () => {
@@ -831,6 +885,23 @@ const opinionMarketFixture = (): MarketCatalogMarket => ({
     ]
   }))
 });
+
+const venueMarketFixture = (venue: string, canonicalMarketId: string): MarketCatalogMarket => {
+  const base = marketFixture("OPEN");
+  return {
+    ...base,
+    canonicalEventId: `event-${canonicalMarketId}`,
+    canonicalMarketIds: [canonicalMarketId],
+    venues: [venue],
+    venueMarkets: base.venueMarkets.map((venueMarket) => ({
+      ...venueMarket,
+      canonicalMarketId,
+      venue,
+      venueMarketId: `${venue.toLowerCase()}-${canonicalMarketId}`,
+      venueMarketProfileId: `profile-${venue.toLowerCase()}-${canonicalMarketId}`
+    }))
+  };
+};
 
 const waitUntil = async (predicate: () => boolean): Promise<void> => {
   for (let attempt = 0; attempt < 50; attempt += 1) {
