@@ -152,12 +152,20 @@ interface StoredChartPoint {
   venues: Record<string, string | null>;
 }
 
+interface BatchQuoteCacheEntry {
+  expiresAt: number;
+  staleUntil: number;
+  item?: MarketBatchQuoteItem;
+  promise?: Promise<MarketBatchQuoteItem>;
+}
+
 const MAX_STORED_POINTS = 20_000;
 const MAX_HISTORY_MS = 31 * 24 * 60 * 60 * 1000;
 const ORDERBOOK_CACHE_MS = 3_000;
 const ORDERBOOK_LIVE_TIMEOUT_MS = 250;
 const ORDERBOOK_DISPLAY_SNAPSHOT_MAX_AGE_MS = 120_000;
 const BATCH_QUOTE_CACHE_MS = 3_000;
+const BATCH_QUOTE_STALE_CACHE_MS = 60_000;
 const BATCH_QUOTE_LIVE_TIMEOUT_MS = 150;
 const BATCH_QUOTE_DISPLAY_SNAPSHOT_MAX_AGE_MS = 120_000;
 const CHART_CACHE_MS = 10_000;
@@ -169,7 +177,7 @@ export class LiveMarketDataViewService {
   private readonly chartPoints: StoredChartPoint[] = [];
   private readonly orderbookCache = new Map<string, { expiresAt: number; response?: MarketOrderbookResponse; promise?: Promise<MarketOrderbookResponse> }>();
   private readonly lastGoodOrderbooks = new Map<string, MarketOrderbookResponse>();
-  private readonly batchQuoteCache = new Map<string, { expiresAt: number; item?: MarketBatchQuoteItem; promise?: Promise<MarketBatchQuoteItem> }>();
+  private readonly batchQuoteCache = new Map<string, BatchQuoteCacheEntry>();
   private readonly chartCache = new Map<string, { expiresAt: number; response: MarketChartResponse }>();
   private readonly lastGoodBatchQuotes = new Map<string, MarketBatchQuoteItem>();
   private readonly now: () => Date;
@@ -346,6 +354,10 @@ export class LiveMarketDataViewService {
         if (cached.item) return cached.item;
         if (cached.promise) return cached.promise;
       }
+      if (cached?.item && cached.staleUntil > generatedAt.getTime()) {
+        this.refreshBatchQuoteInBackground(key, { item, side, quantity, generatedAt });
+        return staleBatchQuoteFromCachedItem(cached.item, generatedAt);
+      }
       const livePromise = this.loadBatchQuoteItem({ item, side, quantity, generatedAt });
       const promise = withTimeout(
         livePromise,
@@ -365,10 +377,14 @@ export class LiveMarketDataViewService {
           if (output.status === "live" || output.status === "partial") {
             this.lastGoodBatchQuotes.set(key, output);
           }
-          this.batchQuoteCache.set(key, { expiresAt: this.now().getTime() + BATCH_QUOTE_CACHE_MS, item: output });
+          this.cacheBatchQuoteItem(key, output, this.now());
         })
         .catch(() => undefined);
-      this.batchQuoteCache.set(key, { expiresAt: generatedAt.getTime() + BATCH_QUOTE_CACHE_MS, promise });
+      this.batchQuoteCache.set(key, {
+        expiresAt: generatedAt.getTime() + BATCH_QUOTE_CACHE_MS,
+        staleUntil: generatedAt.getTime() + BATCH_QUOTE_STALE_CACHE_MS,
+        promise
+      });
       const quote = await promise;
       const output = quote.status === "unavailable"
         ? this.staleBatchQuoteFromLastGood(key, quote, generatedAt) ?? quote
@@ -379,7 +395,7 @@ export class LiveMarketDataViewService {
       if (isDeferredBatchQuote(output)) {
         this.batchQuoteCache.delete(key);
       } else {
-        this.batchQuoteCache.set(key, { expiresAt: generatedAt.getTime() + BATCH_QUOTE_CACHE_MS, item: output });
+        this.cacheBatchQuoteItem(key, output, generatedAt);
       }
       return output;
     }));
@@ -387,6 +403,59 @@ export class LiveMarketDataViewService {
       generatedAt: generatedAt.toISOString(),
       quotes
     };
+  }
+
+  private refreshBatchQuoteInBackground(
+    key: string,
+    input: {
+      item: MarketBatchQuoteRequestItem;
+      side: "buy" | "sell";
+      quantity: number;
+      generatedAt: Date;
+    }
+  ): void {
+    const cached = this.batchQuoteCache.get(key);
+    if (cached?.promise) {
+      return;
+    }
+    const livePromise = this.loadBatchQuoteItem(input)
+      .then((quote) => {
+        const output = quote.status === "unavailable"
+          ? this.staleBatchQuoteFromLastGood(key, quote, this.now()) ?? quote
+          : quote;
+        if (output.status === "live" || output.status === "partial") {
+          this.lastGoodBatchQuotes.set(key, output);
+        }
+        if (!isDeferredBatchQuote(output)) {
+          this.cacheBatchQuoteItem(key, output, this.now());
+        }
+        return output;
+      })
+      .catch((error) => {
+        const current = this.batchQuoteCache.get(key);
+        if (current) {
+          this.batchQuoteCache.set(key, batchQuoteCacheEntryWithoutPromise(current));
+        }
+        throw error;
+      })
+      .finally(() => {
+        const current = this.batchQuoteCache.get(key);
+        if (current?.promise === livePromise) {
+          this.batchQuoteCache.set(key, batchQuoteCacheEntryWithoutPromise(current));
+        }
+      });
+    if (cached) {
+      this.batchQuoteCache.set(key, { ...cached, promise: livePromise });
+    }
+    void livePromise.catch(() => undefined);
+  }
+
+  private cacheBatchQuoteItem(key: string, item: MarketBatchQuoteItem, generatedAt: Date): void {
+    this.batchQuoteCache.set(key, {
+      expiresAt: generatedAt.getTime() + BATCH_QUOTE_CACHE_MS,
+      staleUntil: generatedAt.getTime() + BATCH_QUOTE_STALE_CACHE_MS,
+      item
+    });
   }
 
   private staleBatchQuoteFromLastGood(key: string, current: MarketBatchQuoteItem, generatedAt: Date): MarketBatchQuoteItem | null {
@@ -732,6 +801,35 @@ const isDeferredOrderbook = (orderbook: MarketOrderbookResponse): boolean =>
 const isDeferredBatchQuote = (quote: MarketBatchQuoteItem): boolean =>
   quote.status === "unavailable" &&
   quote.blockers.some((blocker) => blocker.venue === "LOTUS" && blocker.reason === "MARKET_BATCH_QUOTE_REFRESH_DEFERRED");
+
+const staleBatchQuoteFromCachedItem = (
+  quote: MarketBatchQuoteItem,
+  generatedAt: Date
+): MarketBatchQuoteItem => {
+  const blocker = {
+    venue: "LOTUS",
+    reason: "LAST_GOOD_QUOTE_USED",
+    detailsCode: quote.generatedAt
+  };
+  const blockers = quote.blockers.some((item) =>
+    item.venue === blocker.venue &&
+    item.reason === blocker.reason &&
+    item.detailsCode === blocker.detailsCode)
+    ? quote.blockers
+    : [...quote.blockers, blocker];
+  return {
+    ...quote,
+    generatedAt: generatedAt.toISOString(),
+    status: quote.status === "live" ? "stale" : quote.status,
+    blockers
+  };
+};
+
+const batchQuoteCacheEntryWithoutPromise = (entry: BatchQuoteCacheEntry): BatchQuoteCacheEntry => ({
+  expiresAt: entry.expiresAt,
+  staleUntil: entry.staleUntil,
+  ...(entry.item ? { item: entry.item } : {})
+});
 
 const chartCacheKey = (input: {
   marketId: string;
