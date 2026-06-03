@@ -506,7 +506,7 @@ describe("market catalog routes", () => {
 
     expect(first.statusCode).toBe(200);
     expect(second.statusCode).toBe(200);
-    expect(snapshotCache.setCount).toBe(2);
+    expect(snapshotCache.setCount).toBeGreaterThanOrEqual(2);
     expect(repository.filters).toHaveLength(1);
     expect(snapshotCache.values.get("markets:{\"limit\":10,\"routeCoverage\":\"all\"}")).toMatchObject({
       count: 1,

@@ -138,23 +138,23 @@ export const registerMarketCatalogRoutes = async (
     const payload = await getCachedMarketCatalogResponse(
       `markets:${stableQueryCacheKey(cacheQuery)}`,
       async () => {
-        const marketLimit = parsed.data.limit === undefined ? undefined : resolveMarketFetchLimit(parsed.data.limit, parsed.data);
+        const marketLimit = cacheQuery.limit === undefined ? undefined : resolveMarketFetchLimit(cacheQuery.limit, cacheQuery);
         const markets = await deps.marketCatalogRepository.listMarkets({
-          ...(parsed.data.category !== undefined ? { category: parsed.data.category } : {}),
-          ...(parsed.data.search !== undefined ? { search: parsed.data.search } : {}),
+          ...(cacheQuery.category !== undefined ? { category: cacheQuery.category } : {}),
+          ...(cacheQuery.search !== undefined ? { search: cacheQuery.search } : {}),
           ...(marketLimit !== undefined ? { limit: marketLimit } : {})
         });
         touchMarketCatalogActivity(markets, deps.marketActivityTracker, DEFAULT_MARKET_CATALOG_ACTIVITY_TOUCH_LIMIT);
         const enriched = await enrichMarketsWithQuoteReadiness(markets, deps.marketQuoteReadinessSource);
-        const routeCoverage = parsed.data.routeCoverage ?? "all";
+        const routeCoverage = cacheQuery.routeCoverage ?? "all";
         const visibleMarkets = enriched.markets
-          .filter((market) => !parsed.data.quoteReadyOnly || isQuoteReadyMarket(market))
+          .filter((market) => !cacheQuery.quoteReadyOnly || isQuoteReadyMarket(market))
           .filter((market) => routeCoverageMatches(market, routeCoverage))
-          .slice(0, parsed.data.limit ?? enriched.markets.length);
+          .slice(0, cacheQuery.limit ?? enriched.markets.length);
         return {
-          markets: formatMarketCatalogListMarkets(visibleMarkets, parsed.data.view),
+          markets: formatMarketCatalogListMarkets(visibleMarkets, cacheQuery.view),
           count: visibleMarkets.length,
-          ...(parsed.data.view === "compact" ? { view: "compact" } : {}),
+          ...(cacheQuery.view === "compact" ? { view: "compact" } : {}),
           ...(enriched.degraded ? {
             quoteReadinessDegraded: true,
             quoteReadinessReason: enriched.reason
@@ -741,6 +741,7 @@ const getSharedMarketCatalogResponse = async <T extends Record<string, unknown>>
   options: {
     sharedCache?: MarketCatalogSnapshotCache | undefined;
     sharedFallbacks?: readonly { key: string; limit: number }[] | undefined;
+    sharedWriteKeys?: readonly string[] | undefined;
   },
   cacheTtlMs = resolveMarketCatalogResponseCacheMs(process.env.MARKET_CATALOG_RESPONSE_CACHE_MS),
   staleCacheTtlMs = resolveMarketCatalogResponseStaleCacheMs(process.env.MARKET_CATALOG_RESPONSE_STALE_CACHE_MS)
@@ -766,6 +767,10 @@ const getSharedMarketCatalogResponse = async <T extends Record<string, unknown>>
     const best = pickBestMarketCatalogResponse(candidates);
     if (best) {
       cacheMarketCatalogResponse(key, best, cacheTtlMs, staleCacheTtlMs);
+      void setSharedMarketCatalogResponses(key, best, cacheTtlMs, {
+        sharedCache: options.sharedCache,
+        sharedWriteKeys: options.sharedWriteKeys
+      }).catch(() => undefined);
       return best;
     }
   } catch {
