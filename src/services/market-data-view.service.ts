@@ -323,8 +323,12 @@ export class LiveMarketDataViewService {
     const sourceBlockers = venueFilter
       ? report.blocked.filter((blocker) => blocker.venue.toUpperCase() === venueFilter)
       : report.blocked;
-    const blockers = [...sourceBlockers, ...staleVenueBlockers];
-    const status = resolveOrderbookStatus(venues, blockers);
+    const visibleSourceBlockers = venues.length > 0
+      ? sourceBlockers.filter((blocker) => !isLotusDeferredLegBlocker(blocker))
+      : sourceBlockers;
+    const hasSuppressedDeferredLeg = sourceBlockers.length !== visibleSourceBlockers.length;
+    const blockers = [...visibleSourceBlockers, ...staleVenueBlockers];
+    const status = resolveOrderbookStatus(venues, blockers, hasSuppressedDeferredLeg);
 
     this.recordChartPoint({
       marketId: input.marketId,
@@ -986,14 +990,15 @@ const snapshotStatus = (
 
 const resolveOrderbookStatus = (
   venues: readonly MarketOrderbookVenue[],
-  blockers: readonly VenueQuoteSnapshotBlocker[]
+  blockers: readonly VenueQuoteSnapshotBlocker[],
+  partialHint = false
 ): MarketOrderbookResponse["status"] => {
   const hasLive = venues.some((venue) => venue.snapshotStatus === "live");
   const hasStale = venues.some((venue) => venue.snapshotStatus === "stale");
   const hasBlocked = blockers.length > 0 || venues.some((venue) =>
     venue.snapshotStatus === "blocked" || venue.snapshotStatus === "resyncing" || venue.blockers.length > 0);
   if (hasLive) {
-    return hasBlocked || venues.some((venue) => venue.snapshotStatus !== "live") ? "partial" : "live";
+    return hasBlocked || partialHint || venues.some((venue) => venue.snapshotStatus !== "live") ? "partial" : "live";
   }
   if (hasStale) {
     return hasBlocked ? "partial" : "stale";
@@ -1003,6 +1008,10 @@ const resolveOrderbookStatus = (
   }
   return "unavailable";
 };
+
+const isLotusDeferredLegBlocker = (blocker: VenueQuoteSnapshotBlocker): boolean =>
+  blocker.venue.toUpperCase() === "LOTUS" &&
+  blocker.reason === "MARKET_ORDERBOOK_LEG_REFRESH_DEFERRED";
 
 const hotSnapshotSourceField = (
   metadata: Readonly<Record<string, unknown>> | undefined

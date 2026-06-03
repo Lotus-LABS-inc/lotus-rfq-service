@@ -91,7 +91,7 @@ describe("LiveMarketDataViewService", () => {
     });
   });
 
-  it("does not let a slow linked market leg hide a fast live orderbook leg", async () => {
+  it("does not let a slow linked market leg hide or visibly block a fast live orderbook leg", async () => {
     const now = new Date("2026-05-10T12:00:00.000Z");
     const service = new LiveMarketDataViewService({
       getQuoteSnapshotReport: async (input) => {
@@ -132,11 +132,7 @@ describe("LiveMarketDataViewService", () => {
       status: "partial",
       bestAsk: "0.63",
       venues: [expect.objectContaining({ venue: "POLYMARKET", snapshotStatus: "live" })],
-      blockers: [expect.objectContaining({
-        venue: "LOTUS",
-        reason: "MARKET_ORDERBOOK_LEG_REFRESH_DEFERRED",
-        detailsCode: "market-slow"
-      })]
+      blockers: []
     });
   });
 
