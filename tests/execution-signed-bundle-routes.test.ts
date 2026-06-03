@@ -29,6 +29,49 @@ describe("execution signed bundle routes", () => {
       return this.rows.get(this.key(input.userId, input.orderId)) ?? null;
     }
 
+    public async findActiveIntentOrder(input: {
+      userId: string;
+      side: ExecutionOrderRecord["side"];
+      marketId: string;
+      outcomeId: string;
+      amount: string;
+      venuePreference: ExecutionOrderRecord["venuePreference"];
+      orderPolicy: ExecutionOrderRecord["orderPolicy"];
+      slippageToleranceBps: number;
+    }): Promise<ExecutionOrderRecord | null> {
+      const activeStates = new Set<ExecutionOrderRecord["state"]>([
+        "READY_TO_PLACE",
+        "NEEDS_SIGNATURE",
+        "NEEDS_VENUE_SETUP",
+        "WAITING_FOR_VENUE_READY",
+        "SUBMITTING",
+        "SUBMITTED"
+      ]);
+      const priority = new Map<ExecutionOrderRecord["state"], number>([
+        ["SUBMITTING", 1],
+        ["SUBMITTED", 2],
+        ["NEEDS_SIGNATURE", 3],
+        ["READY_TO_PLACE", 4]
+      ]);
+      const matches = [...this.rows.values()].filter((order) =>
+        order.userId === input.userId &&
+        order.side === input.side &&
+        order.marketId === input.marketId &&
+        order.outcomeId === input.outcomeId &&
+        Number(order.amount) === Number(input.amount) &&
+        order.venuePreference === input.venuePreference &&
+        order.orderPolicy === input.orderPolicy &&
+        order.slippageToleranceBps === input.slippageToleranceBps &&
+        activeStates.has(order.state) &&
+        (order.state === "SUBMITTING" || order.state === "SUBMITTED" || !order.expiresAt || Date.parse(order.expiresAt) > Date.now())
+      );
+      matches.sort((left, right) =>
+        (priority.get(left.state) ?? 5) - (priority.get(right.state) ?? 5) ||
+        Date.parse(right.updatedAt) - Date.parse(left.updatedAt)
+      );
+      return matches[0] ?? null;
+    }
+
     public async updateOrder(input: {
       userId: string;
       orderId: string;
@@ -713,6 +756,82 @@ describe("execution signed bundle routes", () => {
       status: "SUBMITTED",
       dryRun: false,
       submittedLegs: [{ legIndex: 0, venue: "POLYMARKET", status: "SUBMITTED", venueOrderId: "poly-order" }]
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+
+  it("reuses a same-intent pending order instead of creating a second preview", async () => {
+    const quote = buyQuote("LIMITLESS", false);
+    let resolveSubmit: ((value: unknown) => void) | undefined;
+    const quoteRoute = vi.fn(async () => ({ quote, rejectedCandidates: [], internalCandidateCount: 1 }));
+    const submit = vi.fn(() => new Promise((resolve) => {
+      resolveSubmit = resolve;
+    }));
+    const service = new ExecutionOrderOrchestratorV1(
+      new MemoryExecutionOrderRepository(),
+      {
+        quote: quoteRoute,
+        getQuote: vi.fn(async () => quote)
+      } as never,
+      { prepareExit: vi.fn() } as never,
+      {
+        getLiveReadiness: vi.fn(async () => ({
+          quoteId: quote.quoteId,
+          generatedAt: new Date().toISOString(),
+          expiresAt: quote.expiresAt,
+          status: "fresh",
+          blockers: [],
+          venues: [{
+            venue: "LIMITLESS",
+            status: "fresh",
+            checkedAt: new Date().toISOString(),
+            blockers: [],
+            account: { walletAddress: "0xwallet", venueAccountAddress: "0xvenue", ownerAddress: "0xwallet" },
+            collateral: { requiredNotional: "1", balance: "10", allowance: "10", tokenSymbol: "USDC", tokenAddress: null, spenderAddress: null, chainId: 8453 }
+          }]
+        })),
+        prepare: vi.fn(),
+        submit,
+        getExecutionStatus: vi.fn(async () => null)
+      } as never,
+      {
+        getCandidates: vi.fn(async () => ({
+          generatedAt: new Date().toISOString(),
+          marketId: quote.marketId,
+          outcomeId: quote.outcomeId,
+          amount: "1",
+          candidates: [{
+            venue: "LIMITLESS",
+            venueMarketId: "limitless-market",
+            venueOutcomeId: "YES",
+            price: 0.5,
+            availableSize: "10",
+            requiresUserSignature: false
+          }],
+          blocked: []
+        }))
+      }
+    );
+
+    const request = { userId: "user-1", marketId: "market-1", outcomeId: "YES", side: "buy" as const, amount: "1", venuePreference: "LIMITLESS" as const };
+    const preview = await service.preview(request);
+    const placed = await service.place({ userId: "user-1", orderId: preview.orderId });
+    const repeatedPreview = await service.preview(request);
+
+    expect(placed).toMatchObject({ state: "SUBMITTING" });
+    expect(repeatedPreview).toMatchObject({
+      orderId: preview.orderId,
+      state: "SUBMITTING",
+      primaryAction: { type: "NONE" }
+    });
+    expect(quoteRoute).toHaveBeenCalledTimes(1);
+    expect(submit).toHaveBeenCalledTimes(1);
+
+    resolveSubmit?.({
+      executionId: quote.quoteId,
+      status: "SUBMITTED",
+      dryRun: false,
+      submittedLegs: [{ legIndex: 0, venue: "LIMITLESS", status: "SUBMITTED", venueOrderId: "limitless-order" }]
     });
     await new Promise((resolve) => setImmediate(resolve));
   });

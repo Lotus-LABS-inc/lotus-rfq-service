@@ -90,6 +90,16 @@ export interface ExecutionOrderRecord {
 export interface ExecutionOrderRepository {
   saveOrder(order: ExecutionOrderRecord): Promise<void>;
   findOrder(input: { userId: string; orderId: string }): Promise<ExecutionOrderRecord | null>;
+  findActiveIntentOrder(input: {
+    userId: string;
+    side: TradeSide;
+    marketId: string;
+    outcomeId: string;
+    amount: string;
+    venuePreference: ExecutionOrderVenuePreference;
+    orderPolicy: ExecutionOrderPolicy;
+    slippageToleranceBps: number;
+  }): Promise<ExecutionOrderRecord | null>;
   updateOrder(input: {
     userId: string;
     orderId: string;
@@ -190,6 +200,10 @@ export class ExecutionOrderOrchestratorV1 {
 
   public async preview(input: ExecutionOrderPreviewInput): Promise<ExecutionOrderResponse> {
     const intentKey = executionOrderIntentKey(input);
+    const active = await this.loadActiveIntent(input);
+    if (active) {
+      return active;
+    }
     const cached = await this.loadCachedIntent(input.userId, intentKey);
     if (cached) {
       return cached;
@@ -697,6 +711,27 @@ export class ExecutionOrderOrchestratorV1 {
     return this.executableRouteService.getQuote(order.userId, order.quoteId);
   }
 
+  private async loadActiveIntent(input: ExecutionOrderPreviewInput): Promise<ExecutionOrderResponse | null> {
+    const order = await this.repository.findActiveIntentOrder({
+      userId: input.userId,
+      side: input.side,
+      marketId: input.marketId,
+      outcomeId: input.outcomeId,
+      amount: normalizeAmountKey(input.amount),
+      venuePreference: input.venuePreference,
+      orderPolicy: input.orderPolicy ?? DEFAULT_EXECUTION_ORDER_POLICY,
+      slippageToleranceBps: normalizeSlippageToleranceBps(input.slippageToleranceBps)
+    });
+    if (!order) {
+      return null;
+    }
+    const quote = await this.loadFreshQuote(order);
+    if (order.quoteId && !quote && !isActiveSubmitState(order.state)) {
+      return null;
+    }
+    return toOrderResponse(order, quote, null);
+  }
+
   private async loadCachedIntent(userId: string, intentKey: string): Promise<ExecutionOrderResponse | null> {
     const cached = this.previewIntentCache.get(intentKey);
     if (!cached || cached.expiresAt <= Date.now()) {
@@ -1078,6 +1113,9 @@ const stateFromSignedStatus = (status: SignedTradeExecutionStatus["status"]): Ex
 
 const isTerminalOrPendingSubmit = (state: ExecutionOrderState): boolean =>
   ["SUBMITTING", "SUBMITTED", "FILLED", "FAILED", "EXPIRED"].includes(state);
+
+const isActiveSubmitState = (state: ExecutionOrderState): boolean =>
+  state === "SUBMITTING" || state === "SUBMITTED";
 
 const hasPolymarketLeg = (quote: ExecutableTradeQuote): boolean =>
   quote.legs.some((leg) => leg.venue.toUpperCase() === "POLYMARKET");

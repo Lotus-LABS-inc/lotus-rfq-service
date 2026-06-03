@@ -637,6 +637,57 @@ export class PgExecutionOrderRepository implements ExecutionOrderRepository {
     return result.rows[0] ? mapExecutionOrderRow(result.rows[0]) : null;
   }
 
+  public async findActiveIntentOrder(input: {
+    userId: string;
+    side: TradeSide;
+    marketId: string;
+    outcomeId: string;
+    amount: string;
+    venuePreference: ExecutionOrderRecord["venuePreference"];
+    orderPolicy: ExecutionOrderRecord["orderPolicy"];
+    slippageToleranceBps: number;
+  }): Promise<ExecutionOrderRecord | null> {
+    const result = await this.pool.query<ExecutionOrderRow>(
+      `SELECT *
+       FROM execution_orders_v1
+       WHERE user_id = $1
+         AND side = $2
+         AND market_id = $3
+         AND outcome_id = $4
+         AND amount = $5::numeric
+         AND venue_preference = $6
+         AND order_policy = $7
+         AND slippage_tolerance_bps = $8
+         AND state IN ('READY_TO_PLACE', 'NEEDS_SIGNATURE', 'NEEDS_VENUE_SETUP', 'WAITING_FOR_VENUE_READY', 'SUBMITTING', 'SUBMITTED')
+         AND (
+           state IN ('SUBMITTING', 'SUBMITTED')
+           OR expires_at IS NULL
+           OR expires_at > now()
+         )
+       ORDER BY
+         CASE state
+           WHEN 'SUBMITTING' THEN 1
+           WHEN 'SUBMITTED' THEN 2
+           WHEN 'NEEDS_SIGNATURE' THEN 3
+           WHEN 'READY_TO_PLACE' THEN 4
+           ELSE 5
+         END,
+         updated_at DESC
+       LIMIT 1`,
+      [
+        input.userId,
+        input.side,
+        input.marketId,
+        input.outcomeId,
+        input.amount,
+        input.venuePreference,
+        input.orderPolicy,
+        input.slippageToleranceBps
+      ]
+    );
+    return result.rows[0] ? mapExecutionOrderRow(result.rows[0]) : null;
+  }
+
   public async updateOrder(input: {
     userId: string;
     orderId: string;
