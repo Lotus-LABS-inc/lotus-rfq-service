@@ -426,7 +426,7 @@ describe("LiveMarketDataViewService", () => {
   });
 
   it("does not expose all-stale orderbook snapshots as tradable depth", async () => {
-    const now = new Date("2026-05-10T12:00:20.000Z");
+    const now = new Date("2026-05-10T12:00:25.000Z");
     const staleAt = new Date("2026-05-10T12:00:00.000Z");
     const service = new LiveMarketDataViewService({
       getQuoteSnapshotReport: async () => ({
