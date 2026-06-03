@@ -675,10 +675,7 @@ export class SharedCoreVenueQuoteMappingResolver implements VenueQuoteMappingRes
         rowsByRequestedId.get(input.canonicalMarketId) ?? [],
         input.canonicalOutcomeId
       );
-      this.readinessCache.set(mappingReadinessCacheKey(input.canonicalMarketId, input.canonicalOutcomeId), {
-        expiresAtMs,
-        value
-      });
+      this.setReadinessCacheValue(input.canonicalMarketId, input.canonicalOutcomeId, expiresAtMs, value);
     }
   }
 
@@ -694,7 +691,63 @@ export class SharedCoreVenueQuoteMappingResolver implements VenueQuoteMappingRes
     limit: number;
   }): Promise<readonly SharedCoreQuoteReadinessMarket[]> {
     const rows = await this.loader.listApprovedVenueMappings(input);
+    this.primeReadinessCacheFromApprovedRows(rows);
     return normalizeSharedCoreReadinessMarkets(rows);
+  }
+
+  private setReadinessCacheValue(
+    canonicalMarketId: string,
+    canonicalOutcomeId: string | undefined,
+    expiresAtMs: number,
+    value: readonly VenueQuoteMappingReadiness[]
+  ): void {
+    this.readinessCache.set(mappingReadinessCacheKey(canonicalMarketId, canonicalOutcomeId), {
+      expiresAtMs,
+      value
+    });
+  }
+
+  private primeReadinessCacheFromApprovedRows(rows: readonly SharedCoreVenueQuoteMappingRow[]): void {
+    if (rows.length === 0) {
+      return;
+    }
+
+    const nowMs = (this.options.now ?? (() => new Date()))().getTime();
+    const expiresAtMs = nowMs + resolveMappingReadinessCacheTtlMs(this.options.cacheTtlMs);
+    const rowsByMarketId = new Map<string, SharedCoreVenueQuoteMappingRow[]>();
+
+    for (const row of rows) {
+      const rowMarketIds = new Set([
+        firstString(row.canonical_market_id),
+        firstString(row.requested_canonical_market_id)
+      ]);
+      for (const marketId of rowMarketIds) {
+        if (!marketId) {
+          continue;
+        }
+        const bucket = rowsByMarketId.get(marketId) ?? [];
+        bucket.push(row);
+        rowsByMarketId.set(marketId, bucket);
+      }
+    }
+
+    for (const [canonicalMarketId, marketRows] of rowsByMarketId.entries()) {
+      const outcomes = readinessOutcomeAliasesFromRows(marketRows);
+      this.setReadinessCacheValue(
+        canonicalMarketId,
+        undefined,
+        expiresAtMs,
+        normalizeSharedCoreMappingReadiness(marketRows)
+      );
+      for (const canonicalOutcomeId of outcomes) {
+        this.setReadinessCacheValue(
+          canonicalMarketId,
+          canonicalOutcomeId,
+          expiresAtMs,
+          normalizeSharedCoreMappingReadiness(marketRows, canonicalOutcomeId)
+        );
+      }
+    }
   }
 }
 
@@ -876,6 +929,61 @@ const normalizeSharedCoreMappingReadiness = (
       blockers
     }];
   });
+
+const readinessOutcomeAliasesFromRows = (rows: readonly SharedCoreVenueQuoteMappingRow[]): readonly string[] => {
+  const aliases = new Set(["YES", "NO", "yes", "no"]);
+  for (const row of rows) {
+    const normalizedPayload = asRecord(row.normalized_payload);
+    const rawPayload = asRecord(row.raw_source_payload);
+    for (const value of [
+      normalizedPayload.quoteOutcomeTokenIds,
+      normalizedPayload.quote_outcome_token_ids,
+      normalizedPayload.outcomes,
+      normalizedPayload.tokens,
+      rawPayload.quoteOutcomeTokenIds,
+      rawPayload.quote_outcome_token_ids,
+      rawPayload.outcomes,
+      rawPayload.tokens
+    ]) {
+      collectReadinessOutcomeAliases(aliases, value);
+    }
+  }
+  return [...aliases];
+};
+
+const collectReadinessOutcomeAliases = (aliases: Set<string>, value: unknown): void => {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const record = asRecord(item);
+      for (const alias of [
+        firstString(record.id),
+        firstString(record.label),
+        firstString(record.name),
+        firstString(record.outcome),
+        firstString(record.outcomeId),
+        firstString(record.outcome_id)
+      ]) {
+        addReadinessOutcomeAlias(aliases, alias);
+      }
+    }
+    return;
+  }
+
+  const record = asRecord(value);
+  for (const alias of Object.keys(record)) {
+    addReadinessOutcomeAlias(aliases, alias);
+  }
+};
+
+const addReadinessOutcomeAlias = (aliases: Set<string>, value: string | null): void => {
+  const trimmed = value?.trim();
+  if (!trimmed || trimmed.length > 128) {
+    return;
+  }
+  aliases.add(trimmed);
+  aliases.add(trimmed.toUpperCase().replace(/\s+/g, "_"));
+  aliases.add(trimmed.toLowerCase().replace(/\s+/g, "_"));
+};
 
 const normalizeSharedCoreReadinessMarkets = (rows: readonly SharedCoreVenueQuoteMappingRow[]): readonly SharedCoreQuoteReadinessMarket[] => {
   const byEvent = new Map<string, {
