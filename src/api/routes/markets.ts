@@ -324,13 +324,7 @@ export const registerMarketCatalogRoutes = async (
         message: "Market was not found."
       });
     }
-    const activeCanonicalMarketId = marketResult.ok && marketResult.market?.canonicalMarketIds[0]
-      ? marketResult.market.canonicalMarketIds[0]
-      : marketId;
-    deps.marketActivityTracker?.touch({
-      canonicalMarketId: activeCanonicalMarketId,
-      ...(parsed.data.outcomeId ? { canonicalOutcomeId: parsed.data.outcomeId } : {})
-    });
+    touchOrderbookMarketActivity(marketId, marketResult, parsed.data.outcomeId, deps.marketActivityTracker);
     const response = await deps.marketDataViewService.getOrderbook({
       marketId,
       ...(parsed.data.outcomeId ? { outcomeId: parsed.data.outcomeId } : {}),
@@ -408,6 +402,29 @@ const touchMarketCatalogActivity = (
       continue;
     }
     tracker.touch({ canonicalMarketId });
+  }
+};
+
+const touchOrderbookMarketActivity = (
+  marketId: string,
+  marketResult: Awaited<ReturnType<typeof resolveCachedCatalogMarketForChart>>,
+  outcomeId: string | undefined,
+  tracker: MarketCatalogRouteDeps["marketActivityTracker"]
+): void => {
+  if (!tracker) {
+    return;
+  }
+  const canonicalMarketIds = marketResult.ok && marketResult.market
+    ? marketResult.market.canonicalMarketIds
+    : [marketId];
+  for (const canonicalMarketId of new Set(canonicalMarketIds)) {
+    if (canonicalMarketId.trim().length === 0) {
+      continue;
+    }
+    tracker.touch({
+      canonicalMarketId,
+      ...(outcomeId ? { canonicalOutcomeId: outcomeId } : {})
+    });
   }
 };
 

@@ -1008,8 +1008,18 @@ describe("market catalog routes", () => {
   it("returns sanitized live orderbook and chart contracts", async () => {
     const app = Fastify({ logger: false });
     const touchedActivity: Array<{ canonicalMarketId: string; canonicalOutcomeId?: string | undefined }> = [];
+    const aggregateCanonicalMarketIds = [
+      market.canonicalMarketIds[0]!,
+      "NOMINEE|US_PRESIDENT|2028|REPUBLICAN:LIMITLESS"
+    ];
+    const aggregateRepository = new FakeMarketCatalogRepository();
+    vi.spyOn(aggregateRepository, "getMarket").mockImplementation(async (marketId) => (
+      marketId === market.canonicalEventId || aggregateCanonicalMarketIds.includes(marketId)
+        ? { ...market, canonicalMarketIds: aggregateCanonicalMarketIds }
+        : null
+    ));
     await registerMarketCatalogRoutes(app, {
-      marketCatalogRepository: new FakeMarketCatalogRepository(),
+      marketCatalogRepository: aggregateRepository,
       marketActivityTracker: {
         touch: (input) => {
           touchedActivity.push(input);
@@ -1144,6 +1154,10 @@ describe("market catalog routes", () => {
     expect(orderbook.body).not.toContain("raw_source_payload");
     expect(touchedActivity).toContainEqual({
       canonicalMarketId: market.canonicalMarketIds[0],
+      canonicalOutcomeId: "yes"
+    });
+    expect(touchedActivity).toContainEqual({
+      canonicalMarketId: "NOMINEE|US_PRESIDENT|2028|REPUBLICAN:LIMITLESS",
       canonicalOutcomeId: "yes"
     });
 
