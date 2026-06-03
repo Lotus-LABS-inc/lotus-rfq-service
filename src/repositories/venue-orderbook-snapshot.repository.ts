@@ -170,7 +170,22 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
          blockers = EXCLUDED.blockers,
          metadata_version = EXCLUDED.metadata_version,
          updated_at = now()
-       WHERE EXCLUDED.received_at >= venue_orderbook_latest_snapshots.received_at`,
+       WHERE EXCLUDED.received_at >= venue_orderbook_latest_snapshots.received_at
+         AND (
+           (
+             COALESCE(jsonb_array_length(EXCLUDED.blockers), 0) = 0
+             AND COALESCE(EXCLUDED.midpoint, EXCLUDED.best_bid, EXCLUDED.best_ask) IS NOT NULL
+           )
+           OR NOT (
+             COALESCE(jsonb_array_length(venue_orderbook_latest_snapshots.blockers), 0) = 0
+             AND COALESCE(
+               venue_orderbook_latest_snapshots.midpoint,
+               venue_orderbook_latest_snapshots.best_bid,
+               venue_orderbook_latest_snapshots.best_ask
+             ) IS NOT NULL
+           )
+           OR venue_orderbook_latest_snapshots.received_at < now() - ($21::int * interval '1 millisecond')
+         )`,
       [
         snapshot.canonicalEventId,
         snapshot.canonicalMarketId,
@@ -191,7 +206,8 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
         JSON.stringify(snapshot.bids),
         JSON.stringify(snapshot.asks),
         JSON.stringify([...new Set(snapshot.blockers)]),
-        snapshot.metadataVersion ?? "venue-orderbook-recorder-v1"
+        snapshot.metadataVersion ?? "venue-orderbook-recorder-v1",
+        DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS
       ]
     );
   }
