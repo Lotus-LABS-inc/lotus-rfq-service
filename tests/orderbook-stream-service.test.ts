@@ -978,6 +978,56 @@ describe("OrderbookStreamService", () => {
     expect(refresh).toHaveBeenCalledTimes(2);
   });
 
+  it("backs off a failed venue instead of rotating through every native book", async () => {
+    const connector = new FakeConnector("LIMITLESS");
+    const refresh = vi.fn(async () => {
+      throw new Error("provider 429");
+    });
+    let currentNow = now;
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [
+            { canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: currentNow },
+            { canonicalMarketId: "canonical-2", canonicalOutcomeId: "YES", lastSeenAt: currentNow }
+          ];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness(input) {
+          return [{
+            venue: "LIMITLESS",
+            approvedVenueMarketId: `${input.canonicalMarketId}-approved`,
+            venueMarketId: `${input.canonicalMarketId}-limitless-book`,
+            venueOutcomeId: "YES",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors: [connector],
+      restRefreshers: [{ venue: "LIMITLESS", refresh }],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => currentNow,
+      config: {
+        restRefreshIntervalMs: 1,
+        maxRestRefreshTargetsPerTick: 10,
+        maxRestRefreshTargetsPerVenuePerTick: 4
+      }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
+    currentNow = new Date(now.getTime() + 10_000);
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    currentNow = new Date(now.getTime() + 301_000);
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
   it("runs REST fallback as bounded sweeps instead of rotating through new targets every poll", async () => {
     const connector = new FakeConnector("PREDICT_FUN");
     const refresh = vi.fn(async (target: VenueOrderbookSubscriptionTarget) => ({

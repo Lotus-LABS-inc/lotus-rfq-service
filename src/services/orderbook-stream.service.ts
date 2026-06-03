@@ -121,6 +121,7 @@ export class OrderbookStreamService {
   private readonly activeSubscriptions = new Map<string, { target: VenueOrderbookSubscriptionTarget; lastDesiredAt: number }>();
   private readonly lastRestRefreshBySubscription = new Map<string, number>();
   private readonly restRefreshFailureCooldowns = new Map<string, number>();
+  private readonly restRefreshVenueFailureCooldowns = new Map<string, number>();
   private lastRestRefreshSweepAt = 0;
   private lastSummaryLogAt = 0;
   private timer: NodeJS.Timeout | null = null;
@@ -419,13 +420,19 @@ export class OrderbookStreamService {
 
   private isRestRefreshFailureCoolingDown(target: VenueOrderbookSubscriptionTarget, nowMs: number): boolean {
     const until = this.restRefreshFailureCooldowns.get(restRefreshKey(target));
-    return until !== undefined && until > nowMs;
+    const venueUntil = this.restRefreshVenueFailureCooldowns.get(normalizeVenue(target.venue));
+    return (until !== undefined && until > nowMs) || (venueUntil !== undefined && venueUntil > nowMs);
   }
 
   private markRestRefreshFailure(target: VenueOrderbookSubscriptionTarget, nowMs: number): void {
+    const cooldownMs = this.restRefreshFailureCooldownMsFor(target);
     this.restRefreshFailureCooldowns.set(
       restRefreshKey(target),
-      nowMs + this.restRefreshFailureCooldownMsFor(target)
+      nowMs + cooldownMs
+    );
+    this.restRefreshVenueFailureCooldowns.set(
+      normalizeVenue(target.venue),
+      nowMs + cooldownMs
     );
   }
 
