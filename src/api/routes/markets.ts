@@ -666,14 +666,14 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
     }
   }
   const cached = marketCatalogResponseCache.get(key);
-  if (cached && cached.expiresAtMs >= now) {
+  if (!preferSharedCache && cached && cached.expiresAtMs >= now) {
     const scrubbed = scrubMarketCatalogResponseForKey(key, cached.value as T);
     if (isCacheableMarketCatalogResponseForKey(key, scrubbed)) {
       return scrubbed;
     }
     marketCatalogResponseCache.delete(key);
   }
-  const staleCached = cached && cached.staleUntilMs >= now
+  const staleCached = !preferSharedCache && cached && cached.staleUntilMs >= now
     ? scrubMarketCatalogResponseForKey(key, cached.value as T)
     : null;
   const usableStaleCached = staleCached && isCacheableMarketCatalogResponseForKey(key, staleCached)
