@@ -364,9 +364,10 @@ export class MarketOrderbookRecorder {
           receivedAt: new Date()
         })
       ).filter((snapshot): snapshot is VenueOrderbookSnapshotInput => snapshot !== null);
+      const hasSnapshots = report.snapshots.length > 0;
       for (const blocker of report.blocked) {
         this.applyProviderCooldown(blocker.venue, blocker.reason);
-        if (isTransientQuoteReadBlocker(blocker.reason, blocker.detailsCode)) {
+        if (!hasSnapshots && isTransientQuoteReadBlocker(blocker.reason, blocker.detailsCode)) {
           this.applySampleCooldown(sample);
         }
       }

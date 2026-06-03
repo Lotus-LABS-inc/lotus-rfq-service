@@ -729,6 +729,69 @@ describe("MarketOrderbookRecorder", () => {
     expect(second.skippedCooldownSamples).toBe(2);
   });
 
+  it("does not cool down a whole sample when a transient venue timeout has another venue quote", async () => {
+    const inserted: VenueOrderbookSnapshotInput[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [multiVenueMarketFixture(["POLYMARKET", "LIMITLESS"])]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalOutcomeId }) => ({
+          snapshots: [{
+            venue: "POLYMARKET",
+            venueMarketId: "poly-1",
+            venueOutcomeId: canonicalOutcomeId ?? "YES",
+            source: "REST",
+            quoteQuality: "FULL_DEPTH_REST",
+            sourceTimestamp: new Date("2026-05-10T12:00:00.000Z"),
+            receivedAt: new Date("2026-05-10T12:00:01.000Z"),
+            bids: [{ price: "0.59", size: "10" }],
+            asks: [{ price: "0.61", size: "11" }],
+            blockers: [],
+            missingFactors: []
+          }],
+          blocked: [{
+            venue: "LIMITLESS",
+            reason: "QUOTE_PROVIDER_TIMEOUT",
+            venueMarketId: "limitless-1",
+            detailsCode: "LIMITLESS_quote_reader_timeout_after_1500ms."
+          }]
+        })
+      },
+      {
+        insertMany: async (snapshots) => {
+          inserted.push(...snapshots);
+          return snapshots.length;
+        },
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        maxSamplesPerTick: 40,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const first = await recorder.runOnce();
+    const second = await recorder.runOnce();
+
+    expect(first.sampledOutcomes).toBe(2);
+    expect(first.insertedSnapshots).toBe(2);
+    expect(second.sampledOutcomes).toBe(2);
+    expect(second.skippedCooldownSamples).toBe(0);
+    expect(second.insertedSnapshots).toBe(2);
+    expect(inserted).toHaveLength(4);
+  });
+
   it("records Opinion display snapshots as quote-ready when fee discovery is the only missing factor", async () => {
     const inserted: VenueOrderbookSnapshotInput[] = [];
     const recorder = new MarketOrderbookRecorder(
@@ -950,6 +1013,22 @@ const venueMarketFixture = (venue: string, canonicalMarketId: string): MarketCat
       venue,
       venueMarketId: `${venue.toLowerCase()}-${canonicalMarketId}`,
       venueMarketProfileId: `profile-${venue.toLowerCase()}-${canonicalMarketId}`
+    }))
+  };
+};
+
+const multiVenueMarketFixture = (venues: readonly string[]): MarketCatalogMarket => {
+  const base = marketFixture("OPEN");
+  return {
+    ...base,
+    venues: [...venues],
+    venueCount: venues.length,
+    venueMarketCount: venues.length,
+    venueMarkets: venues.map((venue, index) => ({
+      ...base.venueMarkets[0]!,
+      venue,
+      venueMarketId: `${venue.toLowerCase()}-${index + 1}`,
+      venueMarketProfileId: `profile-${venue.toLowerCase()}-${index + 1}`
     }))
   };
 };
