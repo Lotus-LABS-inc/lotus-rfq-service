@@ -1101,7 +1101,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       client: new OpinionClient({
         baseUrl: process.env.OPINION_OPENAPI_BASE_URL ?? process.env.OPINION_CLOB_BASE_URL ?? "https://openapi.opinion.trade/openapi",
         apiKey: process.env.OPINION_API_KEY ?? "",
-        requestTimeoutMs: parseOptionalNumber(process.env.OPINION_QUOTE_TIMEOUT_MS) ?? 8_000
+        requestTimeoutMs: parseOptionalNumber(process.env.OPINION_QUOTE_TIMEOUT_MS) ?? 1_500,
+        maxRetries: 0
       }),
       streamCache: opinionQuoteCache,
       topicRate: parseOptionalNumber(process.env.OPINION_QUOTE_TOPIC_RATE),
@@ -1116,9 +1117,12 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       streamCache: myriadQuoteCache
     })
   ], sharedCoreQuoteMappingResolver, () => new Date(), hotQuoteSnapshots, {
-    readerTimeoutMs: 2_000,
+    readerTimeoutMs: 1_500,
     perVenueReaderTimeoutMs: {
-      OPINION: 5_000
+      LIMITLESS: 1_500,
+      OPINION: 1_500,
+      POLYMARKET: 1_500,
+      PREDICT_FUN: 1_500
     }
   });
   const historicalMarketStateRepository = new HistoricalMarketStateRepository(dependencies.pgPool);
