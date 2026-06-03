@@ -53,7 +53,7 @@ export interface MarketOrderbookRecorderRunResult {
 }
 
 const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
-  intervalMs: 12_000,
+  intervalMs: 13_000,
   marketBatchSize: 16,
   activeMarketBatchSize: 250,
   activeMaxSamplesPerTick: 28,
@@ -63,8 +63,8 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
   shardIndex: 0,
   maxSamplesPerTick: 40,
   sampleConcurrency: 12,
-  maxTickDurationMs: 10_500,
-  sampleTimeoutMs: 2_500,
+  maxTickDurationMs: 11_500,
+  sampleTimeoutMs: 4_000,
   cleanupIntervalMs: 30 * 60_000,
   retentionHours: 720,
   levelsPerSide: 25,
