@@ -609,6 +609,9 @@ const compareMarketSnapshotQuality = (
 ): number => {
   const left = marketSnapshotQuality(leftMarkets);
   const right = marketSnapshotQuality(rightMarkets);
+  if (left.marketCount !== right.marketCount) {
+    return left.marketCount - right.marketCount;
+  }
   if (left.distinctVenueCount !== right.distinctVenueCount) {
     return left.distinctVenueCount - right.distinctVenueCount;
   }
@@ -618,7 +621,7 @@ const compareMarketSnapshotQuality = (
   if (left.totalReadyVenueMemberships !== right.totalReadyVenueMemberships) {
     return left.totalReadyVenueMemberships - right.totalReadyVenueMemberships;
   }
-  return left.marketCount - right.marketCount;
+  return 0;
 };
 
 const marketSnapshotQuality = (markets: readonly unknown[]): MarketSnapshotQuality => {

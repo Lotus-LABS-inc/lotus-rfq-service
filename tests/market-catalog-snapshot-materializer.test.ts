@@ -458,6 +458,65 @@ describe("MarketCatalogSnapshotMaterializer", () => {
     expect(JSON.stringify(snapshotCache.values.get(compactKey))).not.toContain("venueMarkets");
   });
 
+  it("does not replace a broader quote-ready snapshot with a smaller venue-diverse tick", async () => {
+    const snapshotCache = new FakeSnapshotCache();
+    const key = `markets:${stableQueryCacheKey({
+      limit: 80,
+      quoteReadyOnly: true
+    })}`;
+    await snapshotCache.set(key, {
+      count: 2,
+      materialized: true,
+      markets: [
+        {
+          ...baseMarket,
+          quoteStatus: "live",
+          quoteReadyVenueCount: 1,
+          quoteReadyVenues: ["POLYMARKET"],
+          lastQuoteAt: "2026-06-01T00:00:00.000Z"
+        },
+        {
+          ...baseMarket,
+          canonicalMarketIds: ["market-2"],
+          canonicalEventId: "event-2",
+          title: "Event 2",
+          quoteStatus: "live",
+          quoteReadyVenueCount: 1,
+          quoteReadyVenues: ["LIMITLESS"],
+          lastQuoteAt: "2026-06-01T00:00:00.000Z"
+        }
+      ]
+    });
+    const materializer = new MarketCatalogSnapshotMaterializer({
+      marketCatalogRepository: {
+        listMarkets: vi.fn(async () => [baseMarket])
+      },
+      marketQuoteReadinessSource: {
+        listLatestMarketQuoteReadiness: vi.fn(async () => [({
+          canonicalMarketId: "market-1",
+          quoteStatus: "live" as const,
+          quoteReadyVenueCount: 3,
+          quoteReadyVenues: ["LIMITLESS", "POLYMARKET", "PREDICT_FUN"],
+          quoteBlockers: [],
+          lastQuoteAt: "2026-06-01T00:00:00.000Z"
+        })])
+      },
+      snapshotCache,
+      logger: { info: vi.fn(), warn: vi.fn() },
+      config: { limits: [80], routeCoverages: ["all"], categories: [], intervalMs: 60_000 }
+    });
+
+    await materializer.runOnce();
+
+    expect(snapshotCache.values.get(key)).toMatchObject({
+      count: 2,
+      markets: [
+        { canonicalMarketIds: ["market-1"] },
+        { canonicalMarketIds: ["market-2"] }
+      ]
+    });
+  });
+
   it("recovers quote-ready materialization from a durable best snapshot after the exact key was already underfilled", async () => {
     const snapshotCache = new FakeSnapshotCache();
     const key = `markets:${stableQueryCacheKey({

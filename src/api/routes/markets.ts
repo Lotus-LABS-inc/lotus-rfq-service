@@ -792,7 +792,23 @@ const setSharedMarketCatalogResponses = async <T extends Record<string, unknown>
     return;
   }
   const keys = new Set([key, ...(options.sharedWriteKeys ?? [])]);
-  await Promise.all([...keys].map((candidateKey) => options.sharedCache?.set(candidateKey, value, ttlMs)));
+  await Promise.all([...keys].map(async (candidateKey) => {
+    const next = scrubMarketCatalogResponseForKey(candidateKey, value);
+    if (isQuoteReadyMarketCatalogCacheKey(candidateKey)) {
+      const existing = await options.sharedCache?.get<T>(candidateKey);
+      if (
+        existing &&
+        isCacheableMarketCatalogResponseForKey(candidateKey, existing) &&
+        compareMarketCatalogResponseScore(
+          marketCatalogResponseScore(scrubMarketCatalogResponseForKey(candidateKey, existing)),
+          marketCatalogResponseScore(next)
+        ) > 0
+      ) {
+        return;
+      }
+    }
+    await options.sharedCache?.set(candidateKey, next, ttlMs);
+  }));
 };
 
 const markMarketCatalogResponseFromStaleCache = <T extends Record<string, unknown>>(value: T): T => ({
