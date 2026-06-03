@@ -279,6 +279,11 @@ export class MarketOrderbookRecorder {
       let timeBudgetLogged = false;
       const workers = Array.from({ length: Math.min(sampleConcurrency, scheduledSamples.length) }, async () => {
         while (!this.stopped) {
+          const sampleIndex = nextSampleIndex;
+          const work = scheduledSamples[sampleIndex];
+          if (!work) {
+            return;
+          }
           if (!hasEnoughBudgetToStartSample(tickStartedAt, maxTickDurationMs, sampleTimeoutMs)) {
             if (!timeBudgetLogged) {
               timeBudgetLogged = true;
@@ -291,12 +296,7 @@ export class MarketOrderbookRecorder {
             }
             return;
           }
-          const sampleIndex = nextSampleIndex;
           nextSampleIndex += 1;
-          const work = scheduledSamples[sampleIndex];
-          if (!work) {
-            return;
-          }
           const sampleResult = await this.processSample(work.market, work.sample, sampleTimeoutMs);
           result.insertedSnapshots += sampleResult.insertedSnapshots;
           result.failedSamples += sampleResult.failedSamples;
