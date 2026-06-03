@@ -60,11 +60,11 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
   cleanupIntervalMs: 30 * 60_000,
   retentionHours: 720,
   levelsPerSide: 25,
-  quoteProviderCooldownMs: 30_000
+  quoteProviderCooldownMs: 15_000
 } as const;
 const RATE_LIMIT_COOLDOWN_MS = 5 * 60_000;
 const PROVIDER_AUTH_COOLDOWN_MS = 15 * 60_000;
-const SAMPLE_TIMEOUT_COOLDOWN_MS = 5 * 60_000;
+const SAMPLE_TIMEOUT_COOLDOWN_MS = 10_000;
 
 export const buildMarketOrderbookRecorderConfig = (): MarketOrderbookRecorderConfig => {
   // Worker-owned duty: do not add per-duty env flags such as
@@ -882,9 +882,6 @@ const sampleCooldownKey = (sample: { canonicalMarketId: string; outcomeId?: stri
   `${sample.canonicalMarketId}:${sample.outcomeId ?? ""}`;
 
 const providerCooldownMsForReason = (reason: string, baseCooldownMs: number): number => {
-  if (isTransientQuoteReadBlocker(reason)) {
-    return Math.max(baseCooldownMs, SAMPLE_TIMEOUT_COOLDOWN_MS);
-  }
   if (reason.includes("QUOTE_PROVIDER_HTTP_429")) {
     return Math.max(baseCooldownMs, RATE_LIMIT_COOLDOWN_MS);
   }
@@ -893,6 +890,9 @@ const providerCooldownMsForReason = (reason: string, baseCooldownMs: number): nu
   }
   if (reason.includes("QUOTE_PROVIDER_HTTP_503") || reason.includes("QUOTE_PROVIDER_HTTP_502")) {
     return Math.max(baseCooldownMs, baseCooldownMs * 2);
+  }
+  if (isTransientQuoteReadBlocker(reason)) {
+    return 0;
   }
   return 0;
 };
