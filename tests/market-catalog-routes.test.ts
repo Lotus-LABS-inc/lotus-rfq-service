@@ -679,6 +679,57 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
+  it("uses quote-ready snapshots as routeCoverage=single aliases", async () => {
+    const repository = new FakeMarketCatalogRepository();
+    const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    const liveMarket = {
+      ...market,
+      quoteStatus: "live" as const,
+      quoteReadyVenueCount: 1,
+      quoteReadyVenues: ["POLYMARKET"],
+      lastQuoteAt: "2026-05-21T23:41:15.000Z"
+    };
+    const secondLiveMarket = {
+      ...liveMarket,
+      canonicalEventId: "22222222-2222-5222-8222-222222222222",
+      eventId: "event:two",
+      canonicalMarketIds: ["market-two"]
+    };
+    snapshotCache.values.set("markets:{\"limit\":10,\"quoteReadyOnly\":true,\"routeCoverage\":\"all\"}", {
+      markets: [liveMarket, secondLiveMarket],
+      count: 2,
+      materialized: true
+    });
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketCatalogSnapshotCache: snapshotCache,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          throw new Error("readiness should not be called when shared snapshot alias is available");
+        }
+      }
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&routeCoverage=single&limit=10"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(repository.filters).toHaveLength(0);
+    expect(response.json()).toMatchObject({
+      count: 2,
+      materialized: true,
+      markets: [
+        { canonicalEventId: market.canonicalEventId },
+        { canonicalEventId: secondLiveMarket.canonicalEventId }
+      ]
+    });
+
+    await app.close();
+  });
+
   it("prefers fresh shared quote-ready snapshots over local in-memory catalog cache", async () => {
     const repository = new FakeMarketCatalogRepository();
     const snapshotCache = new FakeMarketCatalogSnapshotCache();
@@ -907,9 +958,13 @@ describe("market catalog routes", () => {
 
     expect(warm.statusCode).toBe(200);
     expect(degraded.statusCode).toBe(200);
-    expect(snapshotCache.setCount).toBe(2);
+    expect(snapshotCache.setCount).toBe(3);
     expect(repository.filters).toHaveLength(2);
     expect(snapshotCache.values.get("markets:{\"limit\":10,\"quoteReadyOnly\":true,\"routeCoverage\":\"all\"}")).toMatchObject({
+      count: 1,
+      markets: [{ quoteReadyVenueCount: 1 }]
+    });
+    expect(snapshotCache.values.get("markets:{\"limit\":10,\"quoteReadyOnly\":true,\"routeCoverage\":\"single\"}")).toMatchObject({
       count: 1,
       markets: [{ quoteReadyVenueCount: 1 }]
     });

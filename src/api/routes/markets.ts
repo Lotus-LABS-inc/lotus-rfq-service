@@ -908,6 +908,17 @@ const marketCatalogSnapshotWriteKeys = (
 const marketCatalogAllRouteAliases = (
   query: z.infer<typeof listQuerySchema>
 ): z.infer<typeof listQuerySchema>[] => {
+  if (
+    query.quoteReadyOnly === true
+    && (query.routeCoverage === undefined || query.routeCoverage === "all" || query.routeCoverage === "single")
+  ) {
+    const { routeCoverage: _routeCoverage, ...rest } = query;
+    return [
+      rest,
+      { ...rest, routeCoverage: "all" },
+      { ...rest, routeCoverage: "single" }
+    ];
+  }
   if (query.routeCoverage === undefined) {
     return [{ ...query, routeCoverage: "all" }];
   }

@@ -531,6 +531,17 @@ describe("MarketCatalogSnapshotMaterializer", () => {
     expect(snapshotCache.values.get(`markets:${stableQueryCacheKey({
       limit: 80,
       quoteReadyOnly: true,
+      routeCoverage: "single"
+    })}`)).toMatchObject({
+      count: 2,
+      markets: [
+        { canonicalMarketIds: ["market-1"] },
+        { canonicalMarketIds: ["market-2"] }
+      ]
+    });
+    expect(snapshotCache.values.get(`markets:${stableQueryCacheKey({
+      limit: 80,
+      quoteReadyOnly: true,
       routeCoverage: "all",
       view: "compact"
     })}`)).toMatchObject({
