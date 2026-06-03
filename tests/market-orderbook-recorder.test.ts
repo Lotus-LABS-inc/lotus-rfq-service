@@ -26,7 +26,7 @@ describe("MarketOrderbookRecorder", () => {
       maxSamplesPerTick: 32,
       sampleConcurrency: 10,
       maxTickDurationMs: 9_500,
-      sampleTimeoutMs: 2_500,
+      sampleTimeoutMs: 4_000,
       cleanupIntervalMs: 30 * 60_000
     });
   });
@@ -45,7 +45,7 @@ describe("MarketOrderbookRecorder", () => {
         maxSamplesPerTick: 32,
         sampleConcurrency: 10,
         maxTickDurationMs: 9_500,
-        sampleTimeoutMs: 2_500,
+        sampleTimeoutMs: 4_000,
         cleanupIntervalMs: 30 * 60_000
       });
       expect(buildMarketOrderbookRecorderConfig()).not.toHaveProperty("enabled");
