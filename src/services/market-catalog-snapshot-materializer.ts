@@ -1,5 +1,6 @@
 import type { MarketCatalogMarket, MarketCatalogRepository } from "../repositories/market-catalog.repository.js";
 import {
+  DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS,
   DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS,
   type MarketQuoteReadinessSnapshot
 } from "../repositories/venue-orderbook-snapshot.repository.js";
@@ -690,7 +691,7 @@ const hasRecentQuoteTimestamp = (value: unknown): boolean => {
   if (!Number.isFinite(timestampMs)) {
     return false;
   }
-  return Date.now() - timestampMs <= DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS;
+  return Date.now() - timestampMs <= DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS;
 };
 
 const marketIdentityKey = (market: MarketCatalogMarket): string =>

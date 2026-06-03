@@ -47,6 +47,7 @@ export interface MarketQuoteReadinessSnapshot {
 }
 
 export const DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS = 15_000;
+export const DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS = 30_000;
 
 export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSource {
   public constructor(private readonly pool: Pool) {}
