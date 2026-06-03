@@ -277,7 +277,7 @@ export class LiveMarketDataViewService {
     depth?: number | undefined;
     venue?: string | undefined;
   }, generatedAt: Date, depth: number, orderbookMarketIds: readonly string[]): Promise<MarketOrderbookResponse> {
-    const reports = await Promise.all(orderbookMarketIds.map((canonicalMarketId) =>
+    const loadReport = (canonicalMarketId: string): Promise<VenueQuoteSnapshotReport> =>
       this.quoteSource.getQuoteSnapshotReport({
         canonicalMarketId,
         ...(input.outcomeId ? { canonicalOutcomeId: input.outcomeId } : {}),
@@ -285,8 +285,16 @@ export class LiveMarketDataViewService {
         quantity: 1,
         readMode: "cached_display",
         displayMaxAgeMs: ORDERBOOK_DISPLAY_SNAPSHOT_MAX_AGE_MS
-      })
-    ));
+      });
+    const reports = orderbookMarketIds.length > 1
+      ? await Promise.all(orderbookMarketIds.map((canonicalMarketId) =>
+        withTimeout(
+          loadReport(canonicalMarketId),
+          this.orderbookLiveTimeoutMs,
+          orderbookLegDeferredReport(canonicalMarketId)
+        )
+      ))
+      : [await loadReport(orderbookMarketIds[0] ?? input.marketId)];
     const report = mergeVenueQuoteSnapshotReports(reports);
     const venueFilter = input.venue?.trim().toUpperCase();
     const snapshots = venueFilter
@@ -836,6 +844,15 @@ const mergeVenueQuoteSnapshotReports = (reports: readonly VenueQuoteSnapshotRepo
     blocked: [...blockedByKey.values()]
   };
 };
+
+const orderbookLegDeferredReport = (canonicalMarketId: string): VenueQuoteSnapshotReport => ({
+  snapshots: [],
+  blocked: [{
+    venue: "LOTUS",
+    reason: "MARKET_ORDERBOOK_LEG_REFRESH_DEFERRED",
+    detailsCode: canonicalMarketId
+  }]
+});
 
 const venueSnapshotIdentityKey = (snapshot: NormalizedVenueQuoteSnapshot): string =>
   `${snapshot.venue.toUpperCase()}\u0000${snapshot.venueMarketId}\u0000${snapshot.venueOutcomeId ?? ""}`;

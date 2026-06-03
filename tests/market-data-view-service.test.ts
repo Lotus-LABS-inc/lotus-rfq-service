@@ -91,6 +91,55 @@ describe("LiveMarketDataViewService", () => {
     });
   });
 
+  it("does not let a slow linked market leg hide a fast live orderbook leg", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    const service = new LiveMarketDataViewService({
+      getQuoteSnapshotReport: async (input) => {
+        if (input.canonicalMarketId === "market-slow") {
+          return await new Promise(() => undefined);
+        }
+        return {
+          snapshots: [{
+            venue: "POLYMARKET",
+            venueMarketId: "poly-fast",
+            venueOutcomeId: "yes",
+            source: "STREAM",
+            quoteQuality: "FULL_DEPTH_REST",
+            sourceTimestamp: now,
+            receivedAt: now,
+            bestBid: "0.61",
+            bestAsk: "0.63",
+            midpoint: "0.62",
+            spread: "0.02",
+            topOfBookSize: "100",
+            bids: [{ price: "0.61", size: "100" }],
+            asks: [{ price: "0.63", size: "90" }],
+            blockers: [],
+            missingFactors: []
+          }],
+          blocked: []
+        };
+      }
+    }, { now: () => now, orderbookLiveTimeoutMs: 50 });
+
+    const orderbook = await service.getOrderbook({
+      marketId: "event-fast",
+      canonicalMarketIds: ["market-fast", "market-slow"],
+      outcomeId: "yes"
+    });
+
+    expect(orderbook).toMatchObject({
+      status: "partial",
+      bestAsk: "0.63",
+      venues: [expect.objectContaining({ venue: "POLYMARKET", snapshotStatus: "live" })],
+      blockers: [expect.objectContaining({
+        venue: "LOTUS",
+        reason: "MARKET_ORDERBOOK_LEG_REFRESH_DEFERRED",
+        detailsCode: "market-slow"
+      })]
+    });
+  });
+
   it("uses cache-only quote reads for display batch quotes", async () => {
     const now = new Date("2026-05-10T12:00:00.000Z");
     const calls: unknown[] = [];
