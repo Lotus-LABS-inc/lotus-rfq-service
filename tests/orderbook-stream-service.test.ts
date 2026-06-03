@@ -660,6 +660,68 @@ describe("OrderbookStreamService", () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
+  it("bounds REST fallback refreshes per venue so one provider cannot starve the rest", async () => {
+    const connectors = [
+      new FakeConnector("POLYMARKET"),
+      new FakeConnector("LIMITLESS")
+    ];
+    const refresh = vi.fn(async (target: VenueOrderbookSubscriptionTarget) => ({
+      ...snapshot(target),
+      source: "REST" as const,
+      quoteQuality: "FULL_DEPTH_REST" as const
+    }));
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [
+            { canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: now },
+            { canonicalMarketId: "canonical-2", canonicalOutcomeId: "YES", lastSeenAt: now },
+            { canonicalMarketId: "canonical-3", canonicalOutcomeId: "YES", lastSeenAt: now }
+          ];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness(input) {
+          return [
+            {
+              venue: "POLYMARKET",
+              approvedVenueMarketId: `${input.canonicalMarketId}-poly`,
+              venueMarketId: `${input.canonicalMarketId}-poly`,
+              venueOutcomeId: "poly-token",
+              quoteReady: true,
+              blockers: []
+            },
+            {
+              venue: "LIMITLESS",
+              approvedVenueMarketId: `${input.canonicalMarketId}-limitless`,
+              venueMarketId: `${input.canonicalMarketId}-limitless`,
+              venueOutcomeId: "YES",
+              quoteReady: true,
+              blockers: []
+            }
+          ];
+        }
+      },
+      connectors,
+      restRefreshers: [
+        { venue: "POLYMARKET", refresh },
+        { venue: "LIMITLESS", refresh }
+      ],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now,
+      config: {
+        maxRestRefreshTargetsPerVenuePerTick: 1,
+        maxRestRefreshTargetsPerTick: 10
+      }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 2 });
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(refresh.mock.calls.map(([target]) => target.venue).sort()).toEqual(["LIMITLESS", "POLYMARKET"]);
+  });
+
   it("times out slow REST fallback refreshes without failing the stream tick", async () => {
     const connector = new FakeConnector("POLYMARKET");
     const service = new OrderbookStreamService({

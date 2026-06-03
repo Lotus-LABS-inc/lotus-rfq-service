@@ -1,12 +1,22 @@
 import { fileURLToPath } from "node:url";
 import { config as loadDotenvFile } from "dotenv";
 import Fastify from "fastify";
-import { QuoteSnapshotCache, SharedCoreVenueQuoteMappingResolver } from "./core/sor/quote-snapshot.js";
+import {
+  QuoteSnapshotCache,
+  SharedCoreVenueQuoteMappingResolver,
+  type VenueQuoteSnapshotReader
+} from "./core/sor/quote-snapshot.js";
 import { createPgPool, closePgPool } from "./db/postgres.js";
 import { connectRedis, createRedisClient, disconnectRedis } from "./db/redis.js";
+import { LimitlessProfileFeeReader } from "./integrations/limitless/limitless-fee-reader.js";
+import { LimitlessQuoteReader, LimitlessRestOrderbookClient } from "./integrations/limitless/limitless-quote-reader.js";
+import { OpinionClient, OpinionClientError } from "./integrations/opinion/opinion-client.js";
+import { OpinionQuoteReader } from "./integrations/opinion/opinion-quote-reader.js";
 import { PolymarketClobFeeReader } from "./integrations/polymarket/polymarket-fee-reader.js";
 import { PolymarketGammaClient } from "./integrations/polymarket/polymarket-gamma-client.js";
 import { PolymarketQuoteReader, PolymarketRestOrderbookClient } from "./integrations/polymarket/polymarket-quote-reader.js";
+import { PredictClient } from "./integrations/predict/predict-client.js";
+import { PredictQuoteReader } from "./integrations/predict/predict-quote-reader.js";
 import {
   LimitlessSdkOrderbookConnector,
   OpinionSdkOrderbookConnector,
@@ -86,7 +96,7 @@ export const runOrderbookStreamService = async (): Promise<OrderbookStreamRuntim
     liveOrderbooks,
     mappingResolver,
     connectors: buildConnectors(logger),
-    restRefreshers: buildRestRefreshers(),
+    restRefreshers: buildRestRefreshers(logger),
     publisher: redis,
     logger
   });
@@ -200,9 +210,11 @@ const buildConnectors = (logger: ReturnType<typeof createLogger>) => {
   return connectors;
 };
 
-const buildRestRefreshers = (): readonly VenueOrderbookRestRefresher[] => {
+const buildRestRefreshers = (logger: ReturnType<typeof createLogger>): readonly VenueOrderbookRestRefresher[] => {
   const polymarketClobHost = process.env.POLYMARKET_CLOB_HOST ?? process.env.POLY_CLOB_HOST ?? "https://clob.polymarket.com";
   const polymarketGammaBaseUrl = process.env.POLYMARKET_GAMMA_BASE_URL ?? "https://gamma-api.polymarket.com";
+  const limitlessBaseUrl = process.env.LIMITLESS_BASE_URL ?? "https://api.limitless.exchange";
+  const predictEnvironment = process.env.PREDICT_ENVIRONMENT === "testnet" ? "testnet" : "mainnet";
   const polymarketReader = new PolymarketQuoteReader({
     client: new PolymarketRestOrderbookClient({
       clobHost: polymarketClobHost
@@ -215,17 +227,127 @@ const buildRestRefreshers = (): readonly VenueOrderbookRestRefresher[] => {
       clobHost: polymarketClobHost
     })
   });
-  return [{
-    venue: polymarketReader.venue,
-    refresh: (target) => polymarketReader.getQuoteSnapshot({
-      canonicalMarketId: target.canonicalMarketId,
-      ...(target.canonicalOutcomeId ? { canonicalOutcomeId: target.canonicalOutcomeId } : {}),
-      venueMarketId: target.venueMarketId,
-      ...(target.venueOutcomeId ? { venueOutcomeId: target.venueOutcomeId } : {}),
-      side: "buy",
-      quantity: 1
+  const limitlessReader = new LimitlessQuoteReader({
+    client: new LimitlessRestOrderbookClient({
+      baseUrl: limitlessBaseUrl
+    }),
+    streamCache: new QuoteSnapshotCache(),
+    feeBps: parseOptionalNumber(process.env.LIMITLESS_QUOTE_FEE_BPS),
+    feeReader: new LimitlessProfileFeeReader({
+      baseUrl: limitlessBaseUrl,
+      apiKey: process.env.LIMITLESS_API_KEY,
+      hmacTokenId: process.env.LIMITLESS_PARTNER_ACCOUNT_HMAC_TOKEN_ID ?? process.env.LIMITLESS_WITHDRAWAL_ADAPTER_API_KEY,
+      hmacSecret: process.env.LIMITLESS_PARTNER_ACCOUNT_HMAC_SECRET ?? process.env.LIMITLESS_WITHDRAWAL_ADAPTER_HMAC_SECRET,
+      account: process.env.LIMITLESS_QUOTE_FEE_PROFILE_ACCOUNT ?? process.env.LIMITLESS_WITHDRAWAL_ADAPTER_PROFILE_WALLET_ADDRESS
     })
-  }];
+  });
+  const predictReader = new PredictQuoteReader({
+    client: new PredictClient({
+      environment: predictEnvironment,
+      ...(process.env.PREDICT_MAINNET_BASE_URL ? { baseUrl: process.env.PREDICT_MAINNET_BASE_URL } : {}),
+      ...(process.env.PREDICT_API_KEY ? { apiKey: process.env.PREDICT_API_KEY } : {}),
+      logger
+    }),
+    streamCache: new QuoteSnapshotCache(),
+    environment: predictEnvironment,
+    feeBps: parseOptionalNumber(process.env.PREDICT_QUOTE_FEE_BPS)
+  });
+  const refreshers: VenueOrderbookRestRefresher[] = [
+    toRestRefresher(polymarketReader),
+    toRestRefresher(limitlessReader),
+    toRestRefresher(predictReader)
+  ];
+  const opinionApiKeys = resolveOpinionOrderbookApiKeys(process.env);
+  if (opinionApiKeys.length > 0) {
+    const opinionReader = new OpinionQuoteReader({
+      client: createOpinionOrderbookClient({
+        baseUrl: process.env.OPINION_OPENAPI_BASE_URL ?? process.env.OPINION_CLOB_BASE_URL ?? "https://openapi.opinion.trade/openapi",
+        apiKeys: opinionApiKeys,
+        requestTimeoutMs: parseOptionalNumber(process.env.OPINION_QUOTE_TIMEOUT_MS) ?? 1_500,
+        logger
+      }),
+      streamCache: new QuoteSnapshotCache(),
+      topicRate: parseOptionalNumber(process.env.OPINION_QUOTE_TOPIC_RATE),
+      feeBps: parseOptionalNumber(process.env.OPINION_QUOTE_FEE_BPS)
+    });
+    refreshers.push(toRestRefresher(opinionReader));
+  } else {
+    logger.warn(
+      { venue: "OPINION", restRefresher: "disabled" },
+      "Opinion orderbook REST refresher disabled because no Opinion API key is configured."
+    );
+  }
+  return refreshers;
+};
+
+const toRestRefresher = (reader: VenueQuoteSnapshotReader): VenueOrderbookRestRefresher => ({
+  venue: reader.venue,
+  refresh: (target) => reader.getQuoteSnapshot({
+    canonicalMarketId: target.canonicalMarketId,
+    ...(target.canonicalOutcomeId ? { canonicalOutcomeId: target.canonicalOutcomeId } : {}),
+    venueMarketId: target.venueMarketId,
+    ...(target.venueOutcomeId ? { venueOutcomeId: target.venueOutcomeId } : {}),
+    side: "buy",
+    quantity: 1
+  })
+});
+
+const createOpinionOrderbookClient = (input: {
+  baseUrl: string;
+  apiKeys: readonly string[];
+  requestTimeoutMs: number;
+  logger: ReturnType<typeof createLogger>;
+}): Pick<OpinionClient, "getTokenOrderbook"> => {
+  const clients = input.apiKeys.map((apiKey) => new OpinionClient({
+    baseUrl: input.baseUrl,
+    apiKey,
+    requestTimeoutMs: input.requestTimeoutMs,
+    maxRetries: 0
+  }));
+  return {
+    async getTokenOrderbook(request) {
+      let lastError: unknown = null;
+      for (let index = 0; index < clients.length; index += 1) {
+        const client = clients[index]!;
+        try {
+          return await client.getTokenOrderbook(request);
+        } catch (error) {
+          lastError = error;
+          if (!isOpinionAuthError(error) || index === clients.length - 1) {
+            throw error;
+          }
+          input.logger.warn(
+            { venue: "OPINION", keyIndex: index },
+            "Opinion orderbook API key rejected; retrying with next configured key."
+          );
+        }
+      }
+      throw lastError instanceof Error ? lastError : new Error("Opinion token orderbook request failed.");
+    }
+  };
+};
+
+const resolveOpinionOrderbookApiKeys = (env: NodeJS.ProcessEnv): readonly string[] =>
+  uniqueStrings([
+    env.OPINION_API_KEY,
+    ...OPINION_STREAM_API_KEY_ENV_NAMES.map((name) => env[name])
+  ]);
+
+const isOpinionAuthError = (error: unknown): boolean =>
+  error instanceof OpinionClientError && (error.status === 401 || error.status === 403);
+
+const uniqueStrings = (values: readonly (string | undefined)[]): string[] => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+  return result;
 };
 
 const OPINION_STREAM_API_KEY_ENV_NAMES = [

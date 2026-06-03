@@ -45,6 +45,7 @@ export interface OrderbookStreamServiceConfig {
   subscriptionHoldMs: number;
   restRefreshIntervalMs: number;
   maxRestRefreshTargetsPerTick: number;
+  maxRestRefreshTargetsPerVenuePerTick: number;
   restRefreshTimeoutMs: number;
   summaryLogIntervalMs: number;
 }
@@ -90,6 +91,7 @@ const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
   subscriptionHoldMs: 120_000,
   restRefreshIntervalMs: 5_000,
   maxRestRefreshTargetsPerTick: 48,
+  maxRestRefreshTargetsPerVenuePerTick: 12,
   restRefreshTimeoutMs: 2_000,
   summaryLogIntervalMs: 15_000
 };
@@ -326,6 +328,7 @@ export class OrderbookStreamService {
   ): Promise<number> {
     const refreshable = dedupeTargetsBySubscription(targets)
       .filter((target) => this.isRestRefreshDue(target, nowMs))
+      .filter(limitTargetsPerVenue(this.config.maxRestRefreshTargetsPerVenuePerTick))
       .slice(0, this.config.maxRestRefreshTargetsPerTick);
     if (refreshable.length === 0) {
       return 0;
@@ -504,6 +507,22 @@ const groupByVenue = (targets: readonly VenueOrderbookSubscriptionTarget[]): Rea
     grouped.set(venue, bucket);
   }
   return grouped;
+};
+
+const limitTargetsPerVenue = (
+  limit: number
+): ((target: VenueOrderbookSubscriptionTarget) => boolean) => {
+  const maxPerVenue = Math.max(1, Math.floor(limit));
+  const counts = new Map<string, number>();
+  return (target) => {
+    const venue = normalizeVenue(target.venue);
+    const count = counts.get(venue) ?? 0;
+    if (count >= maxPerVenue) {
+      return false;
+    }
+    counts.set(venue, count + 1);
+    return true;
+  };
 };
 
 const chunks = <T>(values: readonly T[], size: number): T[][] => {
