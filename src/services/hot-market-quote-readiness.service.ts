@@ -62,7 +62,7 @@ export class HotMarketQuoteReadinessSource {
       return this.buildHotReadinessSnapshot(canonicalMarketId, readiness, maxAgeMs);
     }));
     const fallbackNeeded = hotResults
-      .filter((snapshot) => snapshot.quoteReadyVenueCount <= 0)
+      .filter((snapshot) => snapshot.quoteReadyVenueCount <= 0 || hasMissingLiveQuoteBlocker(snapshot))
       .map((snapshot) => snapshot.canonicalMarketId);
     if (fallbackNeeded.length === 0 || !this.deps.fallbackSource) {
       return hotResults;
@@ -73,12 +73,9 @@ export class HotMarketQuoteReadinessSource {
     });
     const fallbackByMarket = new Map(fallback.map((snapshot) => [snapshot.canonicalMarketId, snapshot] as const));
     return hotResults.map((snapshot) => {
-      if (snapshot.quoteReadyVenueCount > 0) {
-        return snapshot;
-      }
       const fallbackSnapshot = fallbackByMarket.get(snapshot.canonicalMarketId);
       return fallbackSnapshot && fallbackSnapshot.quoteReadyVenueCount > 0
-        ? fallbackSnapshot
+        ? mergeReadinessSnapshots(snapshot, fallbackSnapshot)
         : snapshot;
     });
   }
@@ -183,6 +180,51 @@ const mappingBlockers = (row: VenueQuoteMappingReadiness): MarketQuoteReadinessS
         ...(row.venueMarketId ? { venueMarketId: row.venueMarketId } : {}),
         ...(row.venueOutcomeId ? { venueOutcomeId: row.venueOutcomeId } : {})
       }];
+
+const hasMissingLiveQuoteBlocker = (snapshot: MarketQuoteReadinessSnapshot): boolean =>
+  snapshot.quoteBlockers.some((blocker) => blocker.reason === "LIVE_QUOTE_SNAPSHOT_MISSING");
+
+const mergeReadinessSnapshots = (
+  hot: MarketQuoteReadinessSnapshot,
+  fallback: MarketQuoteReadinessSnapshot
+): MarketQuoteReadinessSnapshot => {
+  const fallbackReadyVenues = new Set(fallback.quoteReadyVenues.map(normalizeVenue));
+  const quoteReadyVenues = [...new Set([
+    ...hot.quoteReadyVenues.map(normalizeVenue),
+    ...fallback.quoteReadyVenues.map(normalizeVenue)
+  ])].sort();
+  const quoteBlockers = [
+    ...hot.quoteBlockers.filter((blocker) =>
+      blocker.reason !== "LIVE_QUOTE_SNAPSHOT_MISSING" ||
+      !fallbackReadyVenues.has(normalizeVenue(blocker.venue))
+    ),
+    ...fallback.quoteBlockers
+  ];
+  return {
+    canonicalMarketId: hot.canonicalMarketId,
+    quoteStatus: pickMergedQuoteStatus(quoteReadyVenues.length, quoteBlockers),
+    quoteReadyVenueCount: quoteReadyVenues.length,
+    quoteReadyVenues,
+    quoteBlockers,
+    lastQuoteAt: latestTimestamp(hot.lastQuoteAt, fallback.lastQuoteAt)
+  };
+};
+
+const pickMergedQuoteStatus = (
+  quoteReadyVenueCount: number,
+  quoteBlockers: readonly MarketQuoteReadinessSnapshot["quoteBlockers"][number][]
+): MarketQuoteReadinessSnapshot["quoteStatus"] => {
+  if (quoteReadyVenueCount <= 0) {
+    return "unavailable";
+  }
+  return quoteBlockers.length > 0 ? "partial" : "live";
+};
+
+const latestTimestamp = (left: string | null, right: string | null): string | null => {
+  if (!left) return right;
+  if (!right) return left;
+  return Date.parse(left) >= Date.parse(right) ? left : right;
+};
 
 const isPricedLiveSnapshot = (snapshot: NormalizedVenueQuoteSnapshot): boolean =>
   (snapshot.blockers?.length ?? 0) === 0

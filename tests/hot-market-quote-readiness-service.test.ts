@@ -108,4 +108,66 @@ describe("HotMarketQuoteReadinessSource", () => {
         quoteReadyVenues: ["LIMITLESS"]
       })]);
   });
+
+  it("merges DB fallback venues when only part of the route is hot", async () => {
+    const source = new HotMarketQuoteReadinessSource({
+      mappingResolver: {
+        async listApprovedReadiness() {
+          return [{
+            canonicalEventId: "event-1",
+            canonicalMarketIds: ["market-1"],
+            title: "Market 1",
+            category: "Crypto",
+            venues: [
+              {
+                venue: "POLYMARKET",
+                approvedVenueMarketId: "approved-poly",
+                venueMarketId: "poly-1",
+                venueOutcomeId: "token-yes",
+                quoteReady: true,
+                blockers: []
+              },
+              {
+                venue: "LIMITLESS",
+                approvedVenueMarketId: "approved-limitless",
+                venueMarketId: "limitless-1",
+                venueOutcomeId: "YES",
+                quoteReady: true,
+                blockers: []
+              }
+            ]
+          }];
+        }
+      },
+      hotSnapshots: {
+        async getDisplay(input) {
+          return input.venue === "POLYMARKET"
+            ? snapshot(input.venue, input.venueMarketId, input.venueOutcomeId)
+            : null;
+        }
+      },
+      fallbackSource: {
+        async listLatestMarketQuoteReadiness(input) {
+          expect(input.canonicalMarketIds).toEqual(["market-1"]);
+          return [{
+            canonicalMarketId: "market-1",
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["LIMITLESS"],
+            quoteBlockers: [],
+            lastQuoteAt: new Date(now.getTime() + 1000).toISOString()
+          }];
+        }
+      }
+    });
+
+    await expect(source.listLatestMarketQuoteReadiness({ canonicalMarketIds: ["market-1"] }))
+      .resolves.toEqual([expect.objectContaining({
+        quoteStatus: "live",
+        quoteReadyVenueCount: 2,
+        quoteReadyVenues: ["LIMITLESS", "POLYMARKET"],
+        quoteBlockers: [],
+        lastQuoteAt: new Date(now.getTime() + 1000).toISOString()
+      })]);
+  });
 });
