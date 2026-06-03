@@ -17,14 +17,14 @@ const logger: MarketOrderbookRecorderLogger = {
 describe("MarketOrderbookRecorder", () => {
   it("enables recording by default for worker-owned runtime config", () => {
     expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
-      intervalMs: 5_000,
+      intervalMs: 6_000,
       marketBatchSize: 10,
       activeMarketBatchSize: 160,
       activeMaxSamplesPerTick: 16,
-      priorityMarketBatchSize: 48,
+      priorityMarketBatchSize: 36,
       priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-      maxSamplesPerTick: 32,
-      sampleConcurrency: 8,
+      maxSamplesPerTick: 24,
+      sampleConcurrency: 6,
       maxTickDurationMs: 6_000,
       sampleTimeoutMs: 2_500,
       cleanupIntervalMs: 30 * 60_000
@@ -36,14 +36,14 @@ describe("MarketOrderbookRecorder", () => {
     process.env.MARKET_ORDERBOOK_RECORDER_ENABLED = "false";
     try {
       expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
-        intervalMs: 5_000,
+        intervalMs: 6_000,
         marketBatchSize: 10,
         activeMarketBatchSize: 160,
         activeMaxSamplesPerTick: 16,
-        priorityMarketBatchSize: 48,
+        priorityMarketBatchSize: 36,
         priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-        maxSamplesPerTick: 32,
-        sampleConcurrency: 8,
+        maxSamplesPerTick: 24,
+        sampleConcurrency: 6,
         maxTickDurationMs: 6_000,
         sampleTimeoutMs: 2_500,
         cleanupIntervalMs: 30 * 60_000
@@ -61,11 +61,11 @@ describe("MarketOrderbookRecorder", () => {
   it("builds sharded recorder lanes for broad live quote coverage", () => {
     const configs = buildMarketOrderbookRecorderConfigs();
 
-    expect(configs).toHaveLength(3);
-    expect(configs.map((config) => config.shardCount)).toEqual([3, 3, 3]);
-    expect(configs.map((config) => config.shardIndex)).toEqual([0, 1, 2]);
-    expect(configs.every((config) => config.intervalMs === 5_000)).toBe(true);
-    expect(configs.every((config) => config.maxSamplesPerTick === 32)).toBe(true);
+    expect(configs).toHaveLength(2);
+    expect(configs.map((config) => config.shardCount)).toEqual([2, 2]);
+    expect(configs.map((config) => config.shardIndex)).toEqual([0, 1]);
+    expect(configs.every((config) => config.intervalMs === 6_000)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerTick === 24)).toBe(true);
     expect(configs.every((config) => config.activeMaxSamplesPerTick === 16)).toBe(true);
   });
 
