@@ -329,7 +329,9 @@ export class OrderbookStreamService {
     targets: readonly VenueOrderbookSubscriptionTarget[],
     nowMs: number
   ): Promise<number> {
-    const refreshable = dedupeTargetsBySubscription(targets)
+    const groupsByNative = groupTargetsByNative(dedupeTargetsBySubscription(targets));
+    const refreshable = [...groupsByNative.values()]
+      .flatMap((group) => group[0] ? [group[0]] : [])
       .filter((target) => this.isRestRefreshDue(target, nowMs))
       .filter((target) => !this.isRestRefreshFailureCoolingDown(target, nowMs))
       .filter(limitTargetsPerVenue(this.config.maxRestRefreshTargetsPerVenuePerTick))
@@ -344,7 +346,8 @@ export class OrderbookStreamService {
       if (!refresher) {
         return;
       }
-      const key = subscriptionKey(target);
+      const key = restRefreshKey(target);
+      const fanoutTargets = groupsByNative.get(nativeSubscriptionKey(target)) ?? [target];
       this.lastRestRefreshBySubscription.set(key, nowMs);
       try {
         const snapshot = await withTimeout(
@@ -358,7 +361,9 @@ export class OrderbookStreamService {
         }
         this.restRefreshFailureCooldowns.delete(key);
         refreshed += 1;
-        this.onSnapshot(snapshot, target);
+        for (const fanoutTarget of fanoutTargets) {
+          this.onSnapshot(snapshot, fanoutTarget);
+        }
       } catch (error) {
         this.markRestRefreshFailure(target, nowMs);
         this.deps.logger.warn(
@@ -379,18 +384,18 @@ export class OrderbookStreamService {
     if (!this.restRefreshersByVenue.has(normalizeVenue(target.venue))) {
       return false;
     }
-    const last = this.lastRestRefreshBySubscription.get(subscriptionKey(target));
+    const last = this.lastRestRefreshBySubscription.get(restRefreshKey(target));
     return last === undefined || nowMs - last >= this.config.restRefreshIntervalMs;
   }
 
   private isRestRefreshFailureCoolingDown(target: VenueOrderbookSubscriptionTarget, nowMs: number): boolean {
-    const until = this.restRefreshFailureCooldowns.get(subscriptionKey(target));
+    const until = this.restRefreshFailureCooldowns.get(restRefreshKey(target));
     return until !== undefined && until > nowMs;
   }
 
   private markRestRefreshFailure(target: VenueOrderbookSubscriptionTarget, nowMs: number): void {
     this.restRefreshFailureCooldowns.set(
-      subscriptionKey(target),
+      restRefreshKey(target),
       nowMs + Math.max(1_000, this.config.restRefreshFailureCooldownMs)
     );
   }
@@ -527,6 +532,22 @@ const groupByVenue = (targets: readonly VenueOrderbookSubscriptionTarget[]): Rea
   }
   return grouped;
 };
+
+const groupTargetsByNative = (
+  targets: readonly VenueOrderbookSubscriptionTarget[]
+): ReadonlyMap<string, readonly VenueOrderbookSubscriptionTarget[]> => {
+  const grouped = new Map<string, VenueOrderbookSubscriptionTarget[]>();
+  for (const target of targets) {
+    const key = nativeSubscriptionKey(target);
+    const bucket = grouped.get(key) ?? [];
+    bucket.push(target);
+    grouped.set(key, bucket);
+  }
+  return grouped;
+};
+
+const restRefreshKey = (target: VenueOrderbookSubscriptionTarget): string =>
+  nativeSubscriptionKey(target);
 
 const limitTargetsPerVenue = (
   limit: number

@@ -722,6 +722,54 @@ describe("OrderbookStreamService", () => {
     expect(refresh.mock.calls.map(([target]) => target.venue).sort()).toEqual(["LIMITLESS", "POLYMARKET"]);
   });
 
+  it("refreshes duplicate native venue books once and fans out to Lotus subscriptions", async () => {
+    const connector = new FakeConnector("PREDICT_FUN");
+    const put = vi.fn();
+    const publish = vi.fn(async () => 1);
+    const refresh = vi.fn(async (target: VenueOrderbookSubscriptionTarget) => ({
+      ...snapshot(target),
+      source: "REST" as const,
+      quoteQuality: "FULL_DEPTH_REST" as const
+    }));
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [
+            { canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: now },
+            { canonicalMarketId: "canonical-2", canonicalOutcomeId: "YES", lastSeenAt: now }
+          ];
+        }
+      },
+      hotSnapshots: { put },
+      mappingResolver: {
+        async getReadiness() {
+          return [{
+            venue: "PREDICT_FUN",
+            approvedVenueMarketId: "predict-approved",
+            venueMarketId: "predict-market",
+            venueOutcomeId: "predict-token",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors: [connector],
+      restRefreshers: [{ venue: "PREDICT_FUN", refresh }],
+      publisher: { publish },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 1 });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(put).toHaveBeenCalledTimes(2);
+    const topics = (publish.mock.calls as unknown[][]).map((call) => JSON.parse(String(call[1])).topic);
+    expect(topics).toEqual([
+      marketOrderbookTopic("canonical-1", "YES"),
+      marketOrderbookTopic("canonical-2", "YES")
+    ]);
+  });
+
   it("times out slow REST fallback refreshes without failing the stream tick", async () => {
     const connector = new FakeConnector("POLYMARKET");
     const service = new OrderbookStreamService({
