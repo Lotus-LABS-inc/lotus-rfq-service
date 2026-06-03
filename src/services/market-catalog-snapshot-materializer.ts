@@ -215,7 +215,7 @@ export class MarketCatalogSnapshotMaterializer {
       return "skipped_empty_quote_ready";
     }
 
-    if (query.quoteReadyOnly && await this.wouldUnderfillExistingSnapshot(query, marketCatalogSnapshotKeys(query), visibleMarkets)) {
+    if (query.quoteReadyOnly && await this.wouldUnderfillExistingSnapshot(query, marketCatalogRecoverySnapshotKeys(query), visibleMarkets)) {
       return "skipped_underfilled_quote_ready";
     }
 
@@ -354,13 +354,13 @@ export class MarketCatalogSnapshotMaterializer {
       }
     };
     try {
-      for (const key of marketCatalogSnapshotKeys(query)) {
+      for (const key of marketCatalogRecoverySnapshotKeys(query)) {
         const exact = await this.deps.snapshotCache.get<{ markets?: unknown }>(key);
         if (Array.isArray(exact?.markets)) {
           addMarkets(exact.markets.filter(isMarketCatalogMarket));
         }
       }
-      for (const key of bestMarketCatalogSnapshotKeys(query)) {
+      for (const key of bestMarketCatalogRecoverySnapshotKeys(query)) {
         const best = await this.deps.snapshotCache.get<{ markets?: unknown }>(key);
         if (Array.isArray(best?.markets)) {
           addMarkets(best.markets.filter(isMarketCatalogMarket));
@@ -371,13 +371,13 @@ export class MarketCatalogSnapshotMaterializer {
     }
     if (query.category) {
       try {
-        for (const globalKey of marketCatalogSnapshotKeys({ ...query, category: undefined })) {
+        for (const globalKey of marketCatalogRecoverySnapshotKeys({ ...query, category: undefined })) {
           const global = await this.deps.snapshotCache.get<{ markets?: unknown }>(globalKey);
           if (Array.isArray(global?.markets)) {
             addMarkets(global.markets.filter(isMarketCatalogMarket));
           }
         }
-        for (const globalBestKey of bestMarketCatalogSnapshotKeys({ ...query, category: undefined })) {
+        for (const globalBestKey of bestMarketCatalogRecoverySnapshotKeys({ ...query, category: undefined })) {
           const globalBest = await this.deps.snapshotCache.get<{ markets?: unknown }>(globalBestKey);
           if (Array.isArray(globalBest?.markets)) {
             addMarkets(globalBest.markets.filter(isMarketCatalogMarket));
@@ -408,7 +408,7 @@ export class MarketCatalogSnapshotMaterializer {
           existingMarkets = markets;
         }
       }
-      for (const key of bestMarketCatalogSnapshotKeys(query)) {
+      for (const key of bestMarketCatalogRecoverySnapshotKeys(query)) {
         const existing = await this.deps.snapshotCache.get<{ count?: unknown; markets?: unknown }>(key);
         const markets = Array.isArray(existing?.markets)
           ? existing.markets.filter(isMarketCatalogMarket).filter(isQuoteReadyMarket)
@@ -516,8 +516,17 @@ const marketCatalogSnapshotKeys = (query: MarketCatalogMaterializedQuery): strin
     .map((candidate) => `markets:${stableQueryCacheKey(candidate)}`))
 ];
 
+const marketCatalogRecoverySnapshotKeys = (query: MarketCatalogMaterializedQuery): string[] => [
+  ...new Set([query, ...marketCatalogAllRouteAliases(query), ...marketCatalogStricterRouteRecoveryAliases(query)]
+    .map((candidate) => `markets:${stableQueryCacheKey(candidate)}`))
+];
+
 const bestMarketCatalogSnapshotKeys = (query: MarketCatalogMaterializedQuery): string[] => [
   ...new Set(marketCatalogSnapshotKeys(query).map((key) => `best:${key}`))
+];
+
+const bestMarketCatalogRecoverySnapshotKeys = (query: MarketCatalogMaterializedQuery): string[] => [
+  ...new Set(marketCatalogRecoverySnapshotKeys(query).map((key) => `best:${key}`))
 ];
 
 const marketCatalogAllRouteAliases = (
@@ -542,6 +551,32 @@ const marketCatalogAllRouteAliases = (
   }
   const { routeCoverage: _routeCoverage, ...rest } = query;
   return [rest];
+};
+
+const marketCatalogStricterRouteRecoveryAliases = (
+  query: MarketCatalogMaterializedQuery
+): MarketCatalogMaterializedQuery[] => {
+  if (query.quoteReadyOnly !== true) {
+    return [];
+  }
+  const routeCoverage = query.routeCoverage ?? "all";
+  if (routeCoverage === "all" || routeCoverage === "single") {
+    return [
+      { ...query, routeCoverage: "pair" },
+      { ...query, routeCoverage: "tri" },
+      { ...query, routeCoverage: "strict_all" }
+    ];
+  }
+  if (routeCoverage === "pair") {
+    return [
+      { ...query, routeCoverage: "tri" },
+      { ...query, routeCoverage: "strict_all" }
+    ];
+  }
+  if (routeCoverage === "tri") {
+    return [{ ...query, routeCoverage: "strict_all" }];
+  }
+  return [];
 };
 
 const snapshotMarketCount = (snapshot: { count?: unknown; markets?: unknown } | null): number => {

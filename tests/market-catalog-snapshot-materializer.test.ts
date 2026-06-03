@@ -634,6 +634,78 @@ describe("MarketCatalogSnapshotMaterializer", () => {
     });
   });
 
+  it("recovers broad quote-ready snapshots from stricter pair snapshots", async () => {
+    const snapshotCache = new FakeSnapshotCache();
+    const allKey = `markets:${stableQueryCacheKey({
+      limit: 80,
+      quoteReadyOnly: true
+    })}`;
+    const pairKey = `markets:${stableQueryCacheKey({
+      limit: 80,
+      quoteReadyOnly: true,
+      routeCoverage: "pair"
+    })}`;
+    await snapshotCache.set(pairKey, {
+      count: 2,
+      materialized: true,
+      markets: [
+        {
+          ...baseMarket,
+          quoteStatus: "live",
+          quoteReadyVenueCount: 2,
+          quoteReadyVenues: ["POLYMARKET", "PREDICT_FUN"],
+          lastQuoteAt: "2026-06-01T00:00:00.000Z"
+        },
+        {
+          ...baseMarket,
+          canonicalMarketIds: ["market-2"],
+          canonicalEventId: "event-2",
+          title: "Event 2",
+          quoteStatus: "live",
+          quoteReadyVenueCount: 2,
+          quoteReadyVenues: ["OPINION", "POLYMARKET"],
+          lastQuoteAt: "2026-06-01T00:00:00.000Z"
+        }
+      ]
+    });
+    const materializer = new MarketCatalogSnapshotMaterializer({
+      marketCatalogRepository: {
+        listMarkets: vi.fn(async () => [baseMarket])
+      },
+      marketQuoteReadinessSource: {
+        listLatestMarketQuoteReadiness: vi.fn(async () => [({
+          canonicalMarketId: "market-1",
+          quoteStatus: "live" as const,
+          quoteReadyVenueCount: 1,
+          quoteReadyVenues: ["POLYMARKET"],
+          quoteBlockers: [],
+          lastQuoteAt: "2026-06-01T00:00:00.000Z"
+        })])
+      },
+      snapshotCache,
+      logger: { info: vi.fn(), warn: vi.fn() },
+      config: { limits: [80], routeCoverages: ["all", "pair"], categories: [], intervalMs: 60_000 }
+    });
+
+    await materializer.runOnce();
+
+    expect(snapshotCache.values.get(allKey)).toMatchObject({
+      count: 2,
+      markets: [
+        { canonicalMarketIds: ["market-1"], quoteReadyVenues: ["POLYMARKET", "PREDICT_FUN"] },
+        { canonicalMarketIds: ["market-2"], quoteReadyVenues: ["OPINION", "POLYMARKET"] }
+      ]
+    });
+    expect(snapshotCache.values.get(`markets:${stableQueryCacheKey({
+      limit: 80,
+      quoteReadyOnly: true,
+      view: "compact"
+    })}`)).toMatchObject({
+      count: 2,
+      view: "compact"
+    });
+  });
+
   it("protects equivalent routeCoverage=all quote-ready snapshots from alias underfills", async () => {
     const snapshotCache = new FakeSnapshotCache();
     const omittedKey = `markets:${stableQueryCacheKey({
