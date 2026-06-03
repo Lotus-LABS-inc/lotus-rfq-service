@@ -53,18 +53,18 @@ export interface MarketOrderbookRecorderRunResult {
 }
 
 const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
-  intervalMs: 13_000,
-  marketBatchSize: 16,
+  intervalMs: 12_000,
+  marketBatchSize: 24,
   activeMarketBatchSize: 250,
-  activeMaxSamplesPerTick: 28,
-  priorityMarketBatchSize: 120,
+  activeMaxSamplesPerTick: 36,
+  priorityMarketBatchSize: 180,
   priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"] as readonly string[],
   shardCount: 1,
   shardIndex: 0,
-  maxSamplesPerTick: 40,
-  sampleConcurrency: 12,
-  maxTickDurationMs: 11_500,
-  sampleTimeoutMs: 4_000,
+  maxSamplesPerTick: 56,
+  sampleConcurrency: 14,
+  maxTickDurationMs: 10_500,
+  sampleTimeoutMs: 3_000,
   cleanupIntervalMs: 30 * 60_000,
   retentionHours: 720,
   levelsPerSide: 25,
@@ -73,6 +73,7 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
 const RATE_LIMIT_COOLDOWN_MS = 5 * 60_000;
 const PROVIDER_AUTH_COOLDOWN_MS = 15 * 60_000;
 const SAMPLE_TIMEOUT_COOLDOWN_MS = 10_000;
+const MARKET_CATALOG_WINDOW_CACHE_MS = 15_000;
 
 export const buildMarketOrderbookRecorderConfig = (): MarketOrderbookRecorderConfig => {
   // Worker-owned duty: do not add per-duty env flags such as
@@ -103,6 +104,7 @@ export class MarketOrderbookRecorder {
   private lastCleanupAt = Date.now();
   private readonly venueCooldownUntil = new Map<string, number>();
   private readonly sampleCooldownUntil = new Map<string, number>();
+  private readonly catalogWindowCache = new Map<string, { expiresAtMs: number; markets: MarketCatalogMarket[] }>();
 
   public constructor(
     private readonly marketCatalogRepository: Pick<MarketCatalogRepository, "listMarkets">,
@@ -452,7 +454,7 @@ export class MarketOrderbookRecorder {
       return [];
     }
 
-    const catalogWindow = await this.marketCatalogRepository.listMarkets({
+    const catalogWindow = await this.listCachedCatalogWindow({
       limit: Math.max(250, priorityMarketBatchSize),
       offset: 0
     });
@@ -500,7 +502,7 @@ export class MarketOrderbookRecorder {
     }
     const activeMarketBatchSize = this.config.activeMarketBatchSize ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.activeMarketBatchSize;
     const activeIds = new Set(activeTargets.map((target) => target.canonicalMarketId));
-    const catalogWindow = await this.marketCatalogRepository.listMarkets({
+    const catalogWindow = await this.listCachedCatalogWindow({
       limit: Math.max(250, activeMarketBatchSize),
       offset: 0
     });
@@ -511,6 +513,21 @@ export class MarketOrderbookRecorder {
         activeIds.has(market.canonicalEventId)
       )
     );
+  }
+
+  private async listCachedCatalogWindow(input: { limit: number; offset: number }): Promise<MarketCatalogMarket[]> {
+    const key = `${input.limit}:${input.offset}`;
+    const now = Date.now();
+    const cached = this.catalogWindowCache.get(key);
+    if (cached && cached.expiresAtMs > now) {
+      return cached.markets;
+    }
+    const markets = await this.marketCatalogRepository.listMarkets(input);
+    this.catalogWindowCache.set(key, {
+      markets,
+      expiresAtMs: now + MARKET_CATALOG_WINDOW_CACHE_MS
+    });
+    return markets;
   }
 
   private marketBelongsToShard(market: MarketCatalogMarket): boolean {

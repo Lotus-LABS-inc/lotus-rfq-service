@@ -17,16 +17,16 @@ const logger: MarketOrderbookRecorderLogger = {
 describe("MarketOrderbookRecorder", () => {
   it("enables recording by default for worker-owned runtime config", () => {
     expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
-      intervalMs: 13_000,
-      marketBatchSize: 16,
+      intervalMs: 12_000,
+      marketBatchSize: 24,
       activeMarketBatchSize: 250,
-      activeMaxSamplesPerTick: 28,
-      priorityMarketBatchSize: 120,
+      activeMaxSamplesPerTick: 36,
+      priorityMarketBatchSize: 180,
       priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-      maxSamplesPerTick: 40,
-      sampleConcurrency: 12,
-      maxTickDurationMs: 11_500,
-      sampleTimeoutMs: 4_000,
+      maxSamplesPerTick: 56,
+      sampleConcurrency: 14,
+      maxTickDurationMs: 10_500,
+      sampleTimeoutMs: 3_000,
       cleanupIntervalMs: 30 * 60_000
     });
   });
@@ -36,16 +36,16 @@ describe("MarketOrderbookRecorder", () => {
     process.env.MARKET_ORDERBOOK_RECORDER_ENABLED = "false";
     try {
       expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
-        intervalMs: 13_000,
-        marketBatchSize: 16,
+        intervalMs: 12_000,
+        marketBatchSize: 24,
         activeMarketBatchSize: 250,
-        activeMaxSamplesPerTick: 28,
-        priorityMarketBatchSize: 120,
+        activeMaxSamplesPerTick: 36,
+        priorityMarketBatchSize: 180,
         priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-        maxSamplesPerTick: 40,
-        sampleConcurrency: 12,
-        maxTickDurationMs: 11_500,
-        sampleTimeoutMs: 4_000,
+        maxSamplesPerTick: 56,
+        sampleConcurrency: 14,
+        maxTickDurationMs: 10_500,
+        sampleTimeoutMs: 3_000,
         cleanupIntervalMs: 30 * 60_000
       });
       expect(buildMarketOrderbookRecorderConfig()).not.toHaveProperty("enabled");
@@ -64,10 +64,10 @@ describe("MarketOrderbookRecorder", () => {
     expect(configs).toHaveLength(2);
     expect(configs.map((config) => config.shardCount)).toEqual([2, 2]);
     expect(configs.map((config) => config.shardIndex)).toEqual([0, 1]);
-    expect(configs.every((config) => config.intervalMs === 13_000)).toBe(true);
-    expect(configs.every((config) => config.maxSamplesPerTick === 40)).toBe(true);
-    expect(configs.every((config) => config.activeMaxSamplesPerTick === 28)).toBe(true);
-    expect(configs.every((config) => config.sampleTimeoutMs === 4_000)).toBe(true);
+    expect(configs.every((config) => config.intervalMs === 12_000)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerTick === 56)).toBe(true);
+    expect(configs.every((config) => config.activeMaxSamplesPerTick === 36)).toBe(true);
+    expect(configs.every((config) => config.sampleTimeoutMs === 3_000)).toBe(true);
     expect(configs.every((config) => (config.maxTickDurationMs ?? 0) < config.intervalMs)).toBe(true);
   });
 
@@ -480,6 +480,77 @@ describe("MarketOrderbookRecorder", () => {
 
     expect(result.activeMarkets).toBe(1);
     expect(sampledMarketIds).toEqual(["market-active", "market-active", "market-1", "market-1"]);
+  });
+
+  it("reuses the approved catalog window for active and priority sampling in one tick", async () => {
+    let broadCatalogReads = 0;
+    const activeMarket = {
+      ...marketFixture("OPEN"),
+      canonicalEventId: "event-active",
+      canonicalMarketIds: ["market-active"],
+      venueMarkets: marketFixture("OPEN").venueMarkets.map((venueMarket) => ({
+        ...venueMarket,
+        canonicalMarketId: "market-active"
+      }))
+    };
+    const priorityMarket = {
+      ...opinionMarketFixture(),
+      canonicalEventId: "event-opinion",
+      canonicalMarketIds: ["market-opinion"],
+      venueMarkets: opinionMarketFixture().venueMarkets.map((venueMarket) => ({
+        ...venueMarket,
+        canonicalMarketId: "market-opinion"
+      }))
+    };
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async (filter) => {
+          if ((filter?.limit ?? 0) >= 250 && (filter?.offset ?? 0) === 0) {
+            broadCatalogReads += 1;
+            return [activeMarket, priorityMarket, marketFixture("OPEN")];
+          }
+          return [marketFixture("OPEN")];
+        }
+      },
+      {
+        getQuoteSnapshotReport: async () => ({
+          snapshots: [],
+          blocked: []
+        })
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 1,
+        activeMarketBatchSize: 10,
+        priorityMarketBatchSize: 10,
+        priorityVenues: ["OPINION"],
+        maxSamplesPerTick: 4,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      },
+      {
+        listActiveMarketsFromRedis: async () => [({
+          canonicalMarketId: "market-active",
+          canonicalOutcomeId: "YES",
+          lastSeenAt: new Date("2026-05-10T12:00:00.000Z")
+        })]
+      }
+    );
+
+    await recorder.runOnce();
+
+    expect(broadCatalogReads).toBe(1);
   });
 
   it("reserves the first sample budget for active terminal outcomes", async () => {
