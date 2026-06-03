@@ -140,6 +140,66 @@ describe("LiveMarketDataViewService", () => {
     });
   });
 
+  it("keeps recently streamed unchanged books live but marks old snapshots stale", async () => {
+    const now = new Date("2026-05-10T12:00:15.000Z");
+    const service = new LiveMarketDataViewService({
+      getQuoteSnapshotReport: async () => ({
+        snapshots: [
+          {
+            venue: "LIMITLESS",
+            venueMarketId: "limitless-recent",
+            venueOutcomeId: "yes",
+            source: "STREAM",
+            quoteQuality: "FULL_DEPTH_STREAM",
+            sourceTimestamp: new Date("2026-05-10T12:00:06.000Z"),
+            receivedAt: new Date("2026-05-10T12:00:06.000Z"),
+            bestBid: "0.41",
+            bestAsk: "0.43",
+            midpoint: "0.42",
+            spread: "0.02",
+            topOfBookSize: "100",
+            bids: [{ price: "0.41", size: "100" }],
+            asks: [{ price: "0.43", size: "90" }],
+            blockers: [],
+            missingFactors: []
+          },
+          {
+            venue: "POLYMARKET",
+            venueMarketId: "poly-old",
+            venueOutcomeId: "yes",
+            source: "STREAM",
+            quoteQuality: "FULL_DEPTH_STREAM",
+            sourceTimestamp: new Date("2026-05-10T11:59:30.000Z"),
+            receivedAt: new Date("2026-05-10T11:59:30.000Z"),
+            bestBid: "0.39",
+            bestAsk: "0.45",
+            midpoint: "0.42",
+            spread: "0.06",
+            topOfBookSize: "100",
+            bids: [{ price: "0.39", size: "100" }],
+            asks: [{ price: "0.45", size: "90" }],
+            blockers: [],
+            missingFactors: []
+          }
+        ],
+        blocked: []
+      })
+    }, { now: () => now });
+
+    const orderbook = await service.getOrderbook({
+      marketId: "market-1",
+      outcomeId: "yes"
+    });
+
+    expect(orderbook).toMatchObject({
+      status: "partial",
+      bestBid: "0.41",
+      bestAsk: "0.43",
+      venues: [expect.objectContaining({ venue: "LIMITLESS", snapshotStatus: "live" })],
+      blockers: [expect.objectContaining({ venue: "POLYMARKET", reason: "LIVE_ORDERBOOK_REQUIRED" })]
+    });
+  });
+
   it("uses cache-only quote reads for display batch quotes", async () => {
     const now = new Date("2026-05-10T12:00:00.000Z");
     const calls: unknown[] = [];
@@ -194,7 +254,7 @@ describe("LiveMarketDataViewService", () => {
   });
 
   it("does not expose all-stale orderbook snapshots as tradable depth", async () => {
-    const now = new Date("2026-05-10T12:00:05.000Z");
+    const now = new Date("2026-05-10T12:00:06.000Z");
     const staleAt = new Date("2026-05-10T12:00:00.000Z");
     const service = new LiveMarketDataViewService({
       getQuoteSnapshotReport: async () => ({

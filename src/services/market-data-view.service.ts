@@ -168,6 +168,8 @@ const MAX_HISTORY_MS = 31 * 24 * 60 * 60 * 1000;
 const ORDERBOOK_CACHE_MS = 3_000;
 const ORDERBOOK_LIVE_TIMEOUT_MS = 250;
 const ORDERBOOK_DISPLAY_SNAPSHOT_MAX_AGE_MS = 120_000;
+const STREAM_ORDERBOOK_LIVE_FRESHNESS_MS = 15_000;
+const REST_ORDERBOOK_LIVE_FRESHNESS_MS = 5_000;
 const BATCH_QUOTE_CACHE_MS = 3_000;
 const BATCH_QUOTE_STALE_CACHE_MS = 60_000;
 const BATCH_QUOTE_LIVE_TIMEOUT_MS = 150;
@@ -953,7 +955,9 @@ const snapshotStatus = (
   if ((snapshot.blockers ?? []).length > 0) {
     return "blocked";
   }
-  const thresholdMs = snapshot.source === "STREAM" ? 1_000 : 1_500;
+  const thresholdMs = snapshot.source === "STREAM"
+    ? STREAM_ORDERBOOK_LIVE_FRESHNESS_MS
+    : REST_ORDERBOOK_LIVE_FRESHNESS_MS;
   return snapshotFreshnessMs(snapshot, now) <= thresholdMs ? "live" : "stale";
 };
 
