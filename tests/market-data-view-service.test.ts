@@ -254,6 +254,66 @@ describe("LiveMarketDataViewService", () => {
     });
   });
 
+  it("keeps recently materialized REST books live for terminal display", async () => {
+    const now = new Date("2026-05-10T12:00:15.000Z");
+    const service = new LiveMarketDataViewService({
+      getQuoteSnapshotReport: async () => ({
+        snapshots: [
+          {
+            venue: "POLYMARKET",
+            venueMarketId: "poly-rest-recent",
+            venueOutcomeId: "yes",
+            source: "REST",
+            quoteQuality: "FULL_DEPTH_REST",
+            sourceTimestamp: null,
+            receivedAt: new Date("2026-05-10T12:00:03.000Z"),
+            bestBid: "0.39",
+            bestAsk: "0.41",
+            midpoint: "0.40",
+            spread: "0.02",
+            topOfBookSize: "100",
+            bids: [{ price: "0.39", size: "100" }],
+            asks: [{ price: "0.41", size: "90" }],
+            blockers: [],
+            missingFactors: []
+          },
+          {
+            venue: "LIMITLESS",
+            venueMarketId: "limitless-rest-old",
+            venueOutcomeId: "yes",
+            source: "REST",
+            quoteQuality: "FULL_DEPTH_REST",
+            sourceTimestamp: null,
+            receivedAt: new Date("2026-05-10T11:59:30.000Z"),
+            bestBid: "0.38",
+            bestAsk: "0.42",
+            midpoint: "0.40",
+            spread: "0.04",
+            topOfBookSize: "100",
+            bids: [{ price: "0.38", size: "100" }],
+            asks: [{ price: "0.42", size: "90" }],
+            blockers: [],
+            missingFactors: []
+          }
+        ],
+        blocked: []
+      })
+    }, { now: () => now });
+
+    const orderbook = await service.getOrderbook({
+      marketId: "market-1",
+      outcomeId: "yes"
+    });
+
+    expect(orderbook).toMatchObject({
+      status: "partial",
+      bestBid: "0.39",
+      bestAsk: "0.41",
+      venues: [expect.objectContaining({ venue: "POLYMARKET", snapshotStatus: "live" })],
+      blockers: [expect.objectContaining({ venue: "LIMITLESS", reason: "LIVE_ORDERBOOK_REQUIRED" })]
+    });
+  });
+
   it("uses cache-only quote reads for display batch quotes", async () => {
     const now = new Date("2026-05-10T12:00:00.000Z");
     const calls: unknown[] = [];
@@ -308,7 +368,7 @@ describe("LiveMarketDataViewService", () => {
   });
 
   it("does not expose all-stale orderbook snapshots as tradable depth", async () => {
-    const now = new Date("2026-05-10T12:00:06.000Z");
+    const now = new Date("2026-05-10T12:00:20.000Z");
     const staleAt = new Date("2026-05-10T12:00:00.000Z");
     const service = new LiveMarketDataViewService({
       getQuoteSnapshotReport: async () => ({
