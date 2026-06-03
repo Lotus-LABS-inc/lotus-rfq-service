@@ -86,9 +86,9 @@ const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
   maxUnsubscribeTargetsPerTick: 40,
   maxTargetsPerConnectorCall: 40,
   subscriptionHoldMs: 120_000,
-  restRefreshIntervalMs: 10_000,
-  maxRestRefreshTargetsPerTick: 24,
-  restRefreshTimeoutMs: 1_500,
+  restRefreshIntervalMs: 5_000,
+  maxRestRefreshTargetsPerTick: 48,
+  restRefreshTimeoutMs: 2_000,
   summaryLogIntervalMs: 15_000
 };
 
