@@ -122,7 +122,7 @@ export class MarketOrderbookRecorder {
   }
 
   public start(): void {
-    if (this.timer) {
+    if (this.timer || this.running) {
       return;
     }
     this.stopped = false;
@@ -143,11 +143,7 @@ export class MarketOrderbookRecorder {
       retentionHours: this.config.retentionHours,
       levelsPerSide: this.config.levelsPerSide
     }, "Market orderbook recorder started.");
-    this.timer = setInterval(() => {
-      void this.runOnce();
-    }, this.config.intervalMs);
-    this.timer.unref?.();
-    void this.runOnce();
+    this.scheduleNextTick(0);
   }
 
   public async stop(): Promise<void> {
@@ -281,11 +277,12 @@ export class MarketOrderbookRecorder {
       let timeBudgetLogged = false;
       const workers = Array.from({ length: Math.min(sampleConcurrency, scheduledSamples.length) }, async () => {
         while (!this.stopped) {
-          if (Date.now() - tickStartedAt >= maxTickDurationMs) {
+          if (!hasEnoughBudgetToStartSample(tickStartedAt, maxTickDurationMs, sampleTimeoutMs)) {
             if (!timeBudgetLogged) {
               timeBudgetLogged = true;
               this.logger.warn({
                 maxTickDurationMs,
+                sampleTimeoutMs,
                 sampledOutcomes: result.sampledOutcomes,
                 scannedMarkets: result.scannedMarkets
               }, "Market orderbook recorder tick stopped early because its time budget was exhausted.");
@@ -430,6 +427,24 @@ export class MarketOrderbookRecorder {
     }
   }
 
+  private scheduleNextTick(delayMs: number): void {
+    if (this.stopped || this.timer) {
+      return;
+    }
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      const tickStartedAt = Date.now();
+      void this.runOnce().finally(() => {
+        if (this.stopped) {
+          return;
+        }
+        const elapsedMs = Date.now() - tickStartedAt;
+        this.scheduleNextTick(Math.max(0, this.config.intervalMs - elapsedMs));
+      });
+    }, Math.max(0, delayMs));
+    this.timer.unref?.();
+  }
+
   private async listPriorityMarkets(): Promise<MarketCatalogMarket[]> {
     const priorityMarketBatchSize = this.config.priorityMarketBatchSize ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityMarketBatchSize;
     const priorityVenues = this.config.priorityVenues ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityVenues;
@@ -567,6 +582,22 @@ const withRecorderTimeout = async <T>(promise: Promise<T>, timeoutMs: number): P
   } finally {
     if (timeout) clearTimeout(timeout);
   }
+};
+
+const hasEnoughBudgetToStartSample = (
+  tickStartedAt: number,
+  maxTickDurationMs: number,
+  sampleTimeoutMs: number
+): boolean => {
+  if (!Number.isFinite(maxTickDurationMs) || maxTickDurationMs <= 0) {
+    return true;
+  }
+  const elapsedMs = Date.now() - tickStartedAt;
+  if (!Number.isFinite(sampleTimeoutMs) || sampleTimeoutMs <= 0) {
+    return elapsedMs < maxTickDurationMs;
+  }
+  const guardMs = Math.min(100, Math.max(0, Math.floor(maxTickDurationMs * 0.05)));
+  return elapsedMs + sampleTimeoutMs + guardMs < maxTickDurationMs;
 };
 
 type MarketOrderbookRecorderSample = { canonicalMarketId: string; outcomeId: string; venueKeys: readonly string[] };

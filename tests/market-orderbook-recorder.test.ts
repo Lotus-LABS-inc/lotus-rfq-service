@@ -592,6 +592,97 @@ describe("MarketOrderbookRecorder", () => {
     expect(second.skippedCooldownSamples).toBe(2);
   });
 
+  it("does not start more provider samples when the remaining tick budget cannot cover their timeout", async () => {
+    const sampledOutcomes: string[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [marketFixture("OPEN")]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalOutcomeId }) => {
+          sampledOutcomes.push(canonicalOutcomeId ?? "");
+          await delay(20);
+          return {
+            snapshots: [],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 1,
+        priorityMarketBatchSize: 0,
+        priorityVenues: [],
+        maxSamplesPerTick: 40,
+        sampleConcurrency: 1,
+        maxTickDurationMs: 35,
+        sampleTimeoutMs: 20,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.sampledOutcomes).toBe(2);
+    expect(sampledOutcomes).toHaveLength(1);
+  });
+
+  it("uses a non-overlapping start loop instead of skipping interval ticks while a sample is running", async () => {
+    const warnings: string[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [marketFixture("OPEN")]
+      },
+      {
+        getQuoteSnapshotReport: async () => await new Promise(() => undefined)
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      {
+        info: () => undefined,
+        warn: (_input, message) => warnings.push(message),
+        error: () => undefined
+      },
+      {
+        intervalMs: 5,
+        marketBatchSize: 1,
+        priorityMarketBatchSize: 0,
+        priorityVenues: [],
+        maxSamplesPerTick: 40,
+        maxTickDurationMs: 200,
+        sampleTimeoutMs: 100,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    recorder.start();
+    await delay(30);
+    await recorder.stop();
+
+    expect(warnings).not.toContain("Market orderbook recorder tick skipped because the previous tick is still running.");
+  });
+
   it("does not run recording after stop is requested", async () => {
     const listMarkets = async () => [marketFixture("OPEN")];
     let listMarketsCalled = false;
@@ -1069,6 +1160,10 @@ describe("MarketOrderbookRecorder", () => {
     });
   });
 });
+
+const delay = async (durationMs: number): Promise<void> => {
+  await new Promise((resolve) => setTimeout(resolve, durationMs));
+};
 
 const marketFixture = (status: MarketCatalogMarket["status"]): MarketCatalogMarket => ({
   eventId: "event:fixture",
