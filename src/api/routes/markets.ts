@@ -69,6 +69,9 @@ const DEFAULT_MARKET_CATALOG_RESPONSE_STALE_CACHE_MS = 900_000;
 const DEFAULT_MARKET_DETAIL_CACHE_MS = 300_000;
 const DEFAULT_MARKET_CHART_DETAIL_TIMEOUT_MS = 50;
 const DEFAULT_MARKET_CATALOG_ACTIVITY_TOUCH_LIMIT = 60;
+const DEFAULT_MARKET_ORDERBOOK_WARMUP_LIMIT = 12;
+const MARKET_ORDERBOOK_WARMUP_CACHE_MS = 15_000;
+const MARKET_ORDERBOOK_WARMUP_OUTCOMES = ["yes", "no"] as const;
 const MARKET_QUOTE_READINESS_TIMEOUT = Symbol("MARKET_QUOTE_READINESS_TIMEOUT");
 const MARKET_DETAIL_TIMEOUT = Symbol("MARKET_DETAIL_TIMEOUT");
 
@@ -82,6 +85,7 @@ const marketCatalogResponseCache = new Map<string, { expiresAtMs: number; staleU
 const marketCatalogResponsePending = new Map<string, Promise<unknown>>();
 const marketDetailCache = new Map<string, { expiresAtMs: number; value: MarketCatalogMarket | null }>();
 const marketDetailPending = new Map<string, Promise<MarketCatalogMarket | null>>();
+const marketOrderbookWarmupCache = new Map<string, number>();
 
 export const clearMarketQuoteReadinessCacheForTests = (): void => {
   marketQuoteReadinessCache.clear();
@@ -89,6 +93,7 @@ export const clearMarketQuoteReadinessCacheForTests = (): void => {
   marketCatalogResponsePending.clear();
   marketDetailCache.clear();
   marketDetailPending.clear();
+  marketOrderbookWarmupCache.clear();
 };
 
 export interface MarketCatalogRouteDeps {
@@ -160,6 +165,7 @@ export const registerMarketCatalogRoutes = async (
         sharedFallbacks: marketCatalogSnapshotFallbacks(parsed.data)
       }
     );
+    queueMarketCatalogOrderbookWarmup(payload, deps.marketDataViewService);
     return reply.send(payload);
   });
 
@@ -430,6 +436,84 @@ const touchOrderbookMarketActivity = (
       canonicalMarketId,
       ...(outcomeId ? { canonicalOutcomeId: outcomeId } : {})
     });
+  }
+};
+
+const queueMarketCatalogOrderbookWarmup = (
+  payload: unknown,
+  marketDataViewService: MarketCatalogRouteDeps["marketDataViewService"]
+): void => {
+  if (!marketDataViewService?.getOrderbook || typeof payload !== "object" || payload === null) {
+    return;
+  }
+  const markets = Array.isArray((payload as { markets?: unknown }).markets)
+    ? (payload as { markets: unknown[] }).markets
+    : [];
+  if (markets.length === 0) {
+    return;
+  }
+
+  const now = Date.now();
+  pruneMarketOrderbookWarmupCache(now);
+  const tasks: Array<{ marketId: string; canonicalMarketIds: string[]; outcomeId: string }> = [];
+  for (const market of markets) {
+    if (tasks.length >= DEFAULT_MARKET_ORDERBOOK_WARMUP_LIMIT * MARKET_ORDERBOOK_WARMUP_OUTCOMES.length) {
+      break;
+    }
+    if (!isMarketCatalogMarketLike(market) || !isTradableMarketListItem(market)) {
+      continue;
+    }
+    const canonicalMarketIds = market.canonicalMarketIds
+      .map((canonicalMarketId) => canonicalMarketId.trim())
+      .filter((canonicalMarketId) => canonicalMarketId.length > 0);
+    if (canonicalMarketIds.length === 0) {
+      continue;
+    }
+    for (const outcomeId of MARKET_ORDERBOOK_WARMUP_OUTCOMES) {
+      const key = marketOrderbookWarmupKey(market.canonicalEventId, canonicalMarketIds, outcomeId);
+      const cachedUntil = marketOrderbookWarmupCache.get(key) ?? 0;
+      if (cachedUntil > now) {
+        continue;
+      }
+      marketOrderbookWarmupCache.set(key, now + MARKET_ORDERBOOK_WARMUP_CACHE_MS);
+      tasks.push({
+        marketId: market.canonicalEventId,
+        canonicalMarketIds,
+        outcomeId
+      });
+    }
+  }
+
+  if (tasks.length === 0) {
+    return;
+  }
+  void runMarketCatalogOrderbookWarmup(marketDataViewService, tasks).catch(() => undefined);
+};
+
+const runMarketCatalogOrderbookWarmup = async (
+  marketDataViewService: NonNullable<MarketCatalogRouteDeps["marketDataViewService"]>,
+  tasks: readonly { marketId: string; canonicalMarketIds: readonly string[]; outcomeId: string }[]
+): Promise<void> => {
+  for (const task of tasks) {
+    await marketDataViewService.getOrderbook({
+      marketId: task.marketId,
+      canonicalMarketIds: task.canonicalMarketIds,
+      outcomeId: task.outcomeId
+    });
+  }
+};
+
+const marketOrderbookWarmupKey = (
+  marketId: string,
+  canonicalMarketIds: readonly string[],
+  outcomeId: string
+): string => `${marketId}\u0000${canonicalMarketIds.join("\u0001")}\u0000${outcomeId}`;
+
+const pruneMarketOrderbookWarmupCache = (now: number): void => {
+  for (const [key, expiresAtMs] of marketOrderbookWarmupCache.entries()) {
+    if (expiresAtMs <= now) {
+      marketOrderbookWarmupCache.delete(key);
+    }
   }
 };
 

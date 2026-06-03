@@ -256,6 +256,71 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
+  it("prewarms terminal orderbooks for visible quote-ready markets", async () => {
+    const app = Fastify({ logger: false });
+    const repository = new FakeMarketCatalogRepository();
+    const getOrderbook = vi.fn(async (input: {
+      marketId: string;
+      canonicalMarketIds?: readonly string[] | undefined;
+      outcomeId?: string | undefined;
+    }) => ({
+      marketId: input.marketId,
+      outcomeId: input.outcomeId ?? null,
+      generatedAt: new Date().toISOString(),
+      depth: 20,
+      venues: [],
+      bids: [],
+      asks: [],
+      bestBid: null,
+      bestAsk: null,
+      midpoint: null,
+      spread: null,
+      status: "unavailable" as const,
+      blockers: []
+    }));
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "partial" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: []
+          }];
+        }
+      },
+      marketDataViewService: {
+        getOrderbook,
+        getChart: vi.fn()
+      }
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=10&view=compact"
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(response.statusCode).toBe(200);
+    expect(getOrderbook).toHaveBeenCalledTimes(2);
+    expect(getOrderbook).toHaveBeenCalledWith({
+      marketId: market.canonicalEventId,
+      canonicalMarketIds: market.canonicalMarketIds,
+      outcomeId: "yes"
+    });
+    expect(getOrderbook).toHaveBeenCalledWith({
+      marketId: market.canonicalEventId,
+      canonicalMarketIds: market.canonicalMarketIds,
+      outcomeId: "no"
+    });
+
+    await app.close();
+  });
+
   it("filters quote-ready markets and returns sanitized readiness fields", async () => {
     const app = Fastify({ logger: false });
     const repository = new FakeMarketCatalogRepository();
