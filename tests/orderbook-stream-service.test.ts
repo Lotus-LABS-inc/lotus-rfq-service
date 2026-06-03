@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { NormalizedVenueQuoteSnapshot } from "../src/core/sor/quote-snapshot.js";
-import { parseOrderbookStreamVenues } from "../src/orderbook-stream-service.js";
+import { parseOrderbookStreamVenues, resolveOpinionStreamAuth } from "../src/orderbook-stream-service.js";
 import {
   OrderbookStreamService,
   marketOrderbookTopic,
@@ -78,6 +78,26 @@ describe("OrderbookStreamService", () => {
     ]);
     expect(Array.from(parseOrderbookStreamVenues("opinion"))).toEqual(["OPINION"]);
     expect(Array.from(parseOrderbookStreamVenues("not-a-venue"))).toEqual([]);
+  });
+
+  it("resolves Opinion stream auth from canonical and legacy prod env names", () => {
+    expect(resolveOpinionStreamAuth({
+      OPINION_BUILDER_API_KEY: " builder-key ",
+      OPINION_STREAM_WALLET_ADDRESS: " 0xstream "
+    })).toEqual({
+      apiKey: "builder-key",
+      walletAddress: "0xstream"
+    });
+    expect(resolveOpinionStreamAuth({
+      OPINION_BUILDER_API: "legacy-builder-key",
+      OPINION_EOA: "0xeoa"
+    })).toEqual({
+      apiKey: "legacy-builder-key",
+      walletAddress: "0xeoa"
+    });
+    expect(resolveOpinionStreamAuth({
+      OPINION_BUILDER_API: "legacy-builder-key"
+    })).toBeNull();
   });
 
   it("round-trips market orderbook websocket topics without exposing raw separators", () => {
