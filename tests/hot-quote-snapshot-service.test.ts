@@ -219,6 +219,50 @@ describe("HotQuoteSnapshotService", () => {
     expect(display?.metadata?.hotSnapshotFreshnessMs).toBe(60_000);
   });
 
+  it("prefers fresher Redis display snapshots over stale in-memory display snapshots", async () => {
+    const redis = new FakeRedis();
+    const freshAt = new Date(now.getTime() + 20_000);
+    const writer = new HotQuoteSnapshotService({
+      memoryCache: new QuoteSnapshotCache(),
+      redis,
+      now: () => freshAt
+    });
+    writer.put(snapshot({
+      receivedAt: freshAt,
+      sourceTimestamp: freshAt,
+      bids: [{ price: "0.58", size: "10" }],
+      asks: [{ price: "0.60", size: "10" }]
+    }));
+    await vi.waitFor(() => {
+      expect(redis.values.size).toBeGreaterThan(0);
+    });
+
+    const memoryCache = new QuoteSnapshotCache();
+    memoryCache.put(snapshot({
+      receivedAt: now,
+      sourceTimestamp: now,
+      bids: [{ price: "0.48", size: "10" }],
+      asks: [{ price: "0.50", size: "10" }]
+    }));
+    const reader = new HotQuoteSnapshotService({
+      memoryCache,
+      redis,
+      now: () => freshAt
+    });
+
+    const display = await reader.getDisplay({
+      venue: "POLYMARKET",
+      venueMarketId: "market-1",
+      venueOutcomeId: "yes",
+      maxAgeMs: 120_000,
+      includeDbFallback: false
+    });
+
+    expect(display?.metadata?.hotSnapshotSource).toBe("redis");
+    expect(display?.metadata?.hotSnapshotFreshnessMs).toBe(0);
+    expect(display?.bids[0]?.price).toBe("0.58");
+  });
+
   it("tracks active markets and expires idle entries", () => {
     let current = now;
     const service = new HotQuoteSnapshotService({

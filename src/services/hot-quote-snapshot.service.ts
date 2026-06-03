@@ -163,7 +163,7 @@ export class HotQuoteSnapshotService {
   }): Promise<NormalizedVenueQuoteSnapshot | null> {
     const maxAgeMs = Math.max(this.config.staleAfterMs, Math.min(input.maxAgeMs, 5 * 60_000));
     const memory = this.deps.memoryCache.get(input);
-    if (memory && this.isWithinAge(memory, maxAgeMs)) {
+    if (memory && this.isHot(memory)) {
       return annotateSnapshot(memory, "memory", this.now());
     }
 
@@ -171,6 +171,10 @@ export class HotQuoteSnapshotService {
     if (redis && this.isWithinAge(redis, maxAgeMs)) {
       this.deps.memoryCache.put(redis);
       return annotateSnapshot(redis, "redis", this.now());
+    }
+
+    if (memory && this.isWithinAge(memory, maxAgeMs)) {
+      return annotateSnapshot(memory, "memory", this.now());
     }
 
     if (input.includeDbFallback !== false) {
