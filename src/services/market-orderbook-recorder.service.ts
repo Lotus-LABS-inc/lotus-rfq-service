@@ -64,7 +64,7 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
   maxSamplesPerTick: 56,
   sampleConcurrency: 14,
   maxTickDurationMs: 10_500,
-  sampleTimeoutMs: 3_000,
+  sampleTimeoutMs: 1_800,
   cleanupIntervalMs: 30 * 60_000,
   retentionHours: 720,
   levelsPerSide: 25,

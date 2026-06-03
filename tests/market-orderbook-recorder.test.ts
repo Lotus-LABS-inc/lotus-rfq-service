@@ -26,7 +26,7 @@ describe("MarketOrderbookRecorder", () => {
       maxSamplesPerTick: 56,
       sampleConcurrency: 14,
       maxTickDurationMs: 10_500,
-      sampleTimeoutMs: 3_000,
+      sampleTimeoutMs: 1_800,
       cleanupIntervalMs: 30 * 60_000
     });
   });
@@ -45,7 +45,7 @@ describe("MarketOrderbookRecorder", () => {
         maxSamplesPerTick: 56,
         sampleConcurrency: 14,
         maxTickDurationMs: 10_500,
-        sampleTimeoutMs: 3_000,
+        sampleTimeoutMs: 1_800,
         cleanupIntervalMs: 30 * 60_000
       });
       expect(buildMarketOrderbookRecorderConfig()).not.toHaveProperty("enabled");
@@ -67,7 +67,7 @@ describe("MarketOrderbookRecorder", () => {
     expect(configs.every((config) => config.intervalMs === 12_000)).toBe(true);
     expect(configs.every((config) => config.maxSamplesPerTick === 56)).toBe(true);
     expect(configs.every((config) => config.activeMaxSamplesPerTick === 36)).toBe(true);
-    expect(configs.every((config) => config.sampleTimeoutMs === 3_000)).toBe(true);
+    expect(configs.every((config) => config.sampleTimeoutMs === 1_800)).toBe(true);
     expect(configs.every((config) => (config.maxTickDurationMs ?? 0) < config.intervalMs)).toBe(true);
   });
 
