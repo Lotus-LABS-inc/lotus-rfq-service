@@ -25,6 +25,32 @@ describe("VenueOrderbookSnapshotRepository", () => {
     expect(latestUpsert?.values).toHaveLength(21);
     expect(latestUpsert?.values[20]).toBe(DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS);
   });
+
+  it("bulk inserts history while deduping latest upsert keys", async () => {
+    const queries: Array<{ sql: string; values: unknown[] }> = [];
+    const repository = new VenueOrderbookSnapshotRepository({
+      query: async (sql: string, values: unknown[] = []) => {
+        queries.push({ sql, values });
+        return { rowCount: sql.includes("venue_orderbook_snapshots") ? 2 : 1, rows: [] };
+      }
+    } as unknown as Pool);
+
+    await repository.insertMany([
+      snapshotFixture({ receivedAt: new Date("2026-05-10T12:00:01.000Z"), bestBid: "0.49" }),
+      snapshotFixture({ receivedAt: new Date("2026-05-10T12:00:02.000Z"), bestBid: "0.50" })
+    ]);
+
+    expect(queries).toHaveLength(2);
+    const historicalInsert = queries[0]!;
+    const latestUpsert = queries[1]!;
+    expect(historicalInsert.sql).toContain("venue_orderbook_snapshots");
+    expect(historicalInsert.sql).toContain("), (");
+    expect(historicalInsert.values).toHaveLength(40);
+    expect(latestUpsert.sql).toContain("venue_orderbook_latest_snapshots");
+    expect(latestUpsert.sql).not.toContain("), (");
+    expect(latestUpsert.values).toHaveLength(21);
+    expect(latestUpsert.values[9]).toEqual(new Date("2026-05-10T12:00:02.000Z"));
+  });
 });
 
 const snapshotFixture = (overrides: Partial<VenueOrderbookSnapshotInput> = {}): VenueOrderbookSnapshotInput => ({
