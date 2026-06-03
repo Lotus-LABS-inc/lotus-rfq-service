@@ -565,6 +565,67 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
+  it("prefers fresh shared quote-ready snapshots over local in-memory catalog cache", async () => {
+    const repository = new FakeMarketCatalogRepository();
+    const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketCatalogSnapshotCache: snapshotCache,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: []
+          }];
+        }
+      }
+    });
+
+    const first = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=10"
+    });
+    const sharedMarket = {
+      ...market,
+      canonicalEventId: "22222222-2222-5222-8222-222222222222",
+      eventId: "event:shared",
+      quoteStatus: "partial" as const,
+      quoteReadyVenueCount: 2,
+      quoteReadyVenues: ["LIMITLESS", "POLYMARKET"],
+      lastQuoteAt: "2026-05-21T23:41:15.000Z"
+    };
+    snapshotCache.values.set("markets:{\"limit\":10,\"quoteReadyOnly\":true}", {
+      markets: [sharedMarket],
+      count: 1,
+      materialized: true
+    });
+    repository.filters = [];
+
+    const second = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=10"
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(repository.filters).toHaveLength(0);
+    expect(second.json()).toMatchObject({
+      count: 1,
+      materialized: true,
+      markets: [{
+        canonicalEventId: sharedMarket.canonicalEventId,
+        quoteReadyVenueCount: 2
+      }]
+    });
+
+    await app.close();
+  });
+
   it("does not serve stale quote-ready markets from shared snapshots", async () => {
     const repository = new FakeMarketCatalogRepository();
     const snapshotCache = new FakeMarketCatalogSnapshotCache();

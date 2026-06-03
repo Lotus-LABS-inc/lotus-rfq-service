@@ -508,6 +508,13 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
   } = {}
 ): Promise<T> => {
   const now = Date.now();
+  const preferSharedCache = Boolean(options.sharedCache && isQuoteReadyMarketCatalogCacheKey(key));
+  if (preferSharedCache) {
+    const sharedValue = await getSharedMarketCatalogResponse<T>(key, options);
+    if (sharedValue) {
+      return sharedValue;
+    }
+  }
   const cached = marketCatalogResponseCache.get(key);
   if (cached && cached.expiresAtMs >= now) {
     const scrubbed = scrubMarketCatalogResponseForKey(key, cached.value as T);
@@ -524,24 +531,10 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
     : null;
   const cacheTtlMs = resolveMarketCatalogResponseCacheMs(process.env.MARKET_CATALOG_RESPONSE_CACHE_MS);
   const staleCacheTtlMs = resolveMarketCatalogResponseStaleCacheMs(process.env.MARKET_CATALOG_RESPONSE_STALE_CACHE_MS);
-  if (options.sharedCache) {
-    try {
-      const shared = await options.sharedCache.get<T>(key);
-      if (shared && isCacheableMarketCatalogResponseForKey(key, shared)) {
-        const scrubbed = scrubMarketCatalogResponseForKey(key, shared);
-        cacheMarketCatalogResponse(key, scrubbed, cacheTtlMs, staleCacheTtlMs);
-        return scrubbed;
-      }
-      for (const fallback of options.sharedFallbacks ?? []) {
-        const fallbackShared = await options.sharedCache.get<T>(fallback.key);
-        if (fallbackShared && isCacheableMarketCatalogResponseForKey(fallback.key, fallbackShared)) {
-          const sliced = scrubMarketCatalogResponseForKey(key, sliceMarketCatalogResponse(fallbackShared, fallback.limit));
-          cacheMarketCatalogResponse(key, sliced, cacheTtlMs, staleCacheTtlMs);
-          return sliced;
-        }
-      }
-    } catch {
-      // Redis is a hot display cache only. Fall through to the DB producer.
+  if (options.sharedCache && !preferSharedCache) {
+    const sharedValue = await getSharedMarketCatalogResponse<T>(key, options, cacheTtlMs, staleCacheTtlMs);
+    if (sharedValue) {
+      return sharedValue;
     }
   }
   if (usableStaleCached) {
@@ -590,6 +583,39 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
     });
   marketCatalogResponsePending.set(key, promise);
   return await promise;
+};
+
+const getSharedMarketCatalogResponse = async <T extends Record<string, unknown>>(
+  key: string,
+  options: {
+    sharedCache?: MarketCatalogSnapshotCache | undefined;
+    sharedFallbacks?: readonly { key: string; limit: number }[] | undefined;
+  },
+  cacheTtlMs = resolveMarketCatalogResponseCacheMs(process.env.MARKET_CATALOG_RESPONSE_CACHE_MS),
+  staleCacheTtlMs = resolveMarketCatalogResponseStaleCacheMs(process.env.MARKET_CATALOG_RESPONSE_STALE_CACHE_MS)
+): Promise<T | null> => {
+  if (!options.sharedCache) {
+    return null;
+  }
+  try {
+    const shared = await options.sharedCache.get<T>(key);
+    if (shared && isCacheableMarketCatalogResponseForKey(key, shared)) {
+      const scrubbed = scrubMarketCatalogResponseForKey(key, shared);
+      cacheMarketCatalogResponse(key, scrubbed, cacheTtlMs, staleCacheTtlMs);
+      return scrubbed;
+    }
+    for (const fallback of options.sharedFallbacks ?? []) {
+      const fallbackShared = await options.sharedCache.get<T>(fallback.key);
+      if (fallbackShared && isCacheableMarketCatalogResponseForKey(fallback.key, fallbackShared)) {
+        const sliced = scrubMarketCatalogResponseForKey(key, sliceMarketCatalogResponse(fallbackShared, fallback.limit));
+        cacheMarketCatalogResponse(key, sliced, cacheTtlMs, staleCacheTtlMs);
+        return sliced;
+      }
+    }
+  } catch {
+    // Redis is a hot display cache only. Fall through to local cache/DB producer.
+  }
+  return null;
 };
 
 const markMarketCatalogResponseFromStaleCache = <T extends Record<string, unknown>>(value: T): T => ({
