@@ -538,7 +538,7 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
     }
   }
   if (usableStaleCached) {
-    if (!marketCatalogResponsePending.has(key)) {
+    if (!preferSharedCache && !marketCatalogResponsePending.has(key)) {
       const background = producer()
     .then((value) => {
       value = scrubMarketCatalogResponseForKey(key, value);
@@ -554,6 +554,9 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
       marketCatalogResponsePending.set(key, background);
     }
     return markMarketCatalogResponseFromStaleCache(usableStaleCached);
+  }
+  if (preferSharedCache) {
+    return emptyQuoteReadyMarketCatalogResponseForKey(key) as T;
   }
   const pending = marketCatalogResponsePending.get(key);
   if (pending) {
@@ -622,6 +625,14 @@ const markMarketCatalogResponseFromStaleCache = <T extends Record<string, unknow
   ...value,
   quoteReadinessDegraded: true,
   quoteReadinessReason: "stale_cache"
+});
+
+const emptyQuoteReadyMarketCatalogResponseForKey = (key: string): Record<string, unknown> => ({
+  markets: [],
+  count: 0,
+  ...(key.includes("\"view\":\"compact\"") ? { view: "compact" } : {}),
+  quoteReadinessDegraded: true,
+  quoteReadinessReason: "hot_snapshot_unavailable"
 });
 
 const scrubMarketCatalogResponseForKey = <T extends Record<string, unknown>>(key: string, value: T): T => {

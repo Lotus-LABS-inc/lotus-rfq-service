@@ -419,35 +419,23 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
-  it("materializes market catalog responses into the shared snapshot cache", async () => {
+  it("materializes all-market catalog responses into the shared snapshot cache", async () => {
     const repository = new FakeMarketCatalogRepository();
     const snapshotCache = new FakeMarketCatalogSnapshotCache();
     const app = Fastify({ logger: false });
     await registerMarketCatalogRoutes(app, {
       marketCatalogRepository: repository,
-      marketCatalogSnapshotCache: snapshotCache,
-      marketQuoteReadinessSource: {
-        async listLatestMarketQuoteReadiness() {
-          return [{
-            canonicalMarketId: market.canonicalMarketIds[0]!,
-            quoteStatus: "live" as const,
-            quoteReadyVenueCount: 1,
-            quoteReadyVenues: ["POLYMARKET"],
-            lastQuoteAt: "2026-05-21T23:41:15.000Z",
-            quoteBlockers: []
-          }];
-        }
-      }
+      marketCatalogSnapshotCache: snapshotCache
     });
 
     const first = await app.inject({
       method: "GET",
-      url: "/markets?quoteReadyOnly=true&limit=10"
+      url: "/markets?limit=10"
     });
     clearMarketQuoteReadinessCacheForTests();
     const second = await app.inject({
       method: "GET",
-      url: "/markets?quoteReadyOnly=true&limit=10"
+      url: "/markets?limit=10"
     });
 
     expect(first.statusCode).toBe(200);
@@ -456,7 +444,7 @@ describe("market catalog routes", () => {
     expect(repository.filters).toHaveLength(1);
     expect(second.json()).toMatchObject({
       count: 1,
-      markets: [{ quoteReadyVenueCount: 1 }]
+      markets: [{ canonicalEventId: market.canonicalEventId }]
     });
 
     await app.close();
@@ -626,7 +614,7 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
-  it("does not serve stale quote-ready markets from shared snapshots", async () => {
+  it("does not rebuild stale quote-ready shared snapshots on the user request", async () => {
     const repository = new FakeMarketCatalogRepository();
     const snapshotCache = new FakeMarketCatalogSnapshotCache();
     snapshotCache.values.set("markets:{\"limit\":10,\"quoteReadyOnly\":true}", {
@@ -646,7 +634,7 @@ describe("market catalog routes", () => {
       marketCatalogSnapshotCache: snapshotCache,
       marketQuoteReadinessSource: {
         async listLatestMarketQuoteReadiness() {
-          return [];
+          throw new Error("readiness should not be called when quote-ready snapshot is stale");
         }
       }
     });
@@ -657,9 +645,11 @@ describe("market catalog routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(repository.filters).toHaveLength(1);
+    expect(repository.filters).toHaveLength(0);
     expect(response.json()).toMatchObject({
       count: 0,
+      quoteReadinessDegraded: true,
+      quoteReadinessReason: "hot_snapshot_unavailable",
       markets: []
     });
 
@@ -702,7 +692,7 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
-  it("ignores empty shared quote-ready catalog snapshots and rebuilds from repository", async () => {
+  it("does not rebuild empty quote-ready shared snapshots on the user request", async () => {
     const repository = new FakeMarketCatalogRepository();
     const snapshotCache = new FakeMarketCatalogSnapshotCache();
     snapshotCache.values.set("markets:{\"limit\":10,\"quoteReadyOnly\":true}", {
@@ -715,14 +705,7 @@ describe("market catalog routes", () => {
       marketCatalogSnapshotCache: snapshotCache,
       marketQuoteReadinessSource: {
         async listLatestMarketQuoteReadiness() {
-          return [{
-            canonicalMarketId: market.canonicalMarketIds[0]!,
-            quoteStatus: "live" as const,
-            quoteReadyVenueCount: 1,
-            quoteReadyVenues: ["POLYMARKET"],
-            lastQuoteAt: "2026-05-21T23:41:15.000Z",
-            quoteBlockers: []
-          }];
+          throw new Error("readiness should not be called when quote-ready snapshot is empty");
         }
       }
     });
@@ -733,16 +716,18 @@ describe("market catalog routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(repository.filters).toHaveLength(1);
+    expect(repository.filters).toHaveLength(0);
     expect(response.json()).toMatchObject({
-      count: 1,
-      markets: [{ quoteReadyVenueCount: 1 }]
+      count: 0,
+      quoteReadinessDegraded: true,
+      quoteReadinessReason: "hot_snapshot_unavailable",
+      markets: []
     });
 
     await app.close();
   });
 
-  it("does not materialize degraded quote-ready responses when only stale readiness remains", async () => {
+  it("does not rebuild or materialize quote-ready responses when the hot snapshot is missing", async () => {
     process.env.MARKET_QUOTE_READINESS_TIMEOUT_MS = "1";
     const repository = new FakeMarketCatalogRepository();
     const snapshotCache = new FakeMarketCatalogSnapshotCache();
@@ -780,12 +765,18 @@ describe("market catalog routes", () => {
 
     expect(warm.statusCode).toBe(200);
     expect(degraded.statusCode).toBe(200);
-    expect(snapshotCache.setCount).toBe(1);
-    expect(repository.filters).toHaveLength(2);
+    expect(snapshotCache.setCount).toBe(0);
+    expect(repository.filters).toHaveLength(0);
+    expect(warm.json()).toMatchObject({
+      count: 0,
+      quoteReadinessDegraded: true,
+      quoteReadinessReason: "hot_snapshot_unavailable",
+      markets: []
+    });
     expect(degraded.json()).toMatchObject({
       count: 0,
       quoteReadinessDegraded: true,
-      quoteReadinessReason: "timeout",
+      quoteReadinessReason: "hot_snapshot_unavailable",
       markets: []
     });
 
