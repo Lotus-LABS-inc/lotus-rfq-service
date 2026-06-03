@@ -821,10 +821,11 @@ const scrubMarketCatalogResponseForKey = <T extends Record<string, unknown>>(key
   if (!isQuoteReadyMarketCatalogCacheKey(key) || !Array.isArray(value.markets)) {
     return value;
   }
+  const routeCoverage = marketCatalogRouteCoverageFromCacheKey(key);
   const markets = value.markets.filter((market) =>
     isTradableMarketListItem(market, {
       trustMaterializedFreshness: hasRecentMaterializedAt(value)
-    })
+    }) && routeCoverageMatchesMarketListItem(market, routeCoverage)
   );
   return {
     ...value,
@@ -923,6 +924,9 @@ const marketCatalogSnapshotFallbacks = (
   for (const alias of marketCatalogAllRouteAliases(query)) {
     add(alias);
   }
+  for (const alias of marketCatalogBroaderRouteFallbackAliases(query)) {
+    add(alias);
+  }
   if (query.category !== undefined || query.search !== undefined) {
     return [...fallbacks.values()];
   }
@@ -930,6 +934,9 @@ const marketCatalogSnapshotFallbacks = (
   for (const fallbackLimit of fallbackLimits) {
     add({ ...query, limit: fallbackLimit }, limit);
     for (const alias of marketCatalogAllRouteAliases({ ...query, limit: fallbackLimit })) {
+      add(alias, limit);
+    }
+    for (const alias of marketCatalogBroaderRouteFallbackAliases({ ...query, limit: fallbackLimit })) {
       add(alias, limit);
     }
   }
@@ -965,6 +972,24 @@ const marketCatalogAllRouteAliases = (
   }
   const { routeCoverage: _routeCoverage, ...rest } = query;
   return [rest];
+};
+
+const marketCatalogBroaderRouteFallbackAliases = (
+  query: z.infer<typeof listQuerySchema>
+): z.infer<typeof listQuerySchema>[] => {
+  if (query.quoteReadyOnly !== true) {
+    return [];
+  }
+  const routeCoverage = query.routeCoverage ?? "all";
+  if (routeCoverage === "all" || routeCoverage === "single") {
+    return [];
+  }
+  const { routeCoverage: _routeCoverage, ...rest } = query;
+  return [
+    rest,
+    { ...rest, routeCoverage: "all" },
+    { ...rest, routeCoverage: "single" }
+  ];
 };
 
 const pickBestMarketCatalogResponse = <T extends Record<string, unknown>>(values: readonly T[]): T | null => {
@@ -1045,6 +1070,51 @@ const stableQueryCacheKey = (query: z.infer<typeof listQuerySchema>): string =>
       }
       return memo;
     }, {}));
+
+const marketCatalogRouteCoverageFromCacheKey = (
+  key: string
+): z.infer<typeof routeCoverageSchema> => {
+  const prefix = "markets:";
+  if (!key.startsWith(prefix)) {
+    return "all";
+  }
+  try {
+    const parsed = JSON.parse(key.slice(prefix.length)) as { routeCoverage?: unknown };
+    return routeCoverageSchema.safeParse(parsed.routeCoverage).success
+      ? parsed.routeCoverage as z.infer<typeof routeCoverageSchema>
+      : "all";
+  } catch {
+    return "all";
+  }
+};
+
+const routeCoverageMatchesMarketListItem = (
+  value: unknown,
+  routeCoverage: z.infer<typeof routeCoverageSchema>
+): boolean => {
+  const readyVenueCount = marketReadyVenueCount(value);
+  switch (routeCoverage) {
+    case "single":
+      return readyVenueCount >= 1;
+    case "pair":
+      return readyVenueCount >= 2;
+    case "tri":
+      return readyVenueCount >= 3;
+    case "strict_all": {
+      const venueCount = typeof value === "object" && value !== null
+        ? (value as { venueCount?: unknown }).venueCount
+        : undefined;
+      const parsedVenueCount = typeof venueCount === "number"
+        ? venueCount
+        : typeof venueCount === "string"
+          ? Number(venueCount)
+          : 0;
+      return parsedVenueCount > 0 && readyVenueCount >= parsedVenueCount;
+    }
+    case "all":
+      return true;
+  }
+};
 
 const marketCatalogListCacheQuery = (
   query: z.infer<typeof listQuerySchema>

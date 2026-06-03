@@ -1097,6 +1097,59 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
+  it("serves tri quote-ready markets from broader materialized cache without live rebuild", async () => {
+    const singleMarket = {
+      ...market,
+      canonicalEventId: "22222222-2222-5222-8222-222222222222",
+      canonicalMarketIds: ["SINGLE_MARKET"],
+      quoteStatus: "live" as const,
+      quoteReadyVenueCount: 1,
+      quoteReadyVenues: ["POLYMARKET"],
+      lastQuoteAt: "2026-05-21T23:41:15.000Z"
+    };
+    const triMarket = {
+      ...market,
+      canonicalEventId: "33333333-3333-5333-8333-333333333333",
+      canonicalMarketIds: ["TRI_MARKET"],
+      venues: ["POLYMARKET", "LIMITLESS", "PREDICT_FUN"],
+      venueCount: 3,
+      venueMarketCount: 3,
+      quoteStatus: "partial" as const,
+      quoteReadyVenueCount: 3,
+      quoteReadyVenues: ["POLYMARKET", "LIMITLESS", "PREDICT_FUN"],
+      lastQuoteAt: "2026-05-21T23:41:15.000Z"
+    };
+    const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    snapshotCache.values.set("markets:{\"limit\":10,\"quoteReadyOnly\":true,\"routeCoverage\":\"single\"}", {
+      markets: [singleMarket, triMarket],
+      count: 2,
+      materialized: true,
+      materializedAt: "2026-05-21T23:41:15.000Z"
+    });
+    const app = Fastify({ logger: false });
+    const repository = new FakeMarketCatalogRepository();
+    repository.listMarkets = async () => {
+      throw new Error("live rebuild should not run");
+    };
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketCatalogSnapshotCache: snapshotCache
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&routeCoverage=tri&limit=10"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      count: 1,
+      markets: [{ canonicalMarketIds: ["TRI_MARKET"], quoteReadyVenueCount: 3 }]
+    });
+
+    await app.close();
+  });
+
   it("filters quote-ready markets by pair tri and strict-all coverage", async () => {
     const pairMarket = {
       ...market,
