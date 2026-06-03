@@ -492,6 +492,55 @@ describe("LiveMarketDataViewService", () => {
     });
   });
 
+  it("does not cache linked-leg deferred orderbooks over later live retries", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    let calls = 0;
+    const service = new LiveMarketDataViewService(
+      {
+        getQuoteSnapshotReport: async (input) => {
+          calls += 1;
+          if (calls <= 2) {
+            return await new Promise(() => undefined);
+          }
+          return {
+            snapshots: [snapshot({
+              venue: input.canonicalMarketId === "market-poly" ? "POLYMARKET" : "LIMITLESS",
+              venueMarketId: input.canonicalMarketId,
+              venueOutcomeId: input.canonicalMarketId === "market-poly" ? "token-yes" : "YES",
+              receivedAt: now,
+              bid: input.canonicalMarketId === "market-poly" ? "0.48" : "0.47",
+              ask: input.canonicalMarketId === "market-poly" ? "0.50" : "0.51"
+            })],
+            blocked: []
+          };
+        }
+      },
+      {
+        now: () => now,
+        orderbookLiveTimeoutMs: 10
+      }
+    );
+
+    const first = await service.getOrderbook({
+      marketId: "event-1",
+      canonicalMarketIds: ["market-poly", "market-limitless"],
+      outcomeId: "YES"
+    });
+    const second = await service.getOrderbook({
+      marketId: "event-1",
+      canonicalMarketIds: ["market-poly", "market-limitless"],
+      outcomeId: "YES"
+    });
+
+    expect(first.status).toBe("blocked");
+    expect(first.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ venue: "LOTUS", reason: "MARKET_ORDERBOOK_LEG_REFRESH_DEFERRED" })
+    ]));
+    expect(second.status).toBe("live");
+    expect(second.bestAsk).toBe("0.5");
+    expect(calls).toBeGreaterThan(2);
+  });
+
   it("does not serve last-good orderbook prices when a later live refresh times out", async () => {
     let now = new Date("2026-05-10T12:00:00.000Z");
     let calls = 0;

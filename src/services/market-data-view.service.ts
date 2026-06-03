@@ -263,6 +263,10 @@ export class LiveMarketDataViewService {
     void livePromise
       .then((orderbook) => {
         const output = orderbook;
+        if (isDeferredOrderbook(output)) {
+          this.orderbookCache.delete(key);
+          return;
+        }
         if (isDisplayUsableOrderbook(output)) {
           this.lastGoodOrderbooks.set(key, output);
         }
@@ -916,8 +920,10 @@ const isLiveTradableOrderbookVenue = (venue: MarketOrderbookVenue): boolean =>
   venue.snapshotStatus === "live" && venue.blockers.length === 0;
 
 const isDeferredOrderbook = (orderbook: MarketOrderbookResponse): boolean =>
-  orderbook.status === "unavailable" &&
-  orderbook.blockers.some((blocker) => blocker.venue === "LOTUS" && blocker.reason === "MARKET_ORDERBOOK_REFRESH_DEFERRED");
+  orderbook.blockers.some((blocker) =>
+    blocker.venue === "LOTUS" &&
+    (blocker.reason === "MARKET_ORDERBOOK_REFRESH_DEFERRED" ||
+      blocker.reason === "MARKET_ORDERBOOK_LEG_REFRESH_DEFERRED"));
 
 const isDeferredBatchQuote = (quote: MarketBatchQuoteItem): boolean =>
   quote.status === "unavailable" &&
