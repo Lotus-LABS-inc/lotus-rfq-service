@@ -352,6 +352,57 @@ describe("MarketOrderbookRecorder", () => {
     ]);
   });
 
+  it("round-robins capped samples across event cards so one multi-outcome event cannot starve the catalog", async () => {
+    const sampled: string[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [
+          multiMarketEventFixture("event-large", ["market-large-1", "market-large-2", "market-large-3", "market-large-4"]),
+          venueMarketFixture("POLYMARKET", "market-small-1"),
+          venueMarketFixture("POLYMARKET", "market-small-2")
+        ]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalMarketId, canonicalOutcomeId }) => {
+          sampled.push(`${canonicalMarketId}:${canonicalOutcomeId}`);
+          return {
+            snapshots: [],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 3,
+        priorityMarketBatchSize: 0,
+        priorityVenues: ["POLYMARKET"],
+        maxSamplesPerTick: 3,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.sampledOutcomes).toBe(3);
+    expect(sampled).toEqual([
+      "market-large-1:YES",
+      "market-small-1:YES",
+      "market-small-2:YES"
+    ]);
+  });
+
   it("samples active UI markets before the normal catalog sweep", async () => {
     const sampledMarketIds: string[] = [];
     const activeMarket = {
@@ -899,6 +950,23 @@ const venueMarketFixture = (venue: string, canonicalMarketId: string): MarketCat
       venue,
       venueMarketId: `${venue.toLowerCase()}-${canonicalMarketId}`,
       venueMarketProfileId: `profile-${venue.toLowerCase()}-${canonicalMarketId}`
+    }))
+  };
+};
+
+const multiMarketEventFixture = (canonicalEventId: string, canonicalMarketIds: readonly string[]): MarketCatalogMarket => {
+  const base = marketFixture("OPEN");
+  return {
+    ...base,
+    eventId: canonicalEventId,
+    canonicalEventId,
+    canonicalMarketIds: [...canonicalMarketIds],
+    venueMarkets: canonicalMarketIds.map((canonicalMarketId, index) => ({
+      ...base.venueMarkets[0]!,
+      canonicalMarketId,
+      venueMarketId: `poly-large-${index + 1}`,
+      venueMarketProfileId: `profile-large-${index + 1}`,
+      outcomes: [{ id: "YES", label: "Yes" }]
     }))
   };
 };

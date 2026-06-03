@@ -509,6 +509,7 @@ const buildMarketSamples = (market: MarketCatalogMarket): MarketOrderbookRecorde
 };
 
 const selectSamplesForTick = <T extends {
+  market: MarketCatalogMarket;
   sample: MarketOrderbookRecorderSample;
 }>(
   candidates: readonly T[],
@@ -524,13 +525,13 @@ const selectSamplesForTick = <T extends {
     return candidates.slice(0, limit);
   }
 
-  const buckets = new Map<string, T[]>(
-    [...normalizedPriorityVenues, "__OTHER__"].map((venue) => [venue, []])
+  const bucketQueues = new Map<string, EventRoundRobinQueue<T>>(
+    [...normalizedPriorityVenues, "__OTHER__"].map((venue) => [venue, createEventRoundRobinQueue<T>()])
   );
   for (const candidate of candidates) {
     const venueSet = new Set(candidate.sample.venueKeys.map(normalizeVenue));
     const bucketKey = normalizedPriorityVenues.find((venue) => venueSet.has(venue)) ?? "__OTHER__";
-    buckets.get(bucketKey)!.push(candidate);
+    bucketQueues.get(bucketKey)!.push(candidate);
   }
 
   const selected: T[] = [];
@@ -538,12 +539,15 @@ const selectSamplesForTick = <T extends {
   while (selected.length < limit) {
     let addedThisRound = false;
     for (const venue of [...normalizedPriorityVenues, "__OTHER__"]) {
-      const bucket = buckets.get(venue);
-      if (!bucket || bucket.length === 0) {
+      const bucket = bucketQueues.get(venue);
+      if (!bucket || bucket.isEmpty()) {
         continue;
       }
-      while (bucket.length > 0) {
-        const candidate = bucket.shift()!;
+      while (!bucket.isEmpty()) {
+        const candidate = bucket.shift();
+        if (!candidate) {
+          break;
+        }
         const key = sampleCooldownKey(candidate.sample);
         if (selectedKeys.has(key)) {
           continue;
@@ -563,6 +567,53 @@ const selectSamplesForTick = <T extends {
   }
   return selected;
 };
+
+type EventRoundRobinQueue<T extends { market: MarketCatalogMarket }> = {
+  push(candidate: T): void;
+  shift(): T | null;
+  isEmpty(): boolean;
+};
+
+const createEventRoundRobinQueue = <T extends { market: MarketCatalogMarket }>(): EventRoundRobinQueue<T> => {
+  const byEvent = new Map<string, T[]>();
+  const eventOrder: string[] = [];
+  return {
+    push(candidate) {
+      const eventKey = marketEventQueueKey(candidate.market);
+      let bucket = byEvent.get(eventKey);
+      if (!bucket) {
+        bucket = [];
+        byEvent.set(eventKey, bucket);
+        eventOrder.push(eventKey);
+      }
+      bucket.push(candidate);
+    },
+    shift() {
+      while (eventOrder.length > 0) {
+        const eventKey = eventOrder.shift()!;
+        const bucket = byEvent.get(eventKey);
+        if (!bucket || bucket.length === 0) {
+          byEvent.delete(eventKey);
+          continue;
+        }
+        const candidate = bucket.shift()!;
+        if (bucket.length > 0) {
+          eventOrder.push(eventKey);
+        } else {
+          byEvent.delete(eventKey);
+        }
+        return candidate;
+      }
+      return null;
+    },
+    isEmpty() {
+      return eventOrder.length === 0;
+    }
+  };
+};
+
+const marketEventQueueKey = (market: MarketCatalogMarket): string =>
+  market.canonicalEventId || market.eventId || market.canonicalMarketIds.join("|") || market.title;
 
 const countScheduledSampleVenues = (
   scheduledSamples: readonly { sample: MarketOrderbookRecorderSample }[]
