@@ -23,8 +23,8 @@ describe("MarketOrderbookRecorder", () => {
       priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
       maxSamplesPerTick: 48,
       sampleConcurrency: 12,
-      maxTickDurationMs: 4_500,
-      sampleTimeoutMs: 1_200,
+      maxTickDurationMs: 6_000,
+      sampleTimeoutMs: 2_500,
       cleanupIntervalMs: 30 * 60_000
     });
   });
@@ -41,8 +41,8 @@ describe("MarketOrderbookRecorder", () => {
         priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
         maxSamplesPerTick: 48,
         sampleConcurrency: 12,
-        maxTickDurationMs: 4_500,
-        sampleTimeoutMs: 1_200,
+        maxTickDurationMs: 6_000,
+        sampleTimeoutMs: 2_500,
         cleanupIntervalMs: 30 * 60_000
       });
       expect(buildMarketOrderbookRecorderConfig()).not.toHaveProperty("enabled");
