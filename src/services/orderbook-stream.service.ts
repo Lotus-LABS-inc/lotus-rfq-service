@@ -108,10 +108,10 @@ const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
   restRefreshTimeoutMs: 2_000,
   restRefreshFailureCooldownMs: 60_000,
   restRefreshVenuePolicies: {
-    POLYMARKET: { maxTargetsPerSweep: 3, failureCooldownMs: 60_000 },
-    LIMITLESS: { maxTargetsPerSweep: 1, failureCooldownMs: 300_000 },
-    PREDICT_FUN: { maxTargetsPerSweep: 2, failureCooldownMs: 90_000 },
-    OPINION: { maxTargetsPerSweep: 1, failureCooldownMs: 180_000 }
+    POLYMARKET: { maxTargetsPerSweep: 4, failureCooldownMs: 60_000 },
+    LIMITLESS: { maxTargetsPerSweep: 3, failureCooldownMs: 300_000 },
+    PREDICT_FUN: { maxTargetsPerSweep: 3, failureCooldownMs: 90_000 },
+    OPINION: { maxTargetsPerSweep: 3, failureCooldownMs: 180_000 }
   },
   latestSnapshotPersistIntervalMs: 30_000,
   latestSnapshotPersistMinSpacingMs: 250,
@@ -381,40 +381,46 @@ export class OrderbookStreamService {
     }
 
     let refreshed = 0;
-    await Promise.all(refreshable.map(async (target) => {
-      const refresher = this.restRefreshersByVenue.get(normalizeVenue(target.venue));
-      if (!refresher) {
-        return;
-      }
-      const key = restRefreshKey(target);
-      const fanoutTargets = groupsByNative.get(nativeSubscriptionKey(target)) ?? [target];
-      this.lastRestRefreshBySubscription.set(key, nowMs);
-      try {
-        const snapshot = await withTimeout(
-          refresher.refresh(target),
-          this.config.restRefreshTimeoutMs,
-          null
-        );
-        if (!snapshot) {
+    const refreshableByVenue = groupByVenue(refreshable);
+    await Promise.all([...refreshableByVenue.values()].map(async (venueTargets) => {
+      for (const target of venueTargets) {
+        if (this.isRestRefreshFailureCoolingDown(target, nowMs)) {
+          continue;
+        }
+        const refresher = this.restRefreshersByVenue.get(normalizeVenue(target.venue));
+        if (!refresher) {
+          continue;
+        }
+        const key = restRefreshKey(target);
+        const fanoutTargets = groupsByNative.get(nativeSubscriptionKey(target)) ?? [target];
+        this.lastRestRefreshBySubscription.set(key, nowMs);
+        try {
+          const snapshot = await withTimeout(
+            refresher.refresh(target),
+            this.config.restRefreshTimeoutMs,
+            null
+          );
+          if (!snapshot) {
+            this.markRestRefreshFailure(target, nowMs);
+            continue;
+          }
+          this.restRefreshFailureCooldowns.delete(key);
+          refreshed += 1;
+          for (const fanoutTarget of fanoutTargets) {
+            this.onSnapshot(snapshot, fanoutTarget);
+          }
+        } catch (error) {
           this.markRestRefreshFailure(target, nowMs);
-          return;
+          this.deps.logger.warn(
+            {
+              err: error,
+              venue: target.venue,
+              venueMarketId: sanitizeIdentifier(target.venueMarketId),
+              venueOutcomeId: target.venueOutcomeId ? sanitizeIdentifier(target.venueOutcomeId) : undefined
+            },
+            "Venue orderbook REST refresh failed."
+          );
         }
-        this.restRefreshFailureCooldowns.delete(key);
-        refreshed += 1;
-        for (const fanoutTarget of fanoutTargets) {
-          this.onSnapshot(snapshot, fanoutTarget);
-        }
-      } catch (error) {
-        this.markRestRefreshFailure(target, nowMs);
-        this.deps.logger.warn(
-          {
-            err: error,
-            venue: target.venue,
-            venueMarketId: sanitizeIdentifier(target.venueMarketId),
-            venueOutcomeId: target.venueOutcomeId ? sanitizeIdentifier(target.venueOutcomeId) : undefined
-          },
-          "Venue orderbook REST refresh failed."
-        );
       }
     }));
     return refreshed;
