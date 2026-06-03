@@ -11,6 +11,7 @@ export interface MarketOrderbookRecorderConfig {
   intervalMs: number;
   marketBatchSize: number;
   activeMarketBatchSize?: number;
+  activeMaxSamplesPerTick?: number;
   priorityMarketBatchSize?: number;
   priorityVenues?: readonly string[];
   shardCount?: number;
@@ -55,12 +56,13 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
   intervalMs: 5_000,
   marketBatchSize: 10,
   activeMarketBatchSize: 160,
+  activeMaxSamplesPerTick: 16,
   priorityMarketBatchSize: 48,
   priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"] as readonly string[],
   shardCount: 1,
   shardIndex: 0,
-  maxSamplesPerTick: 48,
-  sampleConcurrency: 12,
+  maxSamplesPerTick: 32,
+  sampleConcurrency: 8,
   maxTickDurationMs: 6_000,
   sampleTimeoutMs: 2_500,
   cleanupIntervalMs: 30 * 60_000,
@@ -128,6 +130,7 @@ export class MarketOrderbookRecorder {
       intervalMs: this.config.intervalMs,
       marketBatchSize: this.config.marketBatchSize,
       activeMarketBatchSize: this.config.activeMarketBatchSize ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.activeMarketBatchSize,
+      activeMaxSamplesPerTick: this.config.activeMaxSamplesPerTick ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.activeMaxSamplesPerTick,
       priorityMarketBatchSize: this.config.priorityMarketBatchSize ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityMarketBatchSize,
       priorityVenues: this.config.priorityVenues ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityVenues,
       shardCount: this.shardCount(),
@@ -179,7 +182,8 @@ export class MarketOrderbookRecorder {
         Math.floor(this.config.sampleConcurrency ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.sampleConcurrency)
       );
       const cleanup = await this.cleanupSnapshotsIfDue(tickStartedAt);
-      const activeMarkets = await this.listActiveMarkets();
+      const activeTargets = await this.listActiveTargets();
+      const activeMarkets = await this.listActiveMarkets(activeTargets);
       const priorityMarkets = await this.listPriorityMarkets();
       const shardCount = this.shardCount();
       const marketOffset = this.marketOffset;
@@ -199,7 +203,7 @@ export class MarketOrderbookRecorder {
       }
       const result: MarketOrderbookRecorderRunResult = {
         marketOffset,
-        activeMarkets: activeMarkets.length,
+        activeMarkets: activeTargets.length,
         scannedMarkets: markets.length,
         skippedClosedMarkets: 0,
         sampledOutcomes: 0,
@@ -248,9 +252,11 @@ export class MarketOrderbookRecorder {
           candidateSamples.push({ market, sample });
         }
       }
-      const scheduledSamples = selectSamplesForTick(
+      const scheduledSamples = selectSamplesForTickWithActivePriority(
         candidateSamples,
+        activeTargets,
         this.config.maxSamplesPerTick,
+        this.config.activeMaxSamplesPerTick ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.activeMaxSamplesPerTick,
         this.config.priorityVenues ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityVenues
       );
       result.sampledOutcomes = scheduledSamples.length;
@@ -453,7 +459,11 @@ export class MarketOrderbookRecorder {
     return selected;
   }
 
-  private async listActiveMarkets(): Promise<MarketCatalogMarket[]> {
+  private async listActiveTargets(): Promise<Array<{
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+    lastSeenAt: Date;
+  }>> {
     if (!this.activeMarketSource) {
       return [];
     }
@@ -461,12 +471,19 @@ export class MarketOrderbookRecorder {
     if (activeMarketBatchSize <= 0) {
       return [];
     }
-    const activeTargets = await this.activeMarketSource.listActiveMarketsFromRedis({
+    return this.activeMarketSource.listActiveMarketsFromRedis({
       limit: activeMarketBatchSize
     });
+  }
+
+  private async listActiveMarkets(activeTargets: readonly {
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+  }[]): Promise<MarketCatalogMarket[]> {
     if (activeTargets.length === 0) {
       return [];
     }
+    const activeMarketBatchSize = this.config.activeMarketBatchSize ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.activeMarketBatchSize;
     const activeIds = new Set(activeTargets.map((target) => target.canonicalMarketId));
     const catalogWindow = await this.marketCatalogRepository.listMarkets({
       limit: Math.max(250, activeMarketBatchSize),
@@ -553,6 +570,10 @@ const withRecorderTimeout = async <T>(promise: Promise<T>, timeoutMs: number): P
 };
 
 type MarketOrderbookRecorderSample = { canonicalMarketId: string; outcomeId: string; venueKeys: readonly string[] };
+type ActiveMarketTarget = {
+  canonicalMarketId: string;
+  canonicalOutcomeId?: string | undefined;
+};
 
 const buildMarketSamples = (market: MarketCatalogMarket): MarketOrderbookRecorderSample[] => {
   const canonicalMarketIds = market.canonicalMarketIds.length > 0 ? market.canonicalMarketIds : [market.canonicalEventId];
@@ -567,6 +588,49 @@ const buildMarketSamples = (market: MarketCatalogMarket): MarketOrderbookRecorde
     ).values()];
     return outcomeIds.map((outcomeId) => ({ canonicalMarketId, outcomeId, venueKeys }));
   });
+};
+
+const selectSamplesForTickWithActivePriority = <T extends {
+  market: MarketCatalogMarket;
+  sample: MarketOrderbookRecorderSample;
+}>(
+  candidates: readonly T[],
+  activeTargets: readonly ActiveMarketTarget[],
+  maxSamples: number,
+  activeMaxSamples: number,
+  priorityVenues: readonly string[]
+): T[] => {
+  const limit = Math.max(0, Math.floor(maxSamples));
+  if (limit <= 0 || candidates.length === 0) {
+    return [];
+  }
+  const activeTargetKeys = activeSampleKeys(activeTargets);
+  if (activeTargetKeys.size === 0) {
+    return selectSamplesForTick(candidates, limit, priorityVenues);
+  }
+
+  const activeCandidates = candidates.filter((candidate) =>
+    activeTargetKeys.has(sampleCooldownKey(candidate.sample)) ||
+    activeTargetKeys.has(activeMarketOnlyKey(candidate.sample.canonicalMarketId))
+  );
+  const selectedActive = selectSamplesForTick(
+    activeCandidates,
+    Math.min(limit, Math.max(0, Math.floor(activeMaxSamples))),
+    priorityVenues
+  );
+  const selectedKeys = new Set(selectedActive.map((candidate) => sampleCooldownKey(candidate.sample)));
+  const remaining = limit - selectedActive.length;
+  if (remaining <= 0) {
+    return selectedActive;
+  }
+  return [
+    ...selectedActive,
+    ...selectSamplesForTick(
+      candidates.filter((candidate) => !selectedKeys.has(sampleCooldownKey(candidate.sample))),
+      remaining,
+      priorityVenues
+    )
+  ];
 };
 
 const selectSamplesForTick = <T extends {
@@ -939,6 +1003,19 @@ const wrapSlice = <T>(values: readonly T[], offset: number, limit: number): T[] 
 
 const sampleCooldownKey = (sample: { canonicalMarketId: string; outcomeId?: string | null | undefined }): string =>
   `${sample.canonicalMarketId}:${sample.outcomeId ?? ""}`;
+
+const activeMarketOnlyKey = (canonicalMarketId: string): string =>
+  `${canonicalMarketId}:`;
+
+const activeSampleKeys = (activeTargets: readonly ActiveMarketTarget[]): ReadonlySet<string> => {
+  const keys = new Set<string>();
+  for (const target of activeTargets) {
+    keys.add(target.canonicalOutcomeId
+      ? sampleCooldownKey({ canonicalMarketId: target.canonicalMarketId, outcomeId: target.canonicalOutcomeId })
+      : activeMarketOnlyKey(target.canonicalMarketId));
+  }
+  return keys;
+};
 
 const providerCooldownMsForReason = (reason: string, baseCooldownMs: number): number => {
   if (reason.includes("QUOTE_PROVIDER_HTTP_429")) {

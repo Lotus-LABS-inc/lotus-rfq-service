@@ -20,10 +20,11 @@ describe("MarketOrderbookRecorder", () => {
       intervalMs: 5_000,
       marketBatchSize: 10,
       activeMarketBatchSize: 160,
+      activeMaxSamplesPerTick: 16,
       priorityMarketBatchSize: 48,
       priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-      maxSamplesPerTick: 48,
-      sampleConcurrency: 12,
+      maxSamplesPerTick: 32,
+      sampleConcurrency: 8,
       maxTickDurationMs: 6_000,
       sampleTimeoutMs: 2_500,
       cleanupIntervalMs: 30 * 60_000
@@ -38,10 +39,11 @@ describe("MarketOrderbookRecorder", () => {
         intervalMs: 5_000,
         marketBatchSize: 10,
         activeMarketBatchSize: 160,
+        activeMaxSamplesPerTick: 16,
         priorityMarketBatchSize: 48,
         priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-        maxSamplesPerTick: 48,
-        sampleConcurrency: 12,
+        maxSamplesPerTick: 32,
+        sampleConcurrency: 8,
         maxTickDurationMs: 6_000,
         sampleTimeoutMs: 2_500,
         cleanupIntervalMs: 30 * 60_000
@@ -63,7 +65,8 @@ describe("MarketOrderbookRecorder", () => {
     expect(configs.map((config) => config.shardCount)).toEqual([3, 3, 3]);
     expect(configs.map((config) => config.shardIndex)).toEqual([0, 1, 2]);
     expect(configs.every((config) => config.intervalMs === 5_000)).toBe(true);
-    expect(configs.every((config) => config.maxSamplesPerTick === 48)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerTick === 32)).toBe(true);
+    expect(configs.every((config) => config.activeMaxSamplesPerTick === 16)).toBe(true);
   });
 
   it("records approved open market outcome snapshots and skips closed markets", async () => {
@@ -475,6 +478,73 @@ describe("MarketOrderbookRecorder", () => {
 
     expect(result.activeMarkets).toBe(1);
     expect(sampledMarketIds).toEqual(["market-active", "market-active", "market-1", "market-1"]);
+  });
+
+  it("reserves the first sample budget for active terminal outcomes", async () => {
+    const sampled: string[] = [];
+    const activeMarket = {
+      ...marketFixture("OPEN"),
+      canonicalEventId: "event-active",
+      canonicalMarketIds: ["market-active"],
+      venueMarkets: marketFixture("OPEN").venueMarkets.map((venueMarket) => ({
+        ...venueMarket,
+        canonicalMarketId: "market-active"
+      }))
+    };
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async (filter) => (filter?.limit ?? 0) >= 250
+          ? [activeMarket, marketFixture("OPEN")]
+          : [marketFixture("OPEN")]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalMarketId, canonicalOutcomeId }) => {
+          sampled.push(`${canonicalMarketId}:${canonicalOutcomeId}`);
+          return {
+            snapshots: [],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 1,
+        activeMarketBatchSize: 10,
+        activeMaxSamplesPerTick: 1,
+        priorityMarketBatchSize: 0,
+        priorityVenues: ["POLYMARKET"],
+        maxSamplesPerTick: 2,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      },
+      {
+        listActiveMarketsFromRedis: async () => [{
+          canonicalMarketId: "market-active",
+          canonicalOutcomeId: "NO",
+          lastSeenAt: new Date("2026-05-10T12:00:00.000Z")
+        }]
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.activeMarkets).toBe(1);
+    expect(result.sampledOutcomes).toBe(2);
+    expect(sampled).toEqual([
+      "market-active:NO",
+      "market-active:YES"
+    ]);
   });
 
   it("bounds and cools down hung quote source samples so recorder ticks cannot stall indefinitely", async () => {
