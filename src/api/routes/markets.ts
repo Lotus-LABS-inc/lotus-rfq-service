@@ -162,7 +162,8 @@ export const registerMarketCatalogRoutes = async (
       {
         cacheDegraded: false,
         sharedCache: deps.marketCatalogSnapshotCache,
-        sharedFallbacks: marketCatalogSnapshotFallbacks(parsed.data)
+        sharedFallbacks: marketCatalogSnapshotFallbacks(parsed.data),
+        sharedWriteKeys: marketCatalogSnapshotWriteKeys(parsed.data)
       }
     );
     queueMarketCatalogOrderbookWarmup(payload, deps.marketDataViewService);
@@ -652,6 +653,7 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
     cacheDegraded?: boolean;
     sharedCache?: MarketCatalogSnapshotCache | undefined;
     sharedFallbacks?: readonly { key: string; limit: number }[] | undefined;
+    sharedWriteKeys?: readonly string[] | undefined;
   } = {}
 ): Promise<T> => {
   const now = Date.now();
@@ -691,7 +693,7 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
       value = scrubMarketCatalogResponseForKey(key, value);
       if (options.cacheDegraded !== false || isCacheableMarketCatalogResponseForKey(key, value)) {
         cacheMarketCatalogResponse(key, value, cacheTtlMs, staleCacheTtlMs);
-        void options.sharedCache?.set(key, value, cacheTtlMs).catch(() => undefined);
+        void setSharedMarketCatalogResponses(key, value, cacheTtlMs, options).catch(() => undefined);
           }
         })
         .catch(() => undefined)
@@ -712,7 +714,7 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
       if (options.cacheDegraded !== false || isCacheableMarketCatalogResponseForKey(key, value)) {
         cacheMarketCatalogResponse(key, value, cacheTtlMs, staleCacheTtlMs);
         if (isCacheableMarketCatalogResponseForKey(key, value)) {
-          void options.sharedCache?.set(key, value, cacheTtlMs).catch(() => undefined);
+          void setSharedMarketCatalogResponses(key, value, cacheTtlMs, options).catch(() => undefined);
         }
       } else if (usableStaleCached) {
         return markMarketCatalogResponseFromStaleCache(usableStaleCached);
@@ -768,6 +770,22 @@ const getSharedMarketCatalogResponse = async <T extends Record<string, unknown>>
     // Redis is a hot display cache only. Fall through to local cache/DB producer.
   }
   return null;
+};
+
+const setSharedMarketCatalogResponses = async <T extends Record<string, unknown>>(
+  key: string,
+  value: T,
+  ttlMs: number,
+  options: {
+    sharedCache?: MarketCatalogSnapshotCache | undefined;
+    sharedWriteKeys?: readonly string[] | undefined;
+  }
+): Promise<void> => {
+  if (!options.sharedCache) {
+    return;
+  }
+  const keys = new Set([key, ...(options.sharedWriteKeys ?? [])]);
+  await Promise.all([...keys].map((candidateKey) => options.sharedCache?.set(candidateKey, value, ttlMs)));
 };
 
 const markMarketCatalogResponseFromStaleCache = <T extends Record<string, unknown>>(value: T): T => ({
@@ -879,6 +897,13 @@ const marketCatalogSnapshotFallbacks = (
   }
   return [...fallbacks.values()];
 };
+
+const marketCatalogSnapshotWriteKeys = (
+  query: z.infer<typeof listQuerySchema>
+): string[] => [
+  ...new Set(marketCatalogAllRouteAliases(query)
+    .map((candidate) => `markets:${stableQueryCacheKey(candidate)}`))
+];
 
 const marketCatalogAllRouteAliases = (
   query: z.infer<typeof listQuerySchema>

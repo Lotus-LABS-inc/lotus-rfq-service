@@ -506,8 +506,12 @@ describe("market catalog routes", () => {
 
     expect(first.statusCode).toBe(200);
     expect(second.statusCode).toBe(200);
-    expect(snapshotCache.setCount).toBe(1);
+    expect(snapshotCache.setCount).toBe(2);
     expect(repository.filters).toHaveLength(1);
+    expect(snapshotCache.values.get("markets:{\"limit\":10,\"routeCoverage\":\"all\"}")).toMatchObject({
+      count: 1,
+      markets: [{ canonicalEventId: market.canonicalEventId }]
+    });
     expect(second.json()).toMatchObject({
       count: 1,
       markets: [{ canonicalEventId: market.canonicalEventId }]
@@ -903,8 +907,12 @@ describe("market catalog routes", () => {
 
     expect(warm.statusCode).toBe(200);
     expect(degraded.statusCode).toBe(200);
-    expect(snapshotCache.setCount).toBe(1);
+    expect(snapshotCache.setCount).toBe(2);
     expect(repository.filters).toHaveLength(2);
+    expect(snapshotCache.values.get("markets:{\"limit\":10,\"quoteReadyOnly\":true,\"routeCoverage\":\"all\"}")).toMatchObject({
+      count: 1,
+      markets: [{ quoteReadyVenueCount: 1 }]
+    });
     expect(warm.json()).toMatchObject({
       count: 1,
       markets: [{ quoteReadyVenueCount: 1 }]
