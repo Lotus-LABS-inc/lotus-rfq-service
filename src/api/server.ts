@@ -1165,15 +1165,41 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     app.addHook("onClose", async () => {
       await Promise.all(marketOrderbookRecorders.map((marketOrderbookRecorder) => marketOrderbookRecorder.stop()));
     });
-    const marketCatalogSnapshotMaterializer = new MarketCatalogSnapshotMaterializer({
-      marketCatalogRepository,
-      marketQuoteReadinessSource,
-      snapshotCache: marketCatalogSnapshotCache,
-      logger: dependencies.logger
-    });
-    marketCatalogSnapshotMaterializer.start();
+    const marketCatalogSnapshotMaterializers = [
+      new MarketCatalogSnapshotMaterializer({
+        marketCatalogRepository,
+        marketQuoteReadinessSource,
+        snapshotCache: marketCatalogSnapshotCache,
+        logger: dependencies.logger,
+        config: {
+          intervalMs: 3_000,
+          cacheTtlMs: 45_000,
+          limits: [250],
+          routeCoverages: ["all"],
+          categories: [],
+          categoryRefreshEveryTicks: 1
+        }
+      }),
+      new MarketCatalogSnapshotMaterializer({
+        marketCatalogRepository,
+        marketQuoteReadinessSource,
+        snapshotCache: marketCatalogSnapshotCache,
+        logger: dependencies.logger,
+        config: {
+          intervalMs: 30_000,
+          cacheTtlMs: 120_000,
+          limits: [250],
+          routeCoverages: ["all", "pair", "tri", "strict_all"],
+          categories: ["Crypto", "Sports", "Politics", "Esports"],
+          categoryRefreshEveryTicks: 1
+        }
+      })
+    ];
+    for (const marketCatalogSnapshotMaterializer of marketCatalogSnapshotMaterializers) {
+      marketCatalogSnapshotMaterializer.start();
+    }
     app.addHook("onClose", async () => {
-      await marketCatalogSnapshotMaterializer.stop();
+      await Promise.all(marketCatalogSnapshotMaterializers.map((materializer) => materializer.stop()));
     });
   }
 
