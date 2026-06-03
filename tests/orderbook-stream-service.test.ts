@@ -6,6 +6,7 @@ import {
   marketOrderbookTopic,
   parseMarketOrderbookTopic,
   subscriptionKey,
+  type VenueOrderbookRestRefresher,
   type VenueOrderbookStreamConnector,
   type VenueOrderbookSubscriptionTarget
 } from "../src/services/orderbook-stream.service.js";
@@ -561,5 +562,143 @@ describe("OrderbookStreamService", () => {
     await expect(service.runOnce()).resolves.toMatchObject({ subscribed: 0, pendingSubscriptions: 1 });
     await expect(service.runOnce()).resolves.toMatchObject({ subscribed: 0, pendingSubscriptions: 1 });
     expect(failing.subscribed).toHaveLength(0);
+  });
+
+  it("refreshes subscribed targets through bounded REST fallback and publishes terminal updates", async () => {
+    const connector = new FakeConnector("POLYMARKET");
+    const put = vi.fn();
+    const publish = vi.fn(async () => 1);
+    const refresher: VenueOrderbookRestRefresher = {
+      venue: "POLYMARKET",
+      async refresh(target) {
+        return {
+          ...snapshot(target),
+          source: "REST",
+          quoteQuality: "FULL_DEPTH_REST"
+        };
+      }
+    };
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [{ canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: now }];
+        }
+      },
+      hotSnapshots: { put },
+      mappingResolver: {
+        async getReadiness() {
+          return [{
+            venue: "POLYMARKET",
+            approvedVenueMarketId: "approved-1",
+            venueMarketId: "market-1",
+            venueOutcomeId: "token-yes",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors: [connector],
+      restRefreshers: [refresher],
+      publisher: { publish },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ subscribed: 1, restRefreshed: 1 });
+
+    expect(put).toHaveBeenCalledWith(expect.objectContaining({
+      venue: "POLYMARKET",
+      source: "REST",
+      quoteQuality: "FULL_DEPTH_REST"
+    }));
+    const firstPublishCall = publish.mock.calls[0] as unknown[] | undefined;
+    const message = firstPublishCall?.[1];
+    expect(typeof message).toBe("string");
+    const event = JSON.parse(message as string) as Record<string, unknown>;
+    expect(event).toMatchObject({
+      type: "MARKET_ORDERBOOK_UPDATE",
+      topic: marketOrderbookTopic("canonical-1", "YES")
+    });
+  });
+
+  it("respects REST refresh cooldowns so active target refreshes do not storm providers", async () => {
+    const connector = new FakeConnector("POLYMARKET");
+    const refresh = vi.fn(async (target: VenueOrderbookSubscriptionTarget) => ({
+      ...snapshot(target),
+      source: "REST" as const,
+      quoteQuality: "FULL_DEPTH_REST" as const
+    }));
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [{ canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: now }];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness() {
+          return [{
+            venue: "POLYMARKET",
+            approvedVenueMarketId: "approved-1",
+            venueMarketId: "market-1",
+            venueOutcomeId: "token-yes",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors: [connector],
+      restRefreshers: [{ venue: "POLYMARKET", refresh }],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now,
+      config: { restRefreshIntervalMs: 60_000 }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 1 });
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("times out slow REST fallback refreshes without failing the stream tick", async () => {
+    const connector = new FakeConnector("POLYMARKET");
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [{ canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: now }];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness() {
+          return [{
+            venue: "POLYMARKET",
+            approvedVenueMarketId: "approved-1",
+            venueMarketId: "market-1",
+            venueOutcomeId: "token-yes",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors: [connector],
+      restRefreshers: [{
+        venue: "POLYMARKET",
+        async refresh() {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return null;
+        }
+      }],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now,
+      config: { restRefreshTimeoutMs: 1 }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({
+      activeMarkets: 1,
+      subscribed: 1,
+      restRefreshed: 0
+    });
   });
 });

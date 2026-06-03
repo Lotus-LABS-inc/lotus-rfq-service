@@ -2,6 +2,7 @@ import type { Logger } from "pino";
 import type {
   NormalizedVenueQuoteSnapshot,
   SharedCoreQuoteReadinessMarket,
+  VenueQuoteSnapshotReader,
   VenueQuoteMappingReadiness,
   VenueQuoteMappingResolver
 } from "../core/sor/quote-snapshot.js";
@@ -41,7 +42,15 @@ export interface OrderbookStreamServiceConfig {
   maxUnsubscribeTargetsPerTick: number;
   maxTargetsPerConnectorCall: number;
   subscriptionHoldMs: number;
+  restRefreshIntervalMs: number;
+  maxRestRefreshTargetsPerTick: number;
+  restRefreshTimeoutMs: number;
   summaryLogIntervalMs: number;
+}
+
+export interface VenueOrderbookRestRefresher {
+  readonly venue: string;
+  refresh(target: VenueOrderbookSubscriptionTarget): Promise<NormalizedVenueQuoteSnapshot | null>;
 }
 
 export interface OrderbookStreamServiceDeps {
@@ -49,6 +58,7 @@ export interface OrderbookStreamServiceDeps {
   hotSnapshots: Pick<HotQuoteSnapshotService, "put">;
   mappingResolver: Pick<VenueQuoteMappingResolver, "getReadiness" | "listApprovedReadiness">;
   connectors: readonly VenueOrderbookStreamConnector[];
+  restRefreshers?: readonly VenueOrderbookRestRefresher[] | readonly VenueQuoteSnapshotReader[] | undefined;
   publisher: Pick<RedisClient, "publish">;
   logger: Pick<Logger, "info" | "warn" | "error">;
   now?: () => Date;
@@ -64,6 +74,7 @@ export interface OrderbookStreamServiceRunResult {
   unsupportedVenueTargets: number;
   retainedSubscriptions: number;
   pendingSubscriptions: number;
+  restRefreshed: number;
 }
 
 const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
@@ -75,6 +86,9 @@ const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
   maxUnsubscribeTargetsPerTick: 40,
   maxTargetsPerConnectorCall: 40,
   subscriptionHoldMs: 120_000,
+  restRefreshIntervalMs: 10_000,
+  maxRestRefreshTargetsPerTick: 24,
+  restRefreshTimeoutMs: 1_500,
   summaryLogIntervalMs: 15_000
 };
 
@@ -85,7 +99,9 @@ export class OrderbookStreamService {
   private readonly now: () => Date;
   private readonly redisChannel: string;
   private readonly connectorsByVenue: ReadonlyMap<string, VenueOrderbookStreamConnector>;
+  private readonly restRefreshersByVenue: ReadonlyMap<string, VenueOrderbookRestRefresher>;
   private readonly activeSubscriptions = new Map<string, { target: VenueOrderbookSubscriptionTarget; lastDesiredAt: number }>();
+  private readonly lastRestRefreshBySubscription = new Map<string, number>();
   private lastSummaryLogAt = 0;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
@@ -95,6 +111,8 @@ export class OrderbookStreamService {
     this.now = deps.now ?? (() => new Date());
     this.redisChannel = deps.redisChannel ?? ORDERBOOK_GATEWAY_REDIS_CHANNEL;
     this.connectorsByVenue = new Map(deps.connectors.map((connector) => [normalizeVenue(connector.venue), connector]));
+    this.restRefreshersByVenue = new Map((deps.restRefreshers ?? [])
+      .map((refresher) => [normalizeVenue(refresher.venue), normalizeRestRefresher(refresher)]));
   }
 
   public start(): void {
@@ -169,6 +187,7 @@ export class OrderbookStreamService {
       for (const target of subscribedTargets) {
         this.activeSubscriptions.set(subscriptionKey(target), { target, lastDesiredAt: nowMs });
       }
+      const restRefreshed = await this.refreshRestTargets(desiredTargets, nowMs);
 
       const result = {
         activeMarkets: activeMarkets.length,
@@ -177,7 +196,8 @@ export class OrderbookStreamService {
         unsubscribed: unsubscribedKeys.length,
         unsupportedVenueTargets: resolvedTargets.length - desiredTargets.length,
         retainedSubscriptions: Math.max(0, retainedSubscriptions),
-        pendingSubscriptions: Math.max(0, desiredTargets.length - this.activeSubscriptions.size)
+        pendingSubscriptions: Math.max(0, desiredTargets.length - this.activeSubscriptions.size),
+        restRefreshed
       };
       this.logSummary(result);
       return result;
@@ -296,6 +316,59 @@ export class OrderbookStreamService {
       }
     }));
     return succeeded;
+  }
+
+  private async refreshRestTargets(
+    targets: readonly VenueOrderbookSubscriptionTarget[],
+    nowMs: number
+  ): Promise<number> {
+    const refreshable = dedupeTargetsBySubscription(targets)
+      .filter((target) => this.isRestRefreshDue(target, nowMs))
+      .slice(0, this.config.maxRestRefreshTargetsPerTick);
+    if (refreshable.length === 0) {
+      return 0;
+    }
+
+    let refreshed = 0;
+    await Promise.all(refreshable.map(async (target) => {
+      const refresher = this.restRefreshersByVenue.get(normalizeVenue(target.venue));
+      if (!refresher) {
+        return;
+      }
+      const key = subscriptionKey(target);
+      this.lastRestRefreshBySubscription.set(key, nowMs);
+      try {
+        const snapshot = await withTimeout(
+          refresher.refresh(target),
+          this.config.restRefreshTimeoutMs,
+          null
+        );
+        if (!snapshot) {
+          return;
+        }
+        refreshed += 1;
+        this.onSnapshot(snapshot, target);
+      } catch (error) {
+        this.deps.logger.warn(
+          {
+            err: error,
+            venue: target.venue,
+            venueMarketId: sanitizeIdentifier(target.venueMarketId),
+            venueOutcomeId: target.venueOutcomeId ? sanitizeIdentifier(target.venueOutcomeId) : undefined
+          },
+          "Venue orderbook REST refresh failed."
+        );
+      }
+    }));
+    return refreshed;
+  }
+
+  private isRestRefreshDue(target: VenueOrderbookSubscriptionTarget, nowMs: number): boolean {
+    if (!this.restRefreshersByVenue.has(normalizeVenue(target.venue))) {
+      return false;
+    }
+    const last = this.lastRestRefreshBySubscription.get(subscriptionKey(target));
+    return last === undefined || nowMs - last >= this.config.restRefreshIntervalMs;
   }
 
   private onSnapshot(snapshot: NormalizedVenueQuoteSnapshot, target: VenueOrderbookSubscriptionTarget): void {
@@ -469,6 +542,45 @@ const sanitizeStrings = (values: readonly string[]): readonly string[] =>
     .map((value) => value.replace(/[A-Za-z0-9_-]{32,}/g, "REDACTED").slice(0, 120))
     .filter((value) => value.trim().length > 0);
 
+const sanitizeIdentifier = (value: string): string =>
+  value.length > 16 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
+
+const normalizeRestRefresher = (
+  refresher: VenueOrderbookRestRefresher | VenueQuoteSnapshotReader
+): VenueOrderbookRestRefresher => {
+  if ("refresh" in refresher) {
+    return refresher;
+  }
+  return {
+    venue: refresher.venue,
+    refresh: (target) => refresher.getQuoteSnapshot({
+      canonicalMarketId: target.canonicalMarketId,
+      ...(target.canonicalOutcomeId ? { canonicalOutcomeId: target.canonicalOutcomeId } : {}),
+      venueMarketId: target.venueMarketId,
+      ...(target.venueOutcomeId ? { venueOutcomeId: target.venueOutcomeId } : {}),
+      side: "buy",
+      quantity: 1
+    })
+  };
+};
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
+  let timer: NodeJS.Timeout | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), Math.max(1, timeoutMs));
+        timer.unref?.();
+      })
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+};
+
 const emptyResult = (): OrderbookStreamServiceRunResult => ({
   activeMarkets: 0,
   desiredSubscriptions: 0,
@@ -476,5 +588,6 @@ const emptyResult = (): OrderbookStreamServiceRunResult => ({
   unsubscribed: 0,
   unsupportedVenueTargets: 0,
   retainedSubscriptions: 0,
-  pendingSubscriptions: 0
+  pendingSubscriptions: 0,
+  restRefreshed: 0
 });

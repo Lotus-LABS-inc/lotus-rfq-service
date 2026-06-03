@@ -4,6 +4,9 @@ import Fastify from "fastify";
 import { QuoteSnapshotCache, SharedCoreVenueQuoteMappingResolver } from "./core/sor/quote-snapshot.js";
 import { createPgPool, closePgPool } from "./db/postgres.js";
 import { connectRedis, createRedisClient, disconnectRedis } from "./db/redis.js";
+import { PolymarketClobFeeReader } from "./integrations/polymarket/polymarket-fee-reader.js";
+import { PolymarketGammaClient } from "./integrations/polymarket/polymarket-gamma-client.js";
+import { PolymarketQuoteReader, PolymarketRestOrderbookClient } from "./integrations/polymarket/polymarket-quote-reader.js";
 import {
   LimitlessSdkOrderbookConnector,
   OpinionSdkOrderbookConnector,
@@ -13,7 +16,11 @@ import {
 import { VenueOrderbookSnapshotRepository } from "./repositories/venue-orderbook-snapshot.repository.js";
 import { SharedCoreQuoteMappingRepository } from "./repositories/market-catalog.repository.js";
 import { HotQuoteSnapshotService, resolveHotQuoteRedisNamespace } from "./services/hot-quote-snapshot.service.js";
-import { OrderbookStreamService, type VenueOrderbookStreamConnector } from "./services/orderbook-stream.service.js";
+import {
+  OrderbookStreamService,
+  type VenueOrderbookRestRefresher,
+  type VenueOrderbookStreamConnector
+} from "./services/orderbook-stream.service.js";
 import { loadEnv } from "./utils/env.js";
 import { createLogger } from "./utils/logger.js";
 
@@ -64,6 +71,7 @@ export const runOrderbookStreamService = async (): Promise<OrderbookStreamRuntim
     hotSnapshots,
     mappingResolver,
     connectors: buildConnectors(logger),
+    restRefreshers: buildRestRefreshers(),
     publisher: redis,
     logger
   });
@@ -177,6 +185,34 @@ const buildConnectors = (logger: ReturnType<typeof createLogger>) => {
   return connectors;
 };
 
+const buildRestRefreshers = (): readonly VenueOrderbookRestRefresher[] => {
+  const polymarketClobHost = process.env.POLYMARKET_CLOB_HOST ?? process.env.POLY_CLOB_HOST ?? "https://clob.polymarket.com";
+  const polymarketGammaBaseUrl = process.env.POLYMARKET_GAMMA_BASE_URL ?? "https://gamma-api.polymarket.com";
+  const polymarketReader = new PolymarketQuoteReader({
+    client: new PolymarketRestOrderbookClient({
+      clobHost: polymarketClobHost
+    }),
+    streamCache: new QuoteSnapshotCache(),
+    feeBps: parseOptionalNumber(process.env.POLYMARKET_QUOTE_FEE_BPS),
+    feeReader: new PolymarketClobFeeReader({ clobHost: polymarketClobHost }),
+    metadataClient: new PolymarketGammaClient({
+      baseUrl: polymarketGammaBaseUrl,
+      clobHost: polymarketClobHost
+    })
+  });
+  return [{
+    venue: polymarketReader.venue,
+    refresh: (target) => polymarketReader.getQuoteSnapshot({
+      canonicalMarketId: target.canonicalMarketId,
+      ...(target.canonicalOutcomeId ? { canonicalOutcomeId: target.canonicalOutcomeId } : {}),
+      venueMarketId: target.venueMarketId,
+      ...(target.venueOutcomeId ? { venueOutcomeId: target.venueOutcomeId } : {}),
+      side: "buy",
+      quantity: 1
+    })
+  }];
+};
+
 const OPINION_STREAM_API_KEY_ENV_NAMES = [
   "OPINION_BUILDER_API_KEY",
   "OPINION_BUILDER_SERVICE_API_KEY",
@@ -212,6 +248,14 @@ const orderbookStreamPort = (env: NodeJS.ProcessEnv): number => {
   const raw = env.ORDERBOOK_STREAM_SERVICE_PORT ?? env.PORT;
   const parsed = raw ? Number(raw) : NaN;
   return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_ORDERBOOK_STREAM_PORT;
+};
+
+const parseOptionalNumber = (value: string | undefined): number | undefined => {
+  if (value === undefined || value.trim() === "") {
+    return undefined;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 };
 
 const registerSignals = (shutdown: () => Promise<void>): void => {
