@@ -458,6 +458,84 @@ describe("MarketCatalogSnapshotMaterializer", () => {
     expect(JSON.stringify(snapshotCache.values.get(compactKey))).not.toContain("venueMarkets");
   });
 
+  it("recovers quote-ready materialization from a durable best snapshot after the exact key was already underfilled", async () => {
+    const snapshotCache = new FakeSnapshotCache();
+    const key = `markets:${stableQueryCacheKey({
+      category: "Crypto",
+      limit: 80,
+      quoteReadyOnly: true
+    })}`;
+    const bestKey = `best:${key}`;
+    await snapshotCache.set(key, {
+      count: 1,
+      materialized: true,
+      markets: [{
+        ...baseMarket,
+        quoteStatus: "live",
+        quoteReadyVenueCount: 1,
+        quoteReadyVenues: ["POLYMARKET"],
+        lastQuoteAt: "2026-06-01T00:00:00.000Z"
+      }]
+    });
+    await snapshotCache.set(bestKey, {
+      count: 2,
+      materialized: true,
+      bestSnapshot: true,
+      markets: [
+        {
+          ...baseMarket,
+          quoteStatus: "live",
+          quoteReadyVenueCount: 2,
+          quoteReadyVenues: ["LIMITLESS", "POLYMARKET"],
+          lastQuoteAt: "2026-06-01T00:00:00.000Z"
+        },
+        {
+          ...baseMarket,
+          canonicalMarketIds: ["market-2"],
+          canonicalEventId: "event-2",
+          title: "Event 2",
+          quoteStatus: "live",
+          quoteReadyVenueCount: 2,
+          quoteReadyVenues: ["LIMITLESS", "POLYMARKET"],
+          lastQuoteAt: "2026-06-01T00:00:00.000Z"
+        }
+      ]
+    });
+    const materializer = new MarketCatalogSnapshotMaterializer({
+      marketCatalogRepository: {
+        listMarkets: vi.fn(async () => [baseMarket])
+      },
+      marketQuoteReadinessSource: {
+        listLatestMarketQuoteReadiness: vi.fn(async () => [({
+          canonicalMarketId: "market-1",
+          quoteStatus: "live" as const,
+          quoteReadyVenueCount: 1,
+          quoteReadyVenues: ["POLYMARKET"],
+          quoteBlockers: [],
+          lastQuoteAt: "2026-06-01T00:00:00.000Z"
+        })])
+      },
+      snapshotCache,
+      logger: { info: vi.fn(), warn: vi.fn() },
+      config: { limits: [80], routeCoverages: ["all"], categories: ["Crypto"], intervalMs: 60_000 }
+    });
+
+    const result = await materializer.runOnce();
+
+    expect(result.skippedUnderfilledQuoteReady).toBeGreaterThanOrEqual(1);
+    expect(snapshotCache.values.get(key)).toMatchObject({
+      count: 2,
+      markets: [
+        { canonicalMarketIds: ["market-1"] },
+        { canonicalMarketIds: ["market-2"] }
+      ]
+    });
+    expect(snapshotCache.values.get(bestKey)).toMatchObject({
+      count: 2,
+      bestSnapshot: true
+    });
+  });
+
   it("protects equivalent routeCoverage=all quote-ready snapshots from alias underfills", async () => {
     const snapshotCache = new FakeSnapshotCache();
     const omittedKey = `markets:${stableQueryCacheKey({
