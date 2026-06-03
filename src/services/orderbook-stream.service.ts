@@ -47,6 +47,7 @@ export interface OrderbookStreamServiceConfig {
   maxRestRefreshTargetsPerTick: number;
   maxRestRefreshTargetsPerVenuePerTick: number;
   restRefreshTimeoutMs: number;
+  restRefreshFailureCooldownMs: number;
   summaryLogIntervalMs: number;
 }
 
@@ -89,10 +90,11 @@ const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
   maxUnsubscribeTargetsPerTick: 40,
   maxTargetsPerConnectorCall: 40,
   subscriptionHoldMs: 120_000,
-  restRefreshIntervalMs: 5_000,
-  maxRestRefreshTargetsPerTick: 48,
-  maxRestRefreshTargetsPerVenuePerTick: 12,
+  restRefreshIntervalMs: 10_000,
+  maxRestRefreshTargetsPerTick: 16,
+  maxRestRefreshTargetsPerVenuePerTick: 3,
   restRefreshTimeoutMs: 2_000,
+  restRefreshFailureCooldownMs: 60_000,
   summaryLogIntervalMs: 15_000
 };
 
@@ -106,6 +108,7 @@ export class OrderbookStreamService {
   private readonly restRefreshersByVenue: ReadonlyMap<string, VenueOrderbookRestRefresher>;
   private readonly activeSubscriptions = new Map<string, { target: VenueOrderbookSubscriptionTarget; lastDesiredAt: number }>();
   private readonly lastRestRefreshBySubscription = new Map<string, number>();
+  private readonly restRefreshFailureCooldowns = new Map<string, number>();
   private lastSummaryLogAt = 0;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
@@ -328,6 +331,7 @@ export class OrderbookStreamService {
   ): Promise<number> {
     const refreshable = dedupeTargetsBySubscription(targets)
       .filter((target) => this.isRestRefreshDue(target, nowMs))
+      .filter((target) => !this.isRestRefreshFailureCoolingDown(target, nowMs))
       .filter(limitTargetsPerVenue(this.config.maxRestRefreshTargetsPerVenuePerTick))
       .slice(0, this.config.maxRestRefreshTargetsPerTick);
     if (refreshable.length === 0) {
@@ -349,11 +353,14 @@ export class OrderbookStreamService {
           null
         );
         if (!snapshot) {
+          this.markRestRefreshFailure(target, nowMs);
           return;
         }
+        this.restRefreshFailureCooldowns.delete(key);
         refreshed += 1;
         this.onSnapshot(snapshot, target);
       } catch (error) {
+        this.markRestRefreshFailure(target, nowMs);
         this.deps.logger.warn(
           {
             err: error,
@@ -374,6 +381,18 @@ export class OrderbookStreamService {
     }
     const last = this.lastRestRefreshBySubscription.get(subscriptionKey(target));
     return last === undefined || nowMs - last >= this.config.restRefreshIntervalMs;
+  }
+
+  private isRestRefreshFailureCoolingDown(target: VenueOrderbookSubscriptionTarget, nowMs: number): boolean {
+    const until = this.restRefreshFailureCooldowns.get(subscriptionKey(target));
+    return until !== undefined && until > nowMs;
+  }
+
+  private markRestRefreshFailure(target: VenueOrderbookSubscriptionTarget, nowMs: number): void {
+    this.restRefreshFailureCooldowns.set(
+      subscriptionKey(target),
+      nowMs + Math.max(1_000, this.config.restRefreshFailureCooldownMs)
+    );
   }
 
   private onSnapshot(snapshot: NormalizedVenueQuoteSnapshot, target: VenueOrderbookSubscriptionTarget): void {

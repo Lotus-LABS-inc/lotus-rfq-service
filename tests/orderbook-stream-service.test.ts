@@ -763,4 +763,50 @@ describe("OrderbookStreamService", () => {
       restRefreshed: 0
     });
   });
+
+  it("puts failed REST fallback targets on cooldown before retrying providers", async () => {
+    const connector = new FakeConnector("LIMITLESS");
+    const refresh = vi.fn(async () => {
+      throw new Error("provider 429");
+    });
+    let currentNow = now;
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [{ canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: currentNow }];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness() {
+          return [{
+            venue: "LIMITLESS",
+            approvedVenueMarketId: "approved-1",
+            venueMarketId: "limitless-market",
+            venueOutcomeId: "YES",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors: [connector],
+      restRefreshers: [{ venue: "LIMITLESS", refresh }],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => currentNow,
+      config: {
+        restRefreshIntervalMs: 1,
+        restRefreshFailureCooldownMs: 60_000
+      }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
+    currentNow = new Date(now.getTime() + 10_000);
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    currentNow = new Date(now.getTime() + 61_000);
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
 });
