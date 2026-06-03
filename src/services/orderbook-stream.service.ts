@@ -35,6 +35,8 @@ export interface VenueOrderbookStreamConnector {
 export interface OrderbookStreamServiceConfig {
   pollIntervalMs: number;
   activeMarketLimit: number;
+  backgroundReadinessMarketLimit: number;
+  maxBackgroundSubscriptionTargets: number;
   maxSubscribeTargetsPerTick: number;
   maxUnsubscribeTargetsPerTick: number;
   maxTargetsPerConnectorCall: number;
@@ -67,6 +69,8 @@ export interface OrderbookStreamServiceRunResult {
 const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
   pollIntervalMs: 1_000,
   activeMarketLimit: 500,
+  backgroundReadinessMarketLimit: 250,
+  maxBackgroundSubscriptionTargets: 240,
   maxSubscribeTargetsPerTick: 160,
   maxUnsubscribeTargetsPerTick: 40,
   maxTargetsPerConnectorCall: 40,
@@ -186,8 +190,10 @@ export class OrderbookStreamService {
   }
 
   private async resolveTargets(activeMarkets: readonly ActiveOrderbookMarket[]): Promise<readonly VenueOrderbookSubscriptionTarget[]> {
-    const batchReadiness = await this.loadBatchReadiness(activeMarkets.length);
-    const results: VenueOrderbookSubscriptionTarget[][] = [];
+    const batchReadiness = await this.loadBatchReadiness(
+      Math.max(activeMarkets.length, this.config.backgroundReadinessMarketLimit)
+    );
+    const activeTargetGroups: VenueOrderbookSubscriptionTarget[][] = [];
     for (const market of activeMarkets) {
       const readiness = batchReadiness
         ? batchReadiness.get(market.canonicalMarketId) ?? await this.loadSingleReadiness(market)
@@ -201,19 +207,35 @@ export class OrderbookStreamService {
           venueMarketId: row.venueMarketId!,
           ...(row.venueOutcomeId ? { venueOutcomeId: row.venueOutcomeId } : {})
         }));
-      results.push(targets);
+      activeTargetGroups.push(targets);
     }
-    return dedupeTargets(results.flat());
+    const activeTargets = dedupeTargetsBySubscription(activeTargetGroups.flat());
+    const activeNativeKeys = new Set(activeTargets.map(nativeSubscriptionKey));
+    const backgroundTargets = batchReadiness
+      ? [...batchReadiness.entries()]
+        .flatMap(([canonicalMarketId, readiness]) => readiness
+          .filter(isQuoteReadyMapping)
+          .map((row): VenueOrderbookSubscriptionTarget => ({
+            canonicalMarketId,
+            venue: normalizeVenue(row.venue),
+            venueMarketId: row.venueMarketId!,
+            ...(row.venueOutcomeId ? { venueOutcomeId: row.venueOutcomeId } : {})
+          })))
+        .slice(0, this.config.maxBackgroundSubscriptionTargets)
+      : [];
+    const dedupedBackgroundTargets = dedupeTargetsByNative(backgroundTargets)
+      .filter((target) => !activeNativeKeys.has(nativeSubscriptionKey(target)));
+    return [...activeTargets, ...dedupedBackgroundTargets];
   }
 
   private async loadBatchReadiness(
-    activeMarketCount: number
+    readinessLimit: number
   ): Promise<ReadonlyMap<string, readonly VenueQuoteMappingReadiness[]> | null> {
     if (!this.deps.mappingResolver.listApprovedReadiness) {
       return null;
     }
     const rows = await this.deps.mappingResolver.listApprovedReadiness({
-      limit: Math.max(activeMarketCount, this.config.activeMarketLimit)
+      limit: Math.max(1, readinessLimit)
     });
     return readinessByCanonicalMarket(rows);
   }
@@ -364,13 +386,32 @@ const isQuoteReadyMapping = (
 ): row is VenueQuoteMappingReadiness & { venueMarketId: string } =>
   row.quoteReady && row.venueMarketId !== null;
 
-const dedupeTargets = (targets: readonly VenueOrderbookSubscriptionTarget[]): readonly VenueOrderbookSubscriptionTarget[] => {
+const dedupeTargetsByNative = (targets: readonly VenueOrderbookSubscriptionTarget[]): readonly VenueOrderbookSubscriptionTarget[] => {
   const byKey = new Map<string, VenueOrderbookSubscriptionTarget>();
   for (const target of targets) {
-    byKey.set(subscriptionKey(target), target);
+    if (!byKey.has(nativeSubscriptionKey(target))) {
+      byKey.set(nativeSubscriptionKey(target), target);
+    }
   }
   return [...byKey.values()];
 };
+
+const dedupeTargetsBySubscription = (targets: readonly VenueOrderbookSubscriptionTarget[]): readonly VenueOrderbookSubscriptionTarget[] => {
+  const byKey = new Map<string, VenueOrderbookSubscriptionTarget>();
+  for (const target of targets) {
+    if (!byKey.has(subscriptionKey(target))) {
+      byKey.set(subscriptionKey(target), target);
+    }
+  }
+  return [...byKey.values()];
+};
+
+const nativeSubscriptionKey = (target: VenueOrderbookSubscriptionTarget): string =>
+  [
+    normalizeVenue(target.venue),
+    target.venueMarketId,
+    target.venueOutcomeId ?? "_"
+  ].join("|");
 
 const groupByVenue = (targets: readonly VenueOrderbookSubscriptionTarget[]): ReadonlyMap<string, VenueOrderbookSubscriptionTarget[]> => {
   const grouped = new Map<string, VenueOrderbookSubscriptionTarget[]>();
