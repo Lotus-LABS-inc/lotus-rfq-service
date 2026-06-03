@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildMarketOrderbookRecorderConfig,
+  buildMarketOrderbookRecorderConfigs,
   MarketOrderbookRecorder,
   type MarketOrderbookRecorderLogger
 } from "../src/services/market-orderbook-recorder.service.js";
@@ -53,6 +54,16 @@ describe("MarketOrderbookRecorder", () => {
         process.env.MARKET_ORDERBOOK_RECORDER_ENABLED = previous;
       }
     }
+  });
+
+  it("builds sharded recorder lanes for broad live quote coverage", () => {
+    const configs = buildMarketOrderbookRecorderConfigs();
+
+    expect(configs).toHaveLength(3);
+    expect(configs.map((config) => config.shardCount)).toEqual([3, 3, 3]);
+    expect(configs.map((config) => config.shardIndex)).toEqual([0, 1, 2]);
+    expect(configs.every((config) => config.intervalMs === 5_000)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerTick === 48)).toBe(true);
   });
 
   it("records approved open market outcome snapshots and skips closed markets", async () => {

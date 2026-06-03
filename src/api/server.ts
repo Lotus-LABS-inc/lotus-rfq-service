@@ -363,7 +363,7 @@ import { MarketCatalogRepository, SharedCoreQuoteMappingRepository } from "../re
 import { LiveMarketDataViewService } from "../services/market-data-view.service.js";
 import { HotQuoteSnapshotService, resolveHotQuoteRedisNamespace } from "../services/hot-quote-snapshot.service.js";
 import {
-  buildMarketOrderbookRecorderConfig,
+  buildMarketOrderbookRecorderConfigs,
   MarketOrderbookRecorder
 } from "../services/market-orderbook-recorder.service.js";
 import {
@@ -1149,17 +1149,21 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     })
   });
   if (backgroundWorkersEnabled) {
-    const marketOrderbookRecorder = new MarketOrderbookRecorder(
-      marketCatalogRepository,
-      venueQuoteSource,
-      venueOrderbookSnapshotRepository,
-      dependencies.logger,
-      buildMarketOrderbookRecorderConfig(),
-      hotQuoteSnapshots
+    const marketOrderbookRecorders = buildMarketOrderbookRecorderConfigs().map((config) =>
+      new MarketOrderbookRecorder(
+        marketCatalogRepository,
+        venueQuoteSource,
+        venueOrderbookSnapshotRepository,
+        dependencies.logger,
+        config,
+        hotQuoteSnapshots
+      )
     );
-    marketOrderbookRecorder.start();
+    for (const marketOrderbookRecorder of marketOrderbookRecorders) {
+      marketOrderbookRecorder.start();
+    }
     app.addHook("onClose", async () => {
-      await marketOrderbookRecorder.stop();
+      await Promise.all(marketOrderbookRecorders.map((marketOrderbookRecorder) => marketOrderbookRecorder.stop()));
     });
     const marketCatalogSnapshotMaterializer = new MarketCatalogSnapshotMaterializer({
       marketCatalogRepository,

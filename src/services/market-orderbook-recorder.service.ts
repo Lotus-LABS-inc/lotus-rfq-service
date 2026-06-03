@@ -13,6 +13,8 @@ export interface MarketOrderbookRecorderConfig {
   activeMarketBatchSize?: number;
   priorityMarketBatchSize?: number;
   priorityVenues?: readonly string[];
+  shardCount?: number;
+  shardIndex?: number;
   maxSamplesPerTick: number;
   sampleConcurrency?: number;
   maxTickDurationMs?: number;
@@ -38,6 +40,8 @@ export interface MarketOrderbookRecorderRunResult {
   insertedSnapshots: number;
   failedSamples: number;
   skippedCooldownSamples: number;
+  shardCount?: number | undefined;
+  shardIndex?: number | undefined;
   sampledByVenue?: Record<string, number> | undefined;
   persistedByVenue?: Record<string, number> | undefined;
   failedByVenue?: Record<string, number> | undefined;
@@ -53,6 +57,8 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
   activeMarketBatchSize: 160,
   priorityMarketBatchSize: 48,
   priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"] as readonly string[],
+  shardCount: 1,
+  shardIndex: 0,
   maxSamplesPerTick: 48,
   sampleConcurrency: 12,
   maxTickDurationMs: 6_000,
@@ -73,6 +79,17 @@ export const buildMarketOrderbookRecorderConfig = (): MarketOrderbookRecorderCon
   return {
     ...DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG
   };
+};
+
+const DEFAULT_MARKET_ORDERBOOK_RECORDER_LANES = 3;
+
+export const buildMarketOrderbookRecorderConfigs = (): MarketOrderbookRecorderConfig[] => {
+  const laneCount = DEFAULT_MARKET_ORDERBOOK_RECORDER_LANES;
+  return Array.from({ length: laneCount }, (_, shardIndex) => ({
+    ...DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG,
+    shardCount: laneCount,
+    shardIndex
+  }));
 };
 
 export class MarketOrderbookRecorder {
@@ -98,7 +115,9 @@ export class MarketOrderbookRecorder {
         lastSeenAt: Date;
       }>>;
     } | undefined
-  ) {}
+  ) {
+    this.marketOffset = this.config.marketBatchSize * this.shardIndex();
+  }
 
   public start(): void {
     if (this.timer) {
@@ -111,6 +130,8 @@ export class MarketOrderbookRecorder {
       activeMarketBatchSize: this.config.activeMarketBatchSize ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.activeMarketBatchSize,
       priorityMarketBatchSize: this.config.priorityMarketBatchSize ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityMarketBatchSize,
       priorityVenues: this.config.priorityVenues ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityVenues,
+      shardCount: this.shardCount(),
+      shardIndex: this.shardIndex(),
       maxSamplesPerTick: this.config.maxSamplesPerTick,
       sampleConcurrency: this.config.sampleConcurrency ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.sampleConcurrency,
       maxTickDurationMs: this.config.maxTickDurationMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.maxTickDurationMs,
@@ -160,6 +181,7 @@ export class MarketOrderbookRecorder {
       const cleanup = await this.cleanupSnapshotsIfDue(tickStartedAt);
       const activeMarkets = await this.listActiveMarkets();
       const priorityMarkets = await this.listPriorityMarkets();
+      const shardCount = this.shardCount();
       const marketOffset = this.marketOffset;
       let markets = await this.marketCatalogRepository.listMarkets({
         limit: this.config.marketBatchSize,
@@ -171,7 +193,7 @@ export class MarketOrderbookRecorder {
       }
       this.marketOffset = markets.length < this.config.marketBatchSize
         ? 0
-        : this.marketOffset + this.config.marketBatchSize;
+        : this.marketOffset + this.config.marketBatchSize * shardCount;
       if (activeMarkets.length > 0 || priorityMarkets.length > 0) {
         markets = uniqueMarketsByEventAndMarketIds([...activeMarkets, ...priorityMarkets, ...markets]);
       }
@@ -184,6 +206,8 @@ export class MarketOrderbookRecorder {
         insertedSnapshots: 0,
         failedSamples: 0,
         skippedCooldownSamples: 0,
+        shardCount,
+        shardIndex: this.shardIndex(),
         ...cleanup
       };
       const candidateSamples: Array<{
@@ -412,7 +436,9 @@ export class MarketOrderbookRecorder {
       offset: 0
     });
     const priorityMarkets = catalogWindow.filter((market) =>
-      market.status === "OPEN" && marketIncludesAnyVenue(market, priorityVenues)
+      market.status === "OPEN" &&
+      marketIncludesAnyVenue(market, priorityVenues) &&
+      this.marketBelongsToShard(market)
     );
     if (priorityMarkets.length === 0) {
       this.priorityMarketOffset = 0;
@@ -447,9 +473,30 @@ export class MarketOrderbookRecorder {
       offset: 0
     });
     return catalogWindow.filter((market) =>
-      market.canonicalMarketIds.some((canonicalMarketId) => activeIds.has(canonicalMarketId)) ||
-      activeIds.has(market.canonicalEventId)
+      this.marketBelongsToShard(market) &&
+      (
+        market.canonicalMarketIds.some((canonicalMarketId) => activeIds.has(canonicalMarketId)) ||
+        activeIds.has(market.canonicalEventId)
+      )
     );
+  }
+
+  private marketBelongsToShard(market: MarketCatalogMarket): boolean {
+    return belongsToShard(marketEventQueueKey(market), this.shardCount(), this.shardIndex());
+  }
+
+  private shardCount(): number {
+    const value = Math.floor(this.config.shardCount ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.shardCount);
+    return Number.isFinite(value) && value > 0 ? value : 1;
+  }
+
+  private shardIndex(): number {
+    const shardCount = this.shardCount();
+    const value = Math.floor(this.config.shardIndex ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.shardIndex);
+    if (!Number.isFinite(value) || value < 0) {
+      return 0;
+    }
+    return value % shardCount;
   }
 
   private async cleanupSnapshotsIfDue(nowMs: number): Promise<Pick<
@@ -628,6 +675,18 @@ const createEventRoundRobinQueue = <T extends { market: MarketCatalogMarket }>()
 
 const marketEventQueueKey = (market: MarketCatalogMarket): string =>
   market.canonicalEventId || market.eventId || market.canonicalMarketIds.join("|") || market.title;
+
+const belongsToShard = (value: string, shardCount: number, shardIndex: number): boolean =>
+  stableHash(value) % shardCount === shardIndex;
+
+const stableHash = (value: string): number => {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+};
 
 const countScheduledSampleVenues = (
   scheduledSamples: readonly { sample: MarketOrderbookRecorderSample }[]
