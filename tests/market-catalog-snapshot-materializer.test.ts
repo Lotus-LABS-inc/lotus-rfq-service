@@ -264,6 +264,15 @@ describe("MarketCatalogSnapshotMaterializer", () => {
 
     const globalKey = `markets:${stableQueryCacheKey({ limit: 80, quoteReadyOnly: true })}`;
     expect(snapshotCache.values.get(globalKey)).toMatchObject({
+      count: 1,
+      markets: [
+        { canonicalMarketIds: ["market-1"] }
+      ]
+    });
+
+    await materializer.runOnce();
+
+    expect(snapshotCache.values.get(globalKey)).toMatchObject({
       count: 2,
       markets: [
         { canonicalMarketIds: ["market-1"] },

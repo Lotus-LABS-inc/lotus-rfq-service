@@ -14,6 +14,7 @@ export interface MarketCatalogSnapshotMaterializerConfig {
   limits: readonly number[];
   routeCoverages: readonly RouteCoverage[];
   categories: readonly string[];
+  categoryRefreshEveryTicks: number;
 }
 
 export interface MarketCatalogSnapshotMaterializerLogger {
@@ -47,7 +48,8 @@ const DEFAULT_CONFIG: MarketCatalogSnapshotMaterializerConfig = {
   cacheTtlMs: 60_000,
   limits: [250],
   routeCoverages: ["all", "pair", "tri", "strict_all"],
-  categories: ["Crypto", "Sports", "Politics", "Esports"]
+  categories: ["Crypto", "Sports", "Politics", "Esports"],
+  categoryRefreshEveryTicks: 4
 };
 
 const OVERFETCH_MULTIPLIER = 4;
@@ -59,6 +61,7 @@ export class MarketCatalogSnapshotMaterializer {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private stopped = false;
+  private tickIndex = 0;
 
   public constructor(private readonly deps: MarketCatalogSnapshotMaterializerDeps) {
     this.config = {
@@ -66,7 +69,11 @@ export class MarketCatalogSnapshotMaterializer {
       ...(deps.config ?? {}),
       limits: sanitizeLimits(deps.config?.limits ?? DEFAULT_CONFIG.limits),
       routeCoverages: sanitizeRouteCoverages(deps.config?.routeCoverages ?? DEFAULT_CONFIG.routeCoverages),
-      categories: sanitizeCategories(deps.config?.categories ?? DEFAULT_CONFIG.categories)
+      categories: sanitizeCategories(deps.config?.categories ?? DEFAULT_CONFIG.categories),
+      categoryRefreshEveryTicks: sanitizePositiveInteger(
+        deps.config?.categoryRefreshEveryTicks ?? DEFAULT_CONFIG.categoryRefreshEveryTicks,
+        DEFAULT_CONFIG.categoryRefreshEveryTicks
+      )
     };
   }
 
@@ -111,8 +118,13 @@ export class MarketCatalogSnapshotMaterializer {
     };
     try {
       const detailKeysWritten = new Set<string>();
+      const tickIndex = this.tickIndex;
+      this.tickIndex += 1;
+      const categories = tickIndex % this.config.categoryRefreshEveryTicks === 0
+        ? [undefined, ...this.config.categories] as const
+        : [undefined] as const;
       for (const limit of this.config.limits) {
-        for (const category of [...this.config.categories, undefined] as const) {
+        for (const category of categories) {
           if (this.stopped) {
             return result;
           }
@@ -680,3 +692,8 @@ const sanitizeCategories = (categories: readonly string[]): string[] =>
     .map((category) => category.trim())
     .filter((category) => category.length > 0))]
     .slice(0, 16);
+
+const sanitizePositiveInteger = (value: number, fallback: number): number => {
+  const parsed = Math.floor(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
