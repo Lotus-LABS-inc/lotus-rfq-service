@@ -534,8 +534,7 @@ export class CompositeVenueQuoteSource {
         venue: input.venue,
         venueMarketId: input.venueMarketId,
         ...(input.venueOutcomeId ? { venueOutcomeId: input.venueOutcomeId } : {}),
-        maxAgeMs,
-        includeDbFallback: false
+        maxAgeMs
       });
     }
     return this.hotSnapshotStore.get(input);

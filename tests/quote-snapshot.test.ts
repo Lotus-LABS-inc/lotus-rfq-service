@@ -246,6 +246,54 @@ describe("venue quote readers", () => {
     expect(results.every((result) => result.fees.provider_fee !== undefined)).toBe(true);
   });
 
+  it("allows cached display reads to use recent DB-backed snapshot fallback", async () => {
+    const getDisplayCalls: unknown[] = [];
+    const source = new CompositeVenueQuoteSource([], {
+      async resolve() {
+        return [];
+      },
+      async getReadiness() {
+        return [{
+          venue: "POLYMARKET",
+          approvedVenueMarketId: "pm-approved",
+          venueMarketId: "pm-1",
+          venueOutcomeId: "yes",
+          quoteReady: true,
+          blockers: []
+        }];
+      }
+    }, () => now, {
+      touch() {},
+      async get() {
+        return null;
+      },
+      async getDisplay(input) {
+        getDisplayCalls.push(input);
+        return snapshot({ venue: "POLYMARKET", venueMarketId: "pm-1", venueOutcomeId: "yes" });
+      }
+    });
+
+    const report = await source.getQuoteSnapshotReport({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "yes",
+      side: "buy",
+      quantity: 1,
+      readMode: "cached_display",
+      displayMaxAgeMs: 45_000
+    });
+
+    expect(report.snapshots.map((entry) => entry.venue)).toEqual(["POLYMARKET"]);
+    expect(getDisplayCalls[0]).toMatchObject({
+      venue: "POLYMARKET",
+      venueMarketId: "pm-1",
+      venueOutcomeId: "yes",
+      maxAgeMs: 45_000
+    });
+    expect(getDisplayCalls[0]).not.toMatchObject({
+      includeDbFallback: false
+    });
+  });
+
   it("keeps usable venue snapshots when another mapped reader throws", async () => {
     const source = new CompositeVenueQuoteSource([
       {
