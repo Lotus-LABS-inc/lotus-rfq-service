@@ -1202,7 +1202,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         logger: dependencies.logger,
         config: {
           intervalMs: 3_000,
-          cacheTtlMs: 45_000,
+          cacheTtlMs: 300_000,
           limits: [250],
           routeCoverages: ["all"],
           categories: [],
@@ -1216,7 +1216,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         logger: dependencies.logger,
         config: {
           intervalMs: 30_000,
-          cacheTtlMs: 120_000,
+          cacheTtlMs: 300_000,
           limits: [250],
           routeCoverages: ["all", "pair", "tri", "strict_all"],
           categories: ["Crypto", "Sports", "Politics", "Esports"],
