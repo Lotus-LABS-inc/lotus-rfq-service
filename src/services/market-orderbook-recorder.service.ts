@@ -53,18 +53,18 @@ export interface MarketOrderbookRecorderRunResult {
 }
 
 const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
-  intervalMs: 5_000,
-  marketBatchSize: 16,
-  activeMarketBatchSize: 240,
-  activeMaxSamplesPerTick: 32,
-  priorityMarketBatchSize: 80,
+  intervalMs: 6_000,
+  marketBatchSize: 14,
+  activeMarketBatchSize: 200,
+  activeMaxSamplesPerTick: 24,
+  priorityMarketBatchSize: 56,
   priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"] as readonly string[],
   shardCount: 1,
   shardIndex: 0,
-  maxSamplesPerTick: 48,
-  sampleConcurrency: 12,
-  maxTickDurationMs: 4_500,
-  sampleTimeoutMs: 1_500,
+  maxSamplesPerTick: 36,
+  sampleConcurrency: 8,
+  maxTickDurationMs: 5_500,
+  sampleTimeoutMs: 2_000,
   cleanupIntervalMs: 30 * 60_000,
   retentionHours: 720,
   levelsPerSide: 25,
@@ -83,7 +83,7 @@ export const buildMarketOrderbookRecorderConfig = (): MarketOrderbookRecorderCon
   };
 };
 
-const DEFAULT_MARKET_ORDERBOOK_RECORDER_LANES = 4;
+const DEFAULT_MARKET_ORDERBOOK_RECORDER_LANES = 2;
 
 export const buildMarketOrderbookRecorderConfigs = (): MarketOrderbookRecorderConfig[] => {
   const laneCount = DEFAULT_MARKET_ORDERBOOK_RECORDER_LANES;
