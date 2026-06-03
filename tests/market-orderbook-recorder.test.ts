@@ -20,10 +20,10 @@ describe("MarketOrderbookRecorder", () => {
       intervalMs: 12_000,
       marketBatchSize: 16,
       activeMarketBatchSize: 200,
-      activeMaxSamplesPerTick: 24,
+      activeMaxSamplesPerTick: 40,
       priorityMarketBatchSize: 80,
       priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-      maxSamplesPerTick: 32,
+      maxSamplesPerTick: 64,
       sampleConcurrency: 10,
       maxTickDurationMs: 9_500,
       sampleTimeoutMs: 4_000,
@@ -39,10 +39,10 @@ describe("MarketOrderbookRecorder", () => {
         intervalMs: 12_000,
         marketBatchSize: 16,
         activeMarketBatchSize: 200,
-        activeMaxSamplesPerTick: 24,
+        activeMaxSamplesPerTick: 40,
         priorityMarketBatchSize: 80,
         priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-        maxSamplesPerTick: 32,
+        maxSamplesPerTick: 64,
         sampleConcurrency: 10,
         maxTickDurationMs: 9_500,
         sampleTimeoutMs: 4_000,
@@ -65,8 +65,8 @@ describe("MarketOrderbookRecorder", () => {
     expect(configs.map((config) => config.shardCount)).toEqual([2, 2]);
     expect(configs.map((config) => config.shardIndex)).toEqual([0, 1]);
     expect(configs.every((config) => config.intervalMs === 12_000)).toBe(true);
-    expect(configs.every((config) => config.maxSamplesPerTick === 32)).toBe(true);
-    expect(configs.every((config) => config.activeMaxSamplesPerTick === 24)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerTick === 64)).toBe(true);
+    expect(configs.every((config) => config.activeMaxSamplesPerTick === 40)).toBe(true);
     expect(configs.every((config) => (config.maxTickDurationMs ?? 0) < config.intervalMs)).toBe(true);
   });
 
@@ -204,6 +204,51 @@ describe("MarketOrderbookRecorder", () => {
     expect(result.sampledOutcomes).toBe(1);
     expect(result.insertedSnapshots).toBe(1);
     expect(inserted).toHaveLength(1);
+  });
+
+  it("samples multi-venue markets through venue-filtered provider lanes", async () => {
+    const calls: Array<{ outcomeId: string | undefined; venues: readonly string[] | undefined }> = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [multiVenueMarketFixture(["POLYMARKET", "LIMITLESS", "OPINION"])]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalOutcomeId, venues }) => {
+          calls.push({ outcomeId: canonicalOutcomeId, venues });
+          return {
+            snapshots: [],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        priorityMarketBatchSize: 0,
+        priorityVenues: ["OPINION", "LIMITLESS", "POLYMARKET"],
+        maxSamplesPerTick: 6,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.sampledOutcomes).toBe(6);
+    expect(calls).toHaveLength(6);
+    expect(calls.every((call) => call.venues?.length === 1)).toBe(true);
+    expect([...new Set(calls.map((call) => call.venues?.[0]))].sort()).toEqual(["LIMITLESS", "OPINION", "POLYMARKET"]);
   });
 
   it("samples outcomes with bounded concurrency so one slow outcome does not block the whole tick", async () => {
@@ -980,27 +1025,32 @@ describe("MarketOrderbookRecorder", () => {
         listMarkets: async () => [multiVenueMarketFixture(["POLYMARKET", "LIMITLESS"])]
       },
       {
-        getQuoteSnapshotReport: async ({ canonicalOutcomeId }) => ({
-          snapshots: [{
-            venue: "POLYMARKET",
-            venueMarketId: "poly-1",
-            venueOutcomeId: canonicalOutcomeId ?? "YES",
-            source: "REST",
-            quoteQuality: "FULL_DEPTH_REST",
-            sourceTimestamp: new Date("2026-05-10T12:00:00.000Z"),
-            receivedAt: new Date("2026-05-10T12:00:01.000Z"),
-            bids: [{ price: "0.59", size: "10" }],
-            asks: [{ price: "0.61", size: "11" }],
-            blockers: [],
-            missingFactors: []
-          }],
-          blocked: [{
-            venue: "LIMITLESS",
-            reason: "QUOTE_PROVIDER_TIMEOUT",
-            venueMarketId: "limitless-1",
-            detailsCode: "LIMITLESS_quote_reader_timeout_after_1500ms."
-          }]
-        })
+        getQuoteSnapshotReport: async ({ canonicalOutcomeId, venues }) => venues?.[0] === "LIMITLESS"
+          ? {
+              snapshots: [],
+              blocked: [{
+                venue: "LIMITLESS",
+                reason: "QUOTE_PROVIDER_TIMEOUT",
+                venueMarketId: "limitless-1",
+                detailsCode: "LIMITLESS_quote_reader_timeout_after_1500ms."
+              }]
+            }
+          : {
+              snapshots: [{
+                venue: "POLYMARKET",
+                venueMarketId: "poly-1",
+                venueOutcomeId: canonicalOutcomeId ?? "YES",
+                source: "REST",
+                quoteQuality: "FULL_DEPTH_REST",
+                sourceTimestamp: new Date("2026-05-10T12:00:00.000Z"),
+                receivedAt: new Date("2026-05-10T12:00:01.000Z"),
+                bids: [{ price: "0.59", size: "10" }],
+                asks: [{ price: "0.61", size: "11" }],
+                blockers: [],
+                missingFactors: []
+              }],
+              blocked: []
+            }
       },
       {
         insertMany: async (snapshots) => {
@@ -1028,10 +1078,10 @@ describe("MarketOrderbookRecorder", () => {
     const first = await recorder.runOnce();
     const second = await recorder.runOnce();
 
-    expect(first.sampledOutcomes).toBe(2);
+    expect(first.sampledOutcomes).toBe(4);
     expect(first.insertedSnapshots).toBe(2);
     expect(second.sampledOutcomes).toBe(2);
-    expect(second.skippedCooldownSamples).toBe(0);
+    expect(second.skippedCooldownSamples).toBe(2);
     expect(second.insertedSnapshots).toBe(2);
     expect(inserted).toHaveLength(4);
   });
