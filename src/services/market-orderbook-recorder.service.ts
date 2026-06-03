@@ -38,6 +38,9 @@ export interface MarketOrderbookRecorderRunResult {
   insertedSnapshots: number;
   failedSamples: number;
   skippedCooldownSamples: number;
+  sampledByVenue?: Record<string, number> | undefined;
+  persistedByVenue?: Record<string, number> | undefined;
+  failedByVenue?: Record<string, number> | undefined;
   deletedOldSnapshots: number;
   deletedClosedMarketSnapshots: number;
   deletedClosedLatestSnapshots: number;
@@ -227,6 +230,9 @@ export class MarketOrderbookRecorder {
         this.config.priorityVenues ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityVenues
       );
       result.sampledOutcomes = scheduledSamples.length;
+      result.sampledByVenue = countScheduledSampleVenues(scheduledSamples);
+      const persistedByVenue = new Map<string, number>();
+      const failedByVenue = new Map<string, number>();
 
       let nextSampleIndex = 0;
       let timeBudgetLogged = false;
@@ -252,9 +258,13 @@ export class MarketOrderbookRecorder {
           const sampleResult = await this.processSample(work.market, work.sample, sampleTimeoutMs);
           result.insertedSnapshots += sampleResult.insertedSnapshots;
           result.failedSamples += sampleResult.failedSamples;
+          addVenueCounts(persistedByVenue, sampleResult.persistedByVenue);
+          addVenueCounts(failedByVenue, sampleResult.failedByVenue);
         }
       });
       await Promise.all(workers);
+      result.persistedByVenue = mapToRecord(persistedByVenue);
+      result.failedByVenue = mapToRecord(failedByVenue);
 
       if (
         result.insertedSnapshots > 0 ||
@@ -304,7 +314,12 @@ export class MarketOrderbookRecorder {
     market: MarketCatalogMarket,
     sample: MarketOrderbookRecorderSample,
     sampleTimeoutMs: number
-  ): Promise<{ insertedSnapshots: number; failedSamples: number }> {
+  ): Promise<{
+    insertedSnapshots: number;
+    failedSamples: number;
+    persistedByVenue: Record<string, number>;
+    failedByVenue: Record<string, number>;
+  }> {
     try {
       const report = await withRecorderTimeout(
         this.quoteSource.getQuoteSnapshotReport({
@@ -316,7 +331,7 @@ export class MarketOrderbookRecorder {
         sampleTimeoutMs
       );
       if (this.stopped) {
-        return { insertedSnapshots: 0, failedSamples: 0 };
+        return { insertedSnapshots: 0, failedSamples: 0, persistedByVenue: {}, failedByVenue: {} };
       }
       const snapshots = report.snapshots.flatMap((snapshot) =>
         toSnapshotInput({
@@ -346,7 +361,12 @@ export class MarketOrderbookRecorder {
         ...snapshots,
         ...blockedSnapshots
       ]);
-      return { insertedSnapshots, failedSamples: 0 };
+      return {
+        insertedSnapshots,
+        failedSamples: 0,
+        persistedByVenue: countSnapshotInputVenues([...snapshots, ...blockedSnapshots]),
+        failedByVenue: {}
+      };
     } catch (error) {
       if (error instanceof RecorderSampleTimeoutError) {
         this.applySampleCooldown(sample);
@@ -357,7 +377,12 @@ export class MarketOrderbookRecorder {
         outcomeId: sample.outcomeId,
         errorName: error instanceof Error ? error.name : "UnknownError"
       }, "Market orderbook recorder failed to sample market outcome.");
-      return { insertedSnapshots: 0, failedSamples: 1 };
+      return {
+        insertedSnapshots: 0,
+        failedSamples: 1,
+        persistedByVenue: {},
+        failedByVenue: Object.fromEntries(sample.venueKeys.map((venue) => [venue, 1]))
+      };
     }
   }
 
@@ -538,6 +563,42 @@ const selectSamplesForTick = <T extends {
   }
   return selected;
 };
+
+const countScheduledSampleVenues = (
+  scheduledSamples: readonly { sample: MarketOrderbookRecorderSample }[]
+): Record<string, number> => {
+  const counts = new Map<string, number>();
+  for (const scheduled of scheduledSamples) {
+    for (const venue of scheduled.sample.venueKeys) {
+      addVenueCount(counts, venue, 1);
+    }
+  }
+  return mapToRecord(counts);
+};
+
+const countSnapshotInputVenues = (
+  snapshots: readonly VenueOrderbookSnapshotInput[]
+): Record<string, number> => {
+  const counts = new Map<string, number>();
+  for (const snapshot of snapshots) {
+    addVenueCount(counts, snapshot.venue, 1);
+  }
+  return mapToRecord(counts);
+};
+
+const addVenueCounts = (target: Map<string, number>, values: Record<string, number>): void => {
+  for (const [venue, count] of Object.entries(values)) {
+    addVenueCount(target, venue, count);
+  }
+};
+
+const addVenueCount = (target: Map<string, number>, venue: string, count: number): void => {
+  const normalizedVenue = normalizeVenue(venue);
+  target.set(normalizedVenue, (target.get(normalizedVenue) ?? 0) + count);
+};
+
+const mapToRecord = (values: Map<string, number>): Record<string, number> =>
+  Object.fromEntries([...values.entries()].sort(([left], [right]) => left.localeCompare(right)));
 
 const toSnapshotInput = (input: {
   canonicalEventId: string;
