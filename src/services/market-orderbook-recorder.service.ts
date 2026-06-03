@@ -233,6 +233,19 @@ export class MarketOrderbookRecorder {
       result.sampledByVenue = countScheduledSampleVenues(scheduledSamples);
       const persistedByVenue = new Map<string, number>();
       const failedByVenue = new Map<string, number>();
+      if (scheduledSamples.length > 0 && this.quoteSource.preloadMappingReadiness) {
+        try {
+          await this.quoteSource.preloadMappingReadiness(scheduledSamples.map(({ sample }) => ({
+            canonicalMarketId: sample.canonicalMarketId,
+            canonicalOutcomeId: sample.outcomeId
+          })));
+        } catch (error) {
+          this.logger.warn({
+            errorName: error instanceof Error ? error.name : "UnknownError",
+            sampledOutcomes: scheduledSamples.length
+          }, "Market orderbook recorder mapping preload failed; falling back to per-sample mapping lookup.");
+        }
+      }
 
       let nextSampleIndex = 0;
       let timeBudgetLogged = false;

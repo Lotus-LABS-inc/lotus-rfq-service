@@ -577,6 +577,74 @@ export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingL
     return result.rows;
   }
 
+  public async loadApprovedVenueMappingsBatch(input: {
+    canonicalMarketIds: readonly string[];
+  }): Promise<readonly SharedCoreVenueQuoteMappingRow[]> {
+    const canonicalMarketIds = [...new Set(input.canonicalMarketIds
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0))]
+      .slice(0, 500);
+    if (canonicalMarketIds.length === 0) {
+      return [];
+    }
+    const result = await this.pool.query<SharedCoreVenueQuoteMappingRow>(
+      `WITH requested_markets AS (
+         SELECT DISTINCT unnest($1::text[]) AS requested_canonical_market_id
+       ),
+       selected_events AS (
+         SELECT requested.requested_canonical_market_id, selected.id
+           FROM requested_markets requested
+           JOIN LATERAL (
+             SELECT ce.id
+               FROM canonical_events ce
+               LEFT JOIN canonical_executable_markets cem
+                 ON cem.canonical_event_id = ce.id
+              WHERE (ce.id::text = requested.requested_canonical_market_id
+                 OR ce.proposition_key = requested.requested_canonical_market_id
+                 OR cem.id = requested.requested_canonical_market_id
+                 OR regexp_replace(cem.id, ':(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$', '') = requested.requested_canonical_market_id)
+                AND NOT EXISTS (
+                  SELECT 1
+                   FROM unnest($3::text[]) excluded(prefix)
+                   WHERE upper(ce.proposition_key) = upper(excluded.prefix)
+                      OR upper(ce.proposition_key) LIKE '%' || upper(excluded.prefix) || '%'
+                      OR EXISTS (
+                        SELECT 1
+                          FROM canonical_executable_markets cem_excluded
+                         WHERE cem_excluded.canonical_event_id = ce.id
+                           AND (
+                             upper(cem_excluded.id) = upper(excluded.prefix)
+                             OR upper(cem_excluded.id) LIKE '%' || upper(excluded.prefix) || '%'
+                           )
+                      )
+                )
+              LIMIT 1
+           ) selected ON true
+       )
+       SELECT
+         se.requested_canonical_market_id,
+         vmp.venue,
+         vmp.venue_market_id,
+         vmp.normalized_payload,
+         vmp.raw_source_payload
+        FROM selected_events se
+        JOIN frontend_market_approvals fma
+          ON fma.canonical_event_id = se.id
+         AND fma.status = 'APPROVED'
+         AND fma.metadata->>'source' = $2
+       JOIN venue_market_profiles vmp
+          ON vmp.canonical_event_id = se.id
+         AND ${QUOTE_ENABLED_VENUE_PROFILE_CONDITION}
+       ORDER BY se.requested_canonical_market_id, vmp.venue`,
+      [
+        canonicalMarketIds,
+        this.options.approvalSource ?? FRONTEND_SHARED_CORE_APPROVAL_SOURCE,
+        [...FRONTEND_CATALOG_EXCLUDED_TOPIC_PREFIXES]
+      ]
+    );
+    return result.rows;
+  }
+
   public async listApprovedVenueMappings(input: {
     limit: number;
   }): Promise<readonly SharedCoreVenueQuoteMappingRow[]> {

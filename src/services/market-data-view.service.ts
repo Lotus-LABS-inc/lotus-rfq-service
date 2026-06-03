@@ -9,6 +9,10 @@ import type {
 export type MarketChartTimeframe = "1H" | "6H" | "1D" | "1W" | "1M" | "ALL";
 
 export interface MarketDataQuoteSource {
+  preloadMappingReadiness?(inputs: readonly {
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+  }[]): Promise<void>;
   getQuoteSnapshotReport(input: {
     canonicalMarketId: string;
     canonicalOutcomeId?: string | undefined;

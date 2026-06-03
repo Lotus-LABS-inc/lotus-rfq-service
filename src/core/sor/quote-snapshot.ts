@@ -135,6 +135,10 @@ export interface VenueQuoteMappingResolver {
     canonicalMarketId: string;
     canonicalOutcomeId?: string | undefined;
   }): Promise<readonly VenueQuoteMapping[]>;
+  preloadReadiness?(inputs: readonly {
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+  }[]): Promise<void>;
   getReadiness?(input: {
     canonicalMarketId: string;
     canonicalOutcomeId?: string | undefined;
@@ -145,6 +149,7 @@ export interface VenueQuoteMappingResolver {
 }
 
 export interface SharedCoreVenueQuoteMappingRow extends Record<string, unknown> {
+  requested_canonical_market_id?: string;
   canonical_event_id?: string;
   canonical_market_id?: string | null;
   title?: string;
@@ -159,6 +164,9 @@ export interface SharedCoreQuoteMappingLoader {
   loadApprovedVenueMappings(input: {
     canonicalMarketId: string;
     canonicalOutcomeId?: string | undefined;
+  }): Promise<readonly SharedCoreVenueQuoteMappingRow[]>;
+  loadApprovedVenueMappingsBatch?(input: {
+    canonicalMarketIds: readonly string[];
   }): Promise<readonly SharedCoreVenueQuoteMappingRow[]>;
   listApprovedVenueMappings(input: {
     limit: number;
@@ -483,6 +491,13 @@ export class CompositeVenueQuoteSource {
     };
   }
 
+  public async preloadMappingReadiness(inputs: readonly {
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+  }[]): Promise<void> {
+    await this.mappingResolver.preloadReadiness?.(inputs);
+  }
+
   private async loadMappingReadiness(input: {
     canonicalMarketId: string;
     canonicalOutcomeId?: string | undefined;
@@ -534,6 +549,31 @@ const mappingReadinessCacheKey = (
   canonicalMarketId: string,
   canonicalOutcomeId: string | undefined
 ): string => `${canonicalMarketId}\u0000${canonicalOutcomeId ?? ""}`;
+
+const uniqueMappingReadinessInputs = (inputs: readonly {
+  canonicalMarketId: string;
+  canonicalOutcomeId?: string | undefined;
+}[]): Array<{ canonicalMarketId: string; canonicalOutcomeId?: string | undefined }> => {
+  const seen = new Set<string>();
+  const unique: Array<{ canonicalMarketId: string; canonicalOutcomeId?: string | undefined }> = [];
+  for (const input of inputs) {
+    const canonicalMarketId = input.canonicalMarketId.trim();
+    if (!canonicalMarketId) {
+      continue;
+    }
+    const canonicalOutcomeId = input.canonicalOutcomeId?.trim();
+    const key = mappingReadinessCacheKey(canonicalMarketId, canonicalOutcomeId);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    unique.push({
+      canonicalMarketId,
+      ...(canonicalOutcomeId ? { canonicalOutcomeId } : {})
+    });
+  }
+  return unique;
+};
 
 const resolveMappingReadinessCacheTtlMs = (cacheTtlMs: number | undefined): number =>
   Math.max(100, Math.min(cacheTtlMs ?? DEFAULT_MAPPING_READINESS_CACHE_TTL_MS, 10 * 60_000));
@@ -595,6 +635,52 @@ export class SharedCoreVenueQuoteMappingResolver implements VenueQuoteMappingRes
       });
     this.readinessCache.set(cacheKey, { expiresAtMs, promise });
     return promise;
+  }
+
+  public async preloadReadiness(inputs: readonly {
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+  }[]): Promise<void> {
+    const nowMs = (this.options.now ?? (() => new Date()))().getTime();
+    const cacheTtlMs = resolveMappingReadinessCacheTtlMs(this.options.cacheTtlMs);
+    const expiresAtMs = nowMs + cacheTtlMs;
+    const missing = uniqueMappingReadinessInputs(inputs)
+      .filter((input) => {
+        const cached = this.readinessCache.get(mappingReadinessCacheKey(input.canonicalMarketId, input.canonicalOutcomeId));
+        return !cached || cached.expiresAtMs <= nowMs;
+      });
+    if (missing.length === 0) {
+      return;
+    }
+
+    if (!this.loader.loadApprovedVenueMappingsBatch) {
+      await Promise.all(missing.map((input) => this.getReadiness(input)));
+      return;
+    }
+
+    const rows = await this.loader.loadApprovedVenueMappingsBatch({
+      canonicalMarketIds: [...new Set(missing.map((input) => input.canonicalMarketId))]
+    });
+    const rowsByRequestedId = new Map<string, SharedCoreVenueQuoteMappingRow[]>();
+    for (const row of rows) {
+      const requestedId = firstString(row.requested_canonical_market_id);
+      if (!requestedId) {
+        continue;
+      }
+      const bucket = rowsByRequestedId.get(requestedId) ?? [];
+      bucket.push(row);
+      rowsByRequestedId.set(requestedId, bucket);
+    }
+    for (const input of missing) {
+      const value = normalizeSharedCoreMappingReadiness(
+        rowsByRequestedId.get(input.canonicalMarketId) ?? [],
+        input.canonicalOutcomeId
+      );
+      this.readinessCache.set(mappingReadinessCacheKey(input.canonicalMarketId, input.canonicalOutcomeId), {
+        expiresAtMs,
+        value
+      });
+    }
   }
 
   private async loadReadiness(input: {
