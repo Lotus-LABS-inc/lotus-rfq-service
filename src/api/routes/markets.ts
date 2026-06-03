@@ -618,9 +618,6 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
     }
     return markMarketCatalogResponseFromStaleCache(usableStaleCached);
   }
-  if (preferSharedCache) {
-    return emptyQuoteReadyMarketCatalogResponseForKey(key) as T;
-  }
   const pending = marketCatalogResponsePending.get(key);
   if (pending) {
     return await pending as T;
@@ -688,14 +685,6 @@ const markMarketCatalogResponseFromStaleCache = <T extends Record<string, unknow
   ...value,
   quoteReadinessDegraded: true,
   quoteReadinessReason: "stale_cache"
-});
-
-const emptyQuoteReadyMarketCatalogResponseForKey = (key: string): Record<string, unknown> => ({
-  markets: [],
-  count: 0,
-  ...(key.includes("\"view\":\"compact\"") ? { view: "compact" } : {}),
-  quoteReadinessDegraded: true,
-  quoteReadinessReason: "hot_snapshot_unavailable"
 });
 
 const scrubMarketCatalogResponseForKey = <T extends Record<string, unknown>>(key: string, value: T): T => {
