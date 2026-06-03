@@ -813,7 +813,7 @@ describe("OrderbookStreamService", () => {
   });
 
   it("puts failed REST fallback targets on cooldown before retrying providers", async () => {
-    const connector = new FakeConnector("LIMITLESS");
+    const connector = new FakeConnector("POLYMARKET");
     const refresh = vi.fn(async () => {
       throw new Error("provider 429");
     });
@@ -828,9 +828,9 @@ describe("OrderbookStreamService", () => {
       mappingResolver: {
         async getReadiness() {
           return [{
-            venue: "LIMITLESS",
+            venue: "POLYMARKET",
             approvedVenueMarketId: "approved-1",
-            venueMarketId: "limitless-market",
+            venueMarketId: "polymarket-market",
             venueOutcomeId: "YES",
             quoteReady: true,
             blockers: []
@@ -838,7 +838,7 @@ describe("OrderbookStreamService", () => {
         }
       },
       connectors: [connector],
-      restRefreshers: [{ venue: "LIMITLESS", refresh }],
+      restRefreshers: [{ venue: "POLYMARKET", refresh }],
       publisher: { publish: vi.fn(async () => 1) },
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       now: () => currentNow,
@@ -854,6 +854,126 @@ describe("OrderbookStreamService", () => {
     expect(refresh).toHaveBeenCalledTimes(1);
 
     currentNow = new Date(now.getTime() + 61_000);
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it("applies venue-specific REST fallback budgets from code defaults", async () => {
+    const connectors = [
+      new FakeConnector("POLYMARKET"),
+      new FakeConnector("PREDICT_FUN"),
+      new FakeConnector("LIMITLESS"),
+      new FakeConnector("OPINION")
+    ];
+    const refresh = vi.fn(async (target: VenueOrderbookSubscriptionTarget) => ({
+      ...snapshot(target),
+      source: "REST" as const,
+      quoteQuality: "FULL_DEPTH_REST" as const
+    }));
+    const activeMarkets = [
+      ...Array.from({ length: 4 }, (_, index) => ({ canonicalMarketId: `poly-${index}`, venue: "POLYMARKET" })),
+      ...Array.from({ length: 4 }, (_, index) => ({ canonicalMarketId: `predict-${index}`, venue: "PREDICT_FUN" })),
+      ...Array.from({ length: 4 }, (_, index) => ({ canonicalMarketId: `limitless-${index}`, venue: "LIMITLESS" })),
+      ...Array.from({ length: 4 }, (_, index) => ({ canonicalMarketId: `opinion-${index}`, venue: "OPINION" }))
+    ];
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return activeMarkets.map((market) => ({
+            canonicalMarketId: market.canonicalMarketId,
+            canonicalOutcomeId: "YES",
+            lastSeenAt: now
+          }));
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness(input) {
+          const market = activeMarkets.find((item) => item.canonicalMarketId === input.canonicalMarketId);
+          if (!market) {
+            return [];
+          }
+          return [{
+            venue: market.venue,
+            approvedVenueMarketId: `${market.canonicalMarketId}-approved`,
+            venueMarketId: `${market.canonicalMarketId}-book`,
+            venueOutcomeId: "YES",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors,
+      restRefreshers: [
+        { venue: "POLYMARKET", refresh },
+        { venue: "PREDICT_FUN", refresh },
+        { venue: "LIMITLESS", refresh },
+        { venue: "OPINION", refresh }
+      ],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now,
+      config: {
+        backgroundReadinessMarketLimit: 16,
+        maxBackgroundSubscriptionTargets: 16,
+        maxRestRefreshTargetsPerTick: 20,
+        maxRestRefreshTargetsPerVenuePerTick: 4
+      }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 7 });
+    const countsByVenue = new Map<string, number>();
+    for (const [target] of refresh.mock.calls) {
+      countsByVenue.set(target.venue, (countsByVenue.get(target.venue) ?? 0) + 1);
+    }
+    expect(countsByVenue).toEqual(new Map([
+      ["POLYMARKET", 3],
+      ["PREDICT_FUN", 2],
+      ["LIMITLESS", 1],
+      ["OPINION", 1]
+    ]));
+  });
+
+  it("uses longer venue-specific REST failure cooldowns for slow venues", async () => {
+    const connector = new FakeConnector("OPINION");
+    const refresh = vi.fn(async () => null);
+    let currentNow = now;
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [{ canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: currentNow }];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness() {
+          return [{
+            venue: "OPINION",
+            approvedVenueMarketId: "approved-1",
+            venueMarketId: "opinion-market",
+            venueOutcomeId: "YES",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors: [connector],
+      restRefreshers: [{ venue: "OPINION", refresh }],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => currentNow,
+      config: {
+        restRefreshIntervalMs: 1,
+        restRefreshFailureCooldownMs: 60_000
+      }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
+    currentNow = new Date(now.getTime() + 61_000);
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    currentNow = new Date(now.getTime() + 181_000);
     await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
     expect(refresh).toHaveBeenCalledTimes(2);
   });

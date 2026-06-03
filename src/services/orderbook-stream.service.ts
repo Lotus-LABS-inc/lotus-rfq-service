@@ -48,7 +48,13 @@ export interface OrderbookStreamServiceConfig {
   maxRestRefreshTargetsPerVenuePerTick: number;
   restRefreshTimeoutMs: number;
   restRefreshFailureCooldownMs: number;
+  restRefreshVenuePolicies: Readonly<Record<string, OrderbookStreamVenueRestPolicy>>;
   summaryLogIntervalMs: number;
+}
+
+export interface OrderbookStreamVenueRestPolicy {
+  maxTargetsPerSweep?: number | undefined;
+  failureCooldownMs?: number | undefined;
 }
 
 export interface VenueOrderbookRestRefresher {
@@ -95,6 +101,12 @@ const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
   maxRestRefreshTargetsPerVenuePerTick: 3,
   restRefreshTimeoutMs: 2_000,
   restRefreshFailureCooldownMs: 60_000,
+  restRefreshVenuePolicies: {
+    POLYMARKET: { maxTargetsPerSweep: 3, failureCooldownMs: 60_000 },
+    LIMITLESS: { maxTargetsPerSweep: 1, failureCooldownMs: 300_000 },
+    PREDICT_FUN: { maxTargetsPerSweep: 2, failureCooldownMs: 90_000 },
+    OPINION: { maxTargetsPerSweep: 1, failureCooldownMs: 180_000 }
+  },
   summaryLogIntervalMs: 15_000
 };
 
@@ -115,7 +127,14 @@ export class OrderbookStreamService {
   private running = false;
 
   public constructor(private readonly deps: OrderbookStreamServiceDeps) {
-    this.config = { ...DEFAULT_CONFIG, ...(deps.config ?? {}) };
+    this.config = {
+      ...DEFAULT_CONFIG,
+      ...(deps.config ?? {}),
+      restRefreshVenuePolicies: {
+        ...DEFAULT_CONFIG.restRefreshVenuePolicies,
+        ...(deps.config?.restRefreshVenuePolicies ?? {})
+      }
+    };
     this.now = deps.now ?? (() => new Date());
     this.redisChannel = deps.redisChannel ?? ORDERBOOK_GATEWAY_REDIS_CHANNEL;
     this.connectorsByVenue = new Map(deps.connectors.map((connector) => [normalizeVenue(connector.venue), connector]));
@@ -131,7 +150,9 @@ export class OrderbookStreamService {
       {
         pollIntervalMs: this.config.pollIntervalMs,
         activeMarketLimit: this.config.activeMarketLimit,
-        venues: [...this.connectorsByVenue.keys()].sort()
+        venues: [...this.connectorsByVenue.keys()].sort(),
+        restRefreshIntervalMs: this.config.restRefreshIntervalMs,
+        restRefreshVenuePolicies: this.config.restRefreshVenuePolicies
       },
       "Orderbook stream service started."
     );
@@ -339,7 +360,10 @@ export class OrderbookStreamService {
       .flatMap((group) => group[0] ? [group[0]] : [])
       .filter((target) => this.isRestRefreshDue(target, nowMs))
       .filter((target) => !this.isRestRefreshFailureCoolingDown(target, nowMs))
-      .filter(limitTargetsPerVenue(this.config.maxRestRefreshTargetsPerVenuePerTick))
+      .filter(limitTargetsPerVenue(
+        this.config.maxRestRefreshTargetsPerVenuePerTick,
+        this.config.restRefreshVenuePolicies
+      ))
       .slice(0, this.config.maxRestRefreshTargetsPerTick);
     if (refreshable.length === 0) {
       return 0;
@@ -401,7 +425,16 @@ export class OrderbookStreamService {
   private markRestRefreshFailure(target: VenueOrderbookSubscriptionTarget, nowMs: number): void {
     this.restRefreshFailureCooldowns.set(
       restRefreshKey(target),
-      nowMs + Math.max(1_000, this.config.restRefreshFailureCooldownMs)
+      nowMs + this.restRefreshFailureCooldownMsFor(target)
+    );
+  }
+
+  private restRefreshFailureCooldownMsFor(target: VenueOrderbookSubscriptionTarget): number {
+    const venue = normalizeVenue(target.venue);
+    const venuePolicy = this.config.restRefreshVenuePolicies[venue];
+    return Math.max(
+      1_000,
+      Math.floor(venuePolicy?.failureCooldownMs ?? this.config.restRefreshFailureCooldownMs)
     );
   }
 
@@ -555,14 +588,25 @@ const restRefreshKey = (target: VenueOrderbookSubscriptionTarget): string =>
   nativeSubscriptionKey(target);
 
 const limitTargetsPerVenue = (
-  limit: number
+  limit: number,
+  venuePolicies: Readonly<Record<string, OrderbookStreamVenueRestPolicy>>
 ): ((target: VenueOrderbookSubscriptionTarget) => boolean) => {
-  const maxPerVenue = Math.max(1, Math.floor(limit));
+  const defaultMaxPerVenue = Math.max(1, Math.floor(limit));
   const counts = new Map<string, number>();
   return (target) => {
     const venue = normalizeVenue(target.venue);
+    const venueLimit = Math.max(
+      0,
+      Math.min(
+        defaultMaxPerVenue,
+        Math.floor(venuePolicies[venue]?.maxTargetsPerSweep ?? defaultMaxPerVenue)
+      )
+    );
+    if (venueLimit === 0) {
+      return false;
+    }
     const count = counts.get(venue) ?? 0;
-    if (count >= maxPerVenue) {
+    if (count >= venueLimit) {
       return false;
     }
     counts.set(venue, count + 1);
