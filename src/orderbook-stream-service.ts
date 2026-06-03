@@ -43,7 +43,7 @@ export interface OrderbookStreamRuntime {
 }
 
 const DEFAULT_ORDERBOOK_STREAM_PORT = 3011;
-const DEFAULT_PREDICT_WS_MAINNET_URL = "wss://ws.predict.fun/";
+const DEFAULT_PREDICT_WS_MAINNET_URL = "wss://ws.predict.fun/ws";
 const DEFAULT_ORDERBOOK_STREAM_VENUES = ["POLYMARKET", "LIMITLESS", "PREDICT_FUN", "OPINION"] as const;
 const ORDERBOOK_STREAM_VENUE_ALIASES: Record<string, string> = {
   PREDICT: "PREDICT_FUN",
@@ -176,7 +176,10 @@ const buildConnectors = (logger: ReturnType<typeof createLogger>) => {
   addConnector("POLYMARKET", () => createPolymarketOrderbookConnector({ logger }));
   addConnector("LIMITLESS", () => new LimitlessSdkOrderbookConnector({ logger }));
 
-  const predictUrl = process.env.PREDICT_WS_MAINNET_URL?.trim() || DEFAULT_PREDICT_WS_MAINNET_URL;
+  const predictUrl = resolvePredictWebSocketUrl({
+    configuredUrl: process.env.PREDICT_WS_MAINNET_URL,
+    apiKey: process.env.PREDICT_API_KEY
+  });
   addConnector("PREDICT_FUN", () => new PredictWebSocketOrderbookConnector({
     url: predictUrl,
     environment: "mainnet",
@@ -369,6 +372,27 @@ export const resolveOpinionStreamAuth = (
   const apiKey = resolveFirstEnvValue(env, OPINION_STREAM_API_KEY_ENV_NAMES);
   const walletAddress = resolveFirstEnvValue(env, OPINION_STREAM_WALLET_ENV_NAMES);
   return apiKey && walletAddress ? { apiKey, walletAddress } : null;
+};
+
+export const resolvePredictWebSocketUrl = (input: {
+  configuredUrl?: string | undefined;
+  apiKey?: string | undefined;
+}): string => {
+  const rawUrl = input.configuredUrl?.trim() || DEFAULT_PREDICT_WS_MAINNET_URL;
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    parsed = new URL(DEFAULT_PREDICT_WS_MAINNET_URL);
+  }
+  if (parsed.pathname === "/" || parsed.pathname.length === 0) {
+    parsed.pathname = "/ws";
+  }
+  const apiKey = input.apiKey?.trim();
+  if (apiKey && !parsed.searchParams.has("apiKey")) {
+    parsed.searchParams.set("apiKey", apiKey);
+  }
+  return parsed.toString();
 };
 
 const resolveFirstEnvValue = (env: NodeJS.ProcessEnv, names: readonly string[]): string | null => {

@@ -1,6 +1,28 @@
 import { describe, expect, it, vi } from "vitest";
 import type { VenueOrderbookSubscriptionTarget } from "../src/services/orderbook-stream.service.js";
 
+class FakeSocket {
+  public readyState = 1;
+  public sent: string[] = [];
+  private readonly listeners = new Map<string, Array<(event?: any) => void>>();
+
+  public send(data: string): void {
+    this.sent.push(data);
+  }
+
+  public close(): void {}
+
+  public addEventListener(type: "open" | "close" | "error" | "message", listener: (event?: any) => void): void {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
+  }
+
+  public emit(type: "open" | "close" | "error" | "message", data?: unknown): void {
+    for (const listener of this.listeners.get(type) ?? []) {
+      listener(type === "message" ? { data } : data);
+    }
+  }
+}
+
 const limitlessSdkMock = vi.hoisted(() => ({
   instances: [] as Array<{
     connectCalls: number;
@@ -72,5 +94,55 @@ describe("LimitlessSdkOrderbookConnector", () => {
       expect.objectContaining({ venue: "LIMITLESS", targetCount: 1 }),
       "Limitless websocket disconnected during subscribe; reconnecting once."
     );
+  });
+});
+
+describe("PredictWebSocketOrderbookConnector", () => {
+  it("uses Predict's documented websocket params and unwraps predictOrderbook messages", async () => {
+    const { PredictWebSocketOrderbookConnector } = await import("../src/integrations/orderbook-stream-connectors.js");
+    const socket = new FakeSocket();
+    const connector = new PredictWebSocketOrderbookConnector({
+      url: "wss://ws.predict.fun/ws",
+      environment: "mainnet",
+      webSocketFactory: () => socket
+    });
+    const target: VenueOrderbookSubscriptionTarget = {
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES",
+      venue: "PREDICT_FUN",
+      venueMarketId: "14344",
+      venueOutcomeId: "YES"
+    };
+    const onSnapshot = vi.fn();
+
+    await connector.subscribe([target], onSnapshot);
+    socket.emit("open");
+
+    expect(JSON.parse(socket.sent[0]!)).toEqual({
+      method: "subscribe",
+      params: ["predictOrderbook/14344"],
+      requestId: 1
+    });
+
+    socket.emit("message", JSON.stringify({
+      type: "M",
+      topic: "predictOrderbook/14344",
+      data: {
+        marketId: "14344",
+        bids: [[0.41, 10]],
+        asks: [[0.43, 12]],
+        timestamp: "2026-05-23T12:00:00.000Z"
+      }
+    }));
+
+    expect(onSnapshot).toHaveBeenCalledTimes(1);
+    const firstSnapshot = onSnapshot.mock.calls[0]?.[0];
+    expect(firstSnapshot).toMatchObject({
+      venue: "PREDICT_FUN",
+      venueMarketId: "14344",
+      bids: [{ price: "0.41", size: "10" }],
+      asks: [{ price: "0.43", size: "12" }],
+      source: "STREAM"
+    });
   });
 });

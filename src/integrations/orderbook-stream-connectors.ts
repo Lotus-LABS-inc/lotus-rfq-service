@@ -399,8 +399,7 @@ export class PredictWebSocketOrderbookConnector implements VenueOrderbookStreamC
         [...new Set([...this.targets.values()].map((target) => target.venueMarketId))],
         (topics) => ({
           method: "subscribe",
-          topic: "orderbook",
-          topics,
+          params: topics.map(predictOrderbookTopic),
           requestId: this.client.nextRequestId()
         })
       );
@@ -411,8 +410,7 @@ export class PredictWebSocketOrderbookConnector implements VenueOrderbookStreamC
       [...new Set(newTargets.map((target) => target.venueMarketId))],
       (topics) => ({
         method: "subscribe",
-        topic: "orderbook",
-        topics,
+        params: topics.map(predictOrderbookTopic),
         requestId: this.client.nextRequestId()
       })
     );
@@ -435,12 +433,13 @@ export class PredictWebSocketOrderbookConnector implements VenueOrderbookStreamC
   private onPayload(payload: unknown, receivedAt: Date): void {
     const messages = parseJsonMessages(payload);
     for (const message of messages) {
-      for (const target of matchByMarketId(message, [...this.targets.values()])) {
+      const predictPayload = unwrapPredictOrderbookPayload(message);
+      for (const target of matchPredictOrderbookTargets(message, predictPayload, [...this.targets.values()])) {
         const snapshot = this.adapter.normalize({
           venueMarketId: target.venueMarketId,
           ...(target.venueOutcomeId ? { venueOutcomeId: target.venueOutcomeId } : {}),
           ...(target.canonicalOutcomeId ? { canonicalOutcomeId: target.canonicalOutcomeId } : {}),
-          payload: message,
+          payload: predictPayload,
           receivedAt
         });
         if (snapshot) {
@@ -450,6 +449,34 @@ export class PredictWebSocketOrderbookConnector implements VenueOrderbookStreamC
     }
   }
 }
+
+const predictOrderbookTopic = (marketId: string): string =>
+  `predictOrderbook/${marketId}`;
+
+const unwrapPredictOrderbookPayload = (message: Record<string, unknown>): Record<string, unknown> => {
+  const data = asRecord(message.data);
+  return Object.keys(data).length > 0 ? data : message;
+};
+
+const matchPredictOrderbookTargets = (
+  message: Record<string, unknown>,
+  payload: Record<string, unknown>,
+  targets: readonly VenueOrderbookSubscriptionTarget[]
+): readonly VenueOrderbookSubscriptionTarget[] => {
+  const topicMarketId = predictOrderbookMarketIdFromTopic(message.topic);
+  if (topicMarketId) {
+    return targets.filter((target) => target.venueMarketId === topicMarketId);
+  }
+  return matchByMarketId(payload, targets);
+};
+
+const predictOrderbookMarketIdFromTopic = (topic: unknown): string | null => {
+  if (typeof topic !== "string") {
+    return null;
+  }
+  const prefix = "predictOrderbook/";
+  return topic.startsWith(prefix) ? topic.slice(prefix.length) || null : null;
+};
 
 const createDefaultWebSocket = (url: string): WsLike => new WebSocket(url) as unknown as WsLike;
 

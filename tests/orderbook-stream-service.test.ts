@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { NormalizedVenueQuoteSnapshot } from "../src/core/sor/quote-snapshot.js";
-import { parseOrderbookStreamVenues, resolveOpinionStreamAuth } from "../src/orderbook-stream-service.js";
+import { parseOrderbookStreamVenues, resolveOpinionStreamAuth, resolvePredictWebSocketUrl } from "../src/orderbook-stream-service.js";
 import {
   OrderbookStreamService,
   marketOrderbookTopic,
@@ -99,6 +99,18 @@ describe("OrderbookStreamService", () => {
     expect(resolveOpinionStreamAuth({
       OPINION_BUILDER_API: "legacy-builder-key"
     })).toBeNull();
+  });
+
+  it("uses the documented Predict websocket path and attaches the API key without logging it", () => {
+    expect(resolvePredictWebSocketUrl({})).toBe("wss://ws.predict.fun/ws");
+    expect(resolvePredictWebSocketUrl({
+      configuredUrl: "wss://ws.predict.fun/",
+      apiKey: "predict-secret"
+    })).toBe("wss://ws.predict.fun/ws?apiKey=predict-secret");
+    expect(resolvePredictWebSocketUrl({
+      configuredUrl: "wss://ws.predict.fun/ws?apiKey=existing",
+      apiKey: "predict-secret"
+    })).toBe("wss://ws.predict.fun/ws?apiKey=existing");
   });
 
   it("round-trips market orderbook websocket topics without exposing raw separators", () => {
