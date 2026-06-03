@@ -1007,8 +1007,14 @@ describe("market catalog routes", () => {
 
   it("returns sanitized live orderbook and chart contracts", async () => {
     const app = Fastify({ logger: false });
+    const touchedActivity: Array<{ canonicalMarketId: string; canonicalOutcomeId?: string | undefined }> = [];
     await registerMarketCatalogRoutes(app, {
       marketCatalogRepository: new FakeMarketCatalogRepository(),
+      marketActivityTracker: {
+        touch: (input) => {
+          touchedActivity.push(input);
+        }
+      },
       marketDataViewService: {
         getOrderbook: async (input) => ({
           marketId: input.marketId,
@@ -1136,6 +1142,10 @@ describe("market catalog routes", () => {
     });
     expect(orderbook.body).not.toContain("apiKey");
     expect(orderbook.body).not.toContain("raw_source_payload");
+    expect(touchedActivity).toContainEqual({
+      canonicalMarketId: market.canonicalMarketIds[0],
+      canonicalOutcomeId: "yes"
+    });
 
     const suffixedOrderbook = await app.inject({
       method: "GET",
@@ -1145,6 +1155,10 @@ describe("market catalog routes", () => {
     expect(suffixedOrderbook.json()).toMatchObject({
       status: "live",
       bestBid: "0.51"
+    });
+    expect(touchedActivity).toContainEqual({
+      canonicalMarketId: market.canonicalMarketIds[0],
+      canonicalOutcomeId: "yes"
     });
 
     const chart = await app.inject({

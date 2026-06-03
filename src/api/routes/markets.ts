@@ -324,6 +324,13 @@ export const registerMarketCatalogRoutes = async (
         message: "Market was not found."
       });
     }
+    const activeCanonicalMarketId = marketResult.ok && marketResult.market?.canonicalMarketIds[0]
+      ? marketResult.market.canonicalMarketIds[0]
+      : marketId;
+    deps.marketActivityTracker?.touch({
+      canonicalMarketId: activeCanonicalMarketId,
+      ...(parsed.data.outcomeId ? { canonicalOutcomeId: parsed.data.outcomeId } : {})
+    });
     const response = await deps.marketDataViewService.getOrderbook({
       marketId,
       ...(parsed.data.outcomeId ? { outcomeId: parsed.data.outcomeId } : {}),

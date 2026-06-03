@@ -20,6 +20,7 @@ import { buildLiveExecutionCandidatesResponse, registerExecutionRoutes } from ".
 import { registerTurnkeyAuthRoutes } from "./routes/turnkey-auth.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerMarketCatalogRoutes } from "./routes/markets.js";
+import { parseMarketOrderbookTopic } from "../services/orderbook-stream.service.js";
 import {
   RedisMarketCatalogSnapshotCache,
   resolveMarketCatalogSnapshotCacheKeyPrefix
@@ -360,7 +361,7 @@ import {
 } from "../repositories/execution-routing.repository.js";
 import { PgNotificationRepository } from "../repositories/notification.repository.js";
 import { MarketCatalogRepository, SharedCoreQuoteMappingRepository } from "../repositories/market-catalog.repository.js";
-import { LiveMarketDataViewService } from "../services/market-data-view.service.js";
+import { LiveMarketDataViewService, type MarketOrderbookResponse } from "../services/market-data-view.service.js";
 import { HotQuoteSnapshotService, resolveHotQuoteRedisNamespace } from "../services/hot-quote-snapshot.service.js";
 import {
   buildMarketOrderbookRecorderConfigs,
@@ -1686,7 +1687,30 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
 
   const wsGateway = await registerWebSocketPlugin(app, {
     redisClient: dependencies.redisClient,
-    logger: dependencies.logger
+    logger: dependencies.logger,
+    onSubscribe: async ({ topic, send }) => {
+      const parsedOrderbookTopic = parseMarketOrderbookTopic(topic);
+      if (!parsedOrderbookTopic) {
+        return;
+      }
+      hotQuoteSnapshots.touch({
+        canonicalMarketId: parsedOrderbookTopic.canonicalMarketId,
+        ...(parsedOrderbookTopic.canonicalOutcomeId
+          ? { canonicalOutcomeId: parsedOrderbookTopic.canonicalOutcomeId }
+          : {})
+      });
+      const orderbook = await marketDataViewService.getOrderbook({
+        marketId: parsedOrderbookTopic.canonicalMarketId,
+        ...(parsedOrderbookTopic.canonicalOutcomeId ? { outcomeId: parsedOrderbookTopic.canonicalOutcomeId } : {}),
+        depth: 20
+      });
+      send({
+        type: "MARKET_ORDERBOOK_UPDATE",
+        topic,
+        emittedAt: new Date().toISOString(),
+        payload: toInitialMarketOrderbookPayload(orderbook)
+      });
+    }
   });
   const executionWsUpdatesEnabled = process.env.EXECUTION_WS_UPDATES_ENABLED !== "false";
   const notificationRepository = new PgNotificationRepository(dependencies.pgPool, async (notification) => {
@@ -3251,6 +3275,23 @@ const readAcceptancePolicy = (metadata: Record<string, unknown>): SORAcceptanceP
   }
   return "ALL_OR_NONE";
 };
+
+const toInitialMarketOrderbookPayload = (orderbook: MarketOrderbookResponse): Record<string, unknown> => ({
+  canonicalMarketId: orderbook.marketId,
+  canonicalOutcomeId: orderbook.outcomeId,
+  source: "initial_snapshot",
+  status: orderbook.status,
+  generatedAt: orderbook.generatedAt,
+  depth: orderbook.depth,
+  bestBid: orderbook.bestBid,
+  bestAsk: orderbook.bestAsk,
+  midpoint: orderbook.midpoint,
+  spread: orderbook.spread,
+  venues: orderbook.venues,
+  bids: orderbook.bids,
+  asks: orderbook.asks,
+  blockers: orderbook.blockers
+});
 
 const asRFQState = (value: string): RFQState | null => {
   if (

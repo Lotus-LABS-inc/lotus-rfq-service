@@ -4,6 +4,7 @@ import { parseOrderbookStreamVenues } from "../src/orderbook-stream-service.js";
 import {
   OrderbookStreamService,
   marketOrderbookTopic,
+  parseMarketOrderbookTopic,
   subscriptionKey,
   type VenueOrderbookStreamConnector,
   type VenueOrderbookSubscriptionTarget
@@ -77,6 +78,20 @@ describe("OrderbookStreamService", () => {
     ]);
     expect(Array.from(parseOrderbookStreamVenues("opinion"))).toEqual(["OPINION"]);
     expect(Array.from(parseOrderbookStreamVenues("not-a-venue"))).toEqual([]);
+  });
+
+  it("round-trips market orderbook websocket topics without exposing raw separators", () => {
+    const topic = marketOrderbookTopic("OFFICE_WINNER|SEOUL|MAYOR|2026", "YES");
+
+    expect(topic).toBe("markets:orderbook:T0ZGSUNFX1dJTk5FUnxTRU9VTHxNQVlPUnwyMDI2:WUVT");
+    expect(parseMarketOrderbookTopic(topic)).toEqual({
+      canonicalMarketId: "OFFICE_WINNER|SEOUL|MAYOR|2026",
+      canonicalOutcomeId: "YES"
+    });
+    expect(parseMarketOrderbookTopic(marketOrderbookTopic("market-without-outcome"))).toEqual({
+      canonicalMarketId: "market-without-outcome"
+    });
+    expect(parseMarketOrderbookTopic("execution:user:user-1")).toBeNull();
   });
 
   it("subscribes quote-ready mappings for Redis-active markets and unsubscribes idle targets", async () => {

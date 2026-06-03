@@ -55,6 +55,10 @@ export interface RFQWebSocketGatewayConfig {
   redisChannel?: string;
   heartbeatIntervalMs?: number;
   slowClientBufferedAmountBytes?: number;
+  onSubscribe?: ((input: {
+    topic: string;
+    send: (event: RFQBroadcastEvent) => void;
+  }) => void | Promise<void>) | undefined;
 }
 
 const SOCKET_OPEN = 1;
@@ -70,6 +74,7 @@ export class RFQWebSocketGateway {
   private readonly redisChannel: string;
   private readonly heartbeatIntervalMs: number;
   private readonly slowClientBufferedAmountBytes: number;
+  private readonly onSubscribe: RFQWebSocketGatewayConfig["onSubscribe"];
   private readonly topicSubscribers = new Map<string, Set<GatewaySocket>>();
   private readonly socketState = new Map<GatewaySocket, SocketState>();
   private readonly onRedisMessageBound: (channel: string, message: string) => void;
@@ -86,6 +91,7 @@ export class RFQWebSocketGateway {
     this.heartbeatIntervalMs = config.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
     this.slowClientBufferedAmountBytes =
       config.slowClientBufferedAmountBytes ?? DEFAULT_SLOW_CLIENT_BUFFER_BYTES;
+    this.onSubscribe = config.onSubscribe;
     this.onRedisMessageBound = (channel, message) => {
       this.onRedisMessage(channel, message);
     };
@@ -285,6 +291,7 @@ export class RFQWebSocketGateway {
         type: "SUBSCRIBED",
         topic: message.topic
       });
+      this.runSubscribeHook(socket, message.topic);
       return;
     }
 
@@ -334,6 +341,34 @@ export class RFQWebSocketGateway {
 
       socket.send(serialized);
     }
+  }
+
+  private runSubscribeHook(socket: GatewaySocket, topic: string): void {
+    if (!this.onSubscribe) {
+      return;
+    }
+    void Promise.resolve(this.onSubscribe({
+      topic,
+      send: (event) => {
+        this.sendBroadcastEvent(socket, event);
+      }
+    })).catch((error) => {
+      this.logger.warn({ err: error, topic }, "WebSocket subscribe hook failed.");
+    });
+  }
+
+  private sendBroadcastEvent(socket: GatewaySocket, event: RFQBroadcastEvent): void {
+    const parsed = BROADCAST_EVENT_SCHEMA.safeParse(event);
+    if (!parsed.success || parsed.data.topic !== event.topic) {
+      this.logger.warn({ topic: event.topic }, "Invalid WebSocket subscribe hook event.");
+      return;
+    }
+    this.sendJson(socket, {
+      type: parsed.data.type,
+      topic: parsed.data.topic,
+      emittedAt: parsed.data.emittedAt,
+      payload: parsed.data.payload
+    });
   }
 
   private performHeartbeatSweep(): void {

@@ -332,6 +332,24 @@ export class OrderbookStreamService {
 export const marketOrderbookTopic = (canonicalMarketId: string, canonicalOutcomeId?: string | undefined): string =>
   `markets:orderbook:${topicPart(canonicalMarketId)}:${topicPart(canonicalOutcomeId ?? "_")}`;
 
+export const parseMarketOrderbookTopic = (
+  topic: string
+): { canonicalMarketId: string; canonicalOutcomeId?: string | undefined } | null => {
+  const parts = topic.split(":");
+  if (parts.length !== 4 || parts[0] !== "markets" || parts[1] !== "orderbook") {
+    return null;
+  }
+  const canonicalMarketId = decodeTopicPart(parts[2] ?? "");
+  const canonicalOutcomeId = decodeTopicPart(parts[3] ?? "");
+  if (!canonicalMarketId || canonicalOutcomeId === null) {
+    return null;
+  }
+  return {
+    canonicalMarketId,
+    ...(canonicalOutcomeId !== "_" ? { canonicalOutcomeId } : {})
+  };
+};
+
 export const subscriptionKey = (target: VenueOrderbookSubscriptionTarget): string =>
   [
     normalizeVenue(target.venue),
@@ -391,6 +409,14 @@ const readinessByCanonicalMarket = (
 
 const topicPart = (value: string): string =>
   Buffer.from(value, "utf8").toString("base64url");
+
+const decodeTopicPart = (value: string): string | null => {
+  try {
+    return Buffer.from(value, "base64url").toString("utf8");
+  } catch {
+    return null;
+  }
+};
 
 const normalizeVenue = (venue: string): string => {
   const normalized = venue.trim().toUpperCase();
