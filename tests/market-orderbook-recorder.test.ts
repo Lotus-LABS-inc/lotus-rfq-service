@@ -16,15 +16,15 @@ const logger: MarketOrderbookRecorderLogger = {
 describe("MarketOrderbookRecorder", () => {
   it("enables recording by default for worker-owned runtime config", () => {
     expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
-      intervalMs: 10_000,
+      intervalMs: 5_000,
       marketBatchSize: 10,
       activeMarketBatchSize: 160,
       priorityMarketBatchSize: 48,
       priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-      maxSamplesPerTick: 96,
-      sampleConcurrency: 8,
-      maxTickDurationMs: 9_000,
-      sampleTimeoutMs: 2_500,
+      maxSamplesPerTick: 48,
+      sampleConcurrency: 12,
+      maxTickDurationMs: 4_500,
+      sampleTimeoutMs: 1_200,
       cleanupIntervalMs: 30 * 60_000
     });
   });
@@ -34,15 +34,15 @@ describe("MarketOrderbookRecorder", () => {
     process.env.MARKET_ORDERBOOK_RECORDER_ENABLED = "false";
     try {
       expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
-        intervalMs: 10_000,
+        intervalMs: 5_000,
         marketBatchSize: 10,
         activeMarketBatchSize: 160,
         priorityMarketBatchSize: 48,
         priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-        maxSamplesPerTick: 96,
-        sampleConcurrency: 8,
-        maxTickDurationMs: 9_000,
-        sampleTimeoutMs: 2_500,
+        maxSamplesPerTick: 48,
+        sampleConcurrency: 12,
+        maxTickDurationMs: 4_500,
+        sampleTimeoutMs: 1_200,
         cleanupIntervalMs: 30 * 60_000
       });
       expect(buildMarketOrderbookRecorderConfig()).not.toHaveProperty("enabled");
