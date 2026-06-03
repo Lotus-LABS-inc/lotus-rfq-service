@@ -1009,6 +1009,12 @@ describe("market catalog routes", () => {
   it("returns sanitized live orderbook and chart contracts", async () => {
     const app = Fastify({ logger: false });
     const touchedActivity: Array<{ canonicalMarketId: string; canonicalOutcomeId?: string | undefined }> = [];
+    const orderbookRequests: Array<{
+      marketId: string;
+      canonicalMarketIds?: readonly string[] | undefined;
+      outcomeId?: string | undefined;
+      depth?: number | undefined;
+    }> = [];
     const aggregateCanonicalMarketIds = [
       market.canonicalMarketIds[0]!,
       "NOMINEE|US_PRESIDENT|2028|REPUBLICAN:LIMITLESS"
@@ -1027,32 +1033,53 @@ describe("market catalog routes", () => {
         }
       },
       marketDataViewService: {
-        getOrderbook: async (input) => ({
-          marketId: input.marketId,
-          outcomeId: input.outcomeId ?? null,
-          generatedAt: "2026-05-10T00:00:00.000Z",
-          depth: input.depth ?? 20,
-          status: "live" as const,
-          bestBid: "0.51",
-          bestAsk: "0.53",
-          midpoint: "0.52",
-          spread: "0.02",
-          blockers: [],
-          venues: [{
-            venue: "POLYMARKET",
-            venueMarketId: "poly-1",
-            venueOutcomeId: "yes",
-            source: "REST" as const,
-            quoteQuality: "FULL_DEPTH_REST",
-            sourceTimestamp: null,
-            receivedAt: "2026-05-10T00:00:00.000Z",
+        getOrderbook: async (input) => {
+          orderbookRequests.push(input);
+          return {
+            marketId: input.marketId,
+            outcomeId: input.outcomeId ?? null,
+            generatedAt: "2026-05-10T00:00:00.000Z",
+            depth: input.depth ?? 20,
+            status: "live" as const,
             bestBid: "0.51",
             bestAsk: "0.53",
             midpoint: "0.52",
             spread: "0.02",
-            bidDepth: "100",
-            askDepth: "90",
             blockers: [],
+            venues: [{
+              venue: "POLYMARKET",
+              venueMarketId: "poly-1",
+              venueOutcomeId: "yes",
+              source: "REST" as const,
+              quoteQuality: "FULL_DEPTH_REST",
+              sourceTimestamp: null,
+              receivedAt: "2026-05-10T00:00:00.000Z",
+              bestBid: "0.51",
+              bestAsk: "0.53",
+              midpoint: "0.52",
+              spread: "0.02",
+              bidDepth: "100",
+              askDepth: "90",
+              blockers: [],
+              bids: [{
+                venue: "POLYMARKET",
+                venueMarketId: "poly-1",
+                venueOutcomeId: "yes",
+                price: "0.51",
+                size: "100",
+                cumulativeSize: "100",
+                cumulativeNotional: "51"
+              }],
+              asks: [{
+                venue: "POLYMARKET",
+                venueMarketId: "poly-1",
+                venueOutcomeId: "yes",
+                price: "0.53",
+                size: "90",
+                cumulativeSize: "90",
+                cumulativeNotional: "47.7"
+              }]
+            }],
             bids: [{
               venue: "POLYMARKET",
               venueMarketId: "poly-1",
@@ -1071,26 +1098,8 @@ describe("market catalog routes", () => {
               cumulativeSize: "90",
               cumulativeNotional: "47.7"
             }]
-          }],
-          bids: [{
-            venue: "POLYMARKET",
-            venueMarketId: "poly-1",
-            venueOutcomeId: "yes",
-            price: "0.51",
-            size: "100",
-            cumulativeSize: "100",
-            cumulativeNotional: "51"
-          }],
-          asks: [{
-            venue: "POLYMARKET",
-            venueMarketId: "poly-1",
-            venueOutcomeId: "yes",
-            price: "0.53",
-            size: "90",
-            cumulativeSize: "90",
-            cumulativeNotional: "47.7"
-          }]
-        }),
+          };
+        },
         getChart: async (input) => ({
           marketId: input.marketId,
           outcomeId: input.outcomeId ?? null,
@@ -1160,6 +1169,12 @@ describe("market catalog routes", () => {
     });
     expect(orderbook.body).not.toContain("apiKey");
     expect(orderbook.body).not.toContain("raw_source_payload");
+    expect(orderbookRequests[0]).toMatchObject({
+      marketId: market.canonicalEventId,
+      canonicalMarketIds: aggregateCanonicalMarketIds,
+      outcomeId: "yes",
+      depth: 10
+    });
     expect(touchedActivity).toContainEqual({
       canonicalMarketId: market.canonicalMarketIds[0],
       canonicalOutcomeId: "yes"

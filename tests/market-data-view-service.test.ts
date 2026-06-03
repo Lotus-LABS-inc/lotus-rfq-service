@@ -31,6 +31,66 @@ describe("LiveMarketDataViewService", () => {
     });
   });
 
+  it("merges linked canonical market legs into one partial-live orderbook", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    const calls: unknown[] = [];
+    const service = new LiveMarketDataViewService({
+      getQuoteSnapshotReport: async (input) => {
+        calls.push(input);
+        if (input.canonicalMarketId === "market-poly") {
+          return {
+            snapshots: [{
+              venue: "POLYMARKET",
+              venueMarketId: "poly-1",
+              venueOutcomeId: "yes",
+              source: "STREAM",
+              quoteQuality: "FULL_DEPTH_REST",
+              sourceTimestamp: now,
+              receivedAt: now,
+              bestBid: "0.48",
+              bestAsk: "0.50",
+              midpoint: "0.49",
+              spread: "0.02",
+              topOfBookSize: "100",
+              bids: [{ price: "0.48", size: "100" }],
+              asks: [{ price: "0.50", size: "90" }],
+              blockers: [],
+              missingFactors: []
+            }],
+            blocked: []
+          };
+        }
+        return {
+          snapshots: [],
+          blocked: [{
+            venue: "LIMITLESS",
+            reason: "QUOTE_SNAPSHOT_CACHE_MISS",
+            venueMarketId: "limitless-1",
+            venueOutcomeId: "yes"
+          }]
+        };
+      }
+    }, { now: () => now });
+
+    const orderbook = await service.getOrderbook({
+      marketId: "event-1",
+      canonicalMarketIds: ["market-poly", "market-limitless"],
+      outcomeId: "yes"
+    });
+
+    expect(calls).toEqual([
+      expect.objectContaining({ canonicalMarketId: "market-poly", canonicalOutcomeId: "yes" }),
+      expect.objectContaining({ canonicalMarketId: "market-limitless", canonicalOutcomeId: "yes" })
+    ]);
+    expect(orderbook).toMatchObject({
+      marketId: "event-1",
+      status: "partial",
+      bestAsk: "0.5",
+      venues: [expect.objectContaining({ venue: "POLYMARKET", snapshotStatus: "live" })],
+      blockers: [expect.objectContaining({ venue: "LIMITLESS", reason: "QUOTE_SNAPSHOT_CACHE_MISS" })]
+    });
+  });
+
   it("uses cache-only quote reads for display batch quotes", async () => {
     const now = new Date("2026-05-10T12:00:00.000Z");
     const calls: unknown[] = [];

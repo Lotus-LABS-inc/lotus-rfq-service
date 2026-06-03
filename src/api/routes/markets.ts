@@ -328,6 +328,7 @@ export const registerMarketCatalogRoutes = async (
     touchOrderbookMarketActivity(marketId, marketResult, parsed.data.outcomeId, deps.marketActivityTracker);
     const response = await deps.marketDataViewService.getOrderbook({
       marketId,
+      canonicalMarketIds: resolveOrderbookMarketIds(marketId, marketResult),
       ...(parsed.data.outcomeId ? { outcomeId: parsed.data.outcomeId } : {}),
       ...(parsed.data.depth ? { depth: parsed.data.depth } : {}),
       ...(parsed.data.venue ? { venue: parsed.data.venue } : {})
@@ -430,6 +431,19 @@ const touchOrderbookMarketActivity = (
       ...(outcomeId ? { canonicalOutcomeId: outcomeId } : {})
     });
   }
+};
+
+const resolveOrderbookMarketIds = (
+  marketId: string,
+  marketResult: Awaited<ReturnType<typeof resolveCachedCatalogMarketForChart>>
+): string[] => {
+  const canonicalMarketIds = marketResult.ok && marketResult.market
+    ? marketResult.market.canonicalMarketIds
+    : [marketId];
+  const normalized = [...new Set(canonicalMarketIds)]
+    .map((canonicalMarketId) => canonicalMarketId.trim())
+    .filter((canonicalMarketId) => canonicalMarketId.length > 0);
+  return normalized.length > 0 ? normalized : [marketId];
 };
 
 const buildOrderbookStreamContract = (

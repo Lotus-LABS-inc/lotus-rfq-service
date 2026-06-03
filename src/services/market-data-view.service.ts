@@ -207,13 +207,15 @@ export class LiveMarketDataViewService {
 
   public async getOrderbook(input: {
     marketId: string;
+    canonicalMarketIds?: readonly string[] | undefined;
     outcomeId?: string | undefined;
     depth?: number | undefined;
     venue?: string | undefined;
   }): Promise<MarketOrderbookResponse> {
     const generatedAt = this.now();
     const depth = clampDepth(input.depth);
-    const key = orderbookCacheKey(input.marketId, input.outcomeId ?? null, input.venue ?? null, depth);
+    const orderbookMarketIds = normalizeOrderbookMarketIds(input.marketId, input.canonicalMarketIds);
+    const key = orderbookCacheKey(orderbookCacheMarketKey(input.marketId, orderbookMarketIds), input.outcomeId ?? null, input.venue ?? null, depth);
     const cached = this.orderbookCache.get(key);
     if (cached && cached.expiresAt > generatedAt.getTime()) {
       if (cached.response) {
@@ -227,7 +229,7 @@ export class LiveMarketDataViewService {
       }
     }
 
-    const livePromise = this.loadOrderbook(input, generatedAt, depth)
+    const livePromise = this.loadOrderbook(input, generatedAt, depth, orderbookMarketIds)
       .catch((error) => unavailableOrderbook({
         input,
         generatedAt,
@@ -270,18 +272,22 @@ export class LiveMarketDataViewService {
 
   private async loadOrderbook(input: {
     marketId: string;
+    canonicalMarketIds?: readonly string[] | undefined;
     outcomeId?: string | undefined;
     depth?: number | undefined;
     venue?: string | undefined;
-  }, generatedAt: Date, depth: number): Promise<MarketOrderbookResponse> {
-    const report = await this.quoteSource.getQuoteSnapshotReport({
-      canonicalMarketId: input.marketId,
-      ...(input.outcomeId ? { canonicalOutcomeId: input.outcomeId } : {}),
-      side: "buy",
-      quantity: 1,
-      readMode: "cached_display",
-      displayMaxAgeMs: ORDERBOOK_DISPLAY_SNAPSHOT_MAX_AGE_MS
-    });
+  }, generatedAt: Date, depth: number, orderbookMarketIds: readonly string[]): Promise<MarketOrderbookResponse> {
+    const reports = await Promise.all(orderbookMarketIds.map((canonicalMarketId) =>
+      this.quoteSource.getQuoteSnapshotReport({
+        canonicalMarketId,
+        ...(input.outcomeId ? { canonicalOutcomeId: input.outcomeId } : {}),
+        side: "buy",
+        quantity: 1,
+        readMode: "cached_display",
+        displayMaxAgeMs: ORDERBOOK_DISPLAY_SNAPSHOT_MAX_AGE_MS
+      })
+    ));
+    const report = mergeVenueQuoteSnapshotReports(reports);
     const venueFilter = input.venue?.trim().toUpperCase();
     const snapshots = venueFilter
       ? report.snapshots.filter((snapshot) => snapshot.venue.toUpperCase() === venueFilter)
@@ -798,6 +804,44 @@ const orderbookCacheKey = (
   venue: string | null,
   depth: number
 ): string => `${marketId}\u0000${outcomeId ?? ""}\u0000${venue?.trim().toUpperCase() ?? ""}\u0000${depth}`;
+
+const orderbookCacheMarketKey = (marketId: string, canonicalMarketIds: readonly string[]): string =>
+  canonicalMarketIds.length === 1 && canonicalMarketIds[0] === marketId
+    ? marketId
+    : `${marketId}\u0000${canonicalMarketIds.join("\u0001")}`;
+
+const normalizeOrderbookMarketIds = (
+  marketId: string,
+  canonicalMarketIds: readonly string[] | undefined
+): string[] => {
+  const normalized = [...new Set((canonicalMarketIds ?? [marketId])
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0))];
+  return normalized.length > 0 ? normalized : [marketId];
+};
+
+const mergeVenueQuoteSnapshotReports = (reports: readonly VenueQuoteSnapshotReport[]): VenueQuoteSnapshotReport => {
+  const snapshotsByKey = new Map<string, NormalizedVenueQuoteSnapshot>();
+  const blockedByKey = new Map<string, VenueQuoteSnapshotBlocker>();
+  for (const report of reports) {
+    for (const snapshot of report.snapshots) {
+      snapshotsByKey.set(venueSnapshotIdentityKey(snapshot), snapshot);
+    }
+    for (const blocker of report.blocked) {
+      blockedByKey.set(venueBlockerIdentityKey(blocker), blocker);
+    }
+  }
+  return {
+    snapshots: [...snapshotsByKey.values()],
+    blocked: [...blockedByKey.values()]
+  };
+};
+
+const venueSnapshotIdentityKey = (snapshot: NormalizedVenueQuoteSnapshot): string =>
+  `${snapshot.venue.toUpperCase()}\u0000${snapshot.venueMarketId}\u0000${snapshot.venueOutcomeId ?? ""}`;
+
+const venueBlockerIdentityKey = (blocker: VenueQuoteSnapshotBlocker): string =>
+  `${blocker.venue.toUpperCase()}\u0000${blocker.reason}\u0000${blocker.venueMarketId ?? ""}\u0000${blocker.venueOutcomeId ?? ""}`;
 
 const isDisplayUsableOrderbook = (orderbook: MarketOrderbookResponse): boolean =>
   orderbook.venues.length > 0 &&
