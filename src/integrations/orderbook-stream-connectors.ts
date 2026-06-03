@@ -190,9 +190,9 @@ export class LimitlessSdkOrderbookConnector implements VenueOrderbookStreamConne
       return;
     }
     await this.connect();
-    await this.client.subscribe("orderbook", {
-      marketSlugs: [...new Set((newTargets.length > 0 ? newTargets : [...this.targets.values()]).map((target) => target.venueMarketId))]
-    });
+    await this.subscribeOrderbook(
+      [...new Set((newTargets.length > 0 ? newTargets : [...this.targets.values()]).map((target) => target.venueMarketId))]
+    );
   }
 
   public async unsubscribe(keys: readonly string[]): Promise<void> {
@@ -204,9 +204,7 @@ export class LimitlessSdkOrderbookConnector implements VenueOrderbookStreamConne
     if (removed.length === 0 || !this.connected) {
       return;
     }
-    await this.client.unsubscribe("orderbook", {
-      marketSlugs: [...new Set(removed.map((target) => target.venueMarketId))]
-    });
+    await this.unsubscribeOrderbook([...new Set(removed.map((target) => target.venueMarketId))]);
     if (this.targets.size === 0) {
       await this.disconnect();
     }
@@ -227,6 +225,38 @@ export class LimitlessSdkOrderbookConnector implements VenueOrderbookStreamConne
     }
     await this.client.connect();
     this.connected = true;
+  }
+
+  private async subscribeOrderbook(marketSlugs: readonly string[]): Promise<void> {
+    try {
+      await this.client.subscribe("orderbook", { marketSlugs: [...marketSlugs] });
+    } catch (error) {
+      if (!isLimitlessDisconnectedError(error)) {
+        throw error;
+      }
+      this.connected = false;
+      this.config.logger?.warn?.(
+        { venue: this.venue, targetCount: marketSlugs.length },
+        "Limitless websocket disconnected during subscribe; reconnecting once."
+      );
+      await this.connect();
+      await this.client.subscribe("orderbook", { marketSlugs: [...marketSlugs] });
+    }
+  }
+
+  private async unsubscribeOrderbook(marketSlugs: readonly string[]): Promise<void> {
+    try {
+      await this.client.unsubscribe("orderbook", { marketSlugs: [...marketSlugs] });
+    } catch (error) {
+      if (!isLimitlessDisconnectedError(error)) {
+        throw error;
+      }
+      this.connected = false;
+      this.config.logger?.warn?.(
+        { venue: this.venue, targetCount: marketSlugs.length },
+        "Limitless websocket disconnected during unsubscribe; treating targets as removed."
+      );
+    }
   }
 
   private onPayload(payload: unknown): void {
@@ -484,6 +514,11 @@ const firstString = (...values: readonly unknown[]): string | null => {
     }
   }
   return null;
+};
+
+const isLimitlessDisconnectedError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  return message.toLowerCase().includes("websocket not connected");
 };
 
 const normalizeVenue = (venue: string): string => {

@@ -1052,6 +1052,19 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const sharedCoreQuoteMappingResolver = new SharedCoreVenueQuoteMappingResolver(
     new SharedCoreQuoteMappingRepository(dependencies.pgPool)
   );
+  await warmQuoteMappingReadinessOnce(
+    sharedCoreQuoteMappingResolver,
+    dependencies.logger,
+    "startup",
+    QUOTE_MAPPING_READINESS_STARTUP_WARMUP_TIMEOUT_MS
+  );
+  const stopQuoteMappingReadinessWarmup = startQuoteMappingReadinessWarmup(
+    sharedCoreQuoteMappingResolver,
+    dependencies.logger
+  );
+  app.addHook("onClose", async () => {
+    stopQuoteMappingReadinessWarmup();
+  });
   const marketQuoteReadinessSource = new HotMarketQuoteReadinessSource({
     mappingResolver: sharedCoreQuoteMappingResolver,
     hotSnapshots: hotQuoteSnapshots,
@@ -4101,6 +4114,91 @@ const parseOptionalNumber = (value: string | undefined): number | undefined => {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+};
+
+const QUOTE_MAPPING_READINESS_WARMUP_LIMIT = 500;
+const QUOTE_MAPPING_READINESS_WARMUP_INTERVAL_MS = 30_000;
+const QUOTE_MAPPING_READINESS_STARTUP_WARMUP_TIMEOUT_MS = 2_000;
+const QUOTE_MAPPING_READINESS_BACKGROUND_WARMUP_TIMEOUT_MS = 5_000;
+const QUOTE_MAPPING_READINESS_WARMUP_TIMEOUT = Symbol("QUOTE_MAPPING_READINESS_WARMUP_TIMEOUT");
+
+type QuoteMappingReadinessWarmupSource = {
+  listApprovedReadiness?: (input: { limit: number }) => Promise<readonly unknown[]>;
+};
+
+const startQuoteMappingReadinessWarmup = (
+  source: QuoteMappingReadinessWarmupSource,
+  logger: Pick<Logger, "info" | "warn">
+): (() => void) => {
+  const interval = setInterval(() => {
+    void warmQuoteMappingReadinessOnce(
+      source,
+      logger,
+      "background",
+      QUOTE_MAPPING_READINESS_BACKGROUND_WARMUP_TIMEOUT_MS
+    );
+  }, QUOTE_MAPPING_READINESS_WARMUP_INTERVAL_MS);
+  interval.unref?.();
+  return () => clearInterval(interval);
+};
+
+const warmQuoteMappingReadinessOnce = async (
+  source: QuoteMappingReadinessWarmupSource,
+  logger: Pick<Logger, "info" | "warn">,
+  phase: "startup" | "background",
+  timeoutMs: number
+): Promise<void> => {
+  if (!source.listApprovedReadiness) {
+    return;
+  }
+  const startedAt = Date.now();
+  try {
+    const rows = await withQuoteMappingWarmupTimeout(
+      source.listApprovedReadiness({ limit: QUOTE_MAPPING_READINESS_WARMUP_LIMIT }),
+      timeoutMs
+    );
+    if (rows === QUOTE_MAPPING_READINESS_WARMUP_TIMEOUT) {
+      logger.warn(
+        { phase, timeoutMs, limit: QUOTE_MAPPING_READINESS_WARMUP_LIMIT },
+        "Quote mapping readiness warmup timed out; resolver may still finish in the background."
+      );
+      return;
+    }
+    logger.info(
+      {
+        phase,
+        rowCount: rows.length,
+        elapsedMs: Date.now() - startedAt,
+        limit: QUOTE_MAPPING_READINESS_WARMUP_LIMIT
+      },
+      "Quote mapping readiness cache warmed."
+    );
+  } catch (error) {
+    logger.warn(
+      { err: error, phase, limit: QUOTE_MAPPING_READINESS_WARMUP_LIMIT },
+      "Quote mapping readiness warmup failed."
+    );
+  }
+};
+
+const withQuoteMappingWarmupTimeout = async <T>(
+  promise: Promise<T>,
+  timeoutMs: number
+): Promise<T | typeof QUOTE_MAPPING_READINESS_WARMUP_TIMEOUT> => {
+  let timeout: NodeJS.Timeout | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<typeof QUOTE_MAPPING_READINESS_WARMUP_TIMEOUT>((resolve) => {
+        timeout = setTimeout(() => resolve(QUOTE_MAPPING_READINESS_WARMUP_TIMEOUT), Math.max(1, timeoutMs));
+        timeout.unref?.();
+      })
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 };
 
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
