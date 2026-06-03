@@ -20,10 +20,10 @@ describe("MarketOrderbookRecorder", () => {
       intervalMs: 12_000,
       marketBatchSize: 16,
       activeMarketBatchSize: 200,
-      activeMaxSamplesPerTick: 32,
+      activeMaxSamplesPerTick: 24,
       priorityMarketBatchSize: 80,
       priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-      maxSamplesPerTick: 48,
+      maxSamplesPerTick: 32,
       sampleConcurrency: 10,
       maxTickDurationMs: 9_500,
       sampleTimeoutMs: 4_000,
@@ -39,10 +39,10 @@ describe("MarketOrderbookRecorder", () => {
         intervalMs: 12_000,
         marketBatchSize: 16,
         activeMarketBatchSize: 200,
-        activeMaxSamplesPerTick: 32,
+        activeMaxSamplesPerTick: 24,
         priorityMarketBatchSize: 80,
         priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-        maxSamplesPerTick: 48,
+        maxSamplesPerTick: 32,
         sampleConcurrency: 10,
         maxTickDurationMs: 9_500,
         sampleTimeoutMs: 4_000,
@@ -65,8 +65,8 @@ describe("MarketOrderbookRecorder", () => {
     expect(configs.map((config) => config.shardCount)).toEqual([2, 2]);
     expect(configs.map((config) => config.shardIndex)).toEqual([0, 1]);
     expect(configs.every((config) => config.intervalMs === 12_000)).toBe(true);
-    expect(configs.every((config) => config.maxSamplesPerTick === 48)).toBe(true);
-    expect(configs.every((config) => config.activeMaxSamplesPerTick === 32)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerTick === 32)).toBe(true);
+    expect(configs.every((config) => config.activeMaxSamplesPerTick === 24)).toBe(true);
     expect(configs.every((config) => (config.maxTickDurationMs ?? 0) < config.intervalMs)).toBe(true);
   });
 
