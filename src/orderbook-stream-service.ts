@@ -65,10 +65,11 @@ export const runOrderbookStreamService = async (): Promise<OrderbookStreamRuntim
 
   await connectRedis(redis);
 
+  const venueOrderbookSnapshotRepository = new VenueOrderbookSnapshotRepository(pgPool);
   const hotSnapshots = new HotQuoteSnapshotService({
     memoryCache: new QuoteSnapshotCache(),
     redis,
-    dbFallback: new VenueOrderbookSnapshotRepository(pgPool),
+    dbFallback: venueOrderbookSnapshotRepository,
     logger,
     config: {
       redisNamespace: resolveHotQuoteRedisNamespace({
@@ -97,6 +98,7 @@ export const runOrderbookStreamService = async (): Promise<OrderbookStreamRuntim
     mappingResolver,
     connectors: buildConnectors(logger),
     restRefreshers: buildRestRefreshers(logger),
+    latestSnapshots: venueOrderbookSnapshotRepository,
     publisher: redis,
     logger
   });

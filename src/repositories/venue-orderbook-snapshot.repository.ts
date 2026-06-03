@@ -113,6 +113,16 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
     return inserted;
   }
 
+  public async upsertLatestMany(snapshots: readonly VenueOrderbookSnapshotInput[]): Promise<number> {
+    if (snapshots.length === 0) {
+      return 0;
+    }
+    for (const snapshot of snapshots) {
+      await this.upsertLatest(snapshot);
+    }
+    return snapshots.length;
+  }
+
   private async upsertLatest(snapshot: VenueOrderbookSnapshotInput): Promise<void> {
     await this.pool.query(
       `INSERT INTO venue_orderbook_latest_snapshots (

@@ -1,12 +1,15 @@
 import type { Logger } from "pino";
+import Decimal from "decimal.js";
 import type {
   NormalizedVenueQuoteSnapshot,
+  NormalizedQuoteLevel,
   SharedCoreQuoteReadinessMarket,
   VenueQuoteSnapshotReader,
   VenueQuoteMappingReadiness,
   VenueQuoteMappingResolver
 } from "../core/sor/quote-snapshot.js";
 import type { RedisClient } from "../db/redis.js";
+import type { VenueOrderbookSnapshotInput, VenueOrderbookSnapshotRepository } from "../repositories/venue-orderbook-snapshot.repository.js";
 import type { HotQuoteSnapshotService } from "./hot-quote-snapshot.service.js";
 import type { MarketOrderbookLiveCache } from "./market-orderbook-live-cache.js";
 
@@ -49,6 +52,7 @@ export interface OrderbookStreamServiceConfig {
   restRefreshTimeoutMs: number;
   restRefreshFailureCooldownMs: number;
   restRefreshVenuePolicies: Readonly<Record<string, OrderbookStreamVenueRestPolicy>>;
+  latestSnapshotPersistIntervalMs: number;
   summaryLogIntervalMs: number;
 }
 
@@ -69,6 +73,7 @@ export interface OrderbookStreamServiceDeps {
   mappingResolver: Pick<VenueQuoteMappingResolver, "getReadiness" | "listApprovedReadiness">;
   connectors: readonly VenueOrderbookStreamConnector[];
   restRefreshers?: readonly VenueOrderbookRestRefresher[] | readonly VenueQuoteSnapshotReader[] | undefined;
+  latestSnapshots?: Pick<VenueOrderbookSnapshotRepository, "upsertLatestMany"> | undefined;
   publisher: Pick<RedisClient, "publish">;
   logger: Pick<Logger, "info" | "warn" | "error">;
   now?: () => Date;
@@ -107,6 +112,7 @@ const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
     PREDICT_FUN: { maxTargetsPerSweep: 2, failureCooldownMs: 90_000 },
     OPINION: { maxTargetsPerSweep: 1, failureCooldownMs: 180_000 }
   },
+  latestSnapshotPersistIntervalMs: 5_000,
   summaryLogIntervalMs: 15_000
 };
 
@@ -122,6 +128,7 @@ export class OrderbookStreamService {
   private readonly lastRestRefreshBySubscription = new Map<string, number>();
   private readonly restRefreshFailureCooldowns = new Map<string, number>();
   private readonly restRefreshVenueFailureCooldowns = new Map<string, number>();
+  private readonly lastLatestSnapshotPersistBySubscription = new Map<string, number>();
   private lastRestRefreshSweepAt = 0;
   private lastSummaryLogAt = 0;
   private timer: NodeJS.Timeout | null = null;
@@ -455,6 +462,31 @@ export class OrderbookStreamService {
       this.deps.logger.warn({ err: error, venue: snapshot.venue }, "Market orderbook live cache write failed.");
     });
     void this.publishMarketUpdate(snapshot, target);
+    void this.persistLatestSnapshot(snapshot, target).catch((error) => {
+      this.deps.logger.warn({ err: error, venue: snapshot.venue }, "Orderbook stream latest snapshot persist failed.");
+    });
+  }
+
+  private async persistLatestSnapshot(
+    snapshot: NormalizedVenueQuoteSnapshot,
+    target: VenueOrderbookSubscriptionTarget
+  ): Promise<void> {
+    if (!this.deps.latestSnapshots) {
+      return;
+    }
+    const key = subscriptionKey(target);
+    const nowMs = this.now().getTime();
+    const lastPersistedAt = this.lastLatestSnapshotPersistBySubscription.get(key) ?? 0;
+    if (nowMs - lastPersistedAt < this.config.latestSnapshotPersistIntervalMs) {
+      return;
+    }
+    this.lastLatestSnapshotPersistBySubscription.set(key, nowMs);
+    await this.deps.latestSnapshots.upsertLatestMany([toLatestSnapshotInput({
+      canonicalMarketId: target.canonicalMarketId,
+      canonicalOutcomeId: target.canonicalOutcomeId ?? null,
+      snapshot,
+      receivedAt: this.now()
+    })]);
   }
 
   private async publishMarketUpdate(
@@ -665,6 +697,69 @@ const sanitizeStrings = (values: readonly string[]): readonly string[] =>
   values
     .map((value) => value.replace(/[A-Za-z0-9_-]{32,}/g, "REDACTED").slice(0, 120))
     .filter((value) => value.trim().length > 0);
+
+const toLatestSnapshotInput = (input: {
+  canonicalMarketId: string;
+  canonicalOutcomeId: string | null;
+  snapshot: NormalizedVenueQuoteSnapshot;
+  receivedAt: Date;
+}): VenueOrderbookSnapshotInput => {
+  const bestBid = input.snapshot.bids[0]?.price ?? null;
+  const bestAsk = input.snapshot.asks[0]?.price ?? null;
+  const midpoint = calculateMidpoint(bestBid, bestAsk);
+  return {
+    canonicalEventId: input.canonicalMarketId,
+    canonicalMarketId: input.canonicalMarketId,
+    canonicalOutcomeId: input.canonicalOutcomeId,
+    venue: normalizeVenue(input.snapshot.venue),
+    venueMarketId: input.snapshot.venueMarketId,
+    venueOutcomeId: input.snapshot.venueOutcomeId ?? null,
+    source: input.snapshot.source,
+    quoteQuality: input.snapshot.quoteQuality,
+    sourceTimestamp: input.snapshot.sourceTimestamp,
+    receivedAt: input.receivedAt,
+    bestBid,
+    bestAsk,
+    midpoint,
+    spread: calculateSpread(bestBid, bestAsk),
+    bidDepth: sumLevels(input.snapshot.bids),
+    askDepth: sumLevels(input.snapshot.asks),
+    bids: input.snapshot.bids.slice(0, 25),
+    asks: input.snapshot.asks.slice(0, 25),
+    blockers: sanitizeStrings(input.snapshot.blockers ?? []),
+    metadataVersion: "orderbook-stream-latest-v1"
+  };
+};
+
+const calculateMidpoint = (bestBid: string | null, bestAsk: string | null): string | null => {
+  if (!bestBid || !bestAsk) {
+    return bestBid ?? bestAsk;
+  }
+  try {
+    return new Decimal(bestBid).plus(bestAsk).div(2).toFixed(6);
+  } catch {
+    return bestBid ?? bestAsk;
+  }
+};
+
+const calculateSpread = (bestBid: string | null, bestAsk: string | null): string | null => {
+  if (!bestBid || !bestAsk) {
+    return null;
+  }
+  try {
+    return Decimal.max(0, new Decimal(bestAsk).minus(bestBid)).toFixed(6);
+  } catch {
+    return null;
+  }
+};
+
+const sumLevels = (levels: readonly NormalizedQuoteLevel[]): string => {
+  try {
+    return levels.reduce((sum, level) => sum.plus(level.size), new Decimal(0)).toFixed(6);
+  } catch {
+    return "0";
+  }
+};
 
 const sanitizeIdentifier = (value: string): string =>
   value.length > 16 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;

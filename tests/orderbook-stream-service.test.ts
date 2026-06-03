@@ -172,6 +172,7 @@ describe("OrderbookStreamService", () => {
     const connector = new FakeConnector("POLYMARKET");
     const put = vi.fn();
     const publish = vi.fn(async () => 1);
+    const upsertLatestMany = vi.fn(async () => 1);
     const service = new OrderbookStreamService({
       activeMarkets: {
         async listActiveMarketsFromRedis() {
@@ -196,6 +197,7 @@ describe("OrderbookStreamService", () => {
         }
       },
       connectors: [connector],
+      latestSnapshots: { upsertLatestMany },
       publisher: { publish },
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       now: () => now
@@ -220,6 +222,26 @@ describe("OrderbookStreamService", () => {
       bestAsk: "0.51",
       snapshotStatus: "live"
     });
+    await vi.waitFor(() => expect(upsertLatestMany).toHaveBeenCalledTimes(1));
+    expect(upsertLatestMany).toHaveBeenCalledWith([
+      expect.objectContaining({
+        canonicalEventId: "OFFICE_WINNER|SEOUL|MAYOR|2026",
+        canonicalMarketId: "OFFICE_WINNER|SEOUL|MAYOR|2026",
+        canonicalOutcomeId: "YES",
+        venue: "POLYMARKET",
+        venueMarketId: "market-1",
+        venueOutcomeId: "token-yes",
+        source: "STREAM",
+        bestBid: "0.49",
+        bestAsk: "0.51",
+        midpoint: "0.500000",
+        spread: "0.020000",
+        bidDepth: "10.000000",
+        askDepth: "10.000000",
+        receivedAt: now,
+        metadataVersion: "orderbook-stream-latest-v1"
+      })
+    ]);
   });
 
   it("loads approved quote readiness in one batch for active market scans", async () => {
