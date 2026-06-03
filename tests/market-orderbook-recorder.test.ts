@@ -729,6 +729,77 @@ describe("MarketOrderbookRecorder", () => {
     expect(second.skippedCooldownSamples).toBe(2);
   });
 
+  it("does not cool down an entire venue after one transient sample timeout", async () => {
+    const sampledMarketIds: string[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [
+          venueMarketFixture("POLYMARKET", "market-timeout"),
+          venueMarketFixture("POLYMARKET", "market-healthy")
+        ]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalMarketId, canonicalOutcomeId }) => {
+          sampledMarketIds.push(canonicalMarketId);
+          if (canonicalMarketId === "market-timeout") {
+            return {
+              snapshots: [],
+              blocked: [{
+                venue: "POLYMARKET",
+                reason: "QUOTE_PROVIDER_TIMEOUT",
+                venueMarketId: "poly-timeout",
+                detailsCode: "POLYMARKET_quote_reader_timeout_after_1500ms."
+              }]
+            };
+          }
+          return {
+            snapshots: [{
+              venue: "POLYMARKET",
+              venueMarketId: "poly-healthy",
+              venueOutcomeId: canonicalOutcomeId ?? "YES",
+              source: "REST",
+              quoteQuality: "FULL_DEPTH_REST",
+              sourceTimestamp: new Date("2026-05-10T12:00:00.000Z"),
+              receivedAt: new Date("2026-05-10T12:00:01.000Z"),
+              bids: [{ price: "0.59", size: "10" }],
+              asks: [{ price: "0.61", size: "11" }],
+              blockers: [],
+              missingFactors: []
+            }],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async (snapshots) => snapshots.length,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        maxSamplesPerTick: 40,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const first = await recorder.runOnce();
+    const second = await recorder.runOnce();
+
+    expect(first.sampledOutcomes).toBe(4);
+    expect(first.insertedSnapshots).toBe(2);
+    expect(second.sampledOutcomes).toBe(2);
+    expect(second.skippedCooldownSamples).toBe(2);
+    expect(sampledMarketIds.filter((marketId) => marketId === "market-healthy")).toHaveLength(4);
+  });
+
   it("does not cool down a whole sample when a transient venue timeout has another venue quote", async () => {
     const inserted: VenueOrderbookSnapshotInput[] = [];
     const recorder = new MarketOrderbookRecorder(
