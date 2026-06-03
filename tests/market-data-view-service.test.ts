@@ -1,5 +1,28 @@
 import { describe, expect, it } from "vitest";
+import type { NormalizedVenueQuoteSnapshot } from "../src/core/sor/quote-snapshot.js";
 import { LiveMarketDataViewService } from "../src/services/market-data-view.service.js";
+
+const snapshot = (input: {
+  venue: string;
+  venueMarketId: string;
+  venueOutcomeId?: string | undefined;
+  receivedAt: Date;
+  bid: string;
+  ask: string;
+}): NormalizedVenueQuoteSnapshot => ({
+  venue: input.venue,
+  venueMarketId: input.venueMarketId,
+  ...(input.venueOutcomeId ? { venueOutcomeId: input.venueOutcomeId } : {}),
+  source: "STREAM",
+  quoteQuality: "FULL_DEPTH_STREAM",
+  sourceTimestamp: input.receivedAt,
+  receivedAt: input.receivedAt,
+  bids: [{ price: input.bid, size: "100" }],
+  asks: [{ price: input.ask, size: "100" }],
+  missingFactors: [],
+  blockers: [],
+  metadata: {}
+});
 
 describe("LiveMarketDataViewService", () => {
   it("uses cache-only quote reads for display orderbooks", async () => {
@@ -79,16 +102,55 @@ describe("LiveMarketDataViewService", () => {
     });
 
     expect(calls).toEqual([
-      expect.objectContaining({ canonicalMarketId: "market-poly", canonicalOutcomeId: "yes" }),
-      expect.objectContaining({ canonicalMarketId: "market-limitless", canonicalOutcomeId: "yes" })
+      expect.objectContaining({ canonicalMarketId: "market-poly", canonicalOutcomeId: "YES" }),
+      expect.objectContaining({ canonicalMarketId: "market-limitless", canonicalOutcomeId: "YES" })
     ]);
     expect(orderbook).toMatchObject({
       marketId: "event-1",
+      outcomeId: "YES",
       status: "partial",
       bestAsk: "0.5",
       venues: [expect.objectContaining({ venue: "POLYMARKET", snapshotStatus: "live" })],
       blockers: [expect.objectContaining({ venue: "LIMITLESS", reason: "QUOTE_SNAPSHOT_CACHE_MISS" })]
     });
+  });
+
+  it("normalizes binary orderbook outcome casing so warmup and terminal requests share cache", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    const calls: unknown[] = [];
+    const service = new LiveMarketDataViewService({
+      getQuoteSnapshotReport: async (input) => {
+        calls.push(input);
+        return {
+          snapshots: [snapshot({
+            venue: "POLYMARKET",
+            venueMarketId: "poly-1",
+            venueOutcomeId: "token-yes",
+            receivedAt: now,
+            bid: "0.48",
+            ask: "0.50"
+          })],
+          blocked: []
+        };
+      }
+    }, { now: () => now });
+
+    const lower = await service.getOrderbook({
+      marketId: "event-1",
+      canonicalMarketIds: ["market-poly"],
+      outcomeId: "yes"
+    });
+    const upper = await service.getOrderbook({
+      marketId: "event-1",
+      canonicalMarketIds: ["market-poly"],
+      outcomeId: "YES"
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ canonicalOutcomeId: "YES" });
+    expect(lower.outcomeId).toBe("YES");
+    expect(upper.outcomeId).toBe("YES");
+    expect(upper.venues).toHaveLength(1);
   });
 
   it("does not let a slow linked market leg hide or visibly block a fast live orderbook leg", async () => {
@@ -180,8 +242,8 @@ describe("LiveMarketDataViewService", () => {
     });
 
     expect(calls).toEqual([[
-      { canonicalMarketId: "market-fast", canonicalOutcomeId: "yes" },
-      { canonicalMarketId: "market-peer", canonicalOutcomeId: "yes" }
+      { canonicalMarketId: "market-fast", canonicalOutcomeId: "YES" },
+      { canonicalMarketId: "market-peer", canonicalOutcomeId: "YES" }
     ]]);
     expect(orderbook).toMatchObject({
       status: "live",

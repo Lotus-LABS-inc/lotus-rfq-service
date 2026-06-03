@@ -215,10 +215,20 @@ export class LiveMarketDataViewService {
     depth?: number | undefined;
     venue?: string | undefined;
   }): Promise<MarketOrderbookResponse> {
+    const normalizedOutcomeId = normalizeBinaryOutcomeId(input.outcomeId);
+    const normalizedInput = {
+      ...input,
+      ...(normalizedOutcomeId ? { outcomeId: normalizedOutcomeId } : { outcomeId: undefined })
+    };
     const generatedAt = this.now();
     const depth = clampDepth(input.depth);
-    const orderbookMarketIds = normalizeOrderbookMarketIds(input.marketId, input.canonicalMarketIds);
-    const key = orderbookCacheKey(orderbookCacheMarketKey(input.marketId, orderbookMarketIds), input.outcomeId ?? null, input.venue ?? null, depth);
+    const orderbookMarketIds = normalizeOrderbookMarketIds(normalizedInput.marketId, normalizedInput.canonicalMarketIds);
+    const key = orderbookCacheKey(
+      orderbookCacheMarketKey(normalizedInput.marketId, orderbookMarketIds),
+      normalizedInput.outcomeId ?? null,
+      normalizedInput.venue ?? null,
+      depth
+    );
     const cached = this.orderbookCache.get(key);
     if (cached && cached.expiresAt > generatedAt.getTime()) {
       if (cached.response) {
@@ -232,10 +242,10 @@ export class LiveMarketDataViewService {
       }
     }
 
-    await this.preloadOrderbookMappings(orderbookMarketIds, input.outcomeId);
-    const livePromise = this.loadOrderbook(input, generatedAt, depth, orderbookMarketIds)
+    await this.preloadOrderbookMappings(orderbookMarketIds, normalizedInput.outcomeId);
+    const livePromise = this.loadOrderbook(normalizedInput, generatedAt, depth, orderbookMarketIds)
       .catch((error) => unavailableOrderbook({
-        input,
+        input: normalizedInput,
         generatedAt,
         depth,
         reason: error instanceof Error && error.message ? "LIVE_ORDERBOOK_UNAVAILABLE" : "MARKET_ORDERBOOK_UNAVAILABLE"
@@ -244,7 +254,7 @@ export class LiveMarketDataViewService {
       livePromise,
       this.orderbookRequestTimeoutMs(),
       unavailableOrderbook({
-        input,
+        input: normalizedInput,
         generatedAt,
         depth,
         reason: "MARKET_ORDERBOOK_REFRESH_DEFERRED"
@@ -855,6 +865,15 @@ const normalizeOrderbookMarketIds = (
     .map((value) => value.trim())
     .filter((value) => value.length > 0))];
   return normalized.length > 0 ? normalized : [marketId];
+};
+
+const normalizeBinaryOutcomeId = (outcomeId: string | undefined): string | undefined => {
+  const trimmed = outcomeId?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const upper = trimmed.toUpperCase();
+  return upper === "YES" || upper === "NO" ? upper : trimmed;
 };
 
 const mergeVenueQuoteSnapshotReports = (reports: readonly VenueQuoteSnapshotReport[]): VenueQuoteSnapshotReport => {

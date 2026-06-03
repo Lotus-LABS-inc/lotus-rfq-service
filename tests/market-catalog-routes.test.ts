@@ -310,12 +310,12 @@ describe("market catalog routes", () => {
     expect(getOrderbook).toHaveBeenCalledWith({
       marketId: market.canonicalEventId,
       canonicalMarketIds: market.canonicalMarketIds,
-      outcomeId: "yes"
+      outcomeId: "YES"
     });
     expect(getOrderbook).toHaveBeenCalledWith({
       marketId: market.canonicalEventId,
       canonicalMarketIds: market.canonicalMarketIds,
-      outcomeId: "no"
+      outcomeId: "NO"
     });
 
     await app.close();
