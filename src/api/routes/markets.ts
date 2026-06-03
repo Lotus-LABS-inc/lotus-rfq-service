@@ -745,19 +745,24 @@ const getSharedMarketCatalogResponse = async <T extends Record<string, unknown>>
     return null;
   }
   try {
+    const candidates: T[] = [];
     const shared = await options.sharedCache.get<T>(key);
     if (shared && isCacheableMarketCatalogResponseForKey(key, shared)) {
-      const scrubbed = scrubMarketCatalogResponseForKey(key, shared);
-      cacheMarketCatalogResponse(key, scrubbed, cacheTtlMs, staleCacheTtlMs);
-      return scrubbed;
+      candidates.push(scrubMarketCatalogResponseForKey(key, shared));
     }
     for (const fallback of options.sharedFallbacks ?? []) {
       const fallbackShared = await options.sharedCache.get<T>(fallback.key);
       if (fallbackShared && isCacheableMarketCatalogResponseForKey(fallback.key, fallbackShared)) {
         const sliced = scrubMarketCatalogResponseForKey(key, sliceMarketCatalogResponse(fallbackShared, fallback.limit));
-        cacheMarketCatalogResponse(key, sliced, cacheTtlMs, staleCacheTtlMs);
-        return sliced;
+        if (isCacheableMarketCatalogResponseForKey(key, sliced)) {
+          candidates.push(sliced);
+        }
       }
+    }
+    const best = pickBestMarketCatalogResponse(candidates);
+    if (best) {
+      cacheMarketCatalogResponse(key, best, cacheTtlMs, staleCacheTtlMs);
+      return best;
     }
   } catch {
     // Redis is a hot display cache only. Fall through to local cache/DB producer.
@@ -851,15 +856,58 @@ const isQuoteReadyMarketCatalogCacheKey = (key: string): boolean =>
 const marketCatalogSnapshotFallbacks = (
   query: z.infer<typeof listQuerySchema>
 ): { key: string; limit: number }[] => {
+  const limit = query.limit ?? 80;
+  const fallbacks = new Map<string, { key: string; limit: number }>();
+  const add = (candidate: z.infer<typeof listQuerySchema>, candidateLimit = limit): void => {
+    const key = `markets:${stableQueryCacheKey(candidate)}`;
+    if (key !== `markets:${stableQueryCacheKey(query)}`) {
+      fallbacks.set(key, { key, limit: candidateLimit });
+    }
+  };
+  for (const alias of marketCatalogAllRouteAliases(query)) {
+    add(alias);
+  }
   if (query.category !== undefined || query.search !== undefined) {
+    return [...fallbacks.values()];
+  }
+  const fallbackLimits = [80, 250].filter((fallbackLimit) => fallbackLimit > limit);
+  for (const fallbackLimit of fallbackLimits) {
+    add({ ...query, limit: fallbackLimit }, limit);
+    for (const alias of marketCatalogAllRouteAliases({ ...query, limit: fallbackLimit })) {
+      add(alias, limit);
+    }
+  }
+  return [...fallbacks.values()];
+};
+
+const marketCatalogAllRouteAliases = (
+  query: z.infer<typeof listQuerySchema>
+): z.infer<typeof listQuerySchema>[] => {
+  if (query.routeCoverage === undefined) {
+    return [{ ...query, routeCoverage: "all" }];
+  }
+  if (query.routeCoverage !== "all") {
     return [];
   }
-  const limit = query.limit ?? 80;
-  const fallbackLimits = [80, 250].filter((fallbackLimit) => fallbackLimit > limit);
-  return fallbackLimits.map((fallbackLimit) => ({
-    key: `markets:${stableQueryCacheKey({ ...query, limit: fallbackLimit })}`,
-    limit
-  }));
+  const { routeCoverage: _routeCoverage, ...rest } = query;
+  return [rest];
+};
+
+const pickBestMarketCatalogResponse = <T extends Record<string, unknown>>(values: readonly T[]): T | null => {
+  let best: T | null = null;
+  let bestCount = -1;
+  for (const value of values) {
+    const count = Array.isArray(value.markets)
+      ? value.markets.length
+      : typeof value.count === "number"
+        ? value.count
+        : 0;
+    if (count > bestCount) {
+      best = value;
+      bestCount = count;
+    }
+  }
+  return best;
 };
 
 const sliceMarketCatalogResponse = <T extends Record<string, unknown>>(value: T, limit: number): T => {

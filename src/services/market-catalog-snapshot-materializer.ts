@@ -198,11 +198,10 @@ export class MarketCatalogSnapshotMaterializer {
       .filter((market) => !query.quoteReadyOnly || isQuoteReadyMarket(market))
       .filter((market) => routeCoverageMatches(market, routeCoverage))
       .slice(0, query.limit);
-    const fullKey = `markets:${stableQueryCacheKey(query)}`;
     let visibleMarkets = await this.mergeGlobalQuoteReadyCategorySnapshots(query, baseVisibleMarkets, routeCoverage);
 
     if (query.quoteReadyOnly) {
-      const recoveredMarkets = await this.recoverQuoteReadyMarketsFromExistingSnapshots(query, fullKey, routeCoverage);
+      const recoveredMarkets = await this.recoverQuoteReadyMarketsFromExistingSnapshots(query, routeCoverage);
       visibleMarkets = mergeMarketCatalogMarkets(visibleMarkets, recoveredMarkets, query.limit);
     }
 
@@ -210,7 +209,7 @@ export class MarketCatalogSnapshotMaterializer {
       return "skipped_empty_quote_ready";
     }
 
-    if (query.quoteReadyOnly && await this.wouldUnderfillExistingSnapshot(query, fullKey, visibleMarkets.length)) {
+    if (query.quoteReadyOnly && await this.wouldUnderfillExistingSnapshot(query, marketCatalogSnapshotKeys(query), visibleMarkets.length)) {
       return "skipped_underfilled_quote_ready";
     }
 
@@ -223,20 +222,24 @@ export class MarketCatalogSnapshotMaterializer {
     query: MarketCatalogMaterializedQuery,
     visibleMarkets: readonly MarketCatalogMarket[]
   ): Promise<void> {
-    const fullKey = `markets:${stableQueryCacheKey(query)}`;
-    await this.deps.snapshotCache.set(fullKey, {
-      markets: formatMarketCatalogListMarkets(visibleMarkets, undefined),
-      count: visibleMarkets.length,
-      materialized: true,
-      materializedAt: new Date().toISOString()
-    }, this.config.cacheTtlMs);
-    await this.deps.snapshotCache.set(`markets:${stableQueryCacheKey({ ...query, view: "compact" })}`, {
-      markets: formatMarketCatalogListMarkets(visibleMarkets, "compact"),
-      count: visibleMarkets.length,
-      materialized: true,
-      materializedAt: new Date().toISOString(),
-      view: "compact"
-    }, this.config.cacheTtlMs);
+    const materializedAt = new Date().toISOString();
+    for (const fullKey of marketCatalogSnapshotKeys(query)) {
+      await this.deps.snapshotCache.set(fullKey, {
+        markets: formatMarketCatalogListMarkets(visibleMarkets, undefined),
+        count: visibleMarkets.length,
+        materialized: true,
+        materializedAt
+      }, this.config.cacheTtlMs);
+    }
+    for (const compactKey of marketCatalogSnapshotKeys({ ...query, view: "compact" })) {
+      await this.deps.snapshotCache.set(compactKey, {
+        markets: formatMarketCatalogListMarkets(visibleMarkets, "compact"),
+        count: visibleMarkets.length,
+        materialized: true,
+        materializedAt,
+        view: "compact"
+      }, this.config.cacheTtlMs);
+    }
   }
 
   private async materializeMarketDetailSnapshots(
@@ -290,7 +293,6 @@ export class MarketCatalogSnapshotMaterializer {
 
   private async recoverQuoteReadyMarketsFromExistingSnapshots(
     query: MarketCatalogMaterializedQuery,
-    fullKey: string,
     routeCoverage: RouteCoverage
   ): Promise<MarketCatalogMarket[]> {
     const recovered = new Map<string, MarketCatalogMarket>();
@@ -306,19 +308,22 @@ export class MarketCatalogSnapshotMaterializer {
       }
     };
     try {
-      const exact = await this.deps.snapshotCache.get<{ markets?: unknown }>(fullKey);
-      if (Array.isArray(exact?.markets)) {
-        addMarkets(exact.markets.filter(isMarketCatalogMarket));
+      for (const key of marketCatalogSnapshotKeys(query)) {
+        const exact = await this.deps.snapshotCache.get<{ markets?: unknown }>(key);
+        if (Array.isArray(exact?.markets)) {
+          addMarkets(exact.markets.filter(isMarketCatalogMarket));
+        }
       }
     } catch {
       // Ignore display-cache recovery misses.
     }
     if (query.category) {
       try {
-        const globalKey = `markets:${stableQueryCacheKey({ ...query, category: undefined })}`;
-        const global = await this.deps.snapshotCache.get<{ markets?: unknown }>(globalKey);
-        if (Array.isArray(global?.markets)) {
-          addMarkets(global.markets.filter(isMarketCatalogMarket));
+        for (const globalKey of marketCatalogSnapshotKeys({ ...query, category: undefined })) {
+          const global = await this.deps.snapshotCache.get<{ markets?: unknown }>(globalKey);
+          if (Array.isArray(global?.markets)) {
+            addMarkets(global.markets.filter(isMarketCatalogMarket));
+          }
         }
       } catch {
         // Ignore display-cache recovery misses.
@@ -329,21 +334,29 @@ export class MarketCatalogSnapshotMaterializer {
 
   private async wouldUnderfillExistingSnapshot(
     query: MarketCatalogMaterializedQuery,
-    fullKey: string,
+    keys: readonly string[],
     nextCount: number
   ): Promise<boolean> {
     try {
-      const existing = await this.deps.snapshotCache.get<{ count?: unknown; markets?: unknown }>(fullKey);
-      const existingMarkets = Array.isArray(existing?.markets)
-        ? existing.markets.filter(isMarketCatalogMarket).filter(isQuoteReadyMarket)
-        : [];
+      let bestExisting: { count?: unknown; markets?: unknown } | null = null;
+      let existingMarkets: MarketCatalogMarket[] = [];
+      for (const key of keys) {
+        const existing = await this.deps.snapshotCache.get<{ count?: unknown; markets?: unknown }>(key);
+        const markets = Array.isArray(existing?.markets)
+          ? existing.markets.filter(isMarketCatalogMarket).filter(isQuoteReadyMarket)
+          : [];
+        if (markets.length > existingMarkets.length) {
+          bestExisting = existing;
+          existingMarkets = markets;
+        }
+      }
       const existingCount = existingMarkets.length;
       if (existingCount <= nextCount) {
         return false;
       }
-      if (existing && existingMarkets.length > 0) {
-        await this.ensureCompactSnapshotFromExisting(query, {
-          ...existing,
+      if (bestExisting && existingMarkets.length > 0) {
+        await this.ensureSnapshotsFromExisting(query, {
+          ...bestExisting,
           count: existingMarkets.length,
           markets: existingMarkets
         });
@@ -354,30 +367,43 @@ export class MarketCatalogSnapshotMaterializer {
     }
   }
 
-  private async ensureCompactSnapshotFromExisting(
+  private async ensureSnapshotsFromExisting(
     query: MarketCatalogMaterializedQuery,
     existing: { count?: unknown; markets?: unknown }
   ): Promise<void> {
-    const compactKey = `markets:${stableQueryCacheKey({ ...query, view: "compact" })}`;
-    const currentCompact = await this.deps.snapshotCache.get<{ count?: unknown; markets?: unknown }>(compactKey);
-    const currentCompactCount = typeof currentCompact?.count === "number"
-      ? currentCompact.count
-      : Array.isArray(currentCompact?.markets)
-        ? currentCompact.markets.length
-        : 0;
     const existingMarkets = Array.isArray(existing.markets)
       ? existing.markets
       : [];
-    if (currentCompactCount >= existingMarkets.length || existingMarkets.length === 0) {
+    if (existingMarkets.length === 0) {
       return;
     }
-    await this.deps.snapshotCache.set(compactKey, {
-      markets: formatMarketCatalogListMarkets(existingMarkets as MarketCatalogMarket[], "compact"),
-      count: existingMarkets.length,
-      materialized: true,
-      materializedAt: new Date().toISOString(),
-      view: "compact"
-    }, this.config.cacheTtlMs);
+    const materializedAt = new Date().toISOString();
+    for (const fullKey of marketCatalogSnapshotKeys(query)) {
+      const current = await this.deps.snapshotCache.get<{ count?: unknown; markets?: unknown }>(fullKey);
+      const currentCount = snapshotMarketCount(current);
+      if (currentCount < existingMarkets.length) {
+        await this.deps.snapshotCache.set(fullKey, {
+          markets: existingMarkets,
+          count: existingMarkets.length,
+          materialized: true,
+          materializedAt
+        }, this.config.cacheTtlMs);
+      }
+    }
+    for (const compactKey of marketCatalogSnapshotKeys({ ...query, view: "compact" })) {
+      const currentCompact = await this.deps.snapshotCache.get<{ count?: unknown; markets?: unknown }>(compactKey);
+      const currentCompactCount = snapshotMarketCount(currentCompact);
+      if (currentCompactCount >= existingMarkets.length) {
+        continue;
+      }
+      await this.deps.snapshotCache.set(compactKey, {
+        markets: formatMarketCatalogListMarkets(existingMarkets as MarketCatalogMarket[], "compact"),
+        count: existingMarkets.length,
+        materialized: true,
+        materializedAt,
+        view: "compact"
+      }, this.config.cacheTtlMs);
+    }
   }
 
   private async waitForIdle(): Promise<void> {
@@ -419,6 +445,31 @@ const buildMaterializedQueries = (
     .filter((routeCoverage) => routeCoverage !== "all")
     .map((routeCoverage) => withOptionalCategory({ limit, quoteReadyOnly: true as const, routeCoverage }, category))
 ];
+
+const marketCatalogSnapshotKeys = (query: MarketCatalogMaterializedQuery): string[] => [
+  ...new Set([query, ...marketCatalogAllRouteAliases(query)]
+    .map((candidate) => `markets:${stableQueryCacheKey(candidate)}`))
+];
+
+const marketCatalogAllRouteAliases = (
+  query: MarketCatalogMaterializedQuery
+): MarketCatalogMaterializedQuery[] => {
+  if (query.routeCoverage === undefined) {
+    return [{ ...query, routeCoverage: "all" }];
+  }
+  if (query.routeCoverage !== "all") {
+    return [];
+  }
+  const { routeCoverage: _routeCoverage, ...rest } = query;
+  return [rest];
+};
+
+const snapshotMarketCount = (snapshot: { count?: unknown; markets?: unknown } | null): number => {
+  if (Array.isArray(snapshot?.markets)) {
+    return snapshot.markets.length;
+  }
+  return typeof snapshot?.count === "number" ? snapshot.count : 0;
+};
 
 export interface CompactMarketCatalogMarket {
   eventId?: string | undefined;
