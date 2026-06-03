@@ -215,7 +215,7 @@ export class MarketCatalogSnapshotMaterializer {
       return "skipped_empty_quote_ready";
     }
 
-    if (query.quoteReadyOnly && await this.wouldUnderfillExistingSnapshot(query, marketCatalogSnapshotKeys(query), visibleMarkets.length)) {
+    if (query.quoteReadyOnly && await this.wouldUnderfillExistingSnapshot(query, marketCatalogSnapshotKeys(query), visibleMarkets)) {
       return "skipped_underfilled_quote_ready";
     }
 
@@ -261,7 +261,7 @@ export class MarketCatalogSnapshotMaterializer {
     const materializedAt = new Date().toISOString();
     for (const key of bestMarketCatalogSnapshotKeys(query)) {
       const existing = await this.deps.snapshotCache.get<{ count?: unknown; markets?: unknown }>(key);
-      if (snapshotMarketCount(existing) > visibleMarkets.length) {
+      if (!shouldReplaceSnapshotWithMarkets(existing, visibleMarkets)) {
         continue;
       }
       await this.deps.snapshotCache.set(key, {
@@ -274,7 +274,7 @@ export class MarketCatalogSnapshotMaterializer {
     }
     for (const key of bestMarketCatalogSnapshotKeys({ ...query, view: "compact" })) {
       const existing = await this.deps.snapshotCache.get<{ count?: unknown; markets?: unknown }>(key);
-      if (snapshotMarketCount(existing) > visibleMarkets.length) {
+      if (!shouldReplaceSnapshotWithMarkets(existing, visibleMarkets)) {
         continue;
       }
       await this.deps.snapshotCache.set(key, {
@@ -393,7 +393,7 @@ export class MarketCatalogSnapshotMaterializer {
   private async wouldUnderfillExistingSnapshot(
     query: MarketCatalogMaterializedQuery,
     keys: readonly string[],
-    nextCount: number
+    nextMarkets: readonly MarketCatalogMarket[]
   ): Promise<boolean> {
     try {
       let bestExisting: { count?: unknown; markets?: unknown } | null = null;
@@ -403,7 +403,7 @@ export class MarketCatalogSnapshotMaterializer {
         const markets = Array.isArray(existing?.markets)
           ? existing.markets.filter(isMarketCatalogMarket).filter(isQuoteReadyMarket)
           : [];
-        if (markets.length > existingMarkets.length) {
+        if (compareMarketSnapshotQuality(markets, existingMarkets) > 0) {
           bestExisting = existing;
           existingMarkets = markets;
         }
@@ -413,13 +413,12 @@ export class MarketCatalogSnapshotMaterializer {
         const markets = Array.isArray(existing?.markets)
           ? existing.markets.filter(isMarketCatalogMarket).filter(isQuoteReadyMarket)
           : [];
-        if (markets.length > existingMarkets.length) {
+        if (compareMarketSnapshotQuality(markets, existingMarkets) > 0) {
           bestExisting = existing;
           existingMarkets = markets;
         }
       }
-      const existingCount = existingMarkets.length;
-      if (existingCount <= nextCount) {
+      if (compareMarketSnapshotQuality(existingMarkets, nextMarkets) <= 0) {
         return false;
       }
       if (bestExisting && existingMarkets.length > 0) {
@@ -448,8 +447,7 @@ export class MarketCatalogSnapshotMaterializer {
     const materializedAt = new Date().toISOString();
     for (const fullKey of marketCatalogSnapshotKeys(query)) {
       const current = await this.deps.snapshotCache.get<{ count?: unknown; markets?: unknown }>(fullKey);
-      const currentCount = snapshotMarketCount(current);
-      if (currentCount < existingMarkets.length) {
+      if (shouldReplaceSnapshotWithMarkets(current, existingMarkets as MarketCatalogMarket[])) {
         await this.deps.snapshotCache.set(fullKey, {
           markets: existingMarkets,
           count: existingMarkets.length,
@@ -460,8 +458,7 @@ export class MarketCatalogSnapshotMaterializer {
     }
     for (const compactKey of marketCatalogSnapshotKeys({ ...query, view: "compact" })) {
       const currentCompact = await this.deps.snapshotCache.get<{ count?: unknown; markets?: unknown }>(compactKey);
-      const currentCompactCount = snapshotMarketCount(currentCompact);
-      if (currentCompactCount >= existingMarkets.length) {
+      if (!shouldReplaceSnapshotWithMarkets(currentCompact, existingMarkets as MarketCatalogMarket[])) {
         continue;
       }
       await this.deps.snapshotCache.set(compactKey, {
@@ -552,6 +549,85 @@ const snapshotMarketCount = (snapshot: { count?: unknown; markets?: unknown } | 
     return snapshot.markets.length;
   }
   return typeof snapshot?.count === "number" ? snapshot.count : 0;
+};
+
+interface MarketSnapshotQuality {
+  distinctVenueCount: number;
+  multiVenueMarketCount: number;
+  totalReadyVenueMemberships: number;
+  marketCount: number;
+}
+
+const shouldReplaceSnapshotWithMarkets = (
+  existing: { count?: unknown; markets?: unknown } | null,
+  nextMarkets: readonly MarketCatalogMarket[]
+): boolean => {
+  if (!existing) {
+    return nextMarkets.length > 0;
+  }
+  return compareMarketSnapshotQuality(nextMarkets, snapshotMarkets(existing)) > 0;
+};
+
+const compareMarketSnapshotQuality = (
+  leftMarkets: readonly unknown[],
+  rightMarkets: readonly unknown[]
+): number => {
+  const left = marketSnapshotQuality(leftMarkets);
+  const right = marketSnapshotQuality(rightMarkets);
+  if (left.distinctVenueCount !== right.distinctVenueCount) {
+    return left.distinctVenueCount - right.distinctVenueCount;
+  }
+  if (left.multiVenueMarketCount !== right.multiVenueMarketCount) {
+    return left.multiVenueMarketCount - right.multiVenueMarketCount;
+  }
+  if (left.totalReadyVenueMemberships !== right.totalReadyVenueMemberships) {
+    return left.totalReadyVenueMemberships - right.totalReadyVenueMemberships;
+  }
+  return left.marketCount - right.marketCount;
+};
+
+const marketSnapshotQuality = (markets: readonly unknown[]): MarketSnapshotQuality => {
+  const distinctVenues = new Set<string>();
+  let multiVenueMarketCount = 0;
+  let totalReadyVenueMemberships = 0;
+  for (const market of markets) {
+    const quoteReadyVenues = quoteReadyVenuesFromMarket(market);
+    for (const venue of quoteReadyVenues) {
+      distinctVenues.add(venue);
+    }
+    if (quoteReadyVenues.length > 1) {
+      multiVenueMarketCount += 1;
+    }
+    totalReadyVenueMemberships += quoteReadyVenues.length;
+  }
+  return {
+    distinctVenueCount: distinctVenues.size,
+    multiVenueMarketCount,
+    totalReadyVenueMemberships,
+    marketCount: markets.length
+  };
+};
+
+const snapshotMarkets = (snapshot: { count?: unknown; markets?: unknown }): readonly unknown[] => {
+  if (Array.isArray(snapshot.markets)) {
+    return snapshot.markets;
+  }
+  const count = snapshotMarketCount(snapshot);
+  return count > 0 ? Array.from({ length: count }) : [];
+};
+
+const quoteReadyVenuesFromMarket = (market: unknown): string[] => {
+  if (!market || typeof market !== "object") {
+    return [];
+  }
+  const quoteReadyVenues = (market as { quoteReadyVenues?: unknown }).quoteReadyVenues;
+  if (!Array.isArray(quoteReadyVenues)) {
+    return [];
+  }
+  return [...new Set(quoteReadyVenues
+    .filter((venue): venue is string => typeof venue === "string")
+    .map((venue) => venue.trim().toUpperCase())
+    .filter(Boolean))];
 };
 
 export interface CompactMarketCatalogMarket {
