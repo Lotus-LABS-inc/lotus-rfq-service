@@ -863,6 +863,55 @@ describe("MarketOrderbookRecorder", () => {
     expect(second.skippedCooldownSamples).toBe(2);
   });
 
+  it("excludes cooled-down venues while continuing to sample healthy venues on mixed markets", async () => {
+    const venueAllowlists: string[][] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [multiVenueMarketFixture(["POLYMARKET", "LIMITLESS"])]
+      },
+      {
+        getQuoteSnapshotReport: async ({ venueAllowlist }) => {
+          venueAllowlists.push([...(venueAllowlist ?? [])]);
+          return {
+            snapshots: [],
+            blocked: venueAllowlist?.includes("LIMITLESS")
+              ? [{
+                  venue: "LIMITLESS",
+                  reason: "QUOTE_PROVIDER_HTTP_429",
+                  venueMarketId: "limitless-1",
+                  detailsCode: "Limitless_orderbook_request_failed_with_status_429."
+                }]
+              : []
+          };
+        }
+      },
+      {
+        insertMany: async (snapshots) => snapshots.length,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        maxSamplesPerTick: 1,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 60_000
+      }
+    );
+
+    await recorder.runOnce();
+    await recorder.runOnce();
+
+    expect(venueAllowlists[0]).toEqual(["POLYMARKET", "LIMITLESS"]);
+    expect(venueAllowlists[1]).toEqual(["POLYMARKET"]);
+  });
+
   it("records stable missing-source and 404 mapping blockers without cooling down the whole venue", async () => {
     const inserted: VenueOrderbookSnapshotInput[] = [];
     const recorder = new MarketOrderbookRecorder(

@@ -258,6 +258,7 @@ export class CompositeVenueQuoteSource {
     quantity: number;
     readMode?: "live" | "cached_display" | undefined;
     displayMaxAgeMs?: number | undefined;
+    venueAllowlist?: readonly string[] | undefined;
   }): Promise<CalculatedVenueQuoteSnapshotReport> {
     const rawReport = await this.getQuoteSnapshotReport(input);
     const calculatedResults = withLatencyStageSync("quote_aggregation_calculation", {
@@ -336,6 +337,7 @@ export class CompositeVenueQuoteSource {
     quantity: number;
     readMode?: "live" | "cached_display" | undefined;
     displayMaxAgeMs?: number | undefined;
+    venueAllowlist?: readonly string[] | undefined;
   }): Promise<VenueQuoteSnapshotReport> {
     this.hotSnapshotStore?.touch({
       canonicalMarketId: input.canonicalMarketId,
@@ -344,7 +346,11 @@ export class CompositeVenueQuoteSource {
     const readiness = await withLatencyStage("quote_source_mapping_lookup", {
       canonicalMarketId: input.canonicalMarketId
     }, () => this.loadMappingReadiness(input));
-    const mappingBlockers: VenueQuoteSnapshotBlocker[] = readiness
+    const allowedVenues = normalizeVenueAllowlist(input.venueAllowlist);
+    const venueReadiness = allowedVenues
+      ? readiness.filter((row) => allowedVenues.has(normalizeVenueKey(row.venue)))
+      : readiness;
+    const mappingBlockers: VenueQuoteSnapshotBlocker[] = venueReadiness
       .filter((row) => !row.quoteReady)
       .map((row) => ({
         venue: row.venue,
@@ -352,7 +358,7 @@ export class CompositeVenueQuoteSource {
         ...(row.venueMarketId ? { venueMarketId: row.venueMarketId } : {}),
         ...(row.venueOutcomeId ? { venueOutcomeId: row.venueOutcomeId } : {})
       }));
-    const mappings = readiness
+    const mappings = venueReadiness
       .filter((row) => row.quoteReady && row.venueMarketId !== null)
       .map((row) => ({
         venue: row.venue,
@@ -543,6 +549,21 @@ export class CompositeVenueQuoteSource {
 
 const clampReaderTimeoutMs = (timeoutMs: number): number =>
   Math.max(250, Math.min(timeoutMs, 10_000));
+
+const normalizeVenueKey = (venue: string): string => {
+  const normalized = venue.trim().toUpperCase();
+  return normalized === "PREDICT" ? "PREDICT_FUN" : normalized;
+};
+
+const normalizeVenueAllowlist = (venues: readonly string[] | undefined): ReadonlySet<string> | null => {
+  if (!venues || venues.length === 0) {
+    return null;
+  }
+  const normalized = venues
+    .map(normalizeVenueKey)
+    .filter((venue) => venue.length > 0);
+  return normalized.length > 0 ? new Set(normalized) : null;
+};
 
 const mappingReadinessCacheKey = (
   canonicalMarketId: string,

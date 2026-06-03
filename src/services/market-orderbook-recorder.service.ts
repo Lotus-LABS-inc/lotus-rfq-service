@@ -363,12 +363,17 @@ export class MarketOrderbookRecorder {
     failedByVenue: Record<string, number>;
   }> {
     try {
+      const venueAllowlist = this.activeVenueKeys(sample.venueKeys);
+      if (venueAllowlist.length === 0) {
+        return { insertedSnapshots: 0, failedSamples: 0, persistedByVenue: {}, failedByVenue: {} };
+      }
       const report = await withRecorderTimeout(
         this.quoteSource.getQuoteSnapshotReport({
           canonicalMarketId: sample.canonicalMarketId,
           ...(sample.outcomeId ? { canonicalOutcomeId: sample.outcomeId } : {}),
           side: "buy",
-          quantity: 1
+          quantity: 1,
+          venueAllowlist
         }),
         sampleTimeoutMs
       );
@@ -424,9 +429,15 @@ export class MarketOrderbookRecorder {
         insertedSnapshots: 0,
         failedSamples: 1,
         persistedByVenue: {},
-        failedByVenue: Object.fromEntries(sample.venueKeys.map((venue) => [venue, 1]))
+        failedByVenue: Object.fromEntries(this.activeVenueKeys(sample.venueKeys).map((venue) => [venue, 1]))
       };
     }
+  }
+
+  private activeVenueKeys(venueKeys: readonly string[]): string[] {
+    const now = Date.now();
+    return [...new Set(venueKeys.map(normalizeVenue))]
+      .filter((venue) => (this.venueCooldownUntil.get(venue) ?? 0) <= now);
   }
 
   private scheduleNextTick(delayMs: number): void {
