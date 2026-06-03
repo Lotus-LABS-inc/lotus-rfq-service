@@ -17,7 +17,7 @@ const logger: MarketOrderbookRecorderLogger = {
 describe("MarketOrderbookRecorder", () => {
   it("enables recording by default for worker-owned runtime config", () => {
     expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
-      intervalMs: 8_000,
+      intervalMs: 12_000,
       marketBatchSize: 16,
       activeMarketBatchSize: 200,
       activeMaxSamplesPerTick: 32,
@@ -25,7 +25,7 @@ describe("MarketOrderbookRecorder", () => {
       priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
       maxSamplesPerTick: 48,
       sampleConcurrency: 10,
-      maxTickDurationMs: 7_000,
+      maxTickDurationMs: 9_500,
       sampleTimeoutMs: 4_000,
       cleanupIntervalMs: 30 * 60_000
     });
@@ -36,7 +36,7 @@ describe("MarketOrderbookRecorder", () => {
     process.env.MARKET_ORDERBOOK_RECORDER_ENABLED = "false";
     try {
       expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
-        intervalMs: 8_000,
+        intervalMs: 12_000,
         marketBatchSize: 16,
         activeMarketBatchSize: 200,
         activeMaxSamplesPerTick: 32,
@@ -44,7 +44,7 @@ describe("MarketOrderbookRecorder", () => {
         priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
         maxSamplesPerTick: 48,
         sampleConcurrency: 10,
-        maxTickDurationMs: 7_000,
+        maxTickDurationMs: 9_500,
         sampleTimeoutMs: 4_000,
         cleanupIntervalMs: 30 * 60_000
       });
@@ -64,7 +64,7 @@ describe("MarketOrderbookRecorder", () => {
     expect(configs).toHaveLength(2);
     expect(configs.map((config) => config.shardCount)).toEqual([2, 2]);
     expect(configs.map((config) => config.shardIndex)).toEqual([0, 1]);
-    expect(configs.every((config) => config.intervalMs === 8_000)).toBe(true);
+    expect(configs.every((config) => config.intervalMs === 12_000)).toBe(true);
     expect(configs.every((config) => config.maxSamplesPerTick === 48)).toBe(true);
     expect(configs.every((config) => config.activeMaxSamplesPerTick === 32)).toBe(true);
     expect(configs.every((config) => (config.maxTickDurationMs ?? 0) < config.intervalMs)).toBe(true);
