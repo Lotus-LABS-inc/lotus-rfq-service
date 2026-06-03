@@ -44,7 +44,7 @@ export interface MarketCatalogSnapshotMaterializerDeps {
 
 const DEFAULT_CONFIG: MarketCatalogSnapshotMaterializerConfig = {
   intervalMs: 5_000,
-  cacheTtlMs: 20_000,
+  cacheTtlMs: 60_000,
   limits: [250],
   routeCoverages: ["all", "pair", "tri", "strict_all"],
   categories: ["Crypto", "Sports", "Politics", "Esports"]
