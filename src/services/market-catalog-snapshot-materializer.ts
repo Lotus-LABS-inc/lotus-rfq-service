@@ -233,7 +233,7 @@ export class MarketCatalogSnapshotMaterializer {
   ): Promise<void> {
     const materializedAt = new Date().toISOString();
     for (const fullKey of marketCatalogSnapshotKeys(query)) {
-      await this.deps.snapshotCache.set(fullKey, {
+      await this.setMarketSnapshotIfNotUnderfilled(fullKey, {
         markets: formatMarketCatalogListMarkets(visibleMarkets, undefined),
         count: visibleMarkets.length,
         materialized: true,
@@ -241,7 +241,7 @@ export class MarketCatalogSnapshotMaterializer {
       }, this.config.cacheTtlMs);
     }
     for (const compactKey of marketCatalogSnapshotKeys({ ...query, view: "compact" })) {
-      await this.deps.snapshotCache.set(compactKey, {
+      await this.setMarketSnapshotIfNotUnderfilled(compactKey, {
         markets: formatMarketCatalogListMarkets(visibleMarkets, "compact"),
         count: visibleMarkets.length,
         materialized: true,
@@ -249,6 +249,22 @@ export class MarketCatalogSnapshotMaterializer {
         view: "compact"
       }, this.config.cacheTtlMs);
     }
+  }
+
+  private async setMarketSnapshotIfNotUnderfilled(
+    key: string,
+    payload: { count: number; markets: unknown[]; materialized: true; materializedAt: string; view?: MarketCatalogListView | undefined },
+    ttlMs: number
+  ): Promise<void> {
+    if (isQuoteReadySnapshotKey(key)) {
+      const existing = await this.deps.snapshotCache.get<{ count?: unknown; markets?: unknown }>(key);
+      const existingMarkets = snapshotMarkets(existing ?? {}).filter(isMarketCatalogMarket).filter(isQuoteReadyMarket);
+      const nextMarkets = payload.markets.filter(isMarketCatalogMarket).filter(isQuoteReadyMarket);
+      if (compareMarketSnapshotQuality(existingMarkets, nextMarkets) > 0) {
+        return;
+      }
+    }
+    await this.deps.snapshotCache.set(key, payload, ttlMs);
   }
 
   private async writeBestMarketSnapshots(
@@ -528,6 +544,9 @@ const bestMarketCatalogSnapshotKeys = (query: MarketCatalogMaterializedQuery): s
 const bestMarketCatalogRecoverySnapshotKeys = (query: MarketCatalogMaterializedQuery): string[] => [
   ...new Set(marketCatalogRecoverySnapshotKeys(query).map((key) => `best:${key}`))
 ];
+
+const isQuoteReadySnapshotKey = (key: string): boolean =>
+  key.includes('"quoteReadyOnly":true');
 
 const marketCatalogAllRouteAliases = (
   query: MarketCatalogMaterializedQuery
