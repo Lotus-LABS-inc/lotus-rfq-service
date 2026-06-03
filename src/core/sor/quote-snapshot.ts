@@ -336,7 +336,6 @@ export class CompositeVenueQuoteSource {
     quantity: number;
     readMode?: "live" | "cached_display" | undefined;
     displayMaxAgeMs?: number | undefined;
-    venues?: readonly string[] | undefined;
   }): Promise<VenueQuoteSnapshotReport> {
     this.hotSnapshotStore?.touch({
       canonicalMarketId: input.canonicalMarketId,
@@ -345,13 +344,7 @@ export class CompositeVenueQuoteSource {
     const readiness = await withLatencyStage("quote_source_mapping_lookup", {
       canonicalMarketId: input.canonicalMarketId
     }, () => this.loadMappingReadiness(input));
-    const allowedVenues = input.venues && input.venues.length > 0
-      ? new Set(input.venues.map(normalizeVenueFilter))
-      : null;
-    const filteredReadiness = allowedVenues
-      ? readiness.filter((row) => allowedVenues.has(normalizeVenueFilter(row.venue)))
-      : readiness;
-    const mappingBlockers: VenueQuoteSnapshotBlocker[] = filteredReadiness
+    const mappingBlockers: VenueQuoteSnapshotBlocker[] = readiness
       .filter((row) => !row.quoteReady)
       .map((row) => ({
         venue: row.venue,
@@ -359,7 +352,7 @@ export class CompositeVenueQuoteSource {
         ...(row.venueMarketId ? { venueMarketId: row.venueMarketId } : {}),
         ...(row.venueOutcomeId ? { venueOutcomeId: row.venueOutcomeId } : {})
       }));
-    const mappings = filteredReadiness
+    const mappings = readiness
       .filter((row) => row.quoteReady && row.venueMarketId !== null)
       .map((row) => ({
         venue: row.venue,
@@ -550,11 +543,6 @@ export class CompositeVenueQuoteSource {
 
 const clampReaderTimeoutMs = (timeoutMs: number): number =>
   Math.max(250, Math.min(timeoutMs, 10_000));
-
-const normalizeVenueFilter = (venue: string): string => {
-  const normalized = venue.trim().toUpperCase();
-  return normalized === "PREDICT" ? "PREDICT_FUN" : normalized;
-};
 
 const mappingReadinessCacheKey = (
   canonicalMarketId: string,

@@ -788,69 +788,6 @@ describe("venue quote mapping resolvers", () => {
     })]);
   });
 
-  it("filters quote snapshot reads to requested venues when a recorder lane supplies a venue set", async () => {
-    const calledVenues: string[] = [];
-    const limitlessReader: VenueQuoteSnapshotReader = {
-      venue: "LIMITLESS",
-      async getQuoteSnapshot() {
-        calledVenues.push("LIMITLESS");
-        return await new Promise(() => undefined);
-      }
-    };
-    const polymarketReader: VenueQuoteSnapshotReader = {
-      venue: "POLYMARKET",
-      async getQuoteSnapshot() {
-        calledVenues.push("POLYMARKET");
-        return {
-          venue: "POLYMARKET",
-          venueMarketId: "poly-fast",
-          venueOutcomeId: "yes-token",
-          source: "REST",
-          quoteQuality: "FULL_DEPTH_REST",
-          sourceTimestamp: null,
-          receivedAt: new Date("2026-05-10T12:00:00.000Z"),
-          bids: [{ price: "0.49", size: "10" }],
-          asks: [{ price: "0.51", size: "12" }],
-          blockers: [],
-          missingFactors: []
-        };
-      }
-    };
-    const source = new CompositeVenueQuoteSource([limitlessReader, polymarketReader], new SharedCoreVenueQuoteMappingResolver({
-      async loadApprovedVenueMappings() {
-        return [
-          {
-            venue: "LIMITLESS",
-            venue_market_id: "LIMITLESS:slow-market:canonical",
-            normalized_payload: { venueMarketId: "slow-market", quoteTokenId: "yes-token" },
-            raw_source_payload: {}
-          },
-          {
-            venue: "POLYMARKET",
-            venue_market_id: "POLYMARKET:poly-fast:canonical",
-            normalized_payload: { venueMarketId: "poly-fast", quoteTokenId: "yes-token" },
-            raw_source_payload: {}
-          }
-        ];
-      },
-      async listApprovedVenueMappings() {
-        return [];
-      }
-    }), () => new Date("2026-05-10T12:00:00.000Z"), undefined, { readerTimeoutMs: 1 });
-
-    const report = await source.getQuoteSnapshotReport({
-      canonicalMarketId: "canonical",
-      canonicalOutcomeId: "YES",
-      side: "buy",
-      quantity: 1,
-      venues: ["POLYMARKET"]
-    });
-
-    expect(calledVenues).toEqual(["POLYMARKET"]);
-    expect(report.snapshots.map((snapshot) => snapshot.venue)).toEqual(["POLYMARKET"]);
-    expect(report.blocked).toEqual([]);
-  });
-
   it("supports code-owned per-venue reader timeouts without raising the global timeout", async () => {
     const opinionReader: VenueQuoteSnapshotReader = {
       venue: "OPINION",

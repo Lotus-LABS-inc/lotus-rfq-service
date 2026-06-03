@@ -56,12 +56,12 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
   intervalMs: 12_000,
   marketBatchSize: 16,
   activeMarketBatchSize: 200,
-  activeMaxSamplesPerTick: 40,
+  activeMaxSamplesPerTick: 24,
   priorityMarketBatchSize: 80,
   priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"] as readonly string[],
   shardCount: 1,
   shardIndex: 0,
-  maxSamplesPerTick: 64,
+  maxSamplesPerTick: 32,
   sampleConcurrency: 10,
   maxTickDurationMs: 9_500,
   sampleTimeoutMs: 4_000,
@@ -327,8 +327,10 @@ export class MarketOrderbookRecorder {
     }
   }
 
-  private isSampleFullyCoolingDown(_market: MarketCatalogMarket, sample: MarketOrderbookRecorderSample): boolean {
-    const venues = [...new Set(sample.venueKeys.map(normalizeVenue))];
+  private isSampleFullyCoolingDown(market: MarketCatalogMarket, sample: { canonicalMarketId: string }): boolean {
+    const venues = [...new Set(market.venueMarkets
+      .filter((venueMarket) => venueMarket.canonicalMarketId === sample.canonicalMarketId)
+      .map((venueMarket) => normalizeVenue(venueMarket.venue)))];
     return venues.length > 0 && venues.every((venue) => (this.venueCooldownUntil.get(venue) ?? 0) > Date.now());
   }
 
@@ -364,8 +366,7 @@ export class MarketOrderbookRecorder {
           canonicalMarketId: sample.canonicalMarketId,
           ...(sample.outcomeId ? { canonicalOutcomeId: sample.outcomeId } : {}),
           side: "buy",
-          quantity: 1,
-          venues: sample.venueKeys
+          quantity: 1
         }),
         sampleTimeoutMs
       );
@@ -616,13 +617,7 @@ const buildMarketSamples = (market: MarketCatalogMarket): MarketOrderbookRecorde
         .filter((outcome) => outcome.id.trim().length > 0)
         .map((outcome) => [outcome.label.trim().toLowerCase(), outcome.id.trim()] as const)
     ).values()];
-    return outcomeIds.flatMap((outcomeId) =>
-      venueKeys.map((venueKey) => ({
-        canonicalMarketId,
-        outcomeId,
-        venueKeys: [venueKey]
-      }))
-    );
+    return outcomeIds.map((outcomeId) => ({ canonicalMarketId, outcomeId, venueKeys }));
   });
 };
 
@@ -646,7 +641,7 @@ const selectSamplesForTickWithActivePriority = <T extends {
   }
 
   const activeCandidates = candidates.filter((candidate) =>
-    activeTargetKeys.has(sampleBaseKey(candidate.sample)) ||
+    activeTargetKeys.has(sampleCooldownKey(candidate.sample)) ||
     activeTargetKeys.has(activeMarketOnlyKey(candidate.sample.canonicalMarketId))
   );
   const selectedActive = selectSamplesForTick(
@@ -1037,17 +1032,8 @@ const wrapSlice = <T>(values: readonly T[], offset: number, limit: number): T[] 
   return selected;
 };
 
-const sampleBaseKey = (sample: { canonicalMarketId: string; outcomeId?: string | null | undefined }): string =>
+const sampleCooldownKey = (sample: { canonicalMarketId: string; outcomeId?: string | null | undefined }): string =>
   `${sample.canonicalMarketId}:${sample.outcomeId ?? ""}`;
-
-const sampleCooldownKey = (sample: {
-  canonicalMarketId: string;
-  outcomeId?: string | null | undefined;
-  venueKeys?: readonly string[] | undefined;
-}): string => {
-  const venueKey = [...new Set((sample.venueKeys ?? []).map(normalizeVenue))].sort().join(",");
-  return `${sampleBaseKey(sample)}:${venueKey}`;
-};
 
 const activeMarketOnlyKey = (canonicalMarketId: string): string =>
   `${canonicalMarketId}:`;
@@ -1056,7 +1042,7 @@ const activeSampleKeys = (activeTargets: readonly ActiveMarketTarget[]): Readonl
   const keys = new Set<string>();
   for (const target of activeTargets) {
     keys.add(target.canonicalOutcomeId
-      ? sampleBaseKey({ canonicalMarketId: target.canonicalMarketId, outcomeId: target.canonicalOutcomeId })
+      ? sampleCooldownKey({ canonicalMarketId: target.canonicalMarketId, outcomeId: target.canonicalOutcomeId })
       : activeMarketOnlyKey(target.canonicalMarketId));
   }
   return keys;

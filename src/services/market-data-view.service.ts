@@ -20,7 +20,6 @@ export interface MarketDataQuoteSource {
     quantity: number;
     readMode?: "live" | "cached_display" | undefined;
     displayMaxAgeMs?: number | undefined;
-    venues?: readonly string[] | undefined;
   }): Promise<VenueQuoteSnapshotReport>;
 }
 
