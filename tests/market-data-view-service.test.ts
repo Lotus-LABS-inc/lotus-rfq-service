@@ -140,6 +140,60 @@ describe("LiveMarketDataViewService", () => {
     });
   });
 
+  it("preloads linked-market mapping readiness before bounded orderbook leg reads", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    let preloaded = false;
+    const calls: unknown[] = [];
+    const service = new LiveMarketDataViewService({
+      preloadMappingReadiness: async (inputs) => {
+        calls.push(inputs);
+        preloaded = true;
+      },
+      getQuoteSnapshotReport: async (input) => {
+        if (!preloaded) {
+          return await new Promise(() => undefined);
+        }
+        return {
+          snapshots: [{
+            venue: "POLYMARKET",
+            venueMarketId: "poly-fast",
+            venueOutcomeId: "yes",
+            source: "STREAM",
+            quoteQuality: "FULL_DEPTH_STREAM",
+            sourceTimestamp: now,
+            receivedAt: now,
+            bestBid: "0.61",
+            bestAsk: "0.63",
+            midpoint: "0.62",
+            spread: "0.02",
+            topOfBookSize: "100",
+            bids: [{ price: "0.61", size: "100" }],
+            asks: [{ price: "0.63", size: "90" }],
+            blockers: [],
+            missingFactors: []
+          }],
+          blocked: []
+        };
+      }
+    }, { now: () => now, orderbookLiveTimeoutMs: 50 });
+
+    const orderbook = await service.getOrderbook({
+      marketId: "event-fast",
+      canonicalMarketIds: ["market-fast", "market-peer"],
+      outcomeId: "yes"
+    });
+
+    expect(calls).toEqual([[
+      { canonicalMarketId: "market-fast", canonicalOutcomeId: "yes" },
+      { canonicalMarketId: "market-peer", canonicalOutcomeId: "yes" }
+    ]]);
+    expect(orderbook).toMatchObject({
+      status: "live",
+      bestAsk: "0.63",
+      venues: [expect.objectContaining({ venue: "POLYMARKET", snapshotStatus: "live" })]
+    });
+  });
+
   it("keeps recently streamed unchanged books live but marks old snapshots stale", async () => {
     const now = new Date("2026-05-10T12:00:15.000Z");
     const service = new LiveMarketDataViewService({

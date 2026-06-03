@@ -167,6 +167,7 @@ const MAX_STORED_POINTS = 20_000;
 const MAX_HISTORY_MS = 31 * 24 * 60 * 60 * 1000;
 const ORDERBOOK_CACHE_MS = 3_000;
 const ORDERBOOK_LIVE_TIMEOUT_MS = 250;
+const ORDERBOOK_MAPPING_PRELOAD_TIMEOUT_MS = 750;
 const ORDERBOOK_DISPLAY_SNAPSHOT_MAX_AGE_MS = 120_000;
 const STREAM_ORDERBOOK_LIVE_FRESHNESS_MS = 15_000;
 const REST_ORDERBOOK_LIVE_FRESHNESS_MS = 5_000;
@@ -231,6 +232,7 @@ export class LiveMarketDataViewService {
       }
     }
 
+    await this.preloadOrderbookMappings(orderbookMarketIds, input.outcomeId);
     const livePromise = this.loadOrderbook(input, generatedAt, depth, orderbookMarketIds)
       .catch((error) => unavailableOrderbook({
         input,
@@ -240,7 +242,7 @@ export class LiveMarketDataViewService {
       }));
     const promise = withTimeout(
       livePromise,
-      this.orderbookLiveTimeoutMs,
+      this.orderbookRequestTimeoutMs(),
       unavailableOrderbook({
         input,
         generatedAt,
@@ -347,6 +349,27 @@ export class LiveMarketDataViewService {
       status,
       blockers: [...blockers]
     };
+  }
+
+  private orderbookRequestTimeoutMs(): number {
+    return Math.min(5_000, this.orderbookLiveTimeoutMs + 25);
+  }
+
+  private async preloadOrderbookMappings(
+    canonicalMarketIds: readonly string[],
+    outcomeId: string | undefined
+  ): Promise<void> {
+    if (!this.quoteSource.preloadMappingReadiness || canonicalMarketIds.length === 0) {
+      return;
+    }
+    await withTimeout(
+      this.quoteSource.preloadMappingReadiness(canonicalMarketIds.map((canonicalMarketId) => ({
+        canonicalMarketId,
+        ...(outcomeId ? { canonicalOutcomeId: outcomeId } : {})
+      }))),
+      ORDERBOOK_MAPPING_PRELOAD_TIMEOUT_MS,
+      undefined
+    );
   }
 
   private staleOrderbookFromLastGood(key: string, current: MarketOrderbookResponse, generatedAt: Date): MarketOrderbookResponse | null {
