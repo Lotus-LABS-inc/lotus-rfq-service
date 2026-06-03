@@ -805,7 +805,11 @@ const scrubMarketCatalogResponseForKey = <T extends Record<string, unknown>>(key
   if (!isQuoteReadyMarketCatalogCacheKey(key) || !Array.isArray(value.markets)) {
     return value;
   }
-  const markets = value.markets.filter(isTradableMarketListItem);
+  const markets = value.markets.filter((market) =>
+    isTradableMarketListItem(market, {
+      trustMaterializedFreshness: hasRecentMaterializedAt(value)
+    })
+  );
   return {
     ...value,
     markets,
@@ -813,7 +817,10 @@ const scrubMarketCatalogResponseForKey = <T extends Record<string, unknown>>(key
   };
 };
 
-const isTradableMarketListItem = (value: unknown): boolean => {
+const isTradableMarketListItem = (
+  value: unknown,
+  options: { trustMaterializedFreshness?: boolean } = {}
+): boolean => {
   if (typeof value !== "object" || value === null) {
     return false;
   }
@@ -825,10 +832,17 @@ const isTradableMarketListItem = (value: unknown): boolean => {
       : 0;
   return quoteReadyVenueCount > 0
     && (record.quoteStatus === "live" || record.quoteStatus === "partial")
-    && hasRecentQuoteTimestamp(record.lastQuoteAt);
+    && (options.trustMaterializedFreshness === true || hasRecentQuoteTimestamp(record.lastQuoteAt));
 };
 
+const hasRecentMaterializedAt = (value: Record<string, unknown>): boolean =>
+  hasRecentDisplayTimestamp(value.materializedAt);
+
 const hasRecentQuoteTimestamp = (value: unknown): boolean => {
+  return hasRecentDisplayTimestamp(value);
+};
+
+const hasRecentDisplayTimestamp = (value: unknown): boolean => {
   if (typeof value !== "string" || value.trim().length === 0) {
     return false;
   }
@@ -872,7 +886,8 @@ const isCacheableMarketCatalogResponseForKey = (
     return true;
   }
   const markets = Array.isArray(value.markets) ? value.markets : [];
-  return markets.some(isTradableMarketListItem);
+  const trustMaterializedFreshness = hasRecentMaterializedAt(value);
+  return markets.some((market) => isTradableMarketListItem(market, { trustMaterializedFreshness }));
 };
 
 const isQuoteReadyMarketCatalogCacheKey = (key: string): boolean =>
