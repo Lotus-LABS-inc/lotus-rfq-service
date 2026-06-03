@@ -17,6 +17,10 @@ import { VenueOrderbookSnapshotRepository } from "./repositories/venue-orderbook
 import { SharedCoreQuoteMappingRepository } from "./repositories/market-catalog.repository.js";
 import { HotQuoteSnapshotService, resolveHotQuoteRedisNamespace } from "./services/hot-quote-snapshot.service.js";
 import {
+  RedisMarketOrderbookLiveCache,
+  resolveMarketOrderbookLiveCacheNamespace
+} from "./services/market-orderbook-live-cache.js";
+import {
   OrderbookStreamService,
   type VenueOrderbookRestRefresher,
   type VenueOrderbookStreamConnector
@@ -66,9 +70,20 @@ export const runOrderbookStreamService = async (): Promise<OrderbookStreamRuntim
     }
   });
   const mappingResolver = new SharedCoreVenueQuoteMappingResolver(new SharedCoreQuoteMappingRepository(pgPool));
+  const liveOrderbooks = new RedisMarketOrderbookLiveCache(redis, {
+    namespace: resolveMarketOrderbookLiveCacheNamespace({
+      LOTUS_DEPLOY_ENV: process.env.LOTUS_DEPLOY_ENV,
+      LOTUS_ENV: process.env.LOTUS_ENV,
+      APP_ENV: process.env.APP_ENV,
+      NODE_ENV: process.env.NODE_ENV
+    }),
+    ttlMs: 30_000,
+    maxSnapshotsPerTopic: 16
+  });
   const streamService = new OrderbookStreamService({
     activeMarkets: hotSnapshots,
     hotSnapshots,
+    liveOrderbooks,
     mappingResolver,
     connectors: buildConnectors(logger),
     restRefreshers: buildRestRefreshers(),

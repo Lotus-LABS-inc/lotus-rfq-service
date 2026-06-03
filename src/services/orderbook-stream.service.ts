@@ -8,6 +8,7 @@ import type {
 } from "../core/sor/quote-snapshot.js";
 import type { RedisClient } from "../db/redis.js";
 import type { HotQuoteSnapshotService } from "./hot-quote-snapshot.service.js";
+import type { MarketOrderbookLiveCache } from "./market-orderbook-live-cache.js";
 
 export interface ActiveOrderbookMarket {
   canonicalMarketId: string;
@@ -56,6 +57,7 @@ export interface VenueOrderbookRestRefresher {
 export interface OrderbookStreamServiceDeps {
   activeMarkets: Pick<HotQuoteSnapshotService, "listActiveMarketsFromRedis">;
   hotSnapshots: Pick<HotQuoteSnapshotService, "put">;
+  liveOrderbooks?: MarketOrderbookLiveCache | undefined;
   mappingResolver: Pick<VenueQuoteMappingResolver, "getReadiness" | "listApprovedReadiness">;
   connectors: readonly VenueOrderbookStreamConnector[];
   restRefreshers?: readonly VenueOrderbookRestRefresher[] | readonly VenueQuoteSnapshotReader[] | undefined;
@@ -373,6 +375,13 @@ export class OrderbookStreamService {
 
   private onSnapshot(snapshot: NormalizedVenueQuoteSnapshot, target: VenueOrderbookSubscriptionTarget): void {
     this.deps.hotSnapshots.put(snapshot);
+    void this.deps.liveOrderbooks?.put({
+      canonicalMarketId: target.canonicalMarketId,
+      ...(target.canonicalOutcomeId ? { canonicalOutcomeId: target.canonicalOutcomeId } : {}),
+      snapshot
+    }).catch((error) => {
+      this.deps.logger.warn({ err: error, venue: snapshot.venue }, "Market orderbook live cache write failed.");
+    });
     void this.publishMarketUpdate(snapshot, target);
   }
 

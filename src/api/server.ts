@@ -28,6 +28,10 @@ import {
 import { MarketCatalogSnapshotMaterializer } from "../services/market-catalog-snapshot-materializer.js";
 import { HotMarketQuoteReadinessSource } from "../services/hot-market-quote-readiness.service.js";
 import {
+  RedisMarketOrderbookLiveCache,
+  resolveMarketOrderbookLiveCacheNamespace
+} from "../services/market-orderbook-live-cache.js";
+import {
   buildVenueBalanceActivationActions,
   hasPolymarketActivationApprovalSpender
 } from "../core/funding/venue-activation.js";
@@ -1065,6 +1069,16 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   app.addHook("onClose", async () => {
     stopQuoteMappingReadinessWarmup();
   });
+  const marketOrderbookLiveCache = new RedisMarketOrderbookLiveCache(dependencies.redisClient, {
+    namespace: resolveMarketOrderbookLiveCacheNamespace({
+      LOTUS_DEPLOY_ENV: process.env.LOTUS_DEPLOY_ENV,
+      LOTUS_ENV: process.env.LOTUS_ENV,
+      APP_ENV: process.env.APP_ENV,
+      NODE_ENV: process.env.NODE_ENV
+    }),
+    ttlMs: 30_000,
+    maxSnapshotsPerTopic: 16
+  });
   const marketQuoteReadinessSource = new HotMarketQuoteReadinessSource({
     mappingResolver: sharedCoreQuoteMappingResolver,
     hotSnapshots: hotQuoteSnapshots,
@@ -1141,6 +1155,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   });
   const historicalMarketStateRepository = new HistoricalMarketStateRepository(dependencies.pgPool);
   const marketDataViewService = new LiveMarketDataViewService(venueQuoteSource, {
+    liveOrderbookSource: marketOrderbookLiveCache,
     historicalChartSource: {
       listChartPoints: async (input) => {
         // API chart reads must stay storage-backed. Live venue history fetches belong

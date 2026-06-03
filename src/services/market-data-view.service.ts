@@ -23,6 +23,13 @@ export interface MarketDataQuoteSource {
   }): Promise<VenueQuoteSnapshotReport>;
 }
 
+export interface MarketOrderbookLiveSnapshotSource {
+  get(input: {
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+  }): Promise<readonly NormalizedVenueQuoteSnapshot[]>;
+}
+
 export interface MarketHistoricalChartSource {
   listChartPoints(input: {
     marketId: string;
@@ -198,15 +205,18 @@ export class LiveMarketDataViewService {
       orderbookLiveTimeoutMs?: number | undefined;
       batchQuoteLiveTimeoutMs?: number | undefined;
       historicalChartSource?: MarketHistoricalChartSource | undefined;
+      liveOrderbookSource?: MarketOrderbookLiveSnapshotSource | undefined;
     } = {}
   ) {
     this.now = options.now ?? (() => new Date());
     this.orderbookLiveTimeoutMs = Math.max(50, Math.min(options.orderbookLiveTimeoutMs ?? ORDERBOOK_LIVE_TIMEOUT_MS, 5_000));
     this.batchQuoteLiveTimeoutMs = Math.max(50, Math.min(options.batchQuoteLiveTimeoutMs ?? BATCH_QUOTE_LIVE_TIMEOUT_MS, 5_000));
     this.historicalChartSource = options.historicalChartSource;
+    this.liveOrderbookSource = options.liveOrderbookSource;
   }
 
   private readonly historicalChartSource: MarketHistoricalChartSource | undefined;
+  private readonly liveOrderbookSource: MarketOrderbookLiveSnapshotSource | undefined;
 
   public async getOrderbook(input: {
     marketId: string;
@@ -240,6 +250,13 @@ export class LiveMarketDataViewService {
       if (cached.promise) {
         return cached.promise;
       }
+    }
+
+    const cachedLiveOrderbook = await this.getCachedLiveOrderbook(normalizedInput, generatedAt, depth, orderbookMarketIds);
+    if (cachedLiveOrderbook) {
+      this.lastGoodOrderbooks.set(key, cachedLiveOrderbook);
+      this.orderbookCache.set(key, { expiresAt: generatedAt.getTime() + ORDERBOOK_CACHE_MS, response: cachedLiveOrderbook });
+      return cachedLiveOrderbook;
     }
 
     await this.preloadOrderbookMappings(orderbookMarketIds, normalizedInput.outcomeId);
@@ -288,6 +305,37 @@ export class LiveMarketDataViewService {
     return output;
   }
 
+  private async getCachedLiveOrderbook(input: {
+    marketId: string;
+    canonicalMarketIds?: readonly string[] | undefined;
+    outcomeId?: string | undefined;
+    depth?: number | undefined;
+    venue?: string | undefined;
+  }, generatedAt: Date, depth: number, orderbookMarketIds: readonly string[]): Promise<MarketOrderbookResponse | null> {
+    if (!this.liveOrderbookSource) {
+      return null;
+    }
+    const reports = await Promise.all(orderbookMarketIds.map(async (canonicalMarketId): Promise<VenueQuoteSnapshotReport> => {
+      try {
+        return {
+          snapshots: await this.liveOrderbookSource!.get({
+            canonicalMarketId,
+            ...(input.outcomeId ? { canonicalOutcomeId: input.outcomeId } : {})
+          }),
+          blocked: []
+        };
+      } catch {
+        return { snapshots: [], blocked: [] };
+      }
+    }));
+    const report = mergeVenueQuoteSnapshotReports(reports);
+    if (report.snapshots.length === 0) {
+      return null;
+    }
+    const orderbook = this.orderbookFromReport(input, generatedAt, depth, report);
+    return isDisplayUsableOrderbook(orderbook) ? orderbook : null;
+  }
+
   private async loadOrderbook(input: {
     marketId: string;
     canonicalMarketIds?: readonly string[] | undefined;
@@ -314,6 +362,16 @@ export class LiveMarketDataViewService {
       ))
       : [await loadReport(orderbookMarketIds[0] ?? input.marketId)];
     const report = mergeVenueQuoteSnapshotReports(reports);
+    return this.orderbookFromReport(input, generatedAt, depth, report);
+  }
+
+  private orderbookFromReport(input: {
+    marketId: string;
+    canonicalMarketIds?: readonly string[] | undefined;
+    outcomeId?: string | undefined;
+    depth?: number | undefined;
+    venue?: string | undefined;
+  }, generatedAt: Date, depth: number, report: VenueQuoteSnapshotReport): MarketOrderbookResponse {
     const venueFilter = input.venue?.trim().toUpperCase();
     const snapshots = venueFilter
       ? report.snapshots.filter((snapshot) => snapshot.venue.toUpperCase() === venueFilter)

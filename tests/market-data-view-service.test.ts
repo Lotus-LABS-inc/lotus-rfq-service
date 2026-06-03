@@ -252,6 +252,54 @@ describe("LiveMarketDataViewService", () => {
     });
   });
 
+  it("serves worker-fed live orderbook snapshots before mapping preload or quote fanout", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    let preloadCalled = false;
+    let quoteSourceCalled = false;
+    const service = new LiveMarketDataViewService({
+      preloadMappingReadiness: async () => {
+        preloadCalled = true;
+        await new Promise(() => undefined);
+      },
+      getQuoteSnapshotReport: async () => {
+        quoteSourceCalled = true;
+        return { snapshots: [], blocked: [] };
+      }
+    }, {
+      now: () => now,
+      orderbookLiveTimeoutMs: 50,
+      liveOrderbookSource: {
+        get: async () => [{
+          venue: "POLYMARKET",
+          venueMarketId: "poly-live",
+          venueOutcomeId: "yes",
+          source: "REST",
+          quoteQuality: "FULL_DEPTH_REST",
+          sourceTimestamp: now,
+          receivedAt: now,
+          bids: [{ price: "0.61", size: "100" }],
+          asks: [{ price: "0.63", size: "90" }],
+          blockers: [],
+          missingFactors: []
+        }]
+      }
+    });
+
+    const orderbook = await service.getOrderbook({
+      marketId: "event-fast",
+      canonicalMarketIds: ["market-fast"],
+      outcomeId: "yes"
+    });
+
+    expect(preloadCalled).toBe(false);
+    expect(quoteSourceCalled).toBe(false);
+    expect(orderbook).toMatchObject({
+      status: "live",
+      bestAsk: "0.63",
+      venues: [expect.objectContaining({ venue: "POLYMARKET", snapshotStatus: "live" })]
+    });
+  });
+
   it("keeps recently streamed unchanged books live but marks old snapshots stale", async () => {
     const now = new Date("2026-05-10T12:00:15.000Z");
     const service = new LiveMarketDataViewService({
