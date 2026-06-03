@@ -53,6 +53,7 @@ export interface OrderbookStreamServiceConfig {
   restRefreshFailureCooldownMs: number;
   restRefreshVenuePolicies: Readonly<Record<string, OrderbookStreamVenueRestPolicy>>;
   latestSnapshotPersistIntervalMs: number;
+  latestSnapshotPersistMinSpacingMs: number;
   summaryLogIntervalMs: number;
 }
 
@@ -112,7 +113,8 @@ const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
     PREDICT_FUN: { maxTargetsPerSweep: 2, failureCooldownMs: 90_000 },
     OPINION: { maxTargetsPerSweep: 1, failureCooldownMs: 180_000 }
   },
-  latestSnapshotPersistIntervalMs: 5_000,
+  latestSnapshotPersistIntervalMs: 30_000,
+  latestSnapshotPersistMinSpacingMs: 250,
   summaryLogIntervalMs: 15_000
 };
 
@@ -129,6 +131,7 @@ export class OrderbookStreamService {
   private readonly restRefreshFailureCooldowns = new Map<string, number>();
   private readonly restRefreshVenueFailureCooldowns = new Map<string, number>();
   private readonly lastLatestSnapshotPersistBySubscription = new Map<string, number>();
+  private lastLatestSnapshotPersistAt = 0;
   private lastRestRefreshSweepAt = 0;
   private lastSummaryLogAt = 0;
   private timer: NodeJS.Timeout | null = null;
@@ -480,6 +483,10 @@ export class OrderbookStreamService {
     if (nowMs - lastPersistedAt < this.config.latestSnapshotPersistIntervalMs) {
       return;
     }
+    if (nowMs - this.lastLatestSnapshotPersistAt < this.config.latestSnapshotPersistMinSpacingMs) {
+      return;
+    }
+    this.lastLatestSnapshotPersistAt = nowMs;
     this.lastLatestSnapshotPersistBySubscription.set(key, nowMs);
     await this.deps.latestSnapshots.upsertLatestMany([toLatestSnapshotInput({
       canonicalMarketId: target.canonicalMarketId,
