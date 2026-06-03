@@ -151,6 +151,70 @@ describe("MarketOrderbookRecorder", () => {
     });
   });
 
+  it("samples shared outcome aliases instead of one venue's executable token id", async () => {
+    const requestedOutcomeIds: Array<string | undefined> = [];
+    const market = {
+      ...multiVenueMarketFixture(["POLYMARKET", "LIMITLESS"]),
+      venueMarkets: [
+        {
+          ...multiVenueMarketFixture(["POLYMARKET"]).venueMarkets[0]!,
+          canonicalMarketId: "market-1",
+          venue: "POLYMARKET",
+          venueMarketId: "poly-market",
+          outcomes: [
+            { id: "12345678901234567890", label: "Yes" },
+            { id: "98765432109876543210", label: "No" }
+          ]
+        },
+        {
+          ...multiVenueMarketFixture(["LIMITLESS"]).venueMarkets[0]!,
+          canonicalMarketId: "market-1",
+          venue: "LIMITLESS",
+          venueMarketId: "limitless-market",
+          outcomes: [
+            { id: "limitless-yes-token", label: "Yes" },
+            { id: "limitless-no-token", label: "No" }
+          ]
+        }
+      ]
+    };
+    const recorder = new MarketOrderbookRecorder(
+      { listMarkets: async () => [market] },
+      {
+        getQuoteSnapshotReport: async ({ canonicalOutcomeId }) => {
+          requestedOutcomeIds.push(canonicalOutcomeId);
+          return { snapshots: [], blocked: [] };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        priorityMarketBatchSize: 0,
+        priorityVenues: [],
+        maxSamplesPerTick: 10,
+        cleanupIntervalMs: 0,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.sampledOutcomes).toBe(2);
+    expect(requestedOutcomeIds).toEqual(["YES", "NO"]);
+  });
+
   it("caps live venue samples per tick so recorder work stays bounded", async () => {
     const inserted: VenueOrderbookSnapshotInput[] = [];
     const recorder = new MarketOrderbookRecorder(

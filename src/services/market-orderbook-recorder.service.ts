@@ -643,11 +643,30 @@ const buildMarketSamples = (market: MarketCatalogMarket): MarketOrderbookRecorde
       venueMarkets
         .flatMap((venueMarket) => venueMarket.outcomes)
         .filter((outcome) => outcome.id.trim().length > 0)
-        .map((outcome) => [outcome.label.trim().toLowerCase(), outcome.id.trim()] as const)
+        .map((outcome) => [
+          outcomeAliasKey(outcome),
+          outcomeAliasForQuoteMapping(outcome)
+        ] as const)
     ).values()];
     return outcomeIds.map((outcomeId) => ({ canonicalMarketId, outcomeId, venueKeys }));
   });
 };
+
+const outcomeAliasForQuoteMapping = (outcome: { id: string; label: string }): string => {
+  const label = outcome.label.trim();
+  const id = outcome.id.trim();
+  const normalized = (label || id).toUpperCase().replace(/\s+/g, "_");
+  if (normalized === "YES" || normalized === "Y") {
+    return "YES";
+  }
+  if (normalized === "NO" || normalized === "N") {
+    return "NO";
+  }
+  return label || id;
+};
+
+const outcomeAliasKey = (outcome: { id: string; label: string }): string =>
+  (outcome.label.trim() || outcome.id.trim()).toLowerCase().replace(/\s+/g, "_");
 
 const selectSamplesForTickWithActivePriority = <T extends {
   market: MarketCatalogMarket;
