@@ -109,6 +109,7 @@ export class OrderbookStreamService {
   private readonly activeSubscriptions = new Map<string, { target: VenueOrderbookSubscriptionTarget; lastDesiredAt: number }>();
   private readonly lastRestRefreshBySubscription = new Map<string, number>();
   private readonly restRefreshFailureCooldowns = new Map<string, number>();
+  private lastRestRefreshSweepAt = 0;
   private lastSummaryLogAt = 0;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
@@ -329,6 +330,10 @@ export class OrderbookStreamService {
     targets: readonly VenueOrderbookSubscriptionTarget[],
     nowMs: number
   ): Promise<number> {
+    if (this.lastRestRefreshSweepAt > 0 && nowMs - this.lastRestRefreshSweepAt < this.config.restRefreshIntervalMs) {
+      return 0;
+    }
+    this.lastRestRefreshSweepAt = nowMs;
     const groupsByNative = groupTargetsByNative(dedupeTargetsBySubscription(targets));
     const refreshable = [...groupsByNative.values()]
       .flatMap((group) => group[0] ? [group[0]] : [])

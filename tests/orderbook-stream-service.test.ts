@@ -857,4 +857,57 @@ describe("OrderbookStreamService", () => {
     await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
     expect(refresh).toHaveBeenCalledTimes(2);
   });
+
+  it("runs REST fallback as bounded sweeps instead of rotating through new targets every poll", async () => {
+    const connector = new FakeConnector("PREDICT_FUN");
+    const refresh = vi.fn(async (target: VenueOrderbookSubscriptionTarget) => ({
+      ...snapshot(target),
+      source: "REST" as const,
+      quoteQuality: "FULL_DEPTH_REST" as const
+    }));
+    let currentNow = now;
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [
+            { canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: currentNow },
+            { canonicalMarketId: "canonical-2", canonicalOutcomeId: "YES", lastSeenAt: currentNow },
+            { canonicalMarketId: "canonical-3", canonicalOutcomeId: "YES", lastSeenAt: currentNow },
+            { canonicalMarketId: "canonical-4", canonicalOutcomeId: "YES", lastSeenAt: currentNow }
+          ];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness(input) {
+          return [{
+            venue: "PREDICT_FUN",
+            approvedVenueMarketId: `${input.canonicalMarketId}-predict`,
+            venueMarketId: `${input.canonicalMarketId}-predict`,
+            venueOutcomeId: "YES",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors: [connector],
+      restRefreshers: [{ venue: "PREDICT_FUN", refresh }],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => currentNow,
+      config: {
+        maxRestRefreshTargetsPerVenuePerTick: 2,
+        restRefreshIntervalMs: 10_000
+      }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 2 });
+    currentNow = new Date(now.getTime() + 1_000);
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
+    expect(refresh).toHaveBeenCalledTimes(2);
+
+    currentNow = new Date(now.getTime() + 11_000);
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 2 });
+    expect(refresh).toHaveBeenCalledTimes(4);
+  });
 });
