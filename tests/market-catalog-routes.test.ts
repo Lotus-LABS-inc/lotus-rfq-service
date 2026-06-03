@@ -14,6 +14,7 @@ import {
 } from "../src/repositories/market-catalog.repository.js";
 import type { MarketCatalogSnapshotCache } from "../src/services/market-catalog-snapshot-cache.js";
 import { marketCatalogDetailCacheKey } from "../src/services/market-catalog-snapshot-materializer.js";
+import { marketOrderbookTopic } from "../src/services/orderbook-stream.service.js";
 
 const market: MarketCatalogMarket = {
   eventId: "event:NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
@@ -1148,7 +1149,14 @@ describe("market catalog routes", () => {
     expect(orderbook.json()).toMatchObject({
       status: "live",
       bestBid: "0.51",
-      asks: [{ venue: "POLYMARKET", price: "0.53" }]
+      asks: [{ venue: "POLYMARKET", price: "0.53" }],
+      stream: {
+        primaryTopic: marketOrderbookTopic(market.canonicalMarketIds[0]!, "yes"),
+        topics: [
+          marketOrderbookTopic(market.canonicalMarketIds[0]!, "yes"),
+          marketOrderbookTopic("NOMINEE|US_PRESIDENT|2028|REPUBLICAN:LIMITLESS", "yes")
+        ]
+      }
     });
     expect(orderbook.body).not.toContain("apiKey");
     expect(orderbook.body).not.toContain("raw_source_payload");

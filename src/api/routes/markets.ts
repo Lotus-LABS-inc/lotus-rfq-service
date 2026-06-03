@@ -12,6 +12,7 @@ import {
   marketCatalogDetailAliasKeys,
   marketCatalogDetailCacheKey
 } from "../../services/market-catalog-snapshot-materializer.js";
+import { marketOrderbookTopic } from "../../services/orderbook-stream.service.js";
 
 const routeCoverageSchema = z.enum(["all", "single", "pair", "tri", "strict_all"]);
 const marketListViewSchema = z.enum(["full", "compact"]);
@@ -331,7 +332,10 @@ export const registerMarketCatalogRoutes = async (
       ...(parsed.data.depth ? { depth: parsed.data.depth } : {}),
       ...(parsed.data.venue ? { venue: parsed.data.venue } : {})
     });
-    return reply.send(response);
+    return reply.send({
+      ...response,
+      stream: buildOrderbookStreamContract(marketId, marketResult, parsed.data.outcomeId)
+    });
   });
 
   app.get("/markets/:marketId/chart", async (request, reply) => {
@@ -426,6 +430,27 @@ const touchOrderbookMarketActivity = (
       ...(outcomeId ? { canonicalOutcomeId: outcomeId } : {})
     });
   }
+};
+
+const buildOrderbookStreamContract = (
+  marketId: string,
+  marketResult: Awaited<ReturnType<typeof resolveCachedCatalogMarketForChart>>,
+  outcomeId: string | undefined
+): { primaryTopic: string; topics: string[] } => {
+  const canonicalMarketIds = marketResult.ok && marketResult.market
+    ? marketResult.market.canonicalMarketIds
+    : [marketId];
+  const topics = [...new Set(canonicalMarketIds)]
+    .filter((canonicalMarketId) => canonicalMarketId.trim().length > 0)
+    .map((canonicalMarketId) => marketOrderbookTopic(canonicalMarketId, outcomeId));
+  if (topics.length === 0) {
+    const fallbackTopic = marketOrderbookTopic(marketId, outcomeId);
+    return { primaryTopic: fallbackTopic, topics: [fallbackTopic] };
+  }
+  return {
+    primaryTopic: topics[0]!,
+    topics
+  };
 };
 
 const enrichMarketsWithQuoteReadiness = async (
