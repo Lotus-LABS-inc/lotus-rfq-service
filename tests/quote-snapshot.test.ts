@@ -490,6 +490,10 @@ describe("venue quote mapping resolvers", () => {
       canonicalMarketId: "FRONTEND_CURATED:CRYPTO|ATH_BY_DATE|BTC|2026-06-30|2026_06_30",
       canonicalOutcomeId: "NO"
     });
+    const venueScopedRoute = await resolver.resolve({
+      canonicalMarketId: "FRONTEND_CURATED:CRYPTO|ATH_BY_DATE|BTC|2026-06-30|2026_06_30:POLYMARKET",
+      canonicalOutcomeId: "yes"
+    });
 
     expect(listed).toHaveLength(1);
     expect(directMappingCalls).toBe(0);
@@ -502,6 +506,11 @@ describe("venue quote mapping resolvers", () => {
       venue: "POLYMARKET",
       venueMarketId: "0x337ed4a919995ef9ba9d705b319055633a5dfdcb3ab97cf610009a7d11a9ade4",
       venueOutcomeId: "no-token"
+    }]);
+    expect(venueScopedRoute).toEqual([{
+      venue: "POLYMARKET",
+      venueMarketId: "0x337ed4a919995ef9ba9d705b319055633a5dfdcb3ab97cf610009a7d11a9ade4",
+      venueOutcomeId: "yes-token"
     }]);
   });
 

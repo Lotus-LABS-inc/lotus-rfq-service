@@ -717,10 +717,17 @@ export class SharedCoreVenueQuoteMappingResolver implements VenueQuoteMappingRes
     const rowsByMarketId = new Map<string, SharedCoreVenueQuoteMappingRow[]>();
 
     for (const row of rows) {
-      const rowMarketIds = new Set([
+      const venue = firstString(row.venue)?.toUpperCase();
+      const baseMarketIds = [
         firstString(row.canonical_market_id),
         firstString(row.requested_canonical_market_id)
-      ]);
+      ].filter((marketId): marketId is string => marketId !== null);
+      const rowMarketIds = new Set(baseMarketIds);
+      if (venue) {
+        for (const marketId of baseMarketIds) {
+          rowMarketIds.add(`${marketId}:${venue}`);
+        }
+      }
       for (const marketId of rowMarketIds) {
         if (!marketId) {
           continue;
