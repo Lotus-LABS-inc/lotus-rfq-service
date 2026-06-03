@@ -11,6 +11,7 @@ export type MarketCatalogListView = "full" | "compact";
 export interface MarketCatalogSnapshotMaterializerConfig {
   intervalMs: number;
   cacheTtlMs: number;
+  quoteReadinessMaxAgeMs: number;
   limits: readonly number[];
   routeCoverages: readonly RouteCoverage[];
   categories: readonly string[];
@@ -46,6 +47,7 @@ export interface MarketCatalogSnapshotMaterializerDeps {
 const DEFAULT_CONFIG: MarketCatalogSnapshotMaterializerConfig = {
   intervalMs: 5_000,
   cacheTtlMs: 60_000,
+  quoteReadinessMaxAgeMs: DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS,
   limits: [250],
   routeCoverages: ["all", "pair", "tri", "strict_all"],
   categories: ["Crypto", "Sports", "Politics", "Esports"],
@@ -165,7 +167,8 @@ export class MarketCatalogSnapshotMaterializer {
       ...(category ? { category } : {})
     });
     const readiness = await this.deps.marketQuoteReadinessSource.listLatestMarketQuoteReadiness({
-      canonicalMarketIds: [...new Set(markets.flatMap((market) => market.canonicalMarketIds))]
+      canonicalMarketIds: [...new Set(markets.flatMap((market) => market.canonicalMarketIds))],
+      maxAgeMs: this.config.quoteReadinessMaxAgeMs
     });
     const enriched = enrichMarketsWithReadiness(markets, readiness);
     const result = {

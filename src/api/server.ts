@@ -490,6 +490,7 @@ const parseAdminMagicLinkTtlSeconds = (value: string | undefined): number => {
 const DEFAULT_POLYMARKET_VENUE_BALANCE_READ_TIMEOUT_MS = 2_500;
 const VENUE_BALANCE_READ_TIMEOUT = Symbol("VENUE_BALANCE_READ_TIMEOUT");
 const LOTUS_FASTIFY_MAX_PARAM_LENGTH = 2_048;
+const MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS = 30_000;
 
 export const buildServer = async (dependencies: ServerDependencies): Promise<FastifyInstance> => {
   const app = Fastify({
@@ -1082,7 +1083,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const marketQuoteReadinessSource = new HotMarketQuoteReadinessSource({
     mappingResolver: sharedCoreQuoteMappingResolver,
     hotSnapshots: hotQuoteSnapshots,
-    fallbackSource: venueOrderbookSnapshotRepository
+    fallbackSource: venueOrderbookSnapshotRepository,
+    config: {
+      maxAgeMs: MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS
+    }
   });
   const polymarketClobHost = process.env.POLYMARKET_CLOB_HOST ?? process.env.POLY_CLOB_HOST ?? "https://clob.polymarket.com";
   const polymarketGammaBaseUrl = process.env.POLYMARKET_GAMMA_BASE_URL ?? "https://gamma-api.polymarket.com";
@@ -1203,6 +1207,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         config: {
           intervalMs: 3_000,
           cacheTtlMs: 300_000,
+          quoteReadinessMaxAgeMs: MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS,
           limits: [250],
           routeCoverages: ["all"],
           categories: [],
@@ -1217,6 +1222,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         config: {
           intervalMs: 30_000,
           cacheTtlMs: 300_000,
+          quoteReadinessMaxAgeMs: MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS,
           limits: [250],
           routeCoverages: ["all", "pair", "tri", "strict_all"],
           categories: ["Crypto", "Sports", "Politics", "Esports"],

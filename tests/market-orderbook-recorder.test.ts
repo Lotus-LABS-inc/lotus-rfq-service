@@ -17,15 +17,15 @@ const logger: MarketOrderbookRecorderLogger = {
 describe("MarketOrderbookRecorder", () => {
   it("enables recording by default for worker-owned runtime config", () => {
     expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
-      intervalMs: 6_000,
-      marketBatchSize: 14,
+      intervalMs: 8_000,
+      marketBatchSize: 16,
       activeMarketBatchSize: 200,
-      activeMaxSamplesPerTick: 24,
-      priorityMarketBatchSize: 56,
+      activeMaxSamplesPerTick: 32,
+      priorityMarketBatchSize: 80,
       priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-      maxSamplesPerTick: 36,
-      sampleConcurrency: 8,
-      maxTickDurationMs: 5_500,
+      maxSamplesPerTick: 48,
+      sampleConcurrency: 10,
+      maxTickDurationMs: 7_000,
       sampleTimeoutMs: 4_000,
       cleanupIntervalMs: 30 * 60_000
     });
@@ -36,15 +36,15 @@ describe("MarketOrderbookRecorder", () => {
     process.env.MARKET_ORDERBOOK_RECORDER_ENABLED = "false";
     try {
       expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
-        intervalMs: 6_000,
-        marketBatchSize: 14,
+        intervalMs: 8_000,
+        marketBatchSize: 16,
         activeMarketBatchSize: 200,
-        activeMaxSamplesPerTick: 24,
-        priorityMarketBatchSize: 56,
+        activeMaxSamplesPerTick: 32,
+        priorityMarketBatchSize: 80,
         priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-        maxSamplesPerTick: 36,
-        sampleConcurrency: 8,
-        maxTickDurationMs: 5_500,
+        maxSamplesPerTick: 48,
+        sampleConcurrency: 10,
+        maxTickDurationMs: 7_000,
         sampleTimeoutMs: 4_000,
         cleanupIntervalMs: 30 * 60_000
       });
@@ -64,9 +64,9 @@ describe("MarketOrderbookRecorder", () => {
     expect(configs).toHaveLength(2);
     expect(configs.map((config) => config.shardCount)).toEqual([2, 2]);
     expect(configs.map((config) => config.shardIndex)).toEqual([0, 1]);
-    expect(configs.every((config) => config.intervalMs === 6_000)).toBe(true);
-    expect(configs.every((config) => config.maxSamplesPerTick === 36)).toBe(true);
-    expect(configs.every((config) => config.activeMaxSamplesPerTick === 24)).toBe(true);
+    expect(configs.every((config) => config.intervalMs === 8_000)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerTick === 48)).toBe(true);
+    expect(configs.every((config) => config.activeMaxSamplesPerTick === 32)).toBe(true);
     expect(configs.every((config) => (config.maxTickDurationMs ?? 0) < config.intervalMs)).toBe(true);
   });
 
