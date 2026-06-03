@@ -17,16 +17,16 @@ const logger: MarketOrderbookRecorderLogger = {
 describe("MarketOrderbookRecorder", () => {
   it("enables recording by default for worker-owned runtime config", () => {
     expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
-      intervalMs: 10_000,
-      marketBatchSize: 10,
-      activeMarketBatchSize: 160,
-      activeMaxSamplesPerTick: 16,
-      priorityMarketBatchSize: 36,
+      intervalMs: 5_000,
+      marketBatchSize: 16,
+      activeMarketBatchSize: 240,
+      activeMaxSamplesPerTick: 32,
+      priorityMarketBatchSize: 80,
       priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-      maxSamplesPerTick: 24,
-      sampleConcurrency: 6,
-      maxTickDurationMs: 8_000,
-      sampleTimeoutMs: 2_500,
+      maxSamplesPerTick: 48,
+      sampleConcurrency: 12,
+      maxTickDurationMs: 4_500,
+      sampleTimeoutMs: 1_500,
       cleanupIntervalMs: 30 * 60_000
     });
   });
@@ -36,16 +36,16 @@ describe("MarketOrderbookRecorder", () => {
     process.env.MARKET_ORDERBOOK_RECORDER_ENABLED = "false";
     try {
       expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
-        intervalMs: 10_000,
-        marketBatchSize: 10,
-        activeMarketBatchSize: 160,
-        activeMaxSamplesPerTick: 16,
-        priorityMarketBatchSize: 36,
+        intervalMs: 5_000,
+        marketBatchSize: 16,
+        activeMarketBatchSize: 240,
+        activeMaxSamplesPerTick: 32,
+        priorityMarketBatchSize: 80,
         priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-        maxSamplesPerTick: 24,
-        sampleConcurrency: 6,
-        maxTickDurationMs: 8_000,
-        sampleTimeoutMs: 2_500,
+        maxSamplesPerTick: 48,
+        sampleConcurrency: 12,
+        maxTickDurationMs: 4_500,
+        sampleTimeoutMs: 1_500,
         cleanupIntervalMs: 30 * 60_000
       });
       expect(buildMarketOrderbookRecorderConfig()).not.toHaveProperty("enabled");
@@ -61,12 +61,12 @@ describe("MarketOrderbookRecorder", () => {
   it("builds sharded recorder lanes for broad live quote coverage", () => {
     const configs = buildMarketOrderbookRecorderConfigs();
 
-    expect(configs).toHaveLength(2);
-    expect(configs.map((config) => config.shardCount)).toEqual([2, 2]);
-    expect(configs.map((config) => config.shardIndex)).toEqual([0, 1]);
-    expect(configs.every((config) => config.intervalMs === 10_000)).toBe(true);
-    expect(configs.every((config) => config.maxSamplesPerTick === 24)).toBe(true);
-    expect(configs.every((config) => config.activeMaxSamplesPerTick === 16)).toBe(true);
+    expect(configs).toHaveLength(4);
+    expect(configs.map((config) => config.shardCount)).toEqual([4, 4, 4, 4]);
+    expect(configs.map((config) => config.shardIndex)).toEqual([0, 1, 2, 3]);
+    expect(configs.every((config) => config.intervalMs === 5_000)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerTick === 48)).toBe(true);
+    expect(configs.every((config) => config.activeMaxSamplesPerTick === 32)).toBe(true);
     expect(configs.every((config) => (config.maxTickDurationMs ?? 0) < config.intervalMs)).toBe(true);
   });
 
