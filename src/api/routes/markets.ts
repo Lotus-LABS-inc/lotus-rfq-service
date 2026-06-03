@@ -133,8 +133,9 @@ export const registerMarketCatalogRoutes = async (
         details: parsed.error.flatten()
       });
     }
+    const cacheQuery = marketCatalogListCacheQuery(parsed.data);
     const payload = await getCachedMarketCatalogResponse(
-      `markets:${stableQueryCacheKey(parsed.data)}`,
+      `markets:${stableQueryCacheKey(cacheQuery)}`,
       async () => {
         const marketLimit = parsed.data.limit === undefined ? undefined : resolveMarketFetchLimit(parsed.data.limit, parsed.data);
         const markets = await deps.marketCatalogRepository.listMarkets({
@@ -162,8 +163,8 @@ export const registerMarketCatalogRoutes = async (
       {
         cacheDegraded: false,
         sharedCache: deps.marketCatalogSnapshotCache,
-        sharedFallbacks: marketCatalogSnapshotFallbacks(parsed.data),
-        sharedWriteKeys: marketCatalogSnapshotWriteKeys(parsed.data)
+        sharedFallbacks: marketCatalogSnapshotFallbacks(cacheQuery),
+        sharedWriteKeys: marketCatalogSnapshotWriteKeys(cacheQuery)
       }
     );
     queueMarketCatalogOrderbookWarmup(payload, deps.marketDataViewService);
@@ -931,19 +932,61 @@ const marketCatalogAllRouteAliases = (
 
 const pickBestMarketCatalogResponse = <T extends Record<string, unknown>>(values: readonly T[]): T | null => {
   let best: T | null = null;
-  let bestCount = -1;
+  let bestScore: MarketCatalogResponseScore | null = null;
   for (const value of values) {
-    const count = Array.isArray(value.markets)
-      ? value.markets.length
-      : typeof value.count === "number"
-        ? value.count
-        : 0;
-    if (count > bestCount) {
+    const score = marketCatalogResponseScore(value);
+    if (!bestScore || compareMarketCatalogResponseScore(score, bestScore) > 0) {
       best = value;
-      bestCount = count;
+      bestScore = score;
     }
   }
   return best;
+};
+
+interface MarketCatalogResponseScore {
+  marketCount: number;
+  readyVenueCount: number;
+  materialized: number;
+}
+
+const marketCatalogResponseScore = (value: Record<string, unknown>): MarketCatalogResponseScore => {
+  const markets = Array.isArray(value.markets) ? value.markets : [];
+  return {
+    marketCount: markets.length > 0
+      ? markets.length
+      : typeof value.count === "number"
+        ? value.count
+        : 0,
+    readyVenueCount: markets.reduce((sum, market) => sum + marketReadyVenueCount(market), 0),
+    materialized: value.materialized === true ? 1 : 0
+  };
+};
+
+const compareMarketCatalogResponseScore = (
+  left: MarketCatalogResponseScore,
+  right: MarketCatalogResponseScore
+): number => {
+  if (left.marketCount !== right.marketCount) return left.marketCount - right.marketCount;
+  if (left.readyVenueCount !== right.readyVenueCount) return left.readyVenueCount - right.readyVenueCount;
+  return left.materialized - right.materialized;
+};
+
+const marketReadyVenueCount = (value: unknown): number => {
+  if (typeof value !== "object" || value === null) {
+    return 0;
+  }
+  const record = value as { quoteReadyVenueCount?: unknown; quoteReadyVenues?: unknown };
+  if (Array.isArray(record.quoteReadyVenues)) {
+    return record.quoteReadyVenues.length;
+  }
+  if (typeof record.quoteReadyVenueCount === "number") {
+    return record.quoteReadyVenueCount;
+  }
+  if (typeof record.quoteReadyVenueCount === "string") {
+    const parsed = Number(record.quoteReadyVenueCount);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
 };
 
 const sliceMarketCatalogResponse = <T extends Record<string, unknown>>(value: T, limit: number): T => {
@@ -965,6 +1008,18 @@ const stableQueryCacheKey = (query: z.infer<typeof listQuerySchema>): string =>
       }
       return memo;
     }, {}));
+
+const marketCatalogListCacheQuery = (
+  query: z.infer<typeof listQuerySchema>
+): z.infer<typeof listQuerySchema> => {
+  if (
+    query.quoteReadyOnly === true
+    && (query.routeCoverage === undefined || query.routeCoverage === "all" || query.routeCoverage === "single")
+  ) {
+    return { ...query, routeCoverage: "single" };
+  }
+  return query;
+};
 
 const withReadinessTimeout = async <T>(
   promise: Promise<T>,

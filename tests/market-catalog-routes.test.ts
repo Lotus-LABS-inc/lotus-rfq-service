@@ -730,9 +730,47 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
+  it("uses one primary cache key for equivalent quote-ready all and single coverage requests", async () => {
+    const repository = new FakeMarketCatalogRepository();
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: []
+          }];
+        }
+      }
+    });
+
+    const all = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&routeCoverage=all&limit=37"
+    });
+    const single = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&routeCoverage=single&limit=37"
+    });
+
+    expect(all.statusCode).toBe(200);
+    expect(single.statusCode).toBe(200);
+    expect(repository.filters).toHaveLength(1);
+    expect(all.json()).toMatchObject({ count: 1 });
+    expect(single.json()).toMatchObject({ count: 1 });
+
+    await app.close();
+  });
+
   it("prefers fresh shared quote-ready snapshots over local in-memory catalog cache", async () => {
     const repository = new FakeMarketCatalogRepository();
     const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    const freshTimestamp = new Date().toISOString();
     const app = Fastify({ logger: false });
     await registerMarketCatalogRoutes(app, {
       marketCatalogRepository: repository,
@@ -744,7 +782,7 @@ describe("market catalog routes", () => {
             quoteStatus: "live" as const,
             quoteReadyVenueCount: 1,
             quoteReadyVenues: ["POLYMARKET"],
-            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            lastQuoteAt: freshTimestamp,
             quoteBlockers: []
           }];
         }
@@ -762,7 +800,7 @@ describe("market catalog routes", () => {
       quoteStatus: "partial" as const,
       quoteReadyVenueCount: 2,
       quoteReadyVenues: ["LIMITLESS", "POLYMARKET"],
-      lastQuoteAt: "2026-05-21T23:41:15.000Z"
+      lastQuoteAt: freshTimestamp
     };
     snapshotCache.values.set("markets:{\"limit\":10,\"quoteReadyOnly\":true}", {
       markets: [sharedMarket],
