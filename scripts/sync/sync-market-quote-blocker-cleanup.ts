@@ -730,6 +730,15 @@ async function applyPredictRepairs(db: Pool, rows: readonly PredictRepairCandida
         })
       ]
     );
+    if (row.canonicalMarketId) {
+      await db.query(
+        `DELETE FROM venue_orderbook_latest_snapshots
+          WHERE venue IN ('PREDICT', 'PREDICT_FUN')
+            AND canonical_market_id = $1
+            AND blockers ? 'PREDICT_FUN_TOKEN_ID_MISSING'`,
+        [row.canonicalMarketId]
+      );
+    }
   }
 }
 
