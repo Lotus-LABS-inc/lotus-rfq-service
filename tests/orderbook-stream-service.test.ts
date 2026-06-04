@@ -1020,6 +1020,57 @@ describe("OrderbookStreamService", () => {
     expect(refresh).toHaveBeenCalledTimes(5);
   });
 
+  it("does not put the whole venue on cooldown when one REST target returns no snapshot", async () => {
+    const connector = new FakeConnector("LIMITLESS");
+    const refresh = vi.fn(async (target: VenueOrderbookSubscriptionTarget) => {
+      if (target.canonicalMarketId === "canonical-1") {
+        return null;
+      }
+      return {
+        ...snapshot(target),
+        source: "REST" as const,
+        quoteQuality: "FULL_DEPTH_REST" as const
+      };
+    });
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [
+            { canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: now },
+            { canonicalMarketId: "canonical-2", canonicalOutcomeId: "YES", lastSeenAt: now }
+          ];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness(input) {
+          return [{
+            venue: "LIMITLESS",
+            approvedVenueMarketId: `${input.canonicalMarketId}-approved`,
+            venueMarketId: `${input.canonicalMarketId}-book`,
+            venueOutcomeId: "YES",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors: [connector],
+      restRefreshers: [{ venue: "LIMITLESS", refresh }],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now,
+      config: {
+        maxRestRefreshTargetsPerTick: 10,
+        restRefreshVenuePolicies: {
+          LIMITLESS: { maxTargetsPerSweep: 2 }
+        }
+      }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 1 });
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
   it("uses longer venue-specific REST failure cooldowns for slow venues", async () => {
     const connector = new FakeConnector("OPINION");
     const refresh = vi.fn(async () => null);

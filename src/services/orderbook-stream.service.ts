@@ -401,7 +401,7 @@ export class OrderbookStreamService {
             null
           );
           if (!snapshot) {
-            this.markRestRefreshFailure(target, nowMs);
+            this.markRestRefreshFailure(target, nowMs, "target");
             continue;
           }
           this.restRefreshFailureCooldowns.delete(key);
@@ -410,7 +410,7 @@ export class OrderbookStreamService {
             this.onSnapshot(snapshot, fanoutTarget);
           }
         } catch (error) {
-          this.markRestRefreshFailure(target, nowMs);
+          this.markRestRefreshFailure(target, nowMs, "venue");
           this.deps.logger.warn(
             {
               err: error,
@@ -440,16 +440,22 @@ export class OrderbookStreamService {
     return (until !== undefined && until > nowMs) || (venueUntil !== undefined && venueUntil > nowMs);
   }
 
-  private markRestRefreshFailure(target: VenueOrderbookSubscriptionTarget, nowMs: number): void {
+  private markRestRefreshFailure(
+    target: VenueOrderbookSubscriptionTarget,
+    nowMs: number,
+    scope: "target" | "venue"
+  ): void {
     const cooldownMs = this.restRefreshFailureCooldownMsFor(target);
     this.restRefreshFailureCooldowns.set(
       restRefreshKey(target),
       nowMs + cooldownMs
     );
-    this.restRefreshVenueFailureCooldowns.set(
-      normalizeVenue(target.venue),
-      nowMs + cooldownMs
-    );
+    if (scope === "venue") {
+      this.restRefreshVenueFailureCooldowns.set(
+        normalizeVenue(target.venue),
+        nowMs + cooldownMs
+      );
+    }
   }
 
   private restRefreshFailureCooldownMsFor(target: VenueOrderbookSubscriptionTarget): number {
