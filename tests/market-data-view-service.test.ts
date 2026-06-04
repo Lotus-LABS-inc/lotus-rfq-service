@@ -9,6 +9,7 @@ const snapshot = (input: {
   receivedAt: Date;
   bid: string;
   ask: string;
+  missingFactors?: readonly string[] | undefined;
 }): NormalizedVenueQuoteSnapshot => ({
   venue: input.venue,
   venueMarketId: input.venueMarketId,
@@ -19,7 +20,7 @@ const snapshot = (input: {
   receivedAt: input.receivedAt,
   bids: [{ price: input.bid, size: "100" }],
   asks: [{ price: input.ask, size: "100" }],
-  missingFactors: [],
+  missingFactors: input.missingFactors ?? [],
   blockers: [],
   metadata: {}
 });
@@ -1128,6 +1129,40 @@ describe("LiveMarketDataViewService", () => {
       venueCount: 2,
       venues: ["LIMITLESS", "POLYMARKET"],
       freshnessMs: 0
+    });
+  });
+
+  it("keeps live display prices when only execution metadata factors are missing", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    const service = new LiveMarketDataViewService({
+      getQuoteSnapshotReport: async () => ({ snapshots: [], blocked: [] })
+    }, {
+      now: () => now,
+      liveOrderbookSource: {
+        get: async () => [
+          snapshot({
+            venue: "OPINION",
+            venueMarketId: "opinion-live",
+            venueOutcomeId: "yes",
+            receivedAt: now,
+            bid: "0.44",
+            ask: "0.46",
+            missingFactors: ["FEE_DISCOVERY"]
+          })
+        ]
+      }
+    });
+
+    const prices = await service.getLivePrices({
+      items: [{ marketId: "market-1", outcomeId: "yes" }]
+    });
+
+    expect(prices.prices[0]).toMatchObject({
+      status: "live",
+      price: "0.45",
+      bestVenue: "OPINION",
+      venueCount: 1,
+      venues: ["OPINION"]
     });
   });
 

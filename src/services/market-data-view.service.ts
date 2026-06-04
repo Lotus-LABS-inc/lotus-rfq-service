@@ -1105,7 +1105,7 @@ const isDisplayUsableOrderbook = (orderbook: MarketOrderbookResponse): boolean =
   (orderbook.status === "live" || orderbook.status === "partial");
 
 const isLiveTradableOrderbookVenue = (venue: MarketOrderbookVenue): boolean =>
-  venue.snapshotStatus === "live" && venue.blockers.length === 0;
+  venue.snapshotStatus === "live" && (venue.bestBid !== null || venue.bestAsk !== null);
 
 const isDeferredOrderbook = (orderbook: MarketOrderbookResponse): boolean =>
   orderbook.blockers.some((blocker) =>
