@@ -193,12 +193,14 @@ const mergeReadinessSnapshots = (
     ...hot.quoteReadyVenues.map(normalizeVenue),
     ...fallback.quoteReadyVenues.map(normalizeVenue)
   ])].sort();
+  const readyVenueSet = new Set(quoteReadyVenues);
   const quoteBlockers = [
     ...hot.quoteBlockers.filter((blocker) =>
-      blocker.reason !== "LIVE_QUOTE_SNAPSHOT_MISSING" ||
-      !fallbackReadyVenues.has(normalizeVenue(blocker.venue))
+      !isRedundantDisplayBlocker(blocker, fallbackReadyVenues)
     ),
-    ...fallback.quoteBlockers
+    ...fallback.quoteBlockers.filter((blocker) =>
+      !isRedundantDisplayBlocker(blocker, readyVenueSet)
+    )
   ];
   return {
     canonicalMarketId: hot.canonicalMarketId,
@@ -237,6 +239,15 @@ const isDisplayOnlyExecutionBlocker = (blocker: string): boolean => {
   const normalized = blocker.trim().toUpperCase();
   return normalized === "PREDICT_FUN_TOKEN_ID_MISSING" ||
     normalized === "OPINION_TOKEN_ID_MISSING";
+};
+
+const isRedundantDisplayBlocker = (
+  blocker: MarketQuoteReadinessSnapshot["quoteBlockers"][number],
+  readyVenueSet: ReadonlySet<string>
+): boolean => {
+  const normalized = blocker.reason.trim().toUpperCase();
+  return readyVenueSet.has(normalizeVenue(blocker.venue)) &&
+    (normalized === "LIVE_QUOTE_SNAPSHOT_MISSING" || isDisplayOnlyExecutionBlocker(normalized));
 };
 
 const normalizeVenue = (venue: string): string => {

@@ -799,7 +799,7 @@ const sanitizeMarketCatalogMarketDisplayBlockers = (market: MarketCatalogMarket)
     return market;
   }
   const quoteBlockers = market.quoteBlockers.filter((blocker) =>
-    !isRedundantReadyVenueMissingBlocker(blocker, readyVenueSet)
+    !isRedundantReadyVenueDisplayBlocker(blocker, readyVenueSet)
   );
   return quoteBlockers.length === market.quoteBlockers.length
     ? market
@@ -898,7 +898,7 @@ const aggregateMarketQuoteReadiness = (
     quoteReadyVenues,
     quoteBlockers: [...new Map(readiness
       .flatMap((item) => item.quoteBlockers)
-      .filter((blocker) => !isRedundantReadyVenueMissingBlocker(blocker, readyVenueSet))
+      .filter((blocker) => !isRedundantReadyVenueDisplayBlocker(blocker, readyVenueSet))
       .map((blocker) => [`${blocker.venue}:${blocker.reason}:${blocker.venueMarketId ?? ""}:${blocker.venueOutcomeId ?? ""}`, blocker] as const)
     ).values()],
     lastQuoteAt: readiness
@@ -920,12 +920,19 @@ const pickMarketQuoteStatus = (readiness: readonly MarketQuoteReadinessSnapshot[
   return "unavailable";
 };
 
-const isRedundantReadyVenueMissingBlocker = (
+const isRedundantReadyVenueDisplayBlocker = (
   blocker: MarketQuoteReadinessSnapshot["quoteBlockers"][number],
   readyVenueSet: ReadonlySet<string>
 ): boolean =>
-  blocker.reason.trim().toUpperCase() === "LIVE_QUOTE_SNAPSHOT_MISSING" &&
-  readyVenueSet.has(normalizeQuoteBlockerVenue(blocker.venue));
+  readyVenueSet.has(normalizeQuoteBlockerVenue(blocker.venue)) &&
+  isDisplayOnlyQuoteBlocker(blocker.reason);
+
+const isDisplayOnlyQuoteBlocker = (reason: string): boolean => {
+  const normalized = reason.trim().toUpperCase();
+  return normalized === "LIVE_QUOTE_SNAPSHOT_MISSING" ||
+    normalized === "PREDICT_FUN_TOKEN_ID_MISSING" ||
+    normalized === "OPINION_TOKEN_ID_MISSING";
+};
 
 const normalizeQuoteBlockerVenue = (venue: string): string => {
   const normalized = venue.trim().toUpperCase();
