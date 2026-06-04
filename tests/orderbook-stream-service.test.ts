@@ -747,7 +747,11 @@ describe("OrderbookStreamService", () => {
       now: () => now,
       config: {
         maxRestRefreshTargetsPerVenuePerTick: 1,
-        maxRestRefreshTargetsPerTick: 10
+        maxRestRefreshTargetsPerTick: 10,
+        restRefreshVenuePolicies: {
+          POLYMARKET: { maxTargetsPerSweep: 1 },
+          LIMITLESS: { maxTargetsPerSweep: 1 }
+        }
       }
     });
 
@@ -955,17 +959,65 @@ describe("OrderbookStreamService", () => {
       }
     });
 
-    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 13 });
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 16 });
     const countsByVenue = new Map<string, number>();
     for (const [target] of refresh.mock.calls) {
       countsByVenue.set(target.venue, (countsByVenue.get(target.venue) ?? 0) + 1);
     }
     expect(countsByVenue).toEqual(new Map([
       ["POLYMARKET", 4],
-      ["PREDICT_FUN", 3],
-      ["LIMITLESS", 3],
-      ["OPINION", 3]
+      ["PREDICT_FUN", 4],
+      ["LIMITLESS", 4],
+      ["OPINION", 4]
     ]));
+  });
+
+  it("lets venue-specific REST policies raise a venue above the generic per-venue cap", async () => {
+    const connector = new FakeConnector("LIMITLESS");
+    const refresh = vi.fn(async (target: VenueOrderbookSubscriptionTarget) => ({
+      ...snapshot(target),
+      source: "REST" as const,
+      quoteQuality: "FULL_DEPTH_REST" as const
+    }));
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return Array.from({ length: 5 }, (_, index) => ({
+            canonicalMarketId: `limitless-${index}`,
+            canonicalOutcomeId: "YES",
+            lastSeenAt: now
+          }));
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness(input) {
+          return [{
+            venue: "LIMITLESS",
+            approvedVenueMarketId: `${input.canonicalMarketId}-approved`,
+            venueMarketId: `${input.canonicalMarketId}-book`,
+            venueOutcomeId: "YES",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors: [connector],
+      restRefreshers: [{ venue: "LIMITLESS", refresh }],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now,
+      config: {
+        maxRestRefreshTargetsPerTick: 10,
+        maxRestRefreshTargetsPerVenuePerTick: 1,
+        restRefreshVenuePolicies: {
+          LIMITLESS: { maxTargetsPerSweep: 5 }
+        }
+      }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 5 });
+    expect(refresh).toHaveBeenCalledTimes(5);
   });
 
   it("uses longer venue-specific REST failure cooldowns for slow venues", async () => {
@@ -1101,7 +1153,10 @@ describe("OrderbookStreamService", () => {
       now: () => currentNow,
       config: {
         maxRestRefreshTargetsPerVenuePerTick: 2,
-        restRefreshIntervalMs: 10_000
+        restRefreshIntervalMs: 10_000,
+        restRefreshVenuePolicies: {
+          PREDICT_FUN: { maxTargetsPerSweep: 2 }
+        }
       }
     });
 

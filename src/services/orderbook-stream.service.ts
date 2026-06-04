@@ -103,15 +103,15 @@ const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
   maxTargetsPerConnectorCall: 40,
   subscriptionHoldMs: 120_000,
   restRefreshIntervalMs: 10_000,
-  maxRestRefreshTargetsPerTick: 16,
+  maxRestRefreshTargetsPerTick: 24,
   maxRestRefreshTargetsPerVenuePerTick: 3,
   restRefreshTimeoutMs: 2_000,
   restRefreshFailureCooldownMs: 60_000,
   restRefreshVenuePolicies: {
-    POLYMARKET: { maxTargetsPerSweep: 4, failureCooldownMs: 60_000 },
-    LIMITLESS: { maxTargetsPerSweep: 3, failureCooldownMs: 300_000 },
-    PREDICT_FUN: { maxTargetsPerSweep: 3, failureCooldownMs: 90_000 },
-    OPINION: { maxTargetsPerSweep: 3, failureCooldownMs: 180_000 }
+    POLYMARKET: { maxTargetsPerSweep: 5, failureCooldownMs: 60_000 },
+    LIMITLESS: { maxTargetsPerSweep: 5, failureCooldownMs: 300_000 },
+    PREDICT_FUN: { maxTargetsPerSweep: 4, failureCooldownMs: 90_000 },
+    OPINION: { maxTargetsPerSweep: 4, failureCooldownMs: 180_000 }
   },
   latestSnapshotPersistIntervalMs: 30_000,
   latestSnapshotPersistMinSpacingMs: 250,
@@ -647,13 +647,8 @@ const limitTargetsPerVenue = (
   const counts = new Map<string, number>();
   return (target) => {
     const venue = normalizeVenue(target.venue);
-    const venueLimit = Math.max(
-      0,
-      Math.min(
-        defaultMaxPerVenue,
-        Math.floor(venuePolicies[venue]?.maxTargetsPerSweep ?? defaultMaxPerVenue)
-      )
-    );
+    const configuredLimit = venuePolicies[venue]?.maxTargetsPerSweep;
+    const venueLimit = Math.max(0, Math.floor(configuredLimit ?? defaultMaxPerVenue));
     if (venueLimit === 0) {
       return false;
     }
