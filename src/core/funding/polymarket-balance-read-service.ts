@@ -444,8 +444,17 @@ export class PolymarketFundingBalanceReadService {
       token_id: input.tokenId,
       signature_type: signatureType
     };
-    await client.updateBalanceAllowance?.(params);
-    const response = await client.getBalanceAllowance(params);
+    let response: BalanceAllowanceResponse;
+    try {
+      await client.updateBalanceAllowance?.(params);
+      response = await client.getBalanceAllowance(params);
+    } catch (error) {
+      const fallback = await this.readConditionalTokenApprovalFallback(input, funderAddress);
+      if (fallback) {
+        return fallback;
+      }
+      throw error;
+    }
     const allowanceSpenders = clobAllowanceSpendersFromResponse(response);
     const clobBalance = collateralAtomicUnitsToUsdc(response.balance);
     let tokenBalance = clobBalance;
@@ -478,6 +487,52 @@ export class PolymarketFundingBalanceReadService {
         spenderAddress: spender.spenderAddress,
         allowance: decimalToPlainString(spender.allowance)
       }))
+    };
+  }
+
+  private async readConditionalTokenApprovalFallback(
+    input: PolymarketFundingBalanceReadInput & { tokenId: string },
+    funderAddress: string | null
+  ): Promise<{
+    tokenId: string;
+    tokenBalance: string;
+    tokenAllowance: string;
+    clobAllowanceSpenders: PolymarketClobAllowanceSpender[];
+  } | null> {
+    if (this.config.onchainFallbackEnabled === false || !isHexAddress(funderAddress ?? undefined)) {
+      return null;
+    }
+    let tokenBalance: DecimalValue | null = null;
+    const onchainBalance = await this.readOnchainErc1155Balance(
+      funderAddress!,
+      this.config.conditionalTokensAddress ?? "",
+      input.tokenId
+    ).catch(() => null);
+    if (onchainBalance) {
+      tokenBalance = onchainBalance;
+    }
+    const dataApiPosition = await this.dataApiClient.findPosition({
+      proxyWallet: funderAddress,
+      assetId: input.tokenId
+    }).catch(() => null);
+    if (dataApiPosition) {
+      const dataApiSize = new Decimal(dataApiPosition.size);
+      if (dataApiSize.isFinite() && !dataApiSize.isNegative() && (!tokenBalance || dataApiSize.greaterThan(tokenBalance))) {
+        tokenBalance = dataApiSize;
+      }
+    }
+    if (!tokenBalance) {
+      return null;
+    }
+    const approved = tokenBalance.greaterThan(0)
+      ? await this.readAnyConditionalTokenApproval(funderAddress, [])
+      : false;
+    const tokenAllowance = approved ? tokenBalance : new Decimal(0);
+    return {
+      tokenId: input.tokenId,
+      tokenBalance: decimalToPlainString(tokenBalance),
+      tokenAllowance: decimalToPlainString(tokenAllowance),
+      clobAllowanceSpenders: []
     };
   }
 
@@ -547,6 +602,39 @@ export class PolymarketFundingBalanceReadService {
     const raw = await response.json() as { result?: unknown };
     if (typeof raw.result !== "string" || !/^0x[a-fA-F0-9]+$/.test(raw.result)) {
       return new Decimal(0);
+    }
+    const atomic = BigInt(raw.result);
+    return new Decimal(atomic.toString()).div(new Decimal(10).pow(COLLATERAL_TOKEN_DECIMALS));
+  }
+
+  private async readOnchainErc1155Balance(
+    ownerAddress: string,
+    tokenAddress: string,
+    tokenId: string
+  ): Promise<ReturnType<typeof toDecimal> | null> {
+    const rpcUrl = this.config.polygonRpcUrl;
+    if (!nonEmpty(rpcUrl) || !isHexAddress(ownerAddress) || !isHexAddress(tokenAddress) || !/^\d+$/.test(tokenId)) {
+      return null;
+    }
+    const cleanOwner = ownerAddress.toLowerCase().replace(/^0x/, "").padStart(64, "0");
+    const cleanTokenId = BigInt(tokenId).toString(16).padStart(64, "0");
+    const data = `0x00fdd58e${cleanOwner}${cleanTokenId}`;
+    const response = await this.fetchImpl(rpcUrl!, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_call",
+        params: [{ to: tokenAddress, data }, "latest"]
+      })
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const raw = await response.json() as { result?: unknown };
+    if (typeof raw.result !== "string" || !/^0x[a-fA-F0-9]+$/.test(raw.result)) {
+      return null;
     }
     const atomic = BigInt(raw.result);
     return new Decimal(atomic.toString()).div(new Decimal(10).pow(COLLATERAL_TOKEN_DECIMALS));

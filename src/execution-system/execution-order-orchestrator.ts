@@ -8,6 +8,7 @@ import type {
   TradeSide
 } from "./executable-routing.js";
 import {
+  assertPolymarketMarketBuyRoutePrecision,
   SignedTradeBundleError,
   type LiveSubmitReadinessSnapshot,
   type SignedTradeBundleService,
@@ -189,6 +190,8 @@ export class ExecutionOrderOrchestratorV1 {
   ) {}
 
   public async preview(input: ExecutionOrderPreviewInput): Promise<ExecutionOrderResponse> {
+    const normalizedInput = normalizeExecutionPreviewInput(input);
+    input = normalizedInput;
     const intentKey = executionOrderIntentKey(input);
     const cached = await this.loadCachedIntent(input.userId, intentKey);
     if (cached) {
@@ -1102,6 +1105,14 @@ export const assertPolymarketFokStillExecutable = async (input: {
         "Polymarket sell route is missing the executable conditional token id. Refresh market metadata before selling."
       );
     }
+    if (input.quote.side === "buy") {
+      assertPolymarketMarketBuyRoutePrecision({
+        size: leg.size,
+        price: leg.price,
+        tickSize: polymarketTickSizeFromMetadata(leg.metadata) ?? undefined,
+        slippageToleranceBps: input.slippageToleranceBps
+      });
+    }
     const signedOrder = input.signedLegs ? findPolymarketSignedOrder(input.signedLegs, index) : null;
     const signedOrderType = signedOrder ? asString(recordField(recordField(signedOrder.signedPayload, "data") ?? {}, "orderType")) : null;
     if (signedOrderType && signedOrderType.toUpperCase() !== "FOK") {
@@ -1298,6 +1309,18 @@ const executionOrderIntentKey = (input: ExecutionOrderPreviewInput): string =>
     normalizeSlippageToleranceBps(input.slippageToleranceBps)
   ].join("\u0000");
 
+const EXECUTION_MARKET_VENUE_SUFFIX_PATTERN = /:(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$/i;
+
+const normalizeExecutionPreviewInput = (input: ExecutionOrderPreviewInput): ExecutionOrderPreviewInput => {
+  const normalizedMarketId = normalizeExecutionMarketId(input.marketId);
+  return normalizedMarketId === input.marketId
+    ? input
+    : { ...input, marketId: normalizedMarketId };
+};
+
+const normalizeExecutionMarketId = (marketId: string): string =>
+  marketId.trim().replace(EXECUTION_MARKET_VENUE_SUFFIX_PATTERN, "");
+
 const normalizeAmountKey = (value: string): string => {
   try {
     return new Decimal(value).toDecimalPlaces(8).toString();
@@ -1384,6 +1407,7 @@ const toOrderResponse = (
 
 const routeSummary = (quote: ExecutableTradeQuote): Record<string, unknown> => ({
   routeType: quote.routeType,
+  routeShape: routeShape(quote.venuePath),
   venuePath: quote.venuePath,
   executableAmount: quote.executableAmount,
   skippedAmount: quote.skippedAmount,
@@ -1394,6 +1418,15 @@ const routeSummary = (quote: ExecutableTradeQuote): Record<string, unknown> => (
     requiresUserSignature: leg.requiresUserSignature
   }))
 });
+
+const routeShape = (venuePath: readonly string[]): "SINGLE_VENUE" | "PAIR" | "TRI" | "STRICT_ALL" =>
+  venuePath.length <= 1
+    ? "SINGLE_VENUE"
+    : venuePath.length === 2
+      ? "PAIR"
+      : venuePath.length === 3
+        ? "TRI"
+        : "STRICT_ALL";
 
 const priceSummary = (quote: ExecutableTradeQuote): Record<string, unknown> => ({
   expectedPrice: quote.expectedPrice,
