@@ -53,8 +53,8 @@ class FakeConnector implements VenueOrderbookStreamConnector {
     this.disconnected += 1;
   }
 
-  public emit(target: VenueOrderbookSubscriptionTarget): void {
-    this.listener?.(snapshot(target), target);
+  public emit(target: VenueOrderbookSubscriptionTarget, override: Partial<NormalizedVenueQuoteSnapshot> = {}): void {
+    this.listener?.({ ...snapshot(target), ...override }, target);
   }
 }
 
@@ -216,7 +216,7 @@ describe("OrderbookStreamService", () => {
     expect(event.topic).toBe(marketOrderbookTopic("OFFICE_WINNER|SEOUL|MAYOR|2026", "YES"));
     expect(event.payload).toMatchObject({
       schemaVersion: "lotus-orderbook-stream-v2",
-      updateType: "delta",
+      updateType: "snapshot",
       seq: 1,
       canonicalMarketId: "OFFICE_WINNER|SEOUL|MAYOR|2026",
       canonicalOutcomeId: "YES",
@@ -232,6 +232,30 @@ describe("OrderbookStreamService", () => {
     expect(event.payload).toMatchObject({
       checksum: expect.stringMatching(/^[a-f0-9]{16}$/)
     });
+    connector.emit(connector.subscribed[0]!, {
+      bids: [{ price: "0.50", size: "12" }],
+      asks: [{ price: "0.52", size: "8" }]
+    });
+    const secondCall = publish.mock.calls[1] as unknown[] | undefined;
+    const secondMessage = secondCall?.[1];
+    expect(typeof secondMessage).toBe("string");
+    const secondEvent = JSON.parse(secondMessage as string) as Record<string, unknown>;
+    expect(secondEvent.payload).toMatchObject({
+      updateType: "delta",
+      seq: 2,
+      bestBid: "0.50",
+      bestAsk: "0.52",
+      bidDeltas: [
+        { price: "0.50", size: "12" },
+        { price: "0.49", size: "0" }
+      ],
+      askDeltas: [
+        { price: "0.52", size: "8" },
+        { price: "0.51", size: "0" }
+      ]
+    });
+    expect(secondEvent.payload).not.toHaveProperty("bids");
+    expect(secondEvent.payload).not.toHaveProperty("asks");
     await vi.waitFor(() => expect(upsertLatestMany).toHaveBeenCalledTimes(1));
     expect(upsertLatestMany).toHaveBeenCalledWith([
       expect.objectContaining({

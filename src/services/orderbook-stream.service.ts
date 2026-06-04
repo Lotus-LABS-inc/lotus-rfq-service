@@ -68,6 +68,21 @@ export interface OrderbookStreamVenueRestPolicy {
   failureCooldownMs?: number | undefined;
 }
 
+interface PublishedOrderbookSideDeltas {
+  changed: readonly NormalizedQuoteLevel[];
+  removed: readonly NormalizedQuoteLevel[];
+}
+
+interface PublishedOrderbookDeltas {
+  bids: PublishedOrderbookSideDeltas;
+  asks: PublishedOrderbookSideDeltas;
+}
+
+interface PublishedOrderbookLevels {
+  bids: readonly NormalizedQuoteLevel[];
+  asks: readonly NormalizedQuoteLevel[];
+}
+
 export interface VenueOrderbookRestRefresher {
   readonly venue: string;
   refresh(target: VenueOrderbookSubscriptionTarget): Promise<NormalizedVenueQuoteSnapshot | null>;
@@ -139,6 +154,7 @@ export class OrderbookStreamService {
   private readonly restRefreshVenueFailureCooldowns = new Map<string, number>();
   private readonly lastLatestSnapshotPersistBySubscription = new Map<string, number>();
   private readonly sequenceByTopic = new Map<string, number>();
+  private readonly lastPublishedLevelsBySubscription = new Map<string, PublishedOrderbookLevels>();
   private backgroundTargetCursor = 0;
   private lastLatestSnapshotPersistAt = 0;
   private lastRestRefreshSweepAt = 0;
@@ -540,13 +556,20 @@ export class OrderbookStreamService {
     const blockers = sanitizeStrings(snapshot.blockers ?? []);
     const bids = snapshot.bids.slice(0, 5);
     const asks = snapshot.asks.slice(0, 5);
+    const publishKey = subscriptionKey(target);
+    const previousLevels = this.lastPublishedLevelsBySubscription.get(publishKey);
+    const deltas = previousLevels
+      ? calculatePublishedOrderbookDeltas(previousLevels, { bids, asks })
+      : null;
+    const requiresFullBook = !previousLevels || blockers.length > 0;
+    this.lastPublishedLevelsBySubscription.set(publishKey, { bids, asks });
     const event = {
       type: "MARKET_ORDERBOOK_UPDATE",
       topic,
       emittedAt: this.now().toISOString(),
       payload: {
         schemaVersion: ORDERBOOK_STREAM_SCHEMA_VERSION,
-        updateType: "delta",
+        updateType: requiresFullBook ? "snapshot" : "delta",
         seq: this.nextSequence(topic),
         canonicalMarketId: target.canonicalMarketId,
         canonicalOutcomeId: target.canonicalOutcomeId ?? null,
@@ -566,8 +589,10 @@ export class OrderbookStreamService {
         venueCount: 1,
         liveVenueCount: blockers.length > 0 || (!bestBid && !bestAsk) ? 0 : 1,
         blockers,
-        bids,
-        asks,
+        ...(requiresFullBook ? { bids, asks } : {
+          bidDeltas: encodePublishedOrderbookDeltas(deltas?.bids),
+          askDeltas: encodePublishedOrderbookDeltas(deltas?.asks)
+        }),
         checksum: calculateOrderbookStreamChecksum({
           canonicalMarketId: target.canonicalMarketId,
           canonicalOutcomeId: target.canonicalOutcomeId ?? null,
@@ -978,6 +1003,34 @@ const sumLevels = (levels: readonly NormalizedQuoteLevel[]): string => {
     return "0";
   }
 };
+
+const calculatePublishedOrderbookDeltas = (
+  previous: PublishedOrderbookLevels,
+  current: PublishedOrderbookLevels
+): PublishedOrderbookDeltas => ({
+  bids: calculatePublishedSideDeltas(previous.bids, current.bids),
+  asks: calculatePublishedSideDeltas(previous.asks, current.asks)
+});
+
+const calculatePublishedSideDeltas = (
+  previous: readonly NormalizedQuoteLevel[],
+  current: readonly NormalizedQuoteLevel[]
+): PublishedOrderbookSideDeltas => {
+  const previousByPrice = new Map(previous.map((level) => [level.price, level]));
+  const currentByPrice = new Map(current.map((level) => [level.price, level]));
+  const changed = current.filter((level) => previousByPrice.get(level.price)?.size !== level.size);
+  const removed = previous
+    .filter((level) => !currentByPrice.has(level.price))
+    .map((level) => ({ price: level.price, size: "0" }));
+  return { changed, removed };
+};
+
+const encodePublishedOrderbookDeltas = (
+  deltas: PublishedOrderbookSideDeltas | undefined
+): readonly NormalizedQuoteLevel[] => [
+  ...(deltas?.changed ?? []),
+  ...(deltas?.removed ?? [])
+];
 
 export const calculateOrderbookStreamChecksum = (input: {
   canonicalMarketId: string;
