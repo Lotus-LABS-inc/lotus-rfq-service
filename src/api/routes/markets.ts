@@ -1407,7 +1407,7 @@ const aggregateMarketQuoteReadiness = (
   const quoteReadyVenueCount = quoteReadyVenues.length > 0
     ? quoteReadyVenues.length
     : tradableReadiness.reduce((sum, item) => sum + item.quoteReadyVenueCount, 0);
-  const readyVenueSet = new Set(quoteReadyVenues);
+  const readyVenueSet = new Set(quoteReadyVenues.map(normalizeQuoteBlockerVenue));
   return {
     quoteStatus: pickMarketQuoteStatus(readiness),
     quoteReadyVenueCount,
@@ -1442,8 +1442,13 @@ const isRedundantReadyVenueMissingBlocker = (
   blocker: MarketQuoteReadinessSnapshot["quoteBlockers"][number],
   readyVenueSet: ReadonlySet<string>
 ): boolean =>
-  blocker.reason === "LIVE_QUOTE_SNAPSHOT_MISSING" &&
-  readyVenueSet.has(blocker.venue.trim().toUpperCase());
+  blocker.reason.trim().toUpperCase() === "LIVE_QUOTE_SNAPSHOT_MISSING" &&
+  readyVenueSet.has(normalizeQuoteBlockerVenue(blocker.venue));
+
+const normalizeQuoteBlockerVenue = (venue: string): string => {
+  const normalized = venue.trim().toUpperCase();
+  return normalized === "PREDICT" ? "PREDICT_FUN" : normalized;
+};
 
 const isTradableReadinessSnapshot = (snapshot: MarketQuoteReadinessSnapshot): boolean =>
   (snapshot.quoteStatus === "live" || snapshot.quoteStatus === "partial")

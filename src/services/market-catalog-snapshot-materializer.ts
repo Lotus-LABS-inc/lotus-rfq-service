@@ -794,7 +794,7 @@ export const formatMarketCatalogListMarkets = (
     : markets.map(sanitizeMarketCatalogMarketDisplayBlockers);
 
 const sanitizeMarketCatalogMarketDisplayBlockers = (market: MarketCatalogMarket): MarketCatalogMarket => {
-  const readyVenueSet = new Set((market.quoteReadyVenues ?? []).map((venue) => venue.trim().toUpperCase()));
+  const readyVenueSet = new Set((market.quoteReadyVenues ?? []).map(normalizeQuoteBlockerVenue));
   if (readyVenueSet.size === 0 || !market.quoteBlockers || market.quoteBlockers.length === 0) {
     return market;
   }
@@ -924,8 +924,13 @@ const isRedundantReadyVenueMissingBlocker = (
   blocker: MarketQuoteReadinessSnapshot["quoteBlockers"][number],
   readyVenueSet: ReadonlySet<string>
 ): boolean =>
-  blocker.reason === "LIVE_QUOTE_SNAPSHOT_MISSING" &&
-  readyVenueSet.has(blocker.venue.trim().toUpperCase());
+  blocker.reason.trim().toUpperCase() === "LIVE_QUOTE_SNAPSHOT_MISSING" &&
+  readyVenueSet.has(normalizeQuoteBlockerVenue(blocker.venue));
+
+const normalizeQuoteBlockerVenue = (venue: string): string => {
+  const normalized = venue.trim().toUpperCase();
+  return normalized === "PREDICT" ? "PREDICT_FUN" : normalized;
+};
 
 const isTradableReadinessSnapshot = (snapshot: MarketQuoteReadinessSnapshot): boolean =>
   (snapshot.quoteStatus === "live" || snapshot.quoteStatus === "partial")
