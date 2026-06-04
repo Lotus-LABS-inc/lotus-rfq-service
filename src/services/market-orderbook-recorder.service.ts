@@ -110,19 +110,19 @@ export const resolveMarketOrderbookRecorderDutyProfile = (
 export const buildMarketOrderbookRecorderConfigs = (
   profile: MarketOrderbookRecorderDutyProfile = "production"
 ): MarketOrderbookRecorderConfig[] => {
-  const laneCount = profile === "shared_staging" ? 1 : DEFAULT_MARKET_ORDERBOOK_RECORDER_LANES;
+  const laneCount = DEFAULT_MARKET_ORDERBOOK_RECORDER_LANES;
   const baseConfig: MarketOrderbookRecorderConfig = profile === "shared_staging"
     ? {
         ...DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG,
-        intervalMs: 15_000,
-        marketBatchSize: 18,
-        activeMarketBatchSize: 180,
-        activeMaxSamplesPerTick: 24,
-        priorityMarketBatchSize: 120,
-        maxSamplesPerTick: 36,
-        sampleConcurrency: 8,
-        maxTickDurationMs: 9_500,
-        sampleTimeoutMs: 1_600
+        intervalMs: 10_000,
+        marketBatchSize: 24,
+        activeMarketBatchSize: 250,
+        activeMaxSamplesPerTick: 36,
+        priorityMarketBatchSize: 180,
+        maxSamplesPerTick: 72,
+        sampleConcurrency: 10,
+        maxTickDurationMs: 8_500,
+        sampleTimeoutMs: 1_800
       }
     : {
         ...DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG

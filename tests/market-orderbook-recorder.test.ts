@@ -85,7 +85,7 @@ describe("MarketOrderbookRecorder", () => {
     expect(configs.every((config) => config.sampleConcurrency === 14)).toBe(true);
   });
 
-  it("uses a single shared staging recorder lane to avoid doubling venue polling on one VPS", () => {
+  it("uses bounded shared staging recorder lanes for stable VPS live quote coverage", () => {
     expect(resolveMarketOrderbookRecorderDutyProfile({ LOTUS_DEPLOY_ENV: "staging" })).toBe("shared_staging");
     expect(resolveMarketOrderbookRecorderDutyProfile({ APP_ENV: "vps staging" })).toBe("shared_staging");
 
@@ -93,19 +93,23 @@ describe("MarketOrderbookRecorder", () => {
       resolveMarketOrderbookRecorderDutyProfile({ LOTUS_DEPLOY_ENV: "staging" })
     );
 
-    expect(configs).toHaveLength(1);
+    expect(configs).toHaveLength(2);
     expect(configs[0]).toMatchObject({
-      intervalMs: 15_000,
-      marketBatchSize: 18,
-      activeMarketBatchSize: 180,
-      activeMaxSamplesPerTick: 24,
-      priorityMarketBatchSize: 120,
-      maxSamplesPerTick: 36,
-      sampleConcurrency: 8,
-      maxTickDurationMs: 9_500,
-      sampleTimeoutMs: 1_600,
-      shardCount: 1,
+      intervalMs: 10_000,
+      marketBatchSize: 24,
+      activeMarketBatchSize: 250,
+      activeMaxSamplesPerTick: 36,
+      priorityMarketBatchSize: 180,
+      maxSamplesPerTick: 72,
+      sampleConcurrency: 10,
+      maxTickDurationMs: 8_500,
+      sampleTimeoutMs: 1_800,
+      shardCount: 2,
       shardIndex: 0
+    });
+    expect(configs[1]).toMatchObject({
+      shardCount: 2,
+      shardIndex: 1
     });
   });
 
