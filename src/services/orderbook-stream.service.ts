@@ -66,6 +66,7 @@ export interface OrderbookStreamServiceConfig {
 export interface OrderbookStreamVenueRestPolicy {
   maxTargetsPerSweep?: number | undefined;
   failureCooldownMs?: number | undefined;
+  timeoutMs?: number | undefined;
 }
 
 interface PublishedOrderbookSideDeltas {
@@ -130,10 +131,10 @@ const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
   restRefreshTimeoutMs: 2_000,
   restRefreshFailureCooldownMs: 60_000,
   restRefreshVenuePolicies: {
-    POLYMARKET: { maxTargetsPerSweep: 96, failureCooldownMs: 60_000 },
-    LIMITLESS: { maxTargetsPerSweep: 48, failureCooldownMs: 180_000 },
-    PREDICT_FUN: { maxTargetsPerSweep: 6, failureCooldownMs: 90_000 },
-    OPINION: { maxTargetsPerSweep: 6, failureCooldownMs: 300_000 }
+    POLYMARKET: { maxTargetsPerSweep: 96, failureCooldownMs: 60_000, timeoutMs: 2_000 },
+    LIMITLESS: { maxTargetsPerSweep: 48, failureCooldownMs: 180_000, timeoutMs: 2_500 },
+    PREDICT_FUN: { maxTargetsPerSweep: 6, failureCooldownMs: 90_000, timeoutMs: 2_000 },
+    OPINION: { maxTargetsPerSweep: 6, failureCooldownMs: 300_000, timeoutMs: 6_000 }
   },
   latestSnapshotPersistIntervalMs: 30_000,
   latestSnapshotPersistMinSpacingMs: 250,
@@ -441,7 +442,7 @@ export class OrderbookStreamService {
         try {
           const snapshot = await withTimeout(
             refresher.refresh(target),
-            this.config.restRefreshTimeoutMs,
+            this.restRefreshTimeoutMsFor(target),
             null
           );
           if (!snapshot) {
@@ -524,6 +525,15 @@ export class OrderbookStreamService {
     return Math.max(
       1_000,
       Math.floor(venuePolicy?.failureCooldownMs ?? this.config.restRefreshFailureCooldownMs)
+    );
+  }
+
+  private restRefreshTimeoutMsFor(target: VenueOrderbookSubscriptionTarget): number {
+    const venue = normalizeVenue(target.venue);
+    const venuePolicy = this.config.restRefreshVenuePolicies[venue];
+    return Math.max(
+      250,
+      Math.floor(venuePolicy?.timeoutMs ?? this.config.restRefreshTimeoutMs)
     );
   }
 
