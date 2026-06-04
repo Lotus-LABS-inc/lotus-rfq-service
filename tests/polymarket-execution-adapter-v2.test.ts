@@ -1175,6 +1175,78 @@ describe("PolymarketExecutionAdapterV2", () => {
     expect(postedOrder.signature).not.toBe(`0x${"aa".repeat(65)}`);
   });
 
+  it("submits user-signed Polymarket FAK orders with the signed payload order type", async () => {
+    const calls: Array<{ method: string; args: unknown[] }> = [];
+    const sdkClient: PolymarketClobV2SdkClient = {
+      async createAndPostOrder() {
+        throw new Error("not used");
+      },
+      async postOrder(order, orderType) {
+        calls.push({ method: "postOrder", args: [order, orderType] });
+        return { orderID: "pm-order-fak", status: "MATCHED", takingAmount: "1", price: "0.51" };
+      },
+      async updateBalanceAllowance(params) {
+        calls.push({ method: "updateBalanceAllowance", args: [params] });
+        return {};
+      },
+      async getBalanceAllowance(params) {
+        calls.push({ method: "getBalanceAllowance", args: [params] });
+        return { balance: "2000000", allowance: "2000000" };
+      },
+      async getOrder() {
+        throw new Error("not used");
+      },
+      async getTrades() {
+        return [];
+      },
+      async cancelOrder() {
+        return { success: true };
+      }
+    };
+    const client = new SdkPolymarketClobV2LiveClient({
+      executionMode: "v2",
+      liveExecutionEnabled: true,
+      clobHost: completeEnv.POLY_CLOB_HOST,
+      chainId: completeEnv.POLY_CHAIN_ID,
+      apiKey: completeEnv.POLY_API_KEY,
+      apiSecret: completeEnv.POLY_API_SECRET,
+      apiPassphrase: completeEnv.POLY_API_PASSPHRASE,
+      builderCode: completeEnv.POLY_BUILDER_CODE,
+      privateKey: completeEnv.POLY_PRIVATE_KEY
+    }, () => sdkClient);
+
+    await expect(client.submitOrder(signedPolymarketVenueOrder({
+      signedPayload: {
+        signature: `0x${"aa".repeat(65)}`,
+        data: {
+          polymarketSignatureSuffix: `0x${"bb".repeat(96)}`,
+          orderType: "FAK",
+          order: {
+            salt: "1",
+            maker: diagnosticDepositWallet,
+            signer: diagnosticDepositWallet,
+            tokenId: diagnosticLongTokenId,
+            makerAmount: "1274970",
+            takerAmount: "100000000",
+            side: "BUY",
+            signatureType: 3,
+            timestamp: "1",
+            expiration: "0",
+            metadata: `0x${"00".repeat(32)}`,
+            builder: `0x${"11".repeat(32)}`
+          }
+        }
+      }
+    }))).resolves.toMatchObject({ venueOrderId: "pm-order-fak", status: "FILLED" });
+
+    expect(calls.map((call) => call.method)).toEqual([
+      "updateBalanceAllowance",
+      "getBalanceAllowance",
+      "postOrder"
+    ]);
+    expect(calls[2]!.args[1]).toBe(OrderType.FAK);
+  });
+
   it("blocks tick-misaligned signed Polymarket orders before CLOB readiness or submit", async () => {
     const calls: string[] = [];
     const sdkClient: PolymarketClobV2SdkClient = {

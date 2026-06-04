@@ -44,7 +44,7 @@ export interface PreparedTradeSignatureBundle {
   signatureRequests: TradeSignatureRequest[];
 }
 
-export type SignedTradeOrderPolicy = "FOK";
+export type SignedTradeOrderPolicy = "FOK" | "FAK";
 
 export interface SignedTradeLegPayload {
   legIndex: number;
@@ -1986,6 +1986,7 @@ const buildPolymarketOrderPayload = async (
     throwOnError: true
   });
   const routeMetadata = recordField(payload, "metadata");
+  const orderPolicy = signedTradeOrderPolicyFromMetadata(routeMetadata ?? {});
   const tickSize = parsePolymarketTickSize(
     stringField(routeMetadata ?? {}, "polymarketTickSize")
       ?? stringField(routeMetadata ?? {}, "tickSize")
@@ -2022,7 +2023,7 @@ const buildPolymarketOrderPayload = async (
     typedData: quantized.typedData,
     data: {
       order: orderWithoutSignature,
-      orderType: "FOK",
+      orderType: orderPolicy,
       postOnly: false,
       deferExec: false,
       ...(polymarketSignatureSuffix ? { polymarketSignatureSuffix } : {})
@@ -2505,6 +2506,11 @@ const quoteWithOrderPolicy = (
       }
     }))
   };
+};
+
+const signedTradeOrderPolicyFromMetadata = (metadata: Record<string, unknown>): SignedTradeOrderPolicy => {
+  const normalized = stringField(metadata, "orderPolicy")?.toUpperCase();
+  return normalized === "FAK" ? "FAK" : "FOK";
 };
 
 const parseOptionalEnvBoolean = (value: string | undefined): boolean | undefined => {

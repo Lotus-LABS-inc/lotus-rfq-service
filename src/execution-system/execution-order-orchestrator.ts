@@ -34,7 +34,7 @@ export type ExecutionOrderState =
 
 export type ExecutionOrderPrimaryAction = "PLACE_ORDER" | "SIGN" | "ENABLE_VENUE" | "NONE";
 export type ExecutionOrderVenuePreference = "BEST_ROUTE" | "POLYMARKET" | "LIMITLESS" | "PREDICT_FUN" | "OPINION";
-export type ExecutionOrderPolicy = "FOK";
+export type ExecutionOrderPolicy = "FOK" | "FAK";
 export type ExecutionOrderSigningMode =
   | "NONE"
   | "USER_SIGNATURE_REQUIRED"
@@ -282,6 +282,7 @@ export class ExecutionOrderOrchestratorV1 {
         userId: input.userId,
         quote,
         liveCandidateProvider: this.liveCandidateProvider,
+        orderPolicy: order.orderPolicy,
         slippageToleranceBps: order.slippageToleranceBps
       });
     } catch (error) {
@@ -356,6 +357,7 @@ export class ExecutionOrderOrchestratorV1 {
         quote,
         liveCandidateProvider: this.liveCandidateProvider,
         signedLegs: input.signedPayloads,
+        orderPolicy: order.orderPolicy,
         slippageToleranceBps: order.slippageToleranceBps
       });
     } catch (error) {
@@ -1125,6 +1127,7 @@ export const assertPolymarketFokStillExecutable = async (input: {
   quote: ExecutableTradeQuote | null;
   liveCandidateProvider?: ExecutionOrderLiveCandidateProvider | undefined;
   signedLegs?: readonly SignedTradeLegPayload[] | undefined;
+  orderPolicy?: ExecutionOrderPolicy | undefined;
   slippageToleranceBps?: number | undefined;
 }): Promise<void> => {
   if (!input.liveCandidateProvider || !input.quote) {
@@ -1141,10 +1144,6 @@ export const assertPolymarketFokStillExecutable = async (input: {
       );
     }
     const signedOrder = input.signedLegs ? findPolymarketSignedOrder(input.signedLegs, index) : null;
-    const signedOrderType = signedOrder ? asString(recordField(recordField(signedOrder.signedPayload, "data") ?? {}, "orderType")) : null;
-    if (signedOrderType && signedOrderType.toUpperCase() !== "FOK") {
-      continue;
-    }
     if (input.quote.side === "sell" && signedOrder) {
       const signedTokenId = polymarketSignedOrderTokenId(signedOrder);
       if (!signedTokenId || signedTokenId.toLowerCase() !== leg.venueOutcomeId?.toLowerCase()) {
@@ -1153,6 +1152,12 @@ export const assertPolymarketFokStillExecutable = async (input: {
           "Polymarket signed sell token id no longer matches the route token id. Refresh route and sign again."
         );
       }
+    }
+    const signedOrderData = signedOrder ? recordField(signedOrder.signedPayload, "data") : null;
+    const signedOrderType = asString(signedOrderData?.orderType);
+    const effectiveOrderPolicy = (signedOrderType ?? input.orderPolicy ?? DEFAULT_EXECUTION_ORDER_POLICY).toUpperCase();
+    if (effectiveOrderPolicy !== "FOK") {
+      continue;
     }
     const live = await input.liveCandidateProvider.getCandidates({
       userId: input.userId,

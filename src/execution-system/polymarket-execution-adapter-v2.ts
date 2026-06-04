@@ -613,10 +613,11 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
         extraSensitiveValues,
         order
       );
+      const orderType = parsePolymarketSignedPayloadOrderType(order);
       let response: unknown;
       try {
         response = await this.callSdkWithRedactedConsole(
-          () => postOrder(signedOrder, OrderType.FOK),
+          () => postOrder(signedOrder, orderType),
           extraSensitiveValues
         );
       } catch (error) {
@@ -1470,6 +1471,13 @@ const parseUserSignedPolymarketOrder = (order: PreparedVenueOrder): SignedOrder 
     ...orderPayload,
     signature: finalSignature
   } as unknown as SignedOrder;
+};
+
+const parsePolymarketSignedPayloadOrderType = (order: PreparedVenueOrder): OrderType => {
+  const signedPayload = isRecord(order.payload.signedPayload) ? order.payload.signedPayload : null;
+  const data = signedPayload && isRecord(signedPayload.data) ? signedPayload.data : null;
+  const raw = typeof data?.orderType === "string" ? data.orderType.toUpperCase() : "";
+  return raw === OrderType.FAK ? OrderType.FAK : OrderType.FOK;
 };
 
 const safeParseUserSignedPolymarketOrder = (order: PreparedVenueOrder): SignedOrder | null => {

@@ -793,6 +793,58 @@ describe("SignedTradeBundleService", () => {
     }
   });
 
+  it("propagates Polymarket FAK order policy into the signed order payload", async () => {
+    const fixtureServer = await startPolymarketClobFixtureServer();
+    const env = {
+      ...polymarketSigningEnv,
+      POLYMARKET_CLOB_HOST: fixtureServer.host,
+      POLYMARKET_TICK_SIZE: undefined
+    } as NodeJS.ProcessEnv;
+    const registry = new ExecutionVenueAdapterRegistry();
+    registry.register(new PolymarketExecutionAdapterV2({
+      executionMode: "v2",
+      liveExecutionEnabled: false,
+      clobHost: env.POLYMARKET_CLOB_HOST,
+      chainId: env.POLYMARKET_CHAIN_ID,
+      builderCode: env.POLYMARKET_BUILDER_CODE,
+      signatureType: env.POLYMARKET_SIGNATURE_TYPE
+    }));
+    const liveQuote: ExecutableTradeQuote = {
+      ...polymarketSellQuote({
+        venueOutcomeId: "15636396498081492607537245191035256780946494107835473972503944043229908184003",
+        size: "10",
+        price: 0.25,
+        requiresUserSignature: true,
+        metadata: {
+          tickSize: "0.001",
+          negRisk: false
+        }
+      }),
+      requiredUserSignatureSteps: ["POLYMARKET user signature required"]
+    };
+    const sut = new SignedTradeBundleService(
+      { getQuote: async () => liveQuote } as never,
+      registry,
+      { getAccount: async () => polymarketDepositWalletAccount() },
+      () => new Date("2026-05-20T19:18:20.000Z"),
+      env
+    );
+    try {
+      const prepared = await sut.prepare({
+        userId: "user-1",
+        quoteId: "exec_quote_polymarket_sell",
+        orderPolicy: "FAK",
+        slippageToleranceBps: 50
+      });
+      const orderRequest = prepared.signatureRequests.find((request) => request.requestType === "ORDER")!;
+      const data = orderRequest.signedPayloadHint.data as Record<string, unknown>;
+
+      expect(data.orderType).toBe("FAK");
+    } finally {
+      await fixtureServer.close();
+    }
+  });
+
   it("signs Limitless orders against the market venue exchange address", async () => {
     const marketExchange = "0xe3E00BA3a9888d1DE4834269f62ac008b4BB5C47";
     const liveQuote: ExecutableTradeQuote = {
