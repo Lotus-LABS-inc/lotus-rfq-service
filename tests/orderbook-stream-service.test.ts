@@ -377,6 +377,58 @@ describe("OrderbookStreamService", () => {
     expect(connector.subscribed.map((target) => target.canonicalMarketId)).toEqual(["canonical-1", "canonical-1"]);
   });
 
+  it("warms approved mappings that are not quote-ready because their live snapshot is missing", async () => {
+    const connector = new FakeConnector("LIMITLESS");
+    const refresh = vi.fn(async (target: VenueOrderbookSubscriptionTarget) => ({
+      ...snapshot(target),
+      source: "REST" as const,
+      quoteQuality: "FULL_DEPTH_REST" as const
+    }));
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness() {
+          return [];
+        },
+        async listApprovedReadiness() {
+          return [{
+            canonicalEventId: "event-1",
+            canonicalMarketIds: ["canonical-1"],
+            title: "Event",
+            category: "Crypto",
+            venues: [{
+              venue: "LIMITLESS",
+              approvedVenueMarketId: "approved-1",
+              venueMarketId: "september-30-2026-1775137169961",
+              venueOutcomeId: "YES",
+              quoteReady: false,
+              blockers: ["LIVE_QUOTE_SNAPSHOT_MISSING"]
+            }]
+          }];
+        }
+      },
+      connectors: [connector],
+      restRefreshers: [{ venue: "LIMITLESS", refresh }],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now,
+      config: { backgroundReadinessMarketLimit: 1, maxBackgroundSubscriptionTargets: 1 }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({
+      desiredSubscriptions: 1,
+      subscribed: 1,
+      restRefreshed: 1
+    });
+    expect(connector.subscribed).toHaveLength(1);
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
   it("uses outcome-aware background readiness so card prices land on outcome websocket topics", async () => {
     const connector = new FakeConnector("POLYMARKET");
     const listApprovedReadiness = vi.fn(async () => [
@@ -667,7 +719,7 @@ describe("OrderbookStreamService", () => {
           venue: "POLYMARKET",
           approvedVenueMarketId: "approved-background",
           venueMarketId: "poly-background",
-          venueOutcomeId: null,
+          venueOutcomeId: "background-yes",
           quoteReady: true,
           blockers: []
         }]
@@ -736,7 +788,7 @@ describe("OrderbookStreamService", () => {
           venue: "POLYMARKET",
           approvedVenueMarketId: "approved-background",
           venueMarketId: "poly-background",
-          venueOutcomeId: null,
+          venueOutcomeId: "background-yes",
           quoteReady: true,
           blockers: []
         }]
@@ -776,7 +828,8 @@ describe("OrderbookStreamService", () => {
       }),
       expect.objectContaining({
         canonicalMarketId: "background-1",
-        venueMarketId: "poly-background"
+        venueMarketId: "poly-background",
+        venueOutcomeId: "background-yes"
       })
     ]);
   });

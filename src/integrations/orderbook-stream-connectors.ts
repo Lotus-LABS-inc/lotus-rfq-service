@@ -166,6 +166,7 @@ export class LimitlessSdkOrderbookConnector implements VenueOrderbookStreamConne
   public readonly venue = "LIMITLESS";
   private readonly client: LimitlessWebSocketClient;
   private readonly targets = new Map<string, VenueOrderbookSubscriptionTarget>();
+  private readonly subscribedMarketSlugs = new Set<string>();
   private listener: SnapshotListener | null = null;
   private connected = false;
   private readonly adapter = new LimitlessOrderbookStreamAdapter();
@@ -190,9 +191,16 @@ export class LimitlessSdkOrderbookConnector implements VenueOrderbookStreamConne
       return;
     }
     await this.connect();
-    await this.subscribeOrderbook(
-      [...new Set((newTargets.length > 0 ? newTargets : [...this.targets.values()]).map((target) => target.venueMarketId))]
-    );
+    const marketSlugs = [...new Set((newTargets.length > 0 ? newTargets : [...this.targets.values()])
+      .map((target) => limitlessStreamMarketSlug(target.venueMarketId)))]
+      .filter((slug) => !this.subscribedMarketSlugs.has(slug));
+    if (marketSlugs.length === 0) {
+      return;
+    }
+    await this.subscribeOrderbook(marketSlugs);
+    for (const slug of marketSlugs) {
+      this.subscribedMarketSlugs.add(slug);
+    }
   }
 
   public async unsubscribe(keys: readonly string[]): Promise<void> {
@@ -204,7 +212,15 @@ export class LimitlessSdkOrderbookConnector implements VenueOrderbookStreamConne
     if (removed.length === 0 || !this.connected) {
       return;
     }
-    await this.unsubscribeOrderbook([...new Set(removed.map((target) => target.venueMarketId))]);
+    const remainingSlugs = new Set([...this.targets.values()].map((target) => limitlessStreamMarketSlug(target.venueMarketId)));
+    const marketSlugs = [...new Set(removed.map((target) => limitlessStreamMarketSlug(target.venueMarketId)))]
+      .filter((slug) => !remainingSlugs.has(slug));
+    if (marketSlugs.length > 0) {
+      await this.unsubscribeOrderbook(marketSlugs);
+      for (const slug of marketSlugs) {
+        this.subscribedMarketSlugs.delete(slug);
+      }
+    }
     if (this.targets.size === 0) {
       await this.disconnect();
     }
@@ -217,6 +233,7 @@ export class LimitlessSdkOrderbookConnector implements VenueOrderbookStreamConne
     await this.client.disconnect();
     this.connected = false;
     this.targets.clear();
+    this.subscribedMarketSlugs.clear();
   }
 
   private async connect(): Promise<void> {
@@ -262,7 +279,7 @@ export class LimitlessSdkOrderbookConnector implements VenueOrderbookStreamConne
   private onPayload(payload: unknown): void {
     const messages = parseJsonMessages(payload);
     for (const message of messages) {
-      for (const target of matchByMarketId(message, [...this.targets.values()])) {
+      for (const target of matchLimitlessByMarketSlug(message, [...this.targets.values()])) {
         const snapshot = this.adapter.normalize({
           venueMarketId: target.venueMarketId,
           ...(target.venueOutcomeId ? { venueOutcomeId: target.venueOutcomeId } : {}),
@@ -551,6 +568,34 @@ const matchByMarketId = (
   return marketId
     ? targets.filter((target) => target.venueMarketId === marketId)
     : [];
+};
+
+const matchLimitlessByMarketSlug = (
+  payload: Record<string, unknown>,
+  targets: readonly VenueOrderbookSubscriptionTarget[]
+): readonly VenueOrderbookSubscriptionTarget[] => {
+  if (targets.length === 1) {
+    return targets;
+  }
+  const marketSlug = firstString(payload.market, payload.marketId, payload.market_id, payload.marketSlug, payload.slug, payload.venueMarketId);
+  if (!marketSlug) {
+    return [];
+  }
+  const normalizedPayloadSlug = limitlessStreamMarketSlug(marketSlug);
+  return targets.filter((target) =>
+    target.venueMarketId === marketSlug ||
+    limitlessStreamMarketSlug(target.venueMarketId) === normalizedPayloadSlug
+  );
+};
+
+const limitlessStreamMarketSlug = (venueMarketId: string): string => {
+  const value = venueMarketId.trim();
+  const prefixed = value.match(/^LIMITLESS:([^:]+)(?::|$)/i)?.[1];
+  if (prefixed) {
+    return prefixed;
+  }
+  const [parent, childHint, ...rest] = value.split(":");
+  return parent && childHint && rest.length === 0 ? parent : value;
 };
 
 const asRecord = (value: unknown): Record<string, unknown> =>

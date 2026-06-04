@@ -27,7 +27,9 @@ const limitlessSdkMock = vi.hoisted(() => ({
   instances: [] as Array<{
     connectCalls: number;
     subscribeCalls: number;
+    unsubscribeCalls: number;
     subscriptions: unknown[];
+    unsubscriptions: unknown[];
   }>,
   failSubscribeOnce: false
 }));
@@ -47,7 +49,9 @@ vi.mock("@limitless-exchange/sdk", () => ({
   WebSocketClient: class {
     public connectCalls = 0;
     public subscribeCalls = 0;
+    public unsubscribeCalls = 0;
     public subscriptions: unknown[] = [];
+    public unsubscriptions: unknown[] = [];
 
     public constructor() {
       limitlessSdkMock.instances.push(this);
@@ -68,7 +72,10 @@ vi.mock("@limitless-exchange/sdk", () => ({
       this.subscriptions.push(payload);
     }
 
-    public async unsubscribe(): Promise<void> {}
+    public async unsubscribe(_topic: string, payload: unknown): Promise<void> {
+      this.unsubscribeCalls += 1;
+      this.unsubscriptions.push(payload);
+    }
 
     public async disconnect(): Promise<void> {}
   }
@@ -141,6 +148,56 @@ describe("LimitlessSdkOrderbookConnector", () => {
       expect.objectContaining({ venue: "LIMITLESS", targetCount: 1 }),
       "Limitless websocket disconnected during subscribe; reconnecting once."
     );
+  });
+
+  it("subscribes with the venue slug parsed from curated Limitless IDs", async () => {
+    const { LimitlessSdkOrderbookConnector } = await import("../src/integrations/orderbook-stream-connectors.js");
+    limitlessSdkMock.instances.length = 0;
+    limitlessSdkMock.failSubscribeOnce = false;
+    const connector = new LimitlessSdkOrderbookConnector();
+    const target: VenueOrderbookSubscriptionTarget = {
+      canonicalMarketId: "CRYPTO|ATH_BY_DATE|XRP|2026_09_30",
+      canonicalOutcomeId: "YES",
+      venue: "LIMITLESS",
+      venueMarketId: "LIMITLESS:september-30-2026-1775137169961:CRYPTO|ATH_BY_DATE|XRP|2026_09_30",
+      venueOutcomeId: "YES"
+    };
+
+    await connector.subscribe([target], vi.fn());
+
+    const client = limitlessSdkMock.instances[0];
+    expect(client?.subscriptions).toEqual([
+      { marketSlugs: ["september-30-2026-1775137169961"] }
+    ]);
+  });
+
+  it("keeps a shared Limitless stream subscribed until every mapped target is removed", async () => {
+    const { LimitlessSdkOrderbookConnector } = await import("../src/integrations/orderbook-stream-connectors.js");
+    limitlessSdkMock.instances.length = 0;
+    limitlessSdkMock.failSubscribeOnce = false;
+    const connector = new LimitlessSdkOrderbookConnector();
+    const first: VenueOrderbookSubscriptionTarget = {
+      canonicalMarketId: "canonical-yes",
+      canonicalOutcomeId: "YES",
+      venue: "LIMITLESS",
+      venueMarketId: "LIMITLESS:shared-market:CANONICAL|YES",
+      venueOutcomeId: "YES"
+    };
+    const second: VenueOrderbookSubscriptionTarget = {
+      canonicalMarketId: "canonical-no",
+      canonicalOutcomeId: "NO",
+      venue: "LIMITLESS",
+      venueMarketId: "LIMITLESS:shared-market:CANONICAL|NO",
+      venueOutcomeId: "NO"
+    };
+
+    await connector.subscribe([first, second], vi.fn());
+    await connector.unsubscribe([`${first.venue}|${first.venueMarketId}|${first.venueOutcomeId}|${first.canonicalMarketId}|${first.canonicalOutcomeId}`]);
+    await connector.unsubscribe([`${second.venue}|${second.venueMarketId}|${second.venueOutcomeId}|${second.canonicalMarketId}|${second.canonicalOutcomeId}`]);
+
+    const client = limitlessSdkMock.instances[0];
+    expect(client?.subscriptions).toEqual([{ marketSlugs: ["shared-market"] }]);
+    expect(client?.unsubscriptions).toEqual([{ marketSlugs: ["shared-market"] }]);
   });
 });
 

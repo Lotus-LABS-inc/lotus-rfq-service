@@ -284,7 +284,7 @@ export class OrderbookStreamService {
         ? batchReadiness.get(market.canonicalMarketId) ?? await this.loadSingleReadiness(market)
         : await this.loadSingleReadiness(market);
       const targets = activeReadinessRowsForMarket(market, readiness)
-        .filter(isQuoteReadyMapping)
+        .filter(isWarmableMapping)
         .map((row): VenueOrderbookSubscriptionTarget => targetFromReadinessRow(market.canonicalMarketId, market.canonicalOutcomeId, row));
       activeTargetGroups.push(targets);
     }
@@ -301,7 +301,7 @@ export class OrderbookStreamService {
             ? readiness.outcomeVenues
             : readiness.venues
         )
-          .filter(isQuoteReadyMapping)
+          .filter(isWarmableMapping)
           .map((row): VenueOrderbookSubscriptionTarget => ({
             canonicalMarketId,
             ...(row.canonicalOutcomeId ? { canonicalOutcomeId: row.canonicalOutcomeId } : {}),
@@ -663,10 +663,22 @@ export const subscriptionKey = (target: VenueOrderbookSubscriptionTarget): strin
     target.canonicalOutcomeId ?? "_"
   ].join("|");
 
-const isQuoteReadyMapping = (
+const isWarmableMapping = (
   row: VenueQuoteMappingReadiness
 ): row is VenueQuoteMappingReadiness & { venueMarketId: string } =>
-  row.quoteReady && row.venueMarketId !== null;
+  row.venueMarketId !== null &&
+  hasRequiredNativeSubscriptionId(row) &&
+  !hasHardUnavailableBlocker(row);
+
+const hasRequiredNativeSubscriptionId = (row: VenueQuoteMappingReadiness): boolean => {
+  const venue = normalizeVenue(row.venue);
+  return venue !== "POLYMARKET" || Boolean(row.venueOutcomeId);
+};
+
+const hasHardUnavailableBlocker = (row: VenueQuoteMappingReadiness): boolean =>
+  row.blockers.some((blocker) =>
+    /OFFICIAL_MARKET_CLOSED|NOT_ACCEPTING_ORDERS|QUOTE_PROVIDER_HTTP_404|PROVIDER_UNAVAILABLE_404|MARKET_CLOSED/i.test(blocker)
+  );
 
 const activeReadinessRowsForMarket = (
   market: ActiveOrderbookMarket,
