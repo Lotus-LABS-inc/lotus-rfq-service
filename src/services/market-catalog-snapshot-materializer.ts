@@ -789,7 +789,22 @@ export const formatMarketCatalogListMarkets = (
   markets: readonly MarketCatalogMarket[],
   view: MarketCatalogListView | undefined
 ): MarketCatalogMarket[] | CompactMarketCatalogMarket[] =>
-  view === "compact" ? markets.map(toCompactMarketCatalogMarket) : [...markets];
+  view === "compact"
+    ? markets.map((market) => toCompactMarketCatalogMarket(sanitizeMarketCatalogMarketDisplayBlockers(market)))
+    : markets.map(sanitizeMarketCatalogMarketDisplayBlockers);
+
+const sanitizeMarketCatalogMarketDisplayBlockers = (market: MarketCatalogMarket): MarketCatalogMarket => {
+  const readyVenueSet = new Set((market.quoteReadyVenues ?? []).map((venue) => venue.trim().toUpperCase()));
+  if (readyVenueSet.size === 0 || !market.quoteBlockers || market.quoteBlockers.length === 0) {
+    return market;
+  }
+  const quoteBlockers = market.quoteBlockers.filter((blocker) =>
+    !isRedundantReadyVenueMissingBlocker(blocker, readyVenueSet)
+  );
+  return quoteBlockers.length === market.quoteBlockers.length
+    ? market
+    : { ...market, quoteBlockers };
+};
 
 const toCompactMarketCatalogMarket = (market: MarketCatalogMarket): CompactMarketCatalogMarket => ({
   ...(market.eventId ? { eventId: market.eventId } : {}),
