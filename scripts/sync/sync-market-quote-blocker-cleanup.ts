@@ -731,12 +731,23 @@ async function applyPredictRepairs(db: Pool, rows: readonly PredictRepairCandida
       ]
     );
     if (row.canonicalMarketId) {
+      const numericCandidateMarketId = extractNumericMarketId(row.candidate.venueMarketId) ?? row.candidate.venueMarketId;
+      const venueMarketIdsToClear = [...new Set([
+        row.currentVenueMarketId,
+        row.candidate.venueMarketId,
+        numericCandidateMarketId,
+        `PREDICT:${numericCandidateMarketId}`
+      ].filter(Boolean))];
       await db.query(
         `DELETE FROM venue_orderbook_latest_snapshots
           WHERE venue IN ('PREDICT', 'PREDICT_FUN')
-            AND canonical_market_id = $1
-            AND blockers ? 'PREDICT_FUN_TOKEN_ID_MISSING'`,
-        [row.canonicalMarketId]
+            AND blockers ? 'PREDICT_FUN_TOKEN_ID_MISSING'
+            AND (
+              canonical_market_id = $1
+              OR venue_market_id = ANY($2::text[])
+              OR regexp_replace(venue_market_id, '^PREDICT:?([0-9]+).*$', '\\1') = $3
+            )`,
+        [row.canonicalMarketId, venueMarketIdsToClear, numericCandidateMarketId]
       );
     }
   }
