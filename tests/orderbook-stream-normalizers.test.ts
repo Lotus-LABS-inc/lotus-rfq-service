@@ -47,6 +47,26 @@ describe("venue orderbook stream normalizers", () => {
     expect(snapshot?.asks[0]?.price).toBe("0.55");
   });
 
+  it("normalizes Limitless NO stream orderbooks by inverting the YES book", () => {
+    const adapter = new LimitlessOrderbookStreamAdapter();
+    const snapshot = adapter.normalize({
+      venueMarketId: "limitless-1",
+      canonicalOutcomeId: "NO",
+      receivedAt,
+      payload: {
+        data: {
+          bids: [{ price: "0.30", size: "3" }],
+          asks: [{ price: "0.40", size: "5" }]
+        }
+      }
+    });
+
+    expect(snapshot?.venue).toBe("LIMITLESS");
+    expect(snapshot?.bids[0]?.price).toBe("0.6");
+    expect(snapshot?.asks[0]?.price).toBe("0.7");
+    expect(snapshot?.metadata?.outcomeSide).toBe("NO");
+  });
+
   it("normalizes Opinion stream orderbooks", () => {
     const adapter = new OpinionOrderbookStreamAdapter();
     const snapshot = adapter.normalize({

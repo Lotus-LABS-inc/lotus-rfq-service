@@ -456,6 +456,49 @@ describe("extended venue quote readers", () => {
     expect(calculated.price).toBe(0.52);
   });
 
+  it("Limitless reader caches market detail so display refreshes do not double-hit the provider", async () => {
+    let detailCalls = 0;
+    const reader = new LimitlessQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      now: () => now,
+      client: {
+        async getMarketDetail() {
+          detailCalls += 1;
+          return {
+            tokens: {
+              yes: "yes-token",
+              no: "no-token"
+            }
+          };
+        },
+        async getOrderbook() {
+          return {
+            bids: [{ price: 0.48, size: "10" }],
+            asks: [{ price: 0.51, size: "10" }]
+          };
+        }
+      }
+    });
+
+    await reader.getQuoteSnapshot({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "limitless-market-1",
+      side: "buy",
+      quantity: 1
+    });
+    await reader.getQuoteSnapshot({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "NO",
+      venueMarketId: "limitless-market-1",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(detailCalls).toBe(1);
+  });
+
+
   it("Limitless reader resolves group markets to the canonical child market before reading orderbook", async () => {
     const requestedMarkets: string[] = [];
     const feeMarkets: string[] = [];
@@ -716,6 +759,28 @@ describe("extended venue quote readers", () => {
     expect(calculated.feeQuote?.feeModel).toBe("OPINION_TAKER_CURVE");
     expect(calculated.missingFactors).not.toContain("FEE_DISCOVERY");
   });
+
+  it("normalizes Opinion nested buy/sell orderbook payloads from stream and REST variants", () => {
+    const snapshot = normalizeOpinionOrderbook({
+      payload: {
+        data: {
+          orderbook: {
+            buy: [[0.42, 7]],
+            sell: [{ price: "0.58", quantity: "9" }]
+          }
+        }
+      },
+      venueMarketId: "opinion-market-1",
+      venueOutcomeId: "token-yes",
+      receivedAt: now,
+      topicRate: 0.04
+    });
+
+    expect(snapshot.bids[0]).toEqual({ price: "0.42", size: "7" });
+    expect(snapshot.asks[0]).toEqual({ price: "0.58", size: "9" });
+    expect(snapshot.blockers).toEqual([]);
+  });
+
 
   it("Opinion reader treats numeric market ids as token ids when no separate outcome id exists", async () => {
     const reader = new OpinionQuoteReader({

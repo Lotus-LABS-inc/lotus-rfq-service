@@ -42,6 +42,7 @@ export class LimitlessOrderbookStreamAdapter implements VenueOrderbookStreamAdap
       payload: input.payload,
       venueMarketId: input.venueMarketId,
       ...(input.venueOutcomeId ? { venueOutcomeId: input.venueOutcomeId } : {}),
+      ...(input.canonicalOutcomeId === "YES" || input.canonicalOutcomeId === "NO" ? { outcomeSide: input.canonicalOutcomeId } : {}),
       receivedAt: input.receivedAt
     });
     return asStreamSnapshot(snapshot);

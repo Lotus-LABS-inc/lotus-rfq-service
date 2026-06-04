@@ -61,8 +61,30 @@ export const normalizeOpinionOrderbook = (input: {
   feeBps?: number | undefined;
 }): NormalizedVenueQuoteSnapshot => {
   const record = unwrapRecord(input.payload);
-  const bids = normalizeLevels(record.bids);
-  const asks = normalizeLevels(record.asks);
+  const bids = normalizeLevels(firstArray(
+    record.bids,
+    record.buy,
+    record.buys,
+    record.bid,
+    record.BIDS,
+    record.BUY,
+    asRecord(record.orderbook).bids,
+    asRecord(record.orderbook).buy,
+    asRecord(record.depth).bids,
+    asRecord(record.depth).buy
+  ));
+  const asks = normalizeLevels(firstArray(
+    record.asks,
+    record.sell,
+    record.sells,
+    record.ask,
+    record.ASKS,
+    record.SELL,
+    asRecord(record.orderbook).asks,
+    asRecord(record.orderbook).sell,
+    asRecord(record.depth).asks,
+    asRecord(record.depth).sell
+  ));
   const blockers = bids.length === 0 && asks.length === 0 ? ["QUOTE_PROVIDER_EMPTY_BOOK"] : [];
   const missingFactors = [
     ...(input.feeBps === undefined && input.topicRate === undefined ? ["FEE_DISCOVERY"] : []),
@@ -109,8 +131,12 @@ const unwrapRecord = (payload: unknown): Record<string, unknown> => {
   const record = asRecord(payload);
   const result = asRecord(record.result);
   const data = asRecord(record.data);
+  const orderbook = asRecord(record.orderbook);
+  const depth = asRecord(record.depth);
   if (Object.keys(result).length > 0) return result;
   if (Object.keys(data).length > 0) return data;
+  if (Object.keys(orderbook).length > 0) return orderbook;
+  if (Object.keys(depth).length > 0) return depth;
   return record;
 };
 
@@ -154,6 +180,15 @@ const normalizeLevel = (price: unknown, size: unknown): NormalizedQuoteLevel[] =
     return [];
   }
   return [{ price: String(price), size: String(size) }];
+};
+
+const firstArray = (...values: readonly unknown[]): unknown => {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      return value;
+    }
+  }
+  return undefined;
 };
 
 const asRecord = (value: unknown): Record<string, unknown> =>
