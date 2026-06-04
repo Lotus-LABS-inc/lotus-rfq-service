@@ -272,15 +272,21 @@ export class LiveMarketDataViewService {
         generatedAt: generatedAt.toISOString()
       };
     }
-    const snapshots = this.liveOrderbookSource
+    let snapshots: readonly NormalizedVenueQuoteSnapshot[] = this.liveOrderbookSource
       ? (await Promise.all(marketIds.map((canonicalMarketId) => this.liveOrderbookSource!.get({
           canonicalMarketId,
           ...(normalizedOutcomeId ? { canonicalOutcomeId: normalizedOutcomeId } : {})
         }).catch(() => [])))).flat()
       : [];
-    const liveVenues = snapshots
+    let liveVenues = snapshots
       .map((snapshot) => sanitizeVenueOrderbook(snapshot, 5, generatedAt))
       .filter(isLiveTradableOrderbookVenue);
+    if (liveVenues.length === 0) {
+      snapshots = await this.loadLivePriceSnapshotsFromQuoteSource(marketIds, normalizedOutcomeId);
+      liveVenues = snapshots
+        .map((snapshot) => sanitizeVenueOrderbook(snapshot, 5, generatedAt))
+        .filter(isLiveTradableOrderbookVenue);
+    }
     const bids = sortLevels(liveVenues.flatMap((venue) => venue.bids), "desc");
     const asks = sortLevels(liveVenues.flatMap((venue) => venue.asks), "asc");
     const bestBid = bids[0]?.price ?? null;
@@ -312,6 +318,27 @@ export class LiveMarketDataViewService {
       item: output
     });
     return output;
+  }
+
+  private async loadLivePriceSnapshotsFromQuoteSource(
+    canonicalMarketIds: readonly string[],
+    outcomeId: string | undefined
+  ): Promise<readonly NormalizedVenueQuoteSnapshot[]> {
+    const reports = await Promise.all(canonicalMarketIds.map((canonicalMarketId) =>
+      withTimeout(
+        this.quoteSource.getQuoteSnapshotReport({
+          canonicalMarketId,
+          ...(outcomeId ? { canonicalOutcomeId: outcomeId } : {}),
+          side: "buy",
+          quantity: 1,
+          readMode: "cached_display",
+          displayMaxAgeMs: BATCH_QUOTE_DISPLAY_SNAPSHOT_MAX_AGE_MS
+        }),
+        this.batchQuoteLiveTimeoutMs,
+        { snapshots: [], blocked: [] }
+      ).catch(() => ({ snapshots: [], blocked: [] }))
+    ));
+    return mergeVenueQuoteSnapshotReports(reports).snapshots;
   }
 
   public async getOrderbook(input: {

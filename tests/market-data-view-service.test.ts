@@ -1160,4 +1160,52 @@ describe("LiveMarketDataViewService", () => {
       freshnessMs: null
     });
   });
+
+  it("falls back to bounded cached-display quote snapshots for live prices", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    const calls: unknown[] = [];
+    const service = new LiveMarketDataViewService({
+      getQuoteSnapshotReport: async (input) => {
+        calls.push(input);
+        return {
+          snapshots: [snapshot({
+            venue: "POLYMARKET",
+            venueMarketId: "poly-live",
+            venueOutcomeId: "yes",
+            receivedAt: now,
+            bid: "0.32",
+            ask: "0.34"
+          })],
+          blocked: []
+        };
+      }
+    }, {
+      now: () => now,
+      liveOrderbookSource: {
+        get: async () => []
+      }
+    });
+
+    const prices = await service.getLivePrices({
+      items: [{ marketId: "market-1", canonicalMarketIds: ["market-1", "market-2"], outcomeId: "yes" }]
+    });
+
+    expect(calls).toEqual([
+      expect.objectContaining({
+        canonicalMarketId: "market-1",
+        canonicalOutcomeId: "YES",
+        readMode: "cached_display"
+      }),
+      expect.objectContaining({
+        canonicalMarketId: "market-2",
+        canonicalOutcomeId: "YES",
+        readMode: "cached_display"
+      })
+    ]);
+    expect(prices.prices[0]).toMatchObject({
+      status: "live",
+      price: "0.33",
+      bestVenue: "POLYMARKET"
+    });
+  });
 });
