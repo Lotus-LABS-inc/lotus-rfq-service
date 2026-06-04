@@ -1253,7 +1253,7 @@ describe("OrderbookStreamService", () => {
       }
     });
 
-    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 14 });
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 13 });
     const countsByVenue = new Map<string, number>();
     for (const [target] of refresh.mock.calls) {
       countsByVenue.set(target.venue, (countsByVenue.get(target.venue) ?? 0) + 1);
@@ -1262,7 +1262,7 @@ describe("OrderbookStreamService", () => {
       ["POLYMARKET", 4],
       ["PREDICT_FUN", 4],
       ["LIMITLESS", 4],
-      ["OPINION", 2]
+      ["OPINION", 1]
     ]));
   });
 
@@ -1404,9 +1404,80 @@ describe("OrderbookStreamService", () => {
     await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
     expect(refresh).toHaveBeenCalledTimes(1);
 
-    currentNow = new Date(now.getTime() + 181_000);
+    currentNow = new Date(now.getTime() + 301_000);
     await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
     expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it("backs off blocked no-depth REST snapshots per target without cooling down the whole venue", async () => {
+    const connector = new FakeConnector("OPINION");
+    const refresh = vi.fn(async (target: VenueOrderbookSubscriptionTarget) => {
+      if (target.canonicalMarketId === "canonical-1") {
+        return {
+          ...snapshot(target),
+          source: "REST" as const,
+          quoteQuality: "TOP_OF_BOOK_REST" as const,
+          bids: [],
+          asks: [],
+          blockers: ["QUOTE_PROVIDER_EMPTY_BOOK"]
+        };
+      }
+      return {
+        ...snapshot(target),
+        source: "REST" as const,
+        quoteQuality: "FULL_DEPTH_REST" as const
+      };
+    });
+    let currentNow = now;
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [
+            { canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: currentNow },
+            { canonicalMarketId: "canonical-2", canonicalOutcomeId: "YES", lastSeenAt: currentNow }
+          ];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness(input) {
+          return [{
+            venue: "OPINION",
+            approvedVenueMarketId: `${input.canonicalMarketId}-approved`,
+            venueMarketId: `${input.canonicalMarketId}-opinion-book`,
+            venueOutcomeId: "YES",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors: [connector],
+      restRefreshers: [{ venue: "OPINION", refresh }],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => currentNow,
+      config: {
+        restRefreshIntervalMs: 1,
+        maxRestRefreshTargetsPerTick: 10,
+        maxRestRefreshTargetsPerVenuePerTick: 2,
+        restRefreshVenuePolicies: {
+          OPINION: { maxTargetsPerSweep: 2, failureCooldownMs: 300_000 }
+        }
+      }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 2 });
+    currentNow = new Date(now.getTime() + 2_000);
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 1 });
+    expect(refresh.mock.calls.map(([target]) => target.canonicalMarketId)).toEqual([
+      "canonical-1",
+      "canonical-2",
+      "canonical-2"
+    ]);
+
+    currentNow = new Date(now.getTime() + 301_000);
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 2 });
+    expect(refresh).toHaveBeenCalledTimes(5);
   });
 
   it("backs off a failed venue instead of rotating through every native book", async () => {

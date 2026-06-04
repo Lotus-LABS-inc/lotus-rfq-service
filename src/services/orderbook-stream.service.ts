@@ -117,7 +117,7 @@ const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
     POLYMARKET: { maxTargetsPerSweep: 96, failureCooldownMs: 60_000 },
     LIMITLESS: { maxTargetsPerSweep: 32, failureCooldownMs: 180_000 },
     PREDICT_FUN: { maxTargetsPerSweep: 4, failureCooldownMs: 90_000 },
-    OPINION: { maxTargetsPerSweep: 2, failureCooldownMs: 120_000 }
+    OPINION: { maxTargetsPerSweep: 1, failureCooldownMs: 300_000 }
   },
   latestSnapshotPersistIntervalMs: 30_000,
   latestSnapshotPersistMinSpacingMs: 250,
@@ -422,10 +422,14 @@ export class OrderbookStreamService {
             this.markRestRefreshFailure(target, nowMs, "target");
             continue;
           }
-          this.restRefreshFailureCooldowns.delete(key);
           refreshed += 1;
           for (const fanoutTarget of fanoutTargets) {
             this.onSnapshot(snapshot, fanoutTarget);
+          }
+          if (isBlockedNoDepthSnapshot(snapshot)) {
+            this.markRestRefreshFailure(target, nowMs, "target");
+          } else {
+            this.restRefreshFailureCooldowns.delete(key);
           }
         } catch (error) {
           this.markRestRefreshFailure(target, nowMs, restRefreshFailureScope(error));
@@ -781,6 +785,11 @@ const VENUE_BACKGROUND_PRIORITY = new Map([
 const venuePriorityCompare = (left: string, right: string): number =>
   (VENUE_BACKGROUND_PRIORITY.get(left) ?? 100) - (VENUE_BACKGROUND_PRIORITY.get(right) ?? 100)
   || left.localeCompare(right);
+
+const isBlockedNoDepthSnapshot = (snapshot: NormalizedVenueQuoteSnapshot): boolean =>
+  (snapshot.blockers ?? []).length > 0 &&
+  snapshot.bids.length === 0 &&
+  snapshot.asks.length === 0;
 
 const restRefreshFailureScope = (error: unknown): "target" | "venue" => {
   const status = errorStatus(error);
