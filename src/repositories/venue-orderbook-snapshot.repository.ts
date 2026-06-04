@@ -50,7 +50,7 @@ export interface MarketQuoteReadinessSnapshot {
 // for the orderbook worker's rotating venue sweeps so quote-ready cards do not
 // flap partial between healthy refreshes.
 export const DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS = 90_000;
-export const DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS = 30_000;
+export const DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS = 90_000;
 
 export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSource {
   public constructor(private readonly pool: Pool) {}

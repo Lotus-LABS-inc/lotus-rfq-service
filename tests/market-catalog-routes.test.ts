@@ -935,7 +935,7 @@ describe("market catalog routes", () => {
         quoteStatus: "live" as const,
         quoteReadyVenueCount: 1,
         quoteReadyVenues: ["POLYMARKET"],
-        lastQuoteAt: "2026-05-21T23:40:00.000Z"
+        lastQuoteAt: "2026-05-21T23:38:00.000Z"
       }],
       count: 1,
       materialized: true
