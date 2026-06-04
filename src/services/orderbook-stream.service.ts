@@ -112,6 +112,7 @@ export interface OrderbookStreamServiceRunResult {
   retainedSubscriptions: number;
   pendingSubscriptions: number;
   restRefreshed: number;
+  restRefreshedByVenue: Readonly<Record<string, number>>;
 }
 
 const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
@@ -124,13 +125,13 @@ const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
   maxTargetsPerConnectorCall: 75,
   subscriptionHoldMs: 120_000,
   restRefreshIntervalMs: 10_000,
-  maxRestRefreshTargetsPerTick: 140,
+  maxRestRefreshTargetsPerTick: 220,
   maxRestRefreshTargetsPerVenuePerTick: 48,
   restRefreshTimeoutMs: 2_000,
   restRefreshFailureCooldownMs: 60_000,
   restRefreshVenuePolicies: {
     POLYMARKET: { maxTargetsPerSweep: 96, failureCooldownMs: 60_000 },
-    LIMITLESS: { maxTargetsPerSweep: 32, failureCooldownMs: 180_000 },
+    LIMITLESS: { maxTargetsPerSweep: 96, failureCooldownMs: 180_000 },
     PREDICT_FUN: { maxTargetsPerSweep: 4, failureCooldownMs: 90_000 },
     OPINION: { maxTargetsPerSweep: 1, failureCooldownMs: 300_000 }
   },
@@ -252,7 +253,7 @@ export class OrderbookStreamService {
       for (const target of subscribedTargets) {
         this.activeSubscriptions.set(subscriptionKey(target), { target, lastDesiredAt: nowMs });
       }
-      const restRefreshed = await this.refreshRestTargets(desiredTargets, nowMs);
+      const restRefresh = await this.refreshRestTargets(desiredTargets, nowMs);
 
       const result = {
         activeMarkets: activeMarkets.length,
@@ -262,7 +263,8 @@ export class OrderbookStreamService {
         unsupportedVenueTargets: resolvedTargets.length - desiredTargets.length,
         retainedSubscriptions: Math.max(0, retainedSubscriptions),
         pendingSubscriptions: Math.max(0, desiredTargets.length - this.activeSubscriptions.size),
-        restRefreshed
+        restRefreshed: restRefresh.total,
+        restRefreshedByVenue: restRefresh.byVenue
       };
       this.logSummary(result);
       return result;
@@ -396,9 +398,9 @@ export class OrderbookStreamService {
   private async refreshRestTargets(
     targets: readonly VenueOrderbookSubscriptionTarget[],
     nowMs: number
-  ): Promise<number> {
+  ): Promise<{ total: number; byVenue: Readonly<Record<string, number>> }> {
     if (this.lastRestRefreshSweepAt > 0 && nowMs - this.lastRestRefreshSweepAt < this.config.restRefreshIntervalMs) {
-      return 0;
+      return emptyRestRefreshResult();
     }
     this.lastRestRefreshSweepAt = nowMs;
     const groupsByNative = groupTargetsByNative(dedupeTargetsBySubscription(targets));
@@ -412,10 +414,11 @@ export class OrderbookStreamService {
       ))
       .slice(0, this.config.maxRestRefreshTargetsPerTick);
     if (refreshable.length === 0) {
-      return 0;
+      return emptyRestRefreshResult();
     }
 
     let refreshed = 0;
+    const refreshedByVenue: Record<string, number> = {};
     const refreshableByVenue = groupByVenue(refreshable);
     await Promise.all([...refreshableByVenue.values()].map(async (venueTargets) => {
       for (const target of venueTargets) {
@@ -440,6 +443,8 @@ export class OrderbookStreamService {
             continue;
           }
           refreshed += 1;
+          const venue = normalizeVenue(target.venue);
+          refreshedByVenue[venue] = (refreshedByVenue[venue] ?? 0) + 1;
           for (const fanoutTarget of fanoutTargets) {
             this.onSnapshot(snapshot, fanoutTarget);
           }
@@ -462,7 +467,7 @@ export class OrderbookStreamService {
         }
       }
     }));
-    return refreshed;
+    return { total: refreshed, byVenue: refreshedByVenue };
   }
 
   private isRestRefreshDue(target: VenueOrderbookSubscriptionTarget, nowMs: number): boolean {
@@ -1164,5 +1169,11 @@ const emptyResult = (): OrderbookStreamServiceRunResult => ({
   unsupportedVenueTargets: 0,
   retainedSubscriptions: 0,
   pendingSubscriptions: 0,
-  restRefreshed: 0
+  restRefreshed: 0,
+  restRefreshedByVenue: {}
+});
+
+const emptyRestRefreshResult = (): { total: number; byVenue: Readonly<Record<string, number>> } => ({
+  total: 0,
+  byVenue: {}
 });
