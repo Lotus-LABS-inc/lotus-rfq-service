@@ -343,7 +343,7 @@ export class CompositeVenueQuoteSource {
     venueAllowlist?: readonly string[] | undefined;
   }): Promise<VenueQuoteSnapshotReport> {
     const readMode = input.readMode ?? "live";
-    if (readMode !== "cached_display") {
+    if (readMode !== "cached_display" || !input.canonicalOutcomeId) {
       this.hotSnapshotStore?.touch({
         canonicalMarketId: input.canonicalMarketId,
         ...(input.canonicalOutcomeId ? { canonicalOutcomeId: input.canonicalOutcomeId } : {})

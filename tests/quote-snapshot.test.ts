@@ -329,6 +329,47 @@ describe("venue quote readers", () => {
     }]);
   });
 
+  it("tracks market-level cached display reads without activating every outcome fallback", async () => {
+    const touchCalls: unknown[] = [];
+    const source = new CompositeVenueQuoteSource([], {
+      async resolve() {
+        return [];
+      },
+      async getReadiness() {
+        return [];
+      }
+    }, () => now, {
+      touch(input) {
+        touchCalls.push(input);
+      },
+      async get() {
+        return null;
+      },
+      async getDisplay() {
+        return null;
+      }
+    });
+
+    await source.getQuoteSnapshotReport({
+      canonicalMarketId: "canonical-1",
+      side: "buy",
+      quantity: 1,
+      readMode: "cached_display"
+    });
+
+    await source.getQuoteSnapshotReport({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES",
+      side: "buy",
+      quantity: 1,
+      readMode: "cached_display"
+    });
+
+    expect(touchCalls).toEqual([{
+      canonicalMarketId: "canonical-1"
+    }]);
+  });
+
   it("keeps usable venue snapshots when another mapped reader throws", async () => {
     const source = new CompositeVenueQuoteSource([
       {
