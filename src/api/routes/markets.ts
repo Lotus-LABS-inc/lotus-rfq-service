@@ -61,6 +61,12 @@ const batchQuotesRequestSchema = z.object({
   displayMode: z.enum(["debug", "user"]).optional()
 });
 
+const livePricesQuerySchema = z.object({
+  items: z.string().min(2).optional(),
+  marketIds: z.string().min(1).optional(),
+  outcomeId: z.string().min(1).optional()
+});
+
 const VENUE_SUFFIX_PATTERN = /:(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$/i;
 const DEFAULT_MARKET_QUOTE_READINESS_TIMEOUT_MS = 5_000;
 const DEFAULT_MARKET_QUOTE_READINESS_STALE_CACHE_MS = DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS;
@@ -111,6 +117,27 @@ export interface MarketCatalogRouteDeps {
     touch(input: { canonicalMarketId: string; canonicalOutcomeId?: string | undefined }): void;
   } | undefined;
   marketDataViewService?: Pick<LiveMarketDataViewService, "getOrderbook" | "getChart"> & {
+    getLivePrices?(input: {
+      items: readonly { marketId: string; outcomeId?: string | undefined }[];
+    }): Promise<{
+      generatedAt: string;
+      prices: Array<{
+        marketId: string;
+        outcomeId: string | null;
+        generatedAt: string;
+        status: "live" | "no_live_price";
+        price: string | null;
+        bestBid: string | null;
+        bestAsk: string | null;
+        midpoint: string | null;
+        spread: string | null;
+        bestVenue: string | null;
+        venueCount: number;
+        venues: string[];
+        freshnessMs: number | null;
+      }>;
+    }>;
+  } & {
     getBatchQuotes?(input: {
       items: readonly { marketId: string; outcomeId: string; side?: "buy" | "sell"; amount?: string | number }[];
       displayMode?: "debug" | "user" | undefined;
@@ -316,6 +343,31 @@ export const registerMarketCatalogRoutes = async (
     }));
   });
 
+  app.get("/markets/live-prices", async (request, reply) => {
+    if (!deps.marketDataViewService?.getLivePrices) {
+      return reply.status(503).send({
+        code: "MARKET_LIVE_PRICES_UNAVAILABLE",
+        message: "Live market price display service is not configured."
+      });
+    }
+    const parsed = livePricesQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_MARKET_LIVE_PRICES_QUERY",
+        message: "Market live prices query validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    const items = parseLivePriceQueryItems(parsed.data);
+    if (items.length === 0 || items.length > 80) {
+      return reply.status(400).send({
+        code: "INVALID_MARKET_LIVE_PRICES_ITEMS",
+        message: "Market live prices require between 1 and 80 market items."
+      });
+    }
+    return reply.send(await deps.marketDataViewService.getLivePrices({ items }));
+  });
+
   app.get("/markets/:marketId/orderbook", async (request, reply) => {
     if (!deps.marketDataViewService) {
       return reply.status(503).send({
@@ -403,6 +455,45 @@ const resolveOutcomeLabel = (
     if (outcome) return outcome.label;
   }
   return undefined;
+};
+
+const parseLivePriceQueryItems = (
+  query: z.infer<typeof livePricesQuerySchema>
+): Array<{ marketId: string; outcomeId?: string | undefined }> => {
+  if (query.items) {
+    try {
+      const parsed = JSON.parse(query.items) as unknown;
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+      return parsed.flatMap((item) => {
+        if (!item || typeof item !== "object") {
+          return [];
+        }
+        const record = item as Record<string, unknown>;
+        const marketId = typeof record.marketId === "string" ? record.marketId.trim() : "";
+        const outcomeId = typeof record.outcomeId === "string" ? record.outcomeId.trim() : "";
+        if (!marketId) {
+          return [];
+        }
+        return [{
+          marketId,
+          ...(outcomeId ? { outcomeId } : {})
+        }];
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  return (query.marketIds ?? "")
+    .split(",")
+    .map((marketId) => marketId.trim())
+    .filter((marketId) => marketId.length > 0)
+    .map((marketId) => ({
+      marketId,
+      ...(query.outcomeId ? { outcomeId: query.outcomeId.trim() } : {})
+    }));
 };
 
 const touchMarketCatalogActivity = (

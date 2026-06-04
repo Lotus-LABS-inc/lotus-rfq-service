@@ -158,6 +158,32 @@ export interface MarketBatchQuoteResponse {
   quotes: MarketBatchQuoteItem[];
 }
 
+export interface MarketLivePriceRequestItem {
+  marketId: string;
+  outcomeId?: string | undefined;
+}
+
+export interface MarketLivePriceItem {
+  marketId: string;
+  outcomeId: string | null;
+  generatedAt: string;
+  status: "live" | "no_live_price";
+  price: string | null;
+  bestBid: string | null;
+  bestAsk: string | null;
+  midpoint: string | null;
+  spread: string | null;
+  bestVenue: string | null;
+  venueCount: number;
+  venues: string[];
+  freshnessMs: number | null;
+}
+
+export interface MarketLivePricesResponse {
+  generatedAt: string;
+  prices: MarketLivePriceItem[];
+}
+
 interface StoredChartPoint {
   marketId: string;
   outcomeId: string | null;
@@ -188,6 +214,7 @@ const BATCH_QUOTE_DISPLAY_SNAPSHOT_MAX_AGE_MS = 120_000;
 const CHART_CACHE_MS = 10_000;
 const CHART_LIVE_POINT_TIMEOUT_MS = 50;
 const CHART_HISTORICAL_POINTS_TIMEOUT_MS = 150;
+const LIVE_PRICE_CACHE_MS = 2_000;
 const VENUE_COLORS = ["#3B82F6", "#10B981", "#8B5CF6", "#F59E0B", "#EC4899", "#22D3EE"];
 
 export class LiveMarketDataViewService {
@@ -196,6 +223,7 @@ export class LiveMarketDataViewService {
   private readonly lastGoodOrderbooks = new Map<string, MarketOrderbookResponse>();
   private readonly batchQuoteCache = new Map<string, BatchQuoteCacheEntry>();
   private readonly chartCache = new Map<string, { expiresAt: number; response: MarketChartResponse }>();
+  private readonly livePriceCache = new Map<string, { expiresAt: number; item: MarketLivePriceItem }>();
   private readonly lastGoodBatchQuotes = new Map<string, MarketBatchQuoteItem>();
   private readonly now: () => Date;
   private readonly orderbookLiveTimeoutMs: number;
@@ -220,6 +248,69 @@ export class LiveMarketDataViewService {
 
   private readonly historicalChartSource: MarketHistoricalChartSource | undefined;
   private readonly liveOrderbookSource: MarketOrderbookLiveSnapshotSource | undefined;
+
+  public async getLivePrices(input: {
+    items: readonly MarketLivePriceRequestItem[];
+  }): Promise<MarketLivePricesResponse> {
+    const generatedAt = this.now();
+    const prices = await Promise.all(input.items.map((item) => this.getLivePriceItem(item, generatedAt)));
+    return {
+      generatedAt: generatedAt.toISOString(),
+      prices
+    };
+  }
+
+  private async getLivePriceItem(item: MarketLivePriceRequestItem, generatedAt: Date): Promise<MarketLivePriceItem> {
+    const normalizedOutcomeId = normalizeBinaryOutcomeId(item.outcomeId);
+    const key = livePriceCacheKey(item.marketId, normalizedOutcomeId ?? null);
+    const cached = this.livePriceCache.get(key);
+    if (cached && cached.expiresAt > generatedAt.getTime()) {
+      return {
+        ...cached.item,
+        generatedAt: generatedAt.toISOString()
+      };
+    }
+    const snapshots = this.liveOrderbookSource
+      ? await this.liveOrderbookSource.get({
+          canonicalMarketId: item.marketId,
+          ...(normalizedOutcomeId ? { canonicalOutcomeId: normalizedOutcomeId } : {})
+        }).catch(() => [])
+      : [];
+    const liveVenues = snapshots
+      .map((snapshot) => sanitizeVenueOrderbook(snapshot, 5, generatedAt))
+      .filter(isLiveTradableOrderbookVenue);
+    const bids = sortLevels(liveVenues.flatMap((venue) => venue.bids), "desc");
+    const asks = sortLevels(liveVenues.flatMap((venue) => venue.asks), "asc");
+    const bestBid = bids[0]?.price ?? null;
+    const bestAsk = asks[0]?.price ?? null;
+    const midpoint = midpointFromBest(bestBid, bestAsk);
+    const spread = spreadFromBest(bestBid, bestAsk);
+    const bestVenue = asks[0]?.venue ?? bids[0]?.venue ?? null;
+    const price = midpoint ?? bestAsk ?? bestBid;
+    const freshnessValues = liveVenues
+      .map((venue) => venue.freshnessMs)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    const output: MarketLivePriceItem = {
+      marketId: item.marketId,
+      outcomeId: normalizedOutcomeId ?? null,
+      generatedAt: generatedAt.toISOString(),
+      status: price ? "live" : "no_live_price",
+      price,
+      bestBid,
+      bestAsk,
+      midpoint,
+      spread,
+      bestVenue,
+      venueCount: liveVenues.length,
+      venues: [...new Set(liveVenues.map((venue) => venue.venue))].sort(),
+      freshnessMs: freshnessValues.length > 0 ? Math.min(...freshnessValues) : null
+    };
+    this.livePriceCache.set(key, {
+      expiresAt: generatedAt.getTime() + LIVE_PRICE_CACHE_MS,
+      item: output
+    });
+    return output;
+  }
 
   public async getOrderbook(input: {
     marketId: string;
@@ -1216,6 +1307,11 @@ const batchQuoteCacheKey = (
   side: "buy" | "sell",
   quantity: number
 ): string => `${marketId}\u0000${outcomeId}\u0000${side}\u0000${quantity}`;
+
+const livePriceCacheKey = (
+  marketId: string,
+  outcomeId: string | null
+): string => `${marketId}\u0000${outcomeId ?? ""}`;
 
 const bestLevel = (
   levels: readonly NormalizedQuoteLevel[],

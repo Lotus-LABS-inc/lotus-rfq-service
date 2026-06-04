@@ -1078,4 +1078,86 @@ describe("LiveMarketDataViewService", () => {
       reason: "LIVE_ORDERBOOK_TIMEOUT"
     });
   });
+
+  it("serves display live prices from hot snapshots without quote fanout", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    let quoteSourceCalled = false;
+    const service = new LiveMarketDataViewService({
+      getQuoteSnapshotReport: async () => {
+        quoteSourceCalled = true;
+        return { snapshots: [], blocked: [] };
+      }
+    }, {
+      now: () => now,
+      liveOrderbookSource: {
+        get: async () => [
+          snapshot({
+            venue: "POLYMARKET",
+            venueMarketId: "poly-live",
+            venueOutcomeId: "yes",
+            receivedAt: now,
+            bid: "0.48",
+            ask: "0.52"
+          }),
+          snapshot({
+            venue: "LIMITLESS",
+            venueMarketId: "limitless-live",
+            venueOutcomeId: "yes",
+            receivedAt: now,
+            bid: "0.49",
+            ask: "0.51"
+          })
+        ]
+      }
+    });
+
+    const prices = await service.getLivePrices({
+      items: [{ marketId: "market-1", outcomeId: "yes" }]
+    });
+
+    expect(quoteSourceCalled).toBe(false);
+    expect(prices.prices[0]).toMatchObject({
+      marketId: "market-1",
+      outcomeId: "YES",
+      status: "live",
+      bestBid: "0.49",
+      bestAsk: "0.51",
+      midpoint: "0.5",
+      price: "0.5",
+      bestVenue: "LIMITLESS",
+      venueCount: 2,
+      venues: ["LIMITLESS", "POLYMARKET"],
+      freshnessMs: 0
+    });
+  });
+
+  it("returns no_live_price without provider diagnostics when hot snapshots are missing", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    const service = new LiveMarketDataViewService({
+      getQuoteSnapshotReport: async () => ({
+        snapshots: [],
+        blocked: [{ venue: "OPINION", reason: "QUOTE_PROVIDER_TIMEOUT" }]
+      })
+    }, {
+      now: () => now,
+      liveOrderbookSource: {
+        get: async () => []
+      }
+    });
+
+    const prices = await service.getLivePrices({
+      items: [{ marketId: "market-1", outcomeId: "YES" }]
+    });
+
+    expect(prices.prices[0]).toMatchObject({
+      marketId: "market-1",
+      outcomeId: "YES",
+      status: "no_live_price",
+      price: null,
+      bestVenue: null,
+      venueCount: 0,
+      venues: [],
+      freshnessMs: null
+    });
+  });
 });
