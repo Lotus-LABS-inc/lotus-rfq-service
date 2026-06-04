@@ -302,7 +302,7 @@ export class OpinionSdkOrderbookConnector implements VenueOrderbookStreamConnect
 
   public async subscribe(targets: readonly VenueOrderbookSubscriptionTarget[], onSnapshot: SnapshotListener): Promise<void> {
     this.listener = onSnapshot;
-    const wasConnected = this.connected;
+    const wasConnected = this.isConnected();
     await this.connect();
     const subscribeTargets = targets.filter((target) => !this.targets.has(subscriptionKey(target)) || !wasConnected);
     for (const target of subscribeTargets) {
@@ -314,8 +314,8 @@ export class OpinionSdkOrderbookConnector implements VenueOrderbookStreamConnect
       if (!Number.isInteger(marketId)) {
         continue;
       }
+      await this.subscribeMarketDepthDiff(marketId, target);
       this.targets.set(key, target);
-      this.client.subscribeMarketDepthDiff(marketId, (payload) => this.onPayload(payload, target));
     }
   }
 
@@ -324,7 +324,7 @@ export class OpinionSdkOrderbookConnector implements VenueOrderbookStreamConnect
       const target = this.targets.get(key);
       this.targets.delete(key);
       const marketId = Number(target?.venueMarketId);
-      if (Number.isInteger(marketId) && this.connected) {
+      if (Number.isInteger(marketId) && this.isConnected()) {
         this.client.unsubscribeMarketDepthDiff(marketId);
       }
     }
@@ -343,11 +343,36 @@ export class OpinionSdkOrderbookConnector implements VenueOrderbookStreamConnect
   }
 
   private async connect(): Promise<void> {
-    if (this.connected) {
+    if (this.isConnected()) {
       return;
     }
     await this.client.connect();
     this.connected = true;
+  }
+
+  private async subscribeMarketDepthDiff(marketId: number, target: VenueOrderbookSubscriptionTarget): Promise<void> {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        this.client.subscribeMarketDepthDiff(marketId, (payload) => this.onPayload(payload, target));
+        return;
+      } catch (error) {
+        if (!isOpinionDisconnectedError(error) || attempt >= 1) {
+          throw error;
+        }
+        this.connected = false;
+        this.config.logger?.warn?.(
+          { venue: this.venue, targetCount: 1 },
+          "Opinion websocket disconnected during subscribe; reconnecting once."
+        );
+        this.client.close();
+        await sleep(100);
+        await this.connect();
+      }
+    }
+  }
+
+  private isConnected(): boolean {
+    return this.connected && (this.client as { isConnected?: boolean }).isConnected !== false;
   }
 
   private onPayload(payload: unknown, target: VenueOrderbookSubscriptionTarget): void {
@@ -546,6 +571,16 @@ const firstString = (...values: readonly unknown[]): string | null => {
 const isLimitlessDisconnectedError = (error: unknown): boolean => {
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
   return message.toLowerCase().includes("websocket not connected");
+};
+
+const isOpinionDisconnectedError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  return message.toLowerCase().includes("websocket is not connected") ||
+    message.toLowerCase().includes("websocket not connected");
+};
+
+const sleep = async (durationMs: number): Promise<void> => {
+  await new Promise((resolve) => setTimeout(resolve, durationMs));
 };
 
 const normalizeVenue = (venue: string): string => {

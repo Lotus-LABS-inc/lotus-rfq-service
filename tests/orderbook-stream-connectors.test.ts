@@ -32,6 +32,16 @@ const limitlessSdkMock = vi.hoisted(() => ({
   failSubscribeOnce: false
 }));
 
+const opinionSdkMock = vi.hoisted(() => ({
+  instances: [] as Array<{
+    connectCalls: number;
+    subscribeCalls: number;
+    subscriptions: number[];
+    isConnected: boolean;
+  }>,
+  failSubscribeOnce: false
+}));
+
 vi.mock("@limitless-exchange/sdk", () => ({
   DEFAULT_WS_URL: "wss://limitless.test/ws",
   WebSocketClient: class {
@@ -64,6 +74,43 @@ vi.mock("@limitless-exchange/sdk", () => ({
   }
 }));
 
+vi.mock("@opinion-labs/opinion-clob-sdk", () => ({
+  WebSocketClient: class {
+    public connectCalls = 0;
+    public subscribeCalls = 0;
+    public subscriptions: number[] = [];
+    public isConnected = false;
+
+    public constructor() {
+      opinionSdkMock.instances.push(this);
+    }
+
+    public async connect(): Promise<void> {
+      this.connectCalls += 1;
+      this.isConnected = true;
+    }
+
+    public subscribeMarketDepthDiff(marketId: number): void {
+      this.subscribeCalls += 1;
+      if (opinionSdkMock.failSubscribeOnce) {
+        opinionSdkMock.failSubscribeOnce = false;
+        this.isConnected = false;
+        throw new Error("WebSocket is not connected. Call connect() first.");
+      }
+      if (!this.isConnected) {
+        throw new Error("WebSocket is not connected. Call connect() first.");
+      }
+      this.subscriptions.push(marketId);
+    }
+
+    public unsubscribeMarketDepthDiff(): void {}
+
+    public close(): void {
+      this.isConnected = false;
+    }
+  }
+}));
+
 describe("LimitlessSdkOrderbookConnector", () => {
   it("reconnects once when the SDK reports a dropped websocket during subscribe", async () => {
     const { LimitlessSdkOrderbookConnector } = await import("../src/integrations/orderbook-stream-connectors.js");
@@ -93,6 +140,39 @@ describe("LimitlessSdkOrderbookConnector", () => {
     expect(warn).toHaveBeenCalledWith(
       expect.objectContaining({ venue: "LIMITLESS", targetCount: 1 }),
       "Limitless websocket disconnected during subscribe; reconnecting once."
+    );
+  });
+});
+
+describe("OpinionSdkOrderbookConnector", () => {
+  it("reconnects once when the SDK reports a dropped websocket during subscribe", async () => {
+    const { OpinionSdkOrderbookConnector } = await import("../src/integrations/orderbook-stream-connectors.js");
+    opinionSdkMock.instances.length = 0;
+    opinionSdkMock.failSubscribeOnce = true;
+    const warn = vi.fn();
+    const connector = new OpinionSdkOrderbookConnector({
+      apiKey: "opinion-key",
+      walletAddress: "0x0000000000000000000000000000000000000001",
+      logger: { warn }
+    });
+    const target: VenueOrderbookSubscriptionTarget = {
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES",
+      venue: "OPINION",
+      venueMarketId: "6818",
+      venueOutcomeId: "61908768"
+    };
+
+    await connector.subscribe([target], vi.fn());
+
+    const client = opinionSdkMock.instances[0];
+    expect(client).toBeTruthy();
+    expect(client?.connectCalls).toBe(2);
+    expect(client?.subscribeCalls).toBe(2);
+    expect(client?.subscriptions).toEqual([6818]);
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ venue: "OPINION", targetCount: 1 }),
+      "Opinion websocket disconnected during subscribe; reconnecting once."
     );
   });
 });
