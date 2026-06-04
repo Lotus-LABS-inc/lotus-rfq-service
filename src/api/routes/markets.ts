@@ -24,6 +24,18 @@ const listQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(1000).optional(),
   routeCoverage: routeCoverageSchema.optional(),
   view: marketListViewSchema.optional(),
+  includeInactive: z.preprocess((value) => {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (value === "true" || value === true) {
+      return true;
+    }
+    if (value === "false" || value === false) {
+      return false;
+    }
+    return value;
+  }, z.boolean()).optional(),
   quoteReadyOnly: z.preprocess((value) => {
     if (value === undefined) {
       return undefined;
@@ -183,8 +195,11 @@ export const registerMarketCatalogRoutes = async (
           ...(cacheQuery.search !== undefined ? { search: cacheQuery.search } : {}),
           ...(marketLimit !== undefined ? { limit: marketLimit } : {})
         });
-        touchMarketCatalogActivity(markets, deps.marketActivityTracker, DEFAULT_MARKET_CATALOG_ACTIVITY_TOUCH_LIMIT);
-        const enriched = await enrichMarketsWithQuoteReadiness(markets, deps.marketQuoteReadinessSource);
+        const publicMarkets = cacheQuery.includeInactive
+          ? markets
+          : markets.filter(isPublicMarketListMarket);
+        touchMarketCatalogActivity(publicMarkets, deps.marketActivityTracker, DEFAULT_MARKET_CATALOG_ACTIVITY_TOUCH_LIMIT);
+        const enriched = await enrichMarketsWithQuoteReadiness(publicMarkets, deps.marketQuoteReadinessSource);
         const routeCoverage = cacheQuery.routeCoverage ?? "all";
         const visibleMarkets = enriched.markets
           .filter((market) => !cacheQuery.quoteReadyOnly || isQuoteReadyMarket(market))
@@ -1409,6 +1424,29 @@ const routeCoverageMatches = (
     case "all":
       return true;
   }
+};
+
+const isPublicMarketListMarket = (market: MarketCatalogMarket, nowMs = Date.now()): boolean => {
+  if (market.status !== "OPEN") {
+    return false;
+  }
+  const expiresAtMs = parseMarketListTimestampMs(market.expiresAt);
+  if (expiresAtMs !== null && expiresAtMs <= nowMs) {
+    return false;
+  }
+  const resolvesAtMs = parseMarketListTimestampMs(market.resolvesAt);
+  if (resolvesAtMs !== null && resolvesAtMs <= nowMs) {
+    return false;
+  }
+  return true;
+};
+
+const parseMarketListTimestampMs = (value: string | null): number | null => {
+  if (!value) {
+    return null;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
 };
 
 const resolveCachedCatalogMarket = async (

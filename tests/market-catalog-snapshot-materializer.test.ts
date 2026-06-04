@@ -122,6 +122,57 @@ describe("MarketCatalogSnapshotMaterializer", () => {
     });
   });
 
+  it("does not materialize inactive markets into public catalog snapshots", async () => {
+    const snapshotCache = new FakeSnapshotCache();
+    const expiredMarket: MarketCatalogMarket = {
+      ...baseMarket,
+      eventId: "expired-event",
+      canonicalEventId: "expired-event",
+      canonicalMarketIds: ["expired-market"],
+      title: "Expired threshold",
+      normalizedTitle: "expired threshold",
+      status: "RESOLVED_OR_EXPIRED",
+      expiresAt: "2026-04-30T12:00:00.000Z",
+      resolvesAt: "2026-04-30T12:00:00.000Z"
+    };
+    const repository: Pick<MarketCatalogRepository, "listMarkets"> = {
+      listMarkets: vi.fn(async () => [expiredMarket, baseMarket])
+    };
+    const materializer = new MarketCatalogSnapshotMaterializer({
+      marketCatalogRepository: repository,
+      marketQuoteReadinessSource: {
+        listLatestMarketQuoteReadiness: vi.fn(async () => [{
+          canonicalMarketId: "market-1",
+          quoteStatus: "live" as const,
+          quoteReadyVenueCount: 2,
+          quoteReadyVenues: ["POLYMARKET", "LIMITLESS"],
+          quoteBlockers: [],
+          lastQuoteAt: "2026-06-01T00:00:00.000Z"
+        }, {
+          canonicalMarketId: "expired-market",
+          quoteStatus: "live" as const,
+          quoteReadyVenueCount: 2,
+          quoteReadyVenues: ["POLYMARKET", "LIMITLESS"],
+          quoteBlockers: [],
+          lastQuoteAt: "2026-06-01T00:00:00.000Z"
+        }])
+      },
+      snapshotCache,
+      logger: { info: vi.fn(), warn: vi.fn() },
+      config: { limits: [80], routeCoverages: ["all"], categories: [], intervalMs: 60_000 }
+    });
+
+    await materializer.runOnce();
+
+    const compactAllMarketKey = `markets:${stableQueryCacheKey({ limit: 80, view: "compact" })}`;
+    expect(snapshotCache.values.get(compactAllMarketKey)).toMatchObject({
+      count: 1,
+      materialized: true,
+      markets: [{ canonicalMarketIds: ["market-1"], status: "OPEN" }]
+    });
+    expect(JSON.stringify(snapshotCache.values.get(compactAllMarketKey))).not.toContain("expired-market");
+  });
+
   it("does not cache empty quote-ready snapshots", async () => {
     const snapshotCache = new FakeSnapshotCache();
     const materializer = new MarketCatalogSnapshotMaterializer({

@@ -201,6 +201,7 @@ export class MarketCatalogSnapshotMaterializer {
   ): Promise<number | "skipped_empty_quote_ready" | "skipped_underfilled_quote_ready"> {
     const routeCoverage = query.routeCoverage ?? "all";
     const baseVisibleMarkets = enriched
+      .filter(isPublicMaterializedMarket)
       .filter((market) => !query.quoteReadyOnly || isQuoteReadyMarket(market))
       .filter((market) => routeCoverageMatches(market, routeCoverage))
       .slice(0, query.limit);
@@ -883,6 +884,29 @@ const isQuoteReadyMarket = (market: MarketCatalogMarket): boolean =>
   (market.quoteReadyVenueCount ?? 0) > 0
   && (market.quoteStatus === "live" || market.quoteStatus === "partial")
   && hasRecentQuoteTimestamp(market.lastQuoteAt);
+
+const isPublicMaterializedMarket = (market: MarketCatalogMarket, nowMs = Date.now()): boolean => {
+  if (market.status !== "OPEN") {
+    return false;
+  }
+  const expiresAtMs = parseMarketTimestampMs(market.expiresAt);
+  if (expiresAtMs !== null && expiresAtMs <= nowMs) {
+    return false;
+  }
+  const resolvesAtMs = parseMarketTimestampMs(market.resolvesAt);
+  if (resolvesAtMs !== null && resolvesAtMs <= nowMs) {
+    return false;
+  }
+  return true;
+};
+
+const parseMarketTimestampMs = (value: string | null): number | null => {
+  if (!value) {
+    return null;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
 const hasRecentQuoteTimestamp = (value: unknown): boolean => {
   if (typeof value !== "string" || value.trim().length === 0) {

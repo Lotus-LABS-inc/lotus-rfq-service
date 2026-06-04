@@ -236,6 +236,58 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
+  it("filters inactive markets from public lists while preserving an explicit diagnostic opt-in", async () => {
+    const app = Fastify({ logger: false });
+    const expiredMarket: MarketCatalogMarket = {
+      ...market,
+      canonicalEventId: "22222222-2222-5222-8222-222222222222",
+      canonicalMarketIds: ["THRESHOLD|BTC|2026-04-30"],
+      displayTopic: "BTC threshold by date",
+      displayOutcome: "April 30, 2026",
+      displayOutcomeKey: "date:2026-04-30",
+      title: "Expired BTC threshold",
+      normalizedTitle: "expired btc threshold",
+      status: "RESOLVED_OR_EXPIRED",
+      expiresAt: "2026-04-30T12:00:00.000Z",
+      resolvesAt: "2026-04-30T12:00:00.000Z",
+      updatedAt: "2026-04-30T12:00:00.000Z"
+    };
+    const repository = new FakeMarketCatalogRepository();
+    repository.listMarkets = async (filter = {}) => {
+      repository.filters.push(filter);
+      return [expiredMarket, market];
+    };
+    await registerMarketCatalogRoutes(app, { marketCatalogRepository: repository });
+
+    const publicResponse = await app.inject({
+      method: "GET",
+      url: "/markets?limit=10&view=compact"
+    });
+    expect(publicResponse.statusCode).toBe(200);
+    expect(publicResponse.json()).toMatchObject({
+      count: 1,
+      markets: [{
+        canonicalEventId: market.canonicalEventId,
+        status: "OPEN"
+      }]
+    });
+
+    const diagnosticResponse = await app.inject({
+      method: "GET",
+      url: "/markets?limit=10&view=compact&includeInactive=true"
+    });
+    expect(diagnosticResponse.statusCode).toBe(200);
+    expect(diagnosticResponse.json()).toMatchObject({
+      count: 2,
+      markets: [
+        { canonicalEventId: expiredMarket.canonicalEventId, status: "RESOLVED_OR_EXPIRED" },
+        { canonicalEventId: market.canonicalEventId, status: "OPEN" }
+      ]
+    });
+
+    await app.close();
+  });
+
   it("marks listed markets active for the orderbook stream service", async () => {
     const app = Fastify({ logger: false });
     const repository = new FakeMarketCatalogRepository();
