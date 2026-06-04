@@ -108,15 +108,15 @@ const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
   maxTargetsPerConnectorCall: 50,
   subscriptionHoldMs: 120_000,
   restRefreshIntervalMs: 10_000,
-  maxRestRefreshTargetsPerTick: 40,
-  maxRestRefreshTargetsPerVenuePerTick: 6,
+  maxRestRefreshTargetsPerTick: 64,
+  maxRestRefreshTargetsPerVenuePerTick: 12,
   restRefreshTimeoutMs: 2_000,
   restRefreshFailureCooldownMs: 60_000,
   restRefreshVenuePolicies: {
-    POLYMARKET: { maxTargetsPerSweep: 10, failureCooldownMs: 60_000 },
-    LIMITLESS: { maxTargetsPerSweep: 2, failureCooldownMs: 300_000 },
-    PREDICT_FUN: { maxTargetsPerSweep: 6, failureCooldownMs: 90_000 },
-    OPINION: { maxTargetsPerSweep: 8, failureCooldownMs: 120_000 }
+    POLYMARKET: { maxTargetsPerSweep: 36, failureCooldownMs: 60_000 },
+    LIMITLESS: { maxTargetsPerSweep: 8, failureCooldownMs: 300_000 },
+    PREDICT_FUN: { maxTargetsPerSweep: 2, failureCooldownMs: 90_000 },
+    OPINION: { maxTargetsPerSweep: 2, failureCooldownMs: 120_000 }
   },
   latestSnapshotPersistIntervalMs: 30_000,
   latestSnapshotPersistMinSpacingMs: 250,

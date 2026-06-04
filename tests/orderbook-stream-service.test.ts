@@ -1023,16 +1023,16 @@ describe("OrderbookStreamService", () => {
       }
     });
 
-    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 14 });
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 12 });
     const countsByVenue = new Map<string, number>();
     for (const [target] of refresh.mock.calls) {
       countsByVenue.set(target.venue, (countsByVenue.get(target.venue) ?? 0) + 1);
     }
     expect(countsByVenue).toEqual(new Map([
       ["POLYMARKET", 4],
-      ["PREDICT_FUN", 4],
-      ["LIMITLESS", 2],
-      ["OPINION", 4]
+      ["PREDICT_FUN", 2],
+      ["LIMITLESS", 4],
+      ["OPINION", 2]
     ]));
   });
 
