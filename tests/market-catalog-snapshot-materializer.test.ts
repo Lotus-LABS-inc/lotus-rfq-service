@@ -205,6 +205,48 @@ describe("MarketCatalogSnapshotMaterializer", () => {
     expect(snapshotCache.values.get(`markets:${stableQueryCacheKey({ limit: 80, quoteReadyOnly: true, view: "compact" })}`)).toBeUndefined();
   });
 
+  it("replaces equivalent quote-ready snapshots when the new snapshot has fewer display blockers", async () => {
+    const snapshotCache = new FakeSnapshotCache();
+    const key = `markets:${stableQueryCacheKey({ limit: 80, quoteReadyOnly: true })}`;
+    snapshotCache.values.set(key, {
+      count: 1,
+      materialized: true,
+      markets: [{
+        ...baseMarket,
+        quoteStatus: "live",
+        quoteReadyVenueCount: 2,
+        quoteReadyVenues: ["LIMITLESS", "POLYMARKET"],
+        quoteBlockers: [{ venue: "POLYMARKET", reason: "LIVE_QUOTE_SNAPSHOT_MISSING" }],
+        lastQuoteAt: "2026-06-01T00:00:00.000Z"
+      }]
+    });
+    const materializer = new MarketCatalogSnapshotMaterializer({
+      marketCatalogRepository: {
+        listMarkets: vi.fn(async () => [baseMarket])
+      },
+      marketQuoteReadinessSource: {
+        listLatestMarketQuoteReadiness: vi.fn(async () => [ {
+          canonicalMarketId: "market-1",
+          quoteStatus: "live" as const,
+          quoteReadyVenueCount: 2,
+          quoteReadyVenues: ["POLYMARKET", "LIMITLESS"],
+          quoteBlockers: [],
+          lastQuoteAt: "2026-06-01T00:00:00.000Z"
+        }])
+      },
+      snapshotCache,
+      logger: { info: vi.fn(), warn: vi.fn() },
+      config: { limits: [80], routeCoverages: ["all"], categories: [], intervalMs: 60_000 }
+    });
+
+    await materializer.runOnce();
+
+    expect(snapshotCache.values.get(key)).toMatchObject({
+      count: 1,
+      markets: [{ quoteReadyVenueCount: 2, quoteBlockers: [] }]
+    });
+  });
+
   it("does not run materialization after stop is requested", async () => {
     const listMarkets = vi.fn(async () => [baseMarket]);
     const listLatestMarketQuoteReadiness = vi.fn(async () => []);

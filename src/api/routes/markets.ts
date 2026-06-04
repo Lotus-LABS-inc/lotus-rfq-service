@@ -1189,6 +1189,8 @@ const pickBestMarketCatalogResponse = <T extends Record<string, unknown>>(values
 interface MarketCatalogResponseScore {
   marketCount: number;
   readyVenueCount: number;
+  liveMarketCount: number;
+  blockerCount: number;
   materialized: number;
 }
 
@@ -1201,6 +1203,8 @@ const marketCatalogResponseScore = (value: Record<string, unknown>): MarketCatal
         ? value.count
         : 0,
     readyVenueCount: markets.reduce((sum, market) => sum + marketReadyVenueCount(market), 0),
+    liveMarketCount: markets.filter(isLiveMarketCatalogResponseValue).length,
+    blockerCount: markets.reduce((sum, market) => sum + marketQuoteBlockerCount(market), 0),
     materialized: value.materialized === true ? 1 : 0
   };
 };
@@ -1211,6 +1215,8 @@ const compareMarketCatalogResponseScore = (
 ): number => {
   if (left.marketCount !== right.marketCount) return left.marketCount - right.marketCount;
   if (left.readyVenueCount !== right.readyVenueCount) return left.readyVenueCount - right.readyVenueCount;
+  if (left.liveMarketCount !== right.liveMarketCount) return left.liveMarketCount - right.liveMarketCount;
+  if (left.blockerCount !== right.blockerCount) return right.blockerCount - left.blockerCount;
   return left.materialized - right.materialized;
 };
 
@@ -1230,6 +1236,17 @@ const marketReadyVenueCount = (value: unknown): number => {
     return Number.isFinite(parsed) ? parsed : 0;
   }
   return 0;
+};
+
+const isLiveMarketCatalogResponseValue = (value: unknown): boolean =>
+  Boolean(value && typeof value === "object" && (value as { quoteStatus?: unknown }).quoteStatus === "live");
+
+const marketQuoteBlockerCount = (value: unknown): number => {
+  if (!value || typeof value !== "object") {
+    return 0;
+  }
+  const quoteBlockers = (value as { quoteBlockers?: unknown }).quoteBlockers;
+  return Array.isArray(quoteBlockers) ? quoteBlockers.length : 0;
 };
 
 const sliceMarketCatalogResponse = <T extends Record<string, unknown>>(value: T, limit: number): T => {

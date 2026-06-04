@@ -345,7 +345,7 @@ export class MarketCatalogSnapshotMaterializer {
           if (!isQuoteReadyMarket(market) || !routeCoverageMatches(market, routeCoverage)) {
             continue;
           }
-          byKey.set(marketIdentityKey(market), market);
+          setBestMarketByIdentity(byKey, market);
         }
       } catch {
         // Category snapshots are display fallbacks only. A cache miss should not block materialization.
@@ -367,7 +367,7 @@ export class MarketCatalogSnapshotMaterializer {
         if (!isQuoteReadyMarket(market) || !routeCoverageMatches(market, routeCoverage)) {
           continue;
         }
-        recovered.set(marketIdentityKey(market), market);
+        setBestMarketByIdentity(recovered, market);
       }
     };
     try {
@@ -608,8 +608,10 @@ const snapshotMarketCount = (snapshot: { count?: unknown; markets?: unknown } | 
 
 interface MarketSnapshotQuality {
   distinctVenueCount: number;
+  liveMarketCount: number;
   multiVenueMarketCount: number;
   totalReadyVenueMemberships: number;
+  blockerCount: number;
   marketCount: number;
 }
 
@@ -635,33 +637,47 @@ const compareMarketSnapshotQuality = (
   if (left.distinctVenueCount !== right.distinctVenueCount) {
     return left.distinctVenueCount - right.distinctVenueCount;
   }
+  if (left.liveMarketCount !== right.liveMarketCount) {
+    return left.liveMarketCount - right.liveMarketCount;
+  }
   if (left.multiVenueMarketCount !== right.multiVenueMarketCount) {
     return left.multiVenueMarketCount - right.multiVenueMarketCount;
   }
   if (left.totalReadyVenueMemberships !== right.totalReadyVenueMemberships) {
     return left.totalReadyVenueMemberships - right.totalReadyVenueMemberships;
   }
+  if (left.blockerCount !== right.blockerCount) {
+    return right.blockerCount - left.blockerCount;
+  }
   return 0;
 };
 
 const marketSnapshotQuality = (markets: readonly unknown[]): MarketSnapshotQuality => {
   const distinctVenues = new Set<string>();
+  let liveMarketCount = 0;
   let multiVenueMarketCount = 0;
   let totalReadyVenueMemberships = 0;
+  let blockerCount = 0;
   for (const market of markets) {
     const quoteReadyVenues = quoteReadyVenuesFromMarket(market);
     for (const venue of quoteReadyVenues) {
       distinctVenues.add(venue);
     }
+    if (isLiveMarketSnapshotValue(market)) {
+      liveMarketCount += 1;
+    }
     if (quoteReadyVenues.length > 1) {
       multiVenueMarketCount += 1;
     }
     totalReadyVenueMemberships += quoteReadyVenues.length;
+    blockerCount += quoteBlockerCountFromMarket(market);
   }
   return {
     distinctVenueCount: distinctVenues.size,
+    liveMarketCount,
     multiVenueMarketCount,
     totalReadyVenueMemberships,
+    blockerCount,
     marketCount: markets.length
   };
 };
@@ -686,6 +702,17 @@ const quoteReadyVenuesFromMarket = (market: unknown): string[] => {
     .filter((venue): venue is string => typeof venue === "string")
     .map((venue) => venue.trim().toUpperCase())
     .filter(Boolean))];
+};
+
+const isLiveMarketSnapshotValue = (market: unknown): boolean =>
+  Boolean(market && typeof market === "object" && (market as { quoteStatus?: unknown }).quoteStatus === "live");
+
+const quoteBlockerCountFromMarket = (market: unknown): number => {
+  if (!market || typeof market !== "object") {
+    return 0;
+  }
+  const quoteBlockers = (market as { quoteBlockers?: unknown }).quoteBlockers;
+  return Array.isArray(quoteBlockers) ? quoteBlockers.length : 0;
 };
 
 export interface CompactMarketCatalogMarket {
@@ -941,9 +968,20 @@ const mergeMarketCatalogMarkets = (
   }
   const byKey = new Map(primary.map((market) => [marketIdentityKey(market), market] as const));
   for (const market of recovered) {
-    byKey.set(marketIdentityKey(market), market);
+    setBestMarketByIdentity(byKey, market);
   }
   return [...byKey.values()].slice(0, limit);
+};
+
+const setBestMarketByIdentity = (
+  marketsByKey: Map<string, MarketCatalogMarket>,
+  candidate: MarketCatalogMarket
+): void => {
+  const key = marketIdentityKey(candidate);
+  const existing = marketsByKey.get(key);
+  if (!existing || compareMarketSnapshotQuality([candidate], [existing]) > 0) {
+    marketsByKey.set(key, candidate);
+  }
 };
 
 const isMarketCatalogMarket = (value: unknown): value is MarketCatalogMarket =>
