@@ -9,13 +9,14 @@ const snapshot = (input: {
   receivedAt: Date;
   bid: string;
   ask: string;
+  source?: "STREAM" | "REST" | undefined;
   missingFactors?: readonly string[] | undefined;
 }): NormalizedVenueQuoteSnapshot => ({
   venue: input.venue,
   venueMarketId: input.venueMarketId,
   ...(input.venueOutcomeId ? { venueOutcomeId: input.venueOutcomeId } : {}),
-  source: "STREAM",
-  quoteQuality: "FULL_DEPTH_STREAM",
+  source: input.source ?? "STREAM",
+  quoteQuality: input.source === "REST" ? "FULL_DEPTH_REST" : "FULL_DEPTH_STREAM",
   sourceTimestamp: input.receivedAt,
   receivedAt: input.receivedAt,
   bids: [{ price: input.bid, size: "100" }],
@@ -331,7 +332,7 @@ describe("LiveMarketDataViewService", () => {
             source: "STREAM",
             quoteQuality: "FULL_DEPTH_STREAM",
             sourceTimestamp: new Date("2026-05-10T11:59:30.000Z"),
-            receivedAt: new Date("2026-05-10T11:59:30.000Z"),
+            receivedAt: new Date("2026-05-10T11:59:29.000Z"),
             bestBid: "0.39",
             bestAsk: "0.45",
             midpoint: "0.42",
@@ -391,7 +392,7 @@ describe("LiveMarketDataViewService", () => {
             source: "REST",
             quoteQuality: "FULL_DEPTH_REST",
             sourceTimestamp: null,
-            receivedAt: new Date("2026-05-10T11:59:30.000Z"),
+            receivedAt: new Date("2026-05-10T11:59:29.000Z"),
             bestBid: "0.38",
             bestAsk: "0.42",
             midpoint: "0.40",
@@ -546,7 +547,7 @@ describe("LiveMarketDataViewService", () => {
   });
 
   it("does not expose all-stale orderbook snapshots as tradable depth", async () => {
-    const now = new Date("2026-05-10T12:00:25.000Z");
+    const now = new Date("2026-05-10T12:00:46.000Z");
     const staleAt = new Date("2026-05-10T12:00:00.000Z");
     const service = new LiveMarketDataViewService({
       getQuoteSnapshotReport: async () => ({
@@ -1163,6 +1164,39 @@ describe("LiveMarketDataViewService", () => {
       bestVenue: "OPINION",
       venueCount: 1,
       venues: ["OPINION"]
+    });
+  });
+
+  it("treats recently refreshed REST orderbooks as live display prices", async () => {
+    const now = new Date("2026-05-10T12:00:40.000Z");
+    const service = new LiveMarketDataViewService({
+      getQuoteSnapshotReport: async () => ({ snapshots: [], blocked: [] })
+    }, {
+      now: () => now,
+      liveOrderbookSource: {
+        get: async () => [
+          snapshot({
+            venue: "POLYMARKET",
+            venueMarketId: "poly-rest",
+            venueOutcomeId: "yes",
+            source: "REST",
+            receivedAt: new Date("2026-05-10T12:00:00.000Z"),
+            bid: "0.40",
+            ask: "0.42"
+          })
+        ]
+      }
+    });
+
+    const prices = await service.getLivePrices({
+      items: [{ marketId: "market-1", outcomeId: "yes" }]
+    });
+
+    expect(prices.prices[0]).toMatchObject({
+      status: "live",
+      price: "0.41",
+      bestVenue: "POLYMARKET",
+      freshnessMs: 40000
     });
   });
 
