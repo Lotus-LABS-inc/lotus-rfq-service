@@ -546,7 +546,7 @@ describe("OrderbookStreamService", () => {
       desiredSubscriptions: 360,
       subscribed: 360
     });
-    expect(listApprovedReadiness).toHaveBeenCalledWith({ limit: 1000 });
+    expect(listApprovedReadiness).toHaveBeenCalledWith({ limit: 2500 });
     expect(connector.subscribed).toHaveLength(360);
   });
 
