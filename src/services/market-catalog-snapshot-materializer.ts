@@ -847,6 +847,7 @@ const aggregateMarketQuoteReadiness = (
     .flatMap((item) => item.quoteReadyVenues.length > 0 ? item.quoteReadyVenues : [])
     .map((venue) => venue.trim().toUpperCase())
     .filter(Boolean))].sort();
+  const readyVenueSet = new Set(quoteReadyVenues);
   return {
     quoteStatus: pickMarketQuoteStatus(readiness),
     quoteReadyVenueCount: quoteReadyVenues.length > 0
@@ -855,6 +856,7 @@ const aggregateMarketQuoteReadiness = (
     quoteReadyVenues,
     quoteBlockers: [...new Map(readiness
       .flatMap((item) => item.quoteBlockers)
+      .filter((blocker) => !isRedundantReadyVenueMissingBlocker(blocker, readyVenueSet))
       .map((blocker) => [`${blocker.venue}:${blocker.reason}:${blocker.venueMarketId ?? ""}:${blocker.venueOutcomeId ?? ""}`, blocker] as const)
     ).values()],
     lastQuoteAt: readiness
@@ -875,6 +877,13 @@ const pickMarketQuoteStatus = (readiness: readonly MarketQuoteReadinessSnapshot[
   if (statuses.has("live") || statuses.has("partial") || statuses.has("stale")) return "stale";
   return "unavailable";
 };
+
+const isRedundantReadyVenueMissingBlocker = (
+  blocker: MarketQuoteReadinessSnapshot["quoteBlockers"][number],
+  readyVenueSet: ReadonlySet<string>
+): boolean =>
+  blocker.reason === "LIVE_QUOTE_SNAPSHOT_MISSING" &&
+  readyVenueSet.has(blocker.venue.trim().toUpperCase());
 
 const isTradableReadinessSnapshot = (snapshot: MarketQuoteReadinessSnapshot): boolean =>
   (snapshot.quoteStatus === "live" || snapshot.quoteStatus === "partial")
