@@ -9,6 +9,10 @@ import type {
 export type MarketChartTimeframe = "1H" | "6H" | "1D" | "1W" | "1M" | "ALL";
 
 export interface MarketDataQuoteSource {
+  preloadMappingReadiness?(inputs: readonly {
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+  }[]): Promise<void>;
   getQuoteSnapshotReport(input: {
     canonicalMarketId: string;
     canonicalOutcomeId?: string | undefined;
@@ -16,7 +20,15 @@ export interface MarketDataQuoteSource {
     quantity: number;
     readMode?: "live" | "cached_display" | undefined;
     displayMaxAgeMs?: number | undefined;
+    venueAllowlist?: readonly string[] | undefined;
   }): Promise<VenueQuoteSnapshotReport>;
+}
+
+export interface MarketOrderbookLiveSnapshotSource {
+  get(input: {
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+  }): Promise<readonly NormalizedVenueQuoteSnapshot[]>;
 }
 
 export interface MarketHistoricalChartSource {
@@ -105,6 +117,8 @@ export interface MarketBatchQuoteRequestItem {
   amount?: string | number;
 }
 
+export type MarketBatchQuoteDisplayMode = "debug" | "user";
+
 export interface MarketBatchQuoteVenueEvidence {
   venue: string;
   venueMarketId: string;
@@ -144,6 +158,33 @@ export interface MarketBatchQuoteResponse {
   quotes: MarketBatchQuoteItem[];
 }
 
+export interface MarketLivePriceRequestItem {
+  marketId: string;
+  canonicalMarketIds?: readonly string[] | undefined;
+  outcomeId?: string | undefined;
+}
+
+export interface MarketLivePriceItem {
+  marketId: string;
+  outcomeId: string | null;
+  generatedAt: string;
+  status: "live" | "no_live_price";
+  price: string | null;
+  bestBid: string | null;
+  bestAsk: string | null;
+  midpoint: string | null;
+  spread: string | null;
+  bestVenue: string | null;
+  venueCount: number;
+  venues: string[];
+  freshnessMs: number | null;
+}
+
+export interface MarketLivePricesResponse {
+  generatedAt: string;
+  prices: MarketLivePriceItem[];
+}
+
 interface StoredChartPoint {
   marketId: string;
   outcomeId: string | null;
@@ -162,15 +203,19 @@ interface BatchQuoteCacheEntry {
 const MAX_STORED_POINTS = 20_000;
 const MAX_HISTORY_MS = 31 * 24 * 60 * 60 * 1000;
 const ORDERBOOK_CACHE_MS = 3_000;
-const ORDERBOOK_LIVE_TIMEOUT_MS = 250;
+const ORDERBOOK_LIVE_TIMEOUT_MS = 750;
+const ORDERBOOK_MAPPING_PRELOAD_TIMEOUT_MS = 750;
 const ORDERBOOK_DISPLAY_SNAPSHOT_MAX_AGE_MS = 120_000;
+const STREAM_ORDERBOOK_LIVE_FRESHNESS_MS = 15_000;
+const REST_ORDERBOOK_LIVE_FRESHNESS_MS = 45_000;
 const BATCH_QUOTE_CACHE_MS = 3_000;
-const BATCH_QUOTE_STALE_CACHE_MS = 60_000;
+const BATCH_QUOTE_REFRESH_GRACE_MS = 15_000;
 const BATCH_QUOTE_LIVE_TIMEOUT_MS = 150;
 const BATCH_QUOTE_DISPLAY_SNAPSHOT_MAX_AGE_MS = 120_000;
 const CHART_CACHE_MS = 10_000;
 const CHART_LIVE_POINT_TIMEOUT_MS = 50;
 const CHART_HISTORICAL_POINTS_TIMEOUT_MS = 150;
+const LIVE_PRICE_CACHE_MS = 2_000;
 const VENUE_COLORS = ["#3B82F6", "#10B981", "#8B5CF6", "#F59E0B", "#EC4899", "#22D3EE"];
 
 export class LiveMarketDataViewService {
@@ -179,6 +224,7 @@ export class LiveMarketDataViewService {
   private readonly lastGoodOrderbooks = new Map<string, MarketOrderbookResponse>();
   private readonly batchQuoteCache = new Map<string, BatchQuoteCacheEntry>();
   private readonly chartCache = new Map<string, { expiresAt: number; response: MarketChartResponse }>();
+  private readonly livePriceCache = new Map<string, { expiresAt: number; item: MarketLivePriceItem }>();
   private readonly lastGoodBatchQuotes = new Map<string, MarketBatchQuoteItem>();
   private readonly now: () => Date;
   private readonly orderbookLiveTimeoutMs: number;
@@ -191,25 +237,107 @@ export class LiveMarketDataViewService {
       orderbookLiveTimeoutMs?: number | undefined;
       batchQuoteLiveTimeoutMs?: number | undefined;
       historicalChartSource?: MarketHistoricalChartSource | undefined;
+      liveOrderbookSource?: MarketOrderbookLiveSnapshotSource | undefined;
     } = {}
   ) {
     this.now = options.now ?? (() => new Date());
     this.orderbookLiveTimeoutMs = Math.max(50, Math.min(options.orderbookLiveTimeoutMs ?? ORDERBOOK_LIVE_TIMEOUT_MS, 5_000));
     this.batchQuoteLiveTimeoutMs = Math.max(50, Math.min(options.batchQuoteLiveTimeoutMs ?? BATCH_QUOTE_LIVE_TIMEOUT_MS, 5_000));
     this.historicalChartSource = options.historicalChartSource;
+    this.liveOrderbookSource = options.liveOrderbookSource;
   }
 
   private readonly historicalChartSource: MarketHistoricalChartSource | undefined;
+  private readonly liveOrderbookSource: MarketOrderbookLiveSnapshotSource | undefined;
+
+  public async getLivePrices(input: {
+    items: readonly MarketLivePriceRequestItem[];
+  }): Promise<MarketLivePricesResponse> {
+    const generatedAt = this.now();
+    const prices = await Promise.all(input.items.map((item) => this.getLivePriceItem(item, generatedAt)));
+    return {
+      generatedAt: generatedAt.toISOString(),
+      prices
+    };
+  }
+
+  private async getLivePriceItem(item: MarketLivePriceRequestItem, generatedAt: Date): Promise<MarketLivePriceItem> {
+    const normalizedOutcomeId = normalizeBinaryOutcomeId(item.outcomeId);
+    const marketIds = normalizeOrderbookMarketIds(item.marketId, item.canonicalMarketIds);
+    const key = livePriceCacheKey(orderbookCacheMarketKey(item.marketId, marketIds), normalizedOutcomeId ?? null);
+    const cached = this.livePriceCache.get(key);
+    if (cached && cached.expiresAt > generatedAt.getTime()) {
+      return {
+        ...cached.item,
+        generatedAt: generatedAt.toISOString()
+      };
+    }
+    const outcomeIds = livePriceDisplayOutcomeIds(normalizedOutcomeId);
+    const snapshots: readonly NormalizedVenueQuoteSnapshot[] = this.liveOrderbookSource
+      ? dedupeSnapshotsByIdentity((await Promise.all(marketIds.flatMap((canonicalMarketId) =>
+          outcomeIds.map((outcomeId) => this.liveOrderbookSource!.get({
+            canonicalMarketId,
+            ...(outcomeId ? { canonicalOutcomeId: outcomeId } : {})
+          }).catch(() => []))
+        ))).flat())
+      : [];
+    const liveVenues = snapshots
+      .map((snapshot) => sanitizeVenueOrderbook(snapshot, 5, generatedAt))
+      .filter(isLiveTradableOrderbookVenue);
+    const bids = sortLevels(liveVenues.flatMap((venue) => venue.bids), "desc");
+    const asks = sortLevels(liveVenues.flatMap((venue) => venue.asks), "asc");
+    const bestBid = bids[0]?.price ?? null;
+    const bestAsk = asks[0]?.price ?? null;
+    const midpoint = midpointFromBest(bestBid, bestAsk);
+    const spread = spreadFromBest(bestBid, bestAsk);
+    const bestVenue = asks[0]?.venue ?? bids[0]?.venue ?? null;
+    const price = midpoint ?? bestAsk ?? bestBid;
+    const freshnessValues = liveVenues
+      .map((venue) => venue.freshnessMs)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    const output: MarketLivePriceItem = {
+      marketId: item.marketId,
+      outcomeId: normalizedOutcomeId ?? null,
+      generatedAt: generatedAt.toISOString(),
+      status: price ? "live" : "no_live_price",
+      price,
+      bestBid,
+      bestAsk,
+      midpoint,
+      spread,
+      bestVenue,
+      venueCount: liveVenues.length,
+      venues: [...new Set(liveVenues.map((venue) => venue.venue))].sort(),
+      freshnessMs: freshnessValues.length > 0 ? Math.min(...freshnessValues) : null
+    };
+    this.livePriceCache.set(key, {
+      expiresAt: generatedAt.getTime() + LIVE_PRICE_CACHE_MS,
+      item: output
+    });
+    return output;
+  }
 
   public async getOrderbook(input: {
     marketId: string;
+    canonicalMarketIds?: readonly string[] | undefined;
     outcomeId?: string | undefined;
     depth?: number | undefined;
     venue?: string | undefined;
   }): Promise<MarketOrderbookResponse> {
+    const normalizedOutcomeId = normalizeBinaryOutcomeId(input.outcomeId);
+    const normalizedInput = {
+      ...input,
+      ...(normalizedOutcomeId ? { outcomeId: normalizedOutcomeId } : { outcomeId: undefined })
+    };
     const generatedAt = this.now();
     const depth = clampDepth(input.depth);
-    const key = orderbookCacheKey(input.marketId, input.outcomeId ?? null, input.venue ?? null, depth);
+    const orderbookMarketIds = normalizeOrderbookMarketIds(normalizedInput.marketId, normalizedInput.canonicalMarketIds);
+    const key = orderbookCacheKey(
+      orderbookCacheMarketKey(normalizedInput.marketId, orderbookMarketIds),
+      normalizedInput.outcomeId ?? null,
+      normalizedInput.venue ?? null,
+      depth
+    );
     const cached = this.orderbookCache.get(key);
     if (cached && cached.expiresAt > generatedAt.getTime()) {
       if (cached.response) {
@@ -223,18 +351,26 @@ export class LiveMarketDataViewService {
       }
     }
 
-    const livePromise = this.loadOrderbook(input, generatedAt, depth)
+    const cachedLiveOrderbook = await this.getCachedLiveOrderbook(normalizedInput, generatedAt, depth, orderbookMarketIds);
+    if (cachedLiveOrderbook) {
+      this.lastGoodOrderbooks.set(key, cachedLiveOrderbook);
+      this.orderbookCache.set(key, { expiresAt: generatedAt.getTime() + ORDERBOOK_CACHE_MS, response: cachedLiveOrderbook });
+      return cachedLiveOrderbook;
+    }
+
+    await this.preloadOrderbookMappings(orderbookMarketIds, normalizedInput.outcomeId);
+    const livePromise = this.loadOrderbook(normalizedInput, generatedAt, depth, orderbookMarketIds)
       .catch((error) => unavailableOrderbook({
-        input,
+        input: normalizedInput,
         generatedAt,
         depth,
         reason: error instanceof Error && error.message ? "LIVE_ORDERBOOK_UNAVAILABLE" : "MARKET_ORDERBOOK_UNAVAILABLE"
       }));
     const promise = withTimeout(
       livePromise,
-      this.orderbookLiveTimeoutMs,
+      this.orderbookRequestTimeoutMs(),
       unavailableOrderbook({
-        input,
+        input: normalizedInput,
         generatedAt,
         depth,
         reason: "MARKET_ORDERBOOK_REFRESH_DEFERRED"
@@ -243,6 +379,10 @@ export class LiveMarketDataViewService {
     void livePromise
       .then((orderbook) => {
         const output = orderbook;
+        if (isDeferredOrderbook(output)) {
+          this.orderbookCache.delete(key);
+          return;
+        }
         if (isDisplayUsableOrderbook(output)) {
           this.lastGoodOrderbooks.set(key, output);
         }
@@ -264,20 +404,73 @@ export class LiveMarketDataViewService {
     return output;
   }
 
-  private async loadOrderbook(input: {
+  private async getCachedLiveOrderbook(input: {
     marketId: string;
+    canonicalMarketIds?: readonly string[] | undefined;
     outcomeId?: string | undefined;
     depth?: number | undefined;
     venue?: string | undefined;
-  }, generatedAt: Date, depth: number): Promise<MarketOrderbookResponse> {
-    const report = await this.quoteSource.getQuoteSnapshotReport({
-      canonicalMarketId: input.marketId,
-      ...(input.outcomeId ? { canonicalOutcomeId: input.outcomeId } : {}),
-      side: "buy",
-      quantity: 1,
-      readMode: "cached_display",
-      displayMaxAgeMs: ORDERBOOK_DISPLAY_SNAPSHOT_MAX_AGE_MS
-    });
+  }, generatedAt: Date, depth: number, orderbookMarketIds: readonly string[]): Promise<MarketOrderbookResponse | null> {
+    if (!this.liveOrderbookSource) {
+      return null;
+    }
+    const reports = await Promise.all(orderbookMarketIds.map(async (canonicalMarketId): Promise<VenueQuoteSnapshotReport> => {
+      try {
+        return {
+          snapshots: await this.liveOrderbookSource!.get({
+            canonicalMarketId,
+            ...(input.outcomeId ? { canonicalOutcomeId: input.outcomeId } : {})
+          }),
+          blocked: []
+        };
+      } catch {
+        return { snapshots: [], blocked: [] };
+      }
+    }));
+    const report = mergeVenueQuoteSnapshotReports(reports);
+    if (report.snapshots.length === 0) {
+      return null;
+    }
+    const orderbook = this.orderbookFromReport(input, generatedAt, depth, report);
+    return isDisplayUsableOrderbook(orderbook) ? orderbook : null;
+  }
+
+  private async loadOrderbook(input: {
+    marketId: string;
+    canonicalMarketIds?: readonly string[] | undefined;
+    outcomeId?: string | undefined;
+    depth?: number | undefined;
+    venue?: string | undefined;
+  }, generatedAt: Date, depth: number, orderbookMarketIds: readonly string[]): Promise<MarketOrderbookResponse> {
+    const loadReport = (canonicalMarketId: string): Promise<VenueQuoteSnapshotReport> =>
+      this.quoteSource.getQuoteSnapshotReport({
+        canonicalMarketId,
+        ...(input.outcomeId ? { canonicalOutcomeId: input.outcomeId } : {}),
+        side: "buy",
+        quantity: 1,
+        readMode: "cached_display",
+        displayMaxAgeMs: ORDERBOOK_DISPLAY_SNAPSHOT_MAX_AGE_MS
+      });
+    const reports = orderbookMarketIds.length > 1
+      ? await Promise.all(orderbookMarketIds.map((canonicalMarketId) =>
+        withTimeout(
+          loadReport(canonicalMarketId),
+          this.orderbookLiveTimeoutMs,
+          orderbookLegDeferredReport(canonicalMarketId)
+        )
+      ))
+      : [await loadReport(orderbookMarketIds[0] ?? input.marketId)];
+    const report = mergeVenueQuoteSnapshotReports(reports);
+    return this.orderbookFromReport(input, generatedAt, depth, report);
+  }
+
+  private orderbookFromReport(input: {
+    marketId: string;
+    canonicalMarketIds?: readonly string[] | undefined;
+    outcomeId?: string | undefined;
+    depth?: number | undefined;
+    venue?: string | undefined;
+  }, generatedAt: Date, depth: number, report: VenueQuoteSnapshotReport): MarketOrderbookResponse {
     const venueFilter = input.venue?.trim().toUpperCase();
     const snapshots = venueFilter
       ? report.snapshots.filter((snapshot) => snapshot.venue.toUpperCase() === venueFilter)
@@ -301,8 +494,12 @@ export class LiveMarketDataViewService {
     const sourceBlockers = venueFilter
       ? report.blocked.filter((blocker) => blocker.venue.toUpperCase() === venueFilter)
       : report.blocked;
-    const blockers = [...sourceBlockers, ...staleVenueBlockers];
-    const status = resolveOrderbookStatus(venues, blockers);
+    const visibleSourceBlockers = venues.length > 0
+      ? sourceBlockers.filter((blocker) => !isLotusDeferredLegBlocker(blocker))
+      : sourceBlockers;
+    const hasSuppressedDeferredLeg = sourceBlockers.length !== visibleSourceBlockers.length;
+    const blockers = [...visibleSourceBlockers, ...staleVenueBlockers];
+    const status = resolveOrderbookStatus(venues, blockers, hasSuppressedDeferredLeg);
 
     this.recordChartPoint({
       marketId: input.marketId,
@@ -329,6 +526,27 @@ export class LiveMarketDataViewService {
     };
   }
 
+  private orderbookRequestTimeoutMs(): number {
+    return Math.min(5_000, this.orderbookLiveTimeoutMs + 25);
+  }
+
+  private async preloadOrderbookMappings(
+    canonicalMarketIds: readonly string[],
+    outcomeId: string | undefined
+  ): Promise<void> {
+    if (!this.quoteSource.preloadMappingReadiness || canonicalMarketIds.length === 0) {
+      return;
+    }
+    await withTimeout(
+      this.quoteSource.preloadMappingReadiness(canonicalMarketIds.map((canonicalMarketId) => ({
+        canonicalMarketId,
+        ...(outcomeId ? { canonicalOutcomeId: outcomeId } : {})
+      }))),
+      ORDERBOOK_MAPPING_PRELOAD_TIMEOUT_MS,
+      undefined
+    );
+  }
+
   private staleOrderbookFromLastGood(key: string, current: MarketOrderbookResponse, generatedAt: Date): MarketOrderbookResponse | null {
     const lastGood = this.lastGoodOrderbooks.get(key);
     if (!lastGood) return null;
@@ -349,6 +567,7 @@ export class LiveMarketDataViewService {
 
   public async getBatchQuotes(input: {
     items: readonly MarketBatchQuoteRequestItem[];
+    displayMode?: MarketBatchQuoteDisplayMode | undefined;
   }): Promise<MarketBatchQuoteResponse> {
     const generatedAt = this.now();
     const quotes = await Promise.all(input.items.map(async (item) => {
@@ -357,17 +576,13 @@ export class LiveMarketDataViewService {
       const key = batchQuoteCacheKey(item.marketId, item.outcomeId, side, quantity);
       const cached = this.batchQuoteCache.get(key);
       if (cached && cached.expiresAt > generatedAt.getTime()) {
-        if (cached.item) return cached.item;
+        if (cached.item && isDisplayUsableBatchQuote(cached.item)) return cached.item;
+        if (cached.item) this.batchQuoteCache.delete(key);
         if (cached.promise) return cached.promise;
       }
-      if (cached?.item && cached.staleUntil > generatedAt.getTime()) {
+      if (cached?.item && isDisplayUsableBatchQuote(cached.item) && cached.staleUntil > generatedAt.getTime()) {
         this.refreshBatchQuoteInBackground(key, { item, side, quantity, generatedAt });
-        return unavailableBatchQuoteItem({
-          item,
-          side,
-          generatedAt,
-          reason: "MARKET_BATCH_QUOTE_REFRESHING"
-        });
+        return batchQuoteFromRefreshGrace(cached.item, generatedAt);
       }
       const livePromise = this.loadBatchQuoteItem({ item, side, quantity, generatedAt });
       const promise = withTimeout(
@@ -385,13 +600,13 @@ export class LiveMarketDataViewService {
           const output = quote;
           if (output.status === "live" || output.status === "partial") {
             this.lastGoodBatchQuotes.set(key, output);
+            this.cacheBatchQuoteItem(key, output, this.now());
           }
-          this.cacheBatchQuoteItem(key, output, this.now());
         })
         .catch(() => undefined);
       this.batchQuoteCache.set(key, {
         expiresAt: generatedAt.getTime() + BATCH_QUOTE_CACHE_MS,
-        staleUntil: generatedAt.getTime() + BATCH_QUOTE_STALE_CACHE_MS,
+        staleUntil: generatedAt.getTime() + BATCH_QUOTE_REFRESH_GRACE_MS,
         promise
       });
       const quote = await promise;
@@ -401,14 +616,18 @@ export class LiveMarketDataViewService {
       }
       if (isDeferredBatchQuote(output)) {
         this.batchQuoteCache.delete(key);
-      } else {
+      } else if (isDisplayUsableBatchQuote(output)) {
         this.cacheBatchQuoteItem(key, output, generatedAt);
+      } else {
+        this.batchQuoteCache.delete(key);
       }
       return output;
     }));
     return {
       generatedAt: generatedAt.toISOString(),
-      quotes
+      quotes: input.displayMode === "user"
+        ? quotes.map(toUserFacingBatchQuote)
+        : quotes
     };
   }
 
@@ -430,9 +649,14 @@ export class LiveMarketDataViewService {
         const output = quote;
         if (output.status === "live" || output.status === "partial") {
           this.lastGoodBatchQuotes.set(key, output);
-        }
-        if (!isDeferredBatchQuote(output)) {
           this.cacheBatchQuoteItem(key, output, this.now());
+        } else if (isDeferredBatchQuote(output)) {
+          this.batchQuoteCache.delete(key);
+        } else {
+          const current = this.batchQuoteCache.get(key);
+          if (current?.promise === livePromise) {
+            this.batchQuoteCache.delete(key);
+          }
         }
         return output;
       })
@@ -458,7 +682,7 @@ export class LiveMarketDataViewService {
   private cacheBatchQuoteItem(key: string, item: MarketBatchQuoteItem, generatedAt: Date): void {
     this.batchQuoteCache.set(key, {
       expiresAt: generatedAt.getTime() + BATCH_QUOTE_CACHE_MS,
-      staleUntil: generatedAt.getTime() + BATCH_QUOTE_STALE_CACHE_MS,
+      staleUntil: generatedAt.getTime() + BATCH_QUOTE_REFRESH_GRACE_MS,
       item
     });
   }
@@ -795,41 +1019,126 @@ const orderbookCacheKey = (
   depth: number
 ): string => `${marketId}\u0000${outcomeId ?? ""}\u0000${venue?.trim().toUpperCase() ?? ""}\u0000${depth}`;
 
+const orderbookCacheMarketKey = (marketId: string, canonicalMarketIds: readonly string[]): string =>
+  canonicalMarketIds.length === 1 && canonicalMarketIds[0] === marketId
+    ? marketId
+    : `${marketId}\u0000${canonicalMarketIds.join("\u0001")}`;
+
+const normalizeOrderbookMarketIds = (
+  marketId: string,
+  canonicalMarketIds: readonly string[] | undefined
+): string[] => {
+  const normalized = [...new Set((canonicalMarketIds ?? [marketId])
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0))];
+  return normalized.length > 0 ? normalized : [marketId];
+};
+
+const normalizeBinaryOutcomeId = (outcomeId: string | undefined): string | undefined => {
+  const trimmed = outcomeId?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const upper = trimmed.toUpperCase();
+  return upper === "YES" || upper === "NO" ? upper : trimmed;
+};
+
+const mergeVenueQuoteSnapshotReports = (reports: readonly VenueQuoteSnapshotReport[]): VenueQuoteSnapshotReport => {
+  const snapshotsByKey = new Map<string, NormalizedVenueQuoteSnapshot>();
+  const blockedByKey = new Map<string, VenueQuoteSnapshotBlocker>();
+  for (const report of reports) {
+    for (const snapshot of report.snapshots) {
+      snapshotsByKey.set(venueSnapshotIdentityKey(snapshot), snapshot);
+    }
+    for (const blocker of report.blocked) {
+      blockedByKey.set(venueBlockerIdentityKey(blocker), blocker);
+    }
+  }
+  return {
+    snapshots: [...snapshotsByKey.values()],
+    blocked: [...blockedByKey.values()]
+  };
+};
+
+const orderbookLegDeferredReport = (canonicalMarketId: string): VenueQuoteSnapshotReport => ({
+  snapshots: [],
+  blocked: [{
+    venue: "LOTUS",
+    reason: "MARKET_ORDERBOOK_LEG_REFRESH_DEFERRED",
+    detailsCode: canonicalMarketId
+  }]
+});
+
+const venueSnapshotIdentityKey = (snapshot: NormalizedVenueQuoteSnapshot): string =>
+  `${snapshot.venue.toUpperCase()}\u0000${snapshot.venueMarketId}\u0000${snapshot.venueOutcomeId ?? ""}`;
+
+const dedupeSnapshotsByIdentity = (
+  snapshots: readonly NormalizedVenueQuoteSnapshot[]
+): NormalizedVenueQuoteSnapshot[] => {
+  const byKey = new Map<string, NormalizedVenueQuoteSnapshot>();
+  for (const snapshot of snapshots) {
+    const key = venueSnapshotIdentityKey(snapshot);
+    const existing = byKey.get(key);
+    if (!existing || snapshot.receivedAt.getTime() > existing.receivedAt.getTime()) {
+      byKey.set(key, snapshot);
+    }
+  }
+  return [...byKey.values()];
+};
+
+const venueBlockerIdentityKey = (blocker: VenueQuoteSnapshotBlocker): string =>
+  `${blocker.venue.toUpperCase()}\u0000${blocker.reason}\u0000${blocker.venueMarketId ?? ""}\u0000${blocker.venueOutcomeId ?? ""}`;
+
+const livePriceDisplayOutcomeIds = (outcomeId: string | undefined): readonly (string | undefined)[] =>
+  outcomeId ? [outcomeId] : [undefined, "YES"];
+
 const isDisplayUsableOrderbook = (orderbook: MarketOrderbookResponse): boolean =>
   orderbook.venues.length > 0 &&
   (orderbook.status === "live" || orderbook.status === "partial");
 
 const isLiveTradableOrderbookVenue = (venue: MarketOrderbookVenue): boolean =>
-  venue.snapshotStatus === "live" && venue.blockers.length === 0;
+  venue.snapshotStatus === "live" && (venue.bestBid !== null || venue.bestAsk !== null);
 
 const isDeferredOrderbook = (orderbook: MarketOrderbookResponse): boolean =>
-  orderbook.status === "unavailable" &&
-  orderbook.blockers.some((blocker) => blocker.venue === "LOTUS" && blocker.reason === "MARKET_ORDERBOOK_REFRESH_DEFERRED");
+  orderbook.blockers.some((blocker) =>
+    blocker.venue === "LOTUS" &&
+    (blocker.reason === "MARKET_ORDERBOOK_REFRESH_DEFERRED" ||
+      blocker.reason === "MARKET_ORDERBOOK_LEG_REFRESH_DEFERRED"));
 
 const isDeferredBatchQuote = (quote: MarketBatchQuoteItem): boolean =>
   quote.status === "unavailable" &&
   quote.blockers.some((blocker) => blocker.venue === "LOTUS" && blocker.reason === "MARKET_BATCH_QUOTE_REFRESH_DEFERRED");
 
-const staleBatchQuoteFromCachedItem = (
+const isDisplayUsableBatchQuote = (quote: MarketBatchQuoteItem): boolean =>
+  quote.status === "live" || quote.status === "partial";
+
+const batchQuoteFromRefreshGrace = (
   quote: MarketBatchQuoteItem,
   generatedAt: Date
-): MarketBatchQuoteItem => {
-  const blocker = {
-    venue: "LOTUS",
-    reason: "LAST_GOOD_QUOTE_USED",
-    detailsCode: quote.generatedAt
-  };
-  const blockers = quote.blockers.some((item) =>
-    item.venue === blocker.venue &&
-    item.reason === blocker.reason &&
-    item.detailsCode === blocker.detailsCode)
-    ? quote.blockers
-    : [...quote.blockers, blocker];
+): MarketBatchQuoteItem => ({
+  ...quote,
+  generatedAt: generatedAt.toISOString()
+});
+
+const toUserFacingBatchQuote = (quote: MarketBatchQuoteItem): MarketBatchQuoteItem => {
+  const hasDisplayPrice = quote.bestVenuePrice !== null ||
+    quote.unifiedAveragePrice !== null ||
+    quote.venues.some((venue) => venue.price !== null);
+  if (!hasDisplayPrice) {
+    return {
+      ...quote,
+      status: "unavailable",
+      blockers: []
+    };
+  }
   return {
     ...quote,
-    generatedAt: generatedAt.toISOString(),
-    status: quote.status === "live" ? "stale" : quote.status,
-    blockers
+    status: "live",
+    venues: quote.venues.map((venue) => ({
+      ...venue,
+      blockers: []
+    })),
+    blockers: []
   };
 };
 
@@ -888,20 +1197,23 @@ const snapshotStatus = (
   if ((snapshot.blockers ?? []).length > 0) {
     return "blocked";
   }
-  const thresholdMs = snapshot.source === "STREAM" ? 1_000 : 1_500;
+  const thresholdMs = snapshot.source === "STREAM"
+    ? STREAM_ORDERBOOK_LIVE_FRESHNESS_MS
+    : REST_ORDERBOOK_LIVE_FRESHNESS_MS;
   return snapshotFreshnessMs(snapshot, now) <= thresholdMs ? "live" : "stale";
 };
 
 const resolveOrderbookStatus = (
   venues: readonly MarketOrderbookVenue[],
-  blockers: readonly VenueQuoteSnapshotBlocker[]
+  blockers: readonly VenueQuoteSnapshotBlocker[],
+  partialHint = false
 ): MarketOrderbookResponse["status"] => {
   const hasLive = venues.some((venue) => venue.snapshotStatus === "live");
   const hasStale = venues.some((venue) => venue.snapshotStatus === "stale");
   const hasBlocked = blockers.length > 0 || venues.some((venue) =>
     venue.snapshotStatus === "blocked" || venue.snapshotStatus === "resyncing" || venue.blockers.length > 0);
   if (hasLive) {
-    return hasBlocked || venues.some((venue) => venue.snapshotStatus !== "live") ? "partial" : "live";
+    return hasBlocked || partialHint || venues.some((venue) => venue.snapshotStatus !== "live") ? "partial" : "live";
   }
   if (hasStale) {
     return hasBlocked ? "partial" : "stale";
@@ -911,6 +1223,10 @@ const resolveOrderbookStatus = (
   }
   return "unavailable";
 };
+
+const isLotusDeferredLegBlocker = (blocker: VenueQuoteSnapshotBlocker): boolean =>
+  blocker.venue.toUpperCase() === "LOTUS" &&
+  blocker.reason === "MARKET_ORDERBOOK_LEG_REFRESH_DEFERRED";
 
 const hotSnapshotSourceField = (
   metadata: Readonly<Record<string, unknown>> | undefined
@@ -1013,6 +1329,11 @@ const batchQuoteCacheKey = (
   side: "buy" | "sell",
   quantity: number
 ): string => `${marketId}\u0000${outcomeId}\u0000${side}\u0000${quantity}`;
+
+const livePriceCacheKey = (
+  marketId: string,
+  outcomeId: string | null
+): string => `${marketId}\u0000${outcomeId ?? ""}`;
 
 const bestLevel = (
   levels: readonly NormalizedQuoteLevel[],

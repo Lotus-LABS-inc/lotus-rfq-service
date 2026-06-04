@@ -46,7 +46,11 @@ export interface MarketQuoteReadinessSnapshot {
   lastQuoteAt: string | null;
 }
 
-export const DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS = 15_000;
+// Display-readiness snapshots are not execution authority. Keep this wide enough
+// for the orderbook worker's rotating venue sweeps so quote-ready cards do not
+// flap partial between healthy refreshes.
+export const DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS = 90_000;
+export const DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS = 90_000;
 
 export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSource {
   public constructor(private readonly pool: Pool) {}
@@ -56,64 +60,45 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
       return 0;
     }
 
-    let inserted = 0;
-    for (const snapshot of snapshots) {
-      const result = await this.pool.query(
-        `INSERT INTO venue_orderbook_snapshots (
-           canonical_event_id,
-           canonical_market_id,
-           canonical_outcome_id,
-           venue,
-           venue_market_id,
-           venue_outcome_id,
-           source,
-           quote_quality,
-           source_timestamp,
-           received_at,
-           best_bid,
-           best_ask,
-           midpoint,
-           spread,
-           bid_depth,
-           ask_depth,
-           bids,
-           asks,
-           blockers,
-           metadata_version
-         ) VALUES (
-           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-           $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19::jsonb, $20
-         )`,
-        [
-          snapshot.canonicalEventId,
-          snapshot.canonicalMarketId,
-          snapshot.canonicalOutcomeId,
-          snapshot.venue.toUpperCase(),
-          snapshot.venueMarketId,
-          snapshot.venueOutcomeId,
-          snapshot.source,
-          snapshot.quoteQuality,
-          snapshot.sourceTimestamp,
-          snapshot.receivedAt,
-          snapshot.bestBid,
-          snapshot.bestAsk,
-          snapshot.midpoint,
-          snapshot.spread,
-          snapshot.bidDepth,
-          snapshot.askDepth,
-          JSON.stringify(snapshot.bids),
-          JSON.stringify(snapshot.asks),
-          JSON.stringify([...new Set(snapshot.blockers)]),
-          snapshot.metadataVersion ?? "venue-orderbook-recorder-v1"
-        ]
-      );
-      inserted += result.rowCount ?? 0;
-      await this.upsertLatest(snapshot);
-    }
-    return inserted;
+    const historicalRows = snapshots.map((snapshot) => snapshotInsertValues(snapshot, "historical"));
+    const historical = buildBulkValues(historicalRows, { jsonbColumnIndexes: [16, 17, 18] });
+    const result = await this.pool.query(
+      `INSERT INTO venue_orderbook_snapshots (
+         canonical_event_id,
+         canonical_market_id,
+         canonical_outcome_id,
+         venue,
+         venue_market_id,
+         venue_outcome_id,
+         source,
+         quote_quality,
+         source_timestamp,
+         received_at,
+         best_bid,
+         best_ask,
+         midpoint,
+         spread,
+         bid_depth,
+         ask_depth,
+         bids,
+         asks,
+         blockers,
+         metadata_version
+       ) VALUES ${historical.sql}`,
+      historical.values
+    );
+    await this.upsertLatestMany(snapshots);
+    return result.rowCount ?? 0;
   }
 
-  private async upsertLatest(snapshot: VenueOrderbookSnapshotInput): Promise<void> {
+  public async upsertLatestMany(snapshots: readonly VenueOrderbookSnapshotInput[]): Promise<number> {
+    if (snapshots.length === 0) {
+      return 0;
+    }
+    const latestSnapshots = dedupeLatestSnapshots(snapshots);
+    const latestRows = latestSnapshots.map((snapshot) => snapshotInsertValues(snapshot, "latest"));
+    const latest = buildBulkValues(latestRows, { jsonbColumnIndexes: [16, 17, 18] });
+    const recencyGuardPlaceholder = `$${latest.values.length + 1}`;
     await this.pool.query(
       `INSERT INTO venue_orderbook_latest_snapshots (
          canonical_event_id,
@@ -137,10 +122,7 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
          blockers,
          metadata_version,
          updated_at
-       ) VALUES (
-         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-         $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19::jsonb, $20, now()
-       )
+       ) VALUES ${latest.sqlWithSuffix("now()")}
        ON CONFLICT (canonical_market_id, canonical_outcome_id, venue, venue_market_id, venue_outcome_id)
        DO UPDATE SET
          canonical_event_id = EXCLUDED.canonical_event_id,
@@ -159,30 +141,28 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
          blockers = EXCLUDED.blockers,
          metadata_version = EXCLUDED.metadata_version,
          updated_at = now()
-       WHERE EXCLUDED.received_at >= venue_orderbook_latest_snapshots.received_at`,
+       WHERE EXCLUDED.received_at >= venue_orderbook_latest_snapshots.received_at
+         AND (
+           (
+             COALESCE(jsonb_array_length(EXCLUDED.blockers), 0) = 0
+             AND COALESCE(EXCLUDED.midpoint, EXCLUDED.best_bid, EXCLUDED.best_ask) IS NOT NULL
+           )
+           OR NOT (
+             COALESCE(jsonb_array_length(venue_orderbook_latest_snapshots.blockers), 0) = 0
+             AND COALESCE(
+               venue_orderbook_latest_snapshots.midpoint,
+               venue_orderbook_latest_snapshots.best_bid,
+               venue_orderbook_latest_snapshots.best_ask
+             ) IS NOT NULL
+          )
+          OR venue_orderbook_latest_snapshots.received_at < now() - (${recencyGuardPlaceholder}::int * interval '1 millisecond')
+         )`,
       [
-        snapshot.canonicalEventId,
-        snapshot.canonicalMarketId,
-        nullableKey(snapshot.canonicalOutcomeId),
-        snapshot.venue.toUpperCase(),
-        snapshot.venueMarketId,
-        nullableKey(snapshot.venueOutcomeId),
-        snapshot.source,
-        snapshot.quoteQuality,
-        snapshot.sourceTimestamp,
-        snapshot.receivedAt,
-        snapshot.bestBid,
-        snapshot.bestAsk,
-        snapshot.midpoint,
-        snapshot.spread,
-        snapshot.bidDepth,
-        snapshot.askDepth,
-        JSON.stringify(snapshot.bids),
-        JSON.stringify(snapshot.asks),
-        JSON.stringify([...new Set(snapshot.blockers)]),
-        snapshot.metadataVersion ?? "venue-orderbook-recorder-v1"
+        ...latest.values,
+        DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS
       ]
     );
+    return latestSnapshots.length;
   }
 
   public async listChartPoints(input: {
@@ -567,6 +547,111 @@ const parseStringArray = (value: unknown): string[] =>
 
 const nullableKey = (value: string | null | undefined): string =>
   value ?? "";
+
+const snapshotInsertValues = (
+  snapshot: VenueOrderbookSnapshotInput,
+  mode: "historical" | "latest"
+): unknown[] => [
+  snapshot.canonicalEventId,
+  snapshot.canonicalMarketId,
+  mode === "latest" ? nullableKey(snapshot.canonicalOutcomeId) : snapshot.canonicalOutcomeId,
+  snapshot.venue.toUpperCase(),
+  snapshot.venueMarketId,
+  mode === "latest" ? nullableKey(snapshot.venueOutcomeId) : snapshot.venueOutcomeId,
+  snapshot.source,
+  snapshot.quoteQuality,
+  snapshot.sourceTimestamp,
+  snapshot.receivedAt,
+  snapshot.bestBid,
+  snapshot.bestAsk,
+  snapshot.midpoint,
+  snapshot.spread,
+  snapshot.bidDepth,
+  snapshot.askDepth,
+  JSON.stringify(snapshot.bids),
+  JSON.stringify(snapshot.asks),
+  JSON.stringify([...new Set(snapshot.blockers)]),
+  snapshot.metadataVersion ?? "venue-orderbook-recorder-v1"
+];
+
+const buildBulkValues = (
+  rows: readonly unknown[][],
+  options: { jsonbColumnIndexes?: readonly number[] | undefined } = {}
+): { sql: string; values: unknown[]; sqlWithSuffix(suffix: string): string } => {
+  if (rows.length === 0) {
+    return {
+      sql: "",
+      values: [],
+      sqlWithSuffix: () => ""
+    };
+  }
+  const rowWidth = rows[0]!.length;
+  const jsonbColumnIndexes = new Set(options.jsonbColumnIndexes ?? []);
+  const values = rows.flatMap((row) => {
+    if (row.length !== rowWidth) {
+      throw new Error("Bulk insert rows must have a stable column count.");
+    }
+    return row;
+  });
+  const render = (suffix?: string): string =>
+    rows.map((row, rowIndex) => {
+      const placeholders = row.map((_, columnIndex) => {
+        const parameterIndex = rowIndex * rowWidth + columnIndex + 1;
+        return `$${parameterIndex}${jsonbColumnIndexes.has(columnIndex) ? "::jsonb" : ""}`;
+      });
+      if (suffix) {
+        placeholders.push(suffix);
+      }
+      return `(${placeholders.join(", ")})`;
+    }).join(", ");
+  return {
+    sql: render(),
+    values,
+    sqlWithSuffix: render
+  };
+};
+
+const dedupeLatestSnapshots = (
+  snapshots: readonly VenueOrderbookSnapshotInput[]
+): VenueOrderbookSnapshotInput[] => {
+  const byKey = new Map<string, VenueOrderbookSnapshotInput>();
+  for (const snapshot of snapshots) {
+    const key = latestSnapshotKey(snapshot);
+    const existing = byKey.get(key);
+    if (!existing || shouldReplaceLatestBatchSnapshot(existing, snapshot)) {
+      byKey.set(key, snapshot);
+    }
+  }
+  return [...byKey.values()];
+};
+
+const latestSnapshotKey = (snapshot: VenueOrderbookSnapshotInput): string =>
+  [
+    snapshot.canonicalMarketId,
+    nullableKey(snapshot.canonicalOutcomeId),
+    snapshot.venue.toUpperCase(),
+    snapshot.venueMarketId,
+    nullableKey(snapshot.venueOutcomeId)
+  ].join("\u0000");
+
+const shouldReplaceLatestBatchSnapshot = (
+  existing: VenueOrderbookSnapshotInput,
+  next: VenueOrderbookSnapshotInput
+): boolean => {
+  const existingTime = existing.receivedAt.getTime();
+  const nextTime = next.receivedAt.getTime();
+  if (nextTime !== existingTime) {
+    return nextTime > existingTime;
+  }
+  if (isPriceReadySnapshot(next) !== isPriceReadySnapshot(existing)) {
+    return isPriceReadySnapshot(next);
+  }
+  return false;
+};
+
+const isPriceReadySnapshot = (snapshot: VenueOrderbookSnapshotInput): boolean =>
+  snapshot.blockers.length === 0 &&
+  (snapshot.midpoint !== null || snapshot.bestBid !== null || snapshot.bestAsk !== null);
 
 const parseQuoteReadyVenues = (value: unknown): string[] =>
   Array.isArray(value)

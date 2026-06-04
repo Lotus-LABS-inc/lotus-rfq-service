@@ -62,7 +62,7 @@ export class HotMarketQuoteReadinessSource {
       return this.buildHotReadinessSnapshot(canonicalMarketId, readiness, maxAgeMs);
     }));
     const fallbackNeeded = hotResults
-      .filter((snapshot) => snapshot.quoteReadyVenueCount <= 0)
+      .filter((snapshot) => snapshot.quoteReadyVenueCount <= 0 || hasMissingLiveQuoteBlocker(snapshot))
       .map((snapshot) => snapshot.canonicalMarketId);
     if (fallbackNeeded.length === 0 || !this.deps.fallbackSource) {
       return hotResults;
@@ -73,12 +73,9 @@ export class HotMarketQuoteReadinessSource {
     });
     const fallbackByMarket = new Map(fallback.map((snapshot) => [snapshot.canonicalMarketId, snapshot] as const));
     return hotResults.map((snapshot) => {
-      if (snapshot.quoteReadyVenueCount > 0) {
-        return snapshot;
-      }
       const fallbackSnapshot = fallbackByMarket.get(snapshot.canonicalMarketId);
       return fallbackSnapshot && fallbackSnapshot.quoteReadyVenueCount > 0
-        ? fallbackSnapshot
+        ? mergeReadinessSnapshots(snapshot, fallbackSnapshot)
         : snapshot;
     });
   }
@@ -119,7 +116,8 @@ export class HotMarketQuoteReadinessSource {
     readiness: readonly VenueQuoteMappingReadiness[],
     maxAgeMs: number
   ): Promise<MarketQuoteReadinessSnapshot> {
-    const blockers = readiness.flatMap(mappingBlockers);
+    const blockers = readiness.flatMap(mappingBlockers)
+      .filter((blocker) => !isDisplaySuppressedVenueBlocker(blocker.reason));
     const readyMappings = readiness.filter((row) => row.quoteReady && row.venueMarketId !== null);
     const snapshots = await Promise.all(readyMappings.map(async (row) => {
       const snapshot = await this.deps.hotSnapshots.getDisplay({
@@ -134,15 +132,22 @@ export class HotMarketQuoteReadinessSource {
     const liveSnapshots = snapshots.filter((entry): entry is {
       row: VenueQuoteMappingReadiness & { venueMarketId: string };
       snapshot: NormalizedVenueQuoteSnapshot;
-    } => Boolean(entry.snapshot && isPricedLiveSnapshot(entry.snapshot)));
+    } => Boolean(entry.snapshot && isPricedDisplaySnapshot(entry.snapshot)));
     const missingHot = snapshots
-      .filter((entry) => !entry.snapshot || !isPricedLiveSnapshot(entry.snapshot))
-      .map((entry) => ({
-        venue: normalizeVenue(entry.row.venue),
-        reason: entry.snapshot?.blockers?.join(",") || "LIVE_QUOTE_SNAPSHOT_MISSING",
-        ...(entry.row.venueMarketId ? { venueMarketId: entry.row.venueMarketId } : {}),
-        ...(entry.row.venueOutcomeId ? { venueOutcomeId: entry.row.venueOutcomeId } : {})
-      }));
+      .filter((entry) => !entry.snapshot || !isPricedDisplaySnapshot(entry.snapshot))
+      .flatMap((entry) => {
+        const reasons = displayBlockingSnapshotBlockers(entry.snapshot);
+        const displayReasons = reasons.filter((reason) => !isDisplaySuppressedVenueBlocker(reason));
+        if (reasons.length > 0 && displayReasons.length === 0) {
+          return [];
+        }
+        return [{
+          venue: normalizeVenue(entry.row.venue),
+          reason: displayReasons.join(",") || "LIVE_QUOTE_SNAPSHOT_MISSING",
+          ...(entry.row.venueMarketId ? { venueMarketId: entry.row.venueMarketId } : {}),
+          ...(entry.row.venueOutcomeId ? { venueOutcomeId: entry.row.venueOutcomeId } : {})
+        }];
+      });
     const quoteReadyVenues = [...new Set(liveSnapshots.map((entry) => normalizeVenue(entry.row.venue)))].sort();
     const lastQuoteAt = liveSnapshots
       .map((entry) => entry.snapshot.receivedAt.toISOString())
@@ -150,9 +155,7 @@ export class HotMarketQuoteReadinessSource {
       .at(-1) ?? null;
     return {
       canonicalMarketId,
-      quoteStatus: quoteReadyVenues.length > 0 && blockers.length === 0 && missingHot.length === 0 ? "live"
-        : quoteReadyVenues.length > 0 ? "partial"
-        : "unavailable",
+      quoteStatus: quoteReadyVenues.length > 0 ? "live" : "unavailable",
       quoteReadyVenueCount: quoteReadyVenues.length,
       quoteReadyVenues,
       quoteBlockers: [...blockers, ...missingHot],
@@ -184,9 +187,100 @@ const mappingBlockers = (row: VenueQuoteMappingReadiness): MarketQuoteReadinessS
         ...(row.venueOutcomeId ? { venueOutcomeId: row.venueOutcomeId } : {})
       }];
 
-const isPricedLiveSnapshot = (snapshot: NormalizedVenueQuoteSnapshot): boolean =>
-  (snapshot.blockers?.length ?? 0) === 0
+const hasMissingLiveQuoteBlocker = (snapshot: MarketQuoteReadinessSnapshot): boolean =>
+  snapshot.quoteBlockers.some((blocker) => blocker.reason === "LIVE_QUOTE_SNAPSHOT_MISSING");
+
+const mergeReadinessSnapshots = (
+  hot: MarketQuoteReadinessSnapshot,
+  fallback: MarketQuoteReadinessSnapshot
+): MarketQuoteReadinessSnapshot => {
+  const fallbackReadyVenues = new Set(fallback.quoteReadyVenues.map(normalizeVenue));
+  const fallbackSuppressedVenues = new Set(fallback.quoteBlockers
+    .filter((blocker) => isDisplaySuppressedVenueBlocker(blocker.reason))
+    .map((blocker) => normalizeVenue(blocker.venue)));
+  const quoteReadyVenues = [...new Set([
+    ...hot.quoteReadyVenues.map(normalizeVenue),
+    ...fallback.quoteReadyVenues.map(normalizeVenue)
+  ])].sort();
+  const readyVenueSet = new Set(quoteReadyVenues);
+  const quoteBlockers = [
+    ...hot.quoteBlockers.filter((blocker) =>
+      !isRedundantDisplayBlocker(blocker, fallbackReadyVenues) &&
+      !isFallbackSuppressedMissingQuoteBlocker(blocker, fallbackSuppressedVenues)
+    ),
+    ...fallback.quoteBlockers.filter((blocker) =>
+      !isRedundantDisplayBlocker(blocker, readyVenueSet)
+    )
+  ];
+  return {
+    canonicalMarketId: hot.canonicalMarketId,
+    quoteStatus: pickMergedQuoteStatus(quoteReadyVenues.length, quoteBlockers),
+    quoteReadyVenueCount: quoteReadyVenues.length,
+    quoteReadyVenues,
+    quoteBlockers,
+    lastQuoteAt: latestTimestamp(hot.lastQuoteAt, fallback.lastQuoteAt)
+  };
+};
+
+const pickMergedQuoteStatus = (
+  quoteReadyVenueCount: number,
+  quoteBlockers: readonly MarketQuoteReadinessSnapshot["quoteBlockers"][number][]
+): MarketQuoteReadinessSnapshot["quoteStatus"] => {
+  if (quoteReadyVenueCount <= 0) {
+    return "unavailable";
+  }
+  return "live";
+};
+
+const latestTimestamp = (left: string | null, right: string | null): string | null => {
+  if (!left) return right;
+  if (!right) return left;
+  return Date.parse(left) >= Date.parse(right) ? left : right;
+};
+
+const isPricedDisplaySnapshot = (snapshot: NormalizedVenueQuoteSnapshot): boolean =>
+  displayBlockingSnapshotBlockers(snapshot).length === 0
   && (snapshot.bids.length > 0 || snapshot.asks.length > 0);
+
+const displayBlockingSnapshotBlockers = (snapshot: NormalizedVenueQuoteSnapshot | null | undefined): string[] =>
+  (snapshot?.blockers ?? []).filter((blocker) => !isDisplayOnlyExecutionBlocker(blocker));
+
+const isDisplayOnlyExecutionBlocker = (blocker: string): boolean => {
+  const normalized = blocker.trim().toUpperCase();
+  return normalized === "PREDICT_FUN_TOKEN_ID_MISSING" ||
+    normalized === "OPINION_TOKEN_ID_MISSING";
+};
+
+const isRedundantDisplayBlocker = (
+  blocker: MarketQuoteReadinessSnapshot["quoteBlockers"][number],
+  readyVenueSet: ReadonlySet<string>
+): boolean => {
+  const normalized = blocker.reason.trim().toUpperCase();
+  if (isDisplaySuppressedVenueBlocker(normalized)) {
+    return true;
+  }
+  return readyVenueSet.has(normalizeVenue(blocker.venue)) &&
+    (normalized === "LIVE_QUOTE_SNAPSHOT_MISSING" || isDisplayOnlyExecutionBlocker(normalized));
+};
+
+const isFallbackSuppressedMissingQuoteBlocker = (
+  blocker: MarketQuoteReadinessSnapshot["quoteBlockers"][number],
+  fallbackSuppressedVenues: ReadonlySet<string>
+): boolean =>
+  blocker.reason.trim().toUpperCase() === "LIVE_QUOTE_SNAPSHOT_MISSING" &&
+  fallbackSuppressedVenues.has(normalizeVenue(blocker.venue));
+
+const isDisplaySuppressedVenueBlocker = (reason: string): boolean => {
+  const normalized = reason.trim().toUpperCase();
+  return normalized.includes("POLYMARKET_OFFICIAL_MARKET_CLOSED") ||
+    normalized.includes("POLYMARKET_OFFICIAL_MARKET_NOT_ACCEPTING_ORDERS") ||
+    normalized.includes("QUOTE_PROVIDER_HTTP_404") ||
+    normalized.includes("PROVIDER_UNAVAILABLE_404") ||
+    normalized.includes("QUOTE_PROVIDER_MARKET_INACTIVE") ||
+    normalized.includes("QUOTE_PROVIDER_EMPTY_BOOK") ||
+    normalized.includes("MARKET_CLOSED") ||
+    normalized.includes("NOT_ACCEPTING_ORDERS");
+};
 
 const normalizeVenue = (venue: string): string => {
   const normalized = venue.trim().toUpperCase();

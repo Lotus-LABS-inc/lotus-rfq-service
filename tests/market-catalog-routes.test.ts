@@ -13,7 +13,8 @@ import {
   SharedCoreQuoteMappingRepository
 } from "../src/repositories/market-catalog.repository.js";
 import type { MarketCatalogSnapshotCache } from "../src/services/market-catalog-snapshot-cache.js";
-import { marketCatalogDetailCacheKey } from "../src/services/market-catalog-snapshot-materializer.js";
+import { marketCatalogDetailCacheKey, stableQueryCacheKey } from "../src/services/market-catalog-snapshot-materializer.js";
+import { marketOrderbookTopic } from "../src/services/orderbook-stream.service.js";
 
 const market: MarketCatalogMarket = {
   eventId: "event:NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
@@ -235,6 +236,103 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
+  it("filters inactive markets from public lists while preserving an explicit diagnostic opt-in", async () => {
+    const app = Fastify({ logger: false });
+    const expiredMarket: MarketCatalogMarket = {
+      ...market,
+      canonicalEventId: "22222222-2222-5222-8222-222222222222",
+      canonicalMarketIds: ["THRESHOLD|BTC|2026-04-30"],
+      displayTopic: "BTC threshold by date",
+      displayOutcome: "April 30, 2026",
+      displayOutcomeKey: "date:2026-04-30",
+      title: "Expired BTC threshold",
+      normalizedTitle: "expired btc threshold",
+      status: "RESOLVED_OR_EXPIRED",
+      expiresAt: "2026-04-30T12:00:00.000Z",
+      resolvesAt: "2026-04-30T12:00:00.000Z",
+      updatedAt: "2026-04-30T12:00:00.000Z"
+    };
+    const repository = new FakeMarketCatalogRepository();
+    repository.listMarkets = async (filter = {}) => {
+      repository.filters.push(filter);
+      return [expiredMarket, market];
+    };
+    await registerMarketCatalogRoutes(app, { marketCatalogRepository: repository });
+
+    const publicResponse = await app.inject({
+      method: "GET",
+      url: "/markets?limit=10&view=compact"
+    });
+    expect(publicResponse.statusCode).toBe(200);
+    expect(publicResponse.json()).toMatchObject({
+      count: 1,
+      markets: [{
+        canonicalEventId: market.canonicalEventId,
+        status: "OPEN"
+      }]
+    });
+
+    const diagnosticResponse = await app.inject({
+      method: "GET",
+      url: "/markets?limit=10&view=compact&includeInactive=true"
+    });
+    expect(diagnosticResponse.statusCode).toBe(200);
+    expect(diagnosticResponse.json()).toMatchObject({
+      count: 2,
+      markets: [
+        { canonicalEventId: expiredMarket.canonicalEventId, status: "RESOLVED_OR_EXPIRED" },
+        { canonicalEventId: market.canonicalEventId, status: "OPEN" }
+      ]
+    });
+
+    await app.close();
+  });
+
+  it("scrubs inactive rows from shared catalog snapshots before serving public lists", async () => {
+    const app = Fastify({ logger: false });
+    const expiredMarket: MarketCatalogMarket = {
+      ...market,
+      canonicalEventId: "22222222-2222-5222-8222-222222222222",
+      canonicalMarketIds: ["THRESHOLD|BTC|2026-04-30"],
+      displayTopic: "BTC threshold by date",
+      displayOutcome: "April 30, 2026",
+      displayOutcomeKey: "date:2026-04-30",
+      title: "Expired BTC threshold",
+      normalizedTitle: "expired btc threshold",
+      status: "RESOLVED_OR_EXPIRED",
+      expiresAt: "2026-04-30T12:00:00.000Z",
+      resolvesAt: "2026-04-30T12:00:00.000Z",
+      updatedAt: "2026-04-30T12:00:00.000Z"
+    };
+    const repository = new FakeMarketCatalogRepository();
+    const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    snapshotCache.values.set(`markets:${stableQueryCacheKey({ limit: 10, view: "compact" })}`, {
+      count: 2,
+      view: "compact",
+      materialized: true,
+      materializedAt: "2026-06-01T00:00:00.000Z",
+      markets: [expiredMarket, market]
+    });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketCatalogSnapshotCache: snapshotCache
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?limit=10&view=compact"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      count: 1,
+      markets: [{ canonicalEventId: market.canonicalEventId, status: "OPEN" }]
+    });
+    expect(response.body).not.toContain("THRESHOLD|BTC|2026-04-30");
+
+    await app.close();
+  });
+
   it("marks listed markets active for the orderbook stream service", async () => {
     const app = Fastify({ logger: false });
     const repository = new FakeMarketCatalogRepository();
@@ -251,6 +349,71 @@ describe("market catalog routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(touch).toHaveBeenCalledWith({ canonicalMarketId: market.canonicalMarketIds[0] });
+
+    await app.close();
+  });
+
+  it("prewarms terminal orderbooks for visible quote-ready markets", async () => {
+    const app = Fastify({ logger: false });
+    const repository = new FakeMarketCatalogRepository();
+    const getOrderbook = vi.fn(async (input: {
+      marketId: string;
+      canonicalMarketIds?: readonly string[] | undefined;
+      outcomeId?: string | undefined;
+    }) => ({
+      marketId: input.marketId,
+      outcomeId: input.outcomeId ?? null,
+      generatedAt: new Date().toISOString(),
+      depth: 20,
+      venues: [],
+      bids: [],
+      asks: [],
+      bestBid: null,
+      bestAsk: null,
+      midpoint: null,
+      spread: null,
+      status: "unavailable" as const,
+      blockers: []
+    }));
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "partial" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: []
+          }];
+        }
+      },
+      marketDataViewService: {
+        getOrderbook,
+        getChart: vi.fn()
+      }
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=10&view=compact"
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(response.statusCode).toBe(200);
+    expect(getOrderbook).toHaveBeenCalledTimes(2);
+    expect(getOrderbook).toHaveBeenCalledWith({
+      marketId: market.canonicalEventId,
+      canonicalMarketIds: market.canonicalMarketIds,
+      outcomeId: "YES"
+    });
+    expect(getOrderbook).toHaveBeenCalledWith({
+      marketId: market.canonicalEventId,
+      canonicalMarketIds: market.canonicalMarketIds,
+      outcomeId: "NO"
+    });
 
     await app.close();
   });
@@ -419,44 +582,36 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
-  it("materializes market catalog responses into the shared snapshot cache", async () => {
+  it("materializes all-market catalog responses into the shared snapshot cache", async () => {
     const repository = new FakeMarketCatalogRepository();
     const snapshotCache = new FakeMarketCatalogSnapshotCache();
     const app = Fastify({ logger: false });
     await registerMarketCatalogRoutes(app, {
       marketCatalogRepository: repository,
-      marketCatalogSnapshotCache: snapshotCache,
-      marketQuoteReadinessSource: {
-        async listLatestMarketQuoteReadiness() {
-          return [{
-            canonicalMarketId: market.canonicalMarketIds[0]!,
-            quoteStatus: "live" as const,
-            quoteReadyVenueCount: 1,
-            quoteReadyVenues: ["POLYMARKET"],
-            lastQuoteAt: "2026-05-21T23:41:15.000Z",
-            quoteBlockers: []
-          }];
-        }
-      }
+      marketCatalogSnapshotCache: snapshotCache
     });
 
     const first = await app.inject({
       method: "GET",
-      url: "/markets?quoteReadyOnly=true&limit=10"
+      url: "/markets?limit=10"
     });
     clearMarketQuoteReadinessCacheForTests();
     const second = await app.inject({
       method: "GET",
-      url: "/markets?quoteReadyOnly=true&limit=10"
+      url: "/markets?limit=10"
     });
 
     expect(first.statusCode).toBe(200);
     expect(second.statusCode).toBe(200);
-    expect(snapshotCache.setCount).toBe(1);
+    expect(snapshotCache.setCount).toBeGreaterThanOrEqual(2);
     expect(repository.filters).toHaveLength(1);
+    expect(snapshotCache.values.get("markets:{\"limit\":10,\"routeCoverage\":\"all\"}")).toMatchObject({
+      count: 1,
+      markets: [{ canonicalEventId: market.canonicalEventId }]
+    });
     expect(second.json()).toMatchObject({
       count: 1,
-      markets: [{ quoteReadyVenueCount: 1 }]
+      markets: [{ canonicalEventId: market.canonicalEventId }]
     });
 
     await app.close();
@@ -555,7 +710,7 @@ describe("market catalog routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(repository.filters).toHaveLength(0);
-    expect(snapshotCache.getCount).toBe(2);
+    expect(snapshotCache.getCount).toBeGreaterThanOrEqual(2);
     expect(response.json()).toMatchObject({
       count: 1,
       materialized: true,
@@ -565,7 +720,213 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
-  it("does not serve stale quote-ready markets from shared snapshots", async () => {
+  it("uses routeCoverage=all snapshots as quote-ready aliases when the frontend omits routeCoverage", async () => {
+    const repository = new FakeMarketCatalogRepository();
+    const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    const liveMarket = {
+      ...market,
+      quoteStatus: "live" as const,
+      quoteReadyVenueCount: 1,
+      quoteReadyVenues: ["POLYMARKET"],
+      lastQuoteAt: "2026-05-21T23:41:15.000Z"
+    };
+    const secondLiveMarket = {
+      ...liveMarket,
+      canonicalEventId: "22222222-2222-5222-8222-222222222222",
+      eventId: "event:two",
+      canonicalMarketIds: ["market-two"]
+    };
+    snapshotCache.values.set("markets:{\"limit\":10,\"quoteReadyOnly\":true}", {
+      markets: [liveMarket],
+      count: 1,
+      materialized: true
+    });
+    snapshotCache.values.set("markets:{\"limit\":10,\"quoteReadyOnly\":true,\"routeCoverage\":\"all\"}", {
+      markets: [liveMarket, secondLiveMarket],
+      count: 2,
+      materialized: true
+    });
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketCatalogSnapshotCache: snapshotCache,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          throw new Error("readiness should not be called when shared snapshot alias is available");
+        }
+      }
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=10"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(repository.filters).toHaveLength(0);
+    expect(response.json()).toMatchObject({
+      count: 2,
+      materialized: true,
+      markets: [
+        { canonicalEventId: market.canonicalEventId },
+        { canonicalEventId: secondLiveMarket.canonicalEventId }
+      ]
+    });
+
+    await app.close();
+  });
+
+  it("uses quote-ready snapshots as routeCoverage=single aliases", async () => {
+    const repository = new FakeMarketCatalogRepository();
+    const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    const liveMarket = {
+      ...market,
+      quoteStatus: "live" as const,
+      quoteReadyVenueCount: 1,
+      quoteReadyVenues: ["POLYMARKET"],
+      lastQuoteAt: "2026-05-21T23:41:15.000Z"
+    };
+    const secondLiveMarket = {
+      ...liveMarket,
+      canonicalEventId: "22222222-2222-5222-8222-222222222222",
+      eventId: "event:two",
+      canonicalMarketIds: ["market-two"]
+    };
+    snapshotCache.values.set("markets:{\"limit\":10,\"quoteReadyOnly\":true,\"routeCoverage\":\"all\"}", {
+      markets: [liveMarket, secondLiveMarket],
+      count: 2,
+      materialized: true
+    });
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketCatalogSnapshotCache: snapshotCache,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          throw new Error("readiness should not be called when shared snapshot alias is available");
+        }
+      }
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&routeCoverage=single&limit=10"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(repository.filters).toHaveLength(0);
+    expect(response.json()).toMatchObject({
+      count: 2,
+      materialized: true,
+      markets: [
+        { canonicalEventId: market.canonicalEventId },
+        { canonicalEventId: secondLiveMarket.canonicalEventId }
+      ]
+    });
+
+    await app.close();
+  });
+
+  it("uses one primary cache key for equivalent quote-ready all and single coverage requests", async () => {
+    const repository = new FakeMarketCatalogRepository();
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: []
+          }];
+        }
+      }
+    });
+
+    const all = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&routeCoverage=all&limit=37"
+    });
+    const single = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&routeCoverage=single&limit=37"
+    });
+
+    expect(all.statusCode).toBe(200);
+    expect(single.statusCode).toBe(200);
+    expect(repository.filters).toHaveLength(1);
+    expect(all.json()).toMatchObject({ count: 1 });
+    expect(single.json()).toMatchObject({ count: 1 });
+
+    await app.close();
+  });
+
+  it("prefers fresh shared quote-ready snapshots over local in-memory catalog cache", async () => {
+    const repository = new FakeMarketCatalogRepository();
+    const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    const freshTimestamp = new Date().toISOString();
+    const app = Fastify({ logger: false });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketCatalogSnapshotCache: snapshotCache,
+      marketQuoteReadinessSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            lastQuoteAt: freshTimestamp,
+            quoteBlockers: []
+          }];
+        }
+      }
+    });
+
+    const first = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=10"
+    });
+    const sharedMarket = {
+      ...market,
+      canonicalEventId: "22222222-2222-5222-8222-222222222222",
+      eventId: "event:shared",
+      quoteStatus: "partial" as const,
+      quoteReadyVenueCount: 2,
+      quoteReadyVenues: ["LIMITLESS", "POLYMARKET"],
+      lastQuoteAt: freshTimestamp
+    };
+    snapshotCache.values.set("markets:{\"limit\":10,\"quoteReadyOnly\":true}", {
+      markets: [sharedMarket],
+      count: 1,
+      materialized: true
+    });
+    repository.filters = [];
+
+    const second = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&limit=10"
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(repository.filters).toHaveLength(0);
+    expect(second.json()).toMatchObject({
+      count: 1,
+      materialized: true,
+      markets: [{
+        canonicalEventId: sharedMarket.canonicalEventId,
+        quoteReadyVenueCount: 2
+      }]
+    });
+
+    await app.close();
+  });
+
+  it("rebuilds stale quote-ready shared snapshots from hot readiness on the user request", async () => {
     const repository = new FakeMarketCatalogRepository();
     const snapshotCache = new FakeMarketCatalogSnapshotCache();
     snapshotCache.values.set("markets:{\"limit\":10,\"quoteReadyOnly\":true}", {
@@ -574,7 +935,7 @@ describe("market catalog routes", () => {
         quoteStatus: "live" as const,
         quoteReadyVenueCount: 1,
         quoteReadyVenues: ["POLYMARKET"],
-        lastQuoteAt: "2026-05-21T23:40:00.000Z"
+        lastQuoteAt: "2026-05-21T23:38:00.000Z"
       }],
       count: 1,
       materialized: true
@@ -585,7 +946,14 @@ describe("market catalog routes", () => {
       marketCatalogSnapshotCache: snapshotCache,
       marketQuoteReadinessSource: {
         async listLatestMarketQuoteReadiness() {
-          return [];
+          return [{
+            canonicalMarketId: market.canonicalMarketIds[0]!,
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["LIMITLESS"],
+            lastQuoteAt: "2026-05-21T23:41:15.000Z",
+            quoteBlockers: []
+          }];
         }
       }
     });
@@ -598,8 +966,11 @@ describe("market catalog routes", () => {
     expect(response.statusCode).toBe(200);
     expect(repository.filters).toHaveLength(1);
     expect(response.json()).toMatchObject({
-      count: 0,
-      markets: []
+      count: 1,
+      markets: [{
+        quoteReadyVenueCount: 1,
+        quoteReadyVenues: ["LIMITLESS"]
+      }]
     });
 
     await app.close();
@@ -631,7 +1002,7 @@ describe("market catalog routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(repository.filters).toHaveLength(0);
-    expect(snapshotCache.getCount).toBe(2);
+    expect(snapshotCache.getCount).toBeGreaterThanOrEqual(2);
     expect(response.json()).toMatchObject({
       count: 1,
       materialized: true,
@@ -641,7 +1012,7 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
-  it("ignores empty shared quote-ready catalog snapshots and rebuilds from repository", async () => {
+  it("rebuilds empty quote-ready shared snapshots from hot readiness on the user request", async () => {
     const repository = new FakeMarketCatalogRepository();
     const snapshotCache = new FakeMarketCatalogSnapshotCache();
     snapshotCache.values.set("markets:{\"limit\":10,\"quoteReadyOnly\":true}", {
@@ -658,7 +1029,7 @@ describe("market catalog routes", () => {
             canonicalMarketId: market.canonicalMarketIds[0]!,
             quoteStatus: "live" as const,
             quoteReadyVenueCount: 1,
-            quoteReadyVenues: ["POLYMARKET"],
+            quoteReadyVenues: ["OPINION"],
             lastQuoteAt: "2026-05-21T23:41:15.000Z",
             quoteBlockers: []
           }];
@@ -675,13 +1046,16 @@ describe("market catalog routes", () => {
     expect(repository.filters).toHaveLength(1);
     expect(response.json()).toMatchObject({
       count: 1,
-      markets: [{ quoteReadyVenueCount: 1 }]
+      markets: [{
+        quoteReadyVenueCount: 1,
+        quoteReadyVenues: ["OPINION"]
+      }]
     });
 
     await app.close();
   });
 
-  it("does not materialize degraded quote-ready responses when only stale readiness remains", async () => {
+  it("does not materialize empty quote-ready responses when the hot snapshot is missing", async () => {
     process.env.MARKET_QUOTE_READINESS_TIMEOUT_MS = "1";
     const repository = new FakeMarketCatalogRepository();
     const snapshotCache = new FakeMarketCatalogSnapshotCache();
@@ -719,12 +1093,21 @@ describe("market catalog routes", () => {
 
     expect(warm.statusCode).toBe(200);
     expect(degraded.statusCode).toBe(200);
-    expect(snapshotCache.setCount).toBe(1);
+    expect(snapshotCache.setCount).toBe(3);
     expect(repository.filters).toHaveLength(2);
+    expect(snapshotCache.values.get("markets:{\"limit\":10,\"quoteReadyOnly\":true,\"routeCoverage\":\"all\"}")).toMatchObject({
+      count: 1,
+      markets: [{ quoteReadyVenueCount: 1 }]
+    });
+    expect(snapshotCache.values.get("markets:{\"limit\":10,\"quoteReadyOnly\":true,\"routeCoverage\":\"single\"}")).toMatchObject({
+      count: 1,
+      markets: [{ quoteReadyVenueCount: 1 }]
+    });
+    expect(warm.json()).toMatchObject({
+      count: 1,
+      markets: [{ quoteReadyVenueCount: 1 }]
+    });
     expect(degraded.json()).toMatchObject({
-      count: 0,
-      quoteReadinessDegraded: true,
-      quoteReadinessReason: "timeout",
       markets: []
     });
 
@@ -807,6 +1190,59 @@ describe("market catalog routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(repository.filters[0]).toMatchObject({ limit: 1000 });
+
+    await app.close();
+  });
+
+  it("serves tri quote-ready markets from broader materialized cache without live rebuild", async () => {
+    const singleMarket = {
+      ...market,
+      canonicalEventId: "22222222-2222-5222-8222-222222222222",
+      canonicalMarketIds: ["SINGLE_MARKET"],
+      quoteStatus: "live" as const,
+      quoteReadyVenueCount: 1,
+      quoteReadyVenues: ["POLYMARKET"],
+      lastQuoteAt: "2026-05-21T23:41:15.000Z"
+    };
+    const triMarket = {
+      ...market,
+      canonicalEventId: "33333333-3333-5333-8333-333333333333",
+      canonicalMarketIds: ["TRI_MARKET"],
+      venues: ["POLYMARKET", "LIMITLESS", "PREDICT_FUN"],
+      venueCount: 3,
+      venueMarketCount: 3,
+      quoteStatus: "partial" as const,
+      quoteReadyVenueCount: 3,
+      quoteReadyVenues: ["POLYMARKET", "LIMITLESS", "PREDICT_FUN"],
+      lastQuoteAt: "2026-05-21T23:41:15.000Z"
+    };
+    const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    snapshotCache.values.set("markets:{\"limit\":10,\"quoteReadyOnly\":true,\"routeCoverage\":\"single\"}", {
+      markets: [singleMarket, triMarket],
+      count: 2,
+      materialized: true,
+      materializedAt: "2026-05-21T23:41:15.000Z"
+    });
+    const app = Fastify({ logger: false });
+    const repository = new FakeMarketCatalogRepository();
+    repository.listMarkets = async () => {
+      throw new Error("live rebuild should not run");
+    };
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketCatalogSnapshotCache: snapshotCache
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?quoteReadyOnly=true&routeCoverage=tri&limit=10"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      count: 1,
+      markets: [{ canonicalMarketIds: ["TRI_MARKET"], quoteReadyVenueCount: 3 }]
+    });
 
     await app.close();
   });
@@ -955,35 +1391,78 @@ describe("market catalog routes", () => {
 
   it("returns sanitized live orderbook and chart contracts", async () => {
     const app = Fastify({ logger: false });
+    const touchedActivity: Array<{ canonicalMarketId: string; canonicalOutcomeId?: string | undefined }> = [];
+    const orderbookRequests: Array<{
+      marketId: string;
+      canonicalMarketIds?: readonly string[] | undefined;
+      outcomeId?: string | undefined;
+      depth?: number | undefined;
+    }> = [];
+    const aggregateCanonicalMarketIds = [
+      market.canonicalMarketIds[0]!,
+      "NOMINEE|US_PRESIDENT|2028|REPUBLICAN:LIMITLESS"
+    ];
+    const aggregateRepository = new FakeMarketCatalogRepository();
+    vi.spyOn(aggregateRepository, "getMarket").mockImplementation(async (marketId) => (
+      marketId === market.canonicalEventId || aggregateCanonicalMarketIds.includes(marketId)
+        ? { ...market, canonicalMarketIds: aggregateCanonicalMarketIds }
+        : null
+    ));
     await registerMarketCatalogRoutes(app, {
-      marketCatalogRepository: new FakeMarketCatalogRepository(),
+      marketCatalogRepository: aggregateRepository,
+      marketActivityTracker: {
+        touch: (input) => {
+          touchedActivity.push(input);
+        }
+      },
       marketDataViewService: {
-        getOrderbook: async (input) => ({
-          marketId: input.marketId,
-          outcomeId: input.outcomeId ?? null,
-          generatedAt: "2026-05-10T00:00:00.000Z",
-          depth: input.depth ?? 20,
-          status: "live" as const,
-          bestBid: "0.51",
-          bestAsk: "0.53",
-          midpoint: "0.52",
-          spread: "0.02",
-          blockers: [],
-          venues: [{
-            venue: "POLYMARKET",
-            venueMarketId: "poly-1",
-            venueOutcomeId: "yes",
-            source: "REST" as const,
-            quoteQuality: "FULL_DEPTH_REST",
-            sourceTimestamp: null,
-            receivedAt: "2026-05-10T00:00:00.000Z",
+        getOrderbook: async (input) => {
+          orderbookRequests.push(input);
+          return {
+            marketId: input.marketId,
+            outcomeId: input.outcomeId ?? null,
+            generatedAt: "2026-05-10T00:00:00.000Z",
+            depth: input.depth ?? 20,
+            status: "live" as const,
             bestBid: "0.51",
             bestAsk: "0.53",
             midpoint: "0.52",
             spread: "0.02",
-            bidDepth: "100",
-            askDepth: "90",
             blockers: [],
+            venues: [{
+              venue: "POLYMARKET",
+              venueMarketId: "poly-1",
+              venueOutcomeId: "yes",
+              source: "REST" as const,
+              quoteQuality: "FULL_DEPTH_REST",
+              sourceTimestamp: null,
+              receivedAt: "2026-05-10T00:00:00.000Z",
+              bestBid: "0.51",
+              bestAsk: "0.53",
+              midpoint: "0.52",
+              spread: "0.02",
+              bidDepth: "100",
+              askDepth: "90",
+              blockers: [],
+              bids: [{
+                venue: "POLYMARKET",
+                venueMarketId: "poly-1",
+                venueOutcomeId: "yes",
+                price: "0.51",
+                size: "100",
+                cumulativeSize: "100",
+                cumulativeNotional: "51"
+              }],
+              asks: [{
+                venue: "POLYMARKET",
+                venueMarketId: "poly-1",
+                venueOutcomeId: "yes",
+                price: "0.53",
+                size: "90",
+                cumulativeSize: "90",
+                cumulativeNotional: "47.7"
+              }]
+            }],
             bids: [{
               venue: "POLYMARKET",
               venueMarketId: "poly-1",
@@ -1002,26 +1481,8 @@ describe("market catalog routes", () => {
               cumulativeSize: "90",
               cumulativeNotional: "47.7"
             }]
-          }],
-          bids: [{
-            venue: "POLYMARKET",
-            venueMarketId: "poly-1",
-            venueOutcomeId: "yes",
-            price: "0.51",
-            size: "100",
-            cumulativeSize: "100",
-            cumulativeNotional: "51"
-          }],
-          asks: [{
-            venue: "POLYMARKET",
-            venueMarketId: "poly-1",
-            venueOutcomeId: "yes",
-            price: "0.53",
-            size: "90",
-            cumulativeSize: "90",
-            cumulativeNotional: "47.7"
-          }]
-        }),
+          };
+        },
         getChart: async (input) => ({
           marketId: input.marketId,
           outcomeId: input.outcomeId ?? null,
@@ -1080,10 +1541,31 @@ describe("market catalog routes", () => {
     expect(orderbook.json()).toMatchObject({
       status: "live",
       bestBid: "0.51",
-      asks: [{ venue: "POLYMARKET", price: "0.53" }]
+      asks: [{ venue: "POLYMARKET", price: "0.53" }],
+      stream: {
+        primaryTopic: marketOrderbookTopic(market.canonicalMarketIds[0]!, "yes"),
+        topics: [
+          marketOrderbookTopic(market.canonicalMarketIds[0]!, "yes"),
+          marketOrderbookTopic("NOMINEE|US_PRESIDENT|2028|REPUBLICAN:LIMITLESS", "yes")
+        ]
+      }
     });
     expect(orderbook.body).not.toContain("apiKey");
     expect(orderbook.body).not.toContain("raw_source_payload");
+    expect(orderbookRequests[0]).toMatchObject({
+      marketId: market.canonicalEventId,
+      canonicalMarketIds: aggregateCanonicalMarketIds,
+      outcomeId: "yes",
+      depth: 10
+    });
+    expect(touchedActivity).toContainEqual({
+      canonicalMarketId: market.canonicalMarketIds[0],
+      canonicalOutcomeId: "yes"
+    });
+    expect(touchedActivity).toContainEqual({
+      canonicalMarketId: "NOMINEE|US_PRESIDENT|2028|REPUBLICAN:LIMITLESS",
+      canonicalOutcomeId: "yes"
+    });
 
     const suffixedOrderbook = await app.inject({
       method: "GET",
@@ -1093,6 +1575,10 @@ describe("market catalog routes", () => {
     expect(suffixedOrderbook.json()).toMatchObject({
       status: "live",
       bestBid: "0.51"
+    });
+    expect(touchedActivity).toContainEqual({
+      canonicalMarketId: market.canonicalMarketIds[0],
+      canonicalOutcomeId: "yes"
     });
 
     const chart = await app.inject({

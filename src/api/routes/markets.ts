@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { MarketCatalogMarket, MarketCatalogRepository } from "../../repositories/market-catalog.repository.js";
 import {
+  DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS,
   DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS,
   type MarketQuoteReadinessSnapshot
 } from "../../repositories/venue-orderbook-snapshot.repository.js";
@@ -12,6 +13,7 @@ import {
   marketCatalogDetailAliasKeys,
   marketCatalogDetailCacheKey
 } from "../../services/market-catalog-snapshot-materializer.js";
+import { marketOrderbookTopic } from "../../services/orderbook-stream.service.js";
 
 const routeCoverageSchema = z.enum(["all", "single", "pair", "tri", "strict_all"]);
 const marketListViewSchema = z.enum(["full", "compact"]);
@@ -22,6 +24,18 @@ const listQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(1000).optional(),
   routeCoverage: routeCoverageSchema.optional(),
   view: marketListViewSchema.optional(),
+  includeInactive: z.preprocess((value) => {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (value === "true" || value === true) {
+      return true;
+    }
+    if (value === "false" || value === false) {
+      return false;
+    }
+    return value;
+  }, z.boolean()).optional(),
   quoteReadyOnly: z.preprocess((value) => {
     if (value === undefined) {
       return undefined;
@@ -55,7 +69,22 @@ const batchQuotesRequestSchema = z.object({
     outcomeId: z.string().min(1),
     side: z.enum(["buy", "sell"]).optional(),
     amount: z.union([z.string().regex(/^\d+(\.\d+)?$/), z.number().positive()]).optional()
-  })).min(1).max(60)
+  })).min(1).max(60),
+  displayMode: z.enum(["debug", "user"]).optional()
+});
+
+const livePricesQuerySchema = z.object({
+  items: z.string().min(2).optional(),
+  marketIds: z.string().min(1).optional(),
+  outcomeId: z.string().min(1).optional()
+});
+
+const livePricesRequestSchema = z.object({
+  items: z.array(z.object({
+    marketId: z.string().min(1),
+    canonicalMarketIds: z.array(z.string().min(1)).max(20).optional(),
+    outcomeId: z.string().min(1).optional()
+  })).min(1).max(80)
 });
 
 const VENUE_SUFFIX_PATTERN = /:(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$/i;
@@ -68,6 +97,9 @@ const DEFAULT_MARKET_CATALOG_RESPONSE_STALE_CACHE_MS = 900_000;
 const DEFAULT_MARKET_DETAIL_CACHE_MS = 300_000;
 const DEFAULT_MARKET_CHART_DETAIL_TIMEOUT_MS = 50;
 const DEFAULT_MARKET_CATALOG_ACTIVITY_TOUCH_LIMIT = 60;
+const DEFAULT_MARKET_ORDERBOOK_WARMUP_LIMIT = 12;
+const MARKET_ORDERBOOK_WARMUP_CACHE_MS = 15_000;
+const MARKET_ORDERBOOK_WARMUP_OUTCOMES = ["YES", "NO"] as const;
 const MARKET_QUOTE_READINESS_TIMEOUT = Symbol("MARKET_QUOTE_READINESS_TIMEOUT");
 const MARKET_DETAIL_TIMEOUT = Symbol("MARKET_DETAIL_TIMEOUT");
 
@@ -81,6 +113,7 @@ const marketCatalogResponseCache = new Map<string, { expiresAtMs: number; staleU
 const marketCatalogResponsePending = new Map<string, Promise<unknown>>();
 const marketDetailCache = new Map<string, { expiresAtMs: number; value: MarketCatalogMarket | null }>();
 const marketDetailPending = new Map<string, Promise<MarketCatalogMarket | null>>();
+const marketOrderbookWarmupCache = new Map<string, number>();
 
 export const clearMarketQuoteReadinessCacheForTests = (): void => {
   marketQuoteReadinessCache.clear();
@@ -88,6 +121,7 @@ export const clearMarketQuoteReadinessCacheForTests = (): void => {
   marketCatalogResponsePending.clear();
   marketDetailCache.clear();
   marketDetailPending.clear();
+  marketOrderbookWarmupCache.clear();
 };
 
 export interface MarketCatalogRouteDeps {
@@ -103,7 +137,31 @@ export interface MarketCatalogRouteDeps {
     touch(input: { canonicalMarketId: string; canonicalOutcomeId?: string | undefined }): void;
   } | undefined;
   marketDataViewService?: Pick<LiveMarketDataViewService, "getOrderbook" | "getChart"> & {
-    getBatchQuotes?(input: { items: readonly { marketId: string; outcomeId: string; side?: "buy" | "sell"; amount?: string | number }[] }): Promise<MarketBatchQuoteResponse>;
+    getLivePrices?(input: {
+      items: readonly { marketId: string; canonicalMarketIds?: readonly string[] | undefined; outcomeId?: string | undefined }[];
+    }): Promise<{
+      generatedAt: string;
+      prices: Array<{
+        marketId: string;
+        outcomeId: string | null;
+        generatedAt: string;
+        status: "live" | "no_live_price";
+        price: string | null;
+        bestBid: string | null;
+        bestAsk: string | null;
+        midpoint: string | null;
+        spread: string | null;
+        bestVenue: string | null;
+        venueCount: number;
+        venues: string[];
+        freshnessMs: number | null;
+      }>;
+    }>;
+  } & {
+    getBatchQuotes?(input: {
+      items: readonly { marketId: string; outcomeId: string; side?: "buy" | "sell"; amount?: string | number }[];
+      displayMode?: "debug" | "user" | undefined;
+    }): Promise<MarketBatchQuoteResponse>;
   } | undefined;
 }
 
@@ -127,26 +185,30 @@ export const registerMarketCatalogRoutes = async (
         details: parsed.error.flatten()
       });
     }
+    const cacheQuery = marketCatalogListCacheQuery(parsed.data);
     const payload = await getCachedMarketCatalogResponse(
-      `markets:${stableQueryCacheKey(parsed.data)}`,
+      `markets:${stableQueryCacheKey(cacheQuery)}`,
       async () => {
-        const marketLimit = parsed.data.limit === undefined ? undefined : resolveMarketFetchLimit(parsed.data.limit, parsed.data);
+        const marketLimit = cacheQuery.limit === undefined ? undefined : resolveMarketFetchLimit(cacheQuery.limit, cacheQuery);
         const markets = await deps.marketCatalogRepository.listMarkets({
-          ...(parsed.data.category !== undefined ? { category: parsed.data.category } : {}),
-          ...(parsed.data.search !== undefined ? { search: parsed.data.search } : {}),
+          ...(cacheQuery.category !== undefined ? { category: cacheQuery.category } : {}),
+          ...(cacheQuery.search !== undefined ? { search: cacheQuery.search } : {}),
           ...(marketLimit !== undefined ? { limit: marketLimit } : {})
         });
-        touchMarketCatalogActivity(markets, deps.marketActivityTracker, DEFAULT_MARKET_CATALOG_ACTIVITY_TOUCH_LIMIT);
-        const enriched = await enrichMarketsWithQuoteReadiness(markets, deps.marketQuoteReadinessSource);
-        const routeCoverage = parsed.data.routeCoverage ?? "all";
+        const publicMarkets = cacheQuery.includeInactive
+          ? markets
+          : markets.filter(isPublicMarketListMarket);
+        touchMarketCatalogActivity(publicMarkets, deps.marketActivityTracker, DEFAULT_MARKET_CATALOG_ACTIVITY_TOUCH_LIMIT);
+        const enriched = await enrichMarketsWithQuoteReadiness(publicMarkets, deps.marketQuoteReadinessSource);
+        const routeCoverage = cacheQuery.routeCoverage ?? "all";
         const visibleMarkets = enriched.markets
-          .filter((market) => !parsed.data.quoteReadyOnly || isQuoteReadyMarket(market))
+          .filter((market) => !cacheQuery.quoteReadyOnly || isQuoteReadyMarket(market))
           .filter((market) => routeCoverageMatches(market, routeCoverage))
-          .slice(0, parsed.data.limit ?? enriched.markets.length);
+          .slice(0, cacheQuery.limit ?? enriched.markets.length);
         return {
-          markets: formatMarketCatalogListMarkets(visibleMarkets, parsed.data.view),
+          markets: formatMarketCatalogListMarkets(visibleMarkets, cacheQuery.view),
           count: visibleMarkets.length,
-          ...(parsed.data.view === "compact" ? { view: "compact" } : {}),
+          ...(cacheQuery.view === "compact" ? { view: "compact" } : {}),
           ...(enriched.degraded ? {
             quoteReadinessDegraded: true,
             quoteReadinessReason: enriched.reason
@@ -156,9 +218,11 @@ export const registerMarketCatalogRoutes = async (
       {
         cacheDegraded: false,
         sharedCache: deps.marketCatalogSnapshotCache,
-        sharedFallbacks: marketCatalogSnapshotFallbacks(parsed.data)
+        sharedFallbacks: marketCatalogSnapshotFallbacks(cacheQuery),
+        sharedWriteKeys: marketCatalogSnapshotWriteKeys(cacheQuery)
       }
     );
+    queueMarketCatalogOrderbookWarmup(payload, deps.marketDataViewService);
     return reply.send(payload);
   });
 
@@ -297,6 +361,56 @@ export const registerMarketCatalogRoutes = async (
         outcomeId: item.outcomeId,
         ...(item.side ? { side: item.side } : {}),
         ...(item.amount !== undefined ? { amount: item.amount } : {})
+      })),
+      ...(parsed.data.displayMode ? { displayMode: parsed.data.displayMode } : {})
+    }));
+  });
+
+  app.get("/markets/live-prices", async (request, reply) => {
+    if (!deps.marketDataViewService?.getLivePrices) {
+      return reply.status(503).send({
+        code: "MARKET_LIVE_PRICES_UNAVAILABLE",
+        message: "Live market price display service is not configured."
+      });
+    }
+    const parsed = livePricesQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_MARKET_LIVE_PRICES_QUERY",
+        message: "Market live prices query validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    const items = parseLivePriceQueryItems(parsed.data);
+    if (items.length === 0 || items.length > 80) {
+      return reply.status(400).send({
+        code: "INVALID_MARKET_LIVE_PRICES_ITEMS",
+        message: "Market live prices require between 1 and 80 market items."
+      });
+    }
+    return reply.send(await deps.marketDataViewService.getLivePrices({ items }));
+  });
+
+  app.post("/markets/live-prices", async (request, reply) => {
+    if (!deps.marketDataViewService?.getLivePrices) {
+      return reply.status(503).send({
+        code: "MARKET_LIVE_PRICES_UNAVAILABLE",
+        message: "Live market price display service is not configured."
+      });
+    }
+    const parsed = livePricesRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_MARKET_LIVE_PRICES_REQUEST",
+        message: "Market live prices request validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    return reply.send(await deps.marketDataViewService.getLivePrices({
+      items: parsed.data.items.map((item) => ({
+        marketId: item.marketId,
+        ...(item.canonicalMarketIds ? { canonicalMarketIds: item.canonicalMarketIds } : {}),
+        ...(item.outcomeId ? { outcomeId: item.outcomeId } : {})
       }))
     }));
   });
@@ -324,13 +438,18 @@ export const registerMarketCatalogRoutes = async (
         message: "Market was not found."
       });
     }
+    touchOrderbookMarketActivity(marketId, marketResult, parsed.data.outcomeId, deps.marketActivityTracker);
     const response = await deps.marketDataViewService.getOrderbook({
       marketId,
+      canonicalMarketIds: resolveOrderbookMarketIds(marketId, marketResult),
       ...(parsed.data.outcomeId ? { outcomeId: parsed.data.outcomeId } : {}),
       ...(parsed.data.depth ? { depth: parsed.data.depth } : {}),
       ...(parsed.data.venue ? { venue: parsed.data.venue } : {})
     });
-    return reply.send(response);
+    return reply.send({
+      ...response,
+      stream: buildOrderbookStreamContract(marketId, marketResult, parsed.data.outcomeId)
+    });
   });
 
   app.get("/markets/:marketId/chart", async (request, reply) => {
@@ -385,6 +504,51 @@ const resolveOutcomeLabel = (
   return undefined;
 };
 
+const parseLivePriceQueryItems = (
+  query: z.infer<typeof livePricesQuerySchema>
+): Array<{ marketId: string; canonicalMarketIds?: readonly string[] | undefined; outcomeId?: string | undefined }> => {
+  if (query.items) {
+    try {
+      const parsed = JSON.parse(query.items) as unknown;
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+      return parsed.flatMap((item) => {
+        if (!item || typeof item !== "object") {
+          return [];
+        }
+        const record = item as Record<string, unknown>;
+        const marketId = typeof record.marketId === "string" ? record.marketId.trim() : "";
+        const outcomeId = typeof record.outcomeId === "string" ? record.outcomeId.trim() : "";
+        const canonicalMarketIds = Array.isArray(record.canonicalMarketIds)
+          ? record.canonicalMarketIds
+              .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+              .map((value) => value.trim())
+          : [];
+        if (!marketId) {
+          return [];
+        }
+        return [{
+          marketId,
+          ...(canonicalMarketIds.length > 0 ? { canonicalMarketIds } : {}),
+          ...(outcomeId ? { outcomeId } : {})
+        }];
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  return (query.marketIds ?? "")
+    .split(",")
+    .map((marketId) => marketId.trim())
+    .filter((marketId) => marketId.length > 0)
+    .map((marketId) => ({
+      marketId,
+      ...(query.outcomeId ? { outcomeId: query.outcomeId.trim() } : {})
+    }));
+};
+
 const touchMarketCatalogActivity = (
   markets: readonly MarketCatalogMarket[],
   tracker: MarketCatalogRouteDeps["marketActivityTracker"],
@@ -402,6 +566,141 @@ const touchMarketCatalogActivity = (
     }
     tracker.touch({ canonicalMarketId });
   }
+};
+
+const touchOrderbookMarketActivity = (
+  marketId: string,
+  marketResult: Awaited<ReturnType<typeof resolveCachedCatalogMarketForChart>>,
+  outcomeId: string | undefined,
+  tracker: MarketCatalogRouteDeps["marketActivityTracker"]
+): void => {
+  if (!tracker) {
+    return;
+  }
+  const canonicalMarketIds = marketResult.ok && marketResult.market
+    ? marketResult.market.canonicalMarketIds
+    : [marketId];
+  for (const canonicalMarketId of new Set(canonicalMarketIds)) {
+    if (canonicalMarketId.trim().length === 0) {
+      continue;
+    }
+    tracker.touch({
+      canonicalMarketId,
+      ...(outcomeId ? { canonicalOutcomeId: outcomeId } : {})
+    });
+  }
+};
+
+const queueMarketCatalogOrderbookWarmup = (
+  payload: unknown,
+  marketDataViewService: MarketCatalogRouteDeps["marketDataViewService"]
+): void => {
+  if (!marketDataViewService?.getOrderbook || typeof payload !== "object" || payload === null) {
+    return;
+  }
+  const markets = Array.isArray((payload as { markets?: unknown }).markets)
+    ? (payload as { markets: unknown[] }).markets
+    : [];
+  if (markets.length === 0) {
+    return;
+  }
+
+  const now = Date.now();
+  pruneMarketOrderbookWarmupCache(now);
+  const tasks: Array<{ marketId: string; canonicalMarketIds: string[]; outcomeId: string }> = [];
+  for (const market of markets) {
+    if (tasks.length >= DEFAULT_MARKET_ORDERBOOK_WARMUP_LIMIT * MARKET_ORDERBOOK_WARMUP_OUTCOMES.length) {
+      break;
+    }
+    if (!isMarketCatalogMarketLike(market) || !isTradableMarketListItem(market)) {
+      continue;
+    }
+    const canonicalMarketIds = market.canonicalMarketIds
+      .map((canonicalMarketId) => canonicalMarketId.trim())
+      .filter((canonicalMarketId) => canonicalMarketId.length > 0);
+    if (canonicalMarketIds.length === 0) {
+      continue;
+    }
+    for (const outcomeId of MARKET_ORDERBOOK_WARMUP_OUTCOMES) {
+      const key = marketOrderbookWarmupKey(market.canonicalEventId, canonicalMarketIds, outcomeId);
+      const cachedUntil = marketOrderbookWarmupCache.get(key) ?? 0;
+      if (cachedUntil > now) {
+        continue;
+      }
+      marketOrderbookWarmupCache.set(key, now + MARKET_ORDERBOOK_WARMUP_CACHE_MS);
+      tasks.push({
+        marketId: market.canonicalEventId,
+        canonicalMarketIds,
+        outcomeId
+      });
+    }
+  }
+
+  if (tasks.length === 0) {
+    return;
+  }
+  void runMarketCatalogOrderbookWarmup(marketDataViewService, tasks).catch(() => undefined);
+};
+
+const runMarketCatalogOrderbookWarmup = async (
+  marketDataViewService: NonNullable<MarketCatalogRouteDeps["marketDataViewService"]>,
+  tasks: readonly { marketId: string; canonicalMarketIds: readonly string[]; outcomeId: string }[]
+): Promise<void> => {
+  for (const task of tasks) {
+    await marketDataViewService.getOrderbook({
+      marketId: task.marketId,
+      canonicalMarketIds: task.canonicalMarketIds,
+      outcomeId: task.outcomeId
+    });
+  }
+};
+
+const marketOrderbookWarmupKey = (
+  marketId: string,
+  canonicalMarketIds: readonly string[],
+  outcomeId: string
+): string => `${marketId}\u0000${canonicalMarketIds.join("\u0001")}\u0000${outcomeId}`;
+
+const pruneMarketOrderbookWarmupCache = (now: number): void => {
+  for (const [key, expiresAtMs] of marketOrderbookWarmupCache.entries()) {
+    if (expiresAtMs <= now) {
+      marketOrderbookWarmupCache.delete(key);
+    }
+  }
+};
+
+const resolveOrderbookMarketIds = (
+  marketId: string,
+  marketResult: Awaited<ReturnType<typeof resolveCachedCatalogMarketForChart>>
+): string[] => {
+  const canonicalMarketIds = marketResult.ok && marketResult.market
+    ? marketResult.market.canonicalMarketIds
+    : [marketId];
+  const normalized = [...new Set(canonicalMarketIds)]
+    .map((canonicalMarketId) => canonicalMarketId.trim())
+    .filter((canonicalMarketId) => canonicalMarketId.length > 0);
+  return normalized.length > 0 ? normalized : [marketId];
+};
+
+const buildOrderbookStreamContract = (
+  marketId: string,
+  marketResult: Awaited<ReturnType<typeof resolveCachedCatalogMarketForChart>>,
+  outcomeId: string | undefined
+): { primaryTopic: string; topics: string[] } => {
+  const canonicalMarketIds = marketResult.ok && marketResult.market
+    ? marketResult.market.canonicalMarketIds
+    : [marketId];
+  const topics = [...new Set(canonicalMarketIds)]
+    .filter((canonicalMarketId) => canonicalMarketId.trim().length > 0)
+    .map((canonicalMarketId) => marketOrderbookTopic(canonicalMarketId, outcomeId));
+  if (topics.length === 0) {
+    const fallbackTopic = marketOrderbookTopic(marketId, outcomeId);
+    return { primaryTopic: fallbackTopic, topics: [fallbackTopic] };
+  }
+  return {
+    primaryTopic: topics[0]!,
+    topics
+  };
 };
 
 const enrichMarketsWithQuoteReadiness = async (
@@ -505,18 +804,26 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
     cacheDegraded?: boolean;
     sharedCache?: MarketCatalogSnapshotCache | undefined;
     sharedFallbacks?: readonly { key: string; limit: number }[] | undefined;
+    sharedWriteKeys?: readonly string[] | undefined;
   } = {}
 ): Promise<T> => {
   const now = Date.now();
+  const preferSharedCache = Boolean(options.sharedCache && isQuoteReadyMarketCatalogCacheKey(key));
+  if (preferSharedCache) {
+    const sharedValue = await getSharedMarketCatalogResponse<T>(key, options);
+    if (sharedValue) {
+      return sharedValue;
+    }
+  }
   const cached = marketCatalogResponseCache.get(key);
-  if (cached && cached.expiresAtMs >= now) {
+  if (!preferSharedCache && cached && cached.expiresAtMs >= now) {
     const scrubbed = scrubMarketCatalogResponseForKey(key, cached.value as T);
     if (isCacheableMarketCatalogResponseForKey(key, scrubbed)) {
       return scrubbed;
     }
     marketCatalogResponseCache.delete(key);
   }
-  const staleCached = cached && cached.staleUntilMs >= now
+  const staleCached = !preferSharedCache && cached && cached.staleUntilMs >= now
     ? scrubMarketCatalogResponseForKey(key, cached.value as T)
     : null;
   const usableStaleCached = staleCached && isCacheableMarketCatalogResponseForKey(key, staleCached)
@@ -524,34 +831,20 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
     : null;
   const cacheTtlMs = resolveMarketCatalogResponseCacheMs(process.env.MARKET_CATALOG_RESPONSE_CACHE_MS);
   const staleCacheTtlMs = resolveMarketCatalogResponseStaleCacheMs(process.env.MARKET_CATALOG_RESPONSE_STALE_CACHE_MS);
-  if (options.sharedCache) {
-    try {
-      const shared = await options.sharedCache.get<T>(key);
-      if (shared && isCacheableMarketCatalogResponseForKey(key, shared)) {
-        const scrubbed = scrubMarketCatalogResponseForKey(key, shared);
-        cacheMarketCatalogResponse(key, scrubbed, cacheTtlMs, staleCacheTtlMs);
-        return scrubbed;
-      }
-      for (const fallback of options.sharedFallbacks ?? []) {
-        const fallbackShared = await options.sharedCache.get<T>(fallback.key);
-        if (fallbackShared && isCacheableMarketCatalogResponseForKey(fallback.key, fallbackShared)) {
-          const sliced = scrubMarketCatalogResponseForKey(key, sliceMarketCatalogResponse(fallbackShared, fallback.limit));
-          cacheMarketCatalogResponse(key, sliced, cacheTtlMs, staleCacheTtlMs);
-          return sliced;
-        }
-      }
-    } catch {
-      // Redis is a hot display cache only. Fall through to the DB producer.
+  if (options.sharedCache && !preferSharedCache) {
+    const sharedValue = await getSharedMarketCatalogResponse<T>(key, options, cacheTtlMs, staleCacheTtlMs);
+    if (sharedValue) {
+      return sharedValue;
     }
   }
   if (usableStaleCached) {
-    if (!marketCatalogResponsePending.has(key)) {
+    if (!preferSharedCache && !marketCatalogResponsePending.has(key)) {
       const background = producer()
     .then((value) => {
       value = scrubMarketCatalogResponseForKey(key, value);
       if (options.cacheDegraded !== false || isCacheableMarketCatalogResponseForKey(key, value)) {
         cacheMarketCatalogResponse(key, value, cacheTtlMs, staleCacheTtlMs);
-        void options.sharedCache?.set(key, value, cacheTtlMs).catch(() => undefined);
+        void setSharedMarketCatalogResponses(key, value, cacheTtlMs, options).catch(() => undefined);
           }
         })
         .catch(() => undefined)
@@ -572,7 +865,7 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
       if (options.cacheDegraded !== false || isCacheableMarketCatalogResponseForKey(key, value)) {
         cacheMarketCatalogResponse(key, value, cacheTtlMs, staleCacheTtlMs);
         if (isCacheableMarketCatalogResponseForKey(key, value)) {
-          void options.sharedCache?.set(key, value, cacheTtlMs).catch(() => undefined);
+          void setSharedMarketCatalogResponses(key, value, cacheTtlMs, options).catch(() => undefined);
         }
       } else if (usableStaleCached) {
         return markMarketCatalogResponseFromStaleCache(usableStaleCached);
@@ -592,6 +885,81 @@ const getCachedMarketCatalogResponse = async <T extends Record<string, unknown>>
   return await promise;
 };
 
+const getSharedMarketCatalogResponse = async <T extends Record<string, unknown>>(
+  key: string,
+  options: {
+    sharedCache?: MarketCatalogSnapshotCache | undefined;
+    sharedFallbacks?: readonly { key: string; limit: number }[] | undefined;
+    sharedWriteKeys?: readonly string[] | undefined;
+  },
+  cacheTtlMs = resolveMarketCatalogResponseCacheMs(process.env.MARKET_CATALOG_RESPONSE_CACHE_MS),
+  staleCacheTtlMs = resolveMarketCatalogResponseStaleCacheMs(process.env.MARKET_CATALOG_RESPONSE_STALE_CACHE_MS)
+): Promise<T | null> => {
+  if (!options.sharedCache) {
+    return null;
+  }
+  try {
+    const candidates: T[] = [];
+    const shared = await options.sharedCache.get<T>(key);
+    if (shared && isCacheableMarketCatalogResponseForKey(key, shared)) {
+      candidates.push(scrubMarketCatalogResponseForKey(key, shared));
+    }
+    for (const fallback of options.sharedFallbacks ?? []) {
+      const fallbackShared = await options.sharedCache.get<T>(fallback.key);
+      if (fallbackShared && isCacheableMarketCatalogResponseForKey(fallback.key, fallbackShared)) {
+        const sliced = scrubMarketCatalogResponseForKey(key, sliceMarketCatalogResponse(fallbackShared, fallback.limit));
+        if (isCacheableMarketCatalogResponseForKey(key, sliced)) {
+          candidates.push(sliced);
+        }
+      }
+    }
+    const best = pickBestMarketCatalogResponse(candidates);
+    if (best) {
+      cacheMarketCatalogResponse(key, best, cacheTtlMs, staleCacheTtlMs);
+      void setSharedMarketCatalogResponses(key, best, cacheTtlMs, {
+        sharedCache: options.sharedCache,
+        sharedWriteKeys: options.sharedWriteKeys
+      }).catch(() => undefined);
+      return best;
+    }
+  } catch {
+    // Redis is a hot display cache only. Fall through to local cache/DB producer.
+  }
+  return null;
+};
+
+const setSharedMarketCatalogResponses = async <T extends Record<string, unknown>>(
+  key: string,
+  value: T,
+  ttlMs: number,
+  options: {
+    sharedCache?: MarketCatalogSnapshotCache | undefined;
+    sharedWriteKeys?: readonly string[] | undefined;
+  }
+): Promise<void> => {
+  if (!options.sharedCache) {
+    return;
+  }
+  const keys = new Set([key, ...(options.sharedWriteKeys ?? [])]);
+  await Promise.all([...keys].map(async (candidateKey) => {
+    const next = scrubMarketCatalogResponseForKey(candidateKey, value);
+    if (isQuoteReadyMarketCatalogCacheKey(candidateKey)) {
+      const existing = await options.sharedCache?.get<T>(candidateKey);
+      if (
+        existing &&
+        isCacheableMarketCatalogResponseForKey(candidateKey, existing) &&
+        compareMarketCatalogResponseScore(
+          marketCatalogResponseScore(scrubMarketCatalogResponseForKey(candidateKey, existing)),
+          marketCatalogResponseScore(next)
+        ) > 0
+      ) {
+        return;
+      }
+    }
+    await options.sharedCache?.set(candidateKey, next, ttlMs);
+  }));
+};
+
 const markMarketCatalogResponseFromStaleCache = <T extends Record<string, unknown>>(value: T): T => ({
   ...value,
   quoteReadinessDegraded: true,
@@ -599,10 +967,25 @@ const markMarketCatalogResponseFromStaleCache = <T extends Record<string, unknow
 });
 
 const scrubMarketCatalogResponseForKey = <T extends Record<string, unknown>>(key: string, value: T): T => {
-  if (!isQuoteReadyMarketCatalogCacheKey(key) || !Array.isArray(value.markets)) {
+  if (!key.startsWith("markets:") || !Array.isArray(value.markets)) {
     return value;
   }
-  const markets = value.markets.filter(isTradableMarketListItem);
+  let markets = marketCatalogCacheKeyIncludesInactive(key)
+    ? value.markets
+    : value.markets.filter(isPublicMarketListItem);
+  if (!isQuoteReadyMarketCatalogCacheKey(key)) {
+    return {
+      ...value,
+      markets,
+      count: markets.length
+    };
+  }
+  const routeCoverage = marketCatalogRouteCoverageFromCacheKey(key);
+  markets = markets.filter((market) =>
+    isTradableMarketListItem(market, {
+      trustMaterializedFreshness: hasRecentMaterializedAt(value)
+    }) && routeCoverageMatchesMarketListItem(market, routeCoverage)
+  );
   return {
     ...value,
     markets,
@@ -610,7 +993,32 @@ const scrubMarketCatalogResponseForKey = <T extends Record<string, unknown>>(key
   };
 };
 
-const isTradableMarketListItem = (value: unknown): boolean => {
+const marketCatalogCacheKeyIncludesInactive = (key: string): boolean =>
+  key.includes("\"includeInactive\":true");
+
+const isPublicMarketListItem = (value: unknown): boolean => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const record = value as { status?: unknown; expiresAt?: unknown; resolvesAt?: unknown };
+  if (record.status !== "OPEN") {
+    return false;
+  }
+  const expiresAtMs = typeof record.expiresAt === "string" ? Date.parse(record.expiresAt) : NaN;
+  if (Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now()) {
+    return false;
+  }
+  const resolvesAtMs = typeof record.resolvesAt === "string" ? Date.parse(record.resolvesAt) : NaN;
+  if (Number.isFinite(resolvesAtMs) && resolvesAtMs <= Date.now()) {
+    return false;
+  }
+  return true;
+};
+
+const isTradableMarketListItem = (
+  value: unknown,
+  options: { trustMaterializedFreshness?: boolean } = {}
+): boolean => {
   if (typeof value !== "object" || value === null) {
     return false;
   }
@@ -622,10 +1030,17 @@ const isTradableMarketListItem = (value: unknown): boolean => {
       : 0;
   return quoteReadyVenueCount > 0
     && (record.quoteStatus === "live" || record.quoteStatus === "partial")
-    && hasRecentQuoteTimestamp(record.lastQuoteAt);
+    && (options.trustMaterializedFreshness === true || hasRecentQuoteTimestamp(record.lastQuoteAt));
 };
 
+const hasRecentMaterializedAt = (value: Record<string, unknown>): boolean =>
+  hasRecentDisplayTimestamp(value.materializedAt);
+
 const hasRecentQuoteTimestamp = (value: unknown): boolean => {
+  return hasRecentDisplayTimestamp(value);
+};
+
+const hasRecentDisplayTimestamp = (value: unknown): boolean => {
   if (typeof value !== "string" || value.trim().length === 0) {
     return false;
   }
@@ -633,7 +1048,7 @@ const hasRecentQuoteTimestamp = (value: unknown): boolean => {
   if (!Number.isFinite(timestampMs)) {
     return false;
   }
-  return Date.now() - timestampMs <= DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS;
+  return Date.now() - timestampMs <= DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS;
 };
 
 const cacheMarketCatalogResponse = <T>(
@@ -669,7 +1084,8 @@ const isCacheableMarketCatalogResponseForKey = (
     return true;
   }
   const markets = Array.isArray(value.markets) ? value.markets : [];
-  return markets.some(isTradableMarketListItem);
+  const trustMaterializedFreshness = hasRecentMaterializedAt(value);
+  return markets.some((market) => isTradableMarketListItem(market, { trustMaterializedFreshness }));
 };
 
 const isQuoteReadyMarketCatalogCacheKey = (key: string): boolean =>
@@ -678,15 +1094,159 @@ const isQuoteReadyMarketCatalogCacheKey = (key: string): boolean =>
 const marketCatalogSnapshotFallbacks = (
   query: z.infer<typeof listQuerySchema>
 ): { key: string; limit: number }[] => {
+  const limit = query.limit ?? 80;
+  const fallbacks = new Map<string, { key: string; limit: number }>();
+  const add = (candidate: z.infer<typeof listQuerySchema>, candidateLimit = limit): void => {
+    const key = `markets:${stableQueryCacheKey(candidate)}`;
+    if (key !== `markets:${stableQueryCacheKey(query)}`) {
+      fallbacks.set(key, { key, limit: candidateLimit });
+    }
+  };
+  for (const alias of marketCatalogAllRouteAliases(query)) {
+    add(alias);
+  }
+  for (const alias of marketCatalogBroaderRouteFallbackAliases(query)) {
+    add(alias);
+  }
   if (query.category !== undefined || query.search !== undefined) {
+    return [...fallbacks.values()];
+  }
+  const fallbackLimits = [80, 250].filter((fallbackLimit) => fallbackLimit > limit);
+  for (const fallbackLimit of fallbackLimits) {
+    add({ ...query, limit: fallbackLimit }, limit);
+    for (const alias of marketCatalogAllRouteAliases({ ...query, limit: fallbackLimit })) {
+      add(alias, limit);
+    }
+    for (const alias of marketCatalogBroaderRouteFallbackAliases({ ...query, limit: fallbackLimit })) {
+      add(alias, limit);
+    }
+  }
+  return [...fallbacks.values()];
+};
+
+const marketCatalogSnapshotWriteKeys = (
+  query: z.infer<typeof listQuerySchema>
+): string[] => [
+  ...new Set(marketCatalogAllRouteAliases(query)
+    .map((candidate) => `markets:${stableQueryCacheKey(candidate)}`))
+];
+
+const marketCatalogAllRouteAliases = (
+  query: z.infer<typeof listQuerySchema>
+): z.infer<typeof listQuerySchema>[] => {
+  if (
+    query.quoteReadyOnly === true
+    && (query.routeCoverage === undefined || query.routeCoverage === "all" || query.routeCoverage === "single")
+  ) {
+    const { routeCoverage: _routeCoverage, ...rest } = query;
+    return [
+      rest,
+      { ...rest, routeCoverage: "all" },
+      { ...rest, routeCoverage: "single" }
+    ];
+  }
+  if (query.routeCoverage === undefined) {
+    return [{ ...query, routeCoverage: "all" }];
+  }
+  if (query.routeCoverage !== "all") {
     return [];
   }
-  const limit = query.limit ?? 80;
-  const fallbackLimits = [80, 250].filter((fallbackLimit) => fallbackLimit > limit);
-  return fallbackLimits.map((fallbackLimit) => ({
-    key: `markets:${stableQueryCacheKey({ ...query, limit: fallbackLimit })}`,
-    limit
-  }));
+  const { routeCoverage: _routeCoverage, ...rest } = query;
+  return [rest];
+};
+
+const marketCatalogBroaderRouteFallbackAliases = (
+  query: z.infer<typeof listQuerySchema>
+): z.infer<typeof listQuerySchema>[] => {
+  if (query.quoteReadyOnly !== true) {
+    return [];
+  }
+  const routeCoverage = query.routeCoverage ?? "all";
+  if (routeCoverage === "all" || routeCoverage === "single") {
+    return [];
+  }
+  const { routeCoverage: _routeCoverage, ...rest } = query;
+  return [
+    rest,
+    { ...rest, routeCoverage: "all" },
+    { ...rest, routeCoverage: "single" }
+  ];
+};
+
+const pickBestMarketCatalogResponse = <T extends Record<string, unknown>>(values: readonly T[]): T | null => {
+  let best: T | null = null;
+  let bestScore: MarketCatalogResponseScore | null = null;
+  for (const value of values) {
+    const score = marketCatalogResponseScore(value);
+    if (!bestScore || compareMarketCatalogResponseScore(score, bestScore) > 0) {
+      best = value;
+      bestScore = score;
+    }
+  }
+  return best;
+};
+
+interface MarketCatalogResponseScore {
+  marketCount: number;
+  readyVenueCount: number;
+  liveMarketCount: number;
+  blockerCount: number;
+  materialized: number;
+}
+
+const marketCatalogResponseScore = (value: Record<string, unknown>): MarketCatalogResponseScore => {
+  const markets = Array.isArray(value.markets) ? value.markets : [];
+  return {
+    marketCount: markets.length > 0
+      ? markets.length
+      : typeof value.count === "number"
+        ? value.count
+        : 0,
+    readyVenueCount: markets.reduce((sum, market) => sum + marketReadyVenueCount(market), 0),
+    liveMarketCount: markets.filter(isLiveMarketCatalogResponseValue).length,
+    blockerCount: markets.reduce((sum, market) => sum + marketQuoteBlockerCount(market), 0),
+    materialized: value.materialized === true ? 1 : 0
+  };
+};
+
+const compareMarketCatalogResponseScore = (
+  left: MarketCatalogResponseScore,
+  right: MarketCatalogResponseScore
+): number => {
+  if (left.marketCount !== right.marketCount) return left.marketCount - right.marketCount;
+  if (left.readyVenueCount !== right.readyVenueCount) return left.readyVenueCount - right.readyVenueCount;
+  if (left.liveMarketCount !== right.liveMarketCount) return left.liveMarketCount - right.liveMarketCount;
+  if (left.blockerCount !== right.blockerCount) return right.blockerCount - left.blockerCount;
+  return left.materialized - right.materialized;
+};
+
+const marketReadyVenueCount = (value: unknown): number => {
+  if (typeof value !== "object" || value === null) {
+    return 0;
+  }
+  const record = value as { quoteReadyVenueCount?: unknown; quoteReadyVenues?: unknown };
+  if (Array.isArray(record.quoteReadyVenues)) {
+    return record.quoteReadyVenues.length;
+  }
+  if (typeof record.quoteReadyVenueCount === "number") {
+    return record.quoteReadyVenueCount;
+  }
+  if (typeof record.quoteReadyVenueCount === "string") {
+    const parsed = Number(record.quoteReadyVenueCount);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
+const isLiveMarketCatalogResponseValue = (value: unknown): boolean =>
+  Boolean(value && typeof value === "object" && (value as { quoteStatus?: unknown }).quoteStatus === "live");
+
+const marketQuoteBlockerCount = (value: unknown): number => {
+  if (!value || typeof value !== "object") {
+    return 0;
+  }
+  const quoteBlockers = (value as { quoteBlockers?: unknown }).quoteBlockers;
+  return Array.isArray(quoteBlockers) ? quoteBlockers.length : 0;
 };
 
 const sliceMarketCatalogResponse = <T extends Record<string, unknown>>(value: T, limit: number): T => {
@@ -708,6 +1268,63 @@ const stableQueryCacheKey = (query: z.infer<typeof listQuerySchema>): string =>
       }
       return memo;
     }, {}));
+
+const marketCatalogRouteCoverageFromCacheKey = (
+  key: string
+): z.infer<typeof routeCoverageSchema> => {
+  const prefix = "markets:";
+  if (!key.startsWith(prefix)) {
+    return "all";
+  }
+  try {
+    const parsed = JSON.parse(key.slice(prefix.length)) as { routeCoverage?: unknown };
+    return routeCoverageSchema.safeParse(parsed.routeCoverage).success
+      ? parsed.routeCoverage as z.infer<typeof routeCoverageSchema>
+      : "all";
+  } catch {
+    return "all";
+  }
+};
+
+const routeCoverageMatchesMarketListItem = (
+  value: unknown,
+  routeCoverage: z.infer<typeof routeCoverageSchema>
+): boolean => {
+  const readyVenueCount = marketReadyVenueCount(value);
+  switch (routeCoverage) {
+    case "single":
+      return readyVenueCount >= 1;
+    case "pair":
+      return readyVenueCount >= 2;
+    case "tri":
+      return readyVenueCount >= 3;
+    case "strict_all": {
+      const venueCount = typeof value === "object" && value !== null
+        ? (value as { venueCount?: unknown }).venueCount
+        : undefined;
+      const parsedVenueCount = typeof venueCount === "number"
+        ? venueCount
+        : typeof venueCount === "string"
+          ? Number(venueCount)
+          : 0;
+      return parsedVenueCount > 0 && readyVenueCount >= parsedVenueCount;
+    }
+    case "all":
+      return true;
+  }
+};
+
+const marketCatalogListCacheQuery = (
+  query: z.infer<typeof listQuerySchema>
+): z.infer<typeof listQuerySchema> => {
+  if (
+    query.quoteReadyOnly === true
+    && (query.routeCoverage === undefined || query.routeCoverage === "all" || query.routeCoverage === "single")
+  ) {
+    return { ...query, routeCoverage: "single" };
+  }
+  return query;
+};
 
 const withReadinessTimeout = async <T>(
   promise: Promise<T>,
@@ -790,12 +1407,14 @@ const aggregateMarketQuoteReadiness = (
   const quoteReadyVenueCount = quoteReadyVenues.length > 0
     ? quoteReadyVenues.length
     : tradableReadiness.reduce((sum, item) => sum + item.quoteReadyVenueCount, 0);
+  const readyVenueSet = new Set(quoteReadyVenues.map(normalizeQuoteBlockerVenue));
   return {
     quoteStatus: pickMarketQuoteStatus(readiness),
     quoteReadyVenueCount,
     quoteReadyVenues,
     quoteBlockers: [...new Map(readiness
       .flatMap((item) => item.quoteBlockers)
+      .filter((blocker) => !isRedundantReadyVenueDisplayBlocker(blocker, readyVenueSet))
       .map((blocker) => [`${blocker.venue}:${blocker.reason}:${blocker.venueMarketId ?? ""}:${blocker.venueOutcomeId ?? ""}`, blocker] as const)
     ).values()],
     lastQuoteAt: readiness
@@ -817,6 +1436,38 @@ const pickMarketQuoteStatus = (
   const statuses = new Set(readiness.map((item) => item.quoteStatus));
   if (statuses.has("live") || statuses.has("partial") || statuses.has("stale")) return "stale";
   return "unavailable";
+};
+
+const isRedundantReadyVenueDisplayBlocker = (
+  blocker: MarketQuoteReadinessSnapshot["quoteBlockers"][number],
+  readyVenueSet: ReadonlySet<string>
+): boolean =>
+  isDisplaySuppressedVenueBlocker(blocker.reason) ||
+  (readyVenueSet.has(normalizeQuoteBlockerVenue(blocker.venue)) &&
+    isDisplayOnlyQuoteBlocker(blocker.reason));
+
+const isDisplayOnlyQuoteBlocker = (reason: string): boolean => {
+  const normalized = reason.trim().toUpperCase();
+  return normalized === "LIVE_QUOTE_SNAPSHOT_MISSING" ||
+    normalized === "PREDICT_FUN_TOKEN_ID_MISSING" ||
+    normalized === "OPINION_TOKEN_ID_MISSING";
+};
+
+const isDisplaySuppressedVenueBlocker = (reason: string): boolean => {
+  const normalized = reason.trim().toUpperCase();
+  return normalized.includes("POLYMARKET_OFFICIAL_MARKET_CLOSED") ||
+    normalized.includes("POLYMARKET_OFFICIAL_MARKET_NOT_ACCEPTING_ORDERS") ||
+    normalized.includes("QUOTE_PROVIDER_HTTP_404") ||
+    normalized.includes("PROVIDER_UNAVAILABLE_404") ||
+    normalized.includes("QUOTE_PROVIDER_MARKET_INACTIVE") ||
+    normalized.includes("QUOTE_PROVIDER_EMPTY_BOOK") ||
+    normalized.includes("MARKET_CLOSED") ||
+    normalized.includes("NOT_ACCEPTING_ORDERS");
+};
+
+const normalizeQuoteBlockerVenue = (venue: string): string => {
+  const normalized = venue.trim().toUpperCase();
+  return normalized === "PREDICT" ? "PREDICT_FUN" : normalized;
 };
 
 const isTradableReadinessSnapshot = (snapshot: MarketQuoteReadinessSnapshot): boolean =>
@@ -856,6 +1507,29 @@ const routeCoverageMatches = (
     case "all":
       return true;
   }
+};
+
+const isPublicMarketListMarket = (market: MarketCatalogMarket, nowMs = Date.now()): boolean => {
+  if (market.status !== "OPEN") {
+    return false;
+  }
+  const expiresAtMs = parseMarketListTimestampMs(market.expiresAt);
+  if (expiresAtMs !== null && expiresAtMs <= nowMs) {
+    return false;
+  }
+  const resolvesAtMs = parseMarketListTimestampMs(market.resolvesAt);
+  if (resolvesAtMs !== null && resolvesAtMs <= nowMs) {
+    return false;
+  }
+  return true;
+};
+
+const parseMarketListTimestampMs = (value: string | null): number | null => {
+  if (!value) {
+    return null;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
 };
 
 const resolveCachedCatalogMarket = async (

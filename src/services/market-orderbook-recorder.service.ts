@@ -11,8 +11,11 @@ export interface MarketOrderbookRecorderConfig {
   intervalMs: number;
   marketBatchSize: number;
   activeMarketBatchSize?: number;
+  activeMaxSamplesPerTick?: number;
   priorityMarketBatchSize?: number;
   priorityVenues?: readonly string[];
+  shardCount?: number;
+  shardIndex?: number;
   maxSamplesPerTick: number;
   sampleConcurrency?: number;
   maxTickDurationMs?: number;
@@ -21,6 +24,15 @@ export interface MarketOrderbookRecorderConfig {
   retentionHours: number;
   levelsPerSide: number;
   quoteProviderCooldownMs: number;
+}
+
+export type MarketOrderbookRecorderDutyProfile = "production" | "shared_staging";
+
+export interface MarketOrderbookRecorderDutyProfileSource {
+  LOTUS_DEPLOY_ENV?: string | undefined;
+  LOTUS_ENV?: string | undefined;
+  APP_ENV?: string | undefined;
+  NODE_ENV?: string | undefined;
 }
 
 export interface MarketOrderbookRecorderLogger {
@@ -38,6 +50,11 @@ export interface MarketOrderbookRecorderRunResult {
   insertedSnapshots: number;
   failedSamples: number;
   skippedCooldownSamples: number;
+  shardCount?: number | undefined;
+  shardIndex?: number | undefined;
+  sampledByVenue?: Record<string, number> | undefined;
+  persistedByVenue?: Record<string, number> | undefined;
+  failedByVenue?: Record<string, number> | undefined;
   deletedOldSnapshots: number;
   deletedClosedMarketSnapshots: number;
   deletedClosedLatestSnapshots: number;
@@ -47,13 +64,16 @@ export interface MarketOrderbookRecorderRunResult {
 const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
   intervalMs: 10_000,
   marketBatchSize: 24,
-  activeMarketBatchSize: 180,
-  priorityMarketBatchSize: 24,
-  priorityVenues: ["OPINION"] as readonly string[],
+  activeMarketBatchSize: 250,
+  activeMaxSamplesPerTick: 36,
+  priorityMarketBatchSize: 180,
+  priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"] as readonly string[],
+  shardCount: 1,
+  shardIndex: 0,
   maxSamplesPerTick: 90,
-  sampleConcurrency: 5,
+  sampleConcurrency: 14,
   maxTickDurationMs: 9_000,
-  sampleTimeoutMs: 3_000,
+  sampleTimeoutMs: 1_800,
   cleanupIntervalMs: 30 * 60_000,
   retentionHours: 720,
   levelsPerSide: 25,
@@ -61,7 +81,8 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
 } as const;
 const RATE_LIMIT_COOLDOWN_MS = 5 * 60_000;
 const PROVIDER_AUTH_COOLDOWN_MS = 15 * 60_000;
-const SAMPLE_TIMEOUT_COOLDOWN_MS = 5 * 60_000;
+const SAMPLE_TIMEOUT_COOLDOWN_MS = 10_000;
+const MARKET_CATALOG_WINDOW_CACHE_MS = 15_000;
 
 export const buildMarketOrderbookRecorderConfig = (): MarketOrderbookRecorderConfig => {
   // Worker-owned duty: do not add per-duty env flags such as
@@ -70,6 +91,47 @@ export const buildMarketOrderbookRecorderConfig = (): MarketOrderbookRecorderCon
   return {
     ...DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG
   };
+};
+
+const DEFAULT_MARKET_ORDERBOOK_RECORDER_LANES = 2;
+
+export const resolveMarketOrderbookRecorderDutyProfile = (
+  source: MarketOrderbookRecorderDutyProfileSource = process.env as MarketOrderbookRecorderDutyProfileSource
+): MarketOrderbookRecorderDutyProfile => {
+  const tags = [source.LOTUS_DEPLOY_ENV, source.LOTUS_ENV, source.APP_ENV]
+    .map((value) => value?.trim().toLowerCase())
+    .filter((value): value is string => Boolean(value));
+  if (tags.some((tag) => tag === "staging" || tag === "stage" || tag === "preview" || tag.includes("staging"))) {
+    return "shared_staging";
+  }
+  return "production";
+};
+
+export const buildMarketOrderbookRecorderConfigs = (
+  profile: MarketOrderbookRecorderDutyProfile = "production"
+): MarketOrderbookRecorderConfig[] => {
+  const laneCount = profile === "shared_staging" ? 1 : DEFAULT_MARKET_ORDERBOOK_RECORDER_LANES;
+  const baseConfig: MarketOrderbookRecorderConfig = profile === "shared_staging"
+    ? {
+        ...DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG,
+        intervalMs: 15_000,
+        marketBatchSize: 18,
+        activeMarketBatchSize: 180,
+        activeMaxSamplesPerTick: 24,
+        priorityMarketBatchSize: 120,
+        maxSamplesPerTick: 36,
+        sampleConcurrency: 8,
+        maxTickDurationMs: 9_500,
+        sampleTimeoutMs: 1_600
+      }
+    : {
+        ...DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG
+      };
+  return Array.from({ length: laneCount }, (_, shardIndex) => ({
+    ...baseConfig,
+    shardCount: laneCount,
+    shardIndex
+  }));
 };
 
 export class MarketOrderbookRecorder {
@@ -81,6 +143,7 @@ export class MarketOrderbookRecorder {
   private lastCleanupAt = Date.now();
   private readonly venueCooldownUntil = new Map<string, number>();
   private readonly sampleCooldownUntil = new Map<string, number>();
+  private readonly catalogWindowCache = new Map<string, { expiresAtMs: number; markets: MarketCatalogMarket[] }>();
 
   public constructor(
     private readonly marketCatalogRepository: Pick<MarketCatalogRepository, "listMarkets">,
@@ -95,10 +158,12 @@ export class MarketOrderbookRecorder {
         lastSeenAt: Date;
       }>>;
     } | undefined
-  ) {}
+  ) {
+    this.marketOffset = this.config.marketBatchSize * this.shardIndex();
+  }
 
   public start(): void {
-    if (this.timer) {
+    if (this.timer || this.running) {
       return;
     }
     this.stopped = false;
@@ -106,8 +171,11 @@ export class MarketOrderbookRecorder {
       intervalMs: this.config.intervalMs,
       marketBatchSize: this.config.marketBatchSize,
       activeMarketBatchSize: this.config.activeMarketBatchSize ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.activeMarketBatchSize,
+      activeMaxSamplesPerTick: this.config.activeMaxSamplesPerTick ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.activeMaxSamplesPerTick,
       priorityMarketBatchSize: this.config.priorityMarketBatchSize ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityMarketBatchSize,
       priorityVenues: this.config.priorityVenues ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityVenues,
+      shardCount: this.shardCount(),
+      shardIndex: this.shardIndex(),
       maxSamplesPerTick: this.config.maxSamplesPerTick,
       sampleConcurrency: this.config.sampleConcurrency ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.sampleConcurrency,
       maxTickDurationMs: this.config.maxTickDurationMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.maxTickDurationMs,
@@ -116,11 +184,7 @@ export class MarketOrderbookRecorder {
       retentionHours: this.config.retentionHours,
       levelsPerSide: this.config.levelsPerSide
     }, "Market orderbook recorder started.");
-    this.timer = setInterval(() => {
-      void this.runOnce();
-    }, this.config.intervalMs);
-    this.timer.unref?.();
-    void this.runOnce();
+    this.scheduleNextTick(0);
   }
 
   public async stop(): Promise<void> {
@@ -155,8 +219,10 @@ export class MarketOrderbookRecorder {
         Math.floor(this.config.sampleConcurrency ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.sampleConcurrency)
       );
       const cleanup = await this.cleanupSnapshotsIfDue(tickStartedAt);
-      const activeMarkets = await this.listActiveMarkets();
+      const activeTargets = await this.listActiveTargets();
+      const activeMarkets = await this.listActiveMarkets(activeTargets);
       const priorityMarkets = await this.listPriorityMarkets();
+      const shardCount = this.shardCount();
       const marketOffset = this.marketOffset;
       let markets = await this.marketCatalogRepository.listMarkets({
         limit: this.config.marketBatchSize,
@@ -168,22 +234,24 @@ export class MarketOrderbookRecorder {
       }
       this.marketOffset = markets.length < this.config.marketBatchSize
         ? 0
-        : this.marketOffset + this.config.marketBatchSize;
+        : this.marketOffset + this.config.marketBatchSize * shardCount;
       if (activeMarkets.length > 0 || priorityMarkets.length > 0) {
         markets = uniqueMarketsByEventAndMarketIds([...activeMarkets, ...priorityMarkets, ...markets]);
       }
       const result: MarketOrderbookRecorderRunResult = {
         marketOffset,
-        activeMarkets: activeMarkets.length,
+        activeMarkets: activeTargets.length,
         scannedMarkets: markets.length,
         skippedClosedMarkets: 0,
         sampledOutcomes: 0,
         insertedSnapshots: 0,
         failedSamples: 0,
         skippedCooldownSamples: 0,
+        shardCount,
+        shardIndex: this.shardIndex(),
         ...cleanup
       };
-      const scheduledSamples: Array<{
+      const candidateSamples: Array<{
         market: MarketCatalogMarket;
         sample: MarketOrderbookRecorderSample;
       }> = [];
@@ -202,13 +270,10 @@ export class MarketOrderbookRecorder {
           if (this.stopped) {
             break marketLoop;
           }
-          if (result.sampledOutcomes >= this.config.maxSamplesPerTick) {
-            break marketLoop;
-          }
           if (Date.now() - tickStartedAt >= maxTickDurationMs) {
             this.logger.warn({
               maxTickDurationMs,
-              sampledOutcomes: result.sampledOutcomes,
+              candidateOutcomes: candidateSamples.length,
               scannedMarkets: result.scannedMarkets
             }, "Market orderbook recorder tick stopped early because its time budget was exhausted.");
             break marketLoop;
@@ -221,8 +286,31 @@ export class MarketOrderbookRecorder {
             result.skippedCooldownSamples += 1;
             continue;
           }
-          result.sampledOutcomes += 1;
-          scheduledSamples.push({ market, sample });
+          candidateSamples.push({ market, sample });
+        }
+      }
+      const scheduledSamples = selectSamplesForTickWithActivePriority(
+        candidateSamples,
+        activeTargets,
+        this.config.maxSamplesPerTick,
+        this.config.activeMaxSamplesPerTick ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.activeMaxSamplesPerTick,
+        this.config.priorityVenues ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityVenues
+      );
+      result.sampledOutcomes = scheduledSamples.length;
+      result.sampledByVenue = countScheduledSampleVenues(scheduledSamples);
+      const persistedByVenue = new Map<string, number>();
+      const failedByVenue = new Map<string, number>();
+      if (scheduledSamples.length > 0 && this.quoteSource.preloadMappingReadiness) {
+        try {
+          await this.quoteSource.preloadMappingReadiness(scheduledSamples.map(({ sample }) => ({
+            canonicalMarketId: sample.canonicalMarketId,
+            canonicalOutcomeId: sample.outcomeId
+          })));
+        } catch (error) {
+          this.logger.warn({
+            errorName: error instanceof Error ? error.name : "UnknownError",
+            sampledOutcomes: scheduledSamples.length
+          }, "Market orderbook recorder mapping preload failed; falling back to per-sample mapping lookup.");
         }
       }
 
@@ -230,29 +318,34 @@ export class MarketOrderbookRecorder {
       let timeBudgetLogged = false;
       const workers = Array.from({ length: Math.min(sampleConcurrency, scheduledSamples.length) }, async () => {
         while (!this.stopped) {
-          if (Date.now() - tickStartedAt >= maxTickDurationMs) {
+          const sampleIndex = nextSampleIndex;
+          const work = scheduledSamples[sampleIndex];
+          if (!work) {
+            return;
+          }
+          if (!hasEnoughBudgetToStartSample(tickStartedAt, maxTickDurationMs, sampleTimeoutMs)) {
             if (!timeBudgetLogged) {
               timeBudgetLogged = true;
               this.logger.warn({
                 maxTickDurationMs,
+                sampleTimeoutMs,
                 sampledOutcomes: result.sampledOutcomes,
                 scannedMarkets: result.scannedMarkets
               }, "Market orderbook recorder tick stopped early because its time budget was exhausted.");
             }
             return;
           }
-          const sampleIndex = nextSampleIndex;
           nextSampleIndex += 1;
-          const work = scheduledSamples[sampleIndex];
-          if (!work) {
-            return;
-          }
           const sampleResult = await this.processSample(work.market, work.sample, sampleTimeoutMs);
           result.insertedSnapshots += sampleResult.insertedSnapshots;
           result.failedSamples += sampleResult.failedSamples;
+          addVenueCounts(persistedByVenue, sampleResult.persistedByVenue);
+          addVenueCounts(failedByVenue, sampleResult.failedByVenue);
         }
       });
       await Promise.all(workers);
+      result.persistedByVenue = mapToRecord(persistedByVenue);
+      result.failedByVenue = mapToRecord(failedByVenue);
 
       if (
         result.insertedSnapshots > 0 ||
@@ -302,19 +395,29 @@ export class MarketOrderbookRecorder {
     market: MarketCatalogMarket,
     sample: MarketOrderbookRecorderSample,
     sampleTimeoutMs: number
-  ): Promise<{ insertedSnapshots: number; failedSamples: number }> {
+  ): Promise<{
+    insertedSnapshots: number;
+    failedSamples: number;
+    persistedByVenue: Record<string, number>;
+    failedByVenue: Record<string, number>;
+  }> {
     try {
+      const venueAllowlist = this.activeVenueKeys(sample.venueKeys);
+      if (venueAllowlist.length === 0) {
+        return { insertedSnapshots: 0, failedSamples: 0, persistedByVenue: {}, failedByVenue: {} };
+      }
       const report = await withRecorderTimeout(
         this.quoteSource.getQuoteSnapshotReport({
           canonicalMarketId: sample.canonicalMarketId,
           ...(sample.outcomeId ? { canonicalOutcomeId: sample.outcomeId } : {}),
           side: "buy",
-          quantity: 1
+          quantity: 1,
+          venueAllowlist
         }),
         sampleTimeoutMs
       );
       if (this.stopped) {
-        return { insertedSnapshots: 0, failedSamples: 0 };
+        return { insertedSnapshots: 0, failedSamples: 0, persistedByVenue: {}, failedByVenue: {} };
       }
       const snapshots = report.snapshots.flatMap((snapshot) =>
         toSnapshotInput({
@@ -334,9 +437,10 @@ export class MarketOrderbookRecorder {
           receivedAt: new Date()
         })
       ).filter((snapshot): snapshot is VenueOrderbookSnapshotInput => snapshot !== null);
+      const hasSnapshots = report.snapshots.length > 0;
       for (const blocker of report.blocked) {
         this.applyProviderCooldown(blocker.venue, blocker.reason);
-        if (isTransientQuoteReadBlocker(blocker.reason, blocker.detailsCode)) {
+        if (!hasSnapshots && isTransientQuoteReadBlocker(blocker.reason, blocker.detailsCode)) {
           this.applySampleCooldown(sample);
         }
       }
@@ -344,7 +448,12 @@ export class MarketOrderbookRecorder {
         ...snapshots,
         ...blockedSnapshots
       ]);
-      return { insertedSnapshots, failedSamples: 0 };
+      return {
+        insertedSnapshots,
+        failedSamples: 0,
+        persistedByVenue: countSnapshotInputVenues([...snapshots, ...blockedSnapshots]),
+        failedByVenue: {}
+      };
     } catch (error) {
       if (error instanceof RecorderSampleTimeoutError) {
         this.applySampleCooldown(sample);
@@ -355,8 +464,37 @@ export class MarketOrderbookRecorder {
         outcomeId: sample.outcomeId,
         errorName: error instanceof Error ? error.name : "UnknownError"
       }, "Market orderbook recorder failed to sample market outcome.");
-      return { insertedSnapshots: 0, failedSamples: 1 };
+      return {
+        insertedSnapshots: 0,
+        failedSamples: 1,
+        persistedByVenue: {},
+        failedByVenue: Object.fromEntries(this.activeVenueKeys(sample.venueKeys).map((venue) => [venue, 1]))
+      };
     }
+  }
+
+  private activeVenueKeys(venueKeys: readonly string[]): string[] {
+    const now = Date.now();
+    return [...new Set(venueKeys.map(normalizeVenue))]
+      .filter((venue) => (this.venueCooldownUntil.get(venue) ?? 0) <= now);
+  }
+
+  private scheduleNextTick(delayMs: number): void {
+    if (this.stopped || this.timer) {
+      return;
+    }
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      const tickStartedAt = Date.now();
+      void this.runOnce().finally(() => {
+        if (this.stopped) {
+          return;
+        }
+        const elapsedMs = Date.now() - tickStartedAt;
+        this.scheduleNextTick(Math.max(0, this.config.intervalMs - elapsedMs));
+      });
+    }, Math.max(0, delayMs));
+    this.timer.unref?.();
   }
 
   private async listPriorityMarkets(): Promise<MarketCatalogMarket[]> {
@@ -366,12 +504,14 @@ export class MarketOrderbookRecorder {
       return [];
     }
 
-    const catalogWindow = await this.marketCatalogRepository.listMarkets({
+    const catalogWindow = await this.listCachedCatalogWindow({
       limit: Math.max(250, priorityMarketBatchSize),
       offset: 0
     });
     const priorityMarkets = catalogWindow.filter((market) =>
-      market.status === "OPEN" && marketIncludesAnyVenue(market, priorityVenues)
+      market.status === "OPEN" &&
+      marketIncludesAnyVenue(market, priorityVenues) &&
+      this.marketBelongsToShard(market)
     );
     if (priorityMarkets.length === 0) {
       this.priorityMarketOffset = 0;
@@ -386,7 +526,11 @@ export class MarketOrderbookRecorder {
     return selected;
   }
 
-  private async listActiveMarkets(): Promise<MarketCatalogMarket[]> {
+  private async listActiveTargets(): Promise<Array<{
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+    lastSeenAt: Date;
+  }>> {
     if (!this.activeMarketSource) {
       return [];
     }
@@ -394,21 +538,64 @@ export class MarketOrderbookRecorder {
     if (activeMarketBatchSize <= 0) {
       return [];
     }
-    const activeTargets = await this.activeMarketSource.listActiveMarketsFromRedis({
+    return this.activeMarketSource.listActiveMarketsFromRedis({
       limit: activeMarketBatchSize
     });
+  }
+
+  private async listActiveMarkets(activeTargets: readonly {
+    canonicalMarketId: string;
+    canonicalOutcomeId?: string | undefined;
+  }[]): Promise<MarketCatalogMarket[]> {
     if (activeTargets.length === 0) {
       return [];
     }
+    const activeMarketBatchSize = this.config.activeMarketBatchSize ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.activeMarketBatchSize;
     const activeIds = new Set(activeTargets.map((target) => target.canonicalMarketId));
-    const catalogWindow = await this.marketCatalogRepository.listMarkets({
+    const catalogWindow = await this.listCachedCatalogWindow({
       limit: Math.max(250, activeMarketBatchSize),
       offset: 0
     });
     return catalogWindow.filter((market) =>
-      market.canonicalMarketIds.some((canonicalMarketId) => activeIds.has(canonicalMarketId)) ||
-      activeIds.has(market.canonicalEventId)
+      this.marketBelongsToShard(market) &&
+      (
+        market.canonicalMarketIds.some((canonicalMarketId) => activeIds.has(canonicalMarketId)) ||
+        activeIds.has(market.canonicalEventId)
+      )
     );
+  }
+
+  private async listCachedCatalogWindow(input: { limit: number; offset: number }): Promise<MarketCatalogMarket[]> {
+    const key = `${input.limit}:${input.offset}`;
+    const now = Date.now();
+    const cached = this.catalogWindowCache.get(key);
+    if (cached && cached.expiresAtMs > now) {
+      return cached.markets;
+    }
+    const markets = await this.marketCatalogRepository.listMarkets(input);
+    this.catalogWindowCache.set(key, {
+      markets,
+      expiresAtMs: now + MARKET_CATALOG_WINDOW_CACHE_MS
+    });
+    return markets;
+  }
+
+  private marketBelongsToShard(market: MarketCatalogMarket): boolean {
+    return belongsToShard(marketEventQueueKey(market), this.shardCount(), this.shardIndex());
+  }
+
+  private shardCount(): number {
+    const value = Math.floor(this.config.shardCount ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.shardCount);
+    return Number.isFinite(value) && value > 0 ? value : 1;
+  }
+
+  private shardIndex(): number {
+    const shardCount = this.shardCount();
+    const value = Math.floor(this.config.shardIndex ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.shardIndex);
+    if (!Number.isFinite(value) || value < 0) {
+      return 0;
+    }
+    return value % shardCount;
   }
 
   private async cleanupSnapshotsIfDue(nowMs: number): Promise<Pick<
@@ -464,21 +651,259 @@ const withRecorderTimeout = async <T>(promise: Promise<T>, timeoutMs: number): P
   }
 };
 
-type MarketOrderbookRecorderSample = { canonicalMarketId: string; outcomeId: string };
+const hasEnoughBudgetToStartSample = (
+  tickStartedAt: number,
+  maxTickDurationMs: number,
+  sampleTimeoutMs: number
+): boolean => {
+  if (!Number.isFinite(maxTickDurationMs) || maxTickDurationMs <= 0) {
+    return true;
+  }
+  const elapsedMs = Date.now() - tickStartedAt;
+  if (!Number.isFinite(sampleTimeoutMs) || sampleTimeoutMs <= 0) {
+    return elapsedMs < maxTickDurationMs;
+  }
+  const guardMs = Math.min(100, Math.max(0, Math.floor(maxTickDurationMs * 0.05)));
+  return elapsedMs + sampleTimeoutMs + guardMs < maxTickDurationMs;
+};
+
+type MarketOrderbookRecorderSample = { canonicalMarketId: string; outcomeId: string; venueKeys: readonly string[] };
+type ActiveMarketTarget = {
+  canonicalMarketId: string;
+  canonicalOutcomeId?: string | undefined;
+};
 
 const buildMarketSamples = (market: MarketCatalogMarket): MarketOrderbookRecorderSample[] => {
   const canonicalMarketIds = market.canonicalMarketIds.length > 0 ? market.canonicalMarketIds : [market.canonicalEventId];
   return canonicalMarketIds.flatMap((canonicalMarketId): MarketOrderbookRecorderSample[] => {
     const venueMarkets = market.venueMarkets.filter((venueMarket) => venueMarket.canonicalMarketId === canonicalMarketId);
+    const venueKeys = [...new Set(venueMarkets.map((venueMarket) => normalizeVenue(venueMarket.venue)))];
     const outcomeIds = [...new Map(
       venueMarkets
         .flatMap((venueMarket) => venueMarket.outcomes)
         .filter((outcome) => outcome.id.trim().length > 0)
-        .map((outcome) => [outcome.label.trim().toLowerCase(), outcome.id.trim()] as const)
+        .map((outcome) => [
+          outcomeAliasKey(outcome),
+          outcomeAliasForQuoteMapping(outcome)
+        ] as const)
     ).values()];
-    return outcomeIds.map((outcomeId) => ({ canonicalMarketId, outcomeId }));
+    return outcomeIds.map((outcomeId) => ({ canonicalMarketId, outcomeId, venueKeys }));
   });
 };
+
+const outcomeAliasForQuoteMapping = (outcome: { id: string; label: string }): string => {
+  const label = outcome.label.trim();
+  const id = outcome.id.trim();
+  const normalized = (label || id).toUpperCase().replace(/\s+/g, "_");
+  if (normalized === "YES" || normalized === "Y") {
+    return "YES";
+  }
+  if (normalized === "NO" || normalized === "N") {
+    return "NO";
+  }
+  return label || id;
+};
+
+const outcomeAliasKey = (outcome: { id: string; label: string }): string =>
+  (outcome.label.trim() || outcome.id.trim()).toLowerCase().replace(/\s+/g, "_");
+
+const selectSamplesForTickWithActivePriority = <T extends {
+  market: MarketCatalogMarket;
+  sample: MarketOrderbookRecorderSample;
+}>(
+  candidates: readonly T[],
+  activeTargets: readonly ActiveMarketTarget[],
+  maxSamples: number,
+  activeMaxSamples: number,
+  priorityVenues: readonly string[]
+): T[] => {
+  const limit = Math.max(0, Math.floor(maxSamples));
+  if (limit <= 0 || candidates.length === 0) {
+    return [];
+  }
+  const activeTargetKeys = activeSampleKeys(activeTargets);
+  if (activeTargetKeys.size === 0) {
+    return selectSamplesForTick(candidates, limit, priorityVenues);
+  }
+
+  const activeCandidates = candidates.filter((candidate) =>
+    activeTargetKeys.has(sampleCooldownKey(candidate.sample)) ||
+    activeTargetKeys.has(activeMarketOnlyKey(candidate.sample.canonicalMarketId))
+  );
+  const selectedActive = selectSamplesForTick(
+    activeCandidates,
+    Math.min(limit, Math.max(0, Math.floor(activeMaxSamples))),
+    priorityVenues
+  );
+  const selectedKeys = new Set(selectedActive.map((candidate) => sampleCooldownKey(candidate.sample)));
+  const remaining = limit - selectedActive.length;
+  if (remaining <= 0) {
+    return selectedActive;
+  }
+  return [
+    ...selectedActive,
+    ...selectSamplesForTick(
+      candidates.filter((candidate) => !selectedKeys.has(sampleCooldownKey(candidate.sample))),
+      remaining,
+      priorityVenues
+    )
+  ];
+};
+
+const selectSamplesForTick = <T extends {
+  market: MarketCatalogMarket;
+  sample: MarketOrderbookRecorderSample;
+}>(
+  candidates: readonly T[],
+  maxSamples: number,
+  priorityVenues: readonly string[]
+): T[] => {
+  const limit = Math.max(0, Math.floor(maxSamples));
+  if (limit <= 0 || candidates.length === 0) {
+    return [];
+  }
+  const normalizedPriorityVenues = [...new Set(priorityVenues.map(normalizeVenue))];
+  if (normalizedPriorityVenues.length === 0) {
+    return candidates.slice(0, limit);
+  }
+
+  const bucketQueues = new Map<string, EventRoundRobinQueue<T>>(
+    [...normalizedPriorityVenues, "__OTHER__"].map((venue) => [venue, createEventRoundRobinQueue<T>()])
+  );
+  for (const candidate of candidates) {
+    const venueSet = new Set(candidate.sample.venueKeys.map(normalizeVenue));
+    const bucketKey = normalizedPriorityVenues.find((venue) => venueSet.has(venue)) ?? "__OTHER__";
+    bucketQueues.get(bucketKey)!.push(candidate);
+  }
+
+  const selected: T[] = [];
+  const selectedKeys = new Set<string>();
+  while (selected.length < limit) {
+    let addedThisRound = false;
+    for (const venue of [...normalizedPriorityVenues, "__OTHER__"]) {
+      const bucket = bucketQueues.get(venue);
+      if (!bucket || bucket.isEmpty()) {
+        continue;
+      }
+      while (!bucket.isEmpty()) {
+        const candidate = bucket.shift();
+        if (!candidate) {
+          break;
+        }
+        const key = sampleCooldownKey(candidate.sample);
+        if (selectedKeys.has(key)) {
+          continue;
+        }
+        selected.push(candidate);
+        selectedKeys.add(key);
+        addedThisRound = true;
+        break;
+      }
+      if (selected.length >= limit) {
+        break;
+      }
+    }
+    if (!addedThisRound) {
+      break;
+    }
+  }
+  return selected;
+};
+
+type EventRoundRobinQueue<T extends { market: MarketCatalogMarket }> = {
+  push(candidate: T): void;
+  shift(): T | null;
+  isEmpty(): boolean;
+};
+
+const createEventRoundRobinQueue = <T extends { market: MarketCatalogMarket }>(): EventRoundRobinQueue<T> => {
+  const byEvent = new Map<string, T[]>();
+  const eventOrder: string[] = [];
+  return {
+    push(candidate) {
+      const eventKey = marketEventQueueKey(candidate.market);
+      let bucket = byEvent.get(eventKey);
+      if (!bucket) {
+        bucket = [];
+        byEvent.set(eventKey, bucket);
+        eventOrder.push(eventKey);
+      }
+      bucket.push(candidate);
+    },
+    shift() {
+      while (eventOrder.length > 0) {
+        const eventKey = eventOrder.shift()!;
+        const bucket = byEvent.get(eventKey);
+        if (!bucket || bucket.length === 0) {
+          byEvent.delete(eventKey);
+          continue;
+        }
+        const candidate = bucket.shift()!;
+        if (bucket.length > 0) {
+          eventOrder.push(eventKey);
+        } else {
+          byEvent.delete(eventKey);
+        }
+        return candidate;
+      }
+      return null;
+    },
+    isEmpty() {
+      return eventOrder.length === 0;
+    }
+  };
+};
+
+const marketEventQueueKey = (market: MarketCatalogMarket): string =>
+  market.canonicalEventId || market.eventId || market.canonicalMarketIds.join("|") || market.title;
+
+const belongsToShard = (value: string, shardCount: number, shardIndex: number): boolean =>
+  stableHash(value) % shardCount === shardIndex;
+
+const stableHash = (value: string): number => {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+};
+
+const countScheduledSampleVenues = (
+  scheduledSamples: readonly { sample: MarketOrderbookRecorderSample }[]
+): Record<string, number> => {
+  const counts = new Map<string, number>();
+  for (const scheduled of scheduledSamples) {
+    for (const venue of scheduled.sample.venueKeys) {
+      addVenueCount(counts, venue, 1);
+    }
+  }
+  return mapToRecord(counts);
+};
+
+const countSnapshotInputVenues = (
+  snapshots: readonly VenueOrderbookSnapshotInput[]
+): Record<string, number> => {
+  const counts = new Map<string, number>();
+  for (const snapshot of snapshots) {
+    addVenueCount(counts, snapshot.venue, 1);
+  }
+  return mapToRecord(counts);
+};
+
+const addVenueCounts = (target: Map<string, number>, values: Record<string, number>): void => {
+  for (const [venue, count] of Object.entries(values)) {
+    addVenueCount(target, venue, count);
+  }
+};
+
+const addVenueCount = (target: Map<string, number>, venue: string, count: number): void => {
+  const normalizedVenue = normalizeVenue(venue);
+  target.set(normalizedVenue, (target.get(normalizedVenue) ?? 0) + count);
+};
+
+const mapToRecord = (values: Map<string, number>): Record<string, number> =>
+  Object.fromEntries([...values.entries()].sort(([left], [right]) => left.localeCompare(right)));
 
 const toSnapshotInput = (input: {
   canonicalEventId: string;
@@ -696,10 +1121,20 @@ const wrapSlice = <T>(values: readonly T[], offset: number, limit: number): T[] 
 const sampleCooldownKey = (sample: { canonicalMarketId: string; outcomeId?: string | null | undefined }): string =>
   `${sample.canonicalMarketId}:${sample.outcomeId ?? ""}`;
 
-const providerCooldownMsForReason = (reason: string, baseCooldownMs: number): number => {
-  if (isTransientQuoteReadBlocker(reason)) {
-    return Math.max(baseCooldownMs, SAMPLE_TIMEOUT_COOLDOWN_MS);
+const activeMarketOnlyKey = (canonicalMarketId: string): string =>
+  `${canonicalMarketId}:`;
+
+const activeSampleKeys = (activeTargets: readonly ActiveMarketTarget[]): ReadonlySet<string> => {
+  const keys = new Set<string>();
+  for (const target of activeTargets) {
+    keys.add(target.canonicalOutcomeId
+      ? sampleCooldownKey({ canonicalMarketId: target.canonicalMarketId, outcomeId: target.canonicalOutcomeId })
+      : activeMarketOnlyKey(target.canonicalMarketId));
   }
+  return keys;
+};
+
+const providerCooldownMsForReason = (reason: string, baseCooldownMs: number): number => {
   if (reason.includes("QUOTE_PROVIDER_HTTP_429")) {
     return Math.max(baseCooldownMs, RATE_LIMIT_COOLDOWN_MS);
   }
@@ -708,6 +1143,9 @@ const providerCooldownMsForReason = (reason: string, baseCooldownMs: number): nu
   }
   if (reason.includes("QUOTE_PROVIDER_HTTP_503") || reason.includes("QUOTE_PROVIDER_HTTP_502")) {
     return Math.max(baseCooldownMs, baseCooldownMs * 2);
+  }
+  if (isTransientQuoteReadBlocker(reason)) {
+    return 0;
   }
   return 0;
 };

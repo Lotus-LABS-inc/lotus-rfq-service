@@ -32,7 +32,7 @@ export type HotQuoteSnapshotSource = "memory" | "redis" | "db_last_good";
 const DEFAULT_CONFIG: HotQuoteSnapshotConfig = {
   redisTtlMs: 120_000,
   staleAfterMs: 1_000,
-  activeMarketTtlMs: 180_000,
+  activeMarketTtlMs: 90_000,
   redisNamespace: "default"
 };
 
@@ -90,22 +90,24 @@ export class HotQuoteSnapshotService {
     const limit = Math.max(1, Math.min(input.limit ?? 500, 2_000));
     try {
       const indexKey = activeMarketsIndexKey(this.config.redisNamespace);
+      const cutoffMs = nowMs - this.config.activeMarketTtlMs;
+      const scanLimit = Math.max(limit, Math.min(2_000, limit * 4));
       const keys = this.deps.redis.zrevrangebyscore
         ? await this.deps.redis.zrevrangebyscore(
           indexKey,
           "+inf",
-          nowMs,
+          cutoffMs,
           "LIMIT",
           0,
-          limit
+          scanLimit
         )
         : (await this.deps.redis.zrangebyscore(
           indexKey,
-          nowMs,
+          cutoffMs,
           "+inf",
           "LIMIT",
           0,
-          limit
+          scanLimit
         )).reverse();
       const results: Array<{ canonicalMarketId: string; canonicalOutcomeId?: string | undefined; lastSeenAt: Date }> = [];
       for (const key of keys) {
@@ -117,7 +119,9 @@ export class HotQuoteSnapshotService {
         }
         results.push(parsed);
       }
-      return results;
+      return results
+        .sort((left, right) => right.lastSeenAt.getTime() - left.lastSeenAt.getTime())
+        .slice(0, limit);
     } catch (error) {
       this.deps.logger?.warn({ err: error }, "Hot quote active market Redis read failed.");
       return this.listActiveMarkets();
@@ -163,7 +167,7 @@ export class HotQuoteSnapshotService {
   }): Promise<NormalizedVenueQuoteSnapshot | null> {
     const maxAgeMs = Math.max(this.config.staleAfterMs, Math.min(input.maxAgeMs, 5 * 60_000));
     const memory = this.deps.memoryCache.get(input);
-    if (memory && this.isWithinAge(memory, maxAgeMs)) {
+    if (memory && this.isHot(memory)) {
       return annotateSnapshot(memory, "memory", this.now());
     }
 
@@ -171,6 +175,10 @@ export class HotQuoteSnapshotService {
     if (redis && this.isWithinAge(redis, maxAgeMs)) {
       this.deps.memoryCache.put(redis);
       return annotateSnapshot(redis, "redis", this.now());
+    }
+
+    if (memory && this.isWithinAge(memory, maxAgeMs)) {
+      return annotateSnapshot(memory, "memory", this.now());
     }
 
     if (input.includeDbFallback !== false) {
@@ -237,7 +245,7 @@ export class HotQuoteSnapshotService {
     });
     try {
       await this.deps.redis.set(key, payload, "PX", Math.max(1, Math.floor(this.config.activeMarketTtlMs)));
-      await this.deps.redis.zadd(activeMarketsIndexKey(this.config.redisNamespace), expiresAtMs, key);
+      await this.deps.redis.zadd(activeMarketsIndexKey(this.config.redisNamespace), touchedAt.getTime(), key);
     } catch (error) {
       this.deps.logger?.warn(
         { err: error, canonicalMarketId: input.canonicalMarketId },

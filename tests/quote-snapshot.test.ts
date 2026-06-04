@@ -246,6 +246,130 @@ describe("venue quote readers", () => {
     expect(results.every((result) => result.fees.provider_fee !== undefined)).toBe(true);
   });
 
+  it("allows cached display reads to use recent DB-backed snapshot fallback", async () => {
+    const getDisplayCalls: unknown[] = [];
+    const touchCalls: unknown[] = [];
+    const source = new CompositeVenueQuoteSource([], {
+      async resolve() {
+        return [];
+      },
+      async getReadiness() {
+        return [{
+          venue: "POLYMARKET",
+          approvedVenueMarketId: "pm-approved",
+          venueMarketId: "pm-1",
+          venueOutcomeId: "yes",
+          quoteReady: true,
+          blockers: []
+        }];
+      }
+    }, () => now, {
+      touch(input) {
+        touchCalls.push(input);
+      },
+      async get() {
+        return null;
+      },
+      async getDisplay(input) {
+        getDisplayCalls.push(input);
+        return snapshot({ venue: "POLYMARKET", venueMarketId: "pm-1", venueOutcomeId: "yes" });
+      }
+    });
+
+    const report = await source.getQuoteSnapshotReport({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "yes",
+      side: "buy",
+      quantity: 1,
+      readMode: "cached_display",
+      displayMaxAgeMs: 45_000
+    });
+
+    expect(report.snapshots.map((entry) => entry.venue)).toEqual(["POLYMARKET"]);
+    expect(getDisplayCalls[0]).toMatchObject({
+      venue: "POLYMARKET",
+      venueMarketId: "pm-1",
+      venueOutcomeId: "yes",
+      maxAgeMs: 45_000
+    });
+    expect(getDisplayCalls[0]).not.toMatchObject({
+      includeDbFallback: false
+    });
+    expect(touchCalls).toEqual([]);
+  });
+
+  it("tracks live quote reads as active orderbook work", async () => {
+    const touchCalls: unknown[] = [];
+    const source = new CompositeVenueQuoteSource([], {
+      async resolve() {
+        return [];
+      },
+      async getReadiness() {
+        return [];
+      }
+    }, () => now, {
+      touch(input) {
+        touchCalls.push(input);
+      },
+      async get() {
+        return null;
+      }
+    });
+
+    await source.getQuoteSnapshotReport({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(touchCalls).toEqual([{
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES"
+    }]);
+  });
+
+  it("tracks market-level cached display reads without activating every outcome fallback", async () => {
+    const touchCalls: unknown[] = [];
+    const source = new CompositeVenueQuoteSource([], {
+      async resolve() {
+        return [];
+      },
+      async getReadiness() {
+        return [];
+      }
+    }, () => now, {
+      touch(input) {
+        touchCalls.push(input);
+      },
+      async get() {
+        return null;
+      },
+      async getDisplay() {
+        return null;
+      }
+    });
+
+    await source.getQuoteSnapshotReport({
+      canonicalMarketId: "canonical-1",
+      side: "buy",
+      quantity: 1,
+      readMode: "cached_display"
+    });
+
+    await source.getQuoteSnapshotReport({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES",
+      side: "buy",
+      quantity: 1,
+      readMode: "cached_display"
+    });
+
+    expect(touchCalls).toEqual([{
+      canonicalMarketId: "canonical-1"
+    }]);
+  });
+
   it("keeps usable venue snapshots when another mapped reader throws", async () => {
     const source = new CompositeVenueQuoteSource([
       {
@@ -400,6 +524,70 @@ describe("venue quote mapping resolvers", () => {
     expect(secondRows[0]?.venueMarketId).toBe("market-1");
     expect(cachedRows[0]?.venueMarketId).toBe("market-1");
     expect(refreshedRows[0]?.venueMarketId).toBe("market-2");
+  });
+
+  it("primes terminal outcome mapping cache from approved readiness lists", async () => {
+    let directMappingCalls = 0;
+    const resolver = new SharedCoreVenueQuoteMappingResolver({
+      async loadApprovedVenueMappings() {
+        directMappingCalls += 1;
+        return [];
+      },
+      async listApprovedVenueMappings() {
+        return [
+          {
+            requested_canonical_market_id: "FRONTEND_CURATED:CRYPTO|ATH_BY_DATE|BTC|2026-06-30|2026_06_30",
+            canonical_event_id: "event-btc-ath",
+            canonical_market_id: "FRONTEND_CURATED:CRYPTO|ATH_BY_DATE|BTC|2026-06-30|2026_06_30",
+            title: "BTC ATH by June 30",
+            canonical_category: "CRYPTO",
+            venue: "POLYMARKET",
+            venue_market_id: "POLYMARKET:bitcoin-all-time-high-by-june-30-2026:CRYPTO|ATH_BY_DATE|BTC|2026-06-30|2026_06_30",
+            normalized_payload: {
+              venueMarketId: "bitcoin-all-time-high-by-june-30-2026",
+              quoteMarketId: "0x337ed4a919995ef9ba9d705b319055633a5dfdcb3ab97cf610009a7d11a9ade4",
+              quoteOutcomeTokenIds: {
+                YES: "yes-token",
+                NO: "no-token"
+              }
+            },
+            raw_source_payload: {}
+          }
+        ];
+      }
+    });
+
+    const listed = await resolver.listApprovedReadiness({ limit: 50 });
+    const yesRoute = await resolver.resolve({
+      canonicalMarketId: "FRONTEND_CURATED:CRYPTO|ATH_BY_DATE|BTC|2026-06-30|2026_06_30",
+      canonicalOutcomeId: "yes"
+    });
+    const noRoute = await resolver.resolve({
+      canonicalMarketId: "FRONTEND_CURATED:CRYPTO|ATH_BY_DATE|BTC|2026-06-30|2026_06_30",
+      canonicalOutcomeId: "NO"
+    });
+    const venueScopedRoute = await resolver.resolve({
+      canonicalMarketId: "FRONTEND_CURATED:CRYPTO|ATH_BY_DATE|BTC|2026-06-30|2026_06_30:POLYMARKET",
+      canonicalOutcomeId: "yes"
+    });
+
+    expect(listed).toHaveLength(1);
+    expect(directMappingCalls).toBe(0);
+    expect(yesRoute).toEqual([{
+      venue: "POLYMARKET",
+      venueMarketId: "0x337ed4a919995ef9ba9d705b319055633a5dfdcb3ab97cf610009a7d11a9ade4",
+      venueOutcomeId: "yes-token"
+    }]);
+    expect(noRoute).toEqual([{
+      venue: "POLYMARKET",
+      venueMarketId: "0x337ed4a919995ef9ba9d705b319055633a5dfdcb3ab97cf610009a7d11a9ade4",
+      venueOutcomeId: "no-token"
+    }]);
+    expect(venueScopedRoute).toEqual([{
+      venue: "POLYMARKET",
+      venueMarketId: "0x337ed4a919995ef9ba9d705b319055633a5dfdcb3ab97cf610009a7d11a9ade4",
+      venueOutcomeId: "yes-token"
+    }]);
   });
 
   it("resolves approved frontend-curated DB venue mappings back to raw venue ids", async () => {

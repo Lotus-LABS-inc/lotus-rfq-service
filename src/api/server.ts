@@ -21,11 +21,20 @@ import { registerTurnkeyAuthRoutes } from "./routes/turnkey-auth.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerMarketCatalogRoutes } from "./routes/markets.js";
 import {
+  calculateOrderbookStreamChecksum,
+  ORDERBOOK_STREAM_SCHEMA_VERSION,
+  parseMarketOrderbookTopic
+} from "../services/orderbook-stream.service.js";
+import {
   RedisMarketCatalogSnapshotCache,
   resolveMarketCatalogSnapshotCacheKeyPrefix
 } from "../services/market-catalog-snapshot-cache.js";
 import { MarketCatalogSnapshotMaterializer } from "../services/market-catalog-snapshot-materializer.js";
 import { HotMarketQuoteReadinessSource } from "../services/hot-market-quote-readiness.service.js";
+import {
+  RedisMarketOrderbookLiveCache,
+  resolveMarketOrderbookLiveCacheNamespace
+} from "../services/market-orderbook-live-cache.js";
 import {
   buildVenueBalanceActivationActions,
   hasPolymarketActivationApprovalSpender
@@ -227,7 +236,10 @@ import { ExecutionRecordRepository } from "../repositories/execution-record.repo
 import { ExecutionControlRepository } from "../repositories/execution-control.repository.js";
 import { FundingRepository } from "../repositories/funding.repository.js";
 import { HistoricalMarketStateRepository } from "../repositories/historical-market-state.repository.js";
-import { VenueOrderbookSnapshotRepository } from "../repositories/venue-orderbook-snapshot.repository.js";
+import {
+  DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS,
+  VenueOrderbookSnapshotRepository
+} from "../repositories/venue-orderbook-snapshot.repository.js";
 import { UserWalletRepository } from "../repositories/user-wallet.repository.js";
 import { UserVenueAccountRepository } from "../repositories/user-venue-account.repository.js";
 import { PairEdgeRepository } from "../repositories/pair-edge.repository.js";
@@ -360,11 +372,12 @@ import {
 } from "../repositories/execution-routing.repository.js";
 import { PgNotificationRepository } from "../repositories/notification.repository.js";
 import { MarketCatalogRepository, SharedCoreQuoteMappingRepository } from "../repositories/market-catalog.repository.js";
-import { LiveMarketDataViewService } from "../services/market-data-view.service.js";
+import { LiveMarketDataViewService, type MarketOrderbookResponse } from "../services/market-data-view.service.js";
 import { HotQuoteSnapshotService, resolveHotQuoteRedisNamespace } from "../services/hot-quote-snapshot.service.js";
 import {
-  buildMarketOrderbookRecorderConfig,
-  MarketOrderbookRecorder
+  buildMarketOrderbookRecorderConfigs,
+  MarketOrderbookRecorder,
+  resolveMarketOrderbookRecorderDutyProfile
 } from "../services/market-orderbook-recorder.service.js";
 import {
   buildFundingReadinessWatcherConfigFromEnv,
@@ -1051,10 +1064,36 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const sharedCoreQuoteMappingResolver = new SharedCoreVenueQuoteMappingResolver(
     new SharedCoreQuoteMappingRepository(dependencies.pgPool)
   );
+  await warmQuoteMappingReadinessOnce(
+    sharedCoreQuoteMappingResolver,
+    dependencies.logger,
+    "startup",
+    QUOTE_MAPPING_READINESS_STARTUP_WARMUP_TIMEOUT_MS
+  );
+  const stopQuoteMappingReadinessWarmup = startQuoteMappingReadinessWarmup(
+    sharedCoreQuoteMappingResolver,
+    dependencies.logger
+  );
+  app.addHook("onClose", async () => {
+    stopQuoteMappingReadinessWarmup();
+  });
+  const marketOrderbookLiveCache = new RedisMarketOrderbookLiveCache(dependencies.redisClient, {
+    namespace: resolveMarketOrderbookLiveCacheNamespace({
+      LOTUS_DEPLOY_ENV: process.env.LOTUS_DEPLOY_ENV,
+      LOTUS_ENV: process.env.LOTUS_ENV,
+      APP_ENV: process.env.APP_ENV,
+      NODE_ENV: process.env.NODE_ENV
+    }),
+    ttlMs: 30_000,
+    maxSnapshotsPerTopic: 16
+  });
   const marketQuoteReadinessSource = new HotMarketQuoteReadinessSource({
     mappingResolver: sharedCoreQuoteMappingResolver,
     hotSnapshots: hotQuoteSnapshots,
-    fallbackSource: venueOrderbookSnapshotRepository
+    fallbackSource: venueOrderbookSnapshotRepository,
+    config: {
+      maxAgeMs: DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS
+    }
   });
   const polymarketClobHost = process.env.POLYMARKET_CLOB_HOST ?? process.env.POLY_CLOB_HOST ?? "https://clob.polymarket.com";
   const polymarketGammaBaseUrl = process.env.POLYMARKET_GAMMA_BASE_URL ?? "https://gamma-api.polymarket.com";
@@ -1101,7 +1140,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       client: new OpinionClient({
         baseUrl: process.env.OPINION_OPENAPI_BASE_URL ?? process.env.OPINION_CLOB_BASE_URL ?? "https://openapi.opinion.trade/openapi",
         apiKey: process.env.OPINION_API_KEY ?? "",
-        requestTimeoutMs: parseOptionalNumber(process.env.OPINION_QUOTE_TIMEOUT_MS) ?? 8_000
+        requestTimeoutMs: parseOptionalNumber(process.env.OPINION_QUOTE_TIMEOUT_MS) ?? 1_500,
+        maxRetries: 0
       }),
       streamCache: opinionQuoteCache,
       topicRate: parseOptionalNumber(process.env.OPINION_QUOTE_TOPIC_RATE),
@@ -1116,13 +1156,17 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       streamCache: myriadQuoteCache
     })
   ], sharedCoreQuoteMappingResolver, () => new Date(), hotQuoteSnapshots, {
-    readerTimeoutMs: 2_000,
+    readerTimeoutMs: 1_500,
     perVenueReaderTimeoutMs: {
-      OPINION: 5_000
+      LIMITLESS: 1_500,
+      OPINION: 1_500,
+      POLYMARKET: 1_500,
+      PREDICT_FUN: 1_500
     }
   });
   const historicalMarketStateRepository = new HistoricalMarketStateRepository(dependencies.pgPool);
   const marketDataViewService = new LiveMarketDataViewService(venueQuoteSource, {
+    liveOrderbookSource: marketOrderbookLiveCache,
     historicalChartSource: {
       listChartPoints: async (input) => {
         // API chart reads must stay storage-backed. Live venue history fetches belong
@@ -1145,27 +1189,66 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     })
   });
   if (backgroundWorkersEnabled) {
-    const marketOrderbookRecorder = new MarketOrderbookRecorder(
-      marketCatalogRepository,
-      venueQuoteSource,
-      venueOrderbookSnapshotRepository,
-      dependencies.logger,
-      buildMarketOrderbookRecorderConfig(),
-      hotQuoteSnapshots
+    const workerDutyProfile = resolveMarketOrderbookRecorderDutyProfile({
+      LOTUS_DEPLOY_ENV: process.env.LOTUS_DEPLOY_ENV,
+      LOTUS_ENV: process.env.LOTUS_ENV,
+      APP_ENV: process.env.APP_ENV,
+      NODE_ENV: process.env.NODE_ENV
+    });
+    dependencies.logger.info({ workerDutyProfile }, "Starting market background worker duties.");
+    const marketOrderbookRecorders = buildMarketOrderbookRecorderConfigs(workerDutyProfile).map((config) =>
+      new MarketOrderbookRecorder(
+        marketCatalogRepository,
+        venueQuoteSource,
+        venueOrderbookSnapshotRepository,
+        dependencies.logger,
+        config,
+        hotQuoteSnapshots
+      )
     );
-    marketOrderbookRecorder.start();
+    for (const marketOrderbookRecorder of marketOrderbookRecorders) {
+      marketOrderbookRecorder.start();
+    }
     app.addHook("onClose", async () => {
-      await marketOrderbookRecorder.stop();
+      await Promise.all(marketOrderbookRecorders.map((marketOrderbookRecorder) => marketOrderbookRecorder.stop()));
     });
-    const marketCatalogSnapshotMaterializer = new MarketCatalogSnapshotMaterializer({
-      marketCatalogRepository,
-      marketQuoteReadinessSource,
-      snapshotCache: marketCatalogSnapshotCache,
-      logger: dependencies.logger
-    });
-    marketCatalogSnapshotMaterializer.start();
+    const marketCatalogSnapshotMaterializers = [
+      new MarketCatalogSnapshotMaterializer({
+        marketCatalogRepository,
+        marketQuoteReadinessSource,
+        snapshotCache: marketCatalogSnapshotCache,
+        logger: dependencies.logger,
+        config: {
+          intervalMs: workerDutyProfile === "shared_staging" ? 8_000 : 3_000,
+          cacheTtlMs: 300_000,
+          quoteReadinessMaxAgeMs: DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS,
+          limits: [250],
+          routeCoverages: ["all"],
+          categories: [],
+          categoryRefreshEveryTicks: 1
+        }
+      }),
+      new MarketCatalogSnapshotMaterializer({
+        marketCatalogRepository,
+        marketQuoteReadinessSource,
+        snapshotCache: marketCatalogSnapshotCache,
+        logger: dependencies.logger,
+        config: {
+          intervalMs: workerDutyProfile === "shared_staging" ? 45_000 : 30_000,
+          cacheTtlMs: 300_000,
+          quoteReadinessMaxAgeMs: DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS,
+          limits: [250],
+          routeCoverages: ["all", "pair", "tri", "strict_all"],
+          categories: ["Crypto", "Sports", "Politics", "Esports"],
+          categoryRefreshEveryTicks: 1
+        }
+      })
+    ];
+    for (const marketCatalogSnapshotMaterializer of marketCatalogSnapshotMaterializers) {
+      marketCatalogSnapshotMaterializer.start();
+    }
     app.addHook("onClose", async () => {
-      await marketCatalogSnapshotMaterializer.stop();
+      await Promise.all(marketCatalogSnapshotMaterializers.map((materializer) => materializer.stop()));
     });
   }
 
@@ -1652,7 +1735,30 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
 
   const wsGateway = await registerWebSocketPlugin(app, {
     redisClient: dependencies.redisClient,
-    logger: dependencies.logger
+    logger: dependencies.logger,
+    onSubscribe: async ({ topic, send }) => {
+      const parsedOrderbookTopic = parseMarketOrderbookTopic(topic);
+      if (!parsedOrderbookTopic) {
+        return;
+      }
+      hotQuoteSnapshots.touch({
+        canonicalMarketId: parsedOrderbookTopic.canonicalMarketId,
+        ...(parsedOrderbookTopic.canonicalOutcomeId
+          ? { canonicalOutcomeId: parsedOrderbookTopic.canonicalOutcomeId }
+          : {})
+      });
+      const orderbook = await marketDataViewService.getOrderbook({
+        marketId: parsedOrderbookTopic.canonicalMarketId,
+        ...(parsedOrderbookTopic.canonicalOutcomeId ? { outcomeId: parsedOrderbookTopic.canonicalOutcomeId } : {}),
+        depth: 20
+      });
+      send({
+        type: "MARKET_ORDERBOOK_UPDATE",
+        topic,
+        emittedAt: new Date().toISOString(),
+        payload: toInitialMarketOrderbookPayload(orderbook)
+      });
+    }
   });
   const executionWsUpdatesEnabled = process.env.EXECUTION_WS_UPDATES_ENABLED !== "false";
   const notificationRepository = new PgNotificationRepository(dependencies.pgPool, async (notification) => {
@@ -3218,6 +3324,39 @@ const readAcceptancePolicy = (metadata: Record<string, unknown>): SORAcceptanceP
   return "ALL_OR_NONE";
 };
 
+const toInitialMarketOrderbookPayload = (orderbook: MarketOrderbookResponse): Record<string, unknown> => ({
+  schemaVersion: ORDERBOOK_STREAM_SCHEMA_VERSION,
+  updateType: "snapshot",
+  seq: 0,
+  canonicalMarketId: orderbook.marketId,
+  canonicalOutcomeId: orderbook.outcomeId,
+  source: "initial_snapshot",
+  status: orderbook.status,
+  generatedAt: orderbook.generatedAt,
+  depth: orderbook.depth,
+  bestBid: orderbook.bestBid,
+  bestAsk: orderbook.bestAsk,
+  midpoint: orderbook.midpoint,
+  spread: orderbook.spread,
+  venues: orderbook.venues,
+  venueCount: orderbook.venues.length,
+  liveVenueCount: orderbook.venues.filter((venue) =>
+    venue.snapshotStatus === "live" && venue.blockers.length === 0 && (venue.bestBid !== null || venue.bestAsk !== null)
+  ).length,
+  bids: orderbook.bids,
+  asks: orderbook.asks,
+  blockers: orderbook.blockers,
+  checksum: calculateOrderbookStreamChecksum({
+    canonicalMarketId: orderbook.marketId,
+    canonicalOutcomeId: orderbook.outcomeId,
+    bestBid: orderbook.bestBid,
+    bestAsk: orderbook.bestAsk,
+    bids: orderbook.bids,
+    asks: orderbook.asks,
+    blockers: orderbook.blockers.map((blocker) => blocker.reason)
+  })
+});
+
 const asRFQState = (value: string): RFQState | null => {
   if (
     value === "CREATED" ||
@@ -4026,6 +4165,91 @@ const parseOptionalNumber = (value: string | undefined): number | undefined => {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+};
+
+const QUOTE_MAPPING_READINESS_WARMUP_LIMIT = 500;
+const QUOTE_MAPPING_READINESS_WARMUP_INTERVAL_MS = 30_000;
+const QUOTE_MAPPING_READINESS_STARTUP_WARMUP_TIMEOUT_MS = 2_000;
+const QUOTE_MAPPING_READINESS_BACKGROUND_WARMUP_TIMEOUT_MS = 5_000;
+const QUOTE_MAPPING_READINESS_WARMUP_TIMEOUT = Symbol("QUOTE_MAPPING_READINESS_WARMUP_TIMEOUT");
+
+type QuoteMappingReadinessWarmupSource = {
+  listApprovedReadiness?: (input: { limit: number }) => Promise<readonly unknown[]>;
+};
+
+const startQuoteMappingReadinessWarmup = (
+  source: QuoteMappingReadinessWarmupSource,
+  logger: Pick<Logger, "info" | "warn">
+): (() => void) => {
+  const interval = setInterval(() => {
+    void warmQuoteMappingReadinessOnce(
+      source,
+      logger,
+      "background",
+      QUOTE_MAPPING_READINESS_BACKGROUND_WARMUP_TIMEOUT_MS
+    );
+  }, QUOTE_MAPPING_READINESS_WARMUP_INTERVAL_MS);
+  interval.unref?.();
+  return () => clearInterval(interval);
+};
+
+const warmQuoteMappingReadinessOnce = async (
+  source: QuoteMappingReadinessWarmupSource,
+  logger: Pick<Logger, "info" | "warn">,
+  phase: "startup" | "background",
+  timeoutMs: number
+): Promise<void> => {
+  if (!source.listApprovedReadiness) {
+    return;
+  }
+  const startedAt = Date.now();
+  try {
+    const rows = await withQuoteMappingWarmupTimeout(
+      source.listApprovedReadiness({ limit: QUOTE_MAPPING_READINESS_WARMUP_LIMIT }),
+      timeoutMs
+    );
+    if (rows === QUOTE_MAPPING_READINESS_WARMUP_TIMEOUT) {
+      logger.warn(
+        { phase, timeoutMs, limit: QUOTE_MAPPING_READINESS_WARMUP_LIMIT },
+        "Quote mapping readiness warmup timed out; resolver may still finish in the background."
+      );
+      return;
+    }
+    logger.info(
+      {
+        phase,
+        rowCount: rows.length,
+        elapsedMs: Date.now() - startedAt,
+        limit: QUOTE_MAPPING_READINESS_WARMUP_LIMIT
+      },
+      "Quote mapping readiness cache warmed."
+    );
+  } catch (error) {
+    logger.warn(
+      { err: error, phase, limit: QUOTE_MAPPING_READINESS_WARMUP_LIMIT },
+      "Quote mapping readiness warmup failed."
+    );
+  }
+};
+
+const withQuoteMappingWarmupTimeout = async <T>(
+  promise: Promise<T>,
+  timeoutMs: number
+): Promise<T | typeof QUOTE_MAPPING_READINESS_WARMUP_TIMEOUT> => {
+  let timeout: NodeJS.Timeout | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<typeof QUOTE_MAPPING_READINESS_WARMUP_TIMEOUT>((resolve) => {
+        timeout = setTimeout(() => resolve(QUOTE_MAPPING_READINESS_WARMUP_TIMEOUT), Math.max(1, timeoutMs));
+        timeout.unref?.();
+      })
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 };
 
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {

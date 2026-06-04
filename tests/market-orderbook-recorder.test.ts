@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   buildMarketOrderbookRecorderConfig,
+  buildMarketOrderbookRecorderConfigs,
   MarketOrderbookRecorder,
+  resolveMarketOrderbookRecorderDutyProfile,
   type MarketOrderbookRecorderLogger
 } from "../src/services/market-orderbook-recorder.service.js";
 import type { MarketCatalogMarket } from "../src/repositories/market-catalog.repository.js";
@@ -18,13 +20,14 @@ describe("MarketOrderbookRecorder", () => {
     expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
       intervalMs: 10_000,
       marketBatchSize: 24,
-      activeMarketBatchSize: 180,
-      priorityMarketBatchSize: 24,
-      priorityVenues: ["OPINION"],
+      activeMarketBatchSize: 250,
+      activeMaxSamplesPerTick: 36,
+      priorityMarketBatchSize: 180,
+      priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
       maxSamplesPerTick: 90,
-      sampleConcurrency: 5,
+      sampleConcurrency: 14,
       maxTickDurationMs: 9_000,
-      sampleTimeoutMs: 3_000,
+      sampleTimeoutMs: 1_800,
       cleanupIntervalMs: 30 * 60_000
     });
   });
@@ -36,13 +39,14 @@ describe("MarketOrderbookRecorder", () => {
       expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
         intervalMs: 10_000,
         marketBatchSize: 24,
-        activeMarketBatchSize: 180,
-        priorityMarketBatchSize: 24,
-        priorityVenues: ["OPINION"],
+        activeMarketBatchSize: 250,
+        activeMaxSamplesPerTick: 36,
+        priorityMarketBatchSize: 180,
+        priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
         maxSamplesPerTick: 90,
-        sampleConcurrency: 5,
+        sampleConcurrency: 14,
         maxTickDurationMs: 9_000,
-        sampleTimeoutMs: 3_000,
+        sampleTimeoutMs: 1_800,
         cleanupIntervalMs: 30 * 60_000
       });
       expect(buildMarketOrderbookRecorderConfig()).not.toHaveProperty("enabled");
@@ -53,6 +57,56 @@ describe("MarketOrderbookRecorder", () => {
         process.env.MARKET_ORDERBOOK_RECORDER_ENABLED = previous;
       }
     }
+  });
+
+  it("builds sharded recorder lanes for broad live quote coverage", () => {
+    const configs = buildMarketOrderbookRecorderConfigs();
+
+    expect(configs).toHaveLength(2);
+    expect(configs.map((config) => config.shardCount)).toEqual([2, 2]);
+    expect(configs.map((config) => config.shardIndex)).toEqual([0, 1]);
+    expect(configs.every((config) => config.intervalMs === 10_000)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerTick === 90)).toBe(true);
+    expect(configs.every((config) => config.activeMaxSamplesPerTick === 36)).toBe(true);
+    expect(configs.every((config) => config.sampleTimeoutMs === 1_800)).toBe(true);
+    expect(configs.every((config) => (config.maxTickDurationMs ?? 0) < config.intervalMs)).toBe(true);
+  });
+
+  it("uses the full recorder duty profile for production deploys", () => {
+    expect(resolveMarketOrderbookRecorderDutyProfile({ LOTUS_DEPLOY_ENV: "production" })).toBe("production");
+    expect(resolveMarketOrderbookRecorderDutyProfile({ LOTUS_ENV: "prod" })).toBe("production");
+
+    const configs = buildMarketOrderbookRecorderConfigs(
+      resolveMarketOrderbookRecorderDutyProfile({ LOTUS_DEPLOY_ENV: "production" })
+    );
+
+    expect(configs).toHaveLength(2);
+    expect(configs.every((config) => config.maxSamplesPerTick === 90)).toBe(true);
+    expect(configs.every((config) => config.sampleConcurrency === 14)).toBe(true);
+  });
+
+  it("uses a single shared staging recorder lane to avoid doubling venue polling on one VPS", () => {
+    expect(resolveMarketOrderbookRecorderDutyProfile({ LOTUS_DEPLOY_ENV: "staging" })).toBe("shared_staging");
+    expect(resolveMarketOrderbookRecorderDutyProfile({ APP_ENV: "vps staging" })).toBe("shared_staging");
+
+    const configs = buildMarketOrderbookRecorderConfigs(
+      resolveMarketOrderbookRecorderDutyProfile({ LOTUS_DEPLOY_ENV: "staging" })
+    );
+
+    expect(configs).toHaveLength(1);
+    expect(configs[0]).toMatchObject({
+      intervalMs: 15_000,
+      marketBatchSize: 18,
+      activeMarketBatchSize: 180,
+      activeMaxSamplesPerTick: 24,
+      priorityMarketBatchSize: 120,
+      maxSamplesPerTick: 36,
+      sampleConcurrency: 8,
+      maxTickDurationMs: 9_500,
+      sampleTimeoutMs: 1_600,
+      shardCount: 1,
+      shardIndex: 0
+    });
   });
 
   it("records approved open market outcome snapshots and skips closed markets", async () => {
@@ -98,6 +152,8 @@ describe("MarketOrderbookRecorder", () => {
       {
         intervalMs: 60_000,
         marketBatchSize: 10,
+        priorityMarketBatchSize: 0,
+        priorityVenues: [],
         maxSamplesPerTick: 40,
         cleanupIntervalMs: 0,
         retentionHours: 720,
@@ -131,6 +187,70 @@ describe("MarketOrderbookRecorder", () => {
       bidDepth: "10",
       askDepth: "11"
     });
+  });
+
+  it("samples shared outcome aliases instead of one venue's executable token id", async () => {
+    const requestedOutcomeIds: Array<string | undefined> = [];
+    const market = {
+      ...multiVenueMarketFixture(["POLYMARKET", "LIMITLESS"]),
+      venueMarkets: [
+        {
+          ...multiVenueMarketFixture(["POLYMARKET"]).venueMarkets[0]!,
+          canonicalMarketId: "market-1",
+          venue: "POLYMARKET",
+          venueMarketId: "poly-market",
+          outcomes: [
+            { id: "12345678901234567890", label: "Yes" },
+            { id: "98765432109876543210", label: "No" }
+          ]
+        },
+        {
+          ...multiVenueMarketFixture(["LIMITLESS"]).venueMarkets[0]!,
+          canonicalMarketId: "market-1",
+          venue: "LIMITLESS",
+          venueMarketId: "limitless-market",
+          outcomes: [
+            { id: "limitless-yes-token", label: "Yes" },
+            { id: "limitless-no-token", label: "No" }
+          ]
+        }
+      ]
+    };
+    const recorder = new MarketOrderbookRecorder(
+      { listMarkets: async () => [market] },
+      {
+        getQuoteSnapshotReport: async ({ canonicalOutcomeId }) => {
+          requestedOutcomeIds.push(canonicalOutcomeId);
+          return { snapshots: [], blocked: [] };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        priorityMarketBatchSize: 0,
+        priorityVenues: [],
+        maxSamplesPerTick: 10,
+        cleanupIntervalMs: 0,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.sampledOutcomes).toBe(2);
+    expect(requestedOutcomeIds).toEqual(["YES", "NO"]);
   });
 
   it("caps live venue samples per tick so recorder work stays bounded", async () => {
@@ -295,7 +415,110 @@ describe("MarketOrderbookRecorder", () => {
     const result = await recorder.runOnce();
 
     expect(result.scannedMarkets).toBe(2);
-    expect(sampledMarketIds).toEqual(["market-opinion", "market-opinion", "market-1", "market-1"]);
+    expect(sampledMarketIds).toEqual(["market-opinion", "market-1", "market-opinion", "market-1"]);
+  });
+
+  it("round-robins capped samples across priority venues so one venue cannot starve the others", async () => {
+    const sampled: string[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [
+          venueMarketFixture("POLYMARKET", "market-poly-1"),
+          venueMarketFixture("POLYMARKET", "market-poly-2"),
+          venueMarketFixture("LIMITLESS", "market-limitless"),
+          venueMarketFixture("OPINION", "market-opinion")
+        ]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalMarketId, canonicalOutcomeId }) => {
+          sampled.push(`${canonicalMarketId}:${canonicalOutcomeId}`);
+          return {
+            snapshots: [],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 4,
+        priorityMarketBatchSize: 0,
+        priorityVenues: ["OPINION", "LIMITLESS", "POLYMARKET"],
+        maxSamplesPerTick: 3,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.sampledOutcomes).toBe(3);
+    expect(sampled).toEqual([
+      "market-opinion:YES",
+      "market-limitless:YES",
+      "market-poly-1:YES"
+    ]);
+  });
+
+  it("round-robins capped samples across event cards so one multi-outcome event cannot starve the catalog", async () => {
+    const sampled: string[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [
+          multiMarketEventFixture("event-large", ["market-large-1", "market-large-2", "market-large-3", "market-large-4"]),
+          venueMarketFixture("POLYMARKET", "market-small-1"),
+          venueMarketFixture("POLYMARKET", "market-small-2")
+        ]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalMarketId, canonicalOutcomeId }) => {
+          sampled.push(`${canonicalMarketId}:${canonicalOutcomeId}`);
+          return {
+            snapshots: [],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 3,
+        priorityMarketBatchSize: 0,
+        priorityVenues: ["POLYMARKET"],
+        maxSamplesPerTick: 3,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.sampledOutcomes).toBe(3);
+    expect(sampled).toEqual([
+      "market-large-1:YES",
+      "market-small-1:YES",
+      "market-small-2:YES"
+    ]);
   });
 
   it("samples active UI markets before the normal catalog sweep", async () => {
@@ -361,6 +584,144 @@ describe("MarketOrderbookRecorder", () => {
     expect(sampledMarketIds).toEqual(["market-active", "market-active", "market-1", "market-1"]);
   });
 
+  it("reuses the approved catalog window for active and priority sampling in one tick", async () => {
+    let broadCatalogReads = 0;
+    const activeMarket = {
+      ...marketFixture("OPEN"),
+      canonicalEventId: "event-active",
+      canonicalMarketIds: ["market-active"],
+      venueMarkets: marketFixture("OPEN").venueMarkets.map((venueMarket) => ({
+        ...venueMarket,
+        canonicalMarketId: "market-active"
+      }))
+    };
+    const priorityMarket = {
+      ...opinionMarketFixture(),
+      canonicalEventId: "event-opinion",
+      canonicalMarketIds: ["market-opinion"],
+      venueMarkets: opinionMarketFixture().venueMarkets.map((venueMarket) => ({
+        ...venueMarket,
+        canonicalMarketId: "market-opinion"
+      }))
+    };
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async (filter) => {
+          if ((filter?.limit ?? 0) >= 250 && (filter?.offset ?? 0) === 0) {
+            broadCatalogReads += 1;
+            return [activeMarket, priorityMarket, marketFixture("OPEN")];
+          }
+          return [marketFixture("OPEN")];
+        }
+      },
+      {
+        getQuoteSnapshotReport: async () => ({
+          snapshots: [],
+          blocked: []
+        })
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 1,
+        activeMarketBatchSize: 10,
+        priorityMarketBatchSize: 10,
+        priorityVenues: ["OPINION"],
+        maxSamplesPerTick: 4,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      },
+      {
+        listActiveMarketsFromRedis: async () => [({
+          canonicalMarketId: "market-active",
+          canonicalOutcomeId: "YES",
+          lastSeenAt: new Date("2026-05-10T12:00:00.000Z")
+        })]
+      }
+    );
+
+    await recorder.runOnce();
+
+    expect(broadCatalogReads).toBe(1);
+  });
+
+  it("reserves the first sample budget for active terminal outcomes", async () => {
+    const sampled: string[] = [];
+    const activeMarket = {
+      ...marketFixture("OPEN"),
+      canonicalEventId: "event-active",
+      canonicalMarketIds: ["market-active"],
+      venueMarkets: marketFixture("OPEN").venueMarkets.map((venueMarket) => ({
+        ...venueMarket,
+        canonicalMarketId: "market-active"
+      }))
+    };
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async (filter) => (filter?.limit ?? 0) >= 250
+          ? [activeMarket, marketFixture("OPEN")]
+          : [marketFixture("OPEN")]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalMarketId, canonicalOutcomeId }) => {
+          sampled.push(`${canonicalMarketId}:${canonicalOutcomeId}`);
+          return {
+            snapshots: [],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 1,
+        activeMarketBatchSize: 10,
+        activeMaxSamplesPerTick: 1,
+        priorityMarketBatchSize: 0,
+        priorityVenues: ["POLYMARKET"],
+        maxSamplesPerTick: 2,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      },
+      {
+        listActiveMarketsFromRedis: async () => [{
+          canonicalMarketId: "market-active",
+          canonicalOutcomeId: "NO",
+          lastSeenAt: new Date("2026-05-10T12:00:00.000Z")
+        }]
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.activeMarkets).toBe(1);
+    expect(result.sampledOutcomes).toBe(2);
+    expect(sampled).toEqual([
+      "market-active:NO",
+      "market-active:YES"
+    ]);
+  });
+
   it("bounds and cools down hung quote source samples so recorder ticks cannot stall indefinitely", async () => {
     const recorder = new MarketOrderbookRecorder(
       {
@@ -403,6 +764,97 @@ describe("MarketOrderbookRecorder", () => {
     expect(second.sampledOutcomes).toBe(0);
     expect(second.failedSamples).toBe(0);
     expect(second.skippedCooldownSamples).toBe(2);
+  });
+
+  it("does not start more provider samples when the remaining tick budget cannot cover their timeout", async () => {
+    const sampledOutcomes: string[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [marketFixture("OPEN")]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalOutcomeId }) => {
+          sampledOutcomes.push(canonicalOutcomeId ?? "");
+          await delay(20);
+          return {
+            snapshots: [],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 1,
+        priorityMarketBatchSize: 0,
+        priorityVenues: [],
+        maxSamplesPerTick: 40,
+        sampleConcurrency: 1,
+        maxTickDurationMs: 35,
+        sampleTimeoutMs: 20,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.sampledOutcomes).toBe(2);
+    expect(sampledOutcomes).toHaveLength(1);
+  });
+
+  it("uses a non-overlapping start loop instead of skipping interval ticks while a sample is running", async () => {
+    const warnings: string[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [marketFixture("OPEN")]
+      },
+      {
+        getQuoteSnapshotReport: async () => await new Promise(() => undefined)
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      {
+        info: () => undefined,
+        warn: (_input, message) => warnings.push(message),
+        error: () => undefined
+      },
+      {
+        intervalMs: 5,
+        marketBatchSize: 1,
+        priorityMarketBatchSize: 0,
+        priorityVenues: [],
+        maxSamplesPerTick: 40,
+        maxTickDurationMs: 200,
+        sampleTimeoutMs: 100,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    recorder.start();
+    await delay(30);
+    await recorder.stop();
+
+    expect(warnings).not.toContain("Market orderbook recorder tick skipped because the previous tick is still running.");
   });
 
   it("does not run recording after stop is requested", async () => {
@@ -511,6 +963,55 @@ describe("MarketOrderbookRecorder", () => {
       blockers: ["QUOTE_PROVIDER_HTTP_429", "Limitless_orderbook_request_failed_with_status_429."]
     });
     expect(second.skippedCooldownSamples).toBe(2);
+  });
+
+  it("excludes cooled-down venues while continuing to sample healthy venues on mixed markets", async () => {
+    const venueAllowlists: string[][] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [multiVenueMarketFixture(["POLYMARKET", "LIMITLESS"])]
+      },
+      {
+        getQuoteSnapshotReport: async ({ venueAllowlist }) => {
+          venueAllowlists.push([...(venueAllowlist ?? [])]);
+          return {
+            snapshots: [],
+            blocked: venueAllowlist?.includes("LIMITLESS")
+              ? [{
+                  venue: "LIMITLESS",
+                  reason: "QUOTE_PROVIDER_HTTP_429",
+                  venueMarketId: "limitless-1",
+                  detailsCode: "Limitless_orderbook_request_failed_with_status_429."
+                }]
+              : []
+          };
+        }
+      },
+      {
+        insertMany: async (snapshots) => snapshots.length,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        maxSamplesPerTick: 1,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 60_000
+      }
+    );
+
+    await recorder.runOnce();
+    await recorder.runOnce();
+
+    expect(venueAllowlists[0]).toEqual(["POLYMARKET", "LIMITLESS"]);
+    expect(venueAllowlists[1]).toEqual(["POLYMARKET"]);
   });
 
   it("records stable missing-source and 404 mapping blockers without cooling down the whole venue", async () => {
@@ -622,6 +1123,140 @@ describe("MarketOrderbookRecorder", () => {
     expect(inserted).toEqual([]);
     expect(second.sampledOutcomes).toBe(0);
     expect(second.skippedCooldownSamples).toBe(2);
+  });
+
+  it("does not cool down an entire venue after one transient sample timeout", async () => {
+    const sampledMarketIds: string[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [
+          venueMarketFixture("POLYMARKET", "market-timeout"),
+          venueMarketFixture("POLYMARKET", "market-healthy")
+        ]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalMarketId, canonicalOutcomeId }) => {
+          sampledMarketIds.push(canonicalMarketId);
+          if (canonicalMarketId === "market-timeout") {
+            return {
+              snapshots: [],
+              blocked: [{
+                venue: "POLYMARKET",
+                reason: "QUOTE_PROVIDER_TIMEOUT",
+                venueMarketId: "poly-timeout",
+                detailsCode: "POLYMARKET_quote_reader_timeout_after_1500ms."
+              }]
+            };
+          }
+          return {
+            snapshots: [{
+              venue: "POLYMARKET",
+              venueMarketId: "poly-healthy",
+              venueOutcomeId: canonicalOutcomeId ?? "YES",
+              source: "REST",
+              quoteQuality: "FULL_DEPTH_REST",
+              sourceTimestamp: new Date("2026-05-10T12:00:00.000Z"),
+              receivedAt: new Date("2026-05-10T12:00:01.000Z"),
+              bids: [{ price: "0.59", size: "10" }],
+              asks: [{ price: "0.61", size: "11" }],
+              blockers: [],
+              missingFactors: []
+            }],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async (snapshots) => snapshots.length,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        maxSamplesPerTick: 40,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const first = await recorder.runOnce();
+    const second = await recorder.runOnce();
+
+    expect(first.sampledOutcomes).toBe(4);
+    expect(first.insertedSnapshots).toBe(2);
+    expect(second.sampledOutcomes).toBe(2);
+    expect(second.skippedCooldownSamples).toBe(2);
+    expect(sampledMarketIds.filter((marketId) => marketId === "market-healthy")).toHaveLength(4);
+  });
+
+  it("does not cool down a whole sample when a transient venue timeout has another venue quote", async () => {
+    const inserted: VenueOrderbookSnapshotInput[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [multiVenueMarketFixture(["POLYMARKET", "LIMITLESS"])]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalOutcomeId }) => ({
+          snapshots: [{
+            venue: "POLYMARKET",
+            venueMarketId: "poly-1",
+            venueOutcomeId: canonicalOutcomeId ?? "YES",
+            source: "REST",
+            quoteQuality: "FULL_DEPTH_REST",
+            sourceTimestamp: new Date("2026-05-10T12:00:00.000Z"),
+            receivedAt: new Date("2026-05-10T12:00:01.000Z"),
+            bids: [{ price: "0.59", size: "10" }],
+            asks: [{ price: "0.61", size: "11" }],
+            blockers: [],
+            missingFactors: []
+          }],
+          blocked: [{
+            venue: "LIMITLESS",
+            reason: "QUOTE_PROVIDER_TIMEOUT",
+            venueMarketId: "limitless-1",
+            detailsCode: "LIMITLESS_quote_reader_timeout_after_1500ms."
+          }]
+        })
+      },
+      {
+        insertMany: async (snapshots) => {
+          inserted.push(...snapshots);
+          return snapshots.length;
+        },
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        maxSamplesPerTick: 40,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const first = await recorder.runOnce();
+    const second = await recorder.runOnce();
+
+    expect(first.sampledOutcomes).toBe(2);
+    expect(first.insertedSnapshots).toBe(2);
+    expect(second.sampledOutcomes).toBe(2);
+    expect(second.skippedCooldownSamples).toBe(0);
+    expect(second.insertedSnapshots).toBe(2);
+    expect(inserted).toHaveLength(4);
   });
 
   it("records Opinion display snapshots as quote-ready when fee discovery is the only missing factor", async () => {
@@ -749,6 +1384,10 @@ describe("MarketOrderbookRecorder", () => {
   });
 });
 
+const delay = async (durationMs: number): Promise<void> => {
+  await new Promise((resolve) => setTimeout(resolve, durationMs));
+};
+
 const marketFixture = (status: MarketCatalogMarket["status"]): MarketCatalogMarket => ({
   eventId: "event:fixture",
   eventTitle: "Fixture",
@@ -831,6 +1470,56 @@ const opinionMarketFixture = (): MarketCatalogMarket => ({
     ]
   }))
 });
+
+const venueMarketFixture = (venue: string, canonicalMarketId: string): MarketCatalogMarket => {
+  const base = marketFixture("OPEN");
+  return {
+    ...base,
+    canonicalEventId: `event-${canonicalMarketId}`,
+    canonicalMarketIds: [canonicalMarketId],
+    venues: [venue],
+    venueMarkets: base.venueMarkets.map((venueMarket) => ({
+      ...venueMarket,
+      canonicalMarketId,
+      venue,
+      venueMarketId: `${venue.toLowerCase()}-${canonicalMarketId}`,
+      venueMarketProfileId: `profile-${venue.toLowerCase()}-${canonicalMarketId}`
+    }))
+  };
+};
+
+const multiVenueMarketFixture = (venues: readonly string[]): MarketCatalogMarket => {
+  const base = marketFixture("OPEN");
+  return {
+    ...base,
+    venues: [...venues],
+    venueCount: venues.length,
+    venueMarketCount: venues.length,
+    venueMarkets: venues.map((venue, index) => ({
+      ...base.venueMarkets[0]!,
+      venue,
+      venueMarketId: `${venue.toLowerCase()}-${index + 1}`,
+      venueMarketProfileId: `profile-${venue.toLowerCase()}-${index + 1}`
+    }))
+  };
+};
+
+const multiMarketEventFixture = (canonicalEventId: string, canonicalMarketIds: readonly string[]): MarketCatalogMarket => {
+  const base = marketFixture("OPEN");
+  return {
+    ...base,
+    eventId: canonicalEventId,
+    canonicalEventId,
+    canonicalMarketIds: [...canonicalMarketIds],
+    venueMarkets: canonicalMarketIds.map((canonicalMarketId, index) => ({
+      ...base.venueMarkets[0]!,
+      canonicalMarketId,
+      venueMarketId: `poly-large-${index + 1}`,
+      venueMarketProfileId: `profile-large-${index + 1}`,
+      outcomes: [{ id: "YES", label: "Yes" }]
+    }))
+  };
+};
 
 const waitUntil = async (predicate: () => boolean): Promise<void> => {
   for (let attempt = 0; attempt < 50; attempt += 1) {
