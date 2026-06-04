@@ -474,6 +474,57 @@ describe("MarketOrderbookRecorder", () => {
     ]);
   });
 
+  it("loads priority markets with venue-fair windows when the catalog is sorted toward one venue", async () => {
+    const sampledVenues: string[] = [];
+    const broadCatalog = [
+      ...Array.from({ length: 24 }, (_, index) => venueMarketFixture("POLYMARKET", `market-poly-${index + 1}`)),
+      ...Array.from({ length: 4 }, (_, index) => venueMarketFixture("LIMITLESS", `market-limitless-${index + 1}`)),
+      ...Array.from({ length: 4 }, (_, index) => venueMarketFixture("PREDICT_FUN", `market-predict-${index + 1}`)),
+      ...Array.from({ length: 4 }, (_, index) => venueMarketFixture("OPINION", `market-opinion-${index + 1}`))
+    ];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async (filter) => (filter?.limit ?? 0) >= 32
+          ? broadCatalog
+          : broadCatalog.slice(0, 1)
+      },
+      {
+        getQuoteSnapshotReport: async ({ venueAllowlist }) => {
+          sampledVenues.push(...(venueAllowlist ?? []));
+          return {
+            snapshots: [],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 1,
+        priorityMarketBatchSize: 8,
+        priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
+        maxSamplesPerTick: 8,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.sampledOutcomes).toBe(8);
+    expect(new Set(sampledVenues)).toEqual(new Set(["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"]));
+  });
+
   it("round-robins capped samples across event cards so one multi-outcome event cannot starve the catalog", async () => {
     const sampled: string[] = [];
     const recorder = new MarketOrderbookRecorder(

@@ -140,6 +140,7 @@ export class MarketOrderbookRecorder {
   private stopped = false;
   private marketOffset = 0;
   private priorityMarketOffset = 0;
+  private readonly priorityVenueOffsets = new Map<string, number>();
   private lastCleanupAt = Date.now();
   private readonly venueCooldownUntil = new Map<string, number>();
   private readonly sampleCooldownUntil = new Map<string, number>();
@@ -499,13 +500,16 @@ export class MarketOrderbookRecorder {
 
   private async listPriorityMarkets(): Promise<MarketCatalogMarket[]> {
     const priorityMarketBatchSize = this.config.priorityMarketBatchSize ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityMarketBatchSize;
-    const priorityVenues = this.config.priorityVenues ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityVenues;
+    const priorityVenues = [...new Set(
+      (this.config.priorityVenues ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityVenues).map(normalizeVenue)
+    )];
     if (priorityMarketBatchSize <= 0 || priorityVenues.length === 0) {
       return [];
     }
 
+    const broadWindowLimit = Math.max(250, priorityMarketBatchSize * Math.max(1, priorityVenues.length));
     const catalogWindow = await this.listCachedCatalogWindow({
-      limit: Math.max(250, priorityMarketBatchSize),
+      limit: broadWindowLimit,
       offset: 0
     });
     const priorityMarkets = catalogWindow.filter((market) =>
@@ -518,10 +522,51 @@ export class MarketOrderbookRecorder {
       return [];
     }
 
+    const selected: MarketCatalogMarket[] = [];
+    const selectedKeys = new Set<string>();
+    const perVenueBaseLimit = Math.max(1, Math.floor(priorityMarketBatchSize / priorityVenues.length));
+    let extraVenueSlots = Math.max(0, priorityMarketBatchSize - perVenueBaseLimit * priorityVenues.length);
+
+    for (const venue of priorityVenues) {
+      const venueMarkets = priorityMarkets.filter((market) => marketIncludesAnyVenue(market, [venue]));
+      if (venueMarkets.length === 0) {
+        this.priorityVenueOffsets.set(venue, 0);
+        continue;
+      }
+      const offset = this.priorityVenueOffsets.get(venue) ?? 0;
+      const venueLimit = perVenueBaseLimit + (extraVenueSlots > 0 ? 1 : 0);
+      if (extraVenueSlots > 0) {
+        extraVenueSlots -= 1;
+      }
+      for (const market of wrapSlice(venueMarkets, offset, venueLimit)) {
+        const key = marketPriorityKey(market);
+        if (!selectedKeys.has(key)) {
+          selected.push(market);
+          selectedKeys.add(key);
+        }
+        if (selected.length >= priorityMarketBatchSize) {
+          break;
+        }
+      }
+      this.priorityVenueOffsets.set(venue, (offset + venueLimit) % venueMarkets.length);
+      if (selected.length >= priorityMarketBatchSize) {
+        return selected;
+      }
+    }
+
     if (this.priorityMarketOffset >= priorityMarkets.length) {
       this.priorityMarketOffset = 0;
     }
-    const selected = wrapSlice(priorityMarkets, this.priorityMarketOffset, priorityMarketBatchSize);
+    for (const market of wrapSlice(priorityMarkets, this.priorityMarketOffset, priorityMarketBatchSize)) {
+      const key = marketPriorityKey(market);
+      if (selectedKeys.has(key)) {
+        continue;
+      }
+      selected.push(market);
+      if (selected.length >= priorityMarketBatchSize) {
+        break;
+      }
+    }
     this.priorityMarketOffset = (this.priorityMarketOffset + priorityMarketBatchSize) % priorityMarkets.length;
     return selected;
   }
@@ -856,6 +901,9 @@ const createEventRoundRobinQueue = <T extends { market: MarketCatalogMarket }>()
 
 const marketEventQueueKey = (market: MarketCatalogMarket): string =>
   market.canonicalEventId || market.eventId || market.canonicalMarketIds.join("|") || market.title;
+
+const marketPriorityKey = (market: MarketCatalogMarket): string =>
+  `${market.canonicalEventId}:${market.canonicalMarketIds.join("|") || market.eventId || market.title}`;
 
 const belongsToShard = (value: string, shardCount: number, shardIndex: number): boolean =>
   stableHash(value) % shardCount === shardIndex;
