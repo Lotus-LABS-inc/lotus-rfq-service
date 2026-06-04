@@ -1860,7 +1860,7 @@ describe("OrderbookStreamService", () => {
     ]);
   });
 
-  it("runs REST fallback as bounded sweeps instead of rotating through new targets every poll", async () => {
+  it("rotates bounded REST fallback pages after the refresh interval", async () => {
     const connector = new FakeConnector("PREDICT_FUN");
     const refresh = vi.fn(async (target: VenueOrderbookSubscriptionTarget) => ({
       ...snapshot(target),
@@ -1907,6 +1907,10 @@ describe("OrderbookStreamService", () => {
     });
 
     await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 2 });
+    expect(refresh.mock.calls.map(([target]) => target.canonicalMarketId)).toEqual([
+      "canonical-1",
+      "canonical-2"
+    ]);
     currentNow = new Date(now.getTime() + 1_000);
     await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
     expect(refresh).toHaveBeenCalledTimes(2);
@@ -1914,5 +1918,11 @@ describe("OrderbookStreamService", () => {
     currentNow = new Date(now.getTime() + 11_000);
     await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 2 });
     expect(refresh).toHaveBeenCalledTimes(4);
+    expect(refresh.mock.calls.map(([target]) => target.canonicalMarketId)).toEqual([
+      "canonical-1",
+      "canonical-2",
+      "canonical-3",
+      "canonical-4"
+    ]);
   });
 });

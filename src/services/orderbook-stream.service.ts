@@ -157,6 +157,7 @@ export class OrderbookStreamService {
   private readonly sequenceByTopic = new Map<string, number>();
   private readonly lastPublishedLevelsBySubscription = new Map<string, PublishedOrderbookLevels>();
   private backgroundTargetCursor = 0;
+  private restRefreshTargetCursor = 0;
   private lastLatestSnapshotPersistAt = 0;
   private lastRestRefreshSweepAt = 0;
   private lastSummaryLogAt = 0;
@@ -404,15 +405,18 @@ export class OrderbookStreamService {
     }
     this.lastRestRefreshSweepAt = nowMs;
     const groupsByNative = groupTargetsByNative(dedupeTargetsBySubscription(targets));
-    const refreshable = [...groupsByNative.values()]
+    const refreshableCandidates = [...groupsByNative.values()]
       .flatMap((group) => group[0] ? [group[0]] : [])
       .filter((target) => this.isRestRefreshDue(target, nowMs))
-      .filter((target) => !this.isRestRefreshFailureCoolingDown(target, nowMs))
-      .filter(limitTargetsPerVenue(
-        this.config.maxRestRefreshTargetsPerVenuePerTick,
-        this.config.restRefreshVenuePolicies
-      ))
-      .slice(0, this.config.maxRestRefreshTargetsPerTick);
+      .filter((target) => !this.isRestRefreshFailureCoolingDown(target, nowMs));
+    const refreshable = selectRestRefreshTargets(
+      refreshableCandidates,
+      this.config.maxRestRefreshTargetsPerTick,
+      this.config.maxRestRefreshTargetsPerVenuePerTick,
+      this.config.restRefreshVenuePolicies,
+      this.restRefreshTargetCursor
+    );
+    this.restRefreshTargetCursor += 1;
     if (refreshable.length === 0) {
       return emptyRestRefreshResult();
     }
@@ -891,26 +895,67 @@ const rotate = <T>(values: readonly T[], cursor: number): T[] => {
 const restRefreshKey = (target: VenueOrderbookSubscriptionTarget): string =>
   nativeSubscriptionKey(target);
 
-const limitTargetsPerVenue = (
-  limit: number,
-  venuePolicies: Readonly<Record<string, OrderbookStreamVenueRestPolicy>>
-): ((target: VenueOrderbookSubscriptionTarget) => boolean) => {
-  const defaultMaxPerVenue = Math.max(1, Math.floor(limit));
-  const counts = new Map<string, number>();
-  return (target) => {
-    const venue = normalizeVenue(target.venue);
+const selectRestRefreshTargets = (
+  targets: readonly VenueOrderbookSubscriptionTarget[],
+  totalLimit: number,
+  defaultPerVenueLimit: number,
+  venuePolicies: Readonly<Record<string, OrderbookStreamVenueRestPolicy>>,
+  cursor: number
+): readonly VenueOrderbookSubscriptionTarget[] => {
+  const maxTargets = Math.max(0, Math.floor(totalLimit));
+  if (maxTargets === 0 || targets.length === 0) {
+    return [];
+  }
+  const grouped = groupByVenue(targets);
+  const venues = [...grouped.keys()].sort(venuePriorityCompare);
+  const perVenueLimit = (venue: string): number => {
     const configuredLimit = venuePolicies[venue]?.maxTargetsPerSweep;
-    const venueLimit = Math.max(0, Math.floor(configuredLimit ?? defaultMaxPerVenue));
-    if (venueLimit === 0) {
-      return false;
-    }
-    const count = counts.get(venue) ?? 0;
-    if (count >= venueLimit) {
-      return false;
-    }
-    counts.set(venue, count + 1);
-    return true;
+    return Math.max(0, Math.floor(configuredLimit ?? defaultPerVenueLimit));
   };
+  const rotatedByVenue = new Map<string, VenueOrderbookSubscriptionTarget[]>();
+  const countsByVenue = new Map<string, number>();
+  for (const venue of venues) {
+    const venueLimit = perVenueLimit(venue);
+    if (venueLimit === 0) {
+      continue;
+    }
+    const venueTargets = grouped.get(venue) ?? [];
+    const pageOffset = venueTargets.length <= 1 ? 0 : (Math.abs(cursor) * venueLimit) % venueTargets.length;
+    rotatedByVenue.set(venue, rotate(venueTargets, pageOffset));
+    countsByVenue.set(venue, 0);
+  }
+
+  const selected: VenueOrderbookSubscriptionTarget[] = [];
+  let round = 0;
+  while (selected.length < maxTargets) {
+    let added = false;
+    for (const venue of venues) {
+      const venueTargets = rotatedByVenue.get(venue);
+      if (!venueTargets) {
+        continue;
+      }
+      const venueLimit = perVenueLimit(venue);
+      const venueCount = countsByVenue.get(venue) ?? 0;
+      if (venueCount >= venueLimit) {
+        continue;
+      }
+      const target = venueTargets[round];
+      if (!target) {
+        continue;
+      }
+      selected.push(target);
+      countsByVenue.set(venue, venueCount + 1);
+      added = true;
+      if (selected.length >= maxTargets) {
+        break;
+      }
+    }
+    if (!added) {
+      break;
+    }
+    round += 1;
+  }
+  return selected;
 };
 
 const chunks = <T>(values: readonly T[], size: number): T[][] => {
