@@ -215,12 +215,22 @@ describe("OrderbookStreamService", () => {
     expect(event.type).toBe("MARKET_ORDERBOOK_UPDATE");
     expect(event.topic).toBe(marketOrderbookTopic("OFFICE_WINNER|SEOUL|MAYOR|2026", "YES"));
     expect(event.payload).toMatchObject({
+      schemaVersion: "lotus-orderbook-stream-v2",
+      updateType: "delta",
+      seq: 1,
       canonicalMarketId: "OFFICE_WINNER|SEOUL|MAYOR|2026",
       canonicalOutcomeId: "YES",
       venue: "POLYMARKET",
       bestBid: "0.49",
       bestAsk: "0.51",
+      midpoint: "0.500000",
+      spread: "0.020000",
+      venueCount: 1,
+      liveVenueCount: 1,
       snapshotStatus: "live"
+    });
+    expect(event.payload).toMatchObject({
+      checksum: expect.stringMatching(/^[a-f0-9]{16}$/)
     });
     await vi.waitFor(() => expect(upsertLatestMany).toHaveBeenCalledTimes(1));
     expect(upsertLatestMany).toHaveBeenCalledWith([

@@ -20,7 +20,11 @@ import { buildLiveExecutionCandidatesResponse, registerExecutionRoutes } from ".
 import { registerTurnkeyAuthRoutes } from "./routes/turnkey-auth.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerMarketCatalogRoutes } from "./routes/markets.js";
-import { parseMarketOrderbookTopic } from "../services/orderbook-stream.service.js";
+import {
+  calculateOrderbookStreamChecksum,
+  ORDERBOOK_STREAM_SCHEMA_VERSION,
+  parseMarketOrderbookTopic
+} from "../services/orderbook-stream.service.js";
 import {
   RedisMarketCatalogSnapshotCache,
   resolveMarketCatalogSnapshotCacheKeyPrefix
@@ -3313,6 +3317,9 @@ const readAcceptancePolicy = (metadata: Record<string, unknown>): SORAcceptanceP
 };
 
 const toInitialMarketOrderbookPayload = (orderbook: MarketOrderbookResponse): Record<string, unknown> => ({
+  schemaVersion: ORDERBOOK_STREAM_SCHEMA_VERSION,
+  updateType: "snapshot",
+  seq: 0,
   canonicalMarketId: orderbook.marketId,
   canonicalOutcomeId: orderbook.outcomeId,
   source: "initial_snapshot",
@@ -3324,9 +3331,22 @@ const toInitialMarketOrderbookPayload = (orderbook: MarketOrderbookResponse): Re
   midpoint: orderbook.midpoint,
   spread: orderbook.spread,
   venues: orderbook.venues,
+  venueCount: orderbook.venues.length,
+  liveVenueCount: orderbook.venues.filter((venue) =>
+    venue.snapshotStatus === "live" && venue.blockers.length === 0 && (venue.bestBid !== null || venue.bestAsk !== null)
+  ).length,
   bids: orderbook.bids,
   asks: orderbook.asks,
-  blockers: orderbook.blockers
+  blockers: orderbook.blockers,
+  checksum: calculateOrderbookStreamChecksum({
+    canonicalMarketId: orderbook.marketId,
+    canonicalOutcomeId: orderbook.outcomeId,
+    bestBid: orderbook.bestBid,
+    bestAsk: orderbook.bestAsk,
+    bids: orderbook.bids,
+    asks: orderbook.asks,
+    blockers: orderbook.blockers.map((blocker) => blocker.reason)
+  })
 });
 
 const asRFQState = (value: string): RFQState | null => {

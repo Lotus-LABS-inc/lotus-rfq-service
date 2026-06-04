@@ -1,4 +1,5 @@
 import type { Logger } from "pino";
+import { createHash } from "node:crypto";
 import Decimal from "decimal.js";
 import type {
   NormalizedVenueQuoteSnapshot,
@@ -124,6 +125,7 @@ const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
 };
 
 export const ORDERBOOK_GATEWAY_REDIS_CHANNEL = "rfq:gateway:events";
+export const ORDERBOOK_STREAM_SCHEMA_VERSION = "lotus-orderbook-stream-v2";
 
 export class OrderbookStreamService {
   private readonly config: OrderbookStreamServiceConfig;
@@ -136,6 +138,7 @@ export class OrderbookStreamService {
   private readonly restRefreshFailureCooldowns = new Map<string, number>();
   private readonly restRefreshVenueFailureCooldowns = new Map<string, number>();
   private readonly lastLatestSnapshotPersistBySubscription = new Map<string, number>();
+  private readonly sequenceByTopic = new Map<string, number>();
   private backgroundTargetCursor = 0;
   private lastLatestSnapshotPersistAt = 0;
   private lastRestRefreshSweepAt = 0;
@@ -527,11 +530,20 @@ export class OrderbookStreamService {
     snapshot: NormalizedVenueQuoteSnapshot,
     target: VenueOrderbookSubscriptionTarget
   ): Promise<void> {
+    const topic = marketOrderbookTopic(target.canonicalMarketId, target.canonicalOutcomeId);
+    const bestBid = snapshot.bids[0]?.price ?? null;
+    const bestAsk = snapshot.asks[0]?.price ?? null;
+    const blockers = sanitizeStrings(snapshot.blockers ?? []);
+    const bids = snapshot.bids.slice(0, 5);
+    const asks = snapshot.asks.slice(0, 5);
     const event = {
       type: "MARKET_ORDERBOOK_UPDATE",
-      topic: marketOrderbookTopic(target.canonicalMarketId, target.canonicalOutcomeId),
+      topic,
       emittedAt: this.now().toISOString(),
       payload: {
+        schemaVersion: ORDERBOOK_STREAM_SCHEMA_VERSION,
+        updateType: "delta",
+        seq: this.nextSequence(topic),
         canonicalMarketId: target.canonicalMarketId,
         canonicalOutcomeId: target.canonicalOutcomeId ?? null,
         venue: normalizeVenue(snapshot.venue),
@@ -539,15 +551,29 @@ export class OrderbookStreamService {
         venueOutcomeId: snapshot.venueOutcomeId ?? null,
         source: "stream",
         quoteQuality: snapshot.quoteQuality,
-        bestBid: snapshot.bids[0]?.price ?? null,
-        bestAsk: snapshot.asks[0]?.price ?? null,
+        bestBid,
+        bestAsk,
+        midpoint: calculateMidpoint(bestBid, bestAsk),
+        spread: calculateSpread(bestBid, bestAsk),
         bidSize: snapshot.bids[0]?.size ?? null,
         askSize: snapshot.asks[0]?.size ?? null,
         freshnessMs: Math.max(0, this.now().getTime() - snapshot.receivedAt.getTime()),
-        snapshotStatus: snapshot.blockers && snapshot.blockers.length > 0 ? "blocked" : "live",
-        blockers: sanitizeStrings(snapshot.blockers ?? []),
-        bids: snapshot.bids.slice(0, 5),
-        asks: snapshot.asks.slice(0, 5)
+        snapshotStatus: blockers.length > 0 ? "blocked" : "live",
+        venueCount: 1,
+        liveVenueCount: blockers.length > 0 || (!bestBid && !bestAsk) ? 0 : 1,
+        blockers,
+        bids,
+        asks,
+        checksum: calculateOrderbookStreamChecksum({
+          canonicalMarketId: target.canonicalMarketId,
+          canonicalOutcomeId: target.canonicalOutcomeId ?? null,
+          venue: normalizeVenue(snapshot.venue),
+          bestBid,
+          bestAsk,
+          bids,
+          asks,
+          blockers
+        })
       }
     };
     try {
@@ -555,6 +581,12 @@ export class OrderbookStreamService {
     } catch (error) {
       this.deps.logger.warn({ err: error, venue: snapshot.venue }, "Orderbook stream gateway publish failed.");
     }
+  }
+
+  private nextSequence(topic: string): number {
+    const next = (this.sequenceByTopic.get(topic) ?? 0) + 1;
+    this.sequenceByTopic.set(topic, next);
+    return next;
   }
 
   private logSummary(result: OrderbookStreamServiceRunResult): void {
@@ -936,6 +968,37 @@ const sumLevels = (levels: readonly NormalizedQuoteLevel[]): string => {
   } catch {
     return "0";
   }
+};
+
+export const calculateOrderbookStreamChecksum = (input: {
+  canonicalMarketId: string;
+  canonicalOutcomeId?: string | null | undefined;
+  venue?: string | null | undefined;
+  bestBid?: string | null | undefined;
+  bestAsk?: string | null | undefined;
+  bids?: readonly { venue?: string | undefined; price: string; size: string }[] | undefined;
+  asks?: readonly { venue?: string | undefined; price: string; size: string }[] | undefined;
+  blockers?: readonly string[] | undefined;
+}): string => {
+  const normalizeLevels = (levels: readonly { venue?: string | undefined; price: string; size: string }[] | undefined) =>
+    (levels ?? []).map((level) => ({
+      venue: level.venue ? normalizeVenue(level.venue) : undefined,
+      price: level.price,
+      size: level.size
+    }));
+  return createHash("sha256")
+    .update(JSON.stringify({
+      market: input.canonicalMarketId,
+      outcome: input.canonicalOutcomeId ?? null,
+      venue: input.venue ? normalizeVenue(input.venue) : null,
+      bestBid: input.bestBid ?? null,
+      bestAsk: input.bestAsk ?? null,
+      bids: normalizeLevels(input.bids),
+      asks: normalizeLevels(input.asks),
+      blockers: [...(input.blockers ?? [])].sort()
+    }))
+    .digest("hex")
+    .slice(0, 16);
 };
 
 const sanitizeIdentifier = (value: string): string =>
