@@ -216,7 +216,6 @@ const CHART_CACHE_MS = 10_000;
 const CHART_LIVE_POINT_TIMEOUT_MS = 50;
 const CHART_HISTORICAL_POINTS_TIMEOUT_MS = 150;
 const LIVE_PRICE_CACHE_MS = 2_000;
-const LIVE_PRICE_CACHED_DISPLAY_TIMEOUT_MS = 650;
 const VENUE_COLORS = ["#3B82F6", "#10B981", "#8B5CF6", "#F59E0B", "#EC4899", "#22D3EE"];
 
 export class LiveMarketDataViewService {
@@ -274,7 +273,7 @@ export class LiveMarketDataViewService {
       };
     }
     const outcomeIds = livePriceDisplayOutcomeIds(normalizedOutcomeId);
-    let snapshots: readonly NormalizedVenueQuoteSnapshot[] = this.liveOrderbookSource
+    const snapshots: readonly NormalizedVenueQuoteSnapshot[] = this.liveOrderbookSource
       ? dedupeSnapshotsByIdentity((await Promise.all(marketIds.flatMap((canonicalMarketId) =>
           outcomeIds.map((outcomeId) => this.liveOrderbookSource!.get({
             canonicalMarketId,
@@ -282,15 +281,9 @@ export class LiveMarketDataViewService {
           }).catch(() => []))
         ))).flat())
       : [];
-    let liveVenues = snapshots
+    const liveVenues = snapshots
       .map((snapshot) => sanitizeVenueOrderbook(snapshot, 5, generatedAt))
       .filter(isLiveTradableOrderbookVenue);
-    if (liveVenues.length === 0) {
-      snapshots = await this.loadLivePriceSnapshotsFromQuoteSource(marketIds, outcomeIds);
-      liveVenues = snapshots
-        .map((snapshot) => sanitizeVenueOrderbook(snapshot, 5, generatedAt))
-        .filter(isLiveTradableOrderbookVenue);
-    }
     const bids = sortLevels(liveVenues.flatMap((venue) => venue.bids), "desc");
     const asks = sortLevels(liveVenues.flatMap((venue) => venue.asks), "asc");
     const bestBid = bids[0]?.price ?? null;
@@ -322,29 +315,6 @@ export class LiveMarketDataViewService {
       item: output
     });
     return output;
-  }
-
-  private async loadLivePriceSnapshotsFromQuoteSource(
-    canonicalMarketIds: readonly string[],
-    outcomeIds: readonly (string | undefined)[]
-  ): Promise<readonly NormalizedVenueQuoteSnapshot[]> {
-    const reports = await Promise.all(canonicalMarketIds.flatMap((canonicalMarketId) =>
-      outcomeIds.map((outcomeId) =>
-      withTimeout(
-        this.quoteSource.getQuoteSnapshotReport({
-          canonicalMarketId,
-          ...(outcomeId ? { canonicalOutcomeId: outcomeId } : {}),
-          side: "buy",
-          quantity: 1,
-          readMode: "cached_display",
-          displayMaxAgeMs: BATCH_QUOTE_DISPLAY_SNAPSHOT_MAX_AGE_MS
-        }),
-        LIVE_PRICE_CACHED_DISPLAY_TIMEOUT_MS,
-        { snapshots: [], blocked: [] }
-      ).catch(() => ({ snapshots: [], blocked: [] }))
-      )
-    ));
-    return dedupeSnapshotsByIdentity(mergeVenueQuoteSnapshotReports(reports).snapshots);
   }
 
   public async getOrderbook(input: {

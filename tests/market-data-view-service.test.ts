@@ -1274,7 +1274,7 @@ describe("LiveMarketDataViewService", () => {
     });
   });
 
-  it("falls back to bounded cached-display quote snapshots for live prices", async () => {
+  it("does not call quote providers on live price hot snapshot misses", async () => {
     const now = new Date("2026-05-10T12:00:00.000Z");
     const calls: unknown[] = [];
     const service = new LiveMarketDataViewService({
@@ -1303,22 +1303,12 @@ describe("LiveMarketDataViewService", () => {
       items: [{ marketId: "market-1", canonicalMarketIds: ["market-1", "market-2"], outcomeId: "yes" }]
     });
 
-    expect(calls).toEqual([
-      expect.objectContaining({
-        canonicalMarketId: "market-1",
-        canonicalOutcomeId: "YES",
-        readMode: "cached_display"
-      }),
-      expect.objectContaining({
-        canonicalMarketId: "market-2",
-        canonicalOutcomeId: "YES",
-        readMode: "cached_display"
-      })
-    ]);
+    expect(calls).toEqual([]);
     expect(prices.prices[0]).toMatchObject({
-      status: "live",
-      price: "0.33",
-      bestVenue: "POLYMARKET"
+      status: "no_live_price",
+      price: null,
+      bestVenue: null,
+      venueCount: 0
     });
   });
 });
