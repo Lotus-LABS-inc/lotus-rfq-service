@@ -477,10 +477,11 @@ export class LiveMarketDataViewService {
       const key = batchQuoteCacheKey(item.marketId, item.outcomeId, side, quantity);
       const cached = this.batchQuoteCache.get(key);
       if (cached && cached.expiresAt > generatedAt.getTime()) {
-        if (cached.item) return cached.item;
+        if (cached.item && isDisplayUsableBatchQuote(cached.item)) return cached.item;
+        if (cached.item) this.batchQuoteCache.delete(key);
         if (cached.promise) return cached.promise;
       }
-      if (cached?.item && cached.staleUntil > generatedAt.getTime()) {
+      if (cached?.item && isDisplayUsableBatchQuote(cached.item) && cached.staleUntil > generatedAt.getTime()) {
         this.refreshBatchQuoteInBackground(key, { item, side, quantity, generatedAt });
         return unavailableBatchQuoteItem({
           item,
@@ -505,8 +506,8 @@ export class LiveMarketDataViewService {
           const output = quote;
           if (output.status === "live" || output.status === "partial") {
             this.lastGoodBatchQuotes.set(key, output);
+            this.cacheBatchQuoteItem(key, output, this.now());
           }
-          this.cacheBatchQuoteItem(key, output, this.now());
         })
         .catch(() => undefined);
       this.batchQuoteCache.set(key, {
@@ -521,8 +522,10 @@ export class LiveMarketDataViewService {
       }
       if (isDeferredBatchQuote(output)) {
         this.batchQuoteCache.delete(key);
-      } else {
+      } else if (isDisplayUsableBatchQuote(output)) {
         this.cacheBatchQuoteItem(key, output, generatedAt);
+      } else {
+        this.batchQuoteCache.delete(key);
       }
       return output;
     }));
@@ -550,9 +553,14 @@ export class LiveMarketDataViewService {
         const output = quote;
         if (output.status === "live" || output.status === "partial") {
           this.lastGoodBatchQuotes.set(key, output);
-        }
-        if (!isDeferredBatchQuote(output)) {
           this.cacheBatchQuoteItem(key, output, this.now());
+        } else if (isDeferredBatchQuote(output)) {
+          this.batchQuoteCache.delete(key);
+        } else {
+          const current = this.batchQuoteCache.get(key);
+          if (current?.promise === livePromise) {
+            this.batchQuoteCache.delete(key);
+          }
         }
         return output;
       })
@@ -987,6 +995,9 @@ const isDeferredOrderbook = (orderbook: MarketOrderbookResponse): boolean =>
 const isDeferredBatchQuote = (quote: MarketBatchQuoteItem): boolean =>
   quote.status === "unavailable" &&
   quote.blockers.some((blocker) => blocker.venue === "LOTUS" && blocker.reason === "MARKET_BATCH_QUOTE_REFRESH_DEFERRED");
+
+const isDisplayUsableBatchQuote = (quote: MarketBatchQuoteItem): boolean =>
+  quote.status === "live" || quote.status === "partial";
 
 const staleBatchQuoteFromCachedItem = (
   quote: MarketBatchQuoteItem,

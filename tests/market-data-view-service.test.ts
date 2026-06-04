@@ -835,6 +835,65 @@ describe("LiveMarketDataViewService", () => {
     expect(responses[1].quotes[0]?.bestVenuePrice).toBe("0.53");
   });
 
+  it("does not cache unavailable batch quote misses over later live snapshots", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    let calls = 0;
+    const service = new LiveMarketDataViewService(
+      {
+        getQuoteSnapshotReport: async () => {
+          calls += 1;
+          if (calls === 1) {
+            return {
+              snapshots: [],
+              blocked: [{
+                venue: "LIMITLESS",
+                reason: "QUOTE_SNAPSHOT_CACHE_MISS"
+              }]
+            };
+          }
+          return {
+            snapshots: [{
+              venue: "LIMITLESS",
+              venueMarketId: "limitless-1",
+              venueOutcomeId: "YES",
+              source: "REST",
+              quoteQuality: "FULL_DEPTH_REST",
+              sourceTimestamp: now,
+              receivedAt: now,
+              bids: [{ price: "0.50", size: "100" }],
+              asks: [{ price: "0.53", size: "100" }],
+              blockers: [],
+              missingFactors: []
+            }],
+            blocked: []
+          };
+        }
+      },
+      {
+        now: () => now,
+        batchQuoteLiveTimeoutMs: 500
+      }
+    );
+
+    const first = await service.getBatchQuotes({
+      items: [{ marketId: "market-1", outcomeId: "YES", side: "buy", amount: "1" }]
+    });
+    const second = await service.getBatchQuotes({
+      items: [{ marketId: "market-1", outcomeId: "YES", side: "buy", amount: "1" }]
+    });
+
+    expect(calls).toBe(2);
+    expect(first.quotes[0]).toMatchObject({
+      status: "unavailable",
+      blockers: [expect.objectContaining({ reason: "QUOTE_SNAPSHOT_CACHE_MISS" })]
+    });
+    expect(second.quotes[0]).toMatchObject({
+      status: "live",
+      bestVenue: "LIMITLESS",
+      bestVenuePrice: "0.53"
+    });
+  });
+
   it("does not serve stale batch quote cache as a live price while refreshing in the background", async () => {
     let now = new Date("2026-05-10T12:00:00.000Z");
     let calls = 0;
