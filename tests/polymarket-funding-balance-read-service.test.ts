@@ -30,6 +30,19 @@ class StubBalanceAllowanceClient implements PolymarketBalanceAllowanceClient {
   }
 }
 
+class ThrowingBalanceAllowanceClient implements PolymarketBalanceAllowanceClient {
+  public updateCalls = 0;
+
+  public async getBalanceAllowance(): Promise<BalanceAllowanceResponse> {
+    throw new Error("CLOB conditional-token cache unavailable");
+  }
+
+  public async updateBalanceAllowance(): Promise<unknown> {
+    this.updateCalls += 1;
+    throw new Error("CLOB conditional-token update unavailable");
+  }
+}
+
 const completeConfig = {
   enabled: true,
   clobHost: "https://clob.polymarket.test",
@@ -416,6 +429,71 @@ describe("Polymarket internal funding balance read service", () => {
     expect(rpcCalls).toHaveLength(1);
     expect(JSON.stringify(rpcCalls[0]).toLowerCase()).toContain("e985e9c5");
     expect(JSON.stringify(rpcCalls[0]).toLowerCase()).toContain(clobSpender.toLowerCase().replace(/^0x/, ""));
+  });
+
+  it("uses live data API and ERC1155 approval when conditional-token CLOB reads fail", async () => {
+    const tokenId = "15636396498081492607537245191035256780946494107835473972503944043229908184003";
+    const approvalSpender = "0xE111180000d2663C0091e4f400237545B87B996B";
+    const client = new ThrowingBalanceAllowanceClient();
+    const rpcCalls: unknown[] = [];
+    const service = new PolymarketFundingBalanceReadService(
+      {
+        ...completeConfig,
+        dataApiBaseUrl: "https://data-api.polymarket.test",
+        polygonRpcUrl: "https://polygon-rpc.example",
+        conditionalTokensAddress: "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045",
+        pusdApprovalSpenderAddress: approvalSpender
+      },
+      () => client,
+      {
+        findAccount: async () => ({
+          status: "ACTIVE",
+          venueAccountAddress: "0x6867bD6B5fd147af7B7AFc7b4aee0bABb140e0cB"
+        })
+      },
+      (async (url, init) => {
+        const urlString = String(url);
+        if (urlString.startsWith("https://data-api.polymarket.test/positions?")) {
+          return new Response(JSON.stringify([{
+            proxyWallet: "0x6867bD6B5fd147af7B7AFc7b4aee0bABb140e0cB",
+            asset: tokenId,
+            conditionId: "0x384a78b847edbafb7f4542dcde7000f0042d08a43ad12f11879050fbbf06b0ee",
+            size: 6.0724,
+            avgPrice: 0.9929,
+            outcome: "No"
+          }]), {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          });
+        }
+        const payload = JSON.parse(`${init?.body ?? "{}"}`);
+        rpcCalls.push(payload);
+        const serialized = JSON.stringify(payload).toLowerCase();
+        const result = serialized.includes("00fdd58e") ? "0x0" : "0x1";
+        return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }) as typeof fetch
+    );
+
+    await expect(service.readConditionalTokenApproval({
+      userId: "user-1",
+      fundingIntentId: "intent-1",
+      routeLegId: "leg-1",
+      tokenId
+    })).resolves.toMatchObject({
+      tokenId,
+      tokenBalance: "6.0724",
+      tokenAllowance: "6.0724",
+      clobAllowanceSpenders: []
+    });
+
+    expect(client.updateCalls).toBe(1);
+    expect(rpcCalls).toHaveLength(2);
+    expect(JSON.stringify(rpcCalls[0]).toLowerCase()).toContain("00fdd58e");
+    expect(JSON.stringify(rpcCalls[1]).toLowerCase()).toContain("e985e9c5");
+    expect(JSON.stringify(rpcCalls[1]).toLowerCase()).toContain(approvalSpender.toLowerCase().replace(/^0x/, ""));
   });
 
   it("reports bridged Polygon USDC.e on the active deposit wallet without marking it ready to trade", async () => {

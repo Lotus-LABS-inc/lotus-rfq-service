@@ -53,8 +53,8 @@ const readyVenue = (venue: string, overrides: Partial<ExecutionVenueReadinessSum
 
 const routePolicy = (mode: SmartRoutePolicy["mode"]): SmartRoutePolicy => ({
   mode,
-  highNotionalUsd: 99.9,
-  productionHighNotionalMinBps: 2,
+  highNotionalUsd: 199,
+  productionHighNotionalMinBps: 0,
   productionLowNotionalMinBps: 10,
   stagingHighNotionalMinBps: 0,
   stagingLowNotionalMinBps: 1,
@@ -415,7 +415,7 @@ describe("executable route selection", () => {
     });
   });
 
-  it("keeps production high-notional routes single unless split routing gives meaningful net improvement", async () => {
+  it("keeps lower-notional production routes single unless split routing gives meaningful net improvement", async () => {
     const service = new ExecutableRouteService({
       async listVenues() {
         return [readyVenue("POLYMARKET"), readyVenue("LIMITLESS")];
@@ -427,10 +427,10 @@ describe("executable route selection", () => {
       side: "buy",
       marketId: "market-1",
       outcomeId: "yes",
-      amount: "200",
+      amount: "100",
       candidates: [
-        { venue: "POLYMARKET", price: 0.5, availableSize: "200" },
-        { venue: "LIMITLESS", price: 0.4997, availableSize: "100" }
+        { venue: "POLYMARKET", price: 0.5, availableSize: "100" },
+        { venue: "LIMITLESS", price: 0.4997, availableSize: "50" }
       ]
     });
 
@@ -439,10 +439,10 @@ describe("executable route selection", () => {
       venuePath: ["POLYMARKET"],
       routeDecisionReason: "single_venue_selected_multi_venue_improvement_below_threshold"
     });
-    expect(result.routeDiagnostics?.improvementThreshold).toBeGreaterThanOrEqual(0.02);
+    expect(result.routeDiagnostics?.improvementThreshold).toBeGreaterThanOrEqual(0.05);
   });
 
-  it("selects production high-notional split routes when net improvement clears the threshold", async () => {
+  it("selects production $199+ split routes when net math beats the best single venue", async () => {
     const service = new ExecutableRouteService({
       async listVenues() {
         return [readyVenue("POLYMARKET"), readyVenue("LIMITLESS")];
@@ -454,10 +454,10 @@ describe("executable route selection", () => {
       side: "buy",
       marketId: "market-1",
       outcomeId: "yes",
-      amount: "200",
+      amount: "400",
       candidates: [
-        { venue: "POLYMARKET", price: 0.5, availableSize: "200" },
-        { venue: "LIMITLESS", price: 0.499, availableSize: "100" }
+        { venue: "POLYMARKET", price: 0.5, availableSize: "400" },
+        { venue: "LIMITLESS", price: 0.4997, availableSize: "200" }
       ]
     });
 
@@ -467,6 +467,7 @@ describe("executable route selection", () => {
       routeDecisionReason: "multi_venue_selected_best_net_execution"
     });
     expect(result.quote?.estimatedSavings).toBeGreaterThan(0);
+    expect(result.routeDiagnostics?.improvementThreshold).toBeLessThan(0.001);
   });
 
   it("uses casual staging policy to exercise high-notional split routes on small positive improvement", async () => {
@@ -481,10 +482,10 @@ describe("executable route selection", () => {
       side: "buy",
       marketId: "market-1",
       outcomeId: "yes",
-      amount: "200",
+      amount: "400",
       candidates: [
-        { venue: "POLYMARKET", price: 0.5, availableSize: "200" },
-        { venue: "LIMITLESS", price: 0.4997, availableSize: "100" }
+        { venue: "POLYMARKET", price: 0.5, availableSize: "400" },
+        { venue: "LIMITLESS", price: 0.4997, availableSize: "200" }
       ]
     });
 

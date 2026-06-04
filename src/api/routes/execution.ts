@@ -228,6 +228,7 @@ const DISPLAY_POSITION_MARK_LIVE_READ_BUDGET = 3;
 const EXECUTION_DISPLAY_CACHE_MS = 3_000;
 const EXECUTION_DISPLAY_STALE_MS = 45_000;
 const ROUTE_RATE_LIMIT_WINDOW_MS = 10_000;
+const EXECUTION_MARKET_VENUE_SUFFIX_PATTERN = /:(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$/i;
 const RATE_LIMITS: Record<string, number> = {
   preview: 40,
   place: 12,
@@ -400,10 +401,11 @@ export const registerExecutionRoutes = async (
         message: "Too many live execution candidate refreshes. Please wait briefly and try again."
       });
     }
+    const liveCandidateInput = normalizeLiveCandidateInput(parsed.data);
     const result = await withLatencyStage("route_preview_live_candidates", {
       endpoint: "POST /execution/live-candidates",
-      canonicalMarketId: parsed.data.marketId
-    }, () => getCachedLiveCandidates(deps.liveCandidateProvider!, request.user.userId, parsed.data));
+      canonicalMarketId: liveCandidateInput.marketId
+    }, () => getCachedLiveCandidates(deps.liveCandidateProvider!, request.user.userId, liveCandidateInput));
     if (result.candidates.length === 0) {
       return reply.status(409).send({
         code: "NO_LIVE_EXECUTION_CANDIDATES",
@@ -1167,6 +1169,11 @@ const getCachedLiveCandidates = async (
     ? withDeferredLiveCandidateBlocker(cached.value, "LIVE_CANDIDATES_REFRESH_DEFERRED")
     : deferredLiveCandidates(input, "LIVE_CANDIDATES_REFRESH_DEFERRED");
   return withTimeout(promise, LIVE_CANDIDATE_RESPONSE_TIMEOUT_MS, fallback);
+};
+
+const normalizeLiveCandidateInput = (input: z.infer<typeof liveCandidatesRequestSchema>): z.infer<typeof liveCandidatesRequestSchema> => {
+  const marketId = input.marketId.trim().replace(EXECUTION_MARKET_VENUE_SUFFIX_PATTERN, "");
+  return marketId === input.marketId ? input : { ...input, marketId };
 };
 
 const deferredLiveCandidates = (

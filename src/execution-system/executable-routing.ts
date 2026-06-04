@@ -903,8 +903,8 @@ const routeImprovementThreshold = (
 
 const defaultSmartRoutePolicy: SmartRoutePolicy = {
   mode: "PRODUCTION",
-  highNotionalUsd: 99.9,
-  productionHighNotionalMinBps: 2,
+  highNotionalUsd: 199,
+  productionHighNotionalMinBps: 0,
   productionLowNotionalMinBps: 10,
   stagingHighNotionalMinBps: 0,
   stagingLowNotionalMinBps: 1,
