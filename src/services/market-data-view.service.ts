@@ -273,17 +273,20 @@ export class LiveMarketDataViewService {
         generatedAt: generatedAt.toISOString()
       };
     }
+    const outcomeIds = livePriceDisplayOutcomeIds(normalizedOutcomeId);
     let snapshots: readonly NormalizedVenueQuoteSnapshot[] = this.liveOrderbookSource
-      ? (await Promise.all(marketIds.map((canonicalMarketId) => this.liveOrderbookSource!.get({
-          canonicalMarketId,
-          ...(normalizedOutcomeId ? { canonicalOutcomeId: normalizedOutcomeId } : {})
-        }).catch(() => [])))).flat()
+      ? dedupeSnapshotsByIdentity((await Promise.all(marketIds.flatMap((canonicalMarketId) =>
+          outcomeIds.map((outcomeId) => this.liveOrderbookSource!.get({
+            canonicalMarketId,
+            ...(outcomeId ? { canonicalOutcomeId: outcomeId } : {})
+          }).catch(() => []))
+        ))).flat())
       : [];
     let liveVenues = snapshots
       .map((snapshot) => sanitizeVenueOrderbook(snapshot, 5, generatedAt))
       .filter(isLiveTradableOrderbookVenue);
     if (liveVenues.length === 0) {
-      snapshots = await this.loadLivePriceSnapshotsFromQuoteSource(marketIds, normalizedOutcomeId);
+      snapshots = await this.loadLivePriceSnapshotsFromQuoteSource(marketIds, outcomeIds);
       liveVenues = snapshots
         .map((snapshot) => sanitizeVenueOrderbook(snapshot, 5, generatedAt))
         .filter(isLiveTradableOrderbookVenue);
@@ -323,9 +326,10 @@ export class LiveMarketDataViewService {
 
   private async loadLivePriceSnapshotsFromQuoteSource(
     canonicalMarketIds: readonly string[],
-    outcomeId: string | undefined
+    outcomeIds: readonly (string | undefined)[]
   ): Promise<readonly NormalizedVenueQuoteSnapshot[]> {
-    const reports = await Promise.all(canonicalMarketIds.map((canonicalMarketId) =>
+    const reports = await Promise.all(canonicalMarketIds.flatMap((canonicalMarketId) =>
+      outcomeIds.map((outcomeId) =>
       withTimeout(
         this.quoteSource.getQuoteSnapshotReport({
           canonicalMarketId,
@@ -338,8 +342,9 @@ export class LiveMarketDataViewService {
         LIVE_PRICE_CACHED_DISPLAY_TIMEOUT_MS,
         { snapshots: [], blocked: [] }
       ).catch(() => ({ snapshots: [], blocked: [] }))
+      )
     ));
-    return mergeVenueQuoteSnapshotReports(reports).snapshots;
+    return dedupeSnapshotsByIdentity(mergeVenueQuoteSnapshotReports(reports).snapshots);
   }
 
   public async getOrderbook(input: {
@@ -1097,8 +1102,25 @@ const orderbookLegDeferredReport = (canonicalMarketId: string): VenueQuoteSnapsh
 const venueSnapshotIdentityKey = (snapshot: NormalizedVenueQuoteSnapshot): string =>
   `${snapshot.venue.toUpperCase()}\u0000${snapshot.venueMarketId}\u0000${snapshot.venueOutcomeId ?? ""}`;
 
+const dedupeSnapshotsByIdentity = (
+  snapshots: readonly NormalizedVenueQuoteSnapshot[]
+): NormalizedVenueQuoteSnapshot[] => {
+  const byKey = new Map<string, NormalizedVenueQuoteSnapshot>();
+  for (const snapshot of snapshots) {
+    const key = venueSnapshotIdentityKey(snapshot);
+    const existing = byKey.get(key);
+    if (!existing || snapshot.receivedAt.getTime() > existing.receivedAt.getTime()) {
+      byKey.set(key, snapshot);
+    }
+  }
+  return [...byKey.values()];
+};
+
 const venueBlockerIdentityKey = (blocker: VenueQuoteSnapshotBlocker): string =>
   `${blocker.venue.toUpperCase()}\u0000${blocker.reason}\u0000${blocker.venueMarketId ?? ""}\u0000${blocker.venueOutcomeId ?? ""}`;
+
+const livePriceDisplayOutcomeIds = (outcomeId: string | undefined): readonly (string | undefined)[] =>
+  outcomeId ? [outcomeId] : [undefined, "YES"];
 
 const isDisplayUsableOrderbook = (orderbook: MarketOrderbookResponse): boolean =>
   orderbook.venues.length > 0 &&

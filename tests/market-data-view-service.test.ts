@@ -1166,6 +1166,50 @@ describe("LiveMarketDataViewService", () => {
     });
   });
 
+  it("uses YES hot orderbook snapshots for market-level display prices", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    const calls: Array<{ canonicalMarketId: string; canonicalOutcomeId?: string | undefined }> = [];
+    const service = new LiveMarketDataViewService({
+      getQuoteSnapshotReport: async () => ({ snapshots: [], blocked: [] })
+    }, {
+      now: () => now,
+      liveOrderbookSource: {
+        get: async (input) => {
+          calls.push(input);
+          if (input.canonicalOutcomeId !== "YES") {
+            return [];
+          }
+          return [snapshot({
+            venue: "POLYMARKET",
+            venueMarketId: "poly-live",
+            venueOutcomeId: "yes-token",
+            receivedAt: now,
+            bid: "0.61",
+            ask: "0.63"
+          })];
+        }
+      }
+    });
+
+    const prices = await service.getLivePrices({
+      items: [{ marketId: "event-1", canonicalMarketIds: ["canonical-1"] }]
+    });
+
+    expect(calls).toEqual([
+      { canonicalMarketId: "canonical-1" },
+      { canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES" }
+    ]);
+    expect(prices.prices[0]).toMatchObject({
+      marketId: "event-1",
+      outcomeId: null,
+      status: "live",
+      price: "0.62",
+      bestVenue: "POLYMARKET",
+      venueCount: 1,
+      venues: ["POLYMARKET"]
+    });
+  });
+
   it("returns no_live_price without provider diagnostics when hot snapshots are missing", async () => {
     const now = new Date("2026-05-10T12:00:00.000Z");
     const service = new LiveMarketDataViewService({
