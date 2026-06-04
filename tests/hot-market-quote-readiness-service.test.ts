@@ -263,4 +263,116 @@ describe("HotMarketQuoteReadinessSource", () => {
         quoteBlockers: []
       })]);
   });
+
+  it("does not mark display partial for hard-closed venue mappings when another venue is live", async () => {
+    const source = new HotMarketQuoteReadinessSource({
+      mappingResolver: {
+        async listApprovedReadiness() {
+          return [{
+            canonicalEventId: "event-1",
+            canonicalMarketIds: ["market-1"],
+            title: "Market 1",
+            category: "Crypto",
+            venues: [
+              {
+                venue: "POLYMARKET",
+                approvedVenueMarketId: "approved-poly",
+                venueMarketId: "poly-1",
+                venueOutcomeId: "token-yes",
+                quoteReady: true,
+                blockers: []
+              },
+              {
+                venue: "LIMITLESS",
+                approvedVenueMarketId: "approved-limitless",
+                venueMarketId: "limitless-1",
+                venueOutcomeId: "YES",
+                quoteReady: false,
+                blockers: ["QUOTE_PROVIDER_MARKET_INACTIVE"]
+              }
+            ]
+          }];
+        }
+      },
+      hotSnapshots: {
+        async getDisplay(input) {
+          return input.venue === "POLYMARKET"
+            ? snapshot(input.venue, input.venueMarketId, input.venueOutcomeId)
+            : null;
+        }
+      }
+    });
+
+    await expect(source.listLatestMarketQuoteReadiness({ canonicalMarketIds: ["market-1"] }))
+      .resolves.toEqual([expect.objectContaining({
+        quoteStatus: "live",
+        quoteReadyVenueCount: 1,
+        quoteReadyVenues: ["POLYMARKET"],
+        quoteBlockers: []
+      })]);
+  });
+
+  it("suppresses hard provider fallback blockers when another venue is display-ready", async () => {
+    const source = new HotMarketQuoteReadinessSource({
+      mappingResolver: {
+        async listApprovedReadiness() {
+          return [{
+            canonicalEventId: "event-1",
+            canonicalMarketIds: ["market-1"],
+            title: "Market 1",
+            category: "Crypto",
+            venues: [
+              {
+                venue: "POLYMARKET",
+                approvedVenueMarketId: "approved-poly",
+                venueMarketId: "poly-1",
+                venueOutcomeId: "token-yes",
+                quoteReady: true,
+                blockers: []
+              },
+              {
+                venue: "PREDICT_FUN",
+                approvedVenueMarketId: "approved-predict",
+                venueMarketId: "PREDICT:14343:canonical",
+                venueOutcomeId: null,
+                quoteReady: true,
+                blockers: []
+              }
+            ]
+          }];
+        }
+      },
+      hotSnapshots: {
+        async getDisplay(input) {
+          return input.venue === "POLYMARKET"
+            ? snapshot(input.venue, input.venueMarketId, input.venueOutcomeId)
+            : null;
+        }
+      },
+      fallbackSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: "market-1",
+            quoteStatus: "partial" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            quoteBlockers: [{
+              venue: "PREDICT_FUN",
+              reason: "QUOTE_PROVIDER_HTTP_404",
+              venueMarketId: "PREDICT:14343:canonical"
+            }],
+            lastQuoteAt: now.toISOString()
+          }];
+        }
+      }
+    });
+
+    await expect(source.listLatestMarketQuoteReadiness({ canonicalMarketIds: ["market-1"] }))
+      .resolves.toEqual([expect.objectContaining({
+        quoteStatus: "live",
+        quoteReadyVenueCount: 1,
+        quoteReadyVenues: ["POLYMARKET"],
+        quoteBlockers: []
+      })]);
+  });
 });

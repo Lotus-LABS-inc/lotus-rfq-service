@@ -924,14 +924,27 @@ const isRedundantReadyVenueDisplayBlocker = (
   blocker: MarketQuoteReadinessSnapshot["quoteBlockers"][number],
   readyVenueSet: ReadonlySet<string>
 ): boolean =>
-  readyVenueSet.has(normalizeQuoteBlockerVenue(blocker.venue)) &&
-  isDisplayOnlyQuoteBlocker(blocker.reason);
+  isDisplaySuppressedVenueBlocker(blocker.reason) ||
+  (readyVenueSet.has(normalizeQuoteBlockerVenue(blocker.venue)) &&
+    isDisplayOnlyQuoteBlocker(blocker.reason));
 
 const isDisplayOnlyQuoteBlocker = (reason: string): boolean => {
   const normalized = reason.trim().toUpperCase();
   return normalized === "LIVE_QUOTE_SNAPSHOT_MISSING" ||
     normalized === "PREDICT_FUN_TOKEN_ID_MISSING" ||
     normalized === "OPINION_TOKEN_ID_MISSING";
+};
+
+const isDisplaySuppressedVenueBlocker = (reason: string): boolean => {
+  const normalized = reason.trim().toUpperCase();
+  return normalized.includes("POLYMARKET_OFFICIAL_MARKET_CLOSED") ||
+    normalized.includes("POLYMARKET_OFFICIAL_MARKET_NOT_ACCEPTING_ORDERS") ||
+    normalized.includes("QUOTE_PROVIDER_HTTP_404") ||
+    normalized.includes("PROVIDER_UNAVAILABLE_404") ||
+    normalized.includes("QUOTE_PROVIDER_MARKET_INACTIVE") ||
+    normalized.includes("QUOTE_PROVIDER_EMPTY_BOOK") ||
+    normalized.includes("MARKET_CLOSED") ||
+    normalized.includes("NOT_ACCEPTING_ORDERS");
 };
 
 const normalizeQuoteBlockerVenue = (venue: string): string => {
