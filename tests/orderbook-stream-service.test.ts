@@ -1517,7 +1517,7 @@ describe("OrderbookStreamService", () => {
       }
     });
 
-    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 13 });
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 16 });
     const countsByVenue = new Map<string, number>();
     for (const [target] of refresh.mock.calls) {
       countsByVenue.set(target.venue, (countsByVenue.get(target.venue) ?? 0) + 1);
@@ -1526,7 +1526,7 @@ describe("OrderbookStreamService", () => {
       ["POLYMARKET", 4],
       ["PREDICT_FUN", 4],
       ["LIMITLESS", 4],
-      ["OPINION", 1]
+      ["OPINION", 4]
     ]));
   });
 
