@@ -407,6 +407,147 @@ describe("OrderbookStreamService", () => {
     ]);
   });
 
+  it("prioritizes YES outcome books for active display markets without an explicit outcome", async () => {
+    const connector = new FakeConnector("POLYMARKET");
+    const listApprovedReadiness = vi.fn(async () => [
+      {
+        canonicalEventId: "event-1",
+        canonicalMarketIds: ["canonical-1"],
+        title: "Event",
+        category: "Crypto",
+        venues: [{
+          venue: "POLYMARKET",
+          approvedVenueMarketId: "approved-generic",
+          venueMarketId: "poly-market",
+          venueOutcomeId: null,
+          quoteReady: true,
+          blockers: []
+        }],
+        outcomeVenues: [
+          {
+            canonicalOutcomeId: "NO",
+            venue: "POLYMARKET",
+            approvedVenueMarketId: "approved-no",
+            venueMarketId: "poly-market",
+            venueOutcomeId: "token-no",
+            quoteReady: true,
+            blockers: []
+          },
+          {
+            canonicalOutcomeId: "YES",
+            venue: "POLYMARKET",
+            approvedVenueMarketId: "approved-yes",
+            venueMarketId: "poly-market",
+            venueOutcomeId: "token-yes",
+            quoteReady: true,
+            blockers: []
+          }
+        ]
+      }
+    ]);
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [{ canonicalMarketId: "canonical-1", lastSeenAt: now }];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness() {
+          return [];
+        },
+        listApprovedReadiness
+      },
+      connectors: [connector],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now,
+      config: { backgroundReadinessMarketLimit: 1, maxBackgroundSubscriptionTargets: 0 }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({
+      activeMarkets: 1,
+      desiredSubscriptions: 2,
+      subscribed: 2
+    });
+    expect(connector.subscribed.map((target) => ({
+      canonicalOutcomeId: target.canonicalOutcomeId,
+      venueOutcomeId: target.venueOutcomeId
+    }))).toEqual([
+      { canonicalOutcomeId: "YES", venueOutcomeId: "token-yes" },
+      { canonicalOutcomeId: undefined, venueOutcomeId: undefined }
+    ]);
+  });
+
+  it("keeps explicit active outcome targets precise for terminal orderbooks", async () => {
+    const connector = new FakeConnector("POLYMARKET");
+    const listApprovedReadiness = vi.fn(async () => [
+      {
+        canonicalEventId: "event-1",
+        canonicalMarketIds: ["canonical-1"],
+        title: "Event",
+        category: "Crypto",
+        venues: [{
+          venue: "POLYMARKET",
+          approvedVenueMarketId: "approved-generic",
+          venueMarketId: "poly-market",
+          venueOutcomeId: null,
+          quoteReady: true,
+          blockers: []
+        }],
+        outcomeVenues: [
+          {
+            canonicalOutcomeId: "YES",
+            venue: "POLYMARKET",
+            approvedVenueMarketId: "approved-yes",
+            venueMarketId: "poly-market",
+            venueOutcomeId: "token-yes",
+            quoteReady: true,
+            blockers: []
+          },
+          {
+            canonicalOutcomeId: "NO",
+            venue: "POLYMARKET",
+            approvedVenueMarketId: "approved-no",
+            venueMarketId: "poly-market",
+            venueOutcomeId: "token-no",
+            quoteReady: true,
+            blockers: []
+          }
+        ]
+      }
+    ]);
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [{ canonicalMarketId: "canonical-1", canonicalOutcomeId: "NO", lastSeenAt: now }];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness() {
+          return [];
+        },
+        listApprovedReadiness
+      },
+      connectors: [connector],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now,
+      config: { backgroundReadinessMarketLimit: 1, maxBackgroundSubscriptionTargets: 0 }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({
+      activeMarkets: 1,
+      desiredSubscriptions: 1,
+      subscribed: 1
+    });
+    expect(connector.subscribed[0]).toMatchObject({
+      canonicalOutcomeId: "NO",
+      venueOutcomeId: "token-no"
+    });
+  });
+
   it("keeps active terminal targets ahead of background readiness duplicates", async () => {
     const connector = new FakeConnector("POLYMARKET");
     const service = new OrderbookStreamService({

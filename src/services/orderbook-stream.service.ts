@@ -264,15 +264,9 @@ export class OrderbookStreamService {
       const readiness = batchReadiness
         ? batchReadiness.get(market.canonicalMarketId) ?? await this.loadSingleReadiness(market)
         : await this.loadSingleReadiness(market);
-      const targets = readiness.venues
+      const targets = activeReadinessRowsForMarket(market, readiness)
         .filter(isQuoteReadyMapping)
-        .map((row): VenueOrderbookSubscriptionTarget => ({
-          canonicalMarketId: market.canonicalMarketId,
-          ...(market.canonicalOutcomeId ? { canonicalOutcomeId: market.canonicalOutcomeId } : {}),
-          venue: normalizeVenue(row.venue),
-          venueMarketId: row.venueMarketId!,
-          ...(row.venueOutcomeId ? { venueOutcomeId: row.venueOutcomeId } : {})
-        }));
+        .map((row): VenueOrderbookSubscriptionTarget => targetFromReadinessRow(market.canonicalMarketId, market.canonicalOutcomeId, row));
       activeTargetGroups.push(targets);
     }
     const activeTargets = dedupeTargetsBySubscription(activeTargetGroups.flat());
@@ -609,6 +603,48 @@ const isQuoteReadyMapping = (
 ): row is VenueQuoteMappingReadiness & { venueMarketId: string } =>
   row.quoteReady && row.venueMarketId !== null;
 
+const activeReadinessRowsForMarket = (
+  market: ActiveOrderbookMarket,
+  readiness: OrderbookReadinessGroup
+): readonly VenueQuoteMappingReadiness[] => {
+  const outcomeRows = readiness.outcomeVenues ?? [];
+  if (outcomeRows.length === 0) {
+    return readiness.venues;
+  }
+
+  if (market.canonicalOutcomeId) {
+    const wantedOutcomeId = normalizeOutcomeId(market.canonicalOutcomeId);
+    const matchingOutcomeRows = outcomeRows.filter((row) =>
+      normalizeOutcomeId(row.canonicalOutcomeId) === wantedOutcomeId
+    );
+    return matchingOutcomeRows.length > 0
+      ? matchingOutcomeRows
+      : readiness.venues;
+  }
+
+  const yesOutcomeRows = outcomeRows.filter((row) => normalizeOutcomeId(row.canonicalOutcomeId) === "YES");
+  const displayOutcomeRows = yesOutcomeRows.length > 0 ? yesOutcomeRows : outcomeRows;
+  return [
+    ...displayOutcomeRows,
+    ...readiness.venues
+  ];
+};
+
+const targetFromReadinessRow = (
+  canonicalMarketId: string,
+  requestedOutcomeId: string | undefined,
+  row: VenueQuoteMappingReadiness & { venueMarketId: string }
+): VenueOrderbookSubscriptionTarget => {
+  const canonicalOutcomeId = row.canonicalOutcomeId ?? requestedOutcomeId;
+  return {
+    canonicalMarketId,
+    ...(canonicalOutcomeId ? { canonicalOutcomeId } : {}),
+    venue: normalizeVenue(row.venue),
+    venueMarketId: row.venueMarketId,
+    ...(row.venueOutcomeId ? { venueOutcomeId: row.venueOutcomeId } : {})
+  };
+};
+
 const dedupeTargetsByNative = (targets: readonly VenueOrderbookSubscriptionTarget[]): readonly VenueOrderbookSubscriptionTarget[] => {
   const byKey = new Map<string, VenueOrderbookSubscriptionTarget>();
   for (const target of targets) {
@@ -830,6 +866,9 @@ const normalizeVenue = (venue: string): string => {
   const normalized = venue.trim().toUpperCase();
   return normalized === "PREDICT" ? "PREDICT_FUN" : normalized;
 };
+
+const normalizeOutcomeId = (outcomeId: string | null | undefined): string =>
+  (outcomeId ?? "").trim().toUpperCase();
 
 const sanitizeStrings = (values: readonly string[]): readonly string[] =>
   values
