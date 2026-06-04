@@ -376,7 +376,8 @@ import { LiveMarketDataViewService, type MarketOrderbookResponse } from "../serv
 import { HotQuoteSnapshotService, resolveHotQuoteRedisNamespace } from "../services/hot-quote-snapshot.service.js";
 import {
   buildMarketOrderbookRecorderConfigs,
-  MarketOrderbookRecorder
+  MarketOrderbookRecorder,
+  resolveMarketOrderbookRecorderDutyProfile
 } from "../services/market-orderbook-recorder.service.js";
 import {
   buildFundingReadinessWatcherConfigFromEnv,
@@ -1188,7 +1189,14 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     })
   });
   if (backgroundWorkersEnabled) {
-    const marketOrderbookRecorders = buildMarketOrderbookRecorderConfigs().map((config) =>
+    const workerDutyProfile = resolveMarketOrderbookRecorderDutyProfile({
+      LOTUS_DEPLOY_ENV: process.env.LOTUS_DEPLOY_ENV,
+      LOTUS_ENV: process.env.LOTUS_ENV,
+      APP_ENV: process.env.APP_ENV,
+      NODE_ENV: process.env.NODE_ENV
+    });
+    dependencies.logger.info({ workerDutyProfile }, "Starting market background worker duties.");
+    const marketOrderbookRecorders = buildMarketOrderbookRecorderConfigs(workerDutyProfile).map((config) =>
       new MarketOrderbookRecorder(
         marketCatalogRepository,
         venueQuoteSource,
@@ -1211,7 +1219,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         snapshotCache: marketCatalogSnapshotCache,
         logger: dependencies.logger,
         config: {
-          intervalMs: 3_000,
+          intervalMs: workerDutyProfile === "shared_staging" ? 8_000 : 3_000,
           cacheTtlMs: 300_000,
           quoteReadinessMaxAgeMs: DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS,
           limits: [250],
@@ -1226,7 +1234,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         snapshotCache: marketCatalogSnapshotCache,
         logger: dependencies.logger,
         config: {
-          intervalMs: 30_000,
+          intervalMs: workerDutyProfile === "shared_staging" ? 45_000 : 30_000,
           cacheTtlMs: 300_000,
           quoteReadinessMaxAgeMs: DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS,
           limits: [250],

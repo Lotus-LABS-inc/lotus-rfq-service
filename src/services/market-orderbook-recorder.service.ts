@@ -26,6 +26,15 @@ export interface MarketOrderbookRecorderConfig {
   quoteProviderCooldownMs: number;
 }
 
+export type MarketOrderbookRecorderDutyProfile = "production" | "shared_staging";
+
+export interface MarketOrderbookRecorderDutyProfileSource {
+  LOTUS_DEPLOY_ENV?: string | undefined;
+  LOTUS_ENV?: string | undefined;
+  APP_ENV?: string | undefined;
+  NODE_ENV?: string | undefined;
+}
+
 export interface MarketOrderbookRecorderLogger {
   info(input: Record<string, unknown>, message: string): void;
   warn(input: Record<string, unknown>, message: string): void;
@@ -86,10 +95,40 @@ export const buildMarketOrderbookRecorderConfig = (): MarketOrderbookRecorderCon
 
 const DEFAULT_MARKET_ORDERBOOK_RECORDER_LANES = 2;
 
-export const buildMarketOrderbookRecorderConfigs = (): MarketOrderbookRecorderConfig[] => {
-  const laneCount = DEFAULT_MARKET_ORDERBOOK_RECORDER_LANES;
+export const resolveMarketOrderbookRecorderDutyProfile = (
+  source: MarketOrderbookRecorderDutyProfileSource = process.env as MarketOrderbookRecorderDutyProfileSource
+): MarketOrderbookRecorderDutyProfile => {
+  const tags = [source.LOTUS_DEPLOY_ENV, source.LOTUS_ENV, source.APP_ENV]
+    .map((value) => value?.trim().toLowerCase())
+    .filter((value): value is string => Boolean(value));
+  if (tags.some((tag) => tag === "staging" || tag === "stage" || tag === "preview" || tag.includes("staging"))) {
+    return "shared_staging";
+  }
+  return "production";
+};
+
+export const buildMarketOrderbookRecorderConfigs = (
+  profile: MarketOrderbookRecorderDutyProfile = "production"
+): MarketOrderbookRecorderConfig[] => {
+  const laneCount = profile === "shared_staging" ? 1 : DEFAULT_MARKET_ORDERBOOK_RECORDER_LANES;
+  const baseConfig: MarketOrderbookRecorderConfig = profile === "shared_staging"
+    ? {
+        ...DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG,
+        intervalMs: 15_000,
+        marketBatchSize: 18,
+        activeMarketBatchSize: 180,
+        activeMaxSamplesPerTick: 24,
+        priorityMarketBatchSize: 120,
+        maxSamplesPerTick: 36,
+        sampleConcurrency: 8,
+        maxTickDurationMs: 9_500,
+        sampleTimeoutMs: 1_600
+      }
+    : {
+        ...DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG
+      };
   return Array.from({ length: laneCount }, (_, shardIndex) => ({
-    ...DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG,
+    ...baseConfig,
     shardCount: laneCount,
     shardIndex
   }));

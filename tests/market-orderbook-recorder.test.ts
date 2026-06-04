@@ -3,6 +3,7 @@ import {
   buildMarketOrderbookRecorderConfig,
   buildMarketOrderbookRecorderConfigs,
   MarketOrderbookRecorder,
+  resolveMarketOrderbookRecorderDutyProfile,
   type MarketOrderbookRecorderLogger
 } from "../src/services/market-orderbook-recorder.service.js";
 import type { MarketCatalogMarket } from "../src/repositories/market-catalog.repository.js";
@@ -69,6 +70,43 @@ describe("MarketOrderbookRecorder", () => {
     expect(configs.every((config) => config.activeMaxSamplesPerTick === 36)).toBe(true);
     expect(configs.every((config) => config.sampleTimeoutMs === 1_800)).toBe(true);
     expect(configs.every((config) => (config.maxTickDurationMs ?? 0) < config.intervalMs)).toBe(true);
+  });
+
+  it("uses the full recorder duty profile for production deploys", () => {
+    expect(resolveMarketOrderbookRecorderDutyProfile({ LOTUS_DEPLOY_ENV: "production" })).toBe("production");
+    expect(resolveMarketOrderbookRecorderDutyProfile({ LOTUS_ENV: "prod" })).toBe("production");
+
+    const configs = buildMarketOrderbookRecorderConfigs(
+      resolveMarketOrderbookRecorderDutyProfile({ LOTUS_DEPLOY_ENV: "production" })
+    );
+
+    expect(configs).toHaveLength(2);
+    expect(configs.every((config) => config.maxSamplesPerTick === 56)).toBe(true);
+    expect(configs.every((config) => config.sampleConcurrency === 14)).toBe(true);
+  });
+
+  it("uses a single shared staging recorder lane to avoid doubling venue polling on one VPS", () => {
+    expect(resolveMarketOrderbookRecorderDutyProfile({ LOTUS_DEPLOY_ENV: "staging" })).toBe("shared_staging");
+    expect(resolveMarketOrderbookRecorderDutyProfile({ APP_ENV: "vps staging" })).toBe("shared_staging");
+
+    const configs = buildMarketOrderbookRecorderConfigs(
+      resolveMarketOrderbookRecorderDutyProfile({ LOTUS_DEPLOY_ENV: "staging" })
+    );
+
+    expect(configs).toHaveLength(1);
+    expect(configs[0]).toMatchObject({
+      intervalMs: 15_000,
+      marketBatchSize: 18,
+      activeMarketBatchSize: 180,
+      activeMaxSamplesPerTick: 24,
+      priorityMarketBatchSize: 120,
+      maxSamplesPerTick: 36,
+      sampleConcurrency: 8,
+      maxTickDurationMs: 9_500,
+      sampleTimeoutMs: 1_600,
+      shardCount: 1,
+      shardIndex: 0
+    });
   });
 
   it("records approved open market outcome snapshots and skips closed markets", async () => {
