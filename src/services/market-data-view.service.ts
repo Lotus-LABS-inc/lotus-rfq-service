@@ -160,6 +160,7 @@ export interface MarketBatchQuoteResponse {
 
 export interface MarketLivePriceRequestItem {
   marketId: string;
+  canonicalMarketIds?: readonly string[] | undefined;
   outcomeId?: string | undefined;
 }
 
@@ -262,7 +263,8 @@ export class LiveMarketDataViewService {
 
   private async getLivePriceItem(item: MarketLivePriceRequestItem, generatedAt: Date): Promise<MarketLivePriceItem> {
     const normalizedOutcomeId = normalizeBinaryOutcomeId(item.outcomeId);
-    const key = livePriceCacheKey(item.marketId, normalizedOutcomeId ?? null);
+    const marketIds = normalizeOrderbookMarketIds(item.marketId, item.canonicalMarketIds);
+    const key = livePriceCacheKey(orderbookCacheMarketKey(item.marketId, marketIds), normalizedOutcomeId ?? null);
     const cached = this.livePriceCache.get(key);
     if (cached && cached.expiresAt > generatedAt.getTime()) {
       return {
@@ -271,10 +273,10 @@ export class LiveMarketDataViewService {
       };
     }
     const snapshots = this.liveOrderbookSource
-      ? await this.liveOrderbookSource.get({
-          canonicalMarketId: item.marketId,
+      ? (await Promise.all(marketIds.map((canonicalMarketId) => this.liveOrderbookSource!.get({
+          canonicalMarketId,
           ...(normalizedOutcomeId ? { canonicalOutcomeId: normalizedOutcomeId } : {})
-        }).catch(() => [])
+        }).catch(() => [])))).flat()
       : [];
     const liveVenues = snapshots
       .map((snapshot) => sanitizeVenueOrderbook(snapshot, 5, generatedAt))

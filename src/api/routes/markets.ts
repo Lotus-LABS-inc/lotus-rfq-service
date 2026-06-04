@@ -118,7 +118,7 @@ export interface MarketCatalogRouteDeps {
   } | undefined;
   marketDataViewService?: Pick<LiveMarketDataViewService, "getOrderbook" | "getChart"> & {
     getLivePrices?(input: {
-      items: readonly { marketId: string; outcomeId?: string | undefined }[];
+      items: readonly { marketId: string; canonicalMarketIds?: readonly string[] | undefined; outcomeId?: string | undefined }[];
     }): Promise<{
       generatedAt: string;
       prices: Array<{
@@ -459,7 +459,7 @@ const resolveOutcomeLabel = (
 
 const parseLivePriceQueryItems = (
   query: z.infer<typeof livePricesQuerySchema>
-): Array<{ marketId: string; outcomeId?: string | undefined }> => {
+): Array<{ marketId: string; canonicalMarketIds?: readonly string[] | undefined; outcomeId?: string | undefined }> => {
   if (query.items) {
     try {
       const parsed = JSON.parse(query.items) as unknown;
@@ -473,11 +473,17 @@ const parseLivePriceQueryItems = (
         const record = item as Record<string, unknown>;
         const marketId = typeof record.marketId === "string" ? record.marketId.trim() : "";
         const outcomeId = typeof record.outcomeId === "string" ? record.outcomeId.trim() : "";
+        const canonicalMarketIds = Array.isArray(record.canonicalMarketIds)
+          ? record.canonicalMarketIds
+              .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+              .map((value) => value.trim())
+          : [];
         if (!marketId) {
           return [];
         }
         return [{
           marketId,
+          ...(canonicalMarketIds.length > 0 ? { canonicalMarketIds } : {}),
           ...(outcomeId ? { outcomeId } : {})
         }];
       });
