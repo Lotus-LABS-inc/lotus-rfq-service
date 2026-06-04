@@ -448,6 +448,77 @@ describe("LiveMarketDataViewService", () => {
     });
   });
 
+  it("keeps batch quote diagnostics in debug mode but hides them for user display mode", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    const service = new LiveMarketDataViewService({
+      getQuoteSnapshotReport: async () => ({
+        snapshots: [{
+          venue: "POLYMARKET",
+          venueMarketId: "poly-1",
+          venueOutcomeId: "yes",
+          source: "REST",
+          quoteQuality: "FULL_DEPTH_REST",
+          sourceTimestamp: now,
+          receivedAt: now,
+          bids: [{ price: "0.50", size: "100" }],
+          asks: [{ price: "0.53", size: "100" }],
+          blockers: [],
+          missingFactors: []
+        }],
+        blocked: [{
+          venue: "LIMITLESS",
+          reason: "QUOTE_SNAPSHOT_CACHE_MISS"
+        }]
+      })
+    }, { now: () => now });
+
+    const debug = await service.getBatchQuotes({
+      items: [{ marketId: "market-1", outcomeId: "YES", side: "buy", amount: "1" }]
+    });
+    const userDisplay = await service.getBatchQuotes({
+      items: [{ marketId: "market-1", outcomeId: "YES", side: "buy", amount: "1" }],
+      displayMode: "user"
+    });
+
+    expect(debug.quotes[0]).toMatchObject({
+      status: "partial",
+      bestVenue: "POLYMARKET",
+      bestVenuePrice: "0.53",
+      blockers: [expect.objectContaining({ venue: "LIMITLESS", reason: "QUOTE_SNAPSHOT_CACHE_MISS" })]
+    });
+    expect(userDisplay.quotes[0]).toMatchObject({
+      status: "live",
+      bestVenue: "POLYMARKET",
+      bestVenuePrice: "0.53",
+      blockers: []
+    });
+  });
+
+  it("omits provider blockers from unavailable user display batch quotes", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    const service = new LiveMarketDataViewService({
+      getQuoteSnapshotReport: async () => ({
+        snapshots: [],
+        blocked: [{
+          venue: "PREDICT_FUN",
+          reason: "QUOTE_PROVIDER_TIMEOUT"
+        }]
+      })
+    }, { now: () => now });
+
+    const userDisplay = await service.getBatchQuotes({
+      items: [{ marketId: "market-1", outcomeId: "YES", side: "buy", amount: "1" }],
+      displayMode: "user"
+    });
+
+    expect(userDisplay.quotes[0]).toMatchObject({
+      status: "unavailable",
+      bestVenue: null,
+      bestVenuePrice: null,
+      blockers: []
+    });
+  });
+
   it("returns typed blocked orderbook status when every venue is blocked", async () => {
     const now = new Date("2026-05-10T12:00:00.000Z");
     const service = new LiveMarketDataViewService({

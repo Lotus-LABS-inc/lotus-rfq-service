@@ -117,6 +117,8 @@ export interface MarketBatchQuoteRequestItem {
   amount?: string | number;
 }
 
+export type MarketBatchQuoteDisplayMode = "debug" | "user";
+
 export interface MarketBatchQuoteVenueEvidence {
   venue: string;
   venueMarketId: string;
@@ -469,6 +471,7 @@ export class LiveMarketDataViewService {
 
   public async getBatchQuotes(input: {
     items: readonly MarketBatchQuoteRequestItem[];
+    displayMode?: MarketBatchQuoteDisplayMode | undefined;
   }): Promise<MarketBatchQuoteResponse> {
     const generatedAt = this.now();
     const quotes = await Promise.all(input.items.map(async (item) => {
@@ -526,7 +529,9 @@ export class LiveMarketDataViewService {
     }));
     return {
       generatedAt: generatedAt.toISOString(),
-      quotes
+      quotes: input.displayMode === "user"
+        ? quotes.map(toUserFacingBatchQuote)
+        : quotes
     };
   }
 
@@ -1001,6 +1006,28 @@ const batchQuoteFromRefreshGrace = (
   ...quote,
   generatedAt: generatedAt.toISOString()
 });
+
+const toUserFacingBatchQuote = (quote: MarketBatchQuoteItem): MarketBatchQuoteItem => {
+  const hasDisplayPrice = quote.bestVenuePrice !== null ||
+    quote.unifiedAveragePrice !== null ||
+    quote.venues.some((venue) => venue.price !== null);
+  if (!hasDisplayPrice) {
+    return {
+      ...quote,
+      status: "unavailable",
+      blockers: []
+    };
+  }
+  return {
+    ...quote,
+    status: "live",
+    venues: quote.venues.map((venue) => ({
+      ...venue,
+      blockers: []
+    })),
+    blockers: []
+  };
+};
 
 const batchQuoteCacheEntryWithoutPromise = (entry: BatchQuoteCacheEntry): BatchQuoteCacheEntry => ({
   expiresAt: entry.expiresAt,

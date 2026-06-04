@@ -57,7 +57,8 @@ const batchQuotesRequestSchema = z.object({
     outcomeId: z.string().min(1),
     side: z.enum(["buy", "sell"]).optional(),
     amount: z.union([z.string().regex(/^\d+(\.\d+)?$/), z.number().positive()]).optional()
-  })).min(1).max(60)
+  })).min(1).max(60),
+  displayMode: z.enum(["debug", "user"]).optional()
 });
 
 const VENUE_SUFFIX_PATTERN = /:(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$/i;
@@ -110,7 +111,10 @@ export interface MarketCatalogRouteDeps {
     touch(input: { canonicalMarketId: string; canonicalOutcomeId?: string | undefined }): void;
   } | undefined;
   marketDataViewService?: Pick<LiveMarketDataViewService, "getOrderbook" | "getChart"> & {
-    getBatchQuotes?(input: { items: readonly { marketId: string; outcomeId: string; side?: "buy" | "sell"; amount?: string | number }[] }): Promise<MarketBatchQuoteResponse>;
+    getBatchQuotes?(input: {
+      items: readonly { marketId: string; outcomeId: string; side?: "buy" | "sell"; amount?: string | number }[];
+      displayMode?: "debug" | "user" | undefined;
+    }): Promise<MarketBatchQuoteResponse>;
   } | undefined;
 }
 
@@ -307,7 +311,8 @@ export const registerMarketCatalogRoutes = async (
         outcomeId: item.outcomeId,
         ...(item.side ? { side: item.side } : {}),
         ...(item.amount !== undefined ? { amount: item.amount } : {})
-      }))
+      })),
+      ...(parsed.data.displayMode ? { displayMode: parsed.data.displayMode } : {})
     }));
   });
 
