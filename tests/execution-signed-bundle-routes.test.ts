@@ -1686,6 +1686,61 @@ describe("execution signed bundle routes", () => {
     expect(prepare).not.toHaveBeenCalled();
   });
 
+  it("blocks Polymarket market-buy signature preparation when amount cannot satisfy venue precision", async () => {
+    const app = Fastify();
+    const quote = {
+      ...sellQuote(),
+      quoteId: "exec_quote_poly_buy_tiny",
+      side: "buy" as const,
+      executableAmount: "1.01010101",
+      expectedPrice: 0.996,
+      effectivePrice: 0.996,
+      legs: [{
+        venue: "POLYMARKET",
+        venueMarketId: "poly-market",
+        venueOutcomeId: "12345678901234567890",
+        size: "1.01010101",
+        price: 0.996,
+        requiresUserSignature: true,
+        metadata: {
+          tickSize: "0.001",
+          polymarketTickSize: "0.001"
+        }
+      }]
+    };
+    const prepare = vi.fn();
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: {
+        quote: vi.fn(),
+        getQuote: vi.fn(async () => quote)
+      } as never,
+      sellQuoteService: {
+        prepareExit: vi.fn()
+      } as never,
+      signedTradeBundleService: {
+        prepare,
+        getExecutionStatus: vi.fn(async () => null)
+      } as never,
+      liveCandidateProvider: {
+        getCandidates: vi.fn()
+      }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/execution/exec_quote_poly_buy_tiny/prepare-signatures"
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      code: "POLYMARKET_ORDER_AMOUNT_INVALID",
+      message: "Polymarket market-buy order amount is below venue precision for the current price. Increase amount or refresh route before signing."
+    });
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
   it("blocks Polymarket FOK signed submit when current live price exceeds the signed limit", async () => {
     const app = Fastify();
     const quote = {

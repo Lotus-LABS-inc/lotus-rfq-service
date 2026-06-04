@@ -46,6 +46,14 @@ export interface PreparedTradeSignatureBundle {
 
 export type SignedTradeOrderPolicy = "FOK" | "FAK";
 
+export type PolymarketMarketBuyRoutePrecisionInput = {
+  size: string;
+  price: number;
+  tickSize?: string | undefined;
+  slippageToleranceBps?: number | undefined;
+  env?: NodeJS.ProcessEnv | undefined;
+};
+
 export interface SignedTradeLegPayload {
   legIndex: number;
   venue: string;
@@ -2129,6 +2137,40 @@ const parsePositiveAtomicAmount = (value: unknown, field: string): bigint => {
   return parsed;
 };
 
+const decimalAmountToAtomic = (
+  value: string,
+  field: string,
+  code: string,
+  rounding: "floor" | "ceil" = "floor"
+): bigint => {
+  let decimal: InstanceType<typeof Decimal>;
+  try {
+    decimal = new Decimal(value);
+  } catch {
+    throw new SignedTradeBundleError(
+      "POLYMARKET_ORDER_AMOUNT_INVALID",
+      `Polymarket route ${field} must be a valid decimal amount.`
+    );
+  }
+  if (!decimal.isFinite() || decimal.lte(0)) {
+    throw new SignedTradeBundleError(
+      code,
+      `Polymarket route ${field} must be greater than zero.`
+    );
+  }
+  const scaled = decimal.times("1000000");
+  const rounded = rounding === "ceil" ? scaled.ceil() : scaled.floor();
+  const text = rounded.toFixed(0);
+  const parsed = BigInt(text);
+  if (parsed <= 0n) {
+    throw new SignedTradeBundleError(
+      code,
+      `Polymarket route ${field} is below venue precision.`
+    );
+  }
+  return parsed;
+};
+
 const roundDownAtomic = (value: bigint, quantum: bigint): bigint =>
   (value / quantum) * quantum;
 
@@ -2506,6 +2548,48 @@ const quoteWithOrderPolicy = (
       }
     }))
   };
+};
+
+export const assertPolymarketMarketBuyRoutePrecision = (
+  input: PolymarketMarketBuyRoutePrecisionInput
+): void => {
+  const tickSize = parsePolymarketTickSize(input.tickSize) ?? "0.001";
+  const limitPrice = polymarketMarketBuyLimitPrice(
+    input.price,
+    tickSize,
+    input.env ?? process.env,
+    input.slippageToleranceBps
+  );
+  if (!Number.isFinite(limitPrice) || limitPrice <= 0 || limitPrice >= 1) {
+    return;
+  }
+  const takerAmount = decimalAmountToAtomic(input.size, "size", "POLYMARKET_ORDER_SIZE_TOO_SMALL");
+  const makerAmount = decimalAmountToAtomic(
+    new Decimal(input.size).times(limitPrice).toString(),
+    "collateral amount",
+    "POLYMARKET_ORDER_AMOUNT_INVALID",
+    "ceil"
+  );
+  const quantizedTakerAmount = roundDownAtomic(takerAmount, POLYMARKET_MARKET_BUY_SHARE_QUANTUM_ATOMIC);
+  if (quantizedTakerAmount <= 0n) {
+    throw new SignedTradeBundleError(
+      "POLYMARKET_ORDER_SIZE_TOO_SMALL",
+      "Polymarket market-buy order size is below the minimum 0.00001 share precision."
+    );
+  }
+  const quantized = polymarketVenuePrecisionMarketBuyAmounts(
+    makerAmount,
+    takerAmount,
+    quantizedTakerAmount,
+    tickSize,
+    input.price
+  );
+  if (!quantized) {
+    throw new SignedTradeBundleError(
+      "POLYMARKET_ORDER_AMOUNT_INVALID",
+      "Polymarket market-buy order amount is below venue precision for the current price. Increase amount or refresh route before signing."
+    );
+  }
 };
 
 const signedTradeOrderPolicyFromMetadata = (metadata: Record<string, unknown>): SignedTradeOrderPolicy => {

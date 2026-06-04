@@ -8,6 +8,7 @@ import type {
   TradeSide
 } from "./executable-routing.js";
 import {
+  assertPolymarketMarketBuyRoutePrecision,
   SignedTradeBundleError,
   type LiveSubmitReadinessSnapshot,
   type SignedTradeBundleService,
@@ -1130,7 +1131,7 @@ export const assertPolymarketFokStillExecutable = async (input: {
   orderPolicy?: ExecutionOrderPolicy | undefined;
   slippageToleranceBps?: number | undefined;
 }): Promise<void> => {
-  if (!input.liveCandidateProvider || !input.quote) {
+  if (!input.quote) {
     return;
   }
   for (const [index, leg] of input.quote.legs.entries()) {
@@ -1142,6 +1143,14 @@ export const assertPolymarketFokStillExecutable = async (input: {
         "POLYMARKET_SELL_TOKEN_ID_MISSING",
         "Polymarket sell route is missing the executable conditional token id. Refresh market metadata before selling."
       );
+    }
+    if (input.quote.side === "buy") {
+      assertPolymarketMarketBuyRoutePrecision({
+        size: leg.size,
+        price: leg.price,
+        tickSize: polymarketTickSizeFromMetadata(leg.metadata) ?? undefined,
+        slippageToleranceBps: input.slippageToleranceBps
+      });
     }
     const signedOrder = input.signedLegs ? findPolymarketSignedOrder(input.signedLegs, index) : null;
     if (input.quote.side === "sell" && signedOrder) {
@@ -1156,6 +1165,9 @@ export const assertPolymarketFokStillExecutable = async (input: {
     const signedOrderData = signedOrder ? recordField(signedOrder.signedPayload, "data") : null;
     const signedOrderType = asString(signedOrderData?.orderType);
     const effectiveOrderPolicy = (signedOrderType ?? input.orderPolicy ?? DEFAULT_EXECUTION_ORDER_POLICY).toUpperCase();
+    if (!input.liveCandidateProvider) {
+      continue;
+    }
     if (effectiveOrderPolicy !== "FOK") {
       continue;
     }
