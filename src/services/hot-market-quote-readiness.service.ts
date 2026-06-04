@@ -155,9 +155,7 @@ export class HotMarketQuoteReadinessSource {
       .at(-1) ?? null;
     return {
       canonicalMarketId,
-      quoteStatus: quoteReadyVenues.length > 0 && blockers.length === 0 && missingHot.length === 0 ? "live"
-        : quoteReadyVenues.length > 0 ? "partial"
-        : "unavailable",
+      quoteStatus: quoteReadyVenues.length > 0 ? "live" : "unavailable",
       quoteReadyVenueCount: quoteReadyVenues.length,
       quoteReadyVenues,
       quoteBlockers: [...blockers, ...missingHot],
@@ -231,7 +229,7 @@ const pickMergedQuoteStatus = (
   if (quoteReadyVenueCount <= 0) {
     return "unavailable";
   }
-  return quoteBlockers.length > 0 ? "partial" : "live";
+  return "live";
 };
 
 const latestTimestamp = (left: string | null, right: string | null): string | null => {
