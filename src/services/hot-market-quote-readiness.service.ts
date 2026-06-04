@@ -131,12 +131,12 @@ export class HotMarketQuoteReadinessSource {
     const liveSnapshots = snapshots.filter((entry): entry is {
       row: VenueQuoteMappingReadiness & { venueMarketId: string };
       snapshot: NormalizedVenueQuoteSnapshot;
-    } => Boolean(entry.snapshot && isPricedLiveSnapshot(entry.snapshot)));
+    } => Boolean(entry.snapshot && isPricedDisplaySnapshot(entry.snapshot)));
     const missingHot = snapshots
-      .filter((entry) => !entry.snapshot || !isPricedLiveSnapshot(entry.snapshot))
+      .filter((entry) => !entry.snapshot || !isPricedDisplaySnapshot(entry.snapshot))
       .map((entry) => ({
         venue: normalizeVenue(entry.row.venue),
-        reason: entry.snapshot?.blockers?.join(",") || "LIVE_QUOTE_SNAPSHOT_MISSING",
+        reason: displayBlockingSnapshotBlockers(entry.snapshot).join(",") || "LIVE_QUOTE_SNAPSHOT_MISSING",
         ...(entry.row.venueMarketId ? { venueMarketId: entry.row.venueMarketId } : {}),
         ...(entry.row.venueOutcomeId ? { venueOutcomeId: entry.row.venueOutcomeId } : {})
       }));
@@ -226,9 +226,18 @@ const latestTimestamp = (left: string | null, right: string | null): string | nu
   return Date.parse(left) >= Date.parse(right) ? left : right;
 };
 
-const isPricedLiveSnapshot = (snapshot: NormalizedVenueQuoteSnapshot): boolean =>
-  (snapshot.blockers?.length ?? 0) === 0
+const isPricedDisplaySnapshot = (snapshot: NormalizedVenueQuoteSnapshot): boolean =>
+  displayBlockingSnapshotBlockers(snapshot).length === 0
   && (snapshot.bids.length > 0 || snapshot.asks.length > 0);
+
+const displayBlockingSnapshotBlockers = (snapshot: NormalizedVenueQuoteSnapshot | null | undefined): string[] =>
+  (snapshot?.blockers ?? []).filter((blocker) => !isDisplayOnlyExecutionBlocker(blocker));
+
+const isDisplayOnlyExecutionBlocker = (blocker: string): boolean => {
+  const normalized = blocker.trim().toUpperCase();
+  return normalized === "PREDICT_FUN_TOKEN_ID_MISSING" ||
+    normalized === "OPINION_TOKEN_ID_MISSING";
+};
 
 const normalizeVenue = (venue: string): string => {
   const normalized = venue.trim().toUpperCase();
