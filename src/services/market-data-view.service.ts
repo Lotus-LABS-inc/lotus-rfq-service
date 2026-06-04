@@ -216,6 +216,7 @@ const CHART_CACHE_MS = 10_000;
 const CHART_LIVE_POINT_TIMEOUT_MS = 50;
 const CHART_HISTORICAL_POINTS_TIMEOUT_MS = 150;
 const LIVE_PRICE_CACHE_MS = 2_000;
+const LIVE_PRICE_CACHED_DISPLAY_TIMEOUT_MS = 650;
 const VENUE_COLORS = ["#3B82F6", "#10B981", "#8B5CF6", "#F59E0B", "#EC4899", "#22D3EE"];
 
 export class LiveMarketDataViewService {
@@ -334,7 +335,7 @@ export class LiveMarketDataViewService {
           readMode: "cached_display",
           displayMaxAgeMs: BATCH_QUOTE_DISPLAY_SNAPSHOT_MAX_AGE_MS
         }),
-        this.batchQuoteLiveTimeoutMs,
+        LIVE_PRICE_CACHED_DISPLAY_TIMEOUT_MS,
         { snapshots: [], blocked: [] }
       ).catch(() => ({ snapshots: [], blocked: [] }))
     ));
