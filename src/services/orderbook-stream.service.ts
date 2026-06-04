@@ -271,10 +271,9 @@ export class OrderbookStreamService {
     }
     const activeTargets = dedupeTargetsBySubscription(activeTargetGroups.flat());
     const activeNativeKeys = new Set(activeTargets.map(nativeSubscriptionKey));
-    const backgroundTargetLimit = Math.max(
-      0,
-      this.config.maxBackgroundSubscriptionTargets - activeTargets.length
-    );
+    const backgroundTargetLimit = activeTargets.length > 0
+      ? 0
+      : this.config.maxBackgroundSubscriptionTargets;
     const backgroundCandidates = batchReadiness
       ? [...batchReadiness.entries()]
         .flatMap(([canonicalMarketId, readiness]) => (
@@ -628,10 +627,7 @@ const activeReadinessRowsForMarket = (
 
   const yesOutcomeRows = outcomeRows.filter((row) => normalizeOutcomeId(row.canonicalOutcomeId) === "YES");
   const displayOutcomeRows = yesOutcomeRows.length > 0 ? yesOutcomeRows : outcomeRows;
-  return [
-    ...displayOutcomeRows,
-    ...readiness.venues
-  ];
+  return displayOutcomeRows.length > 0 ? displayOutcomeRows : readiness.venues;
 };
 
 const targetFromReadinessRow = (

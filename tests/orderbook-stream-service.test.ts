@@ -467,15 +467,14 @@ describe("OrderbookStreamService", () => {
 
     await expect(service.runOnce()).resolves.toMatchObject({
       activeMarkets: 1,
-      desiredSubscriptions: 2,
-      subscribed: 2
+      desiredSubscriptions: 1,
+      subscribed: 1
     });
     expect(connector.subscribed.map((target) => ({
       canonicalOutcomeId: target.canonicalOutcomeId,
       venueOutcomeId: target.venueOutcomeId
     }))).toEqual([
-      { canonicalOutcomeId: "YES", venueOutcomeId: "token-yes" },
-      { canonicalOutcomeId: undefined, venueOutcomeId: undefined }
+      { canonicalOutcomeId: "YES", venueOutcomeId: "token-yes" }
     ]);
   });
 
