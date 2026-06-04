@@ -441,6 +441,53 @@ describe("OrderbookStreamService", () => {
     ]);
   });
 
+  it("warms a broad approved background catalog by default", async () => {
+    const connector = new FakeConnector("POLYMARKET");
+    const approvedMarkets = Array.from({ length: 360 }, (_, index) => ({
+      canonicalEventId: `event-${index}`,
+      canonicalMarketIds: [`canonical-${index}`],
+      title: `Event ${index}`,
+      category: "Crypto",
+      venues: [
+        {
+          venue: "POLYMARKET",
+          approvedVenueMarketId: `approved-${index}`,
+          venueMarketId: `poly-${index}`,
+          venueOutcomeId: `token-${index}`,
+          quoteReady: true,
+          blockers: []
+        }
+      ]
+    }));
+    const listApprovedReadiness = vi.fn(async () => approvedMarkets);
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness() {
+          return [];
+        },
+        listApprovedReadiness
+      },
+      connectors: [connector],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({
+      activeMarkets: 0,
+      desiredSubscriptions: 360,
+      subscribed: 360
+    });
+    expect(listApprovedReadiness).toHaveBeenCalledWith({ limit: 1000 });
+    expect(connector.subscribed).toHaveLength(360);
+  });
+
   it("prioritizes YES outcome books for active display markets without an explicit outcome", async () => {
     const connector = new FakeConnector("POLYMARKET");
     const listApprovedReadiness = vi.fn(async () => [
