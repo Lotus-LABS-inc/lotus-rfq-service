@@ -342,10 +342,13 @@ export class CompositeVenueQuoteSource {
     displayMaxAgeMs?: number | undefined;
     venueAllowlist?: readonly string[] | undefined;
   }): Promise<VenueQuoteSnapshotReport> {
-    this.hotSnapshotStore?.touch({
-      canonicalMarketId: input.canonicalMarketId,
-      ...(input.canonicalOutcomeId ? { canonicalOutcomeId: input.canonicalOutcomeId } : {})
-    });
+    const readMode = input.readMode ?? "live";
+    if (readMode !== "cached_display") {
+      this.hotSnapshotStore?.touch({
+        canonicalMarketId: input.canonicalMarketId,
+        ...(input.canonicalOutcomeId ? { canonicalOutcomeId: input.canonicalOutcomeId } : {})
+      });
+    }
     const readiness = await withLatencyStage("quote_source_mapping_lookup", {
       canonicalMarketId: input.canonicalMarketId
     }, () => this.loadMappingReadiness(input));
@@ -375,7 +378,6 @@ export class CompositeVenueQuoteSource {
     }> => {
       const startedAt = performance.now();
       try {
-        const readMode = input.readMode ?? "live";
         const hotSnapshot = await this.readHotSnapshot({
           venue: mapping.venue,
           venueMarketId: mapping.venueMarketId,

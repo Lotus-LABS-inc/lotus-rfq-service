@@ -248,6 +248,7 @@ describe("venue quote readers", () => {
 
   it("allows cached display reads to use recent DB-backed snapshot fallback", async () => {
     const getDisplayCalls: unknown[] = [];
+    const touchCalls: unknown[] = [];
     const source = new CompositeVenueQuoteSource([], {
       async resolve() {
         return [];
@@ -263,7 +264,9 @@ describe("venue quote readers", () => {
         }];
       }
     }, () => now, {
-      touch() {},
+      touch(input) {
+        touchCalls.push(input);
+      },
       async get() {
         return null;
       },
@@ -292,6 +295,38 @@ describe("venue quote readers", () => {
     expect(getDisplayCalls[0]).not.toMatchObject({
       includeDbFallback: false
     });
+    expect(touchCalls).toEqual([]);
+  });
+
+  it("tracks live quote reads as active orderbook work", async () => {
+    const touchCalls: unknown[] = [];
+    const source = new CompositeVenueQuoteSource([], {
+      async resolve() {
+        return [];
+      },
+      async getReadiness() {
+        return [];
+      }
+    }, () => now, {
+      touch(input) {
+        touchCalls.push(input);
+      },
+      async get() {
+        return null;
+      }
+    });
+
+    await source.getQuoteSnapshotReport({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(touchCalls).toEqual([{
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES"
+    }]);
   });
 
   it("keeps usable venue snapshots when another mapped reader throws", async () => {
