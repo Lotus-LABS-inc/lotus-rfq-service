@@ -190,7 +190,10 @@ import { PolymarketGammaClient } from "../integrations/polymarket/polymarket-gam
 import { LimitlessHistoricalClient } from "../integrations/limitless/limitless-client.js";
 import { PredictClient } from "../integrations/predict/predict-client.js";
 import { PredictQuoteReader } from "../integrations/predict/predict-quote-reader.js";
-import { OpinionClient } from "../integrations/opinion/opinion-client.js";
+import {
+  createOpinionOrderbookClient,
+  resolveOpinionOrderbookApiKeys
+} from "../integrations/opinion/opinion-orderbook-client.js";
 import { OpinionQuoteReader } from "../integrations/opinion/opinion-quote-reader.js";
 import { MyriadClient } from "../integrations/myriad/myriad-client.js";
 import { MyriadQuoteReader } from "../integrations/myriad/myriad-quote-reader.js";
@@ -1137,11 +1140,11 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       feeBps: parseOptionalNumber(process.env.PREDICT_QUOTE_FEE_BPS)
     }),
     new OpinionQuoteReader({
-      client: new OpinionClient({
+      client: createOpinionOrderbookClient({
         baseUrl: process.env.OPINION_OPENAPI_BASE_URL ?? process.env.OPINION_CLOB_BASE_URL ?? "https://openapi.opinion.trade/openapi",
-        apiKey: process.env.OPINION_API_KEY ?? "",
+        apiKeys: resolveOpinionOrderbookApiKeys(process.env),
         requestTimeoutMs: parseOptionalNumber(process.env.OPINION_QUOTE_TIMEOUT_MS) ?? 1_500,
-        maxRetries: 0
+        logger: dependencies.logger
       }),
       streamCache: opinionQuoteCache,
       topicRate: parseOptionalNumber(process.env.OPINION_QUOTE_TOPIC_RATE),

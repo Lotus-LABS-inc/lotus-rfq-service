@@ -10,7 +10,10 @@ import { createPgPool, closePgPool } from "./db/postgres.js";
 import { connectRedis, createRedisClient, disconnectRedis } from "./db/redis.js";
 import { LimitlessProfileFeeReader } from "./integrations/limitless/limitless-fee-reader.js";
 import { LimitlessQuoteReader, LimitlessRestOrderbookClient } from "./integrations/limitless/limitless-quote-reader.js";
-import { OpinionClient, OpinionClientError } from "./integrations/opinion/opinion-client.js";
+import {
+  createOpinionOrderbookClient,
+  resolveOpinionOrderbookApiKeys
+} from "./integrations/opinion/opinion-orderbook-client.js";
 import { OpinionQuoteReader } from "./integrations/opinion/opinion-quote-reader.js";
 import { PolymarketClobFeeReader } from "./integrations/polymarket/polymarket-fee-reader.js";
 import { PolymarketGammaClient } from "./integrations/polymarket/polymarket-gamma-client.js";
@@ -296,64 +299,6 @@ const toRestRefresher = (reader: VenueQuoteSnapshotReader): VenueOrderbookRestRe
     quantity: 1
   })
 });
-
-const createOpinionOrderbookClient = (input: {
-  baseUrl: string;
-  apiKeys: readonly string[];
-  requestTimeoutMs: number;
-  logger: ReturnType<typeof createLogger>;
-}): Pick<OpinionClient, "getTokenOrderbook"> => {
-  const clients = input.apiKeys.map((apiKey) => new OpinionClient({
-    baseUrl: input.baseUrl,
-    apiKey,
-    requestTimeoutMs: input.requestTimeoutMs,
-    maxRetries: 0
-  }));
-  return {
-    async getTokenOrderbook(request) {
-      let lastError: unknown = null;
-      for (let index = 0; index < clients.length; index += 1) {
-        const client = clients[index]!;
-        try {
-          return await client.getTokenOrderbook(request);
-        } catch (error) {
-          lastError = error;
-          if (!isOpinionAuthError(error) || index === clients.length - 1) {
-            throw error;
-          }
-          input.logger.warn(
-            { venue: "OPINION", keyIndex: index },
-            "Opinion orderbook API key rejected; retrying with next configured key."
-          );
-        }
-      }
-      throw lastError instanceof Error ? lastError : new Error("Opinion token orderbook request failed.");
-    }
-  };
-};
-
-const resolveOpinionOrderbookApiKeys = (env: NodeJS.ProcessEnv): readonly string[] =>
-  uniqueStrings([
-    env.OPINION_API_KEY,
-    ...OPINION_STREAM_API_KEY_ENV_NAMES.map((name) => env[name])
-  ]);
-
-const isOpinionAuthError = (error: unknown): boolean =>
-  error instanceof OpinionClientError && (error.status === 401 || error.status === 403);
-
-const uniqueStrings = (values: readonly (string | undefined)[]): string[] => {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const value of values) {
-    const trimmed = value?.trim();
-    if (!trimmed || seen.has(trimmed)) {
-      continue;
-    }
-    seen.add(trimmed);
-    result.push(trimmed);
-  }
-  return result;
-};
 
 const OPINION_STREAM_API_KEY_ENV_NAMES = [
   "OPINION_BUILDER_API_KEY",
