@@ -27,6 +27,11 @@ export interface VenueOrderbookSubscriptionTarget {
   venueOutcomeId?: string | undefined;
 }
 
+interface OrderbookReadinessGroup {
+  venues: readonly VenueQuoteMappingReadiness[];
+  outcomeVenues?: readonly VenueQuoteMappingReadiness[] | undefined;
+}
+
 export interface VenueOrderbookStreamConnector {
   readonly venue: string;
   subscribe(
@@ -95,23 +100,23 @@ export interface OrderbookStreamServiceRunResult {
 
 const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
   pollIntervalMs: 1_000,
-  activeMarketLimit: 500,
-  backgroundReadinessMarketLimit: 250,
-  maxBackgroundSubscriptionTargets: 240,
-  maxSubscribeTargetsPerTick: 160,
+  activeMarketLimit: 1_000,
+  backgroundReadinessMarketLimit: 500,
+  maxBackgroundSubscriptionTargets: 640,
+  maxSubscribeTargetsPerTick: 220,
   maxUnsubscribeTargetsPerTick: 40,
-  maxTargetsPerConnectorCall: 40,
+  maxTargetsPerConnectorCall: 50,
   subscriptionHoldMs: 120_000,
   restRefreshIntervalMs: 10_000,
-  maxRestRefreshTargetsPerTick: 24,
-  maxRestRefreshTargetsPerVenuePerTick: 3,
+  maxRestRefreshTargetsPerTick: 40,
+  maxRestRefreshTargetsPerVenuePerTick: 6,
   restRefreshTimeoutMs: 2_000,
   restRefreshFailureCooldownMs: 60_000,
   restRefreshVenuePolicies: {
-    POLYMARKET: { maxTargetsPerSweep: 5, failureCooldownMs: 60_000 },
-    LIMITLESS: { maxTargetsPerSweep: 5, failureCooldownMs: 300_000 },
-    PREDICT_FUN: { maxTargetsPerSweep: 4, failureCooldownMs: 90_000 },
-    OPINION: { maxTargetsPerSweep: 4, failureCooldownMs: 180_000 }
+    POLYMARKET: { maxTargetsPerSweep: 10, failureCooldownMs: 60_000 },
+    LIMITLESS: { maxTargetsPerSweep: 2, failureCooldownMs: 300_000 },
+    PREDICT_FUN: { maxTargetsPerSweep: 6, failureCooldownMs: 90_000 },
+    OPINION: { maxTargetsPerSweep: 8, failureCooldownMs: 120_000 }
   },
   latestSnapshotPersistIntervalMs: 30_000,
   latestSnapshotPersistMinSpacingMs: 250,
@@ -131,6 +136,7 @@ export class OrderbookStreamService {
   private readonly restRefreshFailureCooldowns = new Map<string, number>();
   private readonly restRefreshVenueFailureCooldowns = new Map<string, number>();
   private readonly lastLatestSnapshotPersistBySubscription = new Map<string, number>();
+  private backgroundTargetCursor = 0;
   private lastLatestSnapshotPersistAt = 0;
   private lastRestRefreshSweepAt = 0;
   private lastSummaryLogAt = 0;
@@ -258,7 +264,7 @@ export class OrderbookStreamService {
       const readiness = batchReadiness
         ? batchReadiness.get(market.canonicalMarketId) ?? await this.loadSingleReadiness(market)
         : await this.loadSingleReadiness(market);
-      const targets = readiness
+      const targets = readiness.venues
         .filter(isQuoteReadyMapping)
         .map((row): VenueOrderbookSubscriptionTarget => ({
           canonicalMarketId: market.canonicalMarketId,
@@ -271,26 +277,36 @@ export class OrderbookStreamService {
     }
     const activeTargets = dedupeTargetsBySubscription(activeTargetGroups.flat());
     const activeNativeKeys = new Set(activeTargets.map(nativeSubscriptionKey));
-    const backgroundTargets = batchReadiness
+    const backgroundCandidates = batchReadiness
       ? [...batchReadiness.entries()]
-        .flatMap(([canonicalMarketId, readiness]) => readiness
+        .flatMap(([canonicalMarketId, readiness]) => (
+          readiness.outcomeVenues && readiness.outcomeVenues.length > 0
+            ? readiness.outcomeVenues
+            : readiness.venues
+        )
           .filter(isQuoteReadyMapping)
           .map((row): VenueOrderbookSubscriptionTarget => ({
             canonicalMarketId,
+            ...(row.canonicalOutcomeId ? { canonicalOutcomeId: row.canonicalOutcomeId } : {}),
             venue: normalizeVenue(row.venue),
             venueMarketId: row.venueMarketId!,
             ...(row.venueOutcomeId ? { venueOutcomeId: row.venueOutcomeId } : {})
           })))
-        .slice(0, this.config.maxBackgroundSubscriptionTargets)
       : [];
-    const dedupedBackgroundTargets = dedupeTargetsByNative(backgroundTargets)
+    const dedupedBackgroundTargets = dedupeTargetsByNative(backgroundCandidates)
       .filter((target) => !activeNativeKeys.has(nativeSubscriptionKey(target)));
-    return [...activeTargets, ...dedupedBackgroundTargets];
+    const selectedBackgroundTargets = selectBalancedBackgroundTargets(
+      dedupedBackgroundTargets,
+      this.config.maxBackgroundSubscriptionTargets,
+      this.backgroundTargetCursor
+    );
+    this.backgroundTargetCursor += 1;
+    return [...activeTargets, ...selectedBackgroundTargets];
   }
 
   private async loadBatchReadiness(
     readinessLimit: number
-  ): Promise<ReadonlyMap<string, readonly VenueQuoteMappingReadiness[]> | null> {
+  ): Promise<ReadonlyMap<string, OrderbookReadinessGroup> | null> {
     if (!this.deps.mappingResolver.listApprovedReadiness) {
       return null;
     }
@@ -300,14 +316,16 @@ export class OrderbookStreamService {
     return readinessByCanonicalMarket(rows);
   }
 
-  private async loadSingleReadiness(market: ActiveOrderbookMarket): Promise<readonly VenueQuoteMappingReadiness[]> {
+  private async loadSingleReadiness(market: ActiveOrderbookMarket): Promise<OrderbookReadinessGroup> {
     if (!this.deps.mappingResolver.getReadiness) {
-      return [];
+      return { venues: [] };
     }
-    return this.deps.mappingResolver.getReadiness({
-      canonicalMarketId: market.canonicalMarketId,
-      ...(market.canonicalOutcomeId ? { canonicalOutcomeId: market.canonicalOutcomeId } : {})
-    });
+    return {
+      venues: await this.deps.mappingResolver.getReadiness({
+        canonicalMarketId: market.canonicalMarketId,
+        ...(market.canonicalOutcomeId ? { canonicalOutcomeId: market.canonicalOutcomeId } : {})
+      })
+    };
   }
 
   private async subscribe(targets: readonly VenueOrderbookSubscriptionTarget[]): Promise<readonly VenueOrderbookSubscriptionTarget[]> {
@@ -642,6 +660,68 @@ const groupTargetsByNative = (
   return grouped;
 };
 
+const selectBalancedBackgroundTargets = (
+  targets: readonly VenueOrderbookSubscriptionTarget[],
+  limit: number,
+  cursor: number
+): readonly VenueOrderbookSubscriptionTarget[] => {
+  const maxTargets = Math.max(0, Math.floor(limit));
+  if (targets.length <= maxTargets) {
+    return targets;
+  }
+  if (maxTargets === 0) {
+    return [];
+  }
+  const grouped = groupByVenue(targets);
+  const venues = [...grouped.keys()].sort(venuePriorityCompare);
+  const rotatedByVenue = new Map<string, VenueOrderbookSubscriptionTarget[]>();
+  for (const venue of venues) {
+    const venueTargets = grouped.get(venue) ?? [];
+    rotatedByVenue.set(venue, rotate(venueTargets, cursor));
+  }
+
+  const selected: VenueOrderbookSubscriptionTarget[] = [];
+  let round = 0;
+  while (selected.length < maxTargets) {
+    let added = false;
+    for (const venue of venues) {
+      const target = rotatedByVenue.get(venue)?.[round];
+      if (!target) {
+        continue;
+      }
+      selected.push(target);
+      added = true;
+      if (selected.length >= maxTargets) {
+        break;
+      }
+    }
+    if (!added) {
+      break;
+    }
+    round += 1;
+  }
+  return selected;
+};
+
+const VENUE_BACKGROUND_PRIORITY = new Map([
+  ["POLYMARKET", 0],
+  ["OPINION", 1],
+  ["PREDICT_FUN", 2],
+  ["LIMITLESS", 3]
+]);
+
+const venuePriorityCompare = (left: string, right: string): number =>
+  (VENUE_BACKGROUND_PRIORITY.get(left) ?? 100) - (VENUE_BACKGROUND_PRIORITY.get(right) ?? 100)
+  || left.localeCompare(right);
+
+const rotate = <T>(values: readonly T[], cursor: number): T[] => {
+  if (values.length <= 1) {
+    return [...values];
+  }
+  const offset = Math.abs(cursor) % values.length;
+  return [...values.slice(offset), ...values.slice(0, offset)];
+};
+
 const restRefreshKey = (target: VenueOrderbookSubscriptionTarget): string =>
   nativeSubscriptionKey(target);
 
@@ -678,17 +758,31 @@ const chunks = <T>(values: readonly T[], size: number): T[][] => {
 
 const readinessByCanonicalMarket = (
   rows: readonly SharedCoreQuoteReadinessMarket[]
-): ReadonlyMap<string, readonly VenueQuoteMappingReadiness[]> => {
-  const byMarket = new Map<string, VenueQuoteMappingReadiness[]>();
+): ReadonlyMap<string, OrderbookReadinessGroup> => {
+  const byMarket = new Map<string, {
+    venues: VenueQuoteMappingReadiness[];
+    outcomeVenues: VenueQuoteMappingReadiness[];
+  }>();
   for (const row of rows) {
     const marketIds = row.canonicalMarketIds.length > 0
       ? row.canonicalMarketIds
       : [row.canonicalEventId];
     for (const marketId of marketIds) {
-      byMarket.set(marketId, [...(byMarket.get(marketId) ?? []), ...row.venues]);
+      const bucket = byMarket.get(marketId) ?? { venues: [], outcomeVenues: [] };
+      bucket.venues.push(...row.venues);
+      if (row.outcomeVenues && row.outcomeVenues.length > 0) {
+        bucket.outcomeVenues.push(...row.outcomeVenues);
+      }
+      byMarket.set(marketId, bucket);
     }
   }
-  return byMarket;
+  return new Map([...byMarket.entries()].map(([marketId, bucket]) => [
+    marketId,
+    {
+      venues: bucket.venues,
+      ...(bucket.outcomeVenues.length > 0 ? { outcomeVenues: bucket.outcomeVenues } : {})
+    }
+  ]));
 };
 
 const topicPart = (value: string): string =>

@@ -343,6 +343,70 @@ describe("OrderbookStreamService", () => {
     expect(connector.subscribed.map((target) => target.canonicalMarketId)).toEqual(["canonical-1", "canonical-1"]);
   });
 
+  it("uses outcome-aware background readiness so card prices land on outcome websocket topics", async () => {
+    const connector = new FakeConnector("POLYMARKET");
+    const listApprovedReadiness = vi.fn(async () => [
+      {
+        canonicalEventId: "event-1",
+        canonicalMarketIds: ["canonical-1"],
+        title: "Event",
+        category: "Crypto",
+        venues: [],
+        outcomeVenues: [
+          {
+            canonicalOutcomeId: "YES",
+            venue: "POLYMARKET",
+            approvedVenueMarketId: "approved-yes",
+            venueMarketId: "poly-market",
+            venueOutcomeId: "token-yes",
+            quoteReady: true,
+            blockers: []
+          },
+          {
+            canonicalOutcomeId: "NO",
+            venue: "POLYMARKET",
+            approvedVenueMarketId: "approved-no",
+            venueMarketId: "poly-market",
+            venueOutcomeId: "token-no",
+            quoteReady: true,
+            blockers: []
+          }
+        ]
+      }
+    ]);
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness() {
+          return [];
+        },
+        listApprovedReadiness
+      },
+      connectors: [connector],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now,
+      config: { backgroundReadinessMarketLimit: 1, maxBackgroundSubscriptionTargets: 4 }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({
+      desiredSubscriptions: 2,
+      subscribed: 2
+    });
+    expect(connector.subscribed.map((target) => ({
+      canonicalOutcomeId: target.canonicalOutcomeId,
+      venueOutcomeId: target.venueOutcomeId
+    }))).toEqual([
+      { canonicalOutcomeId: "YES", venueOutcomeId: "token-yes" },
+      { canonicalOutcomeId: "NO", venueOutcomeId: "token-no" }
+    ]);
+  });
+
   it("keeps active terminal targets ahead of background readiness duplicates", async () => {
     const connector = new FakeConnector("POLYMARKET");
     const service = new OrderbookStreamService({
@@ -959,7 +1023,7 @@ describe("OrderbookStreamService", () => {
       }
     });
 
-    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 16 });
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 14 });
     const countsByVenue = new Map<string, number>();
     for (const [target] of refresh.mock.calls) {
       countsByVenue.set(target.venue, (countsByVenue.get(target.venue) ?? 0) + 1);
@@ -967,7 +1031,7 @@ describe("OrderbookStreamService", () => {
     expect(countsByVenue).toEqual(new Map([
       ["POLYMARKET", 4],
       ["PREDICT_FUN", 4],
-      ["LIMITLESS", 4],
+      ["LIMITLESS", 2],
       ["OPINION", 4]
     ]));
   });

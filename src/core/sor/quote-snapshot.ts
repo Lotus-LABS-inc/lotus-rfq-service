@@ -114,6 +114,7 @@ export interface VenueQuoteMapping {
 }
 
 export interface VenueQuoteMappingReadiness {
+  canonicalOutcomeId?: string | undefined;
   venue: string;
   approvedVenueMarketId: string;
   venueMarketId: string | null;
@@ -128,6 +129,7 @@ export interface SharedCoreQuoteReadinessMarket {
   title: string;
   category: string;
   venues: readonly VenueQuoteMappingReadiness[];
+  outcomeVenues?: readonly VenueQuoteMappingReadiness[] | undefined;
 }
 
 export interface VenueQuoteMappingResolver {
@@ -175,6 +177,7 @@ export interface SharedCoreQuoteMappingLoader {
 
 const supportedQuoteVenues = new Set(["POLYMARKET", "LIMITLESS", "PREDICT", "PREDICT_FUN", "OPINION", "MYRIAD"]);
 const DEFAULT_MAPPING_READINESS_CACHE_TTL_MS = 60_000;
+const DEFAULT_DISPLAY_OUTCOME_IDS = ["YES", "NO"] as const;
 
 export interface CalculatedVenueQuoteSnapshot {
   venue: string;
@@ -949,6 +952,7 @@ const normalizeSharedCoreMappingReadiness = (
       ]
     });
     return [{
+      ...(canonicalOutcomeId ? { canonicalOutcomeId } : {}),
       venue,
       approvedVenueMarketId: row.venue_market_id,
       venueMarketId,
@@ -1038,13 +1042,24 @@ const normalizeSharedCoreReadinessMarkets = (rows: readonly SharedCoreVenueQuote
     bucket.rowByVenueKey.set(`${row.venue}:${row.venue_market_id}`, row);
     byEvent.set(eventId, bucket);
   }
-  return [...byEvent.entries()].map(([canonicalEventId, bucket]) => ({
-    canonicalEventId,
-    canonicalMarketIds: [...bucket.canonicalMarketIds].sort(),
-    title: bucket.title,
-    category: bucket.category,
-    venues: normalizeSharedCoreMappingReadiness([...bucket.rowByVenueKey.values()])
-  }));
+  return [...byEvent.entries()].map(([canonicalEventId, bucket]) => {
+    const rows = [...bucket.rowByVenueKey.values()];
+    const outcomeIds = readinessDisplayOutcomeIds(rows);
+    return {
+      canonicalEventId,
+      canonicalMarketIds: [...bucket.canonicalMarketIds].sort(),
+      title: bucket.title,
+      category: bucket.category,
+      venues: normalizeSharedCoreMappingReadiness(rows),
+      outcomeVenues: outcomeIds.flatMap((outcomeId) => normalizeSharedCoreMappingReadiness(rows, outcomeId))
+    };
+  });
+};
+
+const readinessDisplayOutcomeIds = (rows: readonly SharedCoreVenueQuoteMappingRow[]): readonly string[] => {
+  const aliases = new Set(readinessOutcomeAliasesFromRows(rows).map((value) => value.trim().toUpperCase()));
+  const binary = DEFAULT_DISPLAY_OUTCOME_IDS.filter((outcomeId) => aliases.has(outcomeId));
+  return binary.length > 0 ? binary : DEFAULT_DISPLAY_OUTCOME_IDS;
 };
 
 const quoteMappingBlockers = (input: {
