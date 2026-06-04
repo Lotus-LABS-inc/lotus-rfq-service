@@ -325,6 +325,36 @@ describe("HotQuoteSnapshotService", () => {
     expect(result.map((entry) => entry.canonicalMarketId)).toEqual(["newer-market", "older-market"]);
   });
 
+  it("orders Redis-active markets by touchedAt even when older entries have legacy expiry scores", async () => {
+    const redis = new FakeRedis();
+    let current = now;
+    const service = new HotQuoteSnapshotService({
+      memoryCache: new QuoteSnapshotCache(),
+      redis,
+      now: () => current,
+      config: { activeMarketTtlMs: 60_000 }
+    });
+
+    service.touch({ canonicalMarketId: "older-market" });
+    await vi.waitFor(() => {
+      expect(redis.scores.size).toBeGreaterThan(0);
+    });
+    for (const scoreSet of redis.scores.values()) {
+      for (const member of scoreSet.keys()) {
+        scoreSet.set(member, now.getTime() + 180_000);
+      }
+    }
+
+    current = new Date(now.getTime() + 1_000);
+    service.touch({ canonicalMarketId: "newer-market" });
+    await vi.waitFor(() => {
+      expect(redis.values.size).toBeGreaterThan(1);
+    });
+
+    const result = await service.listActiveMarketsFromRedis({ limit: 2 });
+    expect(result.map((entry) => entry.canonicalMarketId)).toEqual(["newer-market", "older-market"]);
+  });
+
   it("isolates hot quote and active-market Redis keys by environment namespace", async () => {
     const redis = new FakeRedis();
     const staging = new HotQuoteSnapshotService({
