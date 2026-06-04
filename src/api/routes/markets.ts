@@ -967,11 +967,21 @@ const markMarketCatalogResponseFromStaleCache = <T extends Record<string, unknow
 });
 
 const scrubMarketCatalogResponseForKey = <T extends Record<string, unknown>>(key: string, value: T): T => {
-  if (!isQuoteReadyMarketCatalogCacheKey(key) || !Array.isArray(value.markets)) {
+  if (!key.startsWith("markets:") || !Array.isArray(value.markets)) {
     return value;
   }
+  let markets = marketCatalogCacheKeyIncludesInactive(key)
+    ? value.markets
+    : value.markets.filter(isPublicMarketListItem);
+  if (!isQuoteReadyMarketCatalogCacheKey(key)) {
+    return {
+      ...value,
+      markets,
+      count: markets.length
+    };
+  }
   const routeCoverage = marketCatalogRouteCoverageFromCacheKey(key);
-  const markets = value.markets.filter((market) =>
+  markets = markets.filter((market) =>
     isTradableMarketListItem(market, {
       trustMaterializedFreshness: hasRecentMaterializedAt(value)
     }) && routeCoverageMatchesMarketListItem(market, routeCoverage)
@@ -981,6 +991,28 @@ const scrubMarketCatalogResponseForKey = <T extends Record<string, unknown>>(key
     markets,
     count: markets.length
   };
+};
+
+const marketCatalogCacheKeyIncludesInactive = (key: string): boolean =>
+  key.includes("\"includeInactive\":true");
+
+const isPublicMarketListItem = (value: unknown): boolean => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const record = value as { status?: unknown; expiresAt?: unknown; resolvesAt?: unknown };
+  if (record.status !== "OPEN") {
+    return false;
+  }
+  const expiresAtMs = typeof record.expiresAt === "string" ? Date.parse(record.expiresAt) : NaN;
+  if (Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now()) {
+    return false;
+  }
+  const resolvesAtMs = typeof record.resolvesAt === "string" ? Date.parse(record.resolvesAt) : NaN;
+  if (Number.isFinite(resolvesAtMs) && resolvesAtMs <= Date.now()) {
+    return false;
+  }
+  return true;
 };
 
 const isTradableMarketListItem = (

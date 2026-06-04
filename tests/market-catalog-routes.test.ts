@@ -13,7 +13,7 @@ import {
   SharedCoreQuoteMappingRepository
 } from "../src/repositories/market-catalog.repository.js";
 import type { MarketCatalogSnapshotCache } from "../src/services/market-catalog-snapshot-cache.js";
-import { marketCatalogDetailCacheKey } from "../src/services/market-catalog-snapshot-materializer.js";
+import { marketCatalogDetailCacheKey, stableQueryCacheKey } from "../src/services/market-catalog-snapshot-materializer.js";
 import { marketOrderbookTopic } from "../src/services/orderbook-stream.service.js";
 
 const market: MarketCatalogMarket = {
@@ -284,6 +284,51 @@ describe("market catalog routes", () => {
         { canonicalEventId: market.canonicalEventId, status: "OPEN" }
       ]
     });
+
+    await app.close();
+  });
+
+  it("scrubs inactive rows from shared catalog snapshots before serving public lists", async () => {
+    const app = Fastify({ logger: false });
+    const expiredMarket: MarketCatalogMarket = {
+      ...market,
+      canonicalEventId: "22222222-2222-5222-8222-222222222222",
+      canonicalMarketIds: ["THRESHOLD|BTC|2026-04-30"],
+      displayTopic: "BTC threshold by date",
+      displayOutcome: "April 30, 2026",
+      displayOutcomeKey: "date:2026-04-30",
+      title: "Expired BTC threshold",
+      normalizedTitle: "expired btc threshold",
+      status: "RESOLVED_OR_EXPIRED",
+      expiresAt: "2026-04-30T12:00:00.000Z",
+      resolvesAt: "2026-04-30T12:00:00.000Z",
+      updatedAt: "2026-04-30T12:00:00.000Z"
+    };
+    const repository = new FakeMarketCatalogRepository();
+    const snapshotCache = new FakeMarketCatalogSnapshotCache();
+    snapshotCache.values.set(`markets:${stableQueryCacheKey({ limit: 10, view: "compact" })}`, {
+      count: 2,
+      view: "compact",
+      materialized: true,
+      materializedAt: "2026-06-01T00:00:00.000Z",
+      markets: [expiredMarket, market]
+    });
+    await registerMarketCatalogRoutes(app, {
+      marketCatalogRepository: repository,
+      marketCatalogSnapshotCache: snapshotCache
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/markets?limit=10&view=compact"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      count: 1,
+      markets: [{ canonicalEventId: market.canonicalEventId, status: "OPEN" }]
+    });
+    expect(response.body).not.toContain("THRESHOLD|BTC|2026-04-30");
 
     await app.close();
   });
