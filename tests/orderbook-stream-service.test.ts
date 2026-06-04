@@ -1506,6 +1506,63 @@ describe("OrderbookStreamService", () => {
     expect(refresh).toHaveBeenCalledTimes(2);
   });
 
+  it("treats DOMException-style REST timeouts as venue cooldowns", async () => {
+    const connector = new FakeConnector("OPINION");
+    const timeoutError = {
+      name: "TimeoutError",
+      message: "The operation was aborted due to timeout",
+      code: 23
+    };
+    const refresh = vi.fn(async () => {
+      throw timeoutError;
+    });
+    let currentNow = now;
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [
+            { canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: currentNow },
+            { canonicalMarketId: "canonical-2", canonicalOutcomeId: "YES", lastSeenAt: currentNow }
+          ];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness(input) {
+          return [{
+            venue: "OPINION",
+            approvedVenueMarketId: `${input.canonicalMarketId}-approved`,
+            venueMarketId: `${input.canonicalMarketId}-book`,
+            venueOutcomeId: "YES",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors: [connector],
+      restRefreshers: [{ venue: "OPINION", refresh }],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => currentNow,
+      config: {
+        restRefreshIntervalMs: 1,
+        restRefreshFailureCooldownMs: 60_000,
+        restRefreshVenuePolicies: {
+          OPINION: { maxTargetsPerSweep: 2, failureCooldownMs: 300_000 }
+        }
+      }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
+    currentNow = new Date(now.getTime() + 10_000);
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    currentNow = new Date(now.getTime() + 301_000);
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
   it("backs off blocked no-depth REST snapshots per target without cooling down the whole venue", async () => {
     const connector = new FakeConnector("OPINION");
     const refresh = vi.fn(async (target: VenueOrderbookSubscriptionTarget) => {

@@ -827,7 +827,7 @@ const restRefreshFailureScope = (error: unknown): "target" | "venue" => {
       return "venue";
     }
   }
-  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  const message = errorMessage(error);
   if (/market is not active|not accepting orders|market closed|orderbook request failed with status 404/i.test(message)) {
     return "target";
   }
@@ -842,9 +842,24 @@ const errorStatus = (error: unknown): number | null => {
   if (typeof record.status === "number" && Number.isInteger(record.status)) {
     return record.status;
   }
-  const message = error instanceof Error ? error.message : typeof record.message === "string" ? record.message : "";
+  const message = errorMessage(error);
   const match = message.match(/\bstatus\s+(\d{3})\b/i);
   return match?.[1] ? Number.parseInt(match[1], 10) : null;
+};
+
+const errorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  const record = typeof error === "object" && error !== null ? error as Record<string, unknown> : {};
+  return [
+    typeof record.name === "string" ? record.name : "",
+    typeof record.message === "string" ? record.message : "",
+    typeof record.code === "string" || typeof record.code === "number" ? String(record.code) : ""
+  ].filter(Boolean).join(" ");
 };
 
 const rotate = <T>(values: readonly T[], cursor: number): T[] => {
