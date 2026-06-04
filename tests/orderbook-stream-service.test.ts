@@ -661,6 +661,79 @@ describe("OrderbookStreamService", () => {
     ]);
   });
 
+  it("keeps warming background markets when active targets leave spare budget", async () => {
+    const connector = new FakeConnector("POLYMARKET");
+    const listApprovedReadiness = vi.fn(async () => [
+      {
+        canonicalEventId: "event-1",
+        canonicalMarketIds: ["active-1"],
+        title: "Active Event",
+        category: "Crypto",
+        venues: [],
+        outcomeVenues: [{
+          canonicalOutcomeId: "YES",
+          venue: "POLYMARKET",
+          approvedVenueMarketId: "approved-active-yes",
+          venueMarketId: "poly-active",
+          venueOutcomeId: "active-yes",
+          quoteReady: true,
+          blockers: []
+        }]
+      },
+      {
+        canonicalEventId: "event-2",
+        canonicalMarketIds: ["background-1"],
+        title: "Background Event",
+        category: "Crypto",
+        venues: [{
+          venue: "POLYMARKET",
+          approvedVenueMarketId: "approved-background",
+          venueMarketId: "poly-background",
+          venueOutcomeId: null,
+          quoteReady: true,
+          blockers: []
+        }]
+      }
+    ]);
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [{ canonicalMarketId: "active-1", lastSeenAt: now }];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness() {
+          return [];
+        },
+        listApprovedReadiness
+      },
+      connectors: [connector],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now,
+      config: { backgroundReadinessMarketLimit: 2, maxBackgroundSubscriptionTargets: 2 }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({
+      activeMarkets: 1,
+      desiredSubscriptions: 2,
+      subscribed: 2
+    });
+    expect(connector.subscribed).toEqual([
+      expect.objectContaining({
+        canonicalMarketId: "active-1",
+        canonicalOutcomeId: "YES",
+        venueMarketId: "poly-active",
+        venueOutcomeId: "active-yes"
+      }),
+      expect.objectContaining({
+        canonicalMarketId: "background-1",
+        venueMarketId: "poly-background"
+      })
+    ]);
+  });
+
   it("keeps active terminal targets ahead of background readiness duplicates", async () => {
     const connector = new FakeConnector("POLYMARKET");
     const service = new OrderbookStreamService({

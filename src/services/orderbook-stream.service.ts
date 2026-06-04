@@ -290,9 +290,10 @@ export class OrderbookStreamService {
     }
     const activeTargets = dedupeTargetsBySubscription(activeTargetGroups.flat());
     const activeNativeKeys = new Set(activeTargets.map(nativeSubscriptionKey));
-    const backgroundTargetLimit = activeTargets.length > 0
-      ? 0
-      : this.config.maxBackgroundSubscriptionTargets;
+    const backgroundTargetLimit = Math.max(
+      0,
+      this.config.maxBackgroundSubscriptionTargets - activeTargets.length
+    );
     const backgroundCandidates = batchReadiness
       ? [...batchReadiness.entries()]
         .flatMap(([canonicalMarketId, readiness]) => (
