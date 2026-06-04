@@ -67,6 +67,14 @@ const livePricesQuerySchema = z.object({
   outcomeId: z.string().min(1).optional()
 });
 
+const livePricesRequestSchema = z.object({
+  items: z.array(z.object({
+    marketId: z.string().min(1),
+    canonicalMarketIds: z.array(z.string().min(1)).max(20).optional(),
+    outcomeId: z.string().min(1).optional()
+  })).min(1).max(80)
+});
+
 const VENUE_SUFFIX_PATTERN = /:(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$/i;
 const DEFAULT_MARKET_QUOTE_READINESS_TIMEOUT_MS = 5_000;
 const DEFAULT_MARKET_QUOTE_READINESS_STALE_CACHE_MS = DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS;
@@ -366,6 +374,30 @@ export const registerMarketCatalogRoutes = async (
       });
     }
     return reply.send(await deps.marketDataViewService.getLivePrices({ items }));
+  });
+
+  app.post("/markets/live-prices", async (request, reply) => {
+    if (!deps.marketDataViewService?.getLivePrices) {
+      return reply.status(503).send({
+        code: "MARKET_LIVE_PRICES_UNAVAILABLE",
+        message: "Live market price display service is not configured."
+      });
+    }
+    const parsed = livePricesRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        code: "INVALID_MARKET_LIVE_PRICES_REQUEST",
+        message: "Market live prices request validation failed.",
+        details: parsed.error.flatten()
+      });
+    }
+    return reply.send(await deps.marketDataViewService.getLivePrices({
+      items: parsed.data.items.map((item) => ({
+        marketId: item.marketId,
+        ...(item.canonicalMarketIds ? { canonicalMarketIds: item.canonicalMarketIds } : {}),
+        ...(item.outcomeId ? { outcomeId: item.outcomeId } : {})
+      }))
+    }));
   });
 
   app.get("/markets/:marketId/orderbook", async (request, reply) => {
