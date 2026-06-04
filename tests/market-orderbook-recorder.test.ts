@@ -18,15 +18,15 @@ const logger: MarketOrderbookRecorderLogger = {
 describe("MarketOrderbookRecorder", () => {
   it("enables recording by default for worker-owned runtime config", () => {
     expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
-      intervalMs: 12_000,
+      intervalMs: 10_000,
       marketBatchSize: 24,
       activeMarketBatchSize: 250,
       activeMaxSamplesPerTick: 36,
       priorityMarketBatchSize: 180,
       priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-      maxSamplesPerTick: 56,
+      maxSamplesPerTick: 90,
       sampleConcurrency: 14,
-      maxTickDurationMs: 10_500,
+      maxTickDurationMs: 9_000,
       sampleTimeoutMs: 1_800,
       cleanupIntervalMs: 30 * 60_000
     });
@@ -37,15 +37,15 @@ describe("MarketOrderbookRecorder", () => {
     process.env.MARKET_ORDERBOOK_RECORDER_ENABLED = "false";
     try {
       expect(buildMarketOrderbookRecorderConfig()).toMatchObject({
-        intervalMs: 12_000,
+        intervalMs: 10_000,
         marketBatchSize: 24,
         activeMarketBatchSize: 250,
         activeMaxSamplesPerTick: 36,
         priorityMarketBatchSize: 180,
         priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-        maxSamplesPerTick: 56,
+        maxSamplesPerTick: 90,
         sampleConcurrency: 14,
-        maxTickDurationMs: 10_500,
+        maxTickDurationMs: 9_000,
         sampleTimeoutMs: 1_800,
         cleanupIntervalMs: 30 * 60_000
       });
@@ -65,8 +65,8 @@ describe("MarketOrderbookRecorder", () => {
     expect(configs).toHaveLength(2);
     expect(configs.map((config) => config.shardCount)).toEqual([2, 2]);
     expect(configs.map((config) => config.shardIndex)).toEqual([0, 1]);
-    expect(configs.every((config) => config.intervalMs === 12_000)).toBe(true);
-    expect(configs.every((config) => config.maxSamplesPerTick === 56)).toBe(true);
+    expect(configs.every((config) => config.intervalMs === 10_000)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerTick === 90)).toBe(true);
     expect(configs.every((config) => config.activeMaxSamplesPerTick === 36)).toBe(true);
     expect(configs.every((config) => config.sampleTimeoutMs === 1_800)).toBe(true);
     expect(configs.every((config) => (config.maxTickDurationMs ?? 0) < config.intervalMs)).toBe(true);
@@ -81,7 +81,7 @@ describe("MarketOrderbookRecorder", () => {
     );
 
     expect(configs).toHaveLength(2);
-    expect(configs.every((config) => config.maxSamplesPerTick === 56)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerTick === 90)).toBe(true);
     expect(configs.every((config) => config.sampleConcurrency === 14)).toBe(true);
   });
 

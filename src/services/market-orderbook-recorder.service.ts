@@ -62,7 +62,7 @@ export interface MarketOrderbookRecorderRunResult {
 }
 
 const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
-  intervalMs: 12_000,
+  intervalMs: 10_000,
   marketBatchSize: 24,
   activeMarketBatchSize: 250,
   activeMaxSamplesPerTick: 36,
@@ -70,9 +70,9 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
   priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"] as readonly string[],
   shardCount: 1,
   shardIndex: 0,
-  maxSamplesPerTick: 56,
+  maxSamplesPerTick: 90,
   sampleConcurrency: 14,
-  maxTickDurationMs: 10_500,
+  maxTickDurationMs: 9_000,
   sampleTimeoutMs: 1_800,
   cleanupIntervalMs: 30 * 60_000,
   retentionHours: 720,
