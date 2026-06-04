@@ -140,6 +140,8 @@ const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
   summaryLogIntervalMs: 15_000
 };
 
+const REST_REFRESH_HARD_TARGET_COOLDOWN_MS = 30 * 60_000;
+
 export const ORDERBOOK_GATEWAY_REDIS_CHANNEL = "rfq:gateway:events";
 export const ORDERBOOK_STREAM_SCHEMA_VERSION = "lotus-orderbook-stream-v2";
 
@@ -458,7 +460,16 @@ export class OrderbookStreamService {
             this.restRefreshFailureCooldowns.delete(key);
           }
         } catch (error) {
-          this.markRestRefreshFailure(target, nowMs, restRefreshFailureScope(error));
+          const hardBlockedSnapshot = restRefreshHardBlockedSnapshot(target, error, this.now());
+          if (hardBlockedSnapshot) {
+            this.onSnapshot(hardBlockedSnapshot, target);
+          }
+          this.markRestRefreshFailure(
+            target,
+            nowMs,
+            restRefreshFailureScope(error),
+            hardBlockedSnapshot ? REST_REFRESH_HARD_TARGET_COOLDOWN_MS : undefined
+          );
           this.deps.logger.warn(
             {
               err: error,
@@ -491,9 +502,10 @@ export class OrderbookStreamService {
   private markRestRefreshFailure(
     target: VenueOrderbookSubscriptionTarget,
     nowMs: number,
-    scope: "target" | "venue"
+    scope: "target" | "venue",
+    cooldownMsOverride?: number | undefined
   ): void {
-    const cooldownMs = this.restRefreshFailureCooldownMsFor(target);
+    const cooldownMs = cooldownMsOverride ?? this.restRefreshFailureCooldownMsFor(target);
     this.restRefreshFailureCooldowns.set(
       restRefreshKey(target),
       nowMs + cooldownMs
@@ -857,6 +869,55 @@ const restRefreshFailureScope = (error: unknown): "target" | "venue" => {
     return "venue";
   }
   return "target";
+};
+
+const restRefreshHardBlockedSnapshot = (
+  target: VenueOrderbookSubscriptionTarget,
+  error: unknown,
+  receivedAt: Date
+): NormalizedVenueQuoteSnapshot | null => {
+  const blockers = restRefreshHardBlockers(error);
+  if (blockers.length === 0) {
+    return null;
+  }
+  return {
+    venue: normalizeVenue(target.venue),
+    venueMarketId: target.venueMarketId,
+    ...(target.venueOutcomeId ? { venueOutcomeId: target.venueOutcomeId } : {}),
+    source: "REST",
+    quoteQuality: "DIAGNOSTIC_ONLY",
+    sourceTimestamp: null,
+    receivedAt,
+    bids: [],
+    asks: [],
+    missingFactors: ["ORDERBOOK_DEPTH"],
+    blockers,
+    streamResynced: true,
+    metadata: {
+      displayOnly: true,
+      restFailure: true,
+      venueMarketId: target.venueMarketId,
+      venueOutcomeId: target.venueOutcomeId ?? null
+    }
+  };
+};
+
+const restRefreshHardBlockers = (error: unknown): readonly string[] => {
+  const status = errorStatus(error);
+  const message = errorMessage(error);
+  if (status === 404 || status === 410) {
+    return ["QUOTE_PROVIDER_HTTP_404"];
+  }
+  if (
+    status === 400 &&
+    /market is not active|not accepting orders|market closed|not found/i.test(message)
+  ) {
+    return ["QUOTE_PROVIDER_MARKET_INACTIVE"];
+  }
+  if (/market is not active|not accepting orders|market closed/i.test(message)) {
+    return ["QUOTE_PROVIDER_MARKET_INACTIVE"];
+  }
+  return [];
 };
 
 const errorStatus = (error: unknown): number | null => {

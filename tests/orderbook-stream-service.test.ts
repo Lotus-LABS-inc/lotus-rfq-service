@@ -1397,6 +1397,63 @@ describe("OrderbookStreamService", () => {
     expect(refresh).toHaveBeenCalledTimes(2);
   });
 
+  it("records hard unavailable REST targets as typed no-depth display snapshots", async () => {
+    const connector = new FakeConnector("POLYMARKET");
+    const put = vi.fn();
+    const refresh = vi.fn(async () => {
+      throw new Error("Polymarket orderbook request failed with status 404.");
+    });
+    let currentNow = now;
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [{
+            canonicalMarketId: "canonical-1",
+            canonicalOutcomeId: "YES",
+            lastSeenAt: currentNow
+          }];
+        }
+      },
+      hotSnapshots: { put },
+      mappingResolver: {
+        async getReadiness() {
+          return [{
+            venue: "POLYMARKET",
+            approvedVenueMarketId: "approved-1",
+            venueMarketId: "poly-market",
+            venueOutcomeId: "poly-token",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors: [connector],
+      restRefreshers: [{ venue: "POLYMARKET", refresh }],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => currentNow,
+      config: {
+        restRefreshIntervalMs: 1,
+        restRefreshFailureCooldownMs: 60_000
+      }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
+    expect(put).toHaveBeenCalledWith(expect.objectContaining({
+      venue: "POLYMARKET",
+      venueMarketId: "poly-market",
+      venueOutcomeId: "poly-token",
+      bids: [],
+      asks: [],
+      blockers: ["QUOTE_PROVIDER_HTTP_404"],
+      quoteQuality: "DIAGNOSTIC_ONLY"
+    }));
+
+    currentNow = new Date(now.getTime() + 61_000);
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 0 });
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
   it("applies venue-specific REST fallback budgets from code defaults", async () => {
     const connectors = [
       new FakeConnector("POLYMARKET"),
