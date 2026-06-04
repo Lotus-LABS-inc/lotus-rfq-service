@@ -428,7 +428,7 @@ export class OrderbookStreamService {
             this.onSnapshot(snapshot, fanoutTarget);
           }
         } catch (error) {
-          this.markRestRefreshFailure(target, nowMs, "venue");
+          this.markRestRefreshFailure(target, nowMs, restRefreshFailureScope(error));
           this.deps.logger.warn(
             {
               err: error,
@@ -713,6 +713,36 @@ const VENUE_BACKGROUND_PRIORITY = new Map([
 const venuePriorityCompare = (left: string, right: string): number =>
   (VENUE_BACKGROUND_PRIORITY.get(left) ?? 100) - (VENUE_BACKGROUND_PRIORITY.get(right) ?? 100)
   || left.localeCompare(right);
+
+const restRefreshFailureScope = (error: unknown): "target" | "venue" => {
+  const status = errorStatus(error);
+  if (status !== null) {
+    if (status === 400 || status === 404 || status === 410) {
+      return "target";
+    }
+    if (status === 429 || status >= 500) {
+      return "venue";
+    }
+  }
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  if (/market is not active|not accepting orders|market closed|orderbook request failed with status 404/i.test(message)) {
+    return "target";
+  }
+  if (/timeout|timed out|\b429\b|\b5\d\d\b|rate limit|too many requests/i.test(message)) {
+    return "venue";
+  }
+  return "target";
+};
+
+const errorStatus = (error: unknown): number | null => {
+  const record = typeof error === "object" && error !== null ? error as Record<string, unknown> : {};
+  if (typeof record.status === "number" && Number.isInteger(record.status)) {
+    return record.status;
+  }
+  const message = error instanceof Error ? error.message : typeof record.message === "string" ? record.message : "";
+  const match = message.match(/\bstatus\s+(\d{3})\b/i);
+  return match?.[1] ? Number.parseInt(match[1], 10) : null;
+};
 
 const rotate = <T>(values: readonly T[], cursor: number): T[] => {
   if (values.length <= 1) {

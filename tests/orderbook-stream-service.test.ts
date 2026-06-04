@@ -1229,6 +1229,72 @@ describe("OrderbookStreamService", () => {
     expect(refresh).toHaveBeenCalledTimes(2);
   });
 
+  it("does not let an inactive market cool down the whole REST venue", async () => {
+    const connector = new FakeConnector("LIMITLESS");
+    const refresh = vi.fn(async (target: VenueOrderbookSubscriptionTarget) => {
+      if (target.venueMarketId === "inactive-market") {
+        throw new Error("Limitless orderbook request failed with status 400. Market is not active");
+      }
+      return {
+        ...snapshot(target),
+        source: "REST" as const,
+        quoteQuality: "FULL_DEPTH_REST" as const
+      };
+    });
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return [
+            { canonicalMarketId: "canonical-inactive", canonicalOutcomeId: "YES", lastSeenAt: now },
+            { canonicalMarketId: "canonical-live", canonicalOutcomeId: "YES", lastSeenAt: now }
+          ];
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness(input) {
+          return input.canonicalMarketId === "canonical-inactive"
+            ? [{
+              venue: "LIMITLESS",
+              approvedVenueMarketId: "approved-inactive",
+              venueMarketId: "inactive-market",
+              venueOutcomeId: "YES",
+              quoteReady: true,
+              blockers: []
+            }]
+            : [{
+              venue: "LIMITLESS",
+              approvedVenueMarketId: "approved-live",
+              venueMarketId: "live-market",
+              venueOutcomeId: "YES",
+              quoteReady: true,
+              blockers: []
+            }];
+        }
+      },
+      connectors: [connector],
+      restRefreshers: [{ venue: "LIMITLESS", refresh }],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now,
+      config: {
+        maxRestRefreshTargetsPerVenuePerTick: 2,
+        restRefreshVenuePolicies: {
+          LIMITLESS: { maxTargetsPerSweep: 2, failureCooldownMs: 300_000 }
+        }
+      }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({
+      desiredSubscriptions: 2,
+      restRefreshed: 1
+    });
+    expect(refresh.mock.calls.map(([target]) => target.venueMarketId)).toEqual([
+      "inactive-market",
+      "live-market"
+    ]);
+  });
+
   it("runs REST fallback as bounded sweeps instead of rotating through new targets every poll", async () => {
     const connector = new FakeConnector("PREDICT_FUN");
     const refresh = vi.fn(async (target: VenueOrderbookSubscriptionTarget) => ({
