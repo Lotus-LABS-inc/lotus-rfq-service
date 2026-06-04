@@ -381,16 +381,18 @@ describe("OrderbookStreamService", () => {
     const connector = new FakeConnector("LIMITLESS");
     const refresh = vi.fn(async (target: VenueOrderbookSubscriptionTarget) => ({
       ...snapshot(target),
+      venueOutcomeId: "limitless-native-token",
       source: "REST" as const,
       quoteQuality: "FULL_DEPTH_REST" as const
     }));
+    const hotSnapshots = { put: vi.fn() };
     const service = new OrderbookStreamService({
       activeMarkets: {
         async listActiveMarketsFromRedis() {
           return [];
         }
       },
-      hotSnapshots: { put: vi.fn() },
+      hotSnapshots,
       mappingResolver: {
         async getReadiness() {
           return [];
@@ -405,7 +407,7 @@ describe("OrderbookStreamService", () => {
               venue: "LIMITLESS",
               approvedVenueMarketId: "approved-1",
               venueMarketId: "september-30-2026-1775137169961",
-              venueOutcomeId: "YES",
+              venueOutcomeId: null,
               quoteReady: false,
               blockers: ["LIVE_QUOTE_SNAPSHOT_MISSING"]
             }]
@@ -427,6 +429,14 @@ describe("OrderbookStreamService", () => {
     });
     expect(connector.subscribed).toHaveLength(1);
     expect(refresh).toHaveBeenCalledTimes(1);
+    expect(hotSnapshots.put).toHaveBeenCalledWith(expect.objectContaining({
+      venue: "LIMITLESS",
+      venueMarketId: "september-30-2026-1775137169961",
+      metadata: expect.objectContaining({
+        nativeVenueOutcomeId: "limitless-native-token"
+      })
+    }));
+    expect(hotSnapshots.put.mock.calls[0]?.[0]).not.toHaveProperty("venueOutcomeId");
   });
 
   it("uses outcome-aware background readiness so card prices land on outcome websocket topics", async () => {

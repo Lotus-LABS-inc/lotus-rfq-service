@@ -507,16 +507,17 @@ export class OrderbookStreamService {
   }
 
   private onSnapshot(snapshot: NormalizedVenueQuoteSnapshot, target: VenueOrderbookSubscriptionTarget): void {
-    this.deps.hotSnapshots.put(snapshot);
+    const targetSnapshot = snapshotForTargetLookup(snapshot, target);
+    this.deps.hotSnapshots.put(targetSnapshot);
     void this.deps.liveOrderbooks?.put({
       canonicalMarketId: target.canonicalMarketId,
       ...(target.canonicalOutcomeId ? { canonicalOutcomeId: target.canonicalOutcomeId } : {}),
-      snapshot
+      snapshot: targetSnapshot
     }).catch((error) => {
       this.deps.logger.warn({ err: error, venue: snapshot.venue }, "Market orderbook live cache write failed.");
     });
-    void this.publishMarketUpdate(snapshot, target);
-    void this.persistLatestSnapshot(snapshot, target).catch((error) => {
+    void this.publishMarketUpdate(targetSnapshot, target);
+    void this.persistLatestSnapshot(targetSnapshot, target).catch((error) => {
       this.deps.logger.warn({ err: error, venue: snapshot.venue }, "Orderbook stream latest snapshot persist failed.");
     });
   }
@@ -959,6 +960,31 @@ const decodeTopicPart = (value: string): string | null => {
 const normalizeVenue = (venue: string): string => {
   const normalized = venue.trim().toUpperCase();
   return normalized === "PREDICT" ? "PREDICT_FUN" : normalized;
+};
+
+const snapshotForTargetLookup = (
+  snapshot: NormalizedVenueQuoteSnapshot,
+  target: VenueOrderbookSubscriptionTarget
+): NormalizedVenueQuoteSnapshot => {
+  const targetVenueMarketId = target.venueMarketId;
+  const targetVenueOutcomeId = target.venueOutcomeId;
+  if (snapshot.venueMarketId === targetVenueMarketId && snapshot.venueOutcomeId === targetVenueOutcomeId) {
+    return snapshot;
+  }
+
+  const { venueOutcomeId: nativeVenueOutcomeId, ...snapshotWithoutOutcome } = snapshot;
+  return {
+    ...snapshotWithoutOutcome,
+    venueMarketId: targetVenueMarketId,
+    ...(targetVenueOutcomeId ? { venueOutcomeId: targetVenueOutcomeId } : {}),
+    metadata: {
+      ...(snapshot.metadata ?? {}),
+      nativeVenueMarketId: snapshot.venueMarketId,
+      nativeVenueOutcomeId: nativeVenueOutcomeId ?? null,
+      approvedVenueMarketId: targetVenueMarketId,
+      approvedVenueOutcomeId: targetVenueOutcomeId ?? null
+    }
+  };
 };
 
 const normalizeOutcomeId = (outcomeId: string | null | undefined): string =>
