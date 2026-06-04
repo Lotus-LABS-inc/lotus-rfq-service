@@ -3,7 +3,7 @@ import { calculateVenueQuote, QuoteSnapshotCache } from "../src/core/sor/quote-s
 import { normalizeMyriadQuote } from "../src/integrations/myriad/myriad-quote-reader.js";
 import { OpinionClient } from "../src/integrations/opinion/opinion-client.js";
 import { normalizeOpinionOrderbook, OpinionQuoteReader, parseOpinionTopicRate } from "../src/integrations/opinion/opinion-quote-reader.js";
-import { normalizePredictOrderbook, PredictQuoteReader } from "../src/integrations/predict/predict-quote-reader.js";
+import { normalizePredictOrderbook, PredictQuoteReader, resolvePredictVenueMarketLookupId } from "../src/integrations/predict/predict-quote-reader.js";
 import { LimitlessQuoteReader } from "../src/integrations/limitless/limitless-quote-reader.js";
 import { PolymarketQuoteReader, resolveOutcomeTokenFromGammaMarkets } from "../src/integrations/polymarket/polymarket-quote-reader.js";
 import { MyriadQuoteReader } from "../src/integrations/myriad/myriad-quote-reader.js";
@@ -90,6 +90,47 @@ describe("extended venue quote readers", () => {
     expect(snapshot?.venueFeeBps).toBe(35);
     expect(snapshot?.venueFeeModel).toBe("PREDICT_MARKET_STATS");
     expect(snapshot?.blockers).toContain("PREDICT_FUN_TOKEN_ID_MISSING");
+  });
+
+  it("Predict reader uses numeric venue lookup for prefixed curated market ids", async () => {
+    const orderbookMarketIds: string[] = [];
+    const statsMarketIds: string[] = [];
+    const detailMarketIds: string[] = [];
+    const reader = new PredictQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      environment: "mainnet",
+      now: () => now,
+      client: {
+        async getMarketOrderbook(marketId: string) {
+          orderbookMarketIds.push(marketId);
+          return { bids: [{ price: "0.4", size: "10" }], asks: [{ price: "0.42", size: "10" }] };
+        },
+        async getMarketStatistics(marketId: string) {
+          statsMarketIds.push(marketId);
+          return { feeRateBps: "35" };
+        },
+        async getMarketById(marketId: string) {
+          detailMarketIds.push(marketId);
+          return { outcomes: [{ label: "YES", tokenId: "1001" }] };
+        }
+      } as never
+    });
+
+    const prefixedMarketId = "PREDICT:14343:CRYPTO|FDV_THRESHOLD_AFTER_LAUNCH|EXTENDED|ONE_DAY_AFTER_LAUNCH|ABOVE|2000000000|2B";
+    const snapshot = await reader.getQuoteSnapshot({
+      canonicalMarketId: "canonical-1",
+      canonicalOutcomeId: "YES",
+      venueMarketId: prefixedMarketId,
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(resolvePredictVenueMarketLookupId(prefixedMarketId)).toBe("14343");
+    expect(orderbookMarketIds).toEqual(["14343"]);
+    expect(statsMarketIds).toEqual(["14343"]);
+    expect(detailMarketIds).toEqual(["14343"]);
+    expect(snapshot?.venueMarketId).toBe(prefixedMarketId);
+    expect(snapshot?.venueOutcomeId).toBe("1001");
   });
 
   it("Predict reader reuses market stats across outcome reads for the same market", async () => {

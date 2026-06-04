@@ -57,17 +57,18 @@ export class PredictQuoteReader implements VenueQuoteSnapshotReader {
   }
 
   private async fetchQuoteSnapshot(input: VenueQuoteSnapshotReaderInput): Promise<NormalizedVenueQuoteSnapshot | null> {
+    const lookupMarketId = resolvePredictVenueMarketLookupId(input.venueMarketId);
     try {
-      const cachedStats = this.statsCache.get(input.venueMarketId);
+      const cachedStats = this.statsCache.get(lookupMarketId);
       const shouldFetchStats = this.config.feeBps === undefined && (!cachedStats || cachedStats.until <= Date.now());
       const shouldFetchMarketDetail = shouldResolvePredictMarketDetail(input);
       const [orderbook, venueFeeBps, marketDetail] = await Promise.all([
-        this.config.client.getMarketOrderbook(input.venueMarketId),
+        this.config.client.getMarketOrderbook(lookupMarketId),
         shouldFetchStats
-          ? this.getCachedStats(input.venueMarketId)
+          ? this.getCachedStats(lookupMarketId)
           : Promise.resolve(cachedStats?.feeBps),
         shouldFetchMarketDetail
-          ? this.getCachedMarketDetail(input.venueMarketId)
+          ? this.getCachedMarketDetail(lookupMarketId)
           : Promise.resolve(null)
       ]);
       const outcomeResolution = resolvePredictOutcome(input.venueOutcomeId, input.canonicalOutcomeId, marketDetail);
@@ -88,6 +89,7 @@ export class PredictQuoteReader implements VenueQuoteSnapshotReader {
         const until = Date.now() + cooldownMs;
         const entry = { until, error };
         this.failureCooldowns.set(input.venueMarketId, entry);
+        this.failureCooldowns.set(lookupMarketId, entry);
         this.failureCooldowns.set(predictSnapshotKey(input), entry);
       }
       throw error;
@@ -280,6 +282,15 @@ const findOutcomeToken = (outcomes: readonly unknown[], label: "YES" | "NO"): st
 };
 
 const looksLikeNumericId = (value: string): boolean => /^\d+$/.test(value);
+
+export const resolvePredictVenueMarketLookupId = (venueMarketId: string): string => {
+  const trimmed = venueMarketId.trim();
+  const prefixed = trimmed.match(/^PREDICT:?(\d+)/i);
+  if (prefixed?.[1]) {
+    return prefixed[1];
+  }
+  return trimmed;
+};
 
 const shouldResolvePredictMarketDetail = (input: VenueQuoteSnapshotReaderInput): boolean =>
   !input.venueOutcomeId || !looksLikeNumericId(input.venueOutcomeId);
