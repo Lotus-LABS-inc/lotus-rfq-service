@@ -1403,27 +1403,30 @@ const toOrderResponse = (
   quote: ExecutableTradeQuote | null,
   signatureRequests: readonly TradeSignatureRequest[] | null,
   override?: { canAutoRenew?: boolean | undefined; renewalReason?: "QUOTE_EXPIRED" | undefined }
-): ExecutionOrderResponse => ({
-  orderId: order.orderId,
-  quoteId: order.quoteId,
-  executionId: order.executionId,
-  state: order.state,
-  primaryAction: { type: order.primaryAction },
-  signingMode: order.signingMode,
-  routeSummary: quote ? routeSummary(quote) : null,
-  priceSummary: quote ? priceSummary(quote) : null,
-  venuePreference: order.venuePreference,
-  orderPolicy: order.orderPolicy,
-  slippageToleranceBps: order.slippageToleranceBps,
-  readinessSummary: order.readinessSummary,
-  venueCapabilitySummary: order.venueCapabilitySummary,
-  blockers: uniqueBlockers(order.blockers),
-  ...(order.lastError ? { lastError: order.lastError } : {}),
-  ...(signatureRequests ? { signatureRequests: [...signatureRequests] } : {}),
-  ...(order.nextPollAt ? { nextPollAt: order.nextPollAt } : {}),
-  ...(override?.canAutoRenew ? { canAutoRenew: true } : {}),
-  ...(override?.renewalReason ? { renewalReason: override.renewalReason } : {})
-});
+): ExecutionOrderResponse => {
+  const isFilled = order.state === "FILLED";
+  return {
+    orderId: order.orderId,
+    quoteId: order.quoteId,
+    executionId: order.executionId,
+    state: order.state,
+    primaryAction: { type: isFilled ? "NONE" : order.primaryAction },
+    signingMode: order.signingMode,
+    routeSummary: quote ? routeSummary(quote) : null,
+    priceSummary: quote ? priceSummary(quote) : null,
+    venuePreference: order.venuePreference,
+    orderPolicy: order.orderPolicy,
+    slippageToleranceBps: order.slippageToleranceBps,
+    readinessSummary: order.readinessSummary,
+    venueCapabilitySummary: order.venueCapabilitySummary,
+    blockers: isFilled ? [] : uniqueBlockers(order.blockers),
+    ...(!isFilled && order.lastError ? { lastError: order.lastError } : {}),
+    ...(signatureRequests ? { signatureRequests: [...signatureRequests] } : {}),
+    ...(!isFilled && order.nextPollAt ? { nextPollAt: order.nextPollAt } : {}),
+    ...(override?.canAutoRenew ? { canAutoRenew: true } : {}),
+    ...(override?.renewalReason ? { renewalReason: override.renewalReason } : {})
+  };
+};
 
 const routeSummary = (quote: ExecutableTradeQuote): Record<string, unknown> => ({
   routeType: quote.routeType,
