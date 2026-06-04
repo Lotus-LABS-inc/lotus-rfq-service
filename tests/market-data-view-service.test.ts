@@ -894,7 +894,7 @@ describe("LiveMarketDataViewService", () => {
     });
   });
 
-  it("does not serve stale batch quote cache as a live price while refreshing in the background", async () => {
+  it("serves the last usable batch quote while refreshing in the background", async () => {
     let now = new Date("2026-05-10T12:00:00.000Z");
     let calls = 0;
     let resolveRefresh!: (value: any) => void;
@@ -945,10 +945,10 @@ describe("LiveMarketDataViewService", () => {
     expect(elapsedMs).toBeLessThan(100);
     expect(calls).toBe(2);
     expect(second.quotes[0]).toMatchObject({
-      status: "unavailable",
-      bestVenue: null,
-      bestVenuePrice: null,
-      blockers: [{ venue: "LOTUS", reason: "MARKET_BATCH_QUOTE_REFRESHING" }]
+      status: "live",
+      bestVenue: "POLYMARKET",
+      bestVenuePrice: "0.53",
+      blockers: []
     });
 
     resolveRefresh({
