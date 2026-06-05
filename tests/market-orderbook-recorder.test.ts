@@ -175,6 +175,10 @@ describe("MarketOrderbookRecorder", () => {
       insertedSnapshots: 2,
       failedSamples: 0,
       skippedCooldownSamples: 0,
+      candidateByVenue: { POLYMARKET: 2 },
+      cooldownSkippedByVenue: {},
+      sampledByVenue: { POLYMARKET: 2 },
+      persistedByVenue: { POLYMARKET: 2 },
       deletedOldSnapshots: 2,
       deletedClosedMarketSnapshots: 3,
       deletedClosedLatestSnapshots: 4,
@@ -819,6 +823,7 @@ describe("MarketOrderbookRecorder", () => {
     expect(second.sampledOutcomes).toBe(0);
     expect(second.failedSamples).toBe(0);
     expect(second.skippedCooldownSamples).toBe(2);
+    expect(second.cooldownSkippedByVenue).toEqual({ POLYMARKET: 2 });
   });
 
   it("does not start more provider samples when the remaining tick budget cannot cover their timeout", async () => {

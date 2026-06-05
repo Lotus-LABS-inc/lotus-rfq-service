@@ -50,6 +50,8 @@ export interface MarketOrderbookRecorderRunResult {
   insertedSnapshots: number;
   failedSamples: number;
   skippedCooldownSamples: number;
+  candidateByVenue?: Record<string, number> | undefined;
+  cooldownSkippedByVenue?: Record<string, number> | undefined;
   shardCount?: number | undefined;
   shardIndex?: number | undefined;
   sampledByVenue?: Record<string, number> | undefined;
@@ -256,6 +258,8 @@ export class MarketOrderbookRecorder {
         market: MarketCatalogMarket;
         sample: MarketOrderbookRecorderSample;
       }> = [];
+      const candidateByVenue = new Map<string, number>();
+      const cooldownSkippedByVenue = new Map<string, number>();
 
       marketLoop:
       for (const market of markets) {
@@ -281,15 +285,20 @@ export class MarketOrderbookRecorder {
           }
           if (this.isSampleFullyCoolingDown(market, sample)) {
             result.skippedCooldownSamples += 1;
+            addVenueKeys(cooldownSkippedByVenue, sample.venueKeys);
             continue;
           }
           if (this.isSampleCoolingDown(sample)) {
             result.skippedCooldownSamples += 1;
+            addVenueKeys(cooldownSkippedByVenue, sample.venueKeys);
             continue;
           }
           candidateSamples.push({ market, sample });
+          addVenueKeys(candidateByVenue, sample.venueKeys);
         }
       }
+      result.candidateByVenue = mapToRecord(candidateByVenue);
+      result.cooldownSkippedByVenue = mapToRecord(cooldownSkippedByVenue);
       const scheduledSamples = selectSamplesForTickWithActivePriority(
         candidateSamples,
         activeTargets,
@@ -942,6 +951,12 @@ const countSnapshotInputVenues = (
 const addVenueCounts = (target: Map<string, number>, values: Record<string, number>): void => {
   for (const [venue, count] of Object.entries(values)) {
     addVenueCount(target, venue, count);
+  }
+};
+
+const addVenueKeys = (target: Map<string, number>, venues: readonly string[]): void => {
+  for (const venue of venues) {
+    addVenueCount(target, venue, 1);
   }
 };
 
