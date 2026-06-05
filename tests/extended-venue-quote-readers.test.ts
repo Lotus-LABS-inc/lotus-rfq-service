@@ -608,6 +608,57 @@ describe("extended venue quote readers", () => {
     expect(snapshot?.venueMarketId).toBe("psg-1765297468297");
   });
 
+  it("Limitless reader caches parent detail while refreshing multiple child orderbooks", async () => {
+    const detailMarkets: string[] = [];
+    const requestedMarkets: string[] = [];
+    const reader = new LimitlessQuoteReader({
+      streamCache: new QuoteSnapshotCache(),
+      now: () => now,
+      client: {
+        async getMarketDetail(marketId: string) {
+          detailMarkets.push(marketId);
+          return {
+            slug: "f1-constructors-champion-1769014616132",
+            marketType: "group",
+            markets: [
+              { slug: "mercedes-1769014616101", title: "Mercedes" },
+              { slug: "red-bull-racing-1769014616102", title: "Red Bull Racing" }
+            ]
+          };
+        },
+        async getOrderbook(input: { marketId: string }) {
+          requestedMarkets.push(input.marketId);
+          return {
+            tokenId: `${input.marketId}-token`,
+            bids: [{ price: 0.44, size: "10" }],
+            asks: [{ price: 0.45, size: "10" }]
+          };
+        }
+      }
+    });
+
+    await reader.getQuoteSnapshot({
+      canonicalMarketId: "FRONTEND_CURATED:SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026|MERCEDES",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "f1-constructors-champion-1769014616132:mercedes",
+      side: "buy",
+      quantity: 1
+    });
+    await reader.getQuoteSnapshot({
+      canonicalMarketId: "FRONTEND_CURATED:SPORTS|TOURNAMENT_WINNER|F1_CONSTRUCTORS_CHAMPIONSHIP|2026|RED_BULL_RACING",
+      canonicalOutcomeId: "YES",
+      venueMarketId: "f1-constructors-champion-1769014616132:red-bull-racing",
+      side: "buy",
+      quantity: 1
+    });
+
+    expect(detailMarkets).toEqual(["f1-constructors-champion-1769014616132"]);
+    expect(requestedMarkets).toEqual([
+      "mercedes-1769014616101",
+      "red-bull-racing-1769014616102"
+    ]);
+  });
+
   it("Limitless reader falls back to parent detail slug instead of invalid colon scoped ids", async () => {
     const requestedMarkets: string[] = [];
     const reader = new LimitlessQuoteReader({

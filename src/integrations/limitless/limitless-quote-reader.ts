@@ -21,11 +21,17 @@ export interface LimitlessQuoteReaderConfig {
   now?: () => Date;
   feeBps?: number | undefined;
   feeReader?: LimitlessFeeReader | undefined;
+  marketDetailCacheTtlMs?: number | undefined;
 }
 
 export class LimitlessQuoteReader implements VenueQuoteSnapshotReader {
   public readonly venue = "LIMITLESS";
   private readonly now: () => Date;
+  private readonly marketDetailCache = new Map<string, {
+    expiresAtMs: number;
+    value?: unknown;
+    promise?: Promise<unknown>;
+  }>();
 
   public constructor(private readonly config: LimitlessQuoteReaderConfig) {
     this.now = config.now ?? (() => new Date());
@@ -38,7 +44,7 @@ export class LimitlessQuoteReader implements VenueQuoteSnapshotReader {
       venueOutcomeId: input.venueOutcomeId
     });
     const detailMarketId = resolveLimitlessDetailMarketId(input.venueMarketId);
-    const marketDetail = await this.config.client.getMarketDetail?.(detailMarketId).catch(() => null);
+    const marketDetail = await this.getMarketDetail(detailMarketId);
     const executableMarketId = resolveLimitlessExecutableMarketId(input.venueMarketId, input.canonicalMarketId, marketDetail);
     const venueAddresses = resolveLimitlessVenueAddresses(marketDetail, executableMarketId);
     const outcomeResolution = resolveLimitlessOutcome(input.venueOutcomeId, input.canonicalOutcomeId, marketDetail);
@@ -71,7 +77,58 @@ export class LimitlessQuoteReader implements VenueQuoteSnapshotReader {
       venueAddresses
     });
   }
+
+  private async getMarketDetail(marketId: string): Promise<unknown> {
+    if (!this.config.client.getMarketDetail) {
+      return null;
+    }
+    const cacheKey = marketId.trim();
+    if (!cacheKey) {
+      return null;
+    }
+    const nowMs = this.now().getTime();
+    const cached = this.marketDetailCache.get(cacheKey);
+    if (cached && cached.expiresAtMs > nowMs) {
+      if ("value" in cached) {
+        return cached.value;
+      }
+      if (cached.promise) {
+        return cached.promise;
+      }
+    }
+
+    const successTtlMs = clampLimitlessMarketDetailCacheTtlMs(this.config.marketDetailCacheTtlMs);
+    const failureTtlMs = Math.min(30_000, successTtlMs);
+    const promise = this.config.client.getMarketDetail(cacheKey)
+      .then((value) => {
+        this.marketDetailCache.set(cacheKey, {
+          expiresAtMs: this.now().getTime() + successTtlMs,
+          value
+        });
+        return value;
+      })
+      .catch(() => {
+        this.marketDetailCache.set(cacheKey, {
+          expiresAtMs: this.now().getTime() + failureTtlMs,
+          value: null
+        });
+        return null;
+      });
+    this.marketDetailCache.set(cacheKey, {
+      expiresAtMs: nowMs + successTtlMs,
+      promise
+    });
+    return promise;
+  }
 }
+
+const clampLimitlessMarketDetailCacheTtlMs = (value: number | undefined): number => {
+  const parsed = Math.floor(Number(value));
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 5 * 60_000;
+  }
+  return Math.max(10_000, Math.min(parsed, 30 * 60_000));
+};
 
 export class LimitlessRestOrderbookClient implements LimitlessOrderbookClient {
   private readonly fetchImpl: typeof fetch;

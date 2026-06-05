@@ -86,7 +86,7 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
   // Code-owned provider budgets keep hot quote coverage broad without falling
   // back to unbounded per-tick fanout when a catalog window is venue-heavy.
   maxSamplesPerVenuePerTick: {
-    LIMITLESS: 14,
+    LIMITLESS: 10,
     OPINION: 14,
     PREDICT_FUN: 36,
     POLYMARKET: 48
