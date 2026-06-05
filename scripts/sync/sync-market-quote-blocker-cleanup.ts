@@ -62,6 +62,14 @@ interface PolymarketBlockedProfileRow {
   latest_quote_at: Date | null;
 }
 
+interface OrphanPolymarketSnapshotRow {
+  canonical_event_id: string;
+  canonical_market_id: string;
+  venue_market_id: string;
+  blockers: unknown;
+  latest_quote_at: Date | null;
+}
+
 interface PredictRepairCandidate {
   profileId: string;
   canonicalEventId: string;
@@ -100,6 +108,7 @@ interface CleanupArtifact {
     predictRowsNeedingOperatorLinks: number;
     predictRowsHiddenOrPlanned: number;
     polymarketProfilesQuoteDisabledOrPlanned: number;
+    orphanPolymarketSnapshotsDeletedOrPlanned: number;
     operatorConfirmedEventsHiddenOrPlanned: number;
   };
   safety: {
@@ -127,6 +136,13 @@ interface CleanupArtifact {
     blockers: string[];
     latestQuoteAt: string | null;
   }>;
+  orphanPolymarketSnapshots: Array<{
+    canonicalEventId: string;
+    canonicalMarketId: string;
+    venueMarketId: string;
+    blockers: string[];
+    latestQuoteAt: string | null;
+  }>;
   predictRepairCandidates: PredictRepairCandidate[];
 }
 
@@ -145,9 +161,10 @@ const pool = new Pool({
 });
 
 try {
-  const [polymarketRows, polymarketBlockedProfiles, predictRows] = await Promise.all([
+  const [polymarketRows, polymarketBlockedProfiles, orphanPolymarketSnapshots, predictRows] = await Promise.all([
     listAllBlockedPolymarketClosedRows(pool, args.lookbackMinutes),
     listPolymarketBlockedProfileRows(pool, args.lookbackMinutes),
+    listOrphanPolymarketSnapshotRows(pool, args.lookbackMinutes),
     listPredictBlockedRows(pool, args.lookbackMinutes, args.predictLimit)
   ]);
 
@@ -159,6 +176,7 @@ try {
       await hidePolymarketClosedEvents(pool, polymarketRows);
       await deleteSnapshotsForPolymarketClosedEvents(pool, polymarketRows);
       await disablePolymarketBlockedProfiles(pool, polymarketBlockedProfiles);
+      await deleteOrphanPolymarketSnapshots(pool, orphanPolymarketSnapshots);
       await hideOperatorConfirmedEvents(pool, args.hideFrontendCuratedKeys);
       await hidePredictNonRepairableRows(pool, predictRepairs);
       await applyPredictRepairs(pool, predictRepairs);
@@ -181,6 +199,7 @@ try {
       predictRowsNeedingOperatorLinks: predictRepairs.filter((row) => row.status === "NEEDS_OPERATOR_LINK").length,
       predictRowsHiddenOrPlanned: predictRepairs.filter((row) => row.status === "DISABLED").length,
       polymarketProfilesQuoteDisabledOrPlanned: polymarketBlockedProfiles.length,
+      orphanPolymarketSnapshotsDeletedOrPlanned: orphanPolymarketSnapshots.length,
       operatorConfirmedEventsHiddenOrPlanned: args.hideFrontendCuratedKeys.length
     },
     safety: {
@@ -208,6 +227,13 @@ try {
       blockers: parseStringArray(row.blockers),
       latestQuoteAt: row.latest_quote_at?.toISOString() ?? null
     })),
+    orphanPolymarketSnapshots: orphanPolymarketSnapshots.map((row) => ({
+      canonicalEventId: row.canonical_event_id,
+      canonicalMarketId: row.canonical_market_id,
+      venueMarketId: row.venue_market_id,
+      blockers: parseStringArray(row.blockers),
+      latestQuoteAt: row.latest_quote_at?.toISOString() ?? null
+    })),
     predictRepairCandidates: predictRepairs
   };
 
@@ -219,6 +245,7 @@ try {
   console.log(`predictRowsNeedingOperatorLinks=${artifact.summary.predictRowsNeedingOperatorLinks}`);
   console.log(`predictRowsQuoteDisabledOrPlanned=${artifact.summary.predictRowsHiddenOrPlanned}`);
   console.log(`polymarketProfilesQuoteDisabledOrPlanned=${artifact.summary.polymarketProfilesQuoteDisabledOrPlanned}`);
+  console.log(`orphanPolymarketSnapshotsDeletedOrPlanned=${artifact.summary.orphanPolymarketSnapshotsDeletedOrPlanned}`);
   console.log(`operatorConfirmedEventsHiddenOrPlanned=${artifact.summary.operatorConfirmedEventsHiddenOrPlanned}`);
 } finally {
   await pool.end();
@@ -377,6 +404,42 @@ async function listPolymarketBlockedProfileRows(db: Pool, lookbackMinutes: numbe
       WHERE hidden.canonical_event_id IS NULL
         AND COALESCE(vmp.normalized_payload->>'quoteDisabled', 'false') <> 'true'
       ORDER BY vmp.id, recent_polymarket_blockers.latest_quote_at DESC`,
+    [lookbackMinutes]
+  );
+  return result.rows;
+}
+
+async function listOrphanPolymarketSnapshotRows(db: Pool, lookbackMinutes: number): Promise<OrphanPolymarketSnapshotRow[]> {
+  const result = await db.query<OrphanPolymarketSnapshotRow>(
+    `WITH recent_polymarket_404 AS (
+       SELECT canonical_event_id,
+              canonical_market_id,
+              venue_market_id,
+              jsonb_agg(DISTINCT blocker.value) AS blockers,
+              MAX(received_at) AS latest_quote_at
+         FROM venue_orderbook_latest_snapshots
+         CROSS JOIN LATERAL jsonb_array_elements_text(blockers) AS blocker(value)
+        WHERE venue = 'POLYMARKET'
+          AND received_at >= now() - ($1::int * interval '1 minute')
+          AND (
+            blockers ? 'QUOTE_PROVIDER_HTTP_404'
+            OR blocker.value ILIKE '%Polymarket_orderbook_request_failed_with_status_404%'
+          )
+        GROUP BY canonical_event_id, canonical_market_id, venue_market_id
+     )
+     SELECT recent_polymarket_404.*
+       FROM recent_polymarket_404
+       LEFT JOIN canonical_events ce
+         ON ce.id::text = recent_polymarket_404.canonical_event_id
+       LEFT JOIN venue_market_profiles vmp
+         ON vmp.venue = 'POLYMARKET'
+        AND (
+          vmp.venue_market_id = recent_polymarket_404.venue_market_id
+          OR vmp.venue_market_id ILIKE ('POLYMARKET:' || recent_polymarket_404.venue_market_id || ':%')
+        )
+      WHERE ce.id IS NULL
+        AND vmp.id IS NULL
+      ORDER BY recent_polymarket_404.latest_quote_at DESC`,
     [lookbackMinutes]
   );
   return result.rows;
@@ -687,6 +750,27 @@ async function disablePolymarketBlockedProfiles(db: Pool, rows: readonly Polymar
         WHERE venue = 'POLYMARKET'
           AND canonical_event_id = $1`,
       [row.canonical_event_id]
+    );
+  }
+}
+
+async function deleteOrphanPolymarketSnapshots(db: Pool, rows: readonly OrphanPolymarketSnapshotRow[]): Promise<void> {
+  for (const row of rows) {
+    await db.query(
+      `DELETE FROM venue_orderbook_latest_snapshots
+        WHERE venue = 'POLYMARKET'
+          AND canonical_event_id = $1
+          AND canonical_market_id = $2
+          AND venue_market_id = $3`,
+      [row.canonical_event_id, row.canonical_market_id, row.venue_market_id]
+    );
+    await db.query(
+      `DELETE FROM venue_orderbook_snapshots
+        WHERE venue = 'POLYMARKET'
+          AND canonical_event_id = $1
+          AND canonical_market_id = $2
+          AND venue_market_id = $3`,
+      [row.canonical_event_id, row.canonical_market_id, row.venue_market_id]
     );
   }
 }
@@ -1057,6 +1141,7 @@ function renderMarkdown(artifact: CleanupArtifact): string {
     `- Predict rows needing operator links: ${artifact.summary.predictRowsNeedingOperatorLinks}`,
     `- Predict rows ${artifact.mode === "APPLY" ? "quote-disabled" : "planned quote-disabled"}: ${artifact.summary.predictRowsHiddenOrPlanned}`,
     `- Polymarket profiles ${artifact.mode === "APPLY" ? "quote-disabled" : "planned quote-disabled"}: ${artifact.summary.polymarketProfilesQuoteDisabledOrPlanned}`,
+    `- Orphan Polymarket snapshots ${artifact.mode === "APPLY" ? "deleted" : "planned delete"}: ${artifact.summary.orphanPolymarketSnapshotsDeletedOrPlanned}`,
     `- Operator-confirmed events ${artifact.mode === "APPLY" ? "hidden" : "planned hidden"}: ${artifact.summary.operatorConfirmedEventsHiddenOrPlanned}`,
     "",
     "## Polymarket Closed Events",
@@ -1073,6 +1158,13 @@ function renderMarkdown(artifact: CleanupArtifact): string {
       : artifact.polymarketBlockedProfiles.map((row) =>
         `- ${row.title || row.eventTitle} profile=${row.profileId} venueMarket=${row.venueMarketId} blockers=${row.blockers.join(", ") || "n/a"}`)),
     "",
+    "## Orphan Polymarket Snapshots",
+    "",
+    ...(artifact.orphanPolymarketSnapshots.length === 0
+      ? ["- none"]
+      : artifact.orphanPolymarketSnapshots.map((row) =>
+        `- canonicalEvent=${row.canonicalEventId} canonicalMarket=${row.canonicalMarketId} venueMarket=${row.venueMarketId} blockers=${row.blockers.join(", ") || "n/a"}`)),
+    "",
     "## Predict Repairs",
     "",
     ...(artifact.predictRepairCandidates.length === 0
@@ -1083,6 +1175,7 @@ function renderMarkdown(artifact: CleanupArtifact): string {
     "## Safety Notes",
     "",
     "- This cleanup hides only all-blocked closed frontend markets; confirmed Predict and Polymarket venue blockers are quote-disabled per venue profile.",
+    "- Orphan Polymarket snapshot cleanup deletes diagnostic quote rows only when no canonical event and no venue profile match exists.",
     "- Predict repair applies only to one active exact-title match.",
     "- No execution adapters, funding gates, approved lanes, scope tokens, or settlement logic are changed.",
     "- Artifacts do not include API keys, auth headers, signatures, or raw provider payloads.",
