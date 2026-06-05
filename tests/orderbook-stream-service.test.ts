@@ -1261,6 +1261,47 @@ describe("OrderbookStreamService", () => {
     expect(refresh.mock.calls.map(([target]) => target.venue).sort()).toEqual(["LIMITLESS", "POLYMARKET"]);
   });
 
+  it("uses conservative default REST refresh budgets for rate-sensitive venues", async () => {
+    const connector = new FakeConnector("LIMITLESS");
+    const refresh = vi.fn(async (target: VenueOrderbookSubscriptionTarget) => ({
+      ...snapshot(target),
+      source: "REST" as const,
+      quoteQuality: "FULL_DEPTH_REST" as const
+    }));
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return Array.from({ length: 8 }, (_, index) => ({
+            canonicalMarketId: `limitless-${index + 1}`,
+            canonicalOutcomeId: "YES",
+            lastSeenAt: now
+          }));
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness(input) {
+          return [{
+            venue: "LIMITLESS",
+            approvedVenueMarketId: `${input.canonicalMarketId}-approved`,
+            venueMarketId: `${input.canonicalMarketId}-book`,
+            venueOutcomeId: "YES",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors: [connector],
+      restRefreshers: [{ venue: "LIMITLESS", refresh }],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 3 });
+    expect(refresh).toHaveBeenCalledTimes(3);
+  });
+
   it("refreshes duplicate native venue books once and fans out to Lotus subscriptions", async () => {
     const connector = new FakeConnector("PREDICT_FUN");
     const put = vi.fn();
@@ -1517,7 +1558,7 @@ describe("OrderbookStreamService", () => {
       }
     });
 
-    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 16 });
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 15 });
     const countsByVenue = new Map<string, number>();
     for (const [target] of refresh.mock.calls) {
       countsByVenue.set(target.venue, (countsByVenue.get(target.venue) ?? 0) + 1);
@@ -1525,7 +1566,7 @@ describe("OrderbookStreamService", () => {
     expect(countsByVenue).toEqual(new Map([
       ["POLYMARKET", 4],
       ["PREDICT_FUN", 4],
-      ["LIMITLESS", 4],
+      ["LIMITLESS", 3],
       ["OPINION", 4]
     ]));
   });

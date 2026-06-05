@@ -132,9 +132,9 @@ const DEFAULT_CONFIG: OrderbookStreamServiceConfig = {
   restRefreshFailureCooldownMs: 60_000,
   restRefreshVenuePolicies: {
     POLYMARKET: { maxTargetsPerSweep: 128, failureCooldownMs: 60_000, timeoutMs: 2_000 },
-    LIMITLESS: { maxTargetsPerSweep: 72, failureCooldownMs: 120_000, timeoutMs: 2_500 },
+    LIMITLESS: { maxTargetsPerSweep: 3, failureCooldownMs: 300_000, timeoutMs: 2_500 },
     PREDICT_FUN: { maxTargetsPerSweep: 18, failureCooldownMs: 90_000, timeoutMs: 2_000 },
-    OPINION: { maxTargetsPerSweep: 18, failureCooldownMs: 180_000, timeoutMs: 6_000 }
+    OPINION: { maxTargetsPerSweep: 8, failureCooldownMs: 180_000, timeoutMs: 6_000 }
   },
   latestSnapshotPersistIntervalMs: 30_000,
   latestSnapshotPersistMinSpacingMs: 250,
