@@ -401,6 +401,7 @@ const hasPolymarketCLOBTradeReadyBalance = (
 
 // Display-only fallback: execution still performs live CLOB readiness checks before submit.
 const POLYMARKET_CLOB_SYNC_CONFIRMATION_MAX_AGE_MS = 60 * 60 * 1000;
+const POLYMARKET_CLOB_SYNC_CONFIRMATION_DISPLAY_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 const isPositiveAmount = (value: string | null | undefined): boolean => {
   if (typeof value !== "string" || !/^\d+(?:\.\d+)?$/.test(value.trim())) {
@@ -419,9 +420,13 @@ const minAmountString = (left: string, right: string): string => {
   return String(Math.min(leftNumber, rightNumber));
 };
 
-const isRecentPolymarketClobSyncConfirmation = (confirmedAt: string, now = Date.now()): boolean => {
+const isRecentPolymarketClobSyncConfirmation = (
+  confirmedAt: string,
+  now = Date.now(),
+  maxAgeMs = POLYMARKET_CLOB_SYNC_CONFIRMATION_MAX_AGE_MS
+): boolean => {
   const timestamp = Date.parse(confirmedAt);
-  return Number.isFinite(timestamp) && now - timestamp <= POLYMARKET_CLOB_SYNC_CONFIRMATION_MAX_AGE_MS;
+  return Number.isFinite(timestamp) && now - timestamp <= maxAgeMs;
 };
 
 export interface ServerDependencies {
@@ -777,12 +782,13 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     };
   };
   const readRecentPolymarketClobConfirmationBalanceForUser = async (
-    userId: string
+    userId: string,
+    maxAgeMs = POLYMARKET_CLOB_SYNC_CONFIRMATION_MAX_AGE_MS
   ): Promise<PolymarketFundingBalanceReadOutput | null> => {
     const confirmation = await userVenueAccountService.getLatestPolymarketClobReadinessConfirmation(userId);
     if (
       !confirmation ||
-      !isRecentPolymarketClobSyncConfirmation(confirmation.confirmedAt) ||
+      !isRecentPolymarketClobSyncConfirmation(confirmation.confirmedAt, Date.now(), maxAgeMs) ||
       !isPositiveAmount(confirmation.readyAmount)
     ) {
       return null;
@@ -1948,7 +1954,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       );
       const displayBalance = sourceReady
         ? polymarket
-        : await readRecentPolymarketClobConfirmationBalanceForUser(userId).catch(() => null) ?? polymarket;
+        : await readRecentPolymarketClobConfirmationBalanceForUser(
+            userId,
+            POLYMARKET_CLOB_SYNC_CONFIRMATION_DISPLAY_MAX_AGE_MS
+          ).catch(() => null) ?? polymarket;
       const spendableBalance = buildPolymarketVenueBalanceView(
         displayBalance,
         balances,
@@ -1959,7 +1968,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       );
       return [spendableBalance, ...withoutPolymarket];
     } catch {
-      const confirmationBalance = await readRecentPolymarketClobConfirmationBalanceForUser(userId).catch(() => null);
+      const confirmationBalance = await readRecentPolymarketClobConfirmationBalanceForUser(
+        userId,
+        POLYMARKET_CLOB_SYNC_CONFIRMATION_DISPLAY_MAX_AGE_MS
+      ).catch(() => null);
       if (confirmationBalance) {
         const spendableBalance = buildPolymarketVenueBalanceView(confirmationBalance, balances, "stale");
         const withoutPolymarket = balances.filter((balance) =>
@@ -1978,10 +1990,11 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     }
   };
   const listVenueActivationsForUser = async (userId: string) => {
+    const polymarketActivationExecuted = await userVenueAccountService.hasExecutedPolymarketBalanceActivation(userId);
     const activations = buildVenueBalanceActivationActions({
       balances: await fundingService.listVenueBalances(userId),
       venueAccounts: await userVenueAccountService.listAccounts(userId),
-      polymarketActivationExecuted: await userVenueAccountService.hasExecutedPolymarketBalanceActivation(userId),
+      polymarketActivationExecuted,
       env: process.env
     });
     const polymarket = activations.find((activation) => activation.venue === "POLYMARKET");
@@ -2027,9 +2040,22 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         if (sourceReady && Number.isFinite(usable) && usable > 0) {
           applyPolymarketClobConfirmationActivation(polymarket, balance, "live");
         } else {
-          const confirmationBalance = await readRecentPolymarketClobConfirmationBalanceForUser(userId).catch(() => null);
+          const confirmationBalance = await readRecentPolymarketClobConfirmationBalanceForUser(
+            userId,
+            POLYMARKET_CLOB_SYNC_CONFIRMATION_DISPLAY_MAX_AGE_MS
+          ).catch(() => null);
           if (confirmationBalance) {
             applyPolymarketClobConfirmationActivation(polymarket, confirmationBalance, "stale");
+          } else if (polymarketActivationExecuted) {
+            polymarket.activationRequired = false;
+            polymarket.mode = "VENUE_UI_OR_RELAYER";
+            polymarket.status = "SYNC_PENDING";
+            polymarket.tokenSymbol = "pUSD";
+            polymarket.readinessReason = "POLYMARKET_CLOB_SYNC_PENDING";
+            polymarket.instructions = [
+              "Polymarket activation was submitted. Lotus is polling CLOB collateral readiness before live trading is enabled."
+            ];
+            polymarket.blockers = [];
           } else if (Number.isFinite(bridgedUsdc) && bridgedUsdc > 0) {
             polymarket.activationRequired = true;
             polymarket.mode = "VENUE_UI_OR_RELAYER";
@@ -2075,9 +2101,22 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           }
         }
       } catch {
-        const balance = await readRecentPolymarketClobConfirmationBalanceForUser(userId).catch(() => null);
+        const balance = await readRecentPolymarketClobConfirmationBalanceForUser(
+          userId,
+          POLYMARKET_CLOB_SYNC_CONFIRMATION_DISPLAY_MAX_AGE_MS
+        ).catch(() => null);
         if (balance) {
           applyPolymarketClobConfirmationActivation(polymarket, balance, "stale");
+        } else if (polymarketActivationExecuted) {
+          polymarket.activationRequired = false;
+          polymarket.mode = "VENUE_UI_OR_RELAYER";
+          polymarket.status = "SYNC_PENDING";
+          polymarket.tokenSymbol = "pUSD";
+          polymarket.readinessReason = "POLYMARKET_CLOB_SYNC_PENDING";
+          polymarket.instructions = [
+            "Polymarket activation was submitted. Lotus is polling CLOB collateral readiness before live trading is enabled."
+          ];
+          polymarket.blockers = [];
         }
       }
     }

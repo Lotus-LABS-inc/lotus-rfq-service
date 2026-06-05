@@ -250,6 +250,28 @@ const buildRelayerAction = (
     return buildNotRequiredAction(venue, account, balance);
   }
 
+  if (venue === "POLYMARKET" && activationExecuted) {
+    return {
+      venue,
+      activationRequired: false,
+      mode: "VENUE_UI_OR_RELAYER",
+      status: "SYNC_PENDING",
+      tokenSymbol: "pUSD",
+      tokenAddress: envValue(env, `${venue}_BALANCE_ACTIVATION_TOKEN_ADDRESS`),
+      chainId: parsePositiveInt(envValue(env, `${venue}_BALANCE_ACTIVATION_CHAIN_ID`)),
+      ownerAddress: account?.venueAccountAddress ?? account?.walletAddress ?? null,
+      signerAddress: account?.walletAddress ?? null,
+      spenderAddress: envValue(env, `${venue}_BALANCE_ACTIVATION_SPENDER_ADDRESS`),
+      amount: null,
+      transactionRequest: null,
+      instructions: [
+        "Polymarket activation was submitted. Lotus is polling CLOB collateral readiness before live trading is enabled."
+      ],
+      blockers: account ? [] : [`${venue} active venue account is required before activation.`],
+      lastSubmitted: true
+    };
+  }
+
   const polymarketAutomationEnabled = venue === "POLYMARKET" &&
     envValue(env, "POLYMARKET_DEPOSIT_WALLET_AUTOMATION_ENABLED") === "true";
   const polymarketReady = polymarketAutomationEnabled &&

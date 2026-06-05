@@ -66,7 +66,7 @@ describe("venue balance activation actions", () => {
     });
   });
 
-  it("keeps Polymarket activation required after relayer execution until venue-ready cash is confirmed", () => {
+  it("keeps Polymarket activation pending after relayer execution instead of asking the user to reactivate", () => {
     const activations = buildVenueBalanceActivationActions({
       balances: [balance("PREDICT_FUN", "USDT")],
       venueAccounts: [account("POLYMARKET"), account("PREDICT_FUN")],
@@ -83,14 +83,14 @@ describe("venue balance activation actions", () => {
 
     expect(activations[0]).toMatchObject({
       venue: "POLYMARKET",
-      activationRequired: true,
+      activationRequired: false,
       mode: "VENUE_UI_OR_RELAYER",
-      status: "READY",
+      status: "SYNC_PENDING",
       tokenSymbol: "pUSD",
       transactionRequest: null,
       lastSubmitted: true
     });
-    expect(activations[0]?.instructions.join(" ")).toContain("CLOB collateral");
+    expect(activations[0]?.instructions.join(" ")).toContain("polling CLOB collateral readiness");
   });
 
   it("does not mark Polymarket relayer activation ready without a CLOB pUSD approval spender", () => {
