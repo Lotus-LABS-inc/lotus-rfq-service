@@ -613,6 +613,62 @@ describe("MarketOrderbookRecorder", () => {
     expect(sampledVenues.filter((venue) => venue === "POLYMARKET")).toHaveLength(8);
   });
 
+  it("prioritizes missing quote-readiness samples before already-live samples", async () => {
+    const sampledMarketIds: string[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [
+          venueMarketFixture("LIMITLESS", "market-live-limitless"),
+          venueMarketFixture("LIMITLESS", "market-missing-limitless")
+        ]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalMarketId }) => {
+          sampledMarketIds.push(canonicalMarketId);
+          return {
+            snapshots: [],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        }),
+        listLatestMarketQuoteReadiness: async ({ canonicalMarketIds }) => canonicalMarketIds
+          .filter((canonicalMarketId) => canonicalMarketId === "market-live-limitless")
+          .map((canonicalMarketId) => ({
+            canonicalMarketId,
+            quoteStatus: "live" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["LIMITLESS"],
+            quoteBlockers: [],
+            lastQuoteAt: new Date("2026-05-10T12:00:00.000Z").toISOString()
+          }))
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 2,
+        priorityMarketBatchSize: 0,
+        priorityVenues: ["LIMITLESS"],
+        maxSamplesPerTick: 1,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.sampledOutcomes).toBe(1);
+    expect(sampledMarketIds).toEqual(["market-missing-limitless"]);
+  });
+
   it("loads priority markets with venue-fair windows when the catalog is sorted toward one venue", async () => {
     const sampledVenues: string[] = [];
     const broadCatalog = [

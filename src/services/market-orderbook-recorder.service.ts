@@ -2,8 +2,10 @@ import Decimal from "decimal.js";
 import type { MarketCatalogMarket, MarketCatalogRepository } from "../repositories/market-catalog.repository.js";
 import type {
   VenueOrderbookSnapshotInput,
-  VenueOrderbookSnapshotRepository
+  VenueOrderbookSnapshotRepository,
+  MarketQuoteReadinessSnapshot
 } from "../repositories/venue-orderbook-snapshot.repository.js";
+import { DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS } from "../repositories/venue-orderbook-snapshot.repository.js";
 import type { MarketDataQuoteSource } from "./market-data-view.service.js";
 import type { NormalizedQuoteLevel, NormalizedVenueQuoteSnapshot, VenueQuoteSnapshotBlocker } from "../core/sor/quote-snapshot.js";
 
@@ -41,6 +43,10 @@ export interface MarketOrderbookRecorderLogger {
   warn(input: Record<string, unknown>, message: string): void;
   error(input: Record<string, unknown>, message: string): void;
 }
+
+export type MarketOrderbookRecorderSnapshotRepository =
+  Pick<VenueOrderbookSnapshotRepository, "insertMany" | "cleanupSnapshots"> &
+  Partial<Pick<VenueOrderbookSnapshotRepository, "listLatestMarketQuoteReadiness">>;
 
 export interface MarketOrderbookRecorderRunResult {
   marketOffset: number;
@@ -162,7 +168,7 @@ export class MarketOrderbookRecorder {
   public constructor(
     private readonly marketCatalogRepository: Pick<MarketCatalogRepository, "listMarkets">,
     private readonly quoteSource: MarketDataQuoteSource,
-    private readonly snapshotRepository: Pick<VenueOrderbookSnapshotRepository, "insertMany" | "cleanupSnapshots">,
+    private readonly snapshotRepository: MarketOrderbookRecorderSnapshotRepository,
     private readonly logger: MarketOrderbookRecorderLogger,
     private readonly config: MarketOrderbookRecorderConfig,
     private readonly activeMarketSource?: {
@@ -312,8 +318,9 @@ export class MarketOrderbookRecorder {
       }
       result.candidateByVenue = mapToRecord(candidateByVenue);
       result.cooldownSkippedByVenue = mapToRecord(cooldownSkippedByVenue);
+      const prioritizedCandidateSamples = await this.prioritizeCandidateSamplesByFreshness(candidateSamples);
       const scheduledSamples = selectSamplesForTickWithActivePriority(
-        candidateSamples,
+        prioritizedCandidateSamples,
         activeTargets,
         this.config.maxSamplesPerTick,
         this.config.activeMaxSamplesPerTick ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.activeMaxSamplesPerTick,
@@ -395,6 +402,34 @@ export class MarketOrderbookRecorder {
       return empty;
     } finally {
       this.running = false;
+    }
+  }
+
+  private async prioritizeCandidateSamplesByFreshness<T extends {
+    market: MarketCatalogMarket;
+    sample: MarketOrderbookRecorderSample;
+  }>(candidates: readonly T[]): Promise<readonly T[]> {
+    if (candidates.length <= 1 || !this.snapshotRepository.listLatestMarketQuoteReadiness) {
+      return candidates;
+    }
+    const canonicalMarketIds = [...new Set(candidates.map((candidate) => candidate.sample.canonicalMarketId))];
+    if (canonicalMarketIds.length === 0) {
+      return candidates;
+    }
+    try {
+      const readiness = await this.snapshotRepository.listLatestMarketQuoteReadiness({
+        canonicalMarketIds,
+        maxAgeMs: DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS
+      });
+      const readinessByMarket = new Map(readiness.map((snapshot) => [snapshot.canonicalMarketId, snapshot] as const));
+      return [...candidates].sort((left, right) =>
+        freshnessPriorityScore(right.sample, readinessByMarket) - freshnessPriorityScore(left.sample, readinessByMarket)
+      );
+    } catch (error) {
+      this.logger.warn({
+        errorName: error instanceof Error ? error.name : "UnknownError"
+      }, "Market orderbook recorder freshness-priority lookup failed; using catalog order.");
+      return candidates;
     }
   }
 
@@ -1036,6 +1071,34 @@ const countScheduledSampleVenues = (
     }
   }
   return mapToRecord(counts);
+};
+
+const freshnessPriorityScore = (
+  sample: MarketOrderbookRecorderSample,
+  readinessByMarket: ReadonlyMap<string, MarketQuoteReadinessSnapshot>
+): number => {
+  const readiness = readinessByMarket.get(sample.canonicalMarketId);
+  if (!readiness) {
+    return 100;
+  }
+  const sampleVenues = new Set(sample.venueKeys.map(normalizeVenue));
+  const missingQuoteBlockers = readiness.quoteBlockers.filter((blocker) =>
+    sampleVenues.has(normalizeVenue(blocker.venue)) &&
+    blocker.reason.trim().toUpperCase().includes("LIVE_QUOTE_SNAPSHOT_MISSING")
+  );
+  if (missingQuoteBlockers.length > 0) {
+    return 90;
+  }
+  if (readiness.quoteStatus === "unavailable") {
+    return 80;
+  }
+  if (readiness.quoteStatus === "stale") {
+    return 70;
+  }
+  if (readiness.quoteStatus === "partial") {
+    return 50;
+  }
+  return 0;
 };
 
 const countSnapshotInputVenues = (
