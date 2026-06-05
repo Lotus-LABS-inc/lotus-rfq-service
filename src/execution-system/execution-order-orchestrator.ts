@@ -822,6 +822,15 @@ export class ExecutionOrderOrchestratorV1 {
     if (!Number.isFinite(updatedAtMs) || Date.now() - updatedAtMs < SUBMIT_START_INTERRUPTED_AFTER_MS) {
       return null;
     }
+    if (this.signedTradeBundleService && order.quoteId) {
+      const status = await this.signedTradeBundleService.getExecutionStatus({
+        userId: order.userId,
+        executionId: order.quoteId
+      });
+      if (status) {
+        return this.updateFromSignedStatus(order, status);
+      }
+    }
     const blocker = interruptedSubmitBlocker();
     return this.repository.updateOrder({
       userId: order.userId,

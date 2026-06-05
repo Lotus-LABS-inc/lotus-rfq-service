@@ -64,7 +64,7 @@ describe("execution signed bundle routes", () => {
       return [...this.rows.values()].filter((order) =>
         order.state === "SUBMITTING" ||
         order.state === "SUBMITTED" ||
-        (order.state === "FAILED" && Boolean(order.executionId))
+        (order.state === "FAILED" && Boolean(order.executionId ?? order.quoteId))
       );
     }
 
@@ -1045,6 +1045,79 @@ describe("execution signed bundle routes", () => {
     await new Promise((resolve) => setImmediate(resolve));
   });
 
+  it("recovers interrupted async submit from signed-bundle status before failing closed", async () => {
+    const quote = buyQuote("POLYMARKET", true);
+    const repo = new MemoryExecutionOrderRepository();
+    const staleTime = new Date(Date.now() - 60_000).toISOString();
+    await repo.saveOrder({
+      orderId: quote.quoteId,
+      userId: "user-1",
+      quoteId: quote.quoteId,
+      executionId: null,
+      state: "SUBMITTING",
+      side: "buy",
+      marketId: quote.marketId,
+      outcomeId: quote.outcomeId,
+      amount: quote.executableAmount,
+      venuePreference: "POLYMARKET",
+      orderPolicy: "FOK",
+      slippageToleranceBps: 50,
+      signingMode: "USER_SIGNATURE_REQUIRED",
+      primaryAction: "NONE",
+      readinessSummary: {},
+      venueCapabilitySummary: { venues: [] },
+      blockers: [],
+      signatureRequestHash: "sig-hash",
+      lastError: null,
+      expiresAt: quote.expiresAt,
+      nextPollAt: staleTime,
+      createdAt: staleTime,
+      updatedAt: staleTime
+    });
+    const getQuote = vi.fn(async () => quote);
+    const getExecutionStatus = vi.fn(async () => ({
+      executionId: quote.quoteId,
+      userId: "user-1",
+      status: "FILLED" as const,
+      dryRun: false,
+      submittedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      route: quote,
+      submittedLegs: [{
+        legIndex: 0,
+        venue: "POLYMARKET",
+        status: "FILLED" as const,
+        venueOrderId: "poly-filled-order",
+        fillState: { status: "FILLED" as const, filledSize: "1", averagePrice: 0.5 }
+      }]
+    }));
+    const service = new ExecutionOrderOrchestratorV1(
+      repo,
+      { quote: vi.fn(), getQuote } as never,
+      { prepareExit: vi.fn() } as never,
+      {
+        getLiveReadiness: vi.fn(),
+        prepare: vi.fn(),
+        submit: vi.fn(),
+        getExecutionStatus
+      } as never
+    );
+
+    const status = await service.status({ userId: "user-1", orderId: quote.quoteId });
+
+    expect(status).toMatchObject({
+      state: "FILLED",
+      executionId: quote.quoteId,
+      blockers: []
+    });
+    expect(status).not.toHaveProperty("lastError");
+    expect(getQuote).not.toHaveBeenCalled();
+    expect(getExecutionStatus).toHaveBeenCalledWith({
+      userId: "user-1",
+      executionId: quote.quoteId
+    });
+  });
+
   it("fails closed when async submit was interrupted before an execution id was persisted", async () => {
     const quote = buyQuote("POLYMARKET", true);
     const repo = new MemoryExecutionOrderRepository();
@@ -1100,7 +1173,10 @@ describe("execution signed bundle routes", () => {
       }]
     });
     expect(getQuote).not.toHaveBeenCalled();
-    expect(getExecutionStatus).not.toHaveBeenCalled();
+    expect(getExecutionStatus).toHaveBeenCalledWith({
+      userId: "user-1",
+      executionId: quote.quoteId
+    });
   });
 
   it("blocks Polymarket sell previews when the executable conditional token id is missing", async () => {

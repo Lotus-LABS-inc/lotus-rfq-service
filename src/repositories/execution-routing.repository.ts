@@ -683,7 +683,7 @@ export class PgExecutionOrderRepository implements ExecutionOrderRepository {
           state IN ('SUBMITTING', 'SUBMITTED')
           OR (
             state = 'FAILED'
-            AND execution_id IS NOT NULL
+            AND (execution_id IS NOT NULL OR quote_id IS NOT NULL)
             AND created_at >= now() - interval '2 minutes'
           )
         )
