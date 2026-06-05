@@ -814,7 +814,48 @@ async function applyPredictRepairs(db: Pool, rows: readonly PredictRepairCandida
         })
       ]
     );
+    await deleteSnapshotsForPredictRepair(db, row);
   }
+}
+
+async function deleteSnapshotsForPredictRepair(db: Pool, row: PredictRepairCandidate): Promise<void> {
+  const venueMarketIds = [...new Set([
+    row.currentVenueMarketId,
+    row.candidate?.venueMarketId,
+    extractNumericMarketId(row.currentVenueMarketId),
+    row.candidate ? extractNumericMarketId(row.candidate.venueMarketId) : null,
+    row.candidate ? `PREDICT:${row.candidate.venueMarketId}` : null
+  ].filter((value): value is string => typeof value === "string" && value.length > 0))];
+  if (venueMarketIds.length === 0) {
+    return;
+  }
+  const params: unknown[] = [venueMarketIds];
+  const marketPredicate = row.canonicalMarketId
+    ? "AND canonical_market_id = $2"
+    : "";
+  if (row.canonicalMarketId) {
+    params.push(row.canonicalMarketId);
+  }
+  await db.query(
+    `DELETE FROM venue_orderbook_latest_snapshots
+      WHERE venue IN ('PREDICT', 'PREDICT_FUN')
+        AND (
+          venue_market_id = ANY($1::text[])
+          OR regexp_replace(venue_market_id, '^PREDICT:?([0-9]+).*$', '\\1') = ANY($1::text[])
+        )
+        ${marketPredicate}`,
+    params
+  );
+  await db.query(
+    `DELETE FROM venue_orderbook_snapshots
+      WHERE venue IN ('PREDICT', 'PREDICT_FUN')
+        AND (
+          venue_market_id = ANY($1::text[])
+          OR regexp_replace(venue_market_id, '^PREDICT:?([0-9]+).*$', '\\1') = ANY($1::text[])
+        )
+        ${marketPredicate}`,
+    params
+  );
 }
 
 async function hidePredictNonRepairableRows(db: Pool, rows: readonly PredictRepairCandidate[]): Promise<void> {
