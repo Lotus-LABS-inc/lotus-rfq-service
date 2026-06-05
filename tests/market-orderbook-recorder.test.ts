@@ -261,6 +261,65 @@ describe("MarketOrderbookRecorder", () => {
     expect(requestedOutcomeIds).toEqual(["YES", "NO"]);
   });
 
+  it("reports empty venue snapshots when providers return no displayable depth", async () => {
+    const inserted: VenueOrderbookSnapshotInput[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [marketFixture("OPEN")]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalOutcomeId }) => ({
+          snapshots: [{
+            venue: "POLYMARKET",
+            venueMarketId: "poly-1",
+            venueOutcomeId: canonicalOutcomeId ?? "YES",
+            source: "REST",
+            quoteQuality: "FULL_DEPTH_REST",
+            sourceTimestamp: new Date("2026-05-10T12:00:00.000Z"),
+            receivedAt: new Date("2026-05-10T12:00:01.000Z"),
+            bids: [],
+            asks: [],
+            blockers: [],
+            missingFactors: []
+          }],
+          blocked: []
+        })
+      },
+      {
+        insertMany: async (snapshots) => {
+          inserted.push(...snapshots);
+          return snapshots.length;
+        },
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 10,
+        priorityMarketBatchSize: 0,
+        priorityVenues: [],
+        maxSamplesPerTick: 10,
+        cleanupIntervalMs: 0,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(inserted).toHaveLength(0);
+    expect(result.sampledOutcomes).toBe(2);
+    expect(result.insertedSnapshots).toBe(0);
+    expect(result.emptyByVenue).toEqual({ POLYMARKET: 2 });
+    expect(result.blockedByVenue).toEqual({});
+  });
+
   it("caps live venue samples per tick so recorder work stays bounded", async () => {
     const inserted: VenueOrderbookSnapshotInput[] = [];
     const recorder = new MarketOrderbookRecorder(

@@ -5,7 +5,7 @@ import type {
   VenueOrderbookSnapshotRepository
 } from "../repositories/venue-orderbook-snapshot.repository.js";
 import type { MarketDataQuoteSource } from "./market-data-view.service.js";
-import type { NormalizedQuoteLevel, NormalizedVenueQuoteSnapshot } from "../core/sor/quote-snapshot.js";
+import type { NormalizedQuoteLevel, NormalizedVenueQuoteSnapshot, VenueQuoteSnapshotBlocker } from "../core/sor/quote-snapshot.js";
 
 export interface MarketOrderbookRecorderConfig {
   intervalMs: number;
@@ -56,6 +56,8 @@ export interface MarketOrderbookRecorderRunResult {
   shardIndex?: number | undefined;
   sampledByVenue?: Record<string, number> | undefined;
   persistedByVenue?: Record<string, number> | undefined;
+  emptyByVenue?: Record<string, number> | undefined;
+  blockedByVenue?: Record<string, number> | undefined;
   failedByVenue?: Record<string, number> | undefined;
   deletedOldSnapshots: number;
   deletedClosedMarketSnapshots: number;
@@ -309,6 +311,8 @@ export class MarketOrderbookRecorder {
       result.sampledOutcomes = scheduledSamples.length;
       result.sampledByVenue = countScheduledSampleVenues(scheduledSamples);
       const persistedByVenue = new Map<string, number>();
+      const emptyByVenue = new Map<string, number>();
+      const blockedByVenue = new Map<string, number>();
       const failedByVenue = new Map<string, number>();
       if (scheduledSamples.length > 0 && this.quoteSource.preloadMappingReadiness) {
         try {
@@ -350,11 +354,15 @@ export class MarketOrderbookRecorder {
           result.insertedSnapshots += sampleResult.insertedSnapshots;
           result.failedSamples += sampleResult.failedSamples;
           addVenueCounts(persistedByVenue, sampleResult.persistedByVenue);
+          addVenueCounts(emptyByVenue, sampleResult.emptyByVenue);
+          addVenueCounts(blockedByVenue, sampleResult.blockedByVenue);
           addVenueCounts(failedByVenue, sampleResult.failedByVenue);
         }
       });
       await Promise.all(workers);
       result.persistedByVenue = mapToRecord(persistedByVenue);
+      result.emptyByVenue = mapToRecord(emptyByVenue);
+      result.blockedByVenue = mapToRecord(blockedByVenue);
       result.failedByVenue = mapToRecord(failedByVenue);
 
       if (
@@ -409,12 +417,14 @@ export class MarketOrderbookRecorder {
     insertedSnapshots: number;
     failedSamples: number;
     persistedByVenue: Record<string, number>;
+    emptyByVenue: Record<string, number>;
+    blockedByVenue: Record<string, number>;
     failedByVenue: Record<string, number>;
   }> {
     try {
       const venueAllowlist = this.activeVenueKeys(sample.venueKeys);
       if (venueAllowlist.length === 0) {
-        return { insertedSnapshots: 0, failedSamples: 0, persistedByVenue: {}, failedByVenue: {} };
+        return { insertedSnapshots: 0, failedSamples: 0, persistedByVenue: {}, emptyByVenue: {}, blockedByVenue: {}, failedByVenue: {} };
       }
       const report = await withRecorderTimeout(
         this.quoteSource.getQuoteSnapshotReport({
@@ -427,7 +437,7 @@ export class MarketOrderbookRecorder {
         sampleTimeoutMs
       );
       if (this.stopped) {
-        return { insertedSnapshots: 0, failedSamples: 0, persistedByVenue: {}, failedByVenue: {} };
+        return { insertedSnapshots: 0, failedSamples: 0, persistedByVenue: {}, emptyByVenue: {}, blockedByVenue: {}, failedByVenue: {} };
       }
       const snapshots = report.snapshots.flatMap((snapshot) =>
         toSnapshotInput({
@@ -458,10 +468,15 @@ export class MarketOrderbookRecorder {
         ...snapshots,
         ...blockedSnapshots
       ]);
+      const persistedByVenue = countSnapshotInputVenues([...snapshots, ...blockedSnapshots]);
+      const emptyByVenue = countEmptySnapshotVenues(report.snapshots, snapshots);
+      const blockedByVenue = countBlockedVenues(report.blocked);
       return {
         insertedSnapshots,
         failedSamples: 0,
-        persistedByVenue: countSnapshotInputVenues([...snapshots, ...blockedSnapshots]),
+        persistedByVenue,
+        emptyByVenue,
+        blockedByVenue,
         failedByVenue: {}
       };
     } catch (error) {
@@ -478,6 +493,8 @@ export class MarketOrderbookRecorder {
         insertedSnapshots: 0,
         failedSamples: 1,
         persistedByVenue: {},
+        emptyByVenue: {},
+        blockedByVenue: {},
         failedByVenue: Object.fromEntries(this.activeVenueKeys(sample.venueKeys).map((venue) => [venue, 1]))
       };
     }
@@ -944,6 +961,38 @@ const countSnapshotInputVenues = (
   const counts = new Map<string, number>();
   for (const snapshot of snapshots) {
     addVenueCount(counts, snapshot.venue, 1);
+  }
+  return mapToRecord(counts);
+};
+
+const countEmptySnapshotVenues = (
+  snapshots: readonly NormalizedVenueQuoteSnapshot[],
+  persistedSnapshots: readonly VenueOrderbookSnapshotInput[]
+): Record<string, number> => {
+  const persistedCounts = new Map<string, number>();
+  for (const snapshot of persistedSnapshots) {
+    addVenueCount(persistedCounts, snapshot.venue, 1);
+  }
+
+  const emptyCounts = new Map<string, number>();
+  for (const snapshot of snapshots) {
+    const venue = normalizeVenue(snapshot.venue);
+    const remainingPersisted = persistedCounts.get(venue) ?? 0;
+    if (remainingPersisted > 0) {
+      persistedCounts.set(venue, remainingPersisted - 1);
+      continue;
+    }
+    addVenueCount(emptyCounts, venue, 1);
+  }
+  return mapToRecord(emptyCounts);
+};
+
+const countBlockedVenues = (
+  blockers: readonly VenueQuoteSnapshotBlocker[]
+): Record<string, number> => {
+  const counts = new Map<string, number>();
+  for (const blocker of blockers) {
+    addVenueCount(counts, blocker.venue, 1);
   }
   return mapToRecord(counts);
 };
