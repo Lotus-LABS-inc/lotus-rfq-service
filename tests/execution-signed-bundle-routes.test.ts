@@ -10,6 +10,7 @@ import {
   type ExecutionOrderRecord,
   type ExecutionOrderRepository
 } from "../src/execution-system/execution-order-orchestrator.js";
+import { ExecutableRouteService } from "../src/execution-system/executable-routing.js";
 import type { SignedTradeExecutionStatus } from "../src/execution-system/signed-trade-bundle.js";
 import { VenueExecutionNotConfiguredError } from "../src/execution-system/venue-adapter.js";
 
@@ -411,6 +412,212 @@ describe("execution signed bundle routes", () => {
         expect.objectContaining({ venue: "POLYMARKET" })
       ])
     }));
+  });
+
+  it("does not route BEST_ROUTE execution through quote-only venues that cannot submit", async () => {
+    const response = buildLiveExecutionCandidatesResponse({
+      marketId: "market-1",
+      outcomeId: "YES",
+      amount: "10",
+      snapshots: [{
+        venue: "OPINION",
+        quotedPrice: 0.2,
+        availableSize: 10,
+        fees: {},
+        latencyMs: 40,
+        fillProb: 0.9,
+        metadata: {
+          venueMarketId: "opinion-market",
+          venueOutcomeId: "opinion-token"
+        }
+      }, {
+        venue: "POLYMARKET",
+        quotedPrice: 0.5,
+        availableSize: 10,
+        fees: {},
+        latencyMs: 40,
+        fillProb: 0.9,
+        metadata: {
+          venueMarketId: "poly-market",
+          venueOutcomeId: "poly-token",
+          polymarketTickSize: "0.001",
+          settlementEvidenceSupported: true
+        }
+      }],
+      readiness: [{
+        venue: "OPINION",
+        adapter: "OpinionExecutionAdapter",
+        executionSigningModel: "USER_SIGNED_BACKEND_RELAY",
+        structuralReadiness: "LIVE_DISABLED",
+        operationalStatus: "LIVE_DISABLED",
+        marketRoutingCoverage: "COVERED_BY_MATCHING",
+        liveSubmissionSupported: false,
+        liveExecutionEnabled: false,
+        featureFlagSelected: false,
+        host: null,
+        chainId: null,
+        requiredEnvPresent: true,
+        missingEnv: [],
+        dryRunRequiredEnvPresent: true,
+        missingDryRunEnv: [],
+        credentialsServerSideOnly: true,
+        lastHarnessAttempt: {
+          artifactPresent: false,
+          generatedAt: null,
+          mode: null,
+          submitted: null,
+          fillStatus: null,
+          settlementStatus: null,
+          settlementVerified: null,
+          errorCode: null,
+          errorStatus: null,
+          errorMessage: null,
+          blockers: ["Opinion submit is prepare-only."],
+          warnings: []
+        },
+        operatorMessage: "Opinion quote display is enabled but live execution is disabled.",
+        venueAccountRequired: false,
+        venueAccountConfigured: false,
+        activeLinkedAccounts: 0,
+        accountSetupBlockers: []
+      }, {
+        venue: "POLYMARKET",
+        adapter: "PolymarketExecutionAdapterV2",
+        executionSigningModel: "USER_SIGNED_BACKEND_RELAY",
+        structuralReadiness: "LIVE_READY",
+        operationalStatus: "STRUCTURALLY_READY",
+        marketRoutingCoverage: "COVERED_BY_MATCHING",
+        liveSubmissionSupported: true,
+        liveExecutionEnabled: true,
+        featureFlagSelected: true,
+        host: "https://clob.polymarket.com",
+        chainId: "137",
+        requiredEnvPresent: true,
+        missingEnv: [],
+        dryRunRequiredEnvPresent: true,
+        missingDryRunEnv: [],
+        credentialsServerSideOnly: true,
+        lastHarnessAttempt: {
+          artifactPresent: true,
+          generatedAt: "2026-05-03T00:00:00.000Z",
+          mode: "LIVE_READY",
+          submitted: true,
+          fillStatus: "FILLED",
+          settlementStatus: "SETTLEMENT_VERIFIED",
+          settlementVerified: true,
+          errorCode: null,
+          errorStatus: null,
+          errorMessage: null,
+          blockers: [],
+          warnings: []
+        },
+        operatorMessage: "ready",
+        venueAccountRequired: false,
+        venueAccountConfigured: false,
+        activeLinkedAccounts: 0,
+        accountSetupBlockers: []
+      }]
+    });
+    const routeService = new ExecutableRouteService({
+      async listVenues() {
+        return [{
+          venue: "OPINION",
+          adapter: "OpinionExecutionAdapter",
+          executionSigningModel: "USER_SIGNED_BACKEND_RELAY",
+          structuralReadiness: "LIVE_DISABLED",
+          operationalStatus: "LIVE_DISABLED",
+          marketRoutingCoverage: "COVERED_BY_MATCHING",
+          liveSubmissionSupported: false,
+          liveExecutionEnabled: false,
+          featureFlagSelected: false,
+          host: null,
+          chainId: null,
+          requiredEnvPresent: true,
+          missingEnv: [],
+          dryRunRequiredEnvPresent: true,
+          missingDryRunEnv: [],
+          credentialsServerSideOnly: true,
+          lastHarnessAttempt: {
+            artifactPresent: false,
+            generatedAt: null,
+            mode: null,
+            submitted: null,
+            fillStatus: null,
+            settlementStatus: null,
+            settlementVerified: null,
+            errorCode: null,
+            errorStatus: null,
+            errorMessage: null,
+            blockers: ["Opinion submit is prepare-only."],
+            warnings: []
+          },
+          operatorMessage: "Opinion quote display is enabled but live execution is disabled.",
+          venueAccountRequired: false,
+          venueAccountConfigured: false,
+          activeLinkedAccounts: 0,
+          accountSetupBlockers: []
+        }, {
+          venue: "POLYMARKET",
+          adapter: "PolymarketExecutionAdapterV2",
+          executionSigningModel: "USER_SIGNED_BACKEND_RELAY",
+          structuralReadiness: "LIVE_READY",
+          operationalStatus: "STRUCTURALLY_READY",
+          marketRoutingCoverage: "COVERED_BY_MATCHING",
+          liveSubmissionSupported: true,
+          liveExecutionEnabled: true,
+          featureFlagSelected: true,
+          host: "https://clob.polymarket.com",
+          chainId: "137",
+          requiredEnvPresent: true,
+          missingEnv: [],
+          dryRunRequiredEnvPresent: true,
+          missingDryRunEnv: [],
+          credentialsServerSideOnly: true,
+          lastHarnessAttempt: {
+            artifactPresent: true,
+            generatedAt: "2026-05-03T00:00:00.000Z",
+            mode: "LIVE_READY",
+            submitted: true,
+            fillStatus: "FILLED",
+            settlementStatus: "SETTLEMENT_VERIFIED",
+            settlementVerified: true,
+            errorCode: null,
+            errorStatus: null,
+            errorMessage: null,
+            blockers: [],
+            warnings: []
+          },
+          operatorMessage: "ready",
+          venueAccountRequired: false,
+          venueAccountConfigured: false,
+          activeLinkedAccounts: 0,
+          accountSetupBlockers: []
+        }];
+      }
+    });
+
+    const quote = await routeService.quote({
+      userId: "user-1",
+      side: "buy",
+      marketId: "market-1",
+      outcomeId: "YES",
+      amount: "10",
+      candidates: response.candidates
+    });
+
+    expect(response.candidates.find((candidate) => candidate.venue === "OPINION")).toMatchObject({
+      settlementEvidenceSupported: false
+    });
+    expect(quote.quote).toMatchObject({
+      routeType: "SINGLE_VENUE",
+      venuePath: ["POLYMARKET"]
+    });
+    expect(quote.rejectedCandidates).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        venue: "OPINION",
+        blockerCategory: "SETTLEMENT_EVIDENCE_MISSING"
+      })
+    ]));
   });
 
   it("returns submitted leg failure details from orchestrated signature submit", async () => {
