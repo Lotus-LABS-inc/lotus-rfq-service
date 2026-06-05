@@ -375,4 +375,68 @@ describe("HotMarketQuoteReadinessSource", () => {
         quoteBlockers: []
       })]);
   });
+
+  it("suppresses provider market-not-found blockers when another venue is display-ready", async () => {
+    const source = new HotMarketQuoteReadinessSource({
+      mappingResolver: {
+        async listApprovedReadiness() {
+          return [{
+            canonicalEventId: "event-1",
+            canonicalMarketIds: ["market-1"],
+            title: "Market 1",
+            category: "Sports",
+            venues: [
+              {
+                venue: "POLYMARKET",
+                approvedVenueMarketId: "approved-poly",
+                venueMarketId: "poly-1",
+                venueOutcomeId: "token-yes",
+                quoteReady: true,
+                blockers: []
+              },
+              {
+                venue: "LIMITLESS",
+                approvedVenueMarketId: "approved-limitless",
+                venueMarketId: "limitless-404",
+                venueOutcomeId: "YES",
+                quoteReady: true,
+                blockers: []
+              }
+            ]
+          }];
+        }
+      },
+      hotSnapshots: {
+        async getDisplay(input) {
+          return input.venue === "POLYMARKET"
+            ? snapshot(input.venue, input.venueMarketId, input.venueOutcomeId)
+            : null;
+        }
+      },
+      fallbackSource: {
+        async listLatestMarketQuoteReadiness() {
+          return [{
+            canonicalMarketId: "market-1",
+            quoteStatus: "partial" as const,
+            quoteReadyVenueCount: 1,
+            quoteReadyVenues: ["POLYMARKET"],
+            quoteBlockers: [{
+              venue: "LIMITLESS",
+              reason: "Limitless_orderbook_request_failed_with_status_404._Market_not_found",
+              venueMarketId: "limitless-404"
+            }],
+            lastQuoteAt: now.toISOString()
+          }];
+        }
+      }
+    });
+
+    await expect(source.listLatestMarketQuoteReadiness({ canonicalMarketIds: ["market-1"] }))
+      .resolves.toEqual([expect.objectContaining({
+        quoteStatus: "live",
+        quoteReadyVenueCount: 1,
+        quoteReadyVenues: ["POLYMARKET"],
+        quoteBlockers: []
+      })]);
+  });
 });

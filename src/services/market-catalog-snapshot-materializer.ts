@@ -941,6 +941,8 @@ const isDisplaySuppressedVenueBlocker = (reason: string): boolean => {
     normalized.includes("POLYMARKET_OFFICIAL_MARKET_NOT_ACCEPTING_ORDERS") ||
     normalized.includes("QUOTE_PROVIDER_HTTP_404") ||
     normalized.includes("PROVIDER_UNAVAILABLE_404") ||
+    normalized.includes("FAILED_WITH_STATUS_404") ||
+    normalized.includes("MARKET_NOT_FOUND") ||
     normalized.includes("QUOTE_PROVIDER_MARKET_INACTIVE") ||
     normalized.includes("QUOTE_PROVIDER_EMPTY_BOOK") ||
     normalized.includes("MARKET_CLOSED") ||
