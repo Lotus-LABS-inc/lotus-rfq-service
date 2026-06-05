@@ -21,17 +21,19 @@ describe("MarketOrderbookRecorder", () => {
       intervalMs: 10_000,
       marketBatchSize: 24,
       activeMarketBatchSize: 250,
-      activeMaxSamplesPerTick: 36,
+      activeMaxSamplesPerTick: 48,
       priorityMarketBatchSize: 180,
       priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-      maxSamplesPerTick: 90,
-      sampleConcurrency: 14,
-      maxTickDurationMs: 9_000,
+      maxSamplesPerTick: 120,
+      sampleConcurrency: 16,
+      maxTickDurationMs: 9_500,
       sampleTimeoutMs: 1_800,
       cleanupIntervalMs: 30 * 60_000,
       maxSamplesPerVenuePerTick: {
-        LIMITLESS: 6,
-        OPINION: 8
+        LIMITLESS: 14,
+        OPINION: 14,
+        PREDICT_FUN: 36,
+        POLYMARKET: 48
       }
     });
   });
@@ -44,17 +46,19 @@ describe("MarketOrderbookRecorder", () => {
         intervalMs: 10_000,
         marketBatchSize: 24,
         activeMarketBatchSize: 250,
-        activeMaxSamplesPerTick: 36,
+        activeMaxSamplesPerTick: 48,
         priorityMarketBatchSize: 180,
         priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"],
-        maxSamplesPerTick: 90,
-        sampleConcurrency: 14,
-        maxTickDurationMs: 9_000,
+        maxSamplesPerTick: 120,
+        sampleConcurrency: 16,
+        maxTickDurationMs: 9_500,
         sampleTimeoutMs: 1_800,
         cleanupIntervalMs: 30 * 60_000,
         maxSamplesPerVenuePerTick: {
-          LIMITLESS: 6,
-          OPINION: 8
+          LIMITLESS: 14,
+          OPINION: 14,
+          PREDICT_FUN: 36,
+          POLYMARKET: 48
         }
       });
       expect(buildMarketOrderbookRecorderConfig()).not.toHaveProperty("enabled");
@@ -74,11 +78,13 @@ describe("MarketOrderbookRecorder", () => {
     expect(configs.map((config) => config.shardCount)).toEqual([2, 2]);
     expect(configs.map((config) => config.shardIndex)).toEqual([0, 1]);
     expect(configs.every((config) => config.intervalMs === 10_000)).toBe(true);
-    expect(configs.every((config) => config.maxSamplesPerTick === 90)).toBe(true);
-    expect(configs.every((config) => config.activeMaxSamplesPerTick === 36)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerTick === 120)).toBe(true);
+    expect(configs.every((config) => config.activeMaxSamplesPerTick === 48)).toBe(true);
     expect(configs.every((config) => config.sampleTimeoutMs === 1_800)).toBe(true);
-    expect(configs.every((config) => config.maxSamplesPerVenuePerTick?.LIMITLESS === 6)).toBe(true);
-    expect(configs.every((config) => config.maxSamplesPerVenuePerTick?.OPINION === 8)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerVenuePerTick?.LIMITLESS === 14)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerVenuePerTick?.OPINION === 14)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerVenuePerTick?.PREDICT_FUN === 36)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerVenuePerTick?.POLYMARKET === 48)).toBe(true);
     expect(configs.every((config) => (config.maxTickDurationMs ?? 0) < config.intervalMs)).toBe(true);
   });
 
@@ -91,8 +97,8 @@ describe("MarketOrderbookRecorder", () => {
     );
 
     expect(configs).toHaveLength(2);
-    expect(configs.every((config) => config.maxSamplesPerTick === 90)).toBe(true);
-    expect(configs.every((config) => config.sampleConcurrency === 14)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerTick === 120)).toBe(true);
+    expect(configs.every((config) => config.sampleConcurrency === 16)).toBe(true);
   });
 
   it("uses bounded shared staging recorder lanes for stable VPS live quote coverage", () => {
@@ -108,15 +114,17 @@ describe("MarketOrderbookRecorder", () => {
       intervalMs: 10_000,
       marketBatchSize: 24,
       activeMarketBatchSize: 250,
-      activeMaxSamplesPerTick: 36,
+      activeMaxSamplesPerTick: 42,
       priorityMarketBatchSize: 180,
-      maxSamplesPerTick: 72,
-      sampleConcurrency: 10,
-      maxTickDurationMs: 8_500,
+      maxSamplesPerTick: 96,
+      sampleConcurrency: 12,
+      maxTickDurationMs: 9_000,
       sampleTimeoutMs: 1_800,
       maxSamplesPerVenuePerTick: {
-        LIMITLESS: 6,
-        OPINION: 8
+        LIMITLESS: 14,
+        OPINION: 14,
+        PREDICT_FUN: 36,
+        POLYMARKET: 48
       },
       shardCount: 2,
       shardIndex: 0

@@ -70,22 +70,26 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
   intervalMs: 10_000,
   marketBatchSize: 24,
   activeMarketBatchSize: 250,
-  activeMaxSamplesPerTick: 36,
+  activeMaxSamplesPerTick: 48,
   priorityMarketBatchSize: 180,
   priorityVenues: ["OPINION", "LIMITLESS", "PREDICT_FUN", "POLYMARKET"] as readonly string[],
   shardCount: 1,
   shardIndex: 0,
-  maxSamplesPerTick: 90,
-  sampleConcurrency: 14,
-  maxTickDurationMs: 9_000,
+  maxSamplesPerTick: 120,
+  sampleConcurrency: 16,
+  maxTickDurationMs: 9_500,
   sampleTimeoutMs: 1_800,
   cleanupIntervalMs: 30 * 60_000,
   retentionHours: 720,
   levelsPerSide: 25,
   quoteProviderCooldownMs: 10_000,
+  // Code-owned provider budgets keep hot quote coverage broad without falling
+  // back to unbounded per-tick fanout when a catalog window is venue-heavy.
   maxSamplesPerVenuePerTick: {
-    LIMITLESS: 6,
-    OPINION: 8
+    LIMITLESS: 14,
+    OPINION: 14,
+    PREDICT_FUN: 36,
+    POLYMARKET: 48
   } as const
 } as const;
 const RATE_LIMIT_COOLDOWN_MS = 5 * 60_000;
@@ -126,11 +130,11 @@ export const buildMarketOrderbookRecorderConfigs = (
         intervalMs: 10_000,
         marketBatchSize: 24,
         activeMarketBatchSize: 250,
-        activeMaxSamplesPerTick: 36,
+        activeMaxSamplesPerTick: 42,
         priorityMarketBatchSize: 180,
-        maxSamplesPerTick: 72,
-        sampleConcurrency: 10,
-        maxTickDurationMs: 8_500,
+        maxSamplesPerTick: 96,
+        sampleConcurrency: 12,
+        maxTickDurationMs: 9_000,
         sampleTimeoutMs: 1_800
       }
     : {
