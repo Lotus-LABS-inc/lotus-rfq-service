@@ -335,7 +335,13 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
       last_quote_at: Date | null;
     }>(
       `WITH requested AS (
-         SELECT unnest($1::text[]) AS canonical_market_id
+         SELECT canonical_market_id,
+                regexp_replace(
+                  regexp_replace(canonical_market_id, '^FRONTEND_CURATED:', ''),
+                  ':(LIMITLESS|POLYMARKET|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$',
+                  ''
+                ) AS canonical_market_core
+           FROM unnest($1::text[]) AS requested(canonical_market_id)
        ),
        profile_aliases AS (
          SELECT requested.canonical_market_id AS requested_canonical_market_id,
@@ -363,7 +369,10 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
                 END AS alias_venue_market_id
            FROM requested
            JOIN venue_market_profiles vmp
-             ON right(vmp.venue_market_id, length(requested.canonical_market_id)) = requested.canonical_market_id
+             ON (
+                  right(vmp.venue_market_id, length(requested.canonical_market_id)) = requested.canonical_market_id
+                  OR right(vmp.venue_market_id, length(requested.canonical_market_core)) = requested.canonical_market_core
+                )
           WHERE COALESCE(vmp.normalized_payload->>'quoteDisabled', 'false') <> 'true'
        ),
        latest AS (
