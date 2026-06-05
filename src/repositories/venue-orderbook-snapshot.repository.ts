@@ -334,7 +334,39 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
       quote_blockers: unknown;
       last_quote_at: Date | null;
     }>(
-      `WITH latest AS (
+      `WITH requested AS (
+         SELECT unnest($1::text[]) AS canonical_market_id
+       ),
+       profile_aliases AS (
+         SELECT requested.canonical_market_id AS requested_canonical_market_id,
+                CASE WHEN vmp.venue IN ('PREDICT', 'PREDICT_FUN') THEN 'PREDICT_FUN' ELSE vmp.venue END AS normalized_venue,
+                CASE
+                  WHEN vmp.venue = 'POLYMARKET' THEN COALESCE(
+                    NULLIF(vmp.normalized_payload->>'quoteMarketId', ''),
+                    NULLIF(vmp.normalized_payload->>'conditionId', '')
+                  )
+                  WHEN vmp.venue = 'LIMITLESS' THEN COALESCE(
+                    NULLIF(vmp.normalized_payload->>'quoteMarketId', ''),
+                    NULLIF(regexp_replace(vmp.venue_market_id, '^LIMITLESS:([^:]+:[^:]+):.*$', '\\1'), vmp.venue_market_id)
+                  )
+                  WHEN vmp.venue IN ('PREDICT', 'PREDICT_FUN') THEN COALESCE(
+                    NULLIF(vmp.normalized_payload->>'quoteMarketId', ''),
+                    NULLIF(vmp.normalized_payload->>'marketId', ''),
+                    NULLIF(regexp_replace(vmp.venue_market_id, '^PREDICT:?([0-9]+).*$', '\\1'), vmp.venue_market_id)
+                  )
+                  WHEN vmp.venue = 'OPINION' THEN COALESCE(
+                    NULLIF(vmp.normalized_payload->>'quoteMarketId', ''),
+                    NULLIF(vmp.normalized_payload->>'marketId', ''),
+                    NULLIF(regexp_replace(vmp.venue_market_id, '^OPINION:([^:]+).*$', '\\1'), vmp.venue_market_id)
+                  )
+                  ELSE vmp.venue_market_id
+                END AS alias_venue_market_id
+           FROM requested
+           JOIN venue_market_profiles vmp
+             ON right(vmp.venue_market_id, length(requested.canonical_market_id)) = requested.canonical_market_id
+          WHERE COALESCE(vmp.normalized_payload->>'quoteDisabled', 'false') <> 'true'
+       ),
+       latest AS (
          SELECT canonical_market_id,
                 canonical_outcome_id,
                 venue,
@@ -348,6 +380,23 @@ export class VenueOrderbookSnapshotRepository implements MarketHistoricalChartSo
            FROM venue_orderbook_latest_snapshots
           WHERE canonical_market_id = ANY($1::text[])
             AND received_at >= now() - ($3::int * interval '1 millisecond')
+          UNION ALL
+         SELECT profile_aliases.requested_canonical_market_id AS canonical_market_id,
+                vos.canonical_outcome_id,
+                vos.venue,
+                vos.venue_market_id,
+                vos.venue_outcome_id,
+                vos.received_at,
+                vos.best_bid,
+                vos.best_ask,
+                vos.midpoint,
+                vos.blockers
+           FROM profile_aliases
+           JOIN venue_orderbook_latest_snapshots vos
+             ON (CASE WHEN vos.venue IN ('PREDICT', 'PREDICT_FUN') THEN 'PREDICT_FUN' ELSE vos.venue END) = profile_aliases.normalized_venue
+            AND vos.venue_market_id = profile_aliases.alias_venue_market_id
+          WHERE profile_aliases.alias_venue_market_id IS NOT NULL
+            AND vos.received_at >= now() - ($3::int * interval '1 millisecond')
        ),
        annotated AS (
          SELECT canonical_market_id,
