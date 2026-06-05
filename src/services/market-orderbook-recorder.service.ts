@@ -84,7 +84,7 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
   levelsPerSide: 25,
   quoteProviderCooldownMs: 10_000,
   maxSamplesPerVenuePerTick: {
-    LIMITLESS: 3,
+    LIMITLESS: 6,
     OPINION: 8
   } as const
 } as const;
