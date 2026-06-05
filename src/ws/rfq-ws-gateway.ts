@@ -52,6 +52,10 @@ export interface RFQWebSocketGatewayConfig {
   publisher: RedisClient;
   subscriber: RedisClient;
   logger: Pick<Logger, "warn" | "error">;
+  onSubscribe?: ((input: {
+    topic: string;
+    send: (event: RFQBroadcastEvent) => void;
+  }) => void | Promise<void>) | undefined;
   redisChannel?: string;
   heartbeatIntervalMs?: number;
   slowClientBufferedAmountBytes?: number;
@@ -67,6 +71,7 @@ export class RFQWebSocketGateway {
   private readonly publisher: RedisClient;
   private readonly subscriber: RedisClient;
   private readonly logger: Pick<Logger, "warn" | "error">;
+  private readonly onSubscribe: NonNullable<RFQWebSocketGatewayConfig["onSubscribe"]> | undefined;
   private readonly redisChannel: string;
   private readonly heartbeatIntervalMs: number;
   private readonly slowClientBufferedAmountBytes: number;
@@ -82,6 +87,7 @@ export class RFQWebSocketGateway {
     this.publisher = config.publisher;
     this.subscriber = config.subscriber;
     this.logger = config.logger;
+    this.onSubscribe = config.onSubscribe;
     this.redisChannel = config.redisChannel ?? DEFAULT_REDIS_CHANNEL;
     this.heartbeatIntervalMs = config.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
     this.slowClientBufferedAmountBytes =
@@ -285,6 +291,7 @@ export class RFQWebSocketGateway {
         type: "SUBSCRIBED",
         topic: message.topic
       });
+      this.notifySubscribeHook(socket, message.topic);
       return;
     }
 
@@ -300,6 +307,29 @@ export class RFQWebSocketGateway {
     this.sendJson(socket, {
       type: "UNSUBSCRIBED",
       topic: message.topic
+    });
+  }
+
+  private notifySubscribeHook(socket: GatewaySocket, topic: string): void {
+    if (!this.onSubscribe) {
+      return;
+    }
+
+    void Promise.resolve(this.onSubscribe({
+      topic,
+      send: (event) => {
+        if (socket.readyState !== SOCKET_OPEN) {
+          return;
+        }
+        this.sendJson(socket, {
+          type: event.type,
+          topic: event.topic,
+          emittedAt: event.emittedAt,
+          payload: event.payload
+        });
+      }
+    })).catch((error) => {
+      this.logger.warn({ err: error, topic }, "WebSocket subscribe hook failed.");
     });
   }
 

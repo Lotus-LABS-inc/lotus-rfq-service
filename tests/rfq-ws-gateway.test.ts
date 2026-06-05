@@ -344,6 +344,52 @@ describe("RFQWebSocketGateway", () => {
     await gateway.stop();
   });
 
+  it("sends subscribe hook snapshots directly to the subscribing socket", async () => {
+    const bus = new FakeRedisBus();
+    const publisher = new FakeRedisClient(bus);
+    const subscriber = new FakeRedisClient(bus);
+    const topic = marketOrderbookTopic("OFFICE_WINNER|SEOUL|MAYOR|2026", "YES");
+    const gateway = new RFQWebSocketGateway({
+      publisher,
+      subscriber,
+      logger: { warn: vi.fn(), error: vi.fn() },
+      onSubscribe: ({ topic: subscribedTopic, send }) => {
+        if (subscribedTopic !== topic) return;
+        send({
+          type: "MARKET_ORDERBOOK_UPDATE",
+          topic: subscribedTopic,
+          emittedAt: "2026-05-23T10:00:00.000Z",
+          payload: {
+            source: "initial_snapshot",
+            canonicalMarketId: "OFFICE_WINNER|SEOUL|MAYOR|2026",
+            canonicalOutcomeId: "YES",
+            bestBid: "0.49",
+            bestAsk: "0.51"
+          }
+        });
+      }
+    });
+
+    await gateway.start();
+    const socket = new FakeSocket();
+    gateway.registerConnection(socket);
+    socket.emit("message", JSON.stringify({ action: "subscribe", topic }));
+
+    await vi.waitFor(() => {
+      const payloads = socket.sent.map((entry) => JSON.parse(entry) as Record<string, unknown>);
+      expect(payloads.find((entry) => entry.type === "MARKET_ORDERBOOK_UPDATE")?.payload)
+        .toEqual({
+          source: "initial_snapshot",
+          canonicalMarketId: "OFFICE_WINNER|SEOUL|MAYOR|2026",
+          canonicalOutcomeId: "YES",
+          bestBid: "0.49",
+          bestAsk: "0.51"
+        });
+    });
+
+    await gateway.stop();
+  });
+
   it("does not fail service startup when Redis subscriber is temporarily unavailable", async () => {
     vi.useFakeTimers();
     const bus = new FakeRedisBus();
