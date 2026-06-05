@@ -834,6 +834,77 @@ describe("MarketOrderbookRecorder", () => {
     expect(sampledMarketIds).toEqual(["market-active", "market-active", "market-1", "market-1"]);
   });
 
+  it("resolves active terminal markets directly when they are outside the first catalog window", async () => {
+    const sampledMarketIds: string[] = [];
+    const activeMarket = {
+      ...marketFixture("OPEN"),
+      canonicalEventId: "event-active-late",
+      canonicalMarketIds: ["market-active-late"],
+      venueMarkets: marketFixture("OPEN").venueMarkets.map((venueMarket) => ({
+        ...venueMarket,
+        canonicalMarketId: "market-active-late"
+      }))
+    };
+    const normalMarket = marketFixture("OPEN");
+    const getMarketCalls: string[] = [];
+    const getMarket = async (marketId: string) => {
+      getMarketCalls.push(marketId);
+      return marketId === "market-active-late" ? activeMarket : null;
+    };
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [normalMarket],
+        getMarket
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalMarketId }) => {
+          sampledMarketIds.push(canonicalMarketId);
+          return {
+            snapshots: [],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 1,
+        activeMarketBatchSize: 10,
+        priorityMarketBatchSize: 0,
+        priorityVenues: [],
+        maxSamplesPerTick: 40,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      },
+      {
+        listActiveMarketsFromRedis: async () => [{
+          canonicalMarketId: "market-active-late",
+          canonicalOutcomeId: "YES",
+          lastSeenAt: new Date("2026-05-10T12:00:00.000Z")
+        }]
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.activeMarkets).toBe(1);
+    expect(getMarketCalls).toEqual(["market-active-late"]);
+    expect(sampledMarketIds.slice(0, 2)).toEqual([
+      "market-active-late",
+      "market-active-late"
+    ]);
+  });
+
   it("reserves venue sample budget for broad coverage when active markets are present", async () => {
     const sampledMarketIds: string[] = [];
     const activeMarket = venueMarketFixture("LIMITLESS", "market-active-limitless");

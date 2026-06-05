@@ -166,7 +166,8 @@ export class MarketOrderbookRecorder {
   private readonly catalogWindowCache = new Map<string, { expiresAtMs: number; markets: MarketCatalogMarket[] }>();
 
   public constructor(
-    private readonly marketCatalogRepository: Pick<MarketCatalogRepository, "listMarkets">,
+    private readonly marketCatalogRepository: Pick<MarketCatalogRepository, "listMarkets"> &
+      Partial<Pick<MarketCatalogRepository, "getMarket">>,
     private readonly quoteSource: MarketDataQuoteSource,
     private readonly snapshotRepository: MarketOrderbookRecorderSnapshotRepository,
     private readonly logger: MarketOrderbookRecorderLogger,
@@ -674,13 +675,31 @@ export class MarketOrderbookRecorder {
       limit: Math.max(250, activeMarketBatchSize),
       offset: 0
     });
-    return catalogWindow.filter((market) =>
+    const activeMarkets = catalogWindow.filter((market) =>
       this.marketBelongsToShard(market) &&
       (
         market.canonicalMarketIds.some((canonicalMarketId) => activeIds.has(canonicalMarketId)) ||
         activeIds.has(market.canonicalEventId)
       )
     );
+    const resolvedIds = new Set(activeMarkets.flatMap((market) => [
+      market.canonicalEventId,
+      ...market.canonicalMarketIds
+    ]));
+    const missingIds = [...activeIds].filter((canonicalMarketId) => !resolvedIds.has(canonicalMarketId));
+    if (missingIds.length === 0 || !this.marketCatalogRepository.getMarket) {
+      return activeMarkets;
+    }
+
+    const directlyResolvedMarkets: MarketCatalogMarket[] = [];
+    for (const canonicalMarketId of missingIds) {
+      const market = await this.marketCatalogRepository.getMarket(canonicalMarketId);
+      if (!market || !this.marketBelongsToShard(market)) {
+        continue;
+      }
+      directlyResolvedMarkets.push(market);
+    }
+    return uniqueMarketsByEventAndMarketIds([...activeMarkets, ...directlyResolvedMarkets]);
   }
 
   private async listCachedCatalogWindow(input: { limit: number; offset: number }): Promise<MarketCatalogMarket[]> {
