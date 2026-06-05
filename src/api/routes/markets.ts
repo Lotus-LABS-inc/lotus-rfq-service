@@ -20,6 +20,7 @@ const marketListViewSchema = z.enum(["full", "compact"]);
 
 const listQuerySchema = z.object({
   category: z.string().min(1).optional(),
+  cursor: z.string().min(1).optional(),
   search: z.string().min(1).optional(),
   limit: z.coerce.number().int().positive().max(1000).optional(),
   routeCoverage: routeCoverageSchema.optional(),
@@ -185,7 +186,8 @@ export const registerMarketCatalogRoutes = async (
         details: parsed.error.flatten()
       });
     }
-    const cacheQuery = marketCatalogListCacheQuery(parsed.data);
+    const page = marketCatalogPageRequest(parsed.data);
+    const cacheQuery = marketCatalogListCacheQuery(marketCatalogSourceQuery(parsed.data, page));
     const payload = await getCachedMarketCatalogResponse(
       `markets:${stableQueryCacheKey(cacheQuery)}`,
       async () => {
@@ -222,8 +224,9 @@ export const registerMarketCatalogRoutes = async (
         sharedWriteKeys: marketCatalogSnapshotWriteKeys(cacheQuery)
       }
     );
-    queueMarketCatalogOrderbookWarmup(payload, deps.marketDataViewService);
-    return reply.send(payload);
+    const responsePayload = page ? paginateMarketCatalogPayload(payload, page, "markets") : payload;
+    queueMarketCatalogOrderbookWarmup(responsePayload, deps.marketDataViewService);
+    return reply.send(responsePayload);
   });
 
   const listEventsHandler = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -235,13 +238,15 @@ export const registerMarketCatalogRoutes = async (
         details: parsed.error.flatten()
       });
     }
+    const page = marketCatalogPageRequest(parsed.data);
+    const sourceQuery = marketCatalogSourceQuery(parsed.data, page);
     const payload = await getCachedMarketCatalogResponse(
-      `events:${stableQueryCacheKey(parsed.data)}`,
+      `events:${stableQueryCacheKey(sourceQuery)}`,
       async () => {
         const events = await deps.marketCatalogRepository.listEvents({
-          ...(parsed.data.category !== undefined ? { category: parsed.data.category } : {}),
-          ...(parsed.data.search !== undefined ? { search: parsed.data.search } : {}),
-          ...(parsed.data.limit !== undefined ? { limit: parsed.data.limit } : {})
+          ...(sourceQuery.category !== undefined ? { category: sourceQuery.category } : {}),
+          ...(sourceQuery.search !== undefined ? { search: sourceQuery.search } : {}),
+          ...(sourceQuery.limit !== undefined ? { limit: sourceQuery.limit } : {})
         });
         return {
           events,
@@ -252,7 +257,7 @@ export const registerMarketCatalogRoutes = async (
         sharedCache: deps.marketCatalogSnapshotCache
       }
     );
-    return reply.send(payload);
+    return reply.send(page ? paginateMarketCatalogPayload(payload, page, "events") : payload);
   };
 
   app.get("/events", listEventsHandler);
@@ -1257,6 +1262,77 @@ const sliceMarketCatalogResponse = <T extends Record<string, unknown>>(value: T,
     count: markets.length
   };
 };
+
+interface MarketCatalogPageRequest {
+  offset: number;
+  pageSize: number;
+}
+
+const marketCatalogPageRequest = (
+  query: z.infer<typeof listQuerySchema>
+): MarketCatalogPageRequest | null => {
+  if (query.cursor === undefined) {
+    return null;
+  }
+  return {
+    offset: parseMarketCatalogCursor(query.cursor),
+    pageSize: query.limit ?? 80
+  };
+};
+
+const marketCatalogSourceQuery = (
+  query: z.infer<typeof listQuerySchema>,
+  page: MarketCatalogPageRequest | null
+): z.infer<typeof listQuerySchema> => {
+  const { cursor: _cursor, ...baseQuery } = query;
+  if (!page) {
+    return baseQuery;
+  }
+  return {
+    ...baseQuery,
+    limit: Math.min(
+      DEFAULT_MARKET_LIST_OVERFETCH_CAP,
+      Math.max(page.offset + page.pageSize + 1, page.pageSize, 250)
+    )
+  };
+};
+
+const paginateMarketCatalogPayload = <T extends Record<string, unknown>>(
+  payload: T,
+  page: MarketCatalogPageRequest,
+  key: "markets" | "events"
+): T & { count: number; pageSize: number; nextCursor: string | null; hasMore: boolean } => {
+  const rows = Array.isArray(payload[key]) ? payload[key] : [];
+  const pageRows = rows.slice(page.offset, page.offset + page.pageSize);
+  const hasMore = rows.length > page.offset + page.pageSize;
+  return {
+    ...payload,
+    [key]: pageRows,
+    count: rows.length,
+    pageSize: page.pageSize,
+    nextCursor: hasMore ? encodeMarketCatalogCursor(page.offset + pageRows.length) : null,
+    hasMore
+  } as T & { count: number; pageSize: number; nextCursor: string | null; hasMore: boolean };
+};
+
+const parseMarketCatalogCursor = (cursor: string): number => {
+  const trimmed = cursor.trim();
+  if (/^\d+$/.test(trimmed)) {
+    return Math.max(0, Number.parseInt(trimmed, 10));
+  }
+  try {
+    const decoded = Buffer.from(trimmed, "base64url").toString("utf8");
+    const parsed = JSON.parse(decoded) as { offset?: unknown };
+    return typeof parsed.offset === "number" && Number.isFinite(parsed.offset)
+      ? Math.max(0, Math.trunc(parsed.offset))
+      : 0;
+  } catch {
+    return 0;
+  }
+};
+
+const encodeMarketCatalogCursor = (offset: number): string =>
+  Buffer.from(JSON.stringify({ offset: Math.max(0, Math.trunc(offset)) }), "utf8").toString("base64url");
 
 const stableQueryCacheKey = (query: z.infer<typeof listQuerySchema>): string =>
   JSON.stringify(Object.keys(query)

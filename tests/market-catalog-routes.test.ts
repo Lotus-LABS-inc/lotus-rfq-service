@@ -236,6 +236,95 @@ describe("market catalog routes", () => {
     await app.close();
   });
 
+  it("paginates market lists with an opaque cursor while preserving legacy count metadata", async () => {
+    const app = Fastify({ logger: false });
+    const repository = new FakeMarketCatalogRepository();
+    const pagedMarkets = Array.from({ length: 5 }, (_, index): MarketCatalogMarket => ({
+      ...market,
+      canonicalEventId: `11111111-1111-5111-8111-11111111111${index}`,
+      canonicalMarketIds: [`MARKET_${index}`],
+      displayTopic: `Market ${index}`,
+      displayOutcome: `Outcome ${index}`,
+      displayOutcomeKey: `outcome:${index}`,
+      title: `Market ${index}`,
+      normalizedTitle: `market ${index}`,
+      venueMarkets: market.venueMarkets.map((venueMarket) => ({
+        ...venueMarket,
+        canonicalMarketId: `MARKET_${index}`,
+        venueMarketProfileId: `vmp_poly_${index}`,
+        venueMarketId: `poly-${index}`
+      }))
+    }));
+    vi.spyOn(repository, "listMarkets").mockImplementation(async (filter = {}) => {
+      repository.filters.push(filter);
+      return pagedMarkets;
+    });
+    await registerMarketCatalogRoutes(app, { marketCatalogRepository: repository });
+
+    const first = await app.inject({
+      method: "GET",
+      url: "/markets?cursor=0&limit=2&view=compact"
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({
+      count: 5,
+      pageSize: 2,
+      hasMore: true,
+      markets: [{ title: "Market 0" }, { title: "Market 1" }]
+    });
+    expect(first.json().nextCursor).toEqual(expect.any(String));
+
+    const second = await app.inject({
+      method: "GET",
+      url: `/markets?cursor=${encodeURIComponent(first.json().nextCursor)}&limit=2&view=compact`
+    });
+
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toMatchObject({
+      count: 5,
+      pageSize: 2,
+      hasMore: true,
+      markets: [{ title: "Market 2" }, { title: "Market 3" }]
+    });
+
+    await app.close();
+  });
+
+  it("paginates event lists with the same cursor contract", async () => {
+    const app = Fastify({ logger: false });
+    const repository = new FakeMarketCatalogRepository();
+    const pagedEvents = Array.from({ length: 3 }, (_, index): MarketCatalogEvent => ({
+      ...marketEvent,
+      eventId: `event:${index}`,
+      title: `Event ${index}`,
+      normalizedTitle: `event ${index}`,
+      featuredMarkets: [{ ...market, title: `Market ${index}` }],
+      markets: [{ ...market, title: `Market ${index}` }]
+    }));
+    vi.spyOn(repository, "listEvents").mockImplementation(async (filter = {}) => {
+      repository.filters.push(filter);
+      return pagedEvents;
+    });
+    await registerMarketCatalogRoutes(app, { marketCatalogRepository: repository });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/events?cursor=0&limit=2"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      count: 3,
+      pageSize: 2,
+      hasMore: true,
+      events: [{ title: "Event 0" }, { title: "Event 1" }]
+    });
+    expect(response.json().nextCursor).toEqual(expect.any(String));
+
+    await app.close();
+  });
+
   it("filters inactive markets from public lists while preserving an explicit diagnostic opt-in", async () => {
     const app = Fastify({ logger: false });
     const expiredMarket: MarketCatalogMarket = {
