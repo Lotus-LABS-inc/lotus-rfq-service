@@ -30,7 +30,8 @@ describe("MarketOrderbookRecorder", () => {
       sampleTimeoutMs: 1_800,
       cleanupIntervalMs: 30 * 60_000,
       maxSamplesPerVenuePerTick: {
-        LIMITLESS: 6
+        LIMITLESS: 3,
+        OPINION: 8
       }
     });
   });
@@ -52,7 +53,8 @@ describe("MarketOrderbookRecorder", () => {
         sampleTimeoutMs: 1_800,
         cleanupIntervalMs: 30 * 60_000,
         maxSamplesPerVenuePerTick: {
-          LIMITLESS: 6
+          LIMITLESS: 3,
+          OPINION: 8
         }
       });
       expect(buildMarketOrderbookRecorderConfig()).not.toHaveProperty("enabled");
@@ -75,7 +77,8 @@ describe("MarketOrderbookRecorder", () => {
     expect(configs.every((config) => config.maxSamplesPerTick === 90)).toBe(true);
     expect(configs.every((config) => config.activeMaxSamplesPerTick === 36)).toBe(true);
     expect(configs.every((config) => config.sampleTimeoutMs === 1_800)).toBe(true);
-    expect(configs.every((config) => config.maxSamplesPerVenuePerTick?.LIMITLESS === 6)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerVenuePerTick?.LIMITLESS === 3)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerVenuePerTick?.OPINION === 8)).toBe(true);
     expect(configs.every((config) => (config.maxTickDurationMs ?? 0) < config.intervalMs)).toBe(true);
   });
 
@@ -112,7 +115,8 @@ describe("MarketOrderbookRecorder", () => {
       maxTickDurationMs: 8_500,
       sampleTimeoutMs: 1_800,
       maxSamplesPerVenuePerTick: {
-        LIMITLESS: 6
+        LIMITLESS: 3,
+        OPINION: 8
       },
       shardCount: 2,
       shardIndex: 0
