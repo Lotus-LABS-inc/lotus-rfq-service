@@ -44,7 +44,7 @@ export interface PreparedTradeSignatureBundle {
   signatureRequests: TradeSignatureRequest[];
 }
 
-export type SignedTradeOrderPolicy = "FOK";
+export type SignedTradeOrderPolicy = "FOK" | "FAK";
 
 export type PolymarketMarketBuyRoutePrecisionInput = {
   size: string;

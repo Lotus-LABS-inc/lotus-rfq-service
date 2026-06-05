@@ -293,6 +293,88 @@ describe("execution signed bundle routes", () => {
     });
   });
 
+  it("accepts FAK execution order policy on orchestrator previews", async () => {
+    const app = Fastify();
+    const quote = buyQuote("POLYMARKET", true);
+    const service = new ExecutionOrderOrchestratorV1(
+      new MemoryExecutionOrderRepository(),
+      {
+        quote: vi.fn(async () => ({ quote, rejectedCandidates: [], internalCandidateCount: 1 })),
+        getQuote: vi.fn(async () => quote)
+      } as never,
+      { prepareExit: vi.fn() } as never,
+      {
+        getLiveReadiness: vi.fn(async () => ({
+          quoteId: quote.quoteId,
+          generatedAt: new Date().toISOString(),
+          expiresAt: quote.expiresAt,
+          status: "fresh",
+          blockers: [],
+          venues: [{
+            venue: "POLYMARKET",
+            status: "fresh",
+            checkedAt: new Date().toISOString(),
+            blockers: [],
+            account: { walletAddress: "0xwallet", venueAccountAddress: "0xdeposit", ownerAddress: "0xdeposit" },
+            collateral: { requiredNotional: "1", balance: "10", allowance: "10", tokenSymbol: "pUSD", tokenAddress: null, spenderAddress: null, chainId: 137 }
+          }]
+        })),
+        prepare: vi.fn(async () => ({
+          quoteId: quote.quoteId,
+          expiresAt: quote.expiresAt,
+          signatureRequests: []
+        })),
+        submit: vi.fn(),
+        getExecutionStatus: vi.fn(async () => null)
+      } as never,
+      {
+        getCandidates: vi.fn(async () => ({
+          generatedAt: new Date().toISOString(),
+          marketId: "market-1",
+          outcomeId: "YES",
+          amount: "1",
+          candidates: [{
+            venue: "POLYMARKET",
+            venueMarketId: "polymarket-market",
+            venueOutcomeId: "polymarket-token",
+            price: 0.5,
+            availableSize: "10",
+            requiresUserSignature: true
+          }],
+          blocked: []
+        }))
+      }
+    );
+    await registerExecutionRoutes(app, async (request) => {
+      request.user = { userId: "user-1", email: "user@example.com", role: "USER" };
+    }, {
+      executableRouteService: { quote: vi.fn(), getQuote: vi.fn() } as never,
+      sellQuoteService: { prepareExit: vi.fn() } as never,
+      executionOrderService: service
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/execution/orders/preview",
+      payload: {
+        marketId: "market-1",
+        outcomeId: "YES",
+        side: "buy",
+        amount: "1",
+        venuePreference: "POLYMARKET",
+        orderPolicy: "FAK",
+        slippageToleranceBps: 50
+      }
+    });
+
+    expect(response.statusCode, response.body).toBe(201);
+    expect(response.json()).toMatchObject({
+      state: "READY_TO_PLACE",
+      orderPolicy: "FAK",
+      slippageToleranceBps: 50
+    });
+  });
+
   it("normalizes clicked venue market ids so BEST_ROUTE still routes across venues", async () => {
     const quote = {
       ...buyQuote("POLYMARKET", true),

@@ -128,7 +128,7 @@ const executionOrderPreviewSchema = z.object({
   side: z.enum(["buy", "sell"]),
   amount: z.string().regex(/^\d+(\.\d+)?$/),
   venuePreference: z.enum(["BEST_ROUTE", "POLYMARKET", "LIMITLESS", "PREDICT_FUN", "OPINION"]),
-  orderPolicy: z.enum(["FOK"]).optional(),
+  orderPolicy: z.enum(["FOK", "FAK"]).optional(),
   slippageToleranceBps: z.number().int().min(0).max(500).optional()
 });
 

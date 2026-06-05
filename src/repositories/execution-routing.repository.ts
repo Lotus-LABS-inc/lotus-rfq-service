@@ -175,6 +175,43 @@ export class PgVerifiedPositionRepository implements VerifiedPositionRepository 
        ORDER BY updated_at DESC`,
       values
     );
+    if (result.rows.length === 0) {
+      const aliasRows = await this.listVerifiedPositionsByCuratedMarketAlias(input);
+      if (aliasRows.length > 0) {
+        return aliasRows;
+      }
+    }
+    return result.rows.map(mapPositionRow);
+  }
+
+  private async listVerifiedPositionsByCuratedMarketAlias(input: {
+    userId: string;
+    marketId: string;
+    outcomeId: string;
+    venue?: string | undefined;
+  }): Promise<VerifiedExecutionPosition[]> {
+    const marketAlias = curatedMarketVenueAlias(input.marketId);
+    if (!marketAlias) {
+      return [];
+    }
+    const values: unknown[] = [input.userId, input.outcomeId, marketAlias.likePattern];
+    const venueClause = input.venue
+      ? (() => {
+          values.push(input.venue.toUpperCase());
+          return ` AND venue = $${values.length}`;
+        })()
+      : "";
+    const result = await this.pool.query<PositionRow>(
+      `SELECT * FROM user_execution_positions
+       WHERE user_id = $1
+         AND outcome_id = $2
+         AND market_id LIKE $3
+         AND verified_size > 0
+         AND status = 'VERIFIED'
+         ${venueClause}
+       ORDER BY updated_at DESC`,
+      values
+    );
     return result.rows.map(mapPositionRow);
   }
 
@@ -762,6 +799,22 @@ const mapExecutionOrderRow = (row: ExecutionOrderRow): ExecutionOrderRecord => (
   createdAt: row.created_at.toISOString(),
   updatedAt: row.updated_at.toISOString()
 });
+
+const CURATED_MARKET_VENUE_SUFFIX = /:(POLYMARKET|LIMITLESS|PREDICT_FUN|OPINION|MYRIAD)$/i;
+
+const curatedMarketVenueAlias = (marketId: string): { likePattern: string } | null => {
+  if (!marketId.startsWith("FRONTEND_CURATED:") || !CURATED_MARKET_VENUE_SUFFIX.test(marketId)) {
+    return null;
+  }
+  const canonicalStem = marketId.replace(CURATED_MARKET_VENUE_SUFFIX, "");
+  if (canonicalStem === marketId || canonicalStem.length === 0) {
+    return null;
+  }
+  return { likePattern: `${escapePostgresLike(canonicalStem)}:%` };
+};
+
+const escapePostgresLike = (value: string): string =>
+  value.replace(/[\\%_]/g, (match) => `\\${match}`);
 
 const mapSignedTradeExecutionStatusRow = (row: SignedTradeExecutionStatusRow): SignedTradeExecutionStatus => ({
   executionId: row.execution_id,

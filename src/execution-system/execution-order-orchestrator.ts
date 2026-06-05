@@ -35,7 +35,7 @@ export type ExecutionOrderState =
 
 export type ExecutionOrderPrimaryAction = "PLACE_ORDER" | "SIGN" | "ENABLE_VENUE" | "NONE";
 export type ExecutionOrderVenuePreference = "BEST_ROUTE" | "POLYMARKET" | "LIMITLESS" | "PREDICT_FUN" | "OPINION";
-export type ExecutionOrderPolicy = "FOK";
+export type ExecutionOrderPolicy = "FOK" | "FAK";
 export type ExecutionOrderSigningMode =
   | "NONE"
   | "USER_SIGNATURE_REQUIRED"
