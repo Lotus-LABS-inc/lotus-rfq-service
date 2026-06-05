@@ -709,10 +709,12 @@ export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingL
         FROM selected_events se
         JOIN canonical_events ce
           ON ce.id = se.id
-        LEFT JOIN canonical_executable_markets cem
+        JOIN canonical_executable_markets cem
           ON cem.canonical_event_id = ce.id
+        JOIN canonical_executable_market_members mem
+          ON mem.canonical_executable_market_id = cem.id
         JOIN venue_market_profiles vmp
-          ON vmp.canonical_event_id = ce.id
+          ON vmp.id = mem.venue_market_profile_id
          AND ${QUOTE_ENABLED_VENUE_PROFILE_CONDITION}
        ORDER BY ce.title, vmp.venue`,
       [

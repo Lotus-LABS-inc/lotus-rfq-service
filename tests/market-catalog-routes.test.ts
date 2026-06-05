@@ -2193,6 +2193,9 @@ describe("market catalog routes", () => {
     const rows = await repository.listApprovedVenueMappings({ limit: 25 });
 
     expect(rows).toHaveLength(0);
+    expect(queries[0]?.sql).toContain("JOIN canonical_executable_market_members mem");
+    expect(queries[0]?.sql).toContain("vmp.id = mem.venue_market_profile_id");
+    expect(queries[0]?.sql).not.toContain("vmp.canonical_event_id = ce.id");
     expect(queries[0]?.sql).toContain("quoteDisabled");
     expect(queries[0]?.params?.[0]).toBe(25);
   });
