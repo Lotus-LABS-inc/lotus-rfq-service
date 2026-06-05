@@ -581,8 +581,12 @@ async function buildPredictRepairCandidates(rows: readonly PredictBlockedRow[]):
     if (currentId) {
       try {
         const current = await adapter.getMarketById(currentId);
-        if (isActivePredictMarket(current) && hasExecutablePredictToken(current)) {
-          results.push(toPredictRepair(row, current, args.apply ? "UPDATED" : "PLANNED", "CURRENT_MARKET_ID_RECOVERED"));
+        if (isActivePredictMarket(current)) {
+          if (hasAutoRepairablePredictOutcomeTokens(current)) {
+            results.push(toPredictRepair(row, current, args.apply ? "UPDATED" : "PLANNED", "CURRENT_MARKET_ID_RECOVERED"));
+            continue;
+          }
+          results.push(toPredictUnresolved(row, "CURRENT_MARKET_ACTIVE_TOKEN_MAPPING_MISSING"));
           continue;
         }
         currentLookupReason = `CURRENT_MARKET_INACTIVE_${normalizeReasonToken(current.status ?? "UNKNOWN")}`;
@@ -596,8 +600,12 @@ async function buildPredictRepairCandidates(rows: readonly PredictBlockedRow[]):
     } else if (currentSlug) {
       try {
         const current = await adapter.getMarketById(currentSlug);
-        if (isActivePredictMarket(current) && hasExecutablePredictToken(current)) {
-          results.push(toPredictRepair(row, current, args.apply ? "UPDATED" : "PLANNED", "CURRENT_MARKET_SLUG_RECOVERED"));
+        if (isActivePredictMarket(current)) {
+          if (hasAutoRepairablePredictOutcomeTokens(current)) {
+            results.push(toPredictRepair(row, current, args.apply ? "UPDATED" : "PLANNED", "CURRENT_MARKET_SLUG_RECOVERED"));
+            continue;
+          }
+          results.push(toPredictUnresolved(row, "CURRENT_MARKET_ACTIVE_TOKEN_MAPPING_MISSING"));
           continue;
         }
         currentLookupReason = `CURRENT_MARKET_INACTIVE_${normalizeReasonToken(current.status ?? "UNKNOWN")}`;
@@ -657,7 +665,7 @@ async function findPredictCandidates(
           const market = await adapter.getMarketById(id);
           if (
             isActivePredictMarket(market) &&
-            hasExecutablePredictToken(market) &&
+            hasAutoRepairablePredictOutcomeTokens(market) &&
             normalizedTargets.has(normalizeTextForMatch(market.title))
           ) {
             candidates.set(market.venueMarketId, market);
@@ -1046,8 +1054,8 @@ function isActivePredictMarket(market: PredictNormalizedMarket): boolean {
   return !["CLOSED", "RESOLVED", "CANCELLED", "CANCELED", "EXPIRED", "INACTIVE"].includes(status);
 }
 
-function hasExecutablePredictToken(market: PredictNormalizedMarket): boolean {
-  return extractPredictOutcomeTokenIds(market) !== null || extractPredictTokenIds(market).length > 0;
+function hasAutoRepairablePredictOutcomeTokens(market: PredictNormalizedMarket): boolean {
+  return extractPredictOutcomeTokenIds(market) !== null;
 }
 
 function extractPredictTokenIds(market: PredictNormalizedMarket): string[] {
