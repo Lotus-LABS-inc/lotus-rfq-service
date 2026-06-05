@@ -30,7 +30,7 @@ describe("MarketOrderbookRecorder", () => {
       sampleTimeoutMs: 1_800,
       cleanupIntervalMs: 30 * 60_000,
       maxSamplesPerVenuePerTick: {
-        LIMITLESS: 10,
+        LIMITLESS: 14,
         OPINION: 14,
         PREDICT_FUN: 36,
         POLYMARKET: 48
@@ -55,7 +55,7 @@ describe("MarketOrderbookRecorder", () => {
         sampleTimeoutMs: 1_800,
         cleanupIntervalMs: 30 * 60_000,
         maxSamplesPerVenuePerTick: {
-          LIMITLESS: 10,
+          LIMITLESS: 14,
           OPINION: 14,
           PREDICT_FUN: 36,
           POLYMARKET: 48
@@ -81,7 +81,7 @@ describe("MarketOrderbookRecorder", () => {
     expect(configs.every((config) => config.maxSamplesPerTick === 120)).toBe(true);
     expect(configs.every((config) => config.activeMaxSamplesPerTick === 48)).toBe(true);
     expect(configs.every((config) => config.sampleTimeoutMs === 1_800)).toBe(true);
-    expect(configs.every((config) => config.maxSamplesPerVenuePerTick?.LIMITLESS === 10)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerVenuePerTick?.LIMITLESS === 14)).toBe(true);
     expect(configs.every((config) => config.maxSamplesPerVenuePerTick?.OPINION === 14)).toBe(true);
     expect(configs.every((config) => config.maxSamplesPerVenuePerTick?.PREDICT_FUN === 36)).toBe(true);
     expect(configs.every((config) => config.maxSamplesPerVenuePerTick?.POLYMARKET === 48)).toBe(true);
@@ -121,7 +121,7 @@ describe("MarketOrderbookRecorder", () => {
       maxTickDurationMs: 9_000,
       sampleTimeoutMs: 1_800,
       maxSamplesPerVenuePerTick: {
-        LIMITLESS: 10,
+        LIMITLESS: 14,
         OPINION: 14,
         PREDICT_FUN: 36,
         POLYMARKET: 48
