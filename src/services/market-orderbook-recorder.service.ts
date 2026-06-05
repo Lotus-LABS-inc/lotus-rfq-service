@@ -24,6 +24,7 @@ export interface MarketOrderbookRecorderConfig {
   retentionHours: number;
   levelsPerSide: number;
   quoteProviderCooldownMs: number;
+  maxSamplesPerVenuePerTick?: Readonly<Record<string, number>>;
 }
 
 export type MarketOrderbookRecorderDutyProfile = "production" | "shared_staging";
@@ -81,7 +82,10 @@ const DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG = {
   cleanupIntervalMs: 30 * 60_000,
   retentionHours: 720,
   levelsPerSide: 25,
-  quoteProviderCooldownMs: 10_000
+  quoteProviderCooldownMs: 10_000,
+  maxSamplesPerVenuePerTick: {
+    LIMITLESS: 6
+  } as const
 } as const;
 const RATE_LIMIT_COOLDOWN_MS = 5 * 60_000;
 const PROVIDER_AUTH_COOLDOWN_MS = 15 * 60_000;
@@ -187,7 +191,9 @@ export class MarketOrderbookRecorder {
       sampleTimeoutMs: this.config.sampleTimeoutMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.sampleTimeoutMs,
       cleanupIntervalMs: this.config.cleanupIntervalMs ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.cleanupIntervalMs,
       retentionHours: this.config.retentionHours,
-      levelsPerSide: this.config.levelsPerSide
+      levelsPerSide: this.config.levelsPerSide,
+      maxSamplesPerVenuePerTick: this.config.maxSamplesPerVenuePerTick ??
+        DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.maxSamplesPerVenuePerTick
     }, "Market orderbook recorder started.");
     this.scheduleNextTick(0);
   }
@@ -306,7 +312,8 @@ export class MarketOrderbookRecorder {
         activeTargets,
         this.config.maxSamplesPerTick,
         this.config.activeMaxSamplesPerTick ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.activeMaxSamplesPerTick,
-        this.config.priorityVenues ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityVenues
+        this.config.priorityVenues ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.priorityVenues,
+        this.config.maxSamplesPerVenuePerTick ?? DEFAULT_MARKET_ORDERBOOK_RECORDER_CONFIG.maxSamplesPerVenuePerTick
       );
       result.sampledOutcomes = scheduledSamples.length;
       result.sampledByVenue = countScheduledSampleVenues(scheduledSamples);
@@ -786,15 +793,18 @@ const selectSamplesForTickWithActivePriority = <T extends {
   activeTargets: readonly ActiveMarketTarget[],
   maxSamples: number,
   activeMaxSamples: number,
-  priorityVenues: readonly string[]
+  priorityVenues: readonly string[],
+  maxSamplesPerVenuePerTick?: Readonly<Record<string, number>> | undefined
 ): T[] => {
   const limit = Math.max(0, Math.floor(maxSamples));
   if (limit <= 0 || candidates.length === 0) {
     return [];
   }
+  const venueBudgets = normalizeMaxSamplesPerVenuePerTick(maxSamplesPerVenuePerTick);
+  const selectedVenueCounts = new Map<string, number>();
   const activeTargetKeys = activeSampleKeys(activeTargets);
   if (activeTargetKeys.size === 0) {
-    return selectSamplesForTick(candidates, limit, priorityVenues);
+    return selectSamplesForTick(candidates, limit, priorityVenues, venueBudgets, selectedVenueCounts);
   }
 
   const activeCandidates = candidates.filter((candidate) =>
@@ -804,7 +814,9 @@ const selectSamplesForTickWithActivePriority = <T extends {
   const selectedActive = selectSamplesForTick(
     activeCandidates,
     Math.min(limit, Math.max(0, Math.floor(activeMaxSamples))),
-    priorityVenues
+    priorityVenues,
+    venueBudgets,
+    selectedVenueCounts
   );
   const selectedKeys = new Set(selectedActive.map((candidate) => sampleCooldownKey(candidate.sample)));
   const remaining = limit - selectedActive.length;
@@ -816,7 +828,9 @@ const selectSamplesForTickWithActivePriority = <T extends {
     ...selectSamplesForTick(
       candidates.filter((candidate) => !selectedKeys.has(sampleCooldownKey(candidate.sample))),
       remaining,
-      priorityVenues
+      priorityVenues,
+      venueBudgets,
+      selectedVenueCounts
     )
   ];
 };
@@ -827,7 +841,9 @@ const selectSamplesForTick = <T extends {
 }>(
   candidates: readonly T[],
   maxSamples: number,
-  priorityVenues: readonly string[]
+  priorityVenues: readonly string[],
+  maxSamplesPerVenuePerTick: ReadonlyMap<string, number> = new Map(),
+  selectedVenueCounts: Map<string, number> = new Map()
 ): T[] => {
   const limit = Math.max(0, Math.floor(maxSamples));
   if (limit <= 0 || candidates.length === 0) {
@@ -835,7 +851,24 @@ const selectSamplesForTick = <T extends {
   }
   const normalizedPriorityVenues = [...new Set(priorityVenues.map(normalizeVenue))];
   if (normalizedPriorityVenues.length === 0) {
-    return candidates.slice(0, limit);
+    const selected: T[] = [];
+    const selectedKeys = new Set<string>();
+    for (const candidate of candidates) {
+      if (selected.length >= limit) {
+        break;
+      }
+      const key = sampleCooldownKey(candidate.sample);
+      if (
+        selectedKeys.has(key) ||
+        !canSelectSampleWithinVenueBudgets(candidate.sample, maxSamplesPerVenuePerTick, selectedVenueCounts)
+      ) {
+        continue;
+      }
+      selected.push(candidate);
+      selectedKeys.add(key);
+      addSelectedSampleVenueBudgets(candidate.sample, selectedVenueCounts);
+    }
+    return selected;
   }
 
   const bucketQueues = new Map<string, EventRoundRobinQueue<T>>(
@@ -862,11 +895,15 @@ const selectSamplesForTick = <T extends {
           break;
         }
         const key = sampleCooldownKey(candidate.sample);
-        if (selectedKeys.has(key)) {
+        if (
+          selectedKeys.has(key) ||
+          !canSelectSampleWithinVenueBudgets(candidate.sample, maxSamplesPerVenuePerTick, selectedVenueCounts)
+        ) {
           continue;
         }
         selected.push(candidate);
         selectedKeys.add(key);
+        addSelectedSampleVenueBudgets(candidate.sample, selectedVenueCounts);
         addedThisRound = true;
         break;
       }
@@ -1016,6 +1053,49 @@ const addVenueCount = (target: Map<string, number>, venue: string, count: number
 
 const mapToRecord = (values: Map<string, number>): Record<string, number> =>
   Object.fromEntries([...values.entries()].sort(([left], [right]) => left.localeCompare(right)));
+
+const normalizeMaxSamplesPerVenuePerTick = (
+  values?: Readonly<Record<string, number>> | undefined
+): ReadonlyMap<string, number> => {
+  const normalized = new Map<string, number>();
+  for (const [venue, value] of Object.entries(values ?? {})) {
+    const limit = Math.max(0, Math.floor(Number(value)));
+    if (!Number.isFinite(limit)) {
+      continue;
+    }
+    normalized.set(normalizeVenue(venue), limit);
+  }
+  return normalized;
+};
+
+const canSelectSampleWithinVenueBudgets = (
+  sample: MarketOrderbookRecorderSample,
+  maxSamplesPerVenuePerTick: ReadonlyMap<string, number>,
+  selectedVenueCounts: ReadonlyMap<string, number>
+): boolean => {
+  for (const venue of uniqueSampleVenues(sample)) {
+    const limit = maxSamplesPerVenuePerTick.get(venue);
+    if (limit === undefined) {
+      continue;
+    }
+    if ((selectedVenueCounts.get(venue) ?? 0) >= limit) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const addSelectedSampleVenueBudgets = (
+  sample: MarketOrderbookRecorderSample,
+  selectedVenueCounts: Map<string, number>
+): void => {
+  for (const venue of uniqueSampleVenues(sample)) {
+    selectedVenueCounts.set(venue, (selectedVenueCounts.get(venue) ?? 0) + 1);
+  }
+};
+
+const uniqueSampleVenues = (sample: MarketOrderbookRecorderSample): string[] =>
+  [...new Set(sample.venueKeys.map(normalizeVenue))];
 
 const toSnapshotInput = (input: {
   canonicalEventId: string;

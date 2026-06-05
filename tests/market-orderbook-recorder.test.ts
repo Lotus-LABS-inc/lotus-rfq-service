@@ -28,7 +28,10 @@ describe("MarketOrderbookRecorder", () => {
       sampleConcurrency: 14,
       maxTickDurationMs: 9_000,
       sampleTimeoutMs: 1_800,
-      cleanupIntervalMs: 30 * 60_000
+      cleanupIntervalMs: 30 * 60_000,
+      maxSamplesPerVenuePerTick: {
+        LIMITLESS: 6
+      }
     });
   });
 
@@ -47,7 +50,10 @@ describe("MarketOrderbookRecorder", () => {
         sampleConcurrency: 14,
         maxTickDurationMs: 9_000,
         sampleTimeoutMs: 1_800,
-        cleanupIntervalMs: 30 * 60_000
+        cleanupIntervalMs: 30 * 60_000,
+        maxSamplesPerVenuePerTick: {
+          LIMITLESS: 6
+        }
       });
       expect(buildMarketOrderbookRecorderConfig()).not.toHaveProperty("enabled");
     } finally {
@@ -69,6 +75,7 @@ describe("MarketOrderbookRecorder", () => {
     expect(configs.every((config) => config.maxSamplesPerTick === 90)).toBe(true);
     expect(configs.every((config) => config.activeMaxSamplesPerTick === 36)).toBe(true);
     expect(configs.every((config) => config.sampleTimeoutMs === 1_800)).toBe(true);
+    expect(configs.every((config) => config.maxSamplesPerVenuePerTick?.LIMITLESS === 6)).toBe(true);
     expect(configs.every((config) => (config.maxTickDurationMs ?? 0) < config.intervalMs)).toBe(true);
   });
 
@@ -104,6 +111,9 @@ describe("MarketOrderbookRecorder", () => {
       sampleConcurrency: 10,
       maxTickDurationMs: 8_500,
       sampleTimeoutMs: 1_800,
+      maxSamplesPerVenuePerTick: {
+        LIMITLESS: 6
+      },
       shardCount: 2,
       shardIndex: 0
     });
@@ -535,6 +545,60 @@ describe("MarketOrderbookRecorder", () => {
       "market-limitless:YES",
       "market-poly-1:YES"
     ]);
+  });
+
+  it("caps rate-limited venue samples without starving uncapped venues", async () => {
+    const sampledVenues: string[] = [];
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async () => [
+          ...Array.from({ length: 8 }, (_, index) => venueMarketFixture("LIMITLESS", `market-limitless-${index + 1}`)),
+          ...Array.from({ length: 8 }, (_, index) => venueMarketFixture("POLYMARKET", `market-poly-${index + 1}`))
+        ]
+      },
+      {
+        getQuoteSnapshotReport: async ({ venueAllowlist }) => {
+          sampledVenues.push(...(venueAllowlist ?? []));
+          return {
+            snapshots: [],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 16,
+        priorityMarketBatchSize: 0,
+        priorityVenues: ["LIMITLESS", "POLYMARKET"],
+        maxSamplesPerTick: 10,
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000,
+        maxSamplesPerVenuePerTick: {
+          LIMITLESS: 2
+        }
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.sampledOutcomes).toBe(10);
+    expect(result.sampledByVenue).toEqual({
+      LIMITLESS: 2,
+      POLYMARKET: 8
+    });
+    expect(sampledVenues.filter((venue) => venue === "LIMITLESS")).toHaveLength(2);
+    expect(sampledVenues.filter((venue) => venue === "POLYMARKET")).toHaveLength(8);
   });
 
   it("loads priority markets with venue-fair windows when the catalog is sorted toward one venue", async () => {
