@@ -29,6 +29,7 @@ export interface MarketQuoteReadinessFallbackSource {
 export interface HotMarketQuoteReadinessSourceConfig {
   maxAgeMs: number;
   batchReadinessLimit: number;
+  fallbackMaxMarketIds: number;
 }
 
 export class HotMarketQuoteReadinessSource {
@@ -38,11 +39,13 @@ export class HotMarketQuoteReadinessSource {
     mappingResolver: Pick<VenueQuoteMappingResolver, "getReadiness" | "listApprovedReadiness">;
     hotSnapshots: HotMarketQuoteReadinessSnapshotStore;
     fallbackSource?: MarketQuoteReadinessFallbackSource | undefined;
+    logger?: { warn(payload: Record<string, unknown>, message: string): void } | undefined;
     config?: Partial<HotMarketQuoteReadinessSourceConfig> | undefined;
   }) {
     this.config = {
       maxAgeMs: DEFAULT_MARKET_QUOTE_READINESS_MAX_AGE_MS,
       batchReadinessLimit: 2_500,
+      fallbackMaxMarketIds: 50,
       ...(deps.config ?? {})
     };
   }
@@ -67,10 +70,26 @@ export class HotMarketQuoteReadinessSource {
     if (fallbackNeeded.length === 0 || !this.deps.fallbackSource) {
       return hotResults;
     }
-    const fallback = await this.deps.fallbackSource.listLatestMarketQuoteReadiness({
-      canonicalMarketIds: fallbackNeeded,
-      maxAgeMs
-    });
+    if (fallbackNeeded.length > this.config.fallbackMaxMarketIds) {
+      this.deps.logger?.warn({
+        fallbackNeeded: fallbackNeeded.length,
+        fallbackMaxMarketIds: this.config.fallbackMaxMarketIds
+      }, "Skipping market quote readiness DB fallback for large hot snapshot batch.");
+      return hotResults;
+    }
+    let fallback: MarketQuoteReadinessSnapshot[];
+    try {
+      fallback = await this.deps.fallbackSource.listLatestMarketQuoteReadiness({
+        canonicalMarketIds: fallbackNeeded,
+        maxAgeMs
+      });
+    } catch (error) {
+      this.deps.logger?.warn({
+        err: error,
+        fallbackNeeded: fallbackNeeded.length
+      }, "Market quote readiness DB fallback failed; returning hot snapshots.");
+      return hotResults;
+    }
     const fallbackByMarket = new Map(fallback.map((snapshot) => [snapshot.canonicalMarketId, snapshot] as const));
     return hotResults.map((snapshot) => {
       const fallbackSnapshot = fallbackByMarket.get(snapshot.canonicalMarketId);

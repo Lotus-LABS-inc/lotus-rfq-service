@@ -1094,6 +1094,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     mappingResolver: sharedCoreQuoteMappingResolver,
     hotSnapshots: hotQuoteSnapshots,
     fallbackSource: venueOrderbookSnapshotRepository,
+    logger: app.log,
     config: {
       maxAgeMs: DEFAULT_MARKET_CATALOG_DISPLAY_QUOTE_READINESS_MAX_AGE_MS
     }

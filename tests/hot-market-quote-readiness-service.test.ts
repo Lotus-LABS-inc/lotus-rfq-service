@@ -109,6 +109,100 @@ describe("HotMarketQuoteReadinessSource", () => {
       })]);
   });
 
+  it("returns hot readiness instead of failing when the DB fallback errors", async () => {
+    const logger = { warn: vi.fn() };
+    const source = new HotMarketQuoteReadinessSource({
+      mappingResolver: {
+        async listApprovedReadiness() {
+          return [{
+            canonicalEventId: "event-1",
+            canonicalMarketIds: ["market-1"],
+            title: "Market 1",
+            category: "Crypto",
+            venues: [{
+              venue: "LIMITLESS",
+              approvedVenueMarketId: "approved-1",
+              venueMarketId: "limitless-1",
+              venueOutcomeId: "YES",
+              quoteReady: true,
+              blockers: []
+            }]
+          }];
+        }
+      },
+      hotSnapshots: {
+        async getDisplay() {
+          return null;
+        }
+      },
+      fallbackSource: {
+        async listLatestMarketQuoteReadiness() {
+          throw new Error("statement timeout");
+        }
+      },
+      logger
+    });
+
+    await expect(source.listLatestMarketQuoteReadiness({ canonicalMarketIds: ["market-1"] }))
+      .resolves.toEqual([expect.objectContaining({
+        canonicalMarketId: "market-1",
+        quoteStatus: "unavailable",
+        quoteReadyVenueCount: 0,
+        quoteReadyVenues: [],
+        quoteBlockers: [expect.objectContaining({
+          venue: "LIMITLESS",
+          reason: "LIVE_QUOTE_SNAPSHOT_MISSING"
+        })]
+      })]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackNeeded: 1 }),
+      "Market quote readiness DB fallback failed; returning hot snapshots."
+    );
+  });
+
+  it("skips DB fallback for large catalog batches so slow fallback reads cannot block live snapshots", async () => {
+    const marketIds = Array.from({ length: 55 }, (_, index) => `market-${index + 1}`);
+    const fallback = vi.fn();
+    const logger = { warn: vi.fn() };
+    const source = new HotMarketQuoteReadinessSource({
+      mappingResolver: {
+        async listApprovedReadiness() {
+          return [{
+            canonicalEventId: "event-1",
+            canonicalMarketIds: marketIds,
+            title: "Market batch",
+            category: "Crypto",
+            venues: [{
+              venue: "POLYMARKET",
+              approvedVenueMarketId: "approved-poly",
+              venueMarketId: "poly-1",
+              venueOutcomeId: "token-yes",
+              quoteReady: true,
+              blockers: []
+            }]
+          }];
+        }
+      },
+      hotSnapshots: {
+        async getDisplay() {
+          return null;
+        }
+      },
+      fallbackSource: { listLatestMarketQuoteReadiness: fallback },
+      logger
+    });
+
+    const result = await source.listLatestMarketQuoteReadiness({ canonicalMarketIds: marketIds });
+
+    expect(result).toHaveLength(55);
+    expect(result.every((snapshot) => snapshot.quoteStatus === "unavailable")).toBe(true);
+    expect(fallback).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackNeeded: 55, fallbackMaxMarketIds: 50 }),
+      "Skipping market quote readiness DB fallback for large hot snapshot batch."
+    );
+  });
+
   it("merges DB fallback venues when only part of the route is hot", async () => {
     const source = new HotMarketQuoteReadinessSource({
       mappingResolver: {
