@@ -1195,6 +1195,54 @@ describe("OrderbookStreamService", () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
+  it("refreshes newly subscribed terminal targets without waiting for the broad REST sweep interval", async () => {
+    let activeMarkets = [{ canonicalMarketId: "canonical-1", canonicalOutcomeId: "YES", lastSeenAt: now }];
+    const connector = new FakeConnector("POLYMARKET");
+    const refresh = vi.fn(async (target: VenueOrderbookSubscriptionTarget) => ({
+      ...snapshot(target),
+      source: "REST" as const,
+      quoteQuality: "FULL_DEPTH_REST" as const
+    }));
+    const service = new OrderbookStreamService({
+      activeMarkets: {
+        async listActiveMarketsFromRedis() {
+          return activeMarkets;
+        }
+      },
+      hotSnapshots: { put: vi.fn() },
+      mappingResolver: {
+        async getReadiness(input) {
+          return [{
+            venue: "POLYMARKET",
+            approvedVenueMarketId: `${input.canonicalMarketId}-approved`,
+            venueMarketId: `${input.canonicalMarketId}-market`,
+            venueOutcomeId: "token-yes",
+            quoteReady: true,
+            blockers: []
+          }];
+        }
+      },
+      connectors: [connector],
+      restRefreshers: [{ venue: "POLYMARKET", refresh }],
+      publisher: { publish: vi.fn(async () => 1) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      now: () => now,
+      config: { restRefreshIntervalMs: 60_000 }
+    });
+
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 1 });
+    activeMarkets = [
+      activeMarkets[0]!,
+      { canonicalMarketId: "canonical-2", canonicalOutcomeId: "YES", lastSeenAt: now }
+    ];
+    await expect(service.runOnce()).resolves.toMatchObject({ restRefreshed: 1 });
+
+    expect(refresh.mock.calls.map(([target]) => target.venueMarketId)).toEqual([
+      "canonical-1-market",
+      "canonical-2-market"
+    ]);
+  });
+
   it("bounds REST fallback refreshes per venue so one provider cannot starve the rest", async () => {
     const connectors = [
       new FakeConnector("POLYMARKET"),

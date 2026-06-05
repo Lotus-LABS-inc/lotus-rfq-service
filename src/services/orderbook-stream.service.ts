@@ -257,7 +257,7 @@ export class OrderbookStreamService {
       for (const target of subscribedTargets) {
         this.activeSubscriptions.set(subscriptionKey(target), { target, lastDesiredAt: nowMs });
       }
-      const restRefresh = await this.refreshRestTargets(desiredTargets, nowMs);
+      const restRefresh = await this.refreshRestTargets(desiredTargets, nowMs, subscribedTargets);
 
       const result = {
         activeMarkets: activeMarkets.length,
@@ -401,15 +401,21 @@ export class OrderbookStreamService {
 
   private async refreshRestTargets(
     targets: readonly VenueOrderbookSubscriptionTarget[],
-    nowMs: number
+    nowMs: number,
+    immediateTargets: readonly VenueOrderbookSubscriptionTarget[] = []
   ): Promise<{ total: number; byVenue: Readonly<Record<string, number>> }> {
-    if (this.lastRestRefreshSweepAt > 0 && nowMs - this.lastRestRefreshSweepAt < this.config.restRefreshIntervalMs) {
+    const immediateNativeKeys = new Set(immediateTargets.map(nativeSubscriptionKey));
+    const sweepDue = this.lastRestRefreshSweepAt <= 0 || nowMs - this.lastRestRefreshSweepAt >= this.config.restRefreshIntervalMs;
+    if (!sweepDue && immediateNativeKeys.size === 0) {
       return emptyRestRefreshResult();
     }
-    this.lastRestRefreshSweepAt = nowMs;
+    if (sweepDue) {
+      this.lastRestRefreshSweepAt = nowMs;
+    }
     const groupsByNative = groupTargetsByNative(dedupeTargetsBySubscription(targets));
     const refreshableCandidates = [...groupsByNative.values()]
       .flatMap((group) => group[0] ? [group[0]] : [])
+      .filter((target) => sweepDue || immediateNativeKeys.has(nativeSubscriptionKey(target)))
       .filter((target) => this.isRestRefreshDue(target, nowMs))
       .filter((target) => !this.isRestRefreshFailureCoolingDown(target, nowMs));
     const refreshable = selectRestRefreshTargets(
