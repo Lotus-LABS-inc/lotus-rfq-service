@@ -529,14 +529,22 @@ export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingL
   }): Promise<readonly SharedCoreVenueQuoteMappingRow[]> {
     const result = await this.pool.query<SharedCoreVenueQuoteMappingRow>(
       `WITH selected_event AS (
-         SELECT ce.id
+         SELECT ce.id,
+                CASE
+                  WHEN cem.id = $1
+                    OR regexp_replace(cem.id, ':(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$', '') =
+                       regexp_replace($1, ':(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$', '')
+                  THEN cem.id
+                  ELSE NULL
+                END AS selected_market_id
            FROM canonical_events ce
            LEFT JOIN canonical_executable_markets cem
              ON cem.canonical_event_id = ce.id
           WHERE (ce.id::text = $1
              OR ce.proposition_key = $1
              OR cem.id = $1
-             OR regexp_replace(cem.id, ':(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$', '') = $1)
+             OR regexp_replace(cem.id, ':(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$', '') =
+                regexp_replace($1, ':(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$', ''))
             AND NOT EXISTS (
               SELECT 1
                FROM unnest($3::text[]) excluded(prefix)
@@ -552,9 +560,18 @@ export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingL
                        )
                   )
             )
+          ORDER BY
+            CASE
+              WHEN cem.id = $1 THEN 0
+              WHEN regexp_replace(cem.id, ':(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$', '') =
+                   regexp_replace($1, ':(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$', '') THEN 1
+              ELSE 2
+            END
           LIMIT 1
        )
        SELECT
+         $1::text AS requested_canonical_market_id,
+         se.selected_market_id AS canonical_market_id,
          vmp.venue,
          vmp.venue_market_id,
          vmp.normalized_payload,
@@ -567,9 +584,83 @@ export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingL
        JOIN venue_market_profiles vmp
           ON vmp.canonical_event_id = se.id
          AND ${QUOTE_ENABLED_VENUE_PROFILE_CONDITION}
+        LEFT JOIN canonical_executable_market_members mem
+          ON mem.venue_market_profile_id = vmp.id
+        WHERE (
+          se.selected_market_id IS NULL
+          OR mem.canonical_executable_market_id = se.selected_market_id
+        )
        ORDER BY vmp.venue`,
       [
         input.canonicalMarketId,
+        this.options.approvalSource ?? FRONTEND_SHARED_CORE_APPROVAL_SOURCE,
+        [...FRONTEND_CATALOG_EXCLUDED_TOPIC_PREFIXES]
+      ]
+    );
+    return result.rows;
+  }
+
+  public async loadApprovedVenueMappingsBatch(input: {
+    canonicalMarketIds: readonly string[];
+  }): Promise<readonly SharedCoreVenueQuoteMappingRow[]> {
+    const canonicalMarketIds = [...new Set(input.canonicalMarketIds.map((id) => id.trim()).filter(Boolean))];
+    if (canonicalMarketIds.length === 0) {
+      return [];
+    }
+    const result = await this.pool.query<SharedCoreVenueQuoteMappingRow>(
+      `WITH requested AS (
+         SELECT requested_canonical_market_id,
+                regexp_replace(
+                  requested_canonical_market_id,
+                  ':(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$',
+                  ''
+                ) AS requested_market_core
+           FROM unnest($1::text[]) AS input(requested_canonical_market_id)
+       ),
+       selected_markets AS (
+         SELECT DISTINCT ON (requested.requested_canonical_market_id)
+                requested.requested_canonical_market_id,
+                ce.id AS canonical_event_id,
+                cem.id AS canonical_market_id
+           FROM requested
+           JOIN canonical_executable_markets cem
+             ON cem.id = requested.requested_canonical_market_id
+             OR regexp_replace(cem.id, ':(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$', '') =
+                requested.requested_market_core
+           JOIN canonical_events ce
+             ON ce.id = cem.canonical_event_id
+          WHERE NOT EXISTS (
+            SELECT 1
+             FROM unnest($3::text[]) excluded(prefix)
+             WHERE upper(ce.proposition_key) = upper(excluded.prefix)
+                OR upper(ce.proposition_key) LIKE '%' || upper(excluded.prefix) || '%'
+                OR upper(cem.id) = upper(excluded.prefix)
+                OR upper(cem.id) LIKE '%' || upper(excluded.prefix) || '%'
+          )
+          ORDER BY requested.requested_canonical_market_id,
+                   CASE WHEN cem.id = requested.requested_canonical_market_id THEN 0 ELSE 1 END
+       )
+       SELECT
+         selected_markets.requested_canonical_market_id,
+         selected_markets.canonical_event_id::text AS canonical_event_id,
+         selected_markets.canonical_market_id,
+         vmp.venue,
+         vmp.venue_market_id,
+         vmp.normalized_payload,
+         vmp.raw_source_payload
+        FROM selected_markets
+        JOIN frontend_market_approvals fma
+          ON fma.canonical_event_id = selected_markets.canonical_event_id
+         AND fma.status = 'APPROVED'
+         AND fma.metadata->>'source' = $2
+        JOIN canonical_executable_market_members mem
+          ON mem.canonical_executable_market_id = selected_markets.canonical_market_id
+        JOIN venue_market_profiles vmp
+          ON vmp.id = mem.venue_market_profile_id
+         AND ${QUOTE_ENABLED_VENUE_PROFILE_CONDITION}
+       ORDER BY selected_markets.requested_canonical_market_id, vmp.venue`,
+      [
+        canonicalMarketIds,
         this.options.approvalSource ?? FRONTEND_SHARED_CORE_APPROVAL_SOURCE,
         [...FRONTEND_CATALOG_EXCLUDED_TOPIC_PREFIXES]
       ]
