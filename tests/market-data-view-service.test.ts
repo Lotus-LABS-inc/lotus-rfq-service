@@ -1167,6 +1167,50 @@ describe("LiveMarketDataViewService", () => {
     });
   });
 
+  it("reports linked venue coverage separately from currently live venue coverage", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    const service = new LiveMarketDataViewService({
+      getQuoteSnapshotReport: async () => ({ snapshots: [], blocked: [] })
+    }, {
+      now: () => now,
+      liveOrderbookSource: {
+        get: async (input) => input.canonicalMarketId.endsWith(":POLYMARKET")
+          ? [snapshot({
+              venue: "POLYMARKET",
+              venueMarketId: "poly-live",
+              venueOutcomeId: "yes",
+              receivedAt: now,
+              bid: "0.24",
+              ask: "0.26"
+            })]
+          : []
+      }
+    });
+
+    const prices = await service.getLivePrices({
+      items: [{
+        marketId: "display-market",
+        canonicalMarketIds: [
+          "FRONTEND_CURATED:EVENT|OUTCOME:POLYMARKET",
+          "FRONTEND_CURATED:EVENT|OUTCOME:PREDICT"
+        ],
+        outcomeId: "yes"
+      }]
+    });
+
+    expect(prices.prices[0]).toMatchObject({
+      status: "live",
+      price: "0.25",
+      venueCount: 1,
+      venues: ["POLYMARKET"],
+      liveVenueCount: 1,
+      liveVenues: ["POLYMARKET"],
+      linkedVenueCount: 2,
+      linkedVenues: ["POLYMARKET", "PREDICT_FUN"],
+      averagePrice: "0.25"
+    });
+  });
+
   it("treats recently refreshed REST orderbooks as live display prices", async () => {
     const now = new Date("2026-05-10T12:00:40.000Z");
     const service = new LiveMarketDataViewService({

@@ -177,6 +177,11 @@ export interface MarketLivePriceItem {
   bestVenue: string | null;
   venueCount: number;
   venues: string[];
+  liveVenueCount: number;
+  liveVenues: string[];
+  linkedVenueCount: number;
+  linkedVenues: string[];
+  averagePrice: string | null;
   freshnessMs: number | null;
 }
 
@@ -284,6 +289,8 @@ export class LiveMarketDataViewService {
     const liveVenues = snapshots
       .map((snapshot) => sanitizeVenueOrderbook(snapshot, 5, generatedAt))
       .filter(isLiveTradableOrderbookVenue);
+    const liveVenueNames = [...new Set(liveVenues.map((venue) => venue.venue))].sort();
+    const linkedVenues = linkedVenuesFromMarketIds(marketIds, snapshots);
     const bids = sortLevels(liveVenues.flatMap((venue) => venue.bids), "desc");
     const asks = sortLevels(liveVenues.flatMap((venue) => venue.asks), "asc");
     const bestBid = bids[0]?.price ?? null;
@@ -291,7 +298,10 @@ export class LiveMarketDataViewService {
     const midpoint = midpointFromBest(bestBid, bestAsk);
     const spread = spreadFromBest(bestBid, bestAsk);
     const bestVenue = asks[0]?.venue ?? bids[0]?.venue ?? null;
-    const price = midpoint ?? bestAsk ?? bestBid;
+    const averagePrice = averageDecimalStrings(liveVenues
+      .map((venue) => venue.midpoint ?? venue.bestAsk ?? venue.bestBid)
+      .filter((value): value is string => value !== null));
+    const price = averagePrice ?? midpoint ?? bestAsk ?? bestBid;
     const freshnessValues = liveVenues
       .map((venue) => venue.freshnessMs)
       .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
@@ -307,7 +317,12 @@ export class LiveMarketDataViewService {
       spread,
       bestVenue,
       venueCount: liveVenues.length,
-      venues: [...new Set(liveVenues.map((venue) => venue.venue))].sort(),
+      venues: liveVenueNames,
+      liveVenueCount: liveVenues.length,
+      liveVenues: liveVenueNames,
+      linkedVenueCount: linkedVenues.length,
+      linkedVenues,
+      averagePrice,
       freshnessMs: freshnessValues.length > 0 ? Math.min(...freshnessValues) : null
     };
     this.livePriceCache.set(key, {
@@ -1091,6 +1106,39 @@ const venueBlockerIdentityKey = (blocker: VenueQuoteSnapshotBlocker): string =>
 
 const livePriceDisplayOutcomeIds = (outcomeId: string | undefined): readonly (string | undefined)[] =>
   outcomeId ? [outcomeId] : [undefined, "YES"];
+
+const linkedVenuesFromMarketIds = (
+  marketIds: readonly string[],
+  snapshots: readonly NormalizedVenueQuoteSnapshot[]
+): string[] => {
+  const venues = new Set<string>();
+  for (const marketId of marketIds) {
+    const venue = venueFromCanonicalMarketId(marketId);
+    if (venue) {
+      venues.add(venue);
+    }
+  }
+  for (const snapshot of snapshots) {
+    venues.add(normalizeDisplayVenue(snapshot.venue));
+  }
+  return [...venues].sort();
+};
+
+const venueFromCanonicalMarketId = (marketId: string): string | null => {
+  const trimmed = marketId.trim();
+  const directSuffix = trimmed.match(/:(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$/i)?.[1];
+  if (directSuffix) {
+    return normalizeDisplayVenue(directSuffix);
+  }
+  const parts = trimmed.split(":").filter(Boolean);
+  const candidate = parts.find((part) => /^(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$/i.test(part));
+  return candidate ? normalizeDisplayVenue(candidate) : null;
+};
+
+const normalizeDisplayVenue = (venue: string): string => {
+  const normalized = venue.trim().toUpperCase();
+  return normalized === "PREDICT" ? "PREDICT_FUN" : normalized;
+};
 
 const isDisplayUsableOrderbook = (orderbook: MarketOrderbookResponse): boolean =>
   orderbook.venues.length > 0 &&
