@@ -54,7 +54,19 @@ const listQuerySchema = z.object({
 const orderbookQuerySchema = z.object({
   outcomeId: z.string().min(1).optional(),
   venue: z.string().min(1).optional(),
-  depth: z.coerce.number().int().positive().max(50).optional()
+  depth: z.coerce.number().int().positive().max(50).optional(),
+  snapshotOnly: z.preprocess((value) => {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (value === "true" || value === true) {
+      return true;
+    }
+    if (value === "false" || value === false) {
+      return false;
+    }
+    return value;
+  }, z.boolean()).optional()
 });
 
 const chartTimeframeSchema = z.enum(["1H", "6H", "1D", "1W", "1M", "ALL"]);
@@ -454,7 +466,8 @@ export const registerMarketCatalogRoutes = async (
       canonicalMarketIds: resolveOrderbookMarketIds(marketId, marketResult),
       ...(parsed.data.outcomeId ? { outcomeId: parsed.data.outcomeId } : {}),
       ...(parsed.data.depth ? { depth: parsed.data.depth } : {}),
-      ...(parsed.data.venue ? { venue: parsed.data.venue } : {})
+      ...(parsed.data.venue ? { venue: parsed.data.venue } : {}),
+      ...(parsed.data.snapshotOnly ? { snapshotOnly: true } : {})
     });
     return reply.send({
       ...response,

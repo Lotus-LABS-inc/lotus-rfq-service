@@ -338,6 +338,7 @@ export class LiveMarketDataViewService {
     outcomeId?: string | undefined;
     depth?: number | undefined;
     venue?: string | undefined;
+    snapshotOnly?: boolean | undefined;
   }): Promise<MarketOrderbookResponse> {
     const normalizedOutcomeId = normalizeBinaryOutcomeId(input.outcomeId);
     const normalizedInput = {
@@ -361,7 +362,7 @@ export class LiveMarketDataViewService {
           generatedAt: generatedAt.toISOString()
         };
       }
-      if (cached.promise) {
+      if (cached.promise && !normalizedInput.snapshotOnly) {
         return cached.promise;
       }
     }
@@ -371,6 +372,15 @@ export class LiveMarketDataViewService {
       this.lastGoodOrderbooks.set(key, cachedLiveOrderbook);
       this.orderbookCache.set(key, { expiresAt: generatedAt.getTime() + ORDERBOOK_CACHE_MS, response: cachedLiveOrderbook });
       return cachedLiveOrderbook;
+    }
+
+    if (normalizedInput.snapshotOnly) {
+      return unavailableOrderbook({
+        input: normalizedInput,
+        generatedAt,
+        depth,
+        reason: "MARKET_ORDERBOOK_SNAPSHOT_PENDING"
+      });
     }
 
     await this.preloadOrderbookMappings(orderbookMarketIds, normalizedInput.outcomeId);

@@ -302,6 +302,40 @@ describe("LiveMarketDataViewService", () => {
     });
   });
 
+  it("returns immediately for snapshot-only terminal reads without quote fanout", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    let preloadCalled = false;
+    let quoteSourceCalled = false;
+    const service = new LiveMarketDataViewService({
+      preloadMappingReadiness: async () => {
+        preloadCalled = true;
+      },
+      getQuoteSnapshotReport: async () => {
+        quoteSourceCalled = true;
+        return { snapshots: [], blocked: [] };
+      }
+    }, {
+      now: () => now,
+      liveOrderbookSource: {
+        get: async () => []
+      }
+    });
+
+    const orderbook = await service.getOrderbook({
+      marketId: "event-fast",
+      canonicalMarketIds: ["market-fast", "market-peer"],
+      outcomeId: "yes",
+      snapshotOnly: true
+    });
+
+    expect(preloadCalled).toBe(false);
+    expect(quoteSourceCalled).toBe(false);
+    expect(orderbook).toMatchObject({
+      status: "unavailable",
+      blockers: [expect.objectContaining({ reason: "MARKET_ORDERBOOK_SNAPSHOT_PENDING" })]
+    });
+  });
+
   it("keeps recently streamed unchanged books live but marks old snapshots stale", async () => {
     const now = new Date("2026-05-10T12:00:15.000Z");
     const service = new LiveMarketDataViewService({
