@@ -813,14 +813,16 @@ const selectSamplesForTickWithActivePriority = <T extends {
   }
 
   const activeCandidates = candidates.filter((candidate) =>
-    activeTargetKeys.has(sampleCooldownKey(candidate.sample)) ||
-    activeTargetKeys.has(activeMarketOnlyKey(candidate.sample.canonicalMarketId))
+    isActiveSampleCandidate(candidate.sample, activeTargetKeys)
+  );
+  const coverageCandidates = candidates.filter((candidate) =>
+    !isActiveSampleCandidate(candidate.sample, activeTargetKeys)
   );
   const selectedActive = selectSamplesForTick(
     activeCandidates,
     Math.min(limit, Math.max(0, Math.floor(activeMaxSamples))),
     priorityVenues,
-    venueBudgets,
+    coverageCandidates.length > 0 ? reserveVenueBudgetsForCoverage(venueBudgets) : venueBudgets,
     selectedVenueCounts
   );
   const selectedKeys = new Set(selectedActive.map((candidate) => sampleCooldownKey(candidate.sample)));
@@ -828,16 +830,55 @@ const selectSamplesForTickWithActivePriority = <T extends {
   if (remaining <= 0) {
     return selectedActive;
   }
+  const selectedCoverage = selectSamplesForTick(
+    coverageCandidates,
+    remaining,
+    priorityVenues,
+    venueBudgets,
+    selectedVenueCounts
+  );
+  for (const candidate of selectedCoverage) {
+    selectedKeys.add(sampleCooldownKey(candidate.sample));
+  }
+  const finalRemaining = remaining - selectedCoverage.length;
+  if (finalRemaining <= 0) {
+    return [...selectedActive, ...selectedCoverage];
+  }
   return [
     ...selectedActive,
+    ...selectedCoverage,
     ...selectSamplesForTick(
       candidates.filter((candidate) => !selectedKeys.has(sampleCooldownKey(candidate.sample))),
-      remaining,
+      finalRemaining,
       priorityVenues,
       venueBudgets,
       selectedVenueCounts
     )
   ];
+};
+
+const isActiveSampleCandidate = (
+  sample: MarketOrderbookRecorderSample,
+  activeTargetKeys: ReadonlySet<string>
+): boolean =>
+  activeTargetKeys.has(sampleCooldownKey(sample)) ||
+  activeTargetKeys.has(activeMarketOnlyKey(sample.canonicalMarketId));
+
+const reserveVenueBudgetsForCoverage = (
+  venueBudgets: ReadonlyMap<string, number>
+): ReadonlyMap<string, number> => {
+  if (venueBudgets.size === 0) {
+    return venueBudgets;
+  }
+  const activeBudgets = new Map<string, number>();
+  for (const [venue, limit] of venueBudgets.entries()) {
+    if (limit <= 1) {
+      activeBudgets.set(venue, limit);
+      continue;
+    }
+    activeBudgets.set(venue, Math.max(1, Math.floor(limit * 0.65)));
+  }
+  return activeBudgets;
 };
 
 const selectSamplesForTick = <T extends {

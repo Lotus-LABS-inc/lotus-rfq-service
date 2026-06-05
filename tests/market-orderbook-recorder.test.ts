@@ -778,6 +778,67 @@ describe("MarketOrderbookRecorder", () => {
     expect(sampledMarketIds).toEqual(["market-active", "market-active", "market-1", "market-1"]);
   });
 
+  it("reserves venue sample budget for broad coverage when active markets are present", async () => {
+    const sampledMarketIds: string[] = [];
+    const activeMarket = venueMarketFixture("LIMITLESS", "market-active-limitless");
+    const coverageMarket = venueMarketFixture("LIMITLESS", "market-coverage-limitless");
+    const recorder = new MarketOrderbookRecorder(
+      {
+        listMarkets: async (filter) => (filter?.limit ?? 0) >= 250
+          ? [activeMarket, coverageMarket]
+          : [coverageMarket]
+      },
+      {
+        getQuoteSnapshotReport: async ({ canonicalMarketId }) => {
+          sampledMarketIds.push(canonicalMarketId);
+          return {
+            snapshots: [],
+            blocked: []
+          };
+        }
+      },
+      {
+        insertMany: async () => 0,
+        cleanupSnapshots: async () => ({
+          deletedOldSnapshots: 0,
+          deletedClosedMarketSnapshots: 0,
+          deletedClosedLatestSnapshots: 0,
+          deletedStaleBlockedLatestSnapshots: 0
+        })
+      },
+      logger,
+      {
+        intervalMs: 60_000,
+        marketBatchSize: 1,
+        activeMarketBatchSize: 10,
+        priorityMarketBatchSize: 0,
+        priorityVenues: ["LIMITLESS"],
+        maxSamplesPerTick: 4,
+        activeMaxSamplesPerTick: 4,
+        maxSamplesPerVenuePerTick: {
+          LIMITLESS: 2
+        },
+        retentionHours: 720,
+        levelsPerSide: 25,
+        quoteProviderCooldownMs: 30_000
+      },
+      {
+        listActiveMarketsFromRedis: async () => [({
+          canonicalMarketId: "market-active-limitless",
+          lastSeenAt: new Date("2026-05-10T12:00:00.000Z")
+        })]
+      }
+    );
+
+    const result = await recorder.runOnce();
+
+    expect(result.sampledByVenue).toEqual({ LIMITLESS: 2 });
+    expect(sampledMarketIds).toEqual([
+      "market-active-limitless",
+      "market-coverage-limitless"
+    ]);
+  });
+
   it("reuses the approved catalog window for active and priority sampling in one tick", async () => {
     let broadCatalogReads = 0;
     const activeMarket = {
