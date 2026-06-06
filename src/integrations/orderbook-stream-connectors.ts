@@ -204,9 +204,13 @@ export class LimitlessSdkOrderbookConnector implements VenueOrderbookStreamConne
     if (removed.length === 0 || !this.connected) {
       return;
     }
-    await this.client.unsubscribe("orderbook", {
+    // Fire-and-forget: the Limitless socket.io server does not acknowledge unsubscribe
+    // messages, so awaiting causes a timeout on every tick and prevents stale subscription
+    // keys from being cleaned up locally. The local targets map is already updated above;
+    // the server-side cleanup is best-effort.
+    void this.client.unsubscribe("orderbook", {
       marketSlugs: [...new Set(removed.map((target) => target.venueMarketId))]
-    });
+    }).catch(() => {});
     if (this.targets.size === 0) {
       await this.disconnect();
     }
