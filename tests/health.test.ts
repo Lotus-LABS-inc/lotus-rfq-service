@@ -270,34 +270,14 @@ describe("bootstrap lifecycle", () => {
     expect(shouldRunWorkerEntrypoint({})).toBe(false);
   });
 
-  it("rejects production deploys that point at local Postgres", () => {
+  it("accepts any database URL for production deploys (VPS-local Postgres is allowed)", () => {
     expect(() =>
       validateDatabaseTargetSafety(createRuntimeEnv({
         LOTUS_DEPLOY_ENV: "prod",
-        DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_prod",
-        SUPABASE_DB_URL: "postgres://postgres:postgres@db.supabase.example:5432/postgres"
+        DATABASE_URL: "postgres://lotus_prod:pass@127.0.0.1:5432/lotus_prod",
+        SUPABASE_DB_URL: "postgres://lotus_prod:pass@127.0.0.1:5432/lotus_prod"
       }))
-    ).toThrow(/must not point at localhost/);
-  });
-
-  it("requires a Supabase DB URL for production deploys", () => {
-    expect(() =>
-      validateDatabaseTargetSafety(createRuntimeEnv({
-        LOTUS_DEPLOY_ENV: "prod",
-        DATABASE_URL: "postgres://postgres:postgres@db.supabase.example:5432/postgres",
-        SUPABASE_DB_URL: undefined
-      }))
-    ).toThrow(/requires SUPABASE_DB_URL/);
-  });
-
-  it("requires production database URLs to target Supabase hosts", () => {
-    expect(() =>
-      validateDatabaseTargetSafety(createRuntimeEnv({
-        LOTUS_DEPLOY_ENV: "prod",
-        DATABASE_URL: "postgres://postgres:postgres@db.internal.example:5432/postgres",
-        SUPABASE_DB_URL: "postgres://postgres:postgres@db.supabase.example:5432/postgres"
-      }))
-    ).toThrow(/must point at Supabase Postgres hosts/);
+    ).not.toThrow();
 
     expect(() =>
       validateDatabaseTargetSafety(createRuntimeEnv({

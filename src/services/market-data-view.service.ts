@@ -278,7 +278,7 @@ export class LiveMarketDataViewService {
       };
     }
     const outcomeIds = livePriceDisplayOutcomeIds(normalizedOutcomeId);
-    const snapshots: readonly NormalizedVenueQuoteSnapshot[] = this.liveOrderbookSource
+    const liveSnapshots: readonly NormalizedVenueQuoteSnapshot[] = this.liveOrderbookSource
       ? dedupeSnapshotsByIdentity((await Promise.all(marketIds.flatMap((canonicalMarketId) =>
           outcomeIds.map((outcomeId) => this.liveOrderbookSource!.get({
             canonicalMarketId,
@@ -286,6 +286,18 @@ export class LiveMarketDataViewService {
           }).catch(() => []))
         ))).flat())
       : [];
+    const snapshots: readonly NormalizedVenueQuoteSnapshot[] = liveSnapshots.length === 0 && this.quoteSource
+      ? dedupeSnapshotsByIdentity((await Promise.all(marketIds.map((canonicalMarketId) =>
+          this.quoteSource.getQuoteSnapshotReport({
+            canonicalMarketId,
+            ...(normalizedOutcomeId ? { canonicalOutcomeId: normalizedOutcomeId } : {}),
+            side: "buy",
+            quantity: 1,
+            readMode: "cached_display",
+            displayMaxAgeMs: ORDERBOOK_DISPLAY_SNAPSHOT_MAX_AGE_MS
+          }).then((r) => r.snapshots).catch(() => [] as readonly NormalizedVenueQuoteSnapshot[])
+        ))).flat())
+      : liveSnapshots;
     const liveVenues = snapshots
       .map((snapshot) => sanitizeVenueOrderbook(snapshot, 5, generatedAt))
       .filter(isLiveTradableOrderbookVenue);
