@@ -164,6 +164,14 @@ export interface MarketLivePriceRequestItem {
   outcomeId?: string | undefined;
 }
 
+export interface MarketLivePriceVenueBreakdown {
+  venue: string;
+  price: string | null;
+  bestBid: string | null;
+  bestAsk: string | null;
+  status: "live" | "no_live_price";
+}
+
 export interface MarketLivePriceItem {
   marketId: string;
   outcomeId: string | null;
@@ -183,6 +191,7 @@ export interface MarketLivePriceItem {
   linkedVenues: string[];
   averagePrice: string | null;
   freshnessMs: number | null;
+  venueBreakdown: MarketLivePriceVenueBreakdown[];
 }
 
 export interface MarketLivePricesResponse {
@@ -333,6 +342,17 @@ export class LiveMarketDataViewService {
     }
     const liveVenueNames = [...new Set(liveVenues.map((venue) => venue.venue))].sort();
     const linkedVenues = linkedVenuesFromMarketIds(marketIds, snapshots);
+    const liveVenueByName = new Map(liveVenues.map((venue) => [venue.venue, venue]));
+    const venueBreakdown: MarketLivePriceVenueBreakdown[] = linkedVenues.map((venueName) => {
+      const lv = liveVenueByName.get(venueName);
+      return {
+        venue: venueName,
+        price: lv?.midpoint ?? lv?.bestAsk ?? lv?.bestBid ?? null,
+        bestBid: lv?.bestBid ?? null,
+        bestAsk: lv?.bestAsk ?? null,
+        status: lv ? "live" : "no_live_price"
+      };
+    });
     const bids = sortLevels(liveVenues.flatMap((venue) => venue.bids), "desc");
     const asks = sortLevels(liveVenues.flatMap((venue) => venue.asks), "asc");
     const bestBid = bids[0]?.price ?? null;
@@ -365,7 +385,8 @@ export class LiveMarketDataViewService {
       linkedVenueCount: linkedVenues.length,
       linkedVenues,
       averagePrice,
-      freshnessMs: freshnessValues.length > 0 ? Math.min(...freshnessValues) : null
+      freshnessMs: freshnessValues.length > 0 ? Math.min(...freshnessValues) : null,
+      venueBreakdown
     };
     this.livePriceCache.set(key, {
       expiresAt: generatedAt.getTime() + LIVE_PRICE_CACHE_MS,

@@ -339,13 +339,14 @@ export const registerMarketCatalogRoutes = async (
         message: "Market was not found."
       });
     }
-    const outcomes = new Map<string, { id: string; label: string; venues: string[]; volume: string | null; volume24h: string | null }>();
+    const outcomes = new Map<string, { id: string; label: string; venues: string[]; canonicalMarketIds: string[]; volume: string | null; volume24h: string | null }>();
     for (const venueMarket of market.venueMarkets) {
       for (const outcome of venueMarket.outcomes) {
         const key = outcome.label.toLowerCase();
         const existing = outcomes.get(key);
         if (existing) {
           existing.venues = [...new Set([...existing.venues, venueMarket.venue])].sort();
+          existing.canonicalMarketIds = [...new Set([...existing.canonicalMarketIds, venueMarket.canonicalMarketId])].sort();
           existing.volume = addVolumeStrings(existing.volume, venueMarket.volume);
           existing.volume24h = addVolumeStrings(existing.volume24h, venueMarket.volume24h);
           continue;
@@ -354,6 +355,7 @@ export const registerMarketCatalogRoutes = async (
           id: outcome.id,
           label: outcome.label,
           venues: [venueMarket.venue],
+          canonicalMarketIds: [venueMarket.canonicalMarketId],
           volume: venueMarket.volume ?? null,
           volume24h: venueMarket.volume24h ?? null,
         });

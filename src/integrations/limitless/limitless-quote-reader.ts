@@ -187,8 +187,11 @@ export const normalizeLimitlessOrderbook = (input: {
   const venueOutcomeId = input.venueOutcomeId ?? firstString(record.tokenId, record.token_id);
   const rawBids = normalizeLevels(record.bids ?? record.buy);
   const rawAsks = normalizeLevels(record.asks ?? record.sell);
-  const bids = input.outcomeSide === "NO" ? invertBinaryLevels(rawAsks, "desc") : rawBids;
-  const asks = input.outcomeSide === "NO" ? invertBinaryLevels(rawBids, "asc") : rawAsks;
+  // LIMITLESS sends sizes in micro-units (1 share = 1,000,000 units). Normalize to shares
+  // at ingestion so every downstream consumer (backend cumulative math, REST response,
+  // WebSocket stream cache) sees consistent display-unit sizes.
+  const bids = scaleLimitlessLevels(input.outcomeSide === "NO" ? invertBinaryLevels(rawAsks, "desc") : rawBids);
+  const asks = scaleLimitlessLevels(input.outcomeSide === "NO" ? invertBinaryLevels(rawBids, "asc") : rawAsks);
   return {
     venue: "LIMITLESS",
     venueMarketId: input.venueMarketId,
@@ -334,6 +337,14 @@ const normalizeLevel = (price: unknown, size: unknown): NormalizedQuoteLevel[] =
   }
   return [{ price: String(price), size: String(size) }];
 };
+
+const LIMITLESS_MICRO_UNIT_DIVISOR = 1_000_000;
+
+const scaleLimitlessLevels = (levels: readonly NormalizedQuoteLevel[]): readonly NormalizedQuoteLevel[] =>
+  levels.map((level) => ({
+    price: level.price,
+    size: String(Number(level.size) / LIMITLESS_MICRO_UNIT_DIVISOR)
+  }));
 
 const invertBinaryLevels = (
   levels: readonly NormalizedQuoteLevel[],
