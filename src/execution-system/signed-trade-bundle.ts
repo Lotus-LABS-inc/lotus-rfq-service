@@ -726,7 +726,8 @@ export class SignedTradeBundleService {
           approvalSpenderSource: balance.approvalSpenderSource
         }
       };
-    } catch {
+    } catch (error) {
+      console.error("[SignedTradeBundleService] polymarketCollateralReadiness failed:", error);
       return {
         ...next,
         status: "stale",
