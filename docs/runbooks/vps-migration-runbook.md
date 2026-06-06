@@ -20,7 +20,7 @@ Think of Lotus as several workers, not one app:
 - `lotus-polymarket-execution-relay`: submits Polymarket orders. This is execution-critical.
 - `lotus-predictfun-execution-relay`: Predict.fun submit relay if enabled.
 - `Redis`: hot temporary cache for orderbooks/websocket state. Redis is not the source of truth.
-- `Supabase/Postgres`: authoritative database. Do not move this in the first VPS migration.
+- `PostgreSQL 17`: authoritative database. Now running on the VPS itself (migrated from Supabase 2026-06-06). Both prod and staging databases are hosted locally on the VPS.
 - `Nginx` or `Caddy`: public HTTPS front door that routes traffic to each local Lotus service.
 
 On one VPS, these should still run as separate services. One server does not mean one process.
@@ -29,7 +29,6 @@ On one VPS, these should still run as separate services. One server does not mea
 
 - Do not paste secrets into chat, tickets, docs, logs, or Git.
 - Do not commit `.env` files.
-- Do not move Supabase/Postgres in the first pass.
 - Do not point production execution traffic at the VPS until health and execution tests pass.
 - Do not change execution logic during infrastructure migration.
 - Do not combine Polymarket relay behavior with Opinion/Predict/other services in one process.
@@ -534,7 +533,7 @@ npm run test:execution-system
 Also verify provider access from the VPS:
 
 ```text
-Supabase connection works
+VPS-local PostgreSQL 17 connection works (pg_lsclusters shows 17/main online, curl /health returns 200)
 Redis connection works
 Turnkey calls work
 Polymarket quote/read works
@@ -675,7 +674,7 @@ The VPS migration is complete only when:
 ```text
 All health endpoints are 200
 Redis is stable
-Supabase latency is acceptable
+VPS-local PostgreSQL 17 is healthy and accessible from all services
 Markets load consistently
 Orderbook updates are live
 Venue balances load
@@ -731,7 +730,8 @@ Prod env files were generated from the current server-side env bundle with these
 ```text
 HOST=127.0.0.1
 REDIS_URL=redis://127.0.0.1:6379/0
-DATABASE_URL forced to SUPABASE_DB_URL, not local 127.0.0.1:5433
+DATABASE_URL=postgresql://lotus_prod:<password>@127.0.0.1:5432/lotus_prod  (VPS-local PG17, post-migration)
+SUPABASE_DB_URL=postgresql://lotus_prod:<password>@127.0.0.1:5432/lotus_prod  (same as DATABASE_URL)
 frontend VITE_* values, Render API keys, smoke keys, and test DB keys excluded
 ```
 
@@ -749,19 +749,16 @@ Redis market catalog snapshots are deploy-namespaced in code from
 same local Redis server only if their snapshot prefixes remain separated; do not
 revert to the legacy `lotus:market-catalog-snapshot:*` shared prefix.
 
-Supabase session-pool protection:
+PostgreSQL connection pool notes (VPS-local, post-migration):
 
 ```text
-prod backend/read/orderbook env files should set PG_POOL_MAX=1
-prod worker unit overrides PG_POOL_MAX=3 and PG_POOL_CONNECTION_TIMEOUT_MS=10000
+VPS-local PG17 has max_connections=100 and no session-pool limit.
+EMAXCONNSESSION no longer applies — that was a Supabase session-pooler constraint.
+PG_POOL_MAX can be left at application defaults for all services.
+If you re-add PG_POOL_MAX, keep worker ≥ API since the worker runs concurrent recorder/materializer jobs.
 ```
 
-The worker needs a larger pool than the API because it runs recorder,
-materializer, and execution refresh jobs concurrently. The API/read/orderbook
-services should stay at one connection each so frontend page loads do not starve
-Supabase or cause `EMAXCONNSESSION`.
-
-Staging env files are templates only. They intentionally have empty DB/JWT fields until a real staging-only Supabase/JWT/venue-secret bundle is provided. Do not start staging by copying prod envs.
+Staging env files are templates only. They intentionally have empty DB/JWT fields until a real staging-only JWT/venue-secret bundle is provided. Do not start staging by copying prod envs.
 
 Smoke result from the VPS:
 
@@ -1147,10 +1144,10 @@ https://api.uselotus.xyz
 
 ## VPS Local Staging Database
 
-The VPS now has a local Postgres staging database:
+The VPS has a local Postgres staging database:
 
 ```text
-Postgres: local service on the VPS
+Postgres version: 17 (cluster 17/main, port 5432)
 Database: lotus_staging
 Role: lotus_staging
 Staging Redis: redis://127.0.0.1:6379/1
@@ -1159,7 +1156,7 @@ Staging read service: localhost:3101
 Staging orderbook service: localhost:3102
 ```
 
-This database is separate from production Supabase. Supabase remains production.
+This database is separate from production (`lotus_prod`). Both databases live in the same PostgreSQL 17 cluster at `127.0.0.1:5432`.
 
 The staging database was migrated with all repo migrations and then populated with:
 
@@ -1190,7 +1187,62 @@ curl http://127.0.0.1:3102/ready
 curl 'http://127.0.0.1:3100/markets?limit=3&quoteReadyOnly=false'
 ```
 
-Do not point staging at production Supabase. If staging needs live provider behavior, copy only the required provider/API env keys into `/etc/lotus/staging/*.env` and keep `DATABASE_URL`, `SUPABASE_DB_URL`, `REDIS_URL`, ports, and `LOTUS_ENV` pointed at staging.
+Do not point staging at production databases. Keep `DATABASE_URL`, `SUPABASE_DB_URL`, `REDIS_URL`, ports, and `LOTUS_ENV` pointed at the staging-specific values. If staging needs live provider behavior, copy only the required provider/API env keys into `/etc/lotus/staging/*.env`.
+
+## Orderbook Snapshot Pruning Timers
+
+`venue_orderbook_snapshots` is a high-write time-series table. Without pruning it grows unboundedly (was 7.4 GB in staging before the first prune). Systemd timers prune rows older than 24 hours once per day.
+
+Timer unit files (enabled and active):
+
+```text
+/etc/systemd/system/lotus-prod-prune-orderbook.timer
+/etc/systemd/system/lotus-prod-prune-orderbook.service
+
+/etc/systemd/system/lotus-staging-prune-orderbook.timer
+/etc/systemd/system/lotus-staging-prune-orderbook.service
+```
+
+What the service runs:
+
+```sql
+-- prod
+DELETE FROM public.venue_orderbook_snapshots WHERE received_at < NOW() - INTERVAL '24 hours';
+
+-- staging (identical, targets lotus_staging)
+```
+
+Timer schedule:
+
+```text
+prod:    OnCalendar=daily, RandomizedDelaySec=600   (fires near 00:00 UTC ± 10 min)
+staging: OnCalendar=daily, RandomizedDelaySec=1200  (fires near 00:00 UTC ± 20 min, offset from prod)
+```
+
+Check timer status:
+
+```bash
+sudo systemctl status lotus-prod-prune-orderbook.timer
+sudo systemctl status lotus-staging-prune-orderbook.timer
+```
+
+Run a prune immediately (e.g. after a large backlog):
+
+```bash
+sudo systemctl start lotus-prod-prune-orderbook.service
+sudo systemctl start lotus-staging-prune-orderbook.service
+```
+
+After a large bulk delete, reclaim disk space with:
+
+```bash
+sudo -u postgres psql -d lotus_prod -c "VACUUM ANALYZE public.venue_orderbook_snapshots;"
+sudo -u postgres psql -d lotus_staging -c "VACUUM FULL ANALYZE public.venue_orderbook_snapshots;"
+```
+
+Use `VACUUM FULL` only on staging (it locks the table briefly). On prod, plain `VACUUM ANALYZE` is safer during active writes.
+
+---
 
 ## DB Retention And Compaction
 
@@ -1286,33 +1338,102 @@ npm run start:worker-service
 
 Use separate systemd units for production API and production worker. Use separate units again for staging API and staging worker. Do not reuse a prod env file for staging.
 
-## Production DB Guardrail
+## VPS-Local PostgreSQL 17
 
-Production must use Supabase as the database target.
+Both production and staging databases now run on the VPS itself. The Supabase-hosted database was fully migrated on 2026-06-06.
 
-Required production rule:
-
-```text
-DATABASE_URL points to the production Supabase Postgres host
-SUPABASE_DB_URL points to the production Supabase Postgres host
-```
-
-Recommended production rule:
+### Cluster
 
 ```text
-DATABASE_URL and SUPABASE_DB_URL contain the same Supabase connection string
+PostgreSQL version: 17 (cluster 17/main)
+Port: 5432
+Data directory: /var/lib/postgresql/17/main
+Log: /var/log/postgresql/postgresql-17-main.log
 ```
 
-The backend now rejects a production boot when:
+Manage:
+
+```bash
+sudo pg_ctlcluster 17 main status
+sudo pg_ctlcluster 17 main restart
+sudo pg_ctlcluster 17 main reload
+pg_lsclusters
+```
+
+### Databases and roles
 
 ```text
-LOTUS_DEPLOY_ENV / LOTUS_ENV / APP_ENV is prod or production
-SUPABASE_DB_URL is missing
-DATABASE_URL or SUPABASE_DB_URL points to localhost / 127.0.0.1 / ::1 / 0.0.0.0
-DATABASE_URL or SUPABASE_DB_URL does not point to a Supabase Postgres host
+Database: lotus_prod   — owner: lotus_prod
+Database: lotus_staging — owner: lotus_staging
 ```
 
-This prevents `api.uselotus.xyz` from accidentally using VPS-local Postgres. VPS-local Postgres is allowed for staging/test only.
+The `postgres` superuser is used only for admin tasks (create extension, vacuumdb, pg_dump). Service env files use the least-privilege role for each database.
+
+### Tuning (applied 2026-06-06)
+
+```text
+shared_buffers              = 512MB  (was default 128MB)
+effective_cache_size        = 2GB
+work_mem                    = 8MB
+wal_buffers                 = 16MB
+random_page_cost            = 1.1
+checkpoint_completion_target = 0.9
+```
+
+Config file: `/etc/postgresql/17/main/postgresql.conf`
+
+Backup before tuning: `/etc/postgresql/17/main/postgresql.conf.backup-before-tuning-*`
+
+`shared_buffers` requires a cluster restart; `work_mem`, `effective_cache_size`, and `checkpoint_completion_target` take effect on reload.
+
+### Production DB Guardrail (removed)
+
+The runtime check `validateDatabaseTargetSafety()` previously rejected any production boot where `DATABASE_URL` pointed at localhost or a non-Supabase host. That guard was removed in commit `9653640` after the database migration made VPS-local Postgres the authoritative source.
+
+The separation guarantee is now enforced by database credentials and database names, not by hostname checks:
+
+```text
+Prod services   → DATABASE_URL → lotus_prod   (user: lotus_prod, port 5432)
+Staging services → DATABASE_URL → lotus_staging (user: lotus_staging, port 5432)
+```
+
+Do not point staging service envs at `lotus_prod`. Do not point prod service envs at `lotus_staging`.
+
+### Venue orderbook snapshots tables
+
+The `venue_orderbook_snapshots` and `venue_orderbook_snapshot_hourly_compactions` tables were excluded from the initial Supabase dump because they rebuild from live stream data. These tables were manually created in `lotus_prod` on 2026-06-06 using the schema from `lotus_staging`:
+
+```sql
+-- already applied; do not re-run unless recreating lotus_prod from scratch
+CREATE TABLE public.venue_orderbook_snapshots ( ... );
+CREATE TABLE public.venue_orderbook_snapshot_hourly_compactions ( ... );
+```
+
+If you ever restore `lotus_prod` from a bare migration run (no dump), create these tables before starting the worker service, or the recorder will fail.
+
+### Backup and restore
+
+Full cluster dump (excluding bulk snapshot tables):
+
+```bash
+sudo -u postgres pg_dump -d lotus_prod \
+  --exclude-table=public.venue_orderbook_snapshots \
+  --exclude-table=public.venue_orderbook_snapshot_hourly_compactions \
+  -Fc -f /tmp/lotus_prod_dump.dump
+```
+
+Restore to a fresh database:
+
+```bash
+sudo -u postgres pg_restore -d lotus_prod --no-owner --role=lotus_prod \
+  -j 4 /tmp/lotus_prod_dump.dump
+```
+
+Remove dump file after restore:
+
+```bash
+rm /tmp/lotus_prod_dump.dump
+```
 
 ## Market Snapshot Stability Rule
 
