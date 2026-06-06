@@ -279,15 +279,26 @@ export class LiveMarketDataViewService {
       };
     }
     const outcomeIds = livePriceDisplayOutcomeIds(normalizedOutcomeId);
-    const liveSnapshots: readonly NormalizedVenueQuoteSnapshot[] = this.liveOrderbookSource
-      ? dedupeSnapshotsByIdentity((await Promise.all(marketIds.flatMap((canonicalMarketId) =>
-          outcomeIds.map((outcomeId) => this.liveOrderbookSource!.get({
-            canonicalMarketId,
-            ...(outcomeId ? { canonicalOutcomeId: outcomeId } : {})
-          }).catch(() => []))
-        ))).flat())
-      : [];
-    let snapshots: readonly NormalizedVenueQuoteSnapshot[] = liveSnapshots.length === 0 && this.quoteSource
+    // Collect live snapshots per canonical market ID so we can detect partial coverage.
+    // flatMap loses per-ID structure needed to identify which venues are missing.
+    const liveSnapshotsPerMarket: readonly NormalizedVenueQuoteSnapshot[][] = this.liveOrderbookSource
+      ? await Promise.all(marketIds.map(async (canonicalMarketId) => {
+          const results = await Promise.all(
+            outcomeIds.map((outcomeId) => this.liveOrderbookSource!.get({
+              canonicalMarketId,
+              ...(outcomeId ? { canonicalOutcomeId: outcomeId } : {})
+            }).catch((): readonly NormalizedVenueQuoteSnapshot[] => []))
+          );
+          return results.flat();
+        }))
+      : marketIds.map((): NormalizedVenueQuoteSnapshot[] => []);
+    const liveSnapshots = dedupeSnapshotsByIdentity(liveSnapshotsPerMarket.flat());
+    // When any canonical market ID has no live snapshots (e.g. LIMITLESS expired from
+    // 30s Redis TTL while POLYMARKET is always hot via WebSocket), fall through to
+    // quoteSource so hotQuoteSnapshots (memory → Redis → DB) fills the gap.
+    // Without this, POLYMARKET-only live cache silences LIMITLESS in the closed card price.
+    const liveCacheIncomplete = marketIds.length > 1 && liveSnapshotsPerMarket.some((s) => s.length === 0);
+    let snapshots: readonly NormalizedVenueQuoteSnapshot[] = (liveSnapshots.length === 0 || liveCacheIncomplete) && this.quoteSource
       ? dedupeSnapshotsByIdentity((await Promise.all(marketIds.map((canonicalMarketId) =>
           this.quoteSource!.getQuoteSnapshotReport({
             canonicalMarketId,
