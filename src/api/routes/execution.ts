@@ -222,7 +222,7 @@ const LIVE_CANDIDATE_CACHE_MS = 10_000;
 const LIVE_CANDIDATE_STALE_MS = 90_000;
 const LIVE_CANDIDATE_RESPONSE_TIMEOUT_MS = 500;
 const POSITION_MARK_CACHE_MS = 15_000;
-const POSITION_MARK_LIVE_TIMEOUT_MS = 700;
+const POSITION_MARK_LIVE_TIMEOUT_MS = 2000;
 const POSITION_MARK_LIVE_READ_BUDGET = 20;
 const DISPLAY_POSITION_MARK_LIVE_READ_BUDGET = 3;
 const EXECUTION_DISPLAY_CACHE_MS = 3_000;
@@ -1355,8 +1355,12 @@ const markPositions = async (input: {
     }
     liveReadsRemaining -= 1;
     try {
+      // Call the provider directly (not getCachedLiveCandidates) so the 500ms
+      // liveCandidateCache inner timeout doesn't fire before the outer mark timeout.
+      // The mark cache (positionMarkCache) handles deduplication for positions.
       const candidates = await withMarkTimeout(
-        getCachedLiveCandidates(input.liveCandidateProvider, input.userId, {
+        input.liveCandidateProvider.getCandidates({
+          userId: input.userId,
           side: "sell",
           marketId: position.marketId,
           outcomeId: position.outcomeId,

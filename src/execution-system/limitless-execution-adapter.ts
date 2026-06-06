@@ -1005,6 +1005,12 @@ export class LimitlessExecutionAdapter implements ExecutionVenueAdapter {
   }
 
   public async cancelOrder(venueOrderId: string): Promise<{ cancelled: boolean }> {
+    // Relay mode has no cancel endpoint — the relay client only implements submit/status.
+    // Return false rather than falling through to getClient() which throws LIMITLESS_ENV_INCOMPLETE
+    // because relay mode doesn't require LIMITLESS_API_KEY / LIMITLESS_EXECUTION_PRIVATE_KEY.
+    if (this.status().executionMode === "user_signed_backend_relay") {
+      return { cancelled: false };
+    }
     const profileId = this.status().executionMode === "delegated_partner_server_wallet"
       ? parseDelegatedProfileId(this.config.delegatedProfileId)
       : undefined;
