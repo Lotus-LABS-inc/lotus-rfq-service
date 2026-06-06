@@ -539,16 +539,19 @@ export class CompositeVenueQuoteSource {
     if (!this.hotSnapshotStore) {
       return null;
     }
+    // PREDICT entries in the catalog are served by PREDICT_FUN; normalize so the
+    // lookup matches what the stream service stores.
+    const venue = normalizeVenueKey(input.venue);
     const maxAgeMs = input.maxAgeMs;
     if (maxAgeMs !== undefined && this.hotSnapshotStore.getDisplay) {
       return this.hotSnapshotStore.getDisplay({
-        venue: input.venue,
+        venue,
         venueMarketId: input.venueMarketId,
         ...(input.venueOutcomeId ? { venueOutcomeId: input.venueOutcomeId } : {}),
         maxAgeMs
       });
     }
-    return this.hotSnapshotStore.get(input);
+    return this.hotSnapshotStore.get({ ...input, venue });
   }
 }
 
