@@ -317,19 +317,25 @@ export const registerMarketCatalogRoutes = async (
         message: "Market was not found."
       });
     }
-    const outcomes = new Map<string, { id: string; label: string; venues: string[] }>();
+    const outcomes = new Map<string, { id: string; label: string; venues: string[]; canonicalMarketIds: string[]; volume: string | null; volume24h: string | null }>();
     for (const venueMarket of market.venueMarkets) {
       for (const outcome of venueMarket.outcomes) {
         const key = outcome.label.toLowerCase();
         const existing = outcomes.get(key);
         if (existing) {
           existing.venues = [...new Set([...existing.venues, venueMarket.venue])].sort();
+          existing.canonicalMarketIds = [...new Set([...existing.canonicalMarketIds, venueMarket.canonicalMarketId])].sort();
+          existing.volume = addVolumeStrings(existing.volume, venueMarket.volume);
+          existing.volume24h = addVolumeStrings(existing.volume24h, venueMarket.volume24h);
           continue;
         }
         outcomes.set(key, {
           id: outcome.id,
           label: outcome.label,
-          venues: [venueMarket.venue]
+          venues: [venueMarket.venue],
+          canonicalMarketIds: [venueMarket.canonicalMarketId],
+          volume: venueMarket.volume ?? null,
+          volume24h: venueMarket.volume24h ?? null,
         });
       }
     }
@@ -1725,4 +1731,13 @@ const resolveCatalogMarket = async (
   const withoutVenueSuffix = marketId.replace(VENUE_SUFFIX_PATTERN, "");
   if (withoutVenueSuffix === marketId) return null;
   return repository.getMarket(withoutVenueSuffix);
+};
+
+
+const addVolumeStrings = (a: string | null, b: string | null | undefined): string | null => {
+  if (a === null && (b === null || b === undefined)) return null;
+  const aVal = parseFloat(a ?? "0");
+  const bVal = parseFloat(b ?? "0");
+  if (isNaN(aVal) || isNaN(bVal)) return a;
+  return String(aVal + bVal);
 };
