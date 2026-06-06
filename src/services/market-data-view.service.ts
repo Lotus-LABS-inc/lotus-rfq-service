@@ -211,6 +211,7 @@ const ORDERBOOK_CACHE_MS = 3_000;
 const ORDERBOOK_LIVE_TIMEOUT_MS = 750;
 const ORDERBOOK_MAPPING_PRELOAD_TIMEOUT_MS = 750;
 const ORDERBOOK_DISPLAY_SNAPSHOT_MAX_AGE_MS = 120_000;
+const CHART_ORDERBOOK_DISPLAY_MAX_AGE_MS = 600_000;
 const STREAM_ORDERBOOK_LIVE_FRESHNESS_MS = 15_000;
 const REST_ORDERBOOK_LIVE_FRESHNESS_MS = 45_000;
 const BATCH_QUOTE_CACHE_MS = 3_000;
@@ -286,9 +287,9 @@ export class LiveMarketDataViewService {
           }).catch(() => []))
         ))).flat())
       : [];
-    const snapshots: readonly NormalizedVenueQuoteSnapshot[] = liveSnapshots.length === 0 && this.quoteSource
+    let snapshots: readonly NormalizedVenueQuoteSnapshot[] = liveSnapshots.length === 0 && this.quoteSource
       ? dedupeSnapshotsByIdentity((await Promise.all(marketIds.map((canonicalMarketId) =>
-          this.quoteSource.getQuoteSnapshotReport({
+          this.quoteSource!.getQuoteSnapshotReport({
             canonicalMarketId,
             ...(normalizedOutcomeId ? { canonicalOutcomeId: normalizedOutcomeId } : {}),
             side: "buy",
@@ -298,9 +299,27 @@ export class LiveMarketDataViewService {
           }).then((r) => r.snapshots).catch(() => [] as readonly NormalizedVenueQuoteSnapshot[])
         ))).flat())
       : liveSnapshots;
-    const liveVenues = snapshots
+    let liveVenues = snapshots
       .map((snapshot) => sanitizeVenueOrderbook(snapshot, 5, generatedAt))
       .filter(isLiveTradableOrderbookVenue);
+    // Level 3: live REST fetch when Redis and DB cached snapshot both yield no usable prices
+    if (liveVenues.length === 0 && this.quoteSource) {
+      const restSnapshots = dedupeSnapshotsByIdentity((await Promise.all(marketIds.map((canonicalMarketId) =>
+        this.quoteSource!.getQuoteSnapshotReport({
+          canonicalMarketId,
+          ...(normalizedOutcomeId ? { canonicalOutcomeId: normalizedOutcomeId } : {}),
+          side: "buy",
+          quantity: 1,
+          readMode: "live"
+        }).then((r) => r.snapshots).catch(() => [] as readonly NormalizedVenueQuoteSnapshot[])
+      ))).flat());
+      if (restSnapshots.length > 0) {
+        snapshots = restSnapshots;
+        liveVenues = snapshots
+          .map((snapshot) => sanitizeVenueOrderbook(snapshot, 5, generatedAt))
+          .filter(isLiveTradableOrderbookVenue);
+      }
+    }
     const liveVenueNames = [...new Set(liveVenues.map((venue) => venue.venue))].sort();
     const linkedVenues = linkedVenuesFromMarketIds(marketIds, snapshots);
     const bids = sortLevels(liveVenues.flatMap((venue) => venue.bids), "desc");
@@ -863,19 +882,74 @@ export class LiveMarketDataViewService {
     marketId: string;
     outcomeId?: string | undefined;
   }): Promise<MarketOrderbookResponse> {
+    const generatedAt = this.now();
+    const depth = 5;
     try {
-      return await this.getOrderbook({
+      const orderbook = await this.getOrderbook({
         marketId: input.marketId,
         ...(input.outcomeId ? { outcomeId: input.outcomeId } : {}),
-        depth: 5
+        depth
       });
-    } catch (error) {
-      const generatedAt = this.now().toISOString();
+      if (orderbook.venues.length > 0) {
+        return orderbook;
+      }
+      // Cold-start: only LIVE_ORDERBOOK_REQUIRED blockers with no live venues.
+      // Re-read with a wider staleness window — chart only needs a price to plot, not execution safety.
+      const hasOnlyStaleBlockers = orderbook.blockers.length > 0 &&
+        orderbook.blockers.every((b) => b.reason === "LIVE_ORDERBOOK_REQUIRED");
+      if (!hasOnlyStaleBlockers || !this.quoteSource) {
+        return orderbook;
+      }
+      const report = await this.quoteSource.getQuoteSnapshotReport({
+        canonicalMarketId: input.marketId,
+        ...(input.outcomeId ? { canonicalOutcomeId: input.outcomeId } : {}),
+        side: "buy",
+        quantity: 1,
+        readMode: "cached_display",
+        displayMaxAgeMs: CHART_ORDERBOOK_DISPLAY_MAX_AGE_MS
+      }).catch(() => null);
+      if (!report || report.snapshots.length === 0) {
+        return orderbook;
+      }
+      const allVenues = report.snapshots.map((s) => sanitizeVenueOrderbook(s, depth, generatedAt));
+      const usableVenues = allVenues.filter((v) => v.bestBid !== null || v.bestAsk !== null);
+      if (usableVenues.length === 0) {
+        return orderbook;
+      }
+      const bids = sortLevels(usableVenues.flatMap((v) => v.bids), "desc").slice(0, depth);
+      const asks = sortLevels(usableVenues.flatMap((v) => v.asks), "asc").slice(0, depth);
+      const bestBid = bids[0]?.price ?? null;
+      const bestAsk = asks[0]?.price ?? null;
+      const midpoint = midpointFromBest(bestBid, bestAsk);
+      const spread = spreadFromBest(bestBid, bestAsk);
+      this.recordChartPoint({
+        marketId: input.marketId,
+        outcomeId: input.outcomeId ?? null,
+        timestamp: generatedAt,
+        unified: midpoint,
+        venues: Object.fromEntries(usableVenues.map((v) => [v.venue, v.midpoint]))
+      });
       return {
         marketId: input.marketId,
         outcomeId: input.outcomeId ?? null,
-        generatedAt,
-        depth: 5,
+        generatedAt: generatedAt.toISOString(),
+        depth,
+        venues: usableVenues,
+        bids,
+        asks,
+        bestBid,
+        bestAsk,
+        midpoint,
+        spread,
+        status: usableVenues.some((v) => v.snapshotStatus === "live") ? "live" : "stale",
+        blockers: []
+      };
+    } catch (error) {
+      return {
+        marketId: input.marketId,
+        outcomeId: input.outcomeId ?? null,
+        generatedAt: generatedAt.toISOString(),
+        depth,
         venues: [],
         bids: [],
         asks: [],

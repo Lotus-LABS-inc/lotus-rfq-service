@@ -1352,7 +1352,7 @@ describe("LiveMarketDataViewService", () => {
     });
   });
 
-  it("does not call quote providers on live price hot snapshot misses", async () => {
+  it("falls back to cached_display snapshot on live price hot snapshot miss", async () => {
     const now = new Date("2026-05-10T12:00:00.000Z");
     const calls: unknown[] = [];
     const service = new LiveMarketDataViewService({
@@ -1364,6 +1364,7 @@ describe("LiveMarketDataViewService", () => {
             venueMarketId: "poly-live",
             venueOutcomeId: "yes",
             receivedAt: now,
+            source: "REST",
             bid: "0.32",
             ask: "0.34"
           })],
@@ -1381,12 +1382,62 @@ describe("LiveMarketDataViewService", () => {
       items: [{ marketId: "market-1", canonicalMarketIds: ["market-1", "market-2"], outcomeId: "yes" }]
     });
 
-    expect(calls).toEqual([]);
+    // Level 2: cached_display is tried for each canonical market ID on Redis miss
+    expect(calls).toMatchObject([
+      { canonicalMarketId: "market-1", readMode: "cached_display" },
+      { canonicalMarketId: "market-2", readMode: "cached_display" }
+    ]);
     expect(prices.prices[0]).toMatchObject({
-      status: "no_live_price",
-      price: null,
-      bestVenue: null,
-      venueCount: 0
+      status: "live",
+      price: "0.33",
+      bestVenue: "POLYMARKET",
+      venueCount: 1
+    });
+  });
+
+  it("tries live REST fetch when cached_display returns no usable prices on hot snapshot miss", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    const calls: unknown[] = [];
+    const service = new LiveMarketDataViewService({
+      getQuoteSnapshotReport: async (input) => {
+        calls.push(input);
+        if ((input as { readMode?: string }).readMode === "cached_display") {
+          return { snapshots: [], blocked: [] };
+        }
+        return {
+          snapshots: [snapshot({
+            venue: "LIMITLESS",
+            venueMarketId: "lim-live",
+            venueOutcomeId: "yes",
+            receivedAt: now,
+            source: "REST",
+            bid: "0.48",
+            ask: "0.52"
+          })],
+          blocked: []
+        };
+      }
+    }, {
+      now: () => now,
+      liveOrderbookSource: {
+        get: async () => []
+      }
+    });
+
+    const prices = await service.getLivePrices({
+      items: [{ marketId: "market-1", outcomeId: "yes" }]
+    });
+
+    // Level 3: live REST fetch triggered after cached_display returns empty
+    expect(calls).toMatchObject([
+      { canonicalMarketId: "market-1", readMode: "cached_display" },
+      { canonicalMarketId: "market-1", readMode: "live" }
+    ]);
+    expect(prices.prices[0]).toMatchObject({
+      status: "live",
+      price: "0.5",
+      bestVenue: "LIMITLESS",
+      venueCount: 1
     });
   });
 });
