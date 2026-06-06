@@ -178,6 +178,17 @@ export class LimitlessSdkOrderbookConnector implements VenueOrderbookStreamConne
     const onMethod = this.client.on.bind(this.client) as unknown as (event: string, handler: (payload: unknown) => void) => void;
     onMethod("orderbookUpdate", (payload) => this.onPayload(payload));
     onMethod("orderbook", (payload) => this.onPayload(payload));
+    // On reconnect the socket.io transport re-establishes but does NOT replay subscriptions.
+    // Re-send all active subscriptions whenever the connect event fires while we already
+    // hold active targets (initial connect has connected=false so the guard skips it).
+    onMethod("connect", () => {
+      if (this.connected && this.targets.size > 0) {
+        void this.client.subscribe("orderbook", {
+          marketSlugs: [...new Set([...this.targets.values()].map((t) => t.venueMarketId))]
+        }).catch(() => {});
+        config.logger?.warn?.({ venue: "LIMITLESS", targetCount: this.targets.size }, "Limitless websocket reconnected; resubscribed all targets.");
+      }
+    });
   }
 
   public async subscribe(targets: readonly VenueOrderbookSubscriptionTarget[], onSnapshot: SnapshotListener): Promise<void> {
