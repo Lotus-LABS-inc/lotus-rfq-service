@@ -483,6 +483,13 @@ export class LiveMarketDataViewService {
         return { snapshots: [], blocked: [] };
       }
     }));
+    // If any canonical market ID has no live snapshots, fall through to loadOrderbook()
+    // so hotQuoteSnapshots (memory → Redis → DB) fills the gap. Without this, a
+    // POLYMARKET-only live cache result would mask LIMITLESS whose 30s Redis TTL expired,
+    // causing the terminal to show only Polymarket despite LIMITLESS being live in hotQuoteSnapshots.
+    if (orderbookMarketIds.length > 1 && reports.some((report) => report.snapshots.length === 0)) {
+      return null;
+    }
     const report = mergeVenueQuoteSnapshotReports(reports);
     if (report.snapshots.length === 0) {
       return null;

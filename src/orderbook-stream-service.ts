@@ -91,7 +91,7 @@ export const runOrderbookStreamService = async (): Promise<OrderbookStreamRuntim
       APP_ENV: process.env.APP_ENV,
       NODE_ENV: process.env.NODE_ENV
     }),
-    ttlMs: 30_000,
+    ttlMs: 60_000,
     maxSnapshotsPerTopic: 16
   });
   const streamService = new OrderbookStreamService({
