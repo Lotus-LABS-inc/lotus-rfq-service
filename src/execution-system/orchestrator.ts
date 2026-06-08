@@ -203,6 +203,9 @@ export class ExecutionSystemOrchestrator {
         if (fill.status === "FILLED") {
           leg.status = "FILLED_PENDING_SETTLEMENT";
           leg.filledAt = this.now().toISOString();
+          if (fill.averagePrice > 0) {
+            leg.price = fill.averagePrice;
+          }
           await writeAudit("FILL_RECEIVED", { legId: leg.executionLegId });
           if (stateMachine.current() === "SUBMITTED" || stateMachine.current() === "PARTIAL_FILL") {
             stateMachine.transitionTo("FILLED_PENDING_SETTLEMENT");
@@ -564,7 +567,11 @@ export class ExecutionSystemOrchestrator {
     if (filled.length === 0) {
       return 0;
     }
-    return filled.reduce((sum, leg) => sum + leg.price, 0) / filled.length;
+    const totalSize = filled.reduce((sum, leg) => sum + Number(leg.size), 0);
+    if (totalSize === 0) {
+      return 0;
+    }
+    return filled.reduce((sum, leg) => sum + leg.price * Number(leg.size), 0) / totalSize;
   }
 }
 

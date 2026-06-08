@@ -85,6 +85,7 @@ describe("execution signed bundle routes", () => {
     skippedAmount: "0",
     expectedPrice: 0.99,
     effectivePrice: 0.99,
+    singleVenueMaxFillSize: "2",
     requiredUserSignatureSteps: ["POLYMARKET user signature required"],
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
     legs: [{
@@ -109,6 +110,7 @@ describe("execution signed bundle routes", () => {
     skippedAmount: "0",
     expectedPrice: 0.5,
     effectivePrice: 0.5,
+    singleVenueMaxFillSize: venue === "POLYMARKET" ? "2" : "1",
     requiredUserSignatureSteps: requiresUserSignature ? [`${venue} user signature required`] : [],
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
     legs: [{

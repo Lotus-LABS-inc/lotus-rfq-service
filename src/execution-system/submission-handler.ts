@@ -63,6 +63,9 @@ export class ExecutionSystemSubmissionHandler implements ExecutionSubmissionHand
       fastLaneEnabled: metadata?.fastLaneEnabled === true,
       ghostFillProtectionEnabled: metadata?.ghostFillProtectionEnabled !== false,
       expectedPrice: Number(metadata?.expectedPrice ?? 0),
+      ...(stringMetadata(metadata, "singleVenueMaxFillSize")
+        ? { singleVenueMaxFillSize: stringMetadata(metadata, "singleVenueMaxFillSize")! }
+        : {}),
       expectedFees: zeroFees(),
       idempotencyKey: input.idempotencyKey,
       createdAt: new Date().toISOString(),

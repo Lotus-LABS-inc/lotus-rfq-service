@@ -2706,7 +2706,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
           expectedPrice: Number.parseFloat(quote.price),
           maxSlippage: 0,
           fastLaneEnabled: false,
-          ghostFillProtectionEnabled: true
+          ghostFillProtectionEnabled: true,
+          // In the legacy RFQ model a single LP quotes for the full quantity, so the
+          // single-venue baseline equals the total requested size (no share improvement).
+          singleVenueMaxFillSize: session.quantity
         },
         policyContext: {
           routeTypeAllowed: true,

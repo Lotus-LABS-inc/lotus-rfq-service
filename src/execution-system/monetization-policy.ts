@@ -24,6 +24,7 @@ export interface MonetizationPolicy {
   policyVersion: string;
   currency: string;
   priceImprovementShareBps: number;
+  shareImprovementShareBps: number;
   executionFeeBps: number;
   fastLaneFeeBps: number;
   ghostFillProtectionFeeBps: number;
@@ -88,6 +89,7 @@ export const getMonetizationPolicyFromEnv = (
     policyVersion: env.MONETIZATION_POLICY_VERSION?.trim() || "lotus-fees-v1",
     currency: env.MONETIZATION_DEFAULT_CURRENCY?.trim() || "USDC",
     priceImprovementShareBps: parseBps(env.MONETIZATION_PRICE_IMPROVEMENT_SHARE_BPS, 3000, "MONETIZATION_PRICE_IMPROVEMENT_SHARE_BPS"),
+    shareImprovementShareBps: parseBps(env.MONETIZATION_SHARE_IMPROVEMENT_SHARE_BPS, 4000, "MONETIZATION_SHARE_IMPROVEMENT_SHARE_BPS"),
     executionFeeBps: parseBps(env.MONETIZATION_EXECUTION_FEE_BPS, 0, "MONETIZATION_EXECUTION_FEE_BPS"),
     fastLaneFeeBps: parseBps(env.MONETIZATION_FAST_LANE_FEE_BPS, 500, "MONETIZATION_FAST_LANE_FEE_BPS"),
     ghostFillProtectionFeeBps: parseBps(env.MONETIZATION_GHOST_FILL_PROTECTION_FEE_BPS, 500, "MONETIZATION_GHOST_FILL_PROTECTION_FEE_BPS"),

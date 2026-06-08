@@ -24,6 +24,7 @@ export class ExecutionFeeService {
       expectedPrice: request.expectedPrice,
       realizedPrice: request.expectedPrice,
       size: Number(request.size),
+      singleVenueMaxFillSize: Number(request.singleVenueMaxFillSize ?? request.size),
       side: request.side,
       fastLaneEnabled: request.fastLaneEnabled,
       ghostFillProtectionEnabled: request.ghostFillProtectionEnabled
@@ -38,6 +39,7 @@ export class ExecutionFeeService {
       expectedPrice: input.request.expectedPrice,
       realizedPrice: input.realizedPrice,
       size: Number(input.request.size),
+      singleVenueMaxFillSize: Number(input.request.singleVenueMaxFillSize ?? input.request.size),
       side: input.request.side,
       fastLaneEnabled: input.request.fastLaneEnabled,
       ghostFillProtectionEnabled: input.request.ghostFillProtectionEnabled
@@ -48,6 +50,7 @@ export class ExecutionFeeService {
     expectedPrice: number;
     realizedPrice: number;
     size: number;
+    singleVenueMaxFillSize: number;
     side: ExecutionRequestV0["side"];
     fastLaneEnabled: boolean;
     ghostFillProtectionEnabled: boolean;
@@ -66,6 +69,7 @@ export class ExecutionFeeService {
         captureMode: "SHADOW",
         revenueSource: "SHADOW_PRICE_IMPROVEMENT",
         priceImprovementFee: legacyPriceImprovementFee,
+        shareImprovementFee: 0,
         executionFee: 0,
         fastLaneFee: legacyFastLaneFee,
         ghostFillProtectionFee: legacyGhostFillProtectionFee,
@@ -88,6 +92,8 @@ export class ExecutionFeeService {
     const improvement = Math.max(0, improvementPerUnit) * input.size;
     const filledNotional = Math.max(0, input.realizedPrice * input.size);
     const priceImprovementFee = improvement * policy.priceImprovementShareBps / 10_000;
+    const extraShares = Math.max(0, input.size - input.singleVenueMaxFillSize);
+    const shareImprovementFee = extraShares * input.realizedPrice * policy.shareImprovementShareBps / 10_000;
     const executionFee = filledNotional * policy.executionFeeBps / 10_000;
     const fastLaneFee = input.fastLaneEnabled ? improvement * policy.fastLaneFeeBps / 10_000 : 0;
     const ghostFillProtectionFee = input.ghostFillProtectionEnabled ? improvement * policy.ghostFillProtectionFeeBps / 10_000 : 0;
@@ -95,7 +101,7 @@ export class ExecutionFeeService {
     const shadowEnabled = isShadowImprovementEnabled(policy);
     const uncappedTotal = !shadowEnabled
       ? 0
-      : priceImprovementFee + executionFee + fastLaneFee + ghostFillProtectionFee + futureSettlementFee;
+      : priceImprovementFee + shareImprovementFee + executionFee + fastLaneFee + ghostFillProtectionFee + futureSettlementFee;
     const notionalCap = filledNotional * policy.maxTotalFeeBps / 10_000;
     const totalLotusFee = Math.min(uncappedTotal, notionalCap);
     return {
@@ -105,6 +111,7 @@ export class ExecutionFeeService {
       captureMode: policy.captureMode,
       revenueSource: "SHADOW_PRICE_IMPROVEMENT",
       priceImprovementFee,
+      shareImprovementFee,
       executionFee,
       fastLaneFee,
       ghostFillProtectionFee,

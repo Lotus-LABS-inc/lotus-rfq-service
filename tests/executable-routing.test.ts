@@ -61,7 +61,10 @@ const routePolicy = (mode: SmartRoutePolicy["mode"]): SmartRoutePolicy => ({
   minimumPositiveImprovement: 0.000001,
   stagingForcePairNotionalUsd: 49.95,
   stagingForceExpandedRouteNotionalUsd: 500,
-  stagingForcedRouteMinLegNotionalUsd: 1
+  stagingForcedRouteMinLegNotionalUsd: 1,
+  productionForcePairNotionalUsd: 200,
+  productionForceExpandedRouteNotionalUsd: 500,
+  productionForcedRouteMinLegNotionalUsd: 1
 });
 
 class MemoryQuoteRepository implements ExecutionQuoteRepository {

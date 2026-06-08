@@ -24,6 +24,7 @@ const quote = (): ExecutableTradeQuote => ({
   executableAmount: "1",
   skippedAmount: "0",
   expectedPrice: 0.51,
+  singleVenueMaxFillSize: "1",
   requiredUserSignatureSteps: [],
   expiresAt: new Date(Date.now() + 60_000).toISOString(),
   legs: [{

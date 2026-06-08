@@ -79,6 +79,7 @@ const quote = (): ExecutableTradeQuote => ({
   executableAmount: "4",
   skippedAmount: "0",
   expectedPrice: 0.42,
+  singleVenueMaxFillSize: "0",
   requiredUserSignatureSteps: [
     "PREDICT_FUN user signature required",
     "LIMITLESS user signature required"

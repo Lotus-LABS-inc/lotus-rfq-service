@@ -651,7 +651,17 @@ export class SdkPolymarketClobV2LiveClient implements PolymarketClobV2LiveClient
   public async fetchFillState(venueOrderId: string, context?: VenueOrderLookupContext): Promise<VenueFillState> {
     const order = await this.callSdkSafely(() => this.sdkClient.getOrder(venueOrderId));
     if (order) {
-      return mapPolymarketOpenOrderToFillState(order);
+      const orderState = mapPolymarketOpenOrderToFillState(order);
+      if (orderState.status === "FILLED") {
+        // order.price is the submitted limit price, not the actual execution price.
+        // fetch trades to get the true size-weighted average fill price.
+        const trades = await this.callSdkSafely(() => this.sdkClient.getTrades({ id: venueOrderId }));
+        const tradeState = mapPolymarketTradesToFillState(trades);
+        if (tradeState.averagePrice > 0) {
+          return { ...orderState, averagePrice: tradeState.averagePrice };
+        }
+      }
+      return orderState;
     }
     const trades = await this.callSdkSafely(() => this.sdkClient.getTrades({ id: venueOrderId }));
     const tradeState = mapPolymarketTradesToFillState(trades);

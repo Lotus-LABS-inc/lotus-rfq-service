@@ -1031,6 +1031,7 @@ const toUserQuote = (quote: ExecutableTradeQuote): Record<string, unknown> => ({
   effectivePrice: quote.effectivePrice,
   estimatedSavings: quote.estimatedSavings,
   savingsBreakdown: quote.savingsBreakdown,
+  singleVenueMaxFillSize: quote.singleVenueMaxFillSize,
   routeDecisionReason: quote.routeDecisionReason,
   expectedFees: {
     total: quote.legs.reduce((sum, leg) => sum + (leg.feeAmount ?? 0), 0),
