@@ -1,10 +1,11 @@
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import { writePairRouteRolloutArtifacts } from "../../src/operations/semantic-expansion/pair-route-rollout-summary.js";
+import { readArtifact } from "../../src/operations/semantic-expansion/shared.js";
 
 describe("pair route evidence artifacts", () => {
   it("writes rollout evidence for both pair classes", () => {
@@ -30,7 +31,7 @@ describe("pair route evidence artifacts", () => {
     writeFileSync(path.join(repoRoot, "docs/simulation-canonical-events.json"), JSON.stringify({ categories: { CRYPTO: [] } }), "utf8");
 
     writePairRouteRolloutArtifacts(repoRoot);
-    const summary = JSON.parse(readFileSync(path.join(repoRoot, "docs/pair-route-rollout-summary.json"), "utf8"));
+    const summary = readArtifact<{ routes: unknown[] }>(repoRoot, "docs/pair-route-rollout-summary.json");
     expect(summary.routes).toHaveLength(2);
   });
 });
