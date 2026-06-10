@@ -11,8 +11,8 @@ import type {
 
 interface PairShadowObservationRow extends QueryResultRow {
   id: string;
-  route_class: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION";
-  route_mode: "POLYMARKET_LIMITLESS" | "POLYMARKET_OPINION";
+  route_class: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION" | "PAIR_PM_PREDICTFUN";
+  route_mode: "POLYMARKET_LIMITLESS" | "POLYMARKET_OPINION" | "POLYMARKET_PREDICT_FUN";
   source_kind: "BOOTSTRAP_ARTIFACT" | "RUNTIME_OBSERVATION";
   scope_kind: "SAFE_EXACT_SUBSET" | "SHADOW_ONLY_SUBSET" | "BLOCKED_FAMILY";
   scope_key: string;
@@ -47,7 +47,7 @@ interface PairShadowObservationRow extends QueryResultRow {
 
 interface PairPromotionDecisionRow extends QueryResultRow {
   id: string;
-  route_class: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION";
+  route_class: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION" | "PAIR_PM_PREDICTFUN";
   scope_promoted: string;
   evidence_window_start: Date;
   evidence_window_end: Date;

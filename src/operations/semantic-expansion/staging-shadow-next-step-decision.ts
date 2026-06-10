@@ -7,7 +7,7 @@ import { writeArtifact, writeMarkdownArtifact } from "./shared.js";
 export interface StagingShadowNextStepDecisionArtifact {
   observedAt: string;
   routes: readonly {
-    routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION";
+    routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION" | "PAIR_PM_PREDICTFUN";
     decision:
       | "REMAIN_SHADOW__INSUFFICIENT_RUNTIME_EXACT_SAFE_EVIDENCE"
       | "READY_FOR_CANARY_REVIEW"

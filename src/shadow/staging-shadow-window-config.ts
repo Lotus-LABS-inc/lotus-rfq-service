@@ -5,8 +5,8 @@ import { writeArtifact, writeMarkdownArtifact } from "../operations/semantic-exp
 import type { PairRouteQualification } from "../qualification/pair-route-qualification.js";
 
 export interface StagingShadowRouteScopeConfig {
-  routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION";
-  routeMode: "POLYMARKET_LIMITLESS" | "POLYMARKET_OPINION";
+  routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION" | "PAIR_PM_PREDICTFUN";
+  routeMode: "POLYMARKET_LIMITLESS" | "POLYMARKET_OPINION" | "POLYMARKET_PREDICT_FUN";
   canaryCountableScopeKeys: readonly string[];
   shadowObservableScopeKeys: readonly string[];
   blockedScopes: readonly string[];

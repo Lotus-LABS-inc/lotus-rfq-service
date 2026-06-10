@@ -12,8 +12,8 @@ export type PairShadowExactnessClass =
 
 export interface PairShadowObservation {
   id: string;
-  routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION";
-  routeMode: "POLYMARKET_LIMITLESS" | "POLYMARKET_OPINION";
+  routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION" | "PAIR_PM_PREDICTFUN";
+  routeMode: "POLYMARKET_LIMITLESS" | "POLYMARKET_OPINION" | "POLYMARKET_PREDICT_FUN";
   sourceKind: PairShadowSourceKind;
   scopeKind: PairShadowScopeKind;
   scopeKey: string;
@@ -53,7 +53,7 @@ export interface CreatePairShadowObservationInput extends Omit<PairShadowObserva
 
 export interface PairPromotionDecisionRecord {
   id: string;
-  routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION";
+  routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION" | "PAIR_PM_PREDICTFUN";
   scopePromoted: string;
   evidenceWindowStart: string;
   evidenceWindowEnd: string;

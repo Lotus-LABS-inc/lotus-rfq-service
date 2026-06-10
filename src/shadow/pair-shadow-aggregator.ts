@@ -136,7 +136,7 @@ export const buildBootstrapPairShadowObservations = (qualification: PairRouteQua
       canonicalMarketId: market.canonicalMarketId,
       basisMode: "HISTORICAL_ONLY",
       decisionTimestamp: now,
-      candidateVenues: qualification.definition.routeMode === "POLYMARKET_LIMITLESS" ? ["POLYMARKET", "LIMITLESS"] : ["POLYMARKET", "OPINION"],
+      candidateVenues: qualification.definition.routeMode === "POLYMARKET_LIMITLESS" ? ["POLYMARKET", "LIMITLESS"] : qualification.definition.routeMode === "POLYMARKET_PREDICT_FUN" ? ["POLYMARKET", "PREDICT_FUN"] : ["POLYMARKET", "OPINION"],
       chosenShadowRoute: qualification.definition.routeMode,
       baselineComparator: "bootstrap_artifact_baseline",
       confidenceState: "HIGH",

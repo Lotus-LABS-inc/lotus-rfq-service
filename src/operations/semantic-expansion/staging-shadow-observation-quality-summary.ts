@@ -8,7 +8,7 @@ import { writeArtifact, writeMarkdownArtifact } from "./shared.js";
 export interface StagingShadowObservationQualityArtifact {
   observedAt: string;
   routes: readonly {
-    routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION";
+    routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION" | "PAIR_PM_PREDICTFUN";
     counts: Record<PairShadowObservationQuality, number>;
   }[];
 }

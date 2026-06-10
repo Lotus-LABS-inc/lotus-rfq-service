@@ -8,7 +8,7 @@ import type { PairRouteQualification } from "../../src/qualification/pair-route-
 import type { PairRouteShadowEvidence, PairShadowMetricSlice } from "../../src/shadow/pair-shadow-metrics.js";
 
 const buildRoute = (input: {
-  routeClassId: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION";
+  routeClassId: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION" | "PAIR_PM_PREDICTFUN";
   canaryAllowedFamilies: readonly string[];
   blockedFamilies?: readonly string[];
   currentStage?: QualificationStage;
@@ -94,10 +94,10 @@ const buildMetricSlice = (): PairShadowMetricSlice => ({
 });
 
 const buildShadowEvidence = (
-  routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION"
+  routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION" | "PAIR_PM_PREDICTFUN"
 ): PairRouteShadowEvidence => ({
   routeClass,
-  routeMode: routeClass === "PAIR_PM_LIMITLESS" ? "POLYMARKET_LIMITLESS" : "POLYMARKET_OPINION",
+  routeMode: routeClass === "PAIR_PM_LIMITLESS" ? "POLYMARKET_LIMITLESS" : routeClass === "PAIR_PM_PREDICTFUN" ? "POLYMARKET_PREDICT_FUN" : "POLYMARKET_OPINION",
   currentStage: QualificationStage.SHADOW,
   window: {
     windowStart: "2026-03-01T00:00:00.000Z",
@@ -127,7 +127,7 @@ const buildShadowEvidence = (
 });
 
 const buildCanaryReadiness = (input: {
-  routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION";
+  routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION" | "PAIR_PM_PREDICTFUN";
   recommendation: PairCanaryReadiness["recommendation"];
   thresholdResults?: PairCanaryReadiness["thresholdResults"];
   blockerReasons?: readonly string[];

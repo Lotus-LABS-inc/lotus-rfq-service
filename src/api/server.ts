@@ -82,6 +82,7 @@ import { registerAdminReplayRoutes } from "./admin/replay.routes.js";
 import { ReplayAdminService } from "./admin/replay-admin-service.js";
 import { registerAdminCompatibilityReviewRoutes } from "./admin/compatibility-review.routes.js";
 import { registerAdminPairMatchReviewRoutes } from "./admin/pair-match-review.routes.js";
+import { registerAdminTriMatchReviewRoutes } from "./admin/tri-match-review.routes.js";
 import { registerAdminExecutionControlRoutes } from "./admin/execution-control.routes.js";
 import { registerAdminQualificationRoutes } from "./admin/qualification.routes.js";
 import { QualificationAdminService, createDefaultPromotionGateConfig } from "./admin/qualification-admin-service.js";
@@ -245,6 +246,7 @@ import { UserVenueAccountRepository } from "../repositories/user-venue-account.r
 import { PairEdgeRepository } from "../repositories/pair-edge.repository.js";
 import { CompatibilityOverrideService } from "../canonical/compatibility-override-service.js";
 import { PairMatchReviewService } from "./admin/pair-match-review-service.js";
+import { TriMatchReviewService } from "./admin/tri-match-review-service.js";
 import { RouteSelectionTraceWriter } from "../routing/route-selection-trace.js";
 import { FailureRecoveryManager } from "../execution/failure-recovery-manager.js";
 import { ExecutionPolicyValidator } from "../execution-control/execution-policy-validator.js";
@@ -3186,6 +3188,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   });
   await registerAdminPairMatchReviewRoutes(app, adminAuthMiddleware, {
     pairMatchReviewService: new PairMatchReviewService(new PairEdgeRepository(dependencies.pgPool))
+  });
+  await registerAdminTriMatchReviewRoutes(app, adminAuthMiddleware, {
+    triMatchReviewService: new TriMatchReviewService(new PairEdgeRepository(dependencies.pgPool))
   });
   await registerAdminExecutionControlRoutes(app, adminAuthMiddleware, {
     executionIntentRepository,

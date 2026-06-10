@@ -18,7 +18,8 @@ export const buildPairRouteRolloutArtifact = (repoRoot: string): PairRouteRollou
   const inputs = loadPairRouteArtifactInputs(repoRoot);
   const qualifications = buildAllPairRouteQualifications({
     PAIR_PM_LIMITLESS: QualificationStage.INTERNAL_ONLY,
-    PAIR_PM_OPINION: QualificationStage.INTERNAL_ONLY
+    PAIR_PM_OPINION: QualificationStage.INTERNAL_ONLY,
+    PAIR_PM_PREDICTFUN: QualificationStage.INTERNAL_ONLY
   }, inputs);
   return {
     observedAt: new Date().toISOString(),
