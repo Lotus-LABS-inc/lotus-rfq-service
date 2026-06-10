@@ -55,6 +55,7 @@ tags:
   - name: Admin Replay
   - name: Admin Internal Engines
   - name: Admin Compatibility
+  - name: Admin Market Matching
   - name: Funding
   - name: Internal Funding
   - name: Admin Funding Readiness
@@ -1177,6 +1178,69 @@ paths:
       security: [{ bearerAuth: [] }]
       responses:
         "200": { $ref: "#/components/responses/AdminSchemaMap" }
+
+  /admin/market-matching/review-queue:
+    get:
+      tags: [Admin Market Matching]
+      summary: Serve the last generated cross-venue market-matching review queue.
+      description: >-
+        Read-only. Returns the exact-overlap candidates eligible for promotion and the
+        near-exact pairs the matcher refused to pool (with failed dimensions). Returns an
+        empty queue with generated=false if the pipeline has not been run yet.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: none
+      x-lotus-danger: low
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/MarketMatchingReviewQueue" }
+        "500": { $ref: "#/components/responses/Error" }
+  /admin/market-matching/run:
+    post:
+      tags: [Admin Market Matching]
+      summary: Re-run the cross-venue matcher and persist the match report.
+      description: >-
+        Runs the semantic cross-venue matcher against current venue inventory and persists
+        the report artifact. Computes and writes a report file only; does not mutate the
+        canonical graph or any trading state. Returns the freshly generated review queue.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: regenerates-match-report
+      x-lotus-danger: medium
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/MarketMatchingReviewQueue" }
+        "500": { $ref: "#/components/responses/Error" }
+  /admin/market-matching/approve:
+    post:
+      tags: [Admin Market Matching]
+      summary: Promote one reviewed exact-overlap candidate into the canonical graph.
+      description: >-
+        Requires ADMIN + 2FA. Promotes a single exact-overlap candidate from the current
+        match report into the canonical graph and historical market states. Fails closed if
+        the promotionId is no longer present in the current report (re-run the pipeline) or
+        if hydration/projection skipped the candidate. Near-exact candidates are never
+        promotable through this route.
+      x-lotus-status: implemented
+      x-lotus-callable: true
+      x-lotus-auth: admin
+      x-lotus-side-effects: promotes-canonical-market
+      x-lotus-danger: high
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarketMatchingApproveRequest"
+      responses:
+        "200": { $ref: "#/components/responses/MarketMatchingApproveResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
 
   /admin/crypto-lanes:
     get:
@@ -4051,6 +4115,26 @@ components:
           schema:
             type: object
             additionalProperties: true
+    MarketMatchingReviewQueue:
+      description: Cross-venue market-matching review queue.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [queue]
+            properties:
+              queue:
+                $ref: "#/components/schemas/MarketMatchingReviewQueue"
+    MarketMatchingApproveResult:
+      description: Result of promoting a single exact-overlap candidate.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [summary]
+            properties:
+              summary:
+                $ref: "#/components/schemas/MarketMatchingSyncSummary"
     MarketCategories:
       description: Approved user-facing market categories.
       content:
@@ -4334,6 +4418,139 @@ components:
           schema:
             $ref: "#/components/schemas/AdminSchemaMapResponse"
   schemas:
+    MarketMatchingMemberRef:
+      type: object
+      description: A venue market that is a member of an exact-overlap candidate.
+      required: [venue, venueMarketId, title, historicalRowCount]
+      properties:
+        venue: { type: string }
+        venueMarketId: { type: string }
+        title: { type: string }
+        historicalRowCount: { type: integer }
+    MarketMatchingExactOverlap:
+      type: object
+      description: An exact-overlap clique eligible for operator-gated promotion.
+      required:
+        [promotionId, eventTitle, category, promotionClass, targetMode, targetCanonicalEventId, targetCanonicalMarketId, members]
+      properties:
+        promotionId: { type: string }
+        eventTitle: { type: string }
+        category: { type: string }
+        promotionClass:
+          type: string
+          enum: [historical_qualified_exact_overlap, live_only_exact_overlap]
+        targetMode:
+          type: string
+          enum: [existing_market_extension, new_exact_overlap]
+        targetCanonicalEventId: { type: string }
+        targetCanonicalMarketId: { type: string }
+        members:
+          type: array
+          items: { $ref: "#/components/schemas/MarketMatchingMemberRef" }
+    MarketMatchingVenueRef:
+      type: object
+      required: [venue, venueMarketId, title]
+      properties:
+        venue: { type: string }
+        venueMarketId: { type: string }
+        title: { type: string }
+    MarketMatchingNearExact:
+      type: object
+      description: >-
+        A near-exact pair the matcher refused to pool because a required dimension differs.
+        Review evidence only; never promotable.
+      required: [matchId, eventTitle, category, venueSet, seed, candidate, finalConfidence, failedDimensions, blockReason]
+      properties:
+        matchId: { type: string }
+        eventTitle: { type: string }
+        category: { type: string }
+        venueSet:
+          type: array
+          items: { type: string }
+        seed: { $ref: "#/components/schemas/MarketMatchingVenueRef" }
+        candidate: { $ref: "#/components/schemas/MarketMatchingVenueRef" }
+        finalConfidence: { type: number }
+        failedDimensions:
+          type: array
+          description: Required proposition dimensions that differed (e.g. conditionActionMatch).
+          items: { type: string }
+        blockReason:
+          type: string
+          nullable: true
+    MarketMatchingReviewQueue:
+      type: object
+      required:
+        [observedAt, generated, inventoryTotal, exactOverlapCount, nearExactCount, exactOverlaps, nearExact]
+      properties:
+        observedAt: { type: string, format: date-time }
+        generated:
+          type: boolean
+          description: False if the pipeline has not been run yet (queue is empty).
+        inventoryTotal: { type: integer }
+        exactOverlapCount: { type: integer }
+        nearExactCount: { type: integer }
+        exactOverlaps:
+          type: array
+          items: { $ref: "#/components/schemas/MarketMatchingExactOverlap" }
+        nearExact:
+          type: array
+          items: { $ref: "#/components/schemas/MarketMatchingNearExact" }
+    MarketMatchingApproveRequest:
+      type: object
+      required: [twoFactorToken, promotionId, reason]
+      additionalProperties: false
+      properties:
+        twoFactorToken:
+          type: string
+          minLength: 6
+          description: ADMIN 2FA token.
+        promotionId:
+          type: string
+          description: promotionId of an exactOverlaps entry from the current review queue.
+        reason:
+          type: string
+          minLength: 1
+    MarketMatchingPromotedTarget:
+      type: object
+      required: [promotionId, targetCanonicalEventId, targetCanonicalMarketId, promotionClass, memberCount]
+      properties:
+        promotionId: { type: string }
+        targetCanonicalEventId: { type: string }
+        targetCanonicalMarketId: { type: string }
+        promotionClass: { type: string }
+        memberCount: { type: integer }
+        hydration:
+          type: array
+          items:
+            type: object
+            properties:
+              venue: { type: string }
+              venueMarketId: { type: string }
+              hydrationSource: { type: string }
+              usedFallback: { type: boolean }
+    MarketMatchingSyncSummary:
+      type: object
+      description: Outcome of a scoped exact-overlap promotion.
+      required:
+        [observedAt, processedPromotionCandidates, promotedHistoricalQualified, promotedLiveOnly, promotedTargets, skippedTargets]
+      properties:
+        observedAt: { type: string, format: date-time }
+        processedPromotionCandidates: { type: integer }
+        promotedHistoricalQualified: { type: integer }
+        promotedLiveOnly: { type: integer }
+        remappedHistoricalRows: { type: integer }
+        insertedSyntheticRows: { type: integer }
+        updatedCanonicalReportPath: { type: string }
+        promotedTargets:
+          type: array
+          items: { $ref: "#/components/schemas/MarketMatchingPromotedTarget" }
+        skippedTargets:
+          type: array
+          items:
+            type: object
+            properties:
+              promotionId: { type: string }
+              reason: { type: string }
     ExecutionOrderPreviewRequest:
       type: object
       required: [marketId, outcomeId, side, amount, venuePreference]
