@@ -7,7 +7,7 @@ import { writeArtifact, writeMarkdownArtifact } from "./shared.js";
 export interface PairCanaryLaunchPlanArtifact {
   observedAt: string;
   eligibleRoutes: readonly {
-    routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION";
+    routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION" | "PAIR_PM_PREDICTFUN";
     scopePromoted: string;
     allowedFamilies: readonly string[];
     blockedFamilies: readonly string[];

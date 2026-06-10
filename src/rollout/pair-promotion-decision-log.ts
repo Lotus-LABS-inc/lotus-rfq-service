@@ -6,7 +6,7 @@ export class PairPromotionDecisionLog {
   public constructor(private readonly repository: PairPromotionDecisionRepository) {}
 
   public async record(input: {
-    routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION";
+    routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION" | "PAIR_PM_PREDICTFUN";
     scopePromoted: string;
     evidence: PairRouteShadowEvidence;
     canaryReadiness: PairCanaryReadiness;

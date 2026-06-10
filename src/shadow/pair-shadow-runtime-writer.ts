@@ -9,7 +9,7 @@ import { PairShadowObservationRepository } from "./pair-shadow-observation-repos
 import { PairShadowObservationService } from "./pair-shadow-observation.js";
 import type { PairShadowObservation } from "./pair-shadow-observation-types.js";
 
-type VenueName = "POLYMARKET" | "LIMITLESS" | "OPINION";
+type VenueName = "POLYMARKET" | "LIMITLESS" | "OPINION" | "PREDICT_FUN";
 
 export interface PairShadowRuntimeSorInput {
   rfq: CanonicalRFQInput;
@@ -59,7 +59,20 @@ const emptyPairShadowCatalog = (): PairShadowCatalog => ({
 
 const routeModeToVenues: Record<PairRouteClassId, readonly VenueName[]> = {
   PAIR_PM_LIMITLESS: ["POLYMARKET", "LIMITLESS"],
-  PAIR_PM_OPINION: ["POLYMARKET", "OPINION"]
+  PAIR_PM_OPINION: ["POLYMARKET", "OPINION"],
+  PAIR_PM_PREDICTFUN: ["POLYMARKET", "PREDICT_FUN"]
+};
+
+const routeClassToRouteMode: Record<PairRouteClassId, "POLYMARKET_LIMITLESS" | "POLYMARKET_OPINION" | "POLYMARKET_PREDICT_FUN"> = {
+  PAIR_PM_LIMITLESS: "POLYMARKET_LIMITLESS",
+  PAIR_PM_OPINION: "POLYMARKET_OPINION",
+  PAIR_PM_PREDICTFUN: "POLYMARKET_PREDICT_FUN"
+};
+
+const routeClassToBaseline: Record<PairRouteClassId, string> = {
+  PAIR_PM_LIMITLESS: "polymarket_vs_limitless",
+  PAIR_PM_OPINION: "polymarket_vs_opinion",
+  PAIR_PM_PREDICTFUN: "polymarket_vs_predictfun"
 };
 
 const inferFamilyFromTitles = (category: string, titles: readonly string[]): string => {
@@ -97,7 +110,8 @@ const buildCatalog = (
   try {
     qualifications = buildAllPairRouteQualifications({
       PAIR_PM_LIMITLESS: QualificationStage.INTERNAL_ONLY,
-      PAIR_PM_OPINION: QualificationStage.INTERNAL_ONLY
+      PAIR_PM_OPINION: QualificationStage.INTERNAL_ONLY,
+      PAIR_PM_PREDICTFUN: QualificationStage.INTERNAL_ONLY
     }, loadPairRouteArtifactInputs(repoRoot));
   } catch (error) {
     logger?.warn?.(
@@ -210,7 +224,7 @@ export class PairShadowRuntimeWriter {
     try {
       const observation = await this.observationService.recordRuntimeObservation({
         routeClass: scope.routeClass,
-        routeMode: scope.routeClass === "PAIR_PM_LIMITLESS" ? "POLYMARKET_LIMITLESS" : "POLYMARKET_OPINION",
+        routeMode: routeClassToRouteMode[scope.routeClass],
         scopeKind: scope.scopeKind,
         scopeKey: scope.canonicalMarketId,
         routeFamily: scope.routeFamily,
@@ -219,8 +233,8 @@ export class PairShadowRuntimeWriter {
         basisMode: "LIVE_ONLY",
         decisionTimestamp: new Date().toISOString(),
         candidateVenues: venues,
-        chosenShadowRoute: scope.routeClass === "PAIR_PM_LIMITLESS" ? "POLYMARKET_LIMITLESS" : "POLYMARKET_OPINION",
-        baselineComparator: scope.routeClass === "PAIR_PM_LIMITLESS" ? "polymarket_vs_limitless" : "polymarket_vs_opinion",
+        chosenShadowRoute: routeClassToRouteMode[scope.routeClass],
+        baselineComparator: routeClassToBaseline[scope.routeClass],
         confidenceState: scope.scopeKind === "SAFE_EXACT_SUBSET" ? "HIGH" : "MEDIUM",
         compatibilityState: scope.scopeKind === "SAFE_EXACT_SUBSET" ? "EXACT" : "NEAR_EXACT",
         exactnessClass: scope.scopeKind === "SAFE_EXACT_SUBSET" ? "semantic_exact_live_only" : "semantic_near_exact",
@@ -264,7 +278,7 @@ export class PairShadowRuntimeWriter {
     const venues = routeModeToVenues[input.routeClass];
     return this.observationService.recordRuntimeObservation({
       routeClass: input.routeClass,
-      routeMode: input.routeClass === "PAIR_PM_LIMITLESS" ? "POLYMARKET_LIMITLESS" : "POLYMARKET_OPINION",
+      routeMode: routeClassToRouteMode[input.routeClass],
       scopeKind: "SAFE_EXACT_SUBSET",
       scopeKey: safeScope.canonicalMarketId,
       routeFamily: safeScope.routeFamily,
@@ -273,8 +287,8 @@ export class PairShadowRuntimeWriter {
       basisMode: "LIVE_ONLY",
       decisionTimestamp: new Date().toISOString(),
       candidateVenues: venues,
-      chosenShadowRoute: input.routeClass === "PAIR_PM_LIMITLESS" ? "POLYMARKET_LIMITLESS" : "POLYMARKET_OPINION",
-      baselineComparator: input.routeClass === "PAIR_PM_LIMITLESS" ? "polymarket_vs_limitless" : "polymarket_vs_opinion",
+      chosenShadowRoute: routeClassToRouteMode[input.routeClass],
+      baselineComparator: routeClassToBaseline[input.routeClass],
       confidenceState: "HIGH",
       compatibilityState: "EXACT",
       exactnessClass: "semantic_exact_live_only",
@@ -310,7 +324,7 @@ export class PairShadowRuntimeWriter {
     const expectedEffectiveCost = input.routeClass === "PAIR_PM_LIMITLESS" ? 1.0 : 1.0;
     return this.observationService.recordRuntimeObservation({
       routeClass: input.routeClass,
-      routeMode: input.routeClass === "PAIR_PM_LIMITLESS" ? "POLYMARKET_LIMITLESS" : "POLYMARKET_OPINION",
+      routeMode: routeClassToRouteMode[input.routeClass],
       scopeKind: "SAFE_EXACT_SUBSET",
       scopeKey: safeScope.canonicalMarketId,
       routeFamily: safeScope.routeFamily,
@@ -319,8 +333,8 @@ export class PairShadowRuntimeWriter {
       basisMode: "LIVE_ONLY",
       decisionTimestamp: input.decisionTimestamp ?? new Date().toISOString(),
       candidateVenues: venues,
-      chosenShadowRoute: input.routeClass === "PAIR_PM_LIMITLESS" ? "POLYMARKET_LIMITLESS" : "POLYMARKET_OPINION",
-      baselineComparator: input.routeClass === "PAIR_PM_LIMITLESS" ? "polymarket_vs_limitless" : "polymarket_vs_opinion",
+      chosenShadowRoute: routeClassToRouteMode[input.routeClass],
+      baselineComparator: routeClassToBaseline[input.routeClass],
       confidenceState: "HIGH",
       compatibilityState: "EXACT",
       exactnessClass: "semantic_exact_live_only",

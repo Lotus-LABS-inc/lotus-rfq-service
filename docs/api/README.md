@@ -1,0 +1,85 @@
+# Lotus API Documentation
+
+Status: static OpenAPI docs  
+Last updated: 2026-04-25
+
+## Where The Spec Lives
+
+The repo-wide OpenAPI spec is:
+
+```text
+docs/api/openapi.yaml
+```
+
+This is a static documentation file. The service does not currently mount Swagger UI and the repo does not currently include an OpenAPI validation script.
+
+## How To View It
+
+Use Swagger Editor:
+
+1. Open https://editor.swagger.io/
+2. Paste the contents of `docs/api/openapi.yaml`
+3. Review endpoints by tag
+
+No runtime server changes are required to view the spec.
+
+## Implemented vs Planned
+
+Every documented endpoint uses Lotus vendor extensions:
+
+- `x-lotus-status`: `implemented`, `planned`, `unregistered`, `stub`, `deprecated`
+- `x-lotus-callable`: whether engineers should call the endpoint
+- `x-lotus-auth`: `public`, `user`, `admin`, `internal`, `lp`
+- `x-lotus-side-effects`: expected side effect class
+- `x-lotus-danger`: `low`, `medium`, `high`, `critical`
+
+Do not call endpoints marked `x-lotus-callable: false`.
+
+## Auth Labels
+
+- `public`: no route middleware in the current server.
+- `user`: requires user JWT middleware.
+- `admin`: requires admin JWT middleware.
+- `admin-preview`: requires admin JWT, except simulation preview can allow loopback access when `DEV_SIMULATION_PREVIEW_ENABLED=true`.
+- `lp`: requires LP authentication middleware.
+
+## How Frontend Should Use This
+
+Frontend should treat implemented callable APIs as usable contracts and planned APIs as future alignment only.
+
+RFQ accept can start execution, but the returned execution may still fail closed if lane approval, execution-scope token, funding readiness, venue readiness, settlement, or ghost-fill checks fail.
+
+Funding intent/status endpoints are implemented for v0, but LI.FI quote execution is feature-flagged and fails closed unless `FUNDING_LIFI_QUOTES_ENABLED=true` and venue destination config is present. Withdrawal endpoints are implemented as a DB-backed non-custodial skeleton for intent, quote preview, user-broadcast tx hash recording, and status reads. Backend v0 does not custody funds, sign wallet transactions, broadcast transactions, call live venue withdrawal APIs, or mark bridge completion as ready-to-trade.
+
+## How Funding Co-Dev Should Use This
+
+Use implemented funding schemas and endpoints for the v0 deposit, withdrawal skeleton, venue-ready balance, and status flows. Planned admin funding endpoints remain shape guidance only unless marked `x-lotus-callable: true`.
+
+The funding implementation must still follow `docs/runbooks/funding-flow-v0-handoff.md`:
+
+- LiFi route quote does not equal ready-to-trade.
+- Venue capability matrix decides target chain/token.
+- Execution preflight requires `READY_TO_TRADE`.
+- Predict.fun is not PredictIt.
+
+LiFi implementation references are documented in the funding handoff:
+
+- https://docs.li.fi/mcp-server/overview
+- https://docs.li.fi/introduction/introduction
+- https://docs.li.fi/api-reference/introduction
+- https://docs.li.fi/sdk/overview
+
+Use LiFi through a Lotus wrapper. Do not let frontend, RFQ, execution, or venue adapters call LiFi directly.
+
+## Validation
+
+OpenAPI validation command: not configured.
+
+Current repo checks:
+
+```bash
+npm run typecheck
+npm run test
+```
+
+If a validation script is added later, document it here and keep it non-mutating.

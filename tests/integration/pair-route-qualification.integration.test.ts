@@ -7,7 +7,8 @@ describe("pair route qualification", () => {
   it("evaluates pair routes with basis-aware readiness", () => {
     const qualifications = buildAllPairRouteQualifications({
       PAIR_PM_LIMITLESS: QualificationStage.INTERNAL_ONLY,
-      PAIR_PM_OPINION: QualificationStage.INTERNAL_ONLY
+      PAIR_PM_OPINION: QualificationStage.INTERNAL_ONLY,
+      PAIR_PM_PREDICTFUN: QualificationStage.INTERNAL_ONLY
     }, {
       timeBasisSummary: {
         routeabilityByBasis: [

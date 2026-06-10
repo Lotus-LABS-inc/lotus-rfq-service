@@ -137,7 +137,8 @@ export class PairRouteAdminService {
   private async getCurrentStages(): Promise<Record<PairRouteClassId, QualificationStage>> {
     const defaults: Record<PairRouteClassId, QualificationStage> = {
       PAIR_PM_LIMITLESS: QualificationStage.INTERNAL_ONLY,
-      PAIR_PM_OPINION: QualificationStage.INTERNAL_ONLY
+      PAIR_PM_OPINION: QualificationStage.INTERNAL_ONLY,
+      PAIR_PM_PREDICTFUN: QualificationStage.INTERNAL_ONLY
     };
     const events = await this.listPromotionEvents();
     for (const routeClassId of Object.keys(defaults) as PairRouteClassId[]) {

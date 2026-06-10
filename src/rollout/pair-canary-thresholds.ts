@@ -49,5 +49,21 @@ export const PairCanaryThresholds: Readonly<Record<PairRouteClassId, PairCanaryT
     maximumReplayProtectionIncidentCount: 0,
     maximumReconciliationIncidentCount: 0,
     maximumVenueHealthFailureRate: 0.02
+  },
+  PAIR_PM_PREDICTFUN: {
+    minimumExactSafeObservations: 3,
+    minimumFamilyCoverageCount: 1,
+    minimumConfidenceStability: 0.9,
+    minimumCompatibilityStability: 0.9,
+    minimumBasisCleanlinessRate: 0.95,
+    maximumStaleDataRate: 0.05,
+    maximumMixedBasisRate: 0,
+    maximumOperatorOverrideRate: 0.05,
+    maximumPolicyBlockRate: 0.1,
+    minimumExpectedNetExecutionImprovement: 0.005,
+    maximumExecutionBoundaryIncidentCount: 0,
+    maximumReplayProtectionIncidentCount: 0,
+    maximumReconciliationIncidentCount: 0,
+    maximumVenueHealthFailureRate: 0.05
   }
 } as const;

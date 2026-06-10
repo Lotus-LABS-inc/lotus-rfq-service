@@ -1,6 +1,6 @@
 import { QualificationStage } from "../core/qualification/qualification.types.js";
 
-export type PairRouteClassId = "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION";
+export type PairRouteClassId = "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION" | "PAIR_PM_PREDICTFUN";
 export type PairRouteBasisMode = "HISTORICAL_ONLY" | "LIVE_ONLY" | "MIXED_BASIS_DIAGNOSTIC";
 export type PairRouteReadinessState =
   | "NOT_READY"
@@ -11,7 +11,7 @@ export type PairRouteReadinessState =
 
 export interface PairRouteClassDefinition {
   id: PairRouteClassId;
-  routeMode: "POLYMARKET_LIMITLESS" | "POLYMARKET_OPINION";
+  routeMode: "POLYMARKET_LIMITLESS" | "POLYMARKET_OPINION" | "POLYMARKET_PREDICT_FUN";
   label: string;
   supportedBasisModes: readonly PairRouteBasisMode[];
   allowedCategories: readonly string[];
@@ -82,6 +82,37 @@ export const PairRouteClassDefinitions: readonly PairRouteClassDefinition[] = [
     operatorNotes: [
       "Use the exact BTC slice as the initial shadow target.",
       "Do not treat broader PM+Opinion near-exact families as canary-eligible."
+    ]
+  }
+  ,
+  {
+    id: "PAIR_PM_PREDICTFUN",
+    routeMode: "POLYMARKET_PREDICT_FUN",
+    label: "Polymarket + Predict.fun Pair Route",
+    supportedBasisModes: ["HISTORICAL_ONLY", "LIVE_ONLY", "MIXED_BASIS_DIAGNOSTIC"],
+    allowedCategories: ["CRYPTO", "POLITICS", "SPORTS"],
+    shadowAllowedFamilies: [
+      "CRYPTO:ATH_BY_DATE",
+      "CRYPTO:SAME_DAY_DIRECTIONAL",
+      "POLITICS:NOMINATION_WINNER"
+    ],
+    canaryAllowedFamilies: [
+      "CRYPTO:ATH_BY_DATE"
+    ],
+    blockedFamilies: [
+      "CRYPTO:THRESHOLD_BY_DATE",
+      "SPORTS:MATCHUP_WINNER",
+      "ESPORTS:*"
+    ],
+    qualificationStatus: "EVIDENCE_GATED",
+    rolloutStatus: QualificationStage.INTERNAL_ONLY,
+    knownLimitations: [
+      "Predict.fun and Polymarket market structure may diverge on resolution timing.",
+      "PREDICT_FUN venue is aliased as PREDICT in catalog — normalise before edge lookup."
+    ],
+    operatorNotes: [
+      "Review PREDICT_FUN pair edges in /admin/pair-match-review before enabling this route class.",
+      "Confirm PREDICT_FUN venue readiness in /admin/execution-venues before canary."
     ]
   }
 ] as const;

@@ -7,7 +7,7 @@ import { writeArtifact, writeMarkdownArtifact } from "./shared.js";
 export interface PairShadowRuntimeCollectionSummary {
   observedAt: string;
   routes: readonly {
-    routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION";
+    routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION" | "PAIR_PM_PREDICTFUN";
     runtimeObservationCount: number;
     runtimeExactSafeObservationCount: number;
     runtimeShadowOnlyObservationCount: number;

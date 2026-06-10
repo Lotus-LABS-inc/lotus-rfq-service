@@ -35,8 +35,8 @@ export interface PairShadowMetricsWindow {
 }
 
 export interface PairRouteShadowEvidence {
-  routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION";
-  routeMode: "POLYMARKET_LIMITLESS" | "POLYMARKET_OPINION";
+  routeClass: "PAIR_PM_LIMITLESS" | "PAIR_PM_OPINION" | "PAIR_PM_PREDICTFUN";
+  routeMode: "POLYMARKET_LIMITLESS" | "POLYMARKET_OPINION" | "POLYMARKET_PREDICT_FUN";
   currentStage: string;
   window: PairShadowMetricsWindow;
   routeOverall: PairShadowMetricSlice;
