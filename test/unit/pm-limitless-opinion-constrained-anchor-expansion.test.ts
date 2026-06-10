@@ -118,6 +118,7 @@ describe("buildOpinionConstrainedAnchorSeedsFromInputs", () => {
           historicalQualified: false,
           compatibilityDecisionClass: null,
           blockReason: null,
+          failedDimensions: [],
           baseConfidence: 0.5,
           finalConfidence: 0.5,
           semanticValidation: {},

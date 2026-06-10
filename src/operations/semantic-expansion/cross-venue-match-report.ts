@@ -214,6 +214,7 @@ const toMatchEntry = (
     blockReason:
       matchClass === "blocked_by_compatibility" ? "blocked_by_compatibility"
       : validation.confidenceCapReason ?? raw.comparison.primaryFailureReason,
+    failedDimensions: raw.comparison.failedDimensions,
     baseConfidence: validation.baseConfidence,
     finalConfidence: validation.finalConfidence,
     semanticValidation: validation,
@@ -283,6 +284,11 @@ export const buildPromotionCandidates = (
         })
       );
       const canonicalIds = buildStablePromotionIds(memberRefs);
+      const eventTitle =
+        [...memberRefs]
+          .sort((left, right) => right.historicalRowCount - left.historicalRowCount)[0]?.title
+        ?? memberRefs[0]?.title
+        ?? canonicalIds.promotionId;
       const matchingRows = memberRefs
         .map((entry) => inventoryByKey.get(`${entry.venue}:${entry.venueMarketId}`))
         .filter((row): row is SemanticExpansionInventoryRow => row !== undefined);
@@ -295,6 +301,7 @@ export const buildPromotionCandidates = (
 
       return {
         promotionId: canonicalIds.promotionId,
+        eventTitle,
         category: matchingRows[0]?.semanticCategory ?? "OTHER",
         promotionClass: matchingRows.every((row) => row.historicalRowCount > 0)
           ? "historical_qualified_exact_overlap"

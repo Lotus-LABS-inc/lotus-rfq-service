@@ -150,6 +150,7 @@ describe("buildPairFamilyExactnessReportFromInputs", () => {
           historicalQualified: false,
           compatibilityDecisionClass: null,
           blockReason: null,
+          failedDimensions: [],
           baseConfidence: 0.7,
           finalConfidence: 0.92,
           semanticValidation: {
