@@ -74,6 +74,7 @@ describe("buildSemanticRulepackSuggestions", () => {
           historicalQualified: false,
           compatibilityDecisionClass: null,
           blockReason: "semantic_ambiguity",
+          failedDimensions: [],
           baseConfidence: 0.55,
           finalConfidence: 0.6,
           semanticValidation: {
@@ -115,6 +116,7 @@ describe("buildSemanticRulepackSuggestions", () => {
           historicalQualified: false,
           compatibilityDecisionClass: null,
           blockReason: "semantic_ambiguity",
+          failedDimensions: [],
           baseConfidence: 0.55,
           finalConfidence: 0.6,
           semanticValidation: {

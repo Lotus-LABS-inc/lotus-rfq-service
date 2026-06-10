@@ -90,6 +90,7 @@ const buildMatch = (
   historicalQualified: matchClass === "semantic_exact_historical_qualified",
   compatibilityDecisionClass: null,
   blockReason: null,
+  failedDimensions: [],
   baseConfidence: 0.6,
   finalConfidence: 0.8,
   semanticValidation: {},

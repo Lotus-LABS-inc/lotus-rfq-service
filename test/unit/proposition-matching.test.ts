@@ -200,6 +200,89 @@ describe("proposition-matching", () => {
     expect(downgraded.failedDimensions).toContain("timeBoundaryMatch");
   });
 
+  it("pools the same politics proposition across venues and downgrades different subjects", () => {
+    const seed = parseStructuredProposition({
+      category: "POLITICS",
+      title: "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
+      rules: "Resolves YES if Gavin Newsom becomes the 2028 Democratic nominee.",
+      yesLabel: "Yes",
+      noLabel: "No"
+    });
+    const sameAcrossVenue = parseStructuredProposition({
+      category: "POLITICS",
+      title: "Gavin Newsom to win the Democratic presidential nomination?",
+      rules: "Resolves YES if Gavin Newsom wins the 2028 Democratic nominee contest.",
+      yesLabel: "Yes",
+      noLabel: "No"
+    });
+    const differentSubject = parseStructuredProposition({
+      category: "POLITICS",
+      title: "Will Jon Ossoff win the Democratic presidential nomination?",
+      rules: "Resolves YES if Jon Ossoff wins the 2028 Democratic nominee contest.",
+      yesLabel: "Yes",
+      noLabel: "No"
+    });
+
+    expect(compareStructuredPropositions({
+      seed,
+      candidate: sameAcrossVenue,
+      historyQualified: true,
+      requireHistoricalQualification: true
+    }).classification).toBe("semantic_exact_historical_qualified");
+
+    expect(compareStructuredPropositions({
+      seed,
+      candidate: differentSubject,
+      historyQualified: true,
+      requireHistoricalQualification: true
+    }).failedDimensions).toContain("subjectEntityMatch");
+  });
+
+  it("pools the same sports and esports propositions across venues", () => {
+    const sportsSeed = parseStructuredProposition({
+      category: "SPORTS",
+      title: "Will the Oklahoma City Thunder win the NBA Finals?",
+      rules: "Resolves YES if the Oklahoma City Thunder win the NBA Finals.",
+      yesLabel: "Yes",
+      noLabel: "No"
+    });
+    const sportsAcrossVenue = parseStructuredProposition({
+      category: "SPORTS",
+      title: "OKC Thunder to win the NBA Finals?",
+      rules: "Resolves YES if Oklahoma City Thunder wins the NBA Finals.",
+      yesLabel: "Yes",
+      noLabel: "No"
+    });
+    const esportsSeed = parseStructuredProposition({
+      category: "ESPORTS",
+      title: "Will Gen.G win the LCK 2026 playoffs?",
+      rules: "Resolves YES if Gen.G Esports wins the LCK 2026 season playoffs.",
+      yesLabel: "Yes",
+      noLabel: "No"
+    });
+    const esportsAcrossVenue = parseStructuredProposition({
+      category: "ESPORTS",
+      title: "Gen.G Esports to win the LCK 2026 season playoffs?",
+      rules: "Resolves YES if Gen.G wins the LCK 2026 season playoffs.",
+      yesLabel: "Yes",
+      noLabel: "No"
+    });
+
+    expect(compareStructuredPropositions({
+      seed: sportsSeed,
+      candidate: sportsAcrossVenue,
+      historyQualified: true,
+      requireHistoricalQualification: true
+    }).classification).toBe("semantic_exact_historical_qualified");
+
+    expect(compareStructuredPropositions({
+      seed: esportsSeed,
+      candidate: esportsAcrossVenue,
+      historyQualified: true,
+      requireHistoricalQualification: true
+    }).classification).toBe("semantic_exact_historical_qualified");
+  });
+
   it("infers missing year for month-day titles from boundary reference time", () => {
     const parsed = parseStructuredProposition({
       category: "CRYPTO",

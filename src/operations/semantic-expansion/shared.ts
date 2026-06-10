@@ -97,6 +97,7 @@ export interface CrossVenueReportMatchEntry {
   historicalQualified: boolean;
   compatibilityDecisionClass: CompatibilityClass | null;
   blockReason: string | null;
+  failedDimensions: readonly string[];
   baseConfidence: number;
   finalConfidence: number;
   semanticValidation: Record<string, unknown>;
@@ -115,6 +116,7 @@ export interface SemanticExpansionMatchRef {
 
 export interface SemanticPromotionCandidate {
   promotionId: string;
+  eventTitle: string;
   category: SemanticDiscoveryCategory;
   promotionClass: "historical_qualified_exact_overlap" | "live_only_exact_overlap";
   targetMode: "existing_market_extension" | "new_exact_overlap";

@@ -239,11 +239,18 @@ export const syncSemanticExactOverlaps = async (input: {
   repoRoot: string;
   pool: Pool;
   reportPath?: string;
+  // When set, only promote candidates whose promotionId is in this list. Used by the
+  // operator-gated approve flow to promote a single reviewed candidate. Omit to promote all.
+  promotionIds?: readonly string[];
 }): Promise<SemanticExactSyncSummary> => {
   const report = readArtifact<CrossVenueMatchReport>(
     input.repoRoot,
     input.reportPath ?? "docs/cross-venue-match-report.json"
   );
+  const promotionIdFilter = input.promotionIds ? new Set(input.promotionIds) : null;
+  const candidates = promotionIdFilter
+    ? report.promotionCandidates.filter((candidate) => promotionIdFilter.has(candidate.promotionId))
+    : report.promotionCandidates;
   const inventory = await loadSemanticExpansionInventory(input.pool);
   const inventoryByKey = new Map(
     inventory.map((row) => [`${row.venue}:${row.venueMarketId}`, row] as const)
@@ -287,7 +294,7 @@ export const syncSemanticExactOverlaps = async (input: {
     }>;
   }> = [];
 
-  for (const candidate of report.promotionCandidates) {
+  for (const candidate of candidates) {
     const memberRows = candidate.memberRefs
       .map((member) => inventoryByKey.get(`${member.venue}:${member.venueMarketId}`))
       .filter((row): row is SemanticExpansionInventoryRow => row !== undefined);
@@ -367,7 +374,7 @@ export const syncSemanticExactOverlaps = async (input: {
 
   const summary: SemanticExactSyncSummary = {
     observedAt: new Date().toISOString(),
-    processedPromotionCandidates: report.promotionCandidates.length,
+    processedPromotionCandidates: candidates.length,
     promotedHistoricalQualified,
     promotedLiveOnly,
     remappedHistoricalRows,

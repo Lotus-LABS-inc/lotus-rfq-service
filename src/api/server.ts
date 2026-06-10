@@ -83,6 +83,7 @@ import { ReplayAdminService } from "./admin/replay-admin-service.js";
 import { registerAdminCompatibilityReviewRoutes } from "./admin/compatibility-review.routes.js";
 import { registerAdminPairMatchReviewRoutes } from "./admin/pair-match-review.routes.js";
 import { registerAdminTriMatchReviewRoutes } from "./admin/tri-match-review.routes.js";
+import { registerAdminMarketMatchingRoutes } from "./admin/market-matching.routes.js";
 import { registerAdminExecutionControlRoutes } from "./admin/execution-control.routes.js";
 import { registerAdminQualificationRoutes } from "./admin/qualification.routes.js";
 import { QualificationAdminService, createDefaultPromotionGateConfig } from "./admin/qualification-admin-service.js";
@@ -250,6 +251,7 @@ import { PairEdgeRepository } from "../repositories/pair-edge.repository.js";
 import { CompatibilityOverrideService } from "../canonical/compatibility-override-service.js";
 import { PairMatchReviewService } from "./admin/pair-match-review-service.js";
 import { TriMatchReviewService } from "./admin/tri-match-review-service.js";
+import { MarketMatchingService } from "./admin/market-matching-service.js";
 import { RouteSelectionTraceWriter } from "../routing/route-selection-trace.js";
 import { FailureRecoveryManager } from "../execution/failure-recovery-manager.js";
 import { ExecutionPolicyValidator } from "../execution-control/execution-policy-validator.js";
@@ -3237,6 +3239,9 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   });
   await registerAdminTriMatchReviewRoutes(app, adminAuthMiddleware, {
     triMatchReviewService: new TriMatchReviewService(new PairEdgeRepository(dependencies.pgPool))
+  });
+  await registerAdminMarketMatchingRoutes(app, adminAuthMiddleware, {
+    marketMatchingService: new MarketMatchingService(dependencies.pgPool)
   });
   await registerAdminExecutionControlRoutes(app, adminAuthMiddleware, {
     executionIntentRepository,
