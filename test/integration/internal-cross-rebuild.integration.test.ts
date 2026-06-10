@@ -49,7 +49,7 @@ const applyMigrations = async (pool: Pool): Promise<void> => {
         } catch (error) {
           const code = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
           const message = error instanceof Error ? error.message : "";
-          if (code === "42P07" || code === "42710") break;
+          if (code === "42P07" || code === "42710" || code === "42701" || code === "42P06" || code === "42723") break;
           attempts += 1;
           if (!message.includes("ECONNRESET") || attempts >= 3) {
             throw error;

@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { writePairCanaryReadinessArtifacts } from "../../src/operations/semantic-expansion/pair-canary-readiness-summary.js";
+import { readArtifact } from "../../src/operations/semantic-expansion/shared.js";
 import type { PairRouteShadowEvidence } from "../../src/shadow/pair-shadow-metrics.js";
 import type { PairCanaryReadiness } from "../../src/rollout/pair-canary-readiness-evaluator.js";
 import { getPairRouteClassDefinition } from "../../src/rollout/pair-route-classes.js";
@@ -184,9 +185,10 @@ describe("pair promotion evidence artifacts", () => {
 
     await writePairCanaryReadinessArtifacts(repoRoot, adminService);
 
-    const readinessJson = JSON.parse(
-      readFileSync(path.resolve(repoRoot, "docs/pair-canary-readiness-summary.json"), "utf8")
-    ) as { routes: Array<{ routeClass: string; canaryReadiness: { recommendation: string } }> };
+    const readinessJson = readArtifact<{ routes: Array<{ routeClass: string; canaryReadiness: { recommendation: string } }> }>(
+      repoRoot,
+      "docs/pair-canary-readiness-summary.json"
+    );
     const checklist = readFileSync(path.resolve(repoRoot, "docs/delivery/pair-first-production-checklist.md"), "utf8");
 
     expect(readinessJson.routes).toHaveLength(2);

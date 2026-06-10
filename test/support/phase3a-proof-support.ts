@@ -121,7 +121,7 @@ const migrationPriority = (filename: string): number => {
 
 const isSkippableMigrationError = (error: unknown): boolean => {
   const code = error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined;
-  return code === "42P07" || code === "42710" || code === "42701";
+  return code === "42P07" || code === "42710" || code === "42701" || code === "42P06" || code === "42723" || code === "42701";
 };
 
 const listMigrationFiles = async (
