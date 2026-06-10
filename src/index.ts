@@ -179,45 +179,6 @@ const isTransientRedisStartupError = (error: unknown): boolean => {
   );
 };
 
-const isProductionDeploy = (env: EnvConfig): boolean =>
-  [env.LOTUS_DEPLOY_ENV, env.LOTUS_ENV, env.APP_ENV].some((value) =>
-    typeof value === "string" && ["prod", "production"].includes(value.trim().toLowerCase())
-  );
-
-const localDatabaseHosts = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
-
-const databaseHost = (databaseUrl: string): string => {
-  try {
-    return new URL(databaseUrl).hostname.toLowerCase();
-  } catch {
-    return "";
-  }
-};
-
-const isSupabaseDatabaseHost = (host: string): boolean =>
-  host === "supabase.com" || host.endsWith(".supabase.com") || host.includes(".supabase.co");
-
-export const validateDatabaseTargetSafety = (env: EnvConfig): void => {
-  if (!isProductionDeploy(env)) {
-    return;
-  }
-
-  const databaseHostName = databaseHost(env.DATABASE_URL);
-  const supabaseHostName = env.SUPABASE_DB_URL ? databaseHost(env.SUPABASE_DB_URL) : "";
-
-  if (!env.SUPABASE_DB_URL) {
-    throw new Error("Production deploy requires SUPABASE_DB_URL so prod cannot silently fall back to VPS-local Postgres.");
-  }
-
-  if (localDatabaseHosts.has(databaseHostName) || localDatabaseHosts.has(supabaseHostName)) {
-    throw new Error("Production deploy database URLs must not point at localhost/VPS-local Postgres.");
-  }
-
-  if (!isSupabaseDatabaseHost(databaseHostName) || !isSupabaseDatabaseHost(supabaseHostName)) {
-    throw new Error("Production deploy DATABASE_URL and SUPABASE_DB_URL must point at Supabase Postgres hosts.");
-  }
-};
-
 export const startService = async (
   modules: Partial<BootstrapModules> = {}
 ): Promise<ServiceRuntime> => {
@@ -226,7 +187,6 @@ export const startService = async (
 
   const env = impl.loadEnv();
   const logger = impl.createLogger(env.LOG_LEVEL);
-  validateDatabaseTargetSafety(env);
   const runtimeMode: RuntimeMode = shouldRunWorkerEntrypoint({ LOTUS_SERVICE_MODE: env.LOTUS_SERVICE_MODE })
     ? "worker"
     : "api";

@@ -10,7 +10,6 @@ import {
   WORKER_SERVICE_MODE,
   shouldRunPolymarketRelayEntrypoint,
   shouldRunWorkerEntrypoint,
-  validateDatabaseTargetSafety,
   startService
 } from "../src/index.js";
 import { loadEnv } from "../src/utils/env.js";
@@ -268,44 +267,6 @@ describe("bootstrap lifecycle", () => {
     ).toBe(false);
 
     expect(shouldRunWorkerEntrypoint({})).toBe(false);
-  });
-
-  it("rejects production deploys that point at local Postgres", () => {
-    expect(() =>
-      validateDatabaseTargetSafety(createRuntimeEnv({
-        LOTUS_DEPLOY_ENV: "prod",
-        DATABASE_URL: "postgres://postgres:postgres@localhost:5432/lotus_prod",
-        SUPABASE_DB_URL: "postgres://postgres:postgres@db.supabase.example:5432/postgres"
-      }))
-    ).toThrow(/must not point at localhost/);
-  });
-
-  it("requires a Supabase DB URL for production deploys", () => {
-    expect(() =>
-      validateDatabaseTargetSafety(createRuntimeEnv({
-        LOTUS_DEPLOY_ENV: "prod",
-        DATABASE_URL: "postgres://postgres:postgres@db.supabase.example:5432/postgres",
-        SUPABASE_DB_URL: undefined
-      }))
-    ).toThrow(/requires SUPABASE_DB_URL/);
-  });
-
-  it("requires production database URLs to target Supabase hosts", () => {
-    expect(() =>
-      validateDatabaseTargetSafety(createRuntimeEnv({
-        LOTUS_DEPLOY_ENV: "prod",
-        DATABASE_URL: "postgres://postgres:postgres@db.internal.example:5432/postgres",
-        SUPABASE_DB_URL: "postgres://postgres:postgres@db.supabase.example:5432/postgres"
-      }))
-    ).toThrow(/must point at Supabase Postgres hosts/);
-
-    expect(() =>
-      validateDatabaseTargetSafety(createRuntimeEnv({
-        LOTUS_DEPLOY_ENV: "prod",
-        DATABASE_URL: "postgres://postgres:postgres@aws-0-us-east-1.pooler.supabase.com:6543/postgres",
-        SUPABASE_DB_URL: "postgres://postgres:postgres@db.project.supabase.co:5432/postgres"
-      }))
-    ).not.toThrow();
   });
 
   it("initializes dependencies in expected order", async () => {
