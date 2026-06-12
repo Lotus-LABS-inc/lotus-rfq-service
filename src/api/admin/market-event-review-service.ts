@@ -64,12 +64,15 @@ export interface EventReviewOutcome {
 export interface EventReviewSummary {
   eventKey: string;
   eventTitle: string;
+  canonicalFixtureEventId: string | null;
+  fixtureTitle: string | null;
   category: string;
   venues: string[];
   outcomeCount: number;
   statusRollup: { live: number; paused: number; pending: number; disabled: number };
-  // Outcomes not present on every venue the event touches — i.e. likely pairing gaps to review.
   gapOutcomeCount: number;
+  resolvesAt: string | null;
+  expiresAt: string | null;
 }
 
 export interface EventReviewVenueRulesPanel {
@@ -97,8 +100,12 @@ interface OutcomeAccumulator {
 interface EventAccumulator {
   eventKey: string;
   eventTitle: string;
+  canonicalFixtureEventId: string | null;
+  fixtureTitle: string | null;
   category: string;
   outcomes: Map<string, OutcomeAccumulator>;
+  resolvesAt: string | null;
+  expiresAt: string | null;
 }
 
 const stripSourcePrefix = (propositionKey: string): string => {
@@ -173,8 +180,12 @@ export class MarketEventReviewService {
       const event = events.get(identity.eventKey) ?? {
         eventKey: identity.eventKey,
         eventTitle: identity.eventTitle,
+        canonicalFixtureEventId: row.canonicalFixtureEventId,
+        fixtureTitle: row.fixtureTitle,
         category: row.category,
-        outcomes: new Map<string, OutcomeAccumulator>()
+        outcomes: new Map<string, OutcomeAccumulator>(),
+        resolvesAt: row.resolvesAt,
+        expiresAt: row.expiresAt
       };
       const acc = event.outcomes.get(outcome.outcomeKey) ?? {
         outcomeKey: outcome.outcomeKey,
@@ -221,11 +232,15 @@ export class MarketEventReviewService {
     return {
       eventKey: event.eventKey,
       eventTitle: event.eventTitle,
+      canonicalFixtureEventId: event.canonicalFixtureEventId,
+      fixtureTitle: event.fixtureTitle,
       category: event.category,
       venues: [...eventVenues].sort(),
       outcomeCount: event.outcomes.size,
       statusRollup,
-      gapOutcomeCount
+      gapOutcomeCount,
+      resolvesAt: event.resolvesAt,
+      expiresAt: event.expiresAt
     };
   }
 

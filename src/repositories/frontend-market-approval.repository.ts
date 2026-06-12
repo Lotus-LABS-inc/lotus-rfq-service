@@ -6,15 +6,17 @@ import type { Pool } from "pg";
 export const FRONTEND_CURATED_CATALOG_SOURCE = "frontend-curated-catalog";
 
 // DB-level statuses on frontend_market_approvals. "PENDING" is synthetic: it means no
-// approval row exists yet for the event.
+// approval row exists yet for the event. "CLOSED" is derived at query time when
+// canonical_events.resolves_at < NOW() — it is never written to the DB.
 export type FrontendApprovalDbStatus = "APPROVED" | "HIDDEN" | "DISABLED" | "PENDING";
+export type FrontendApprovalStatus = FrontendApprovalDbStatus | "CLOSED";
 
 export interface AdminCatalogEventRow {
   canonicalEventId: string;
   title: string;
   propositionKey: string;
   category: string;
-  status: FrontendApprovalDbStatus;
+  status: FrontendApprovalStatus;
   displayTitle: string | null;
   sortPriority: number | null;
   approvedBy: string | null;
@@ -30,7 +32,7 @@ export interface AdminCatalogEventRow {
 }
 
 export interface AdminCatalogListFilter {
-  status?: FrontendApprovalDbStatus | undefined;
+  status?: FrontendApprovalStatus | undefined;
   category?: string | undefined;
   search?: string | undefined;
   limit?: number | undefined;
@@ -42,7 +44,7 @@ interface CatalogRow {
   title: string;
   proposition_key: string;
   category: string;
-  status: FrontendApprovalDbStatus;
+  status: FrontendApprovalStatus;
   display_title: string | null;
   sort_priority: number | null;
   approved_by: string | null;
@@ -117,9 +119,14 @@ export class FrontendMarketApprovalRepository {
       OR EXISTS (SELECT 1 FROM canonical_executable_markets cem2 WHERE cem2.canonical_event_id = ce.id)
     )`);
 
-    if (filter.status) {
+    if (filter.status === "CLOSED") {
+      conditions.push(`(ce.resolves_at IS NOT NULL AND ce.resolves_at < NOW())`);
+    } else if (filter.status) {
       params.push(filter.status);
-      conditions.push(`COALESCE(fma.status, 'PENDING') = $${params.length}`);
+      conditions.push(`(ce.resolves_at IS NULL OR ce.resolves_at >= NOW()) AND COALESCE(fma.status, 'PENDING') = $${params.length}`);
+    } else {
+      // Default: exclude closed markets so they don't clutter other tabs.
+      conditions.push(`(ce.resolves_at IS NULL OR ce.resolves_at >= NOW())`);
     }
     if (filter.category?.trim()) {
       params.push(filter.category.trim().toUpperCase());
@@ -142,7 +149,10 @@ export class FrontendMarketApprovalRepository {
           ce.title,
           ce.proposition_key,
           ce.canonical_category AS category,
-          COALESCE(fma.status, 'PENDING') AS status,
+          CASE
+            WHEN ce.resolves_at IS NOT NULL AND ce.resolves_at < NOW() THEN 'CLOSED'
+            ELSE COALESCE(fma.status, 'PENDING')
+          END AS status,
           fma.display_title,
           fma.sort_priority,
           fma.approved_by,
@@ -170,16 +180,21 @@ export class FrontendMarketApprovalRepository {
     return result.rows.map(toEvent);
   }
 
-  public async getStatusCounts(): Promise<Record<FrontendApprovalDbStatus, number>> {
-    const result = await this.pool.query<{ status: FrontendApprovalDbStatus; count: string }>(
-      `SELECT COALESCE(fma.status, 'PENDING') AS status, COUNT(*)::text AS count
+  public async getStatusCounts(): Promise<Record<FrontendApprovalStatus, number>> {
+    const result = await this.pool.query<{ status: FrontendApprovalStatus; count: string }>(
+      `SELECT
+          CASE
+            WHEN ce.resolves_at IS NOT NULL AND ce.resolves_at < NOW() THEN 'CLOSED'
+            ELSE COALESCE(fma.status, 'PENDING')
+          END AS status,
+          COUNT(*)::text AS count
          FROM canonical_events ce
          LEFT JOIN frontend_market_approvals fma ON fma.canonical_event_id = ce.id
         WHERE EXISTS (SELECT 1 FROM venue_market_profiles vmp WHERE vmp.canonical_event_id = ce.id)
            OR EXISTS (SELECT 1 FROM canonical_executable_markets cem WHERE cem.canonical_event_id = ce.id)
-        GROUP BY COALESCE(fma.status, 'PENDING')`
+        GROUP BY 1`
     );
-    const counts: Record<FrontendApprovalDbStatus, number> = { APPROVED: 0, HIDDEN: 0, DISABLED: 0, PENDING: 0 };
+    const counts: Record<FrontendApprovalStatus, number> = { APPROVED: 0, HIDDEN: 0, DISABLED: 0, PENDING: 0, CLOSED: 0 };
     for (const row of result.rows) {
       counts[row.status] = Number(row.count);
     }
@@ -193,7 +208,10 @@ export class FrontendMarketApprovalRepository {
           ce.title,
           ce.proposition_key,
           ce.canonical_category AS category,
-          COALESCE(fma.status, 'PENDING') AS status,
+          CASE
+            WHEN ce.resolves_at IS NOT NULL AND ce.resolves_at < NOW() THEN 'CLOSED'
+            ELSE COALESCE(fma.status, 'PENDING')
+          END AS status,
           fma.display_title,
           fma.sort_priority,
           fma.approved_by,

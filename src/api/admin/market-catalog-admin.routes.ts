@@ -34,7 +34,7 @@ const createMarketBodySchema = z.object({
 });
 
 const listQuerySchema = z.object({
-  status: z.enum(["LIVE", "PAUSED", "DISABLED", "PENDING"]).optional(),
+  status: z.enum(["LIVE", "PAUSED", "DISABLED", "PENDING", "CLOSED"]).optional(),
   category: z.string().min(1).optional(),
   search: z.string().min(1).optional(),
   limit: z.coerce.number().int().positive().max(200).optional(),

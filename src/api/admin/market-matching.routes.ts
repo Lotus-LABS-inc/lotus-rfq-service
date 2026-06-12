@@ -26,7 +26,8 @@ const acceptEventBodySchema = z.object({
 const eventListQuerySchema = z.object({
   status: z.enum(["LIVE", "PAUSED", "DISABLED", "PENDING"]).optional(),
   category: z.string().min(1).optional(),
-  search: z.string().min(1).optional()
+  search: z.string().min(1).optional(),
+  includeExpired: z.enum(["true", "false"]).optional()
 });
 
 const eventParamsSchema = z.object({ eventKey: z.string().min(1) });
@@ -73,7 +74,8 @@ export const registerAdminMarketMatchingRoutes = async (
       const result = await deps.marketEventReviewService.listEvents({
         status: parsed.data.status ? FRIENDLY_TO_DB[parsed.data.status] : undefined,
         category: parsed.data.category,
-        search: parsed.data.search
+        search: parsed.data.search,
+        includeExpired: parsed.data.includeExpired === "true"
       });
       return reply.send(result);
     } catch (error) {

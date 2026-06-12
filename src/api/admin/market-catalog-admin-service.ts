@@ -1,7 +1,7 @@
 import {
   FrontendMarketApprovalRepository,
   type AdminCatalogEventRow,
-  type FrontendApprovalDbStatus
+  type FrontendApprovalStatus
 } from "../../repositories/frontend-market-approval.repository.js";
 
 export class MarketCatalogAdminServiceError extends Error {
@@ -12,17 +12,19 @@ export class MarketCatalogAdminServiceError extends Error {
 }
 
 // Operator-facing status labels. LIVE = visible to users; PAUSED = temporarily hidden;
-// DISABLED = explicitly turned off; PENDING = no approval decision yet.
-export type MarketCatalogStatus = "LIVE" | "PAUSED" | "DISABLED" | "PENDING";
+// DISABLED = explicitly turned off; PENDING = no approval decision yet;
+// CLOSED = past resolves_at (derived, never written to DB).
+export type MarketCatalogStatus = "LIVE" | "PAUSED" | "DISABLED" | "PENDING" | "CLOSED";
 
-const DB_TO_FRIENDLY: Record<FrontendApprovalDbStatus, MarketCatalogStatus> = {
+const DB_TO_FRIENDLY: Record<FrontendApprovalStatus, MarketCatalogStatus> = {
   APPROVED: "LIVE",
   HIDDEN: "PAUSED",
   DISABLED: "DISABLED",
-  PENDING: "PENDING"
+  PENDING: "PENDING",
+  CLOSED: "CLOSED"
 };
 
-const FRIENDLY_TO_DB: Record<MarketCatalogStatus, FrontendApprovalDbStatus> = {
+const FRIENDLY_TO_DB: Record<Exclude<MarketCatalogStatus, "CLOSED">, FrontendApprovalStatus> = {
   LIVE: "APPROVED",
   PAUSED: "HIDDEN",
   DISABLED: "DISABLED",
@@ -55,10 +57,12 @@ export interface MarketCatalogAdminSummary {
   paused: number;
   pending: number;
   disabled: number;
+  closed: number;
 }
 
 export interface MarketCatalogListInput {
   status?: MarketCatalogStatus | undefined;
+  // CLOSED is a read-only derived status — passing it lists expired events.
   category?: string | undefined;
   search?: string | undefined;
   limit?: number | undefined;
@@ -94,8 +98,11 @@ export class MarketCatalogAdminService {
   constructor(private readonly repository: FrontendMarketApprovalRepository) {}
 
   async listEvents(input: MarketCatalogListInput = {}): Promise<{ events: MarketCatalogAdminEvent[] }> {
+    const dbStatus = input.status
+      ? (input.status === "CLOSED" ? "CLOSED" : FRIENDLY_TO_DB[input.status])
+      : undefined;
     const rows = await this.repository.listEventCatalog({
-      status: input.status ? FRIENDLY_TO_DB[input.status] : undefined,
+      status: dbStatus,
       category: input.category,
       search: input.search,
       limit: input.limit,
@@ -107,11 +114,12 @@ export class MarketCatalogAdminService {
   async getSummary(): Promise<MarketCatalogAdminSummary> {
     const counts = await this.repository.getStatusCounts();
     return {
-      total: counts.APPROVED + counts.HIDDEN + counts.DISABLED + counts.PENDING,
+      total: counts.APPROVED + counts.HIDDEN + counts.DISABLED + counts.PENDING + counts.CLOSED,
       live: counts.APPROVED,
       paused: counts.HIDDEN,
       pending: counts.PENDING,
-      disabled: counts.DISABLED
+      disabled: counts.DISABLED,
+      closed: counts.CLOSED
     };
   }
 
