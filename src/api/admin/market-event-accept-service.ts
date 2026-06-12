@@ -32,11 +32,18 @@ export interface AcceptEventResult {
   summary: SemanticExactSyncSummary | null;
 }
 
+const normalizeVenue = (venue: string): string => (venue === "PREDICT" ? "PREDICT_FUN" : venue);
+
 /**
- * Event-level accept (B1, Option A — exact path). Pools the event's exact-overlap candidates
- * from the current match report into the canonical graph, reusing the proven, promotionId-scoped
- * sync. Near-exact override pooling is intentionally not handled here yet (it mutates the graph on
- * operator assertion and is validated separately). Requires ADMIN+2FA at the route layer.
+ * Event-level accept (B1). Pools the event's EXACT-overlap candidates from the current match
+ * report into the canonical graph via the proven promotionId-scoped sync.
+ *
+ * Near-exact override-pooling is deliberately NOT implemented: a read-only validation showed the
+ * matcher's per-dimension flags are not reliable enough to gate parameter safety (it cleared a
+ * BTC-ATH Dec-31 vs Jun-30 pair on timeBoundaryMatch), so auto-pooling near-exacts on those flags
+ * could merge genuinely different markets. Near-exact candidates are surfaced read-only on the
+ * event detail for operators to review and decline; new cross-venue pools go through the exact
+ * path. Requires ADMIN+2FA at the route layer.
  */
 export class MarketEventAcceptService {
   constructor(
@@ -55,7 +62,6 @@ export class MarketEventAcceptService {
       );
     }
 
-    // Resolve the event grouping key for every canonical event referenced by a promotion candidate.
     const eventIds = new Set<string>();
     for (const candidate of report.promotionCandidates) {
       for (const member of candidate.memberRefs) {
@@ -70,16 +76,17 @@ export class MarketEventAcceptService {
         : `event:raw:${canonicalEventId}`;
     };
 
-    const venueFilter = input.venues && input.venues.length > 0 ? new Set(input.venues) : null;
+    const venueFilter = input.venues && input.venues.length > 0
+      ? new Set(input.venues.map(normalizeVenue))
+      : null;
 
     const promotionIds: string[] = [];
     for (const candidate of report.promotionCandidates) {
-      const memberEventKeys = candidate.memberRefs.map((member) => eventKeyOf(member.canonicalEventId));
-      const belongsToEvent = memberEventKeys.some((key) => key === input.eventKey);
-      if (!belongsToEvent) {
+      const belongs = candidate.memberRefs.some((member) => eventKeyOf(member.canonicalEventId) === input.eventKey);
+      if (!belongs) {
         continue;
       }
-      if (venueFilter && !candidate.memberRefs.every((member) => venueFilter.has(member.venue))) {
+      if (venueFilter && !candidate.memberRefs.every((member) => venueFilter.has(normalizeVenue(member.venue)))) {
         continue;
       }
       promotionIds.push(candidate.promotionId);
