@@ -971,7 +971,7 @@ const deriveEventGroup = (row: MarketRow): { eventId: string; title: string } =>
   };
 };
 
-const deriveCuratedEventGroup = (key: string): { eventId: string; title: string } | null => {
+export const deriveCuratedEventGroup = (key: string): { eventId: string; title: string } | null => {
   const parts = key.split("|").filter(Boolean);
   if (parts[0] === "NOMINEE" && parts[1] === "US_PRESIDENT" && parts[2] && parts[3]) {
     const eventKey = parts.slice(0, 4).join("|");
