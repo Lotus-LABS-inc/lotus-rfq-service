@@ -128,6 +128,9 @@ jobs:
             sudo systemctl --no-pager --full status "$service" >/dev/null
           done
 
+          sudo mkdir -p "$VPS_BACKEND_DIR/artifacts/runtime"
+          sudo chown -R "$(id -u):$(id -g)" "$VPS_BACKEND_DIR/artifacts"
+
           if [ "$DEPLOY_BRANCH" = "main" ]; then
             npm run report:vps-runtime-smoke -- production
           else
