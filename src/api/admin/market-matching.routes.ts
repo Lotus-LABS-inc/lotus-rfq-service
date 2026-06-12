@@ -2,10 +2,30 @@ import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import { z } from "zod";
 
 import { MarketMatchingService, MarketMatchingServiceError } from "./market-matching-service.js";
+import {
+  MarketEventReviewService,
+  MarketEventReviewServiceError
+} from "./market-event-review-service.js";
 
 export interface AdminMarketMatchingRouteDeps {
   marketMatchingService: MarketMatchingService;
+  marketEventReviewService: MarketEventReviewService;
 }
+
+const eventListQuerySchema = z.object({
+  status: z.enum(["LIVE", "PAUSED", "DISABLED", "PENDING"]).optional(),
+  category: z.string().min(1).optional(),
+  search: z.string().min(1).optional()
+});
+
+const eventParamsSchema = z.object({ eventKey: z.string().min(1) });
+
+const FRIENDLY_TO_DB = {
+  LIVE: "APPROVED",
+  PAUSED: "HIDDEN",
+  DISABLED: "DISABLED",
+  PENDING: "PENDING"
+} as const;
 
 const approveBodySchema = z.object({
   twoFactorToken: z.string().min(6),
@@ -32,6 +52,43 @@ export const registerAdminMarketMatchingRoutes = async (
   adminMiddleware: preHandlerHookHandler,
   deps: AdminMarketMatchingRouteDeps
 ): Promise<void> => {
+  // B1 event-centric review: list events grouped from the canonical graph (read-only).
+  app.get("/admin/market-matching/events", { preHandler: adminMiddleware }, async (request, reply) => {
+    const parsed = eventListQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: parsed.error.flatten() });
+    }
+    try {
+      const result = await deps.marketEventReviewService.listEvents({
+        status: parsed.data.status ? FRIENDLY_TO_DB[parsed.data.status] : undefined,
+        category: parsed.data.category,
+        search: parsed.data.search
+      });
+      return reply.send(result);
+    } catch (error) {
+      app.log.error({ err: error }, "Failed to list market matching events.");
+      return reply.status(500).send({ code: "MARKET_MATCHING_ERROR", message: "Failed to list market matching events." });
+    }
+  });
+
+  // B1 event detail: outcomes, per-venue presence, and rules side by side.
+  app.get("/admin/market-matching/events/:eventKey", { preHandler: adminMiddleware }, async (request, reply) => {
+    const parsed = eventParamsSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: parsed.error.flatten() });
+    }
+    try {
+      const event = await deps.marketEventReviewService.getEvent(parsed.data.eventKey);
+      return reply.send({ event });
+    } catch (error) {
+      if (error instanceof MarketEventReviewServiceError) {
+        return reply.status(404).send({ code: "MARKET_EVENT_NOT_FOUND", message: error.message });
+      }
+      app.log.error({ err: error }, "Failed to fetch market matching event.");
+      return reply.status(500).send({ code: "MARKET_MATCHING_ERROR", message: "Failed to fetch market matching event." });
+    }
+  });
+
   // Serve the last generated review queue. Read-only, cheap.
   app.get("/admin/market-matching/review-queue", { preHandler: adminMiddleware }, async (_request, reply) => {
     try {

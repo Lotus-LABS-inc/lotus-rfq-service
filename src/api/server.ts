@@ -250,6 +250,8 @@ import { CompatibilityOverrideService } from "../canonical/compatibility-overrid
 import { PairMatchReviewService } from "./admin/pair-match-review-service.js";
 import { TriMatchReviewService } from "./admin/tri-match-review-service.js";
 import { MarketMatchingService } from "./admin/market-matching-service.js";
+import { MarketEventReviewService } from "./admin/market-event-review-service.js";
+import { MarketEventReviewRepository } from "../repositories/market-event-review.repository.js";
 import { MarketCatalogAdminService } from "./admin/market-catalog-admin-service.js";
 import { CuratedMarketAdminService } from "./admin/curated-market-admin-service.js";
 import { FrontendMarketApprovalRepository } from "../repositories/frontend-market-approval.repository.js";
@@ -3199,7 +3201,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     triMatchReviewService: new TriMatchReviewService(new PairEdgeRepository(dependencies.pgPool))
   });
   await registerAdminMarketMatchingRoutes(app, adminAuthMiddleware, {
-    marketMatchingService: new MarketMatchingService(dependencies.pgPool)
+    marketMatchingService: new MarketMatchingService(dependencies.pgPool),
+    marketEventReviewService: new MarketEventReviewService(
+      new MarketEventReviewRepository(dependencies.pgPool)
+    )
   });
   await registerAdminMarketCatalogRoutes(app, adminAuthMiddleware, {
     marketCatalogAdminService: new MarketCatalogAdminService(
