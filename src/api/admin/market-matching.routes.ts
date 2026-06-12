@@ -6,11 +6,22 @@ import {
   MarketEventReviewService,
   MarketEventReviewServiceError
 } from "./market-event-review-service.js";
+import {
+  MarketEventAcceptService,
+  MarketEventAcceptServiceError
+} from "./market-event-accept-service.js";
 
 export interface AdminMarketMatchingRouteDeps {
   marketMatchingService: MarketMatchingService;
   marketEventReviewService: MarketEventReviewService;
+  marketEventAcceptService: MarketEventAcceptService;
 }
+
+const acceptEventBodySchema = z.object({
+  twoFactorToken: z.string().min(6),
+  reason: z.string().min(1),
+  venues: z.array(z.string().min(1)).optional()
+});
 
 const eventListQuerySchema = z.object({
   status: z.enum(["LIVE", "PAUSED", "DISABLED", "PENDING"]).optional(),
@@ -68,6 +79,40 @@ export const registerAdminMarketMatchingRoutes = async (
     } catch (error) {
       app.log.error({ err: error }, "Failed to list market matching events.");
       return reply.status(500).send({ code: "MARKET_MATCHING_ERROR", message: "Failed to list market matching events." });
+    }
+  });
+
+  // B1 accept: pool the event's exact-overlap candidates into the canonical graph. ADMIN+2FA.
+  // (Decline a candidate = POST /admin/market-matching/reject with its matchId.)
+  app.post("/admin/market-matching/events/:eventKey/accept", { preHandler: adminMiddleware }, async (request, reply) => {
+    const params = eventParamsSchema.safeParse(request.params);
+    if (!params.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: params.error.flatten() });
+    }
+    const body = acceptEventBodySchema.safeParse(request.body);
+    if (!body.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: body.error.flatten() });
+    }
+    if (!validateTwoFactorToken(body.data.twoFactorToken)) {
+      return reply.status(403).send({ code: "FORBIDDEN", message: "ADMIN+2FA required." });
+    }
+    try {
+      const result = await deps.marketEventAcceptService.acceptEvent({
+        eventKey: params.data.eventKey,
+        venues: body.data.venues,
+        reason: body.data.reason
+      });
+      app.log.info(
+        { eventKey: params.data.eventKey, pooled: result.exactCandidatesPooled, acceptedBy: request.user.userId, reason: body.data.reason },
+        "Market matching event accepted by operator."
+      );
+      return reply.send({ result });
+    } catch (error) {
+      if (error instanceof MarketEventAcceptServiceError) {
+        return reply.status(409).send({ code: "MARKET_EVENT_ACCEPT_FAILED", message: error.message });
+      }
+      app.log.error({ err: error }, "Failed to accept market matching event.");
+      return reply.status(500).send({ code: "MARKET_MATCHING_ERROR", message: "Failed to accept market matching event." });
     }
   });
 
