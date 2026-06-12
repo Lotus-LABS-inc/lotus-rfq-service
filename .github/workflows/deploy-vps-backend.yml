@@ -45,7 +45,7 @@ jobs:
       VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
       VPS_PORT: ${{ vars.VPS_PORT || '22' }}
       VPS_BACKEND_DIR: ${{ vars.VPS_BACKEND_DIR || '/opt/lotus/lotus-rfq-service' }}
-      VPS_SYSTEMD_SERVICES: ${{ vars.VPS_SYSTEMD_SERVICES || (github.ref_name == 'main' && 'lotus-prod-backend lotus-prod-read lotus-prod-orderbook lotus-prod-worker lotus-prod-polymarket-relay lotus-prod-predictfun-relay' || 'lotus-staging-backend lotus-staging-read lotus-staging-orderbook lotus-staging-worker lotus-staging-polymarket-relay lotus-staging-predictfun-relay') }}
+      VPS_SYSTEMD_SERVICES: ${{ vars.VPS_SYSTEMD_SERVICES }}
     steps:
       - name: Validate deploy configuration
         shell: bash
@@ -55,6 +55,14 @@ jobs:
           test -n "$VPS_USER" || { echo "Missing secret VPS_USER"; exit 1; }
           test -n "$VPS_SSH_PRIVATE_KEY" || { echo "Missing secret VPS_SSH_PRIVATE_KEY"; exit 1; }
           test -n "$VPS_BACKEND_DIR" || { echo "Missing variable VPS_BACKEND_DIR"; exit 1; }
+          if [ -z "${VPS_SYSTEMD_SERVICES:-}" ]; then
+            if [ "$DEPLOY_BRANCH" = "main" ]; then
+              VPS_SYSTEMD_SERVICES="lotus-prod-backend lotus-prod-read lotus-prod-orderbook lotus-prod-worker lotus-prod-polymarket-relay lotus-prod-predictfun-relay"
+            else
+              VPS_SYSTEMD_SERVICES="lotus-staging-backend lotus-staging-read lotus-staging-orderbook lotus-staging-worker lotus-staging-polymarket-relay lotus-staging-predictfun-relay"
+            fi
+            echo "VPS_SYSTEMD_SERVICES=$VPS_SYSTEMD_SERVICES" >> "$GITHUB_ENV"
+          fi
           test -n "$VPS_SYSTEMD_SERVICES" || { echo "Missing variable VPS_SYSTEMD_SERVICES"; exit 1; }
 
       - name: Install SSH key
