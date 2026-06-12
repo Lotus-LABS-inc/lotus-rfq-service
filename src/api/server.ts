@@ -254,6 +254,7 @@ import { PairMatchReviewService } from "./admin/pair-match-review-service.js";
 import { TriMatchReviewService } from "./admin/tri-match-review-service.js";
 import { MarketMatchingService } from "./admin/market-matching-service.js";
 import { MarketCatalogAdminService } from "./admin/market-catalog-admin-service.js";
+import { CuratedMarketAdminService } from "./admin/curated-market-admin-service.js";
 import { FrontendMarketApprovalRepository } from "../repositories/frontend-market-approval.repository.js";
 import { RouteSelectionTraceWriter } from "../routing/route-selection-trace.js";
 import { FailureRecoveryManager } from "../execution/failure-recovery-manager.js";
@@ -3249,7 +3250,8 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   await registerAdminMarketCatalogRoutes(app, adminAuthMiddleware, {
     marketCatalogAdminService: new MarketCatalogAdminService(
       new FrontendMarketApprovalRepository(dependencies.pgPool)
-    )
+    ),
+    curatedMarketAdminService: new CuratedMarketAdminService(dependencies.pgPool)
   });
   await registerAdminExecutionControlRoutes(app, adminAuthMiddleware, {
     executionIntentRepository,

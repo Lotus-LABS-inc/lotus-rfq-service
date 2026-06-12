@@ -10,6 +10,7 @@ import {
   syncSemanticExactOverlaps,
   type SemanticExactSyncSummary
 } from "../../operations/semantic-expansion/semantic-exact-sync.js";
+import { MarketMatchingReviewRepository } from "../../repositories/market-matching-review.repository.js";
 
 const MATCH_REPORT_PATH = "docs/cross-venue-match-report.json";
 
@@ -57,6 +58,8 @@ export interface MarketMatchingNearExact {
   finalConfidence: number;
   failedDimensions: readonly string[];
   blockReason: string | null;
+  reviewStatus: "PENDING" | "REJECTED";
+  rejectionReason: string | null;
 }
 
 export interface MarketMatchingReviewQueue {
@@ -88,32 +91,42 @@ const toExactOverlap = (
 });
 
 const toNearExact = (
-  match: CrossVenueMatchReport["matches"][number]
-): MarketMatchingNearExact => ({
-  matchId: match.matchId,
-  eventTitle: match.seed.title,
-  category: match.category,
-  venueSet: match.venueSet,
-  seed: {
-    venue: match.seed.venue,
-    venueMarketId: match.seed.venueMarketId,
-    title: match.seed.title
-  },
-  candidate: {
-    venue: match.candidate.venue,
-    venueMarketId: match.candidate.venueMarketId,
-    title: match.candidate.title
-  },
-  finalConfidence: match.finalConfidence,
-  failedDimensions: match.failedDimensions,
-  blockReason: match.blockReason
-});
+  match: CrossVenueMatchReport["matches"][number],
+  rejections: Map<string, string>
+): MarketMatchingNearExact => {
+  const rejectionReason = rejections.get(match.matchId) ?? null;
+  return {
+    matchId: match.matchId,
+    eventTitle: match.seed.title,
+    category: match.category,
+    venueSet: match.venueSet,
+    seed: {
+      venue: match.seed.venue,
+      venueMarketId: match.seed.venueMarketId,
+      title: match.seed.title
+    },
+    candidate: {
+      venue: match.candidate.venue,
+      venueMarketId: match.candidate.venueMarketId,
+      title: match.candidate.title
+    },
+    finalConfidence: match.finalConfidence,
+    failedDimensions: match.failedDimensions,
+    blockReason: match.blockReason,
+    reviewStatus: rejectionReason === null ? "PENDING" : "REJECTED",
+    rejectionReason
+  };
+};
 
-const buildQueue = (report: CrossVenueMatchReport, generated: boolean): MarketMatchingReviewQueue => {
+const buildQueue = (
+  report: CrossVenueMatchReport,
+  generated: boolean,
+  rejections: Map<string, string>
+): MarketMatchingReviewQueue => {
   const exactOverlaps = report.promotionCandidates.map(toExactOverlap);
   const nearExact = report.matches
     .filter((match) => match.matchClass === "semantic_near_exact")
-    .map(toNearExact);
+    .map((match) => toNearExact(match, rejections));
 
   return {
     observedAt: report.observedAt,
@@ -133,15 +146,23 @@ const buildQueue = (report: CrossVenueMatchReport, generated: boolean): MarketMa
  * exact overlap is a separate, operator-gated action.
  */
 export class MarketMatchingService {
+  private readonly reviewRepository: MarketMatchingReviewRepository;
+
   constructor(
     private readonly pool: Pool,
-    private readonly repoRoot: string = process.cwd()
-  ) {}
+    private readonly repoRoot: string = process.cwd(),
+    reviewRepository?: MarketMatchingReviewRepository
+  ) {
+    this.reviewRepository = reviewRepository ?? new MarketMatchingReviewRepository(pool);
+  }
 
   async runPipeline(): Promise<MarketMatchingReviewQueue> {
-    const report = await buildCrossVenueMatchReport(this.pool);
+    const [report, rejections] = await Promise.all([
+      buildCrossVenueMatchReport(this.pool),
+      this.reviewRepository.listRejections()
+    ]);
     writeArtifact(this.repoRoot, MATCH_REPORT_PATH, report);
-    return buildQueue(report, true);
+    return buildQueue(report, true, rejections);
   }
 
   /**
@@ -169,7 +190,7 @@ export class MarketMatchingService {
     return summary;
   }
 
-  getReviewQueue(): MarketMatchingReviewQueue {
+  async getReviewQueue(): Promise<MarketMatchingReviewQueue> {
     let report: CrossVenueMatchReport;
     try {
       report = readArtifact<CrossVenueMatchReport>(this.repoRoot, MATCH_REPORT_PATH);
@@ -184,6 +205,36 @@ export class MarketMatchingService {
         nearExact: []
       };
     }
-    return buildQueue(report, true);
+    const rejections = await this.reviewRepository.listRejections();
+    return buildQueue(report, true, rejections);
+  }
+
+  /**
+   * Operator rejection of a near-exact pair. Persists the decision keyed by matchId so it
+   * survives pipeline re-runs and is reflected as reviewStatus REJECTED in the queue.
+   * Context (titles/venues) is captured from the current report when available.
+   */
+  async reject(matchId: string, reason: string, actor: string): Promise<MarketMatchingNearExact | null> {
+    let match: CrossVenueMatchReport["matches"][number] | undefined;
+    try {
+      const report = readArtifact<CrossVenueMatchReport>(this.repoRoot, MATCH_REPORT_PATH);
+      match = report.matches.find((entry) => entry.matchId === matchId);
+    } catch {
+      match = undefined;
+    }
+    await this.reviewRepository.rejectMatch({
+      matchId,
+      reason,
+      decidedBy: actor,
+      eventTitle: match?.seed.title ?? null,
+      seedVenue: match?.seed.venue ?? null,
+      seedVenueMarketId: match?.seed.venueMarketId ?? null,
+      candidateVenue: match?.candidate.venue ?? null,
+      candidateVenueMarketId: match?.candidate.venueMarketId ?? null
+    });
+    if (!match) {
+      return null;
+    }
+    return toNearExact(match, new Map([[matchId, reason]]));
   }
 }

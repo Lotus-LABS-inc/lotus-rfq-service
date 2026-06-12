@@ -6,10 +6,32 @@ import {
   MarketCatalogAdminServiceError,
   type MarketCatalogAdminEvent
 } from "./market-catalog-admin-service.js";
+import {
+  CuratedMarketAdminService,
+  CuratedMarketAdminServiceError
+} from "./curated-market-admin-service.js";
 
 export interface AdminMarketCatalogRouteDeps {
   marketCatalogAdminService: MarketCatalogAdminService;
+  curatedMarketAdminService: CuratedMarketAdminService;
 }
+
+const createMarketBodySchema = z.object({
+  twoFactorToken: z.string().min(6),
+  reason: z.string().min(1),
+  venue: z.enum(["POLYMARKET", "LIMITLESS", "OPINION", "MYRIAD", "PREDICT"]),
+  venueMarketId: z.string().min(1),
+  title: z.string().min(1),
+  category: z.enum(["SPORTS", "CRYPTO", "POLITICS", "ESPORTS", "POP_CULTURE", "ECONOMICS", "OTHER"]),
+  marketClass: z.enum(["BINARY", "CATEGORICAL", "SCALAR", "MULTI_OUTCOME", "UNKNOWN"]).optional(),
+  outcomes: z.array(z.object({ id: z.string().min(1), label: z.string().min(1) })).optional(),
+  expiresAt: z.string().datetime().optional(),
+  resolvesAt: z.string().datetime().optional(),
+  resolutionSource: z.string().min(1).optional(),
+  resolutionTitle: z.string().min(1).optional(),
+  resolutionRulesText: z.string().min(1).optional(),
+  makeLive: z.boolean().optional()
+});
 
 const listQuerySchema = z.object({
   status: z.enum(["LIVE", "PAUSED", "DISABLED", "PENDING"]).optional(),
@@ -112,6 +134,49 @@ export const registerAdminMarketCatalogRoutes = async (
       return reply.status(500).send({ code: "MARKET_CATALOG_ERROR", message: `Failed to ${action} market catalog event.` });
     }
   };
+
+  // Add a new market by projecting a curated seed through the canonical graph pipeline.
+  // Requires ADMIN+2FA. Writes canonical_events/venue_market_profiles + derived profiles.
+  app.post("/admin/market-catalog/markets", { preHandler: adminMiddleware }, async (request, reply) => {
+    const parsed = createMarketBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: parsed.error.flatten() });
+    }
+    if (!validateTwoFactorToken(parsed.data.twoFactorToken)) {
+      return reply.status(403).send({ code: "FORBIDDEN", message: "ADMIN+2FA required." });
+    }
+    try {
+      const result = await deps.curatedMarketAdminService.createMarket(
+        {
+          venue: parsed.data.venue,
+          venueMarketId: parsed.data.venueMarketId,
+          title: parsed.data.title,
+          category: parsed.data.category,
+          marketClass: parsed.data.marketClass,
+          outcomes: parsed.data.outcomes,
+          expiresAt: parsed.data.expiresAt,
+          resolvesAt: parsed.data.resolvesAt,
+          resolutionSource: parsed.data.resolutionSource,
+          resolutionTitle: parsed.data.resolutionTitle,
+          resolutionRulesText: parsed.data.resolutionRulesText,
+          makeLive: parsed.data.makeLive,
+          reason: parsed.data.reason
+        },
+        request.user.userId
+      );
+      app.log.info(
+        { canonicalEventId: result.canonicalEventId, venue: parsed.data.venue, createdBy: request.user.userId, makeLive: parsed.data.makeLive ?? false },
+        "Market added by operator."
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      if (error instanceof CuratedMarketAdminServiceError) {
+        return reply.status(422).send({ code: "MARKET_CREATE_FAILED", message: error.message });
+      }
+      app.log.error({ err: error }, "Failed to add market.");
+      return reply.status(500).send({ code: "MARKET_CATALOG_ERROR", message: "Failed to add market." });
+    }
+  });
 
   app.post("/admin/market-catalog/events/:eventId/pause", { preHandler: adminMiddleware }, (request, reply) =>
     runMutation(request, reply, "pause", (id, actor, reason) => deps.marketCatalogAdminService.pause(id, actor, reason))

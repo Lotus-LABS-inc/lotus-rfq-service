@@ -13,6 +13,12 @@ const approveBodySchema = z.object({
   reason: z.string().min(1)
 });
 
+const rejectBodySchema = z.object({
+  twoFactorToken: z.string().min(6),
+  matchId: z.string().min(1),
+  reason: z.string().min(1)
+});
+
 const validateTwoFactorToken = (token: string): boolean => {
   const configuredToken = process.env.ADMIN_2FA_TOKEN;
   if (typeof configuredToken === "string" && configuredToken.length > 0) {
@@ -29,7 +35,7 @@ export const registerAdminMarketMatchingRoutes = async (
   // Serve the last generated review queue. Read-only, cheap.
   app.get("/admin/market-matching/review-queue", { preHandler: adminMiddleware }, async (_request, reply) => {
     try {
-      const queue = deps.marketMatchingService.getReviewQueue();
+      const queue = await deps.marketMatchingService.getReviewQueue();
       return reply.send({ queue });
     } catch (error) {
       app.log.error({ err: error }, "Failed to load market matching review queue.");
@@ -86,6 +92,37 @@ export const registerAdminMarketMatchingRoutes = async (
       return reply.status(500).send({
         code: "MARKET_MATCHING_ERROR",
         message: "Failed to promote market matching candidate."
+      });
+    }
+  });
+
+  // Operator rejection of a near-exact pair. Read-only against the canonical graph; only
+  // records a review decision so the pair stays rejected across pipeline re-runs.
+  app.post("/admin/market-matching/reject", { preHandler: adminMiddleware }, async (request, reply) => {
+    const parsed = rejectBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: parsed.error.flatten() });
+    }
+    if (!validateTwoFactorToken(parsed.data.twoFactorToken)) {
+      return reply.status(403).send({ code: "FORBIDDEN", message: "ADMIN+2FA required." });
+    }
+
+    try {
+      const match = await deps.marketMatchingService.reject(
+        parsed.data.matchId,
+        parsed.data.reason,
+        request.user.userId
+      );
+      app.log.info(
+        { matchId: parsed.data.matchId, rejectedBy: request.user.userId, reason: parsed.data.reason },
+        "Market matching near-exact rejected by operator."
+      );
+      return reply.send({ match });
+    } catch (error) {
+      app.log.error({ err: error }, "Failed to reject market matching near-exact.");
+      return reply.status(500).send({
+        code: "MARKET_MATCHING_ERROR",
+        message: "Failed to reject market matching near-exact."
       });
     }
   });
