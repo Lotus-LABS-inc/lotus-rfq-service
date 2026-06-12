@@ -123,6 +123,20 @@ interface ParserContext {
 const PARSER_VERSION = "structured-proposition-v3";
 const MONTH_PATTERN = "(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)";
 const RAW_MONTH_PATTERN = "(jan(?:uary)?\\.?|feb(?:ruary)?\\.?|mar(?:ch)?\\.?|apr(?:il)?\\.?|may\\.?|jun(?:e)?\\.?|jul(?:y)?\\.?|aug(?:ust)?\\.?|sep(?:tember)?\\.?|oct(?:ober)?\\.?|nov(?:ember)?\\.?|dec(?:ember)?\\.?)";
+const ISO_MONTH_NAMES = [
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december"
+] as const;
 
 const normalizeCalendarDate = (
   month: string,
@@ -136,6 +150,22 @@ const normalizeCalendarDate = (
     return null;
   }
   return `${normalizedMonth} ${day} ${resolvedYear}`;
+};
+
+const normalizeIsoCalendarDate = (year: string, month: string, day: string): string | null => {
+  const yearNumber = Number.parseInt(year, 10);
+  const monthNumber = Number.parseInt(month, 10);
+  const dayNumber = Number.parseInt(day, 10);
+  const date = new Date(Date.UTC(yearNumber, monthNumber - 1, dayNumber));
+  if (
+    date.getUTCFullYear() !== yearNumber
+    || date.getUTCMonth() !== monthNumber - 1
+    || date.getUTCDate() !== dayNumber
+  ) {
+    return null;
+  }
+  const monthName = ISO_MONTH_NAMES[monthNumber - 1];
+  return monthName ? `${monthName} ${dayNumber} ${yearNumber}` : null;
 };
 
 const extractCalendarDateField = (
@@ -278,6 +308,20 @@ const parseDeadlineOrSeason = (context: ParserContext): PropositionField => {
   );
   if (exactCalendarDate.normalized) {
     return exactCalendarDate;
+  }
+
+  const isoDate = rawSourceText.match(/\b(20\d{2})[-/](0[1-9]|1[0-2])[-/](0[1-9]|[12]\d|3[01])\b/);
+  if (isoDate?.[1] && isoDate?.[2] && isoDate?.[3]) {
+    const normalized = normalizeIsoCalendarDate(isoDate[1], isoDate[2], isoDate[3]);
+    if (normalized) {
+      return buildField(
+        isoDate[0],
+        normalized,
+        context.aliasesApplied,
+        "HIGH",
+        [...context.ruleEvidence, "deadline:iso_date"]
+      );
+    }
   }
 
   const byDate = context.normalizedText.match(new RegExp(`\\bby\\s+${MONTH_PATTERN}\\s+(\\d{1,2})(?:,?\\s+(\\d{4}))?\\b`, "i"));

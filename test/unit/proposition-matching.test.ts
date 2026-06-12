@@ -200,6 +200,86 @@ describe("proposition-matching", () => {
     expect(downgraded.failedDimensions).toContain("timeBoundaryMatch");
   });
 
+  it("normalizes ISO date time boundaries before the generic year fallback", () => {
+    const parsed = parseStructuredProposition({
+      category: "CRYPTO",
+      title: "Bitcoin all time high by 2026-12-31",
+      rules: null,
+      yesLabel: "Yes",
+      noLabel: "No"
+    });
+    const slashParsed = parseStructuredProposition({
+      category: "CRYPTO",
+      title: "Bitcoin all time high by 2026/06/30",
+      rules: null,
+      yesLabel: "Yes",
+      noLabel: "No"
+    });
+
+    expect(parsed.deadlineOrSeason.normalized).toBe("december 31 2026");
+    expect(parsed.deadlineOrSeason.ruleEvidence).toContain("deadline:iso_date");
+    expect(slashParsed.deadlineOrSeason.normalized).toBe("june 30 2026");
+    expect(slashParsed.deadlineOrSeason.ruleEvidence).toContain("deadline:iso_date");
+  });
+
+  it("matches equivalent ISO and written calendar dates", () => {
+    const isoDate = parseStructuredProposition({
+      category: "CRYPTO",
+      title: "Bitcoin all time high by 2026-12-31",
+      rules: null,
+      yesLabel: "Yes",
+      noLabel: "No"
+    });
+    const writtenDate = parseStructuredProposition({
+      category: "CRYPTO",
+      title: "BTC ATH by December 31, 2026",
+      rules: null,
+      yesLabel: "Yes",
+      noLabel: "No"
+    });
+
+    expect(isoDate.deadlineOrSeason.normalized).toBe("december 31 2026");
+    expect(writtenDate.deadlineOrSeason.normalized).toBe("december 31 2026");
+
+    const comparison = compareStructuredPropositions({
+      seed: isoDate,
+      candidate: writtenDate,
+      historyQualified: true,
+      requireHistoricalQualification: true
+    });
+    expect(comparison.classification).toBe("semantic_exact_historical_qualified");
+    expect(comparison.failedDimensions).not.toContain("timeBoundaryMatch");
+  });
+
+  it("fails timeBoundaryMatch for different ISO date markets", () => {
+    const december = parseStructuredProposition({
+      category: "CRYPTO",
+      title: "Bitcoin all time high by 2026-12-31",
+      rules: null,
+      yesLabel: "Yes",
+      noLabel: "No"
+    });
+    const june = parseStructuredProposition({
+      category: "CRYPTO",
+      title: "Bitcoin all time high by 2026-06-30",
+      rules: null,
+      yesLabel: "Yes",
+      noLabel: "No"
+    });
+
+    expect(december.deadlineOrSeason.normalized).toBe("december 31 2026");
+    expect(june.deadlineOrSeason.normalized).toBe("june 30 2026");
+
+    const comparison = compareStructuredPropositions({
+      seed: december,
+      candidate: june,
+      historyQualified: true,
+      requireHistoricalQualification: true
+    });
+    expect(comparison.classification).toBe("semantic_near_exact");
+    expect(comparison.failedDimensions).toContain("timeBoundaryMatch");
+  });
+
   it("pools the same politics proposition across venues and downgrades different subjects", () => {
     const seed = parseStructuredProposition({
       category: "POLITICS",
