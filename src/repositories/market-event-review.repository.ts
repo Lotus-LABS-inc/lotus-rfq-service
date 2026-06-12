@@ -109,6 +109,18 @@ export class MarketEventReviewRepository {
     }));
   }
 
+  /** Map of canonicalEventId -> proposition_key, for deriving event grouping keys. */
+  public async getPropositionKeys(canonicalEventIds: readonly string[]): Promise<Map<string, string>> {
+    if (canonicalEventIds.length === 0) {
+      return new Map();
+    }
+    const result = await this.pool.query<{ id: string; proposition_key: string }>(
+      `SELECT id::text AS id, proposition_key FROM canonical_events WHERE id = ANY($1::uuid[])`,
+      [canonicalEventIds]
+    );
+    return new Map(result.rows.map((row) => [row.id, row.proposition_key]));
+  }
+
   public async listVenueRules(canonicalEventIds: readonly string[]): Promise<EventReviewVenueRuleRow[]> {
     if (canonicalEventIds.length === 0) {
       return [];

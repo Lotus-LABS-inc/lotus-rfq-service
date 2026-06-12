@@ -87,6 +87,15 @@ const stripSourcePrefix = (propositionKey: string): string => {
   return colon >= 0 ? propositionKey.slice(colon + 1) : propositionKey;
 };
 
+/**
+ * Stable event grouping key for a proposition. Mirrors deriveEventIdentity but works from a
+ * proposition_key + canonical event id alone (used by the accept flow to scope candidates).
+ */
+export const deriveEventKeyFromProposition = (propositionKey: string, canonicalEventId: string): string => {
+  const curated = deriveCuratedEventGroup(stripSourcePrefix(propositionKey));
+  return curated ? curated.eventId : `event:raw:${canonicalEventId}`;
+};
+
 const deriveEventIdentity = (row: EventReviewCanonicalRow): { eventKey: string; eventTitle: string } => {
   const body = stripSourcePrefix(row.propositionKey);
   const curated = deriveCuratedEventGroup(body);
