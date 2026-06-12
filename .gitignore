@@ -17,8 +17,6 @@ tmp-*.html
 # Generated local evidence and operator scratch files
 artifacts/
 docs/*
-!docs/api/
-!docs/api/openapi.yaml
 !docs/legal/
 !docs/legal/**
 docs/generated/
