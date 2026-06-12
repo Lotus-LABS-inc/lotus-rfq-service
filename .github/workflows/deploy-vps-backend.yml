@@ -44,6 +44,7 @@ jobs:
       VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
       VPS_PORT: ${{ vars.VPS_PORT }}
       VPS_BACKEND_DIR: ${{ vars.VPS_BACKEND_DIR }}
+      VPS_ENV_FILE: ${{ vars.VPS_ENV_FILE }}
       VPS_SYSTEMD_SERVICES: ${{ vars.VPS_SYSTEMD_SERVICES }}
     steps:
       - name: Validate deploy configuration
@@ -62,8 +63,20 @@ jobs:
             echo "VPS_PORT=$VPS_PORT" >> "$GITHUB_ENV"
           fi
           if [ -z "${VPS_BACKEND_DIR:-}" ]; then
-            VPS_BACKEND_DIR="/opt/lotus/lotus-rfq-service"
+            if [ "$DEPLOY_BRANCH" = "main" ]; then
+              VPS_BACKEND_DIR="/opt/lotus/lotus-rfq-service"
+            else
+              VPS_BACKEND_DIR="/opt/lotus/lotus-rfq-service-staging"
+            fi
             echo "VPS_BACKEND_DIR=$VPS_BACKEND_DIR" >> "$GITHUB_ENV"
+          fi
+          if [ -z "${VPS_ENV_FILE:-}" ]; then
+            if [ "$DEPLOY_BRANCH" = "main" ]; then
+              VPS_ENV_FILE="/etc/lotus/prod/backend.env"
+            else
+              VPS_ENV_FILE="/etc/lotus/staging/backend.env"
+            fi
+            echo "VPS_ENV_FILE=$VPS_ENV_FILE" >> "$GITHUB_ENV"
           fi
           if [ -z "${VPS_SYSTEMD_SERVICES:-}" ]; then
             if [ "$DEPLOY_BRANCH" = "main" ]; then
@@ -90,7 +103,7 @@ jobs:
         run: |
           set -euo pipefail
           ssh -i ~/.ssh/lotus_vps_deploy -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
-            "DEPLOY_BRANCH='$DEPLOY_BRANCH' VPS_BACKEND_DIR='$VPS_BACKEND_DIR' VPS_SYSTEMD_SERVICES='$VPS_SYSTEMD_SERVICES' RUN_MIGRATIONS='$RUN_MIGRATIONS' bash -s" <<'REMOTE'
+            "DEPLOY_BRANCH='$DEPLOY_BRANCH' VPS_BACKEND_DIR='$VPS_BACKEND_DIR' VPS_ENV_FILE='$VPS_ENV_FILE' VPS_SYSTEMD_SERVICES='$VPS_SYSTEMD_SERVICES' RUN_MIGRATIONS='$RUN_MIGRATIONS' bash -s" <<'REMOTE'
           set -euo pipefail
 
           cd "$VPS_BACKEND_DIR"
@@ -103,7 +116,11 @@ jobs:
           npm run build
 
           if [ "$RUN_MIGRATIONS" = "true" ]; then
-            npm run db:migrate:supabase
+            if [ -n "${VPS_ENV_FILE:-}" ] && sudo test -r "$VPS_ENV_FILE"; then
+              sudo -E bash -lc "set -a; . '$VPS_ENV_FILE'; set +a; cd '$VPS_BACKEND_DIR'; npm run db:migrate:supabase"
+            else
+              npm run db:migrate:supabase
+            fi
           fi
 
           for service in $VPS_SYSTEMD_SERVICES; do
