@@ -62,6 +62,9 @@ describe("ExecutionScopeTokenService", () => {
       sessionId: "session-1",
       quoteId: "quote-1",
       canonicalMarketId: "canonical-market-1",
+      flowSegment: "soft",
+      flowSegmentVersion: "flow-segmentation-v1",
+      flowSegmentInputHash: "hash-1",
       ttlSeconds: 120,
       scope: {
         topicKey: "NOMINEE|US_PRESIDENT|2028|REPUBLICAN",
@@ -78,6 +81,7 @@ describe("ExecutionScopeTokenService", () => {
       sessionId: "session-1",
       quoteId: "quote-1",
       canonicalMarketId: "canonical-market-1",
+      expectedFlowSegment: "soft",
       actualVenueTargets: ["POLYMARKET", "LIMITLESS", "OPINION"],
       authorities: {
         POLITICS_NOMINEE_LANE: authority
@@ -87,6 +91,41 @@ describe("ExecutionScopeTokenService", () => {
 
     expect(validated.binding.scopeId).toBe("POLITICS_NOMINEE_REPUBLICAN_TRI_LIMITLESS_OPINION_POLYMARKET");
     expect(validated.binding.venueSet).toEqual(["LIMITLESS", "OPINION", "POLYMARKET"]);
+    expect(validated.claims.flowSegment).toBe("soft");
+  });
+
+  it("fails closed when the expected flow segment differs from the token", async () => {
+    const service = new ExecutionScopeTokenService("scope-secret");
+    const issued = service.issue({
+      scopeKind: "CRYPTO_LANE",
+      scopeId: "CRYPTO_BTC_ATH_BY_DATE_PAIR_LIMITLESS_POLYMARKET",
+      principalId: "user-1",
+      sessionId: "session-1",
+      quoteId: "quote-1",
+      canonicalMarketId: "canonical-market-1",
+      flowSegment: "standard",
+      ttlSeconds: 120,
+      scope: {
+        topicKey: "CRYPTO|ATH_BY_DATE|BTC",
+        laneType: "PAIR",
+        venueSet: ["POLYMARKET", "LIMITLESS"],
+        candidateSet: ["2026-06-30", "2026-05-31"]
+      },
+      now: new Date("2026-04-04T12:00:00.000Z")
+    });
+
+    await expect(service.validate({
+      token: issued.token,
+      principalId: "user-1",
+      sessionId: "session-1",
+      quoteId: "quote-1",
+      canonicalMarketId: "canonical-market-1",
+      expectedFlowSegment: "soft",
+      authorities: {
+        CRYPTO_LANE: authority
+      },
+      now: new Date("2026-04-04T12:01:00.000Z")
+    })).rejects.toBeInstanceOf(ExecutionScopeTokenError);
   });
 
   it("fails closed when the live authority no longer matches the route venue set", async () => {

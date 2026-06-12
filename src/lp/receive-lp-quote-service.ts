@@ -17,6 +17,14 @@ import {
   ResolutionRiskQuotePolicyError
 } from "../core/rfq-engine/resolution-risk-rfq-policy.js";
 import type { ResolutionRiskVenueGrouping } from "../core/rfq-engine/resolution-risk.types.js";
+import type { LPKeyRecord } from "../db/repositories/lp-key-repository.js";
+import {
+  assertMakerCanQuoteFlowSegment,
+  readFlowSegment,
+  readFlowSegmentInputHash,
+  readFlowSegmentVersion,
+  type FlowSegment
+} from "../core/rfq-engine/flow-segmentation.js";
 
 export interface ReceiveLPQuoteCommand {
   routeLpId: string;
@@ -47,6 +55,7 @@ export interface ReceiveLPQuoteServiceDependencies {
   eventEmitter: RFQEventEmitter;
   logger: Pick<Logger, "error">;
   lpStatsRepository?: LPStatsRepository;
+  lpKeyRepository?: { findByKeyId(keyId: string): Promise<LPKeyRecord | null> };
   now?: () => Date;
 }
 
@@ -85,6 +94,15 @@ export class ResolutionRiskQuoteRejectedError extends Error {
   }
 }
 
+export class LPFlowSegmentNotSubscribedError extends Error {
+  public readonly code = "LP_FLOW_SEGMENT_NOT_SUBSCRIBED";
+
+  public constructor(message: string) {
+    super(message);
+    this.name = "LPFlowSegmentNotSubscribedError";
+  }
+}
+
 export class ReceiveLPQuoteService {
   private readonly now: () => Date;
 
@@ -118,7 +136,24 @@ export class ReceiveLPQuoteService {
 
         const sessionMetadata = await this.deps.sessionManager.getSessionMetadata(command.sessionId);
         const grouping = readResolutionGrouping(sessionMetadata?.metadata);
+        const flowSegment = readSessionFlowSegment(session, sessionMetadata?.metadata);
+        const flowSegmentVersion = readSessionFlowSegmentVersion(session, sessionMetadata?.metadata);
+        const flowSegmentInputHash = readSessionFlowSegmentInputHash(session, sessionMetadata?.metadata);
         const quotePayload = { ...(command.payload ?? {}) };
+
+        if (flowSegment) {
+          const lpKey = await this.deps.lpKeyRepository?.findByKeyId(command.authenticatedLpKeyId);
+          try {
+            assertMakerCanQuoteFlowSegment(flowSegment, lpKey?.metadata);
+          } catch (error) {
+            throw new LPFlowSegmentNotSubscribedError(
+              error instanceof Error ? error.message : "LP key is not subscribed to this RFQ flow segment."
+            );
+          }
+          quotePayload.flow_segment = flowSegment;
+          if (flowSegmentVersion) quotePayload.flow_segment_version = flowSegmentVersion;
+          if (flowSegmentInputHash) quotePayload.flow_segment_input_hash = flowSegmentInputHash;
+        }
 
         if (grouping) {
           try {
@@ -253,4 +288,30 @@ const readResolutionGrouping = (
     return null;
   }
   return grouping as ResolutionRiskVenueGrouping;
+};
+
+const readSessionFlowSegment = (
+  session: { flow_segment?: unknown; metadata?: Readonly<Record<string, unknown>> },
+  redisMetadata: Readonly<Record<string, unknown>> | undefined
+): FlowSegment | null => {
+  if (session.flow_segment === "soft" || session.flow_segment === "standard") {
+    return session.flow_segment;
+  }
+  return readFlowSegment(redisMetadata) ?? readFlowSegment(session.metadata);
+};
+
+const readSessionFlowSegmentVersion = (
+  session: { flow_segment_version?: unknown; metadata?: Readonly<Record<string, unknown>> },
+  redisMetadata: Readonly<Record<string, unknown>> | undefined
+): string | null => {
+  if (typeof session.flow_segment_version === "string") return session.flow_segment_version;
+  return readFlowSegmentVersion(redisMetadata) ?? readFlowSegmentVersion(session.metadata);
+};
+
+const readSessionFlowSegmentInputHash = (
+  session: { flow_segment_input_hash?: unknown; metadata?: Readonly<Record<string, unknown>> },
+  redisMetadata: Readonly<Record<string, unknown>> | undefined
+): string | null => {
+  if (typeof session.flow_segment_input_hash === "string") return session.flow_segment_input_hash;
+  return readFlowSegmentInputHash(redisMetadata) ?? readFlowSegmentInputHash(session.metadata);
 };

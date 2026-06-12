@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   DuplicateQuoteIdError,
   InvalidRFQSessionStateError,
+  LPFlowSegmentNotSubscribedError,
   LPIdentityMismatchError,
   ReceiveLPQuoteService,
   RFQSessionNotFoundError,
@@ -96,6 +97,13 @@ export const registerLPQuotesRoute = async (
       if (error instanceof ResolutionRiskQuoteRejectedError) {
         return reply.status(409).send({
           code: "RESOLUTION_RISK_QUOTE_REJECTED",
+          message: error.message
+        });
+      }
+
+      if (error instanceof LPFlowSegmentNotSubscribedError) {
+        return reply.status(409).send({
+          code: error.code,
           message: error.message
         });
       }

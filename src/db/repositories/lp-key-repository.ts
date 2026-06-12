@@ -57,6 +57,15 @@ export class LPKeyRepository {
     return result.rows[0] ?? null;
   }
 
+  public async findById(id: string): Promise<LPKeyRecord | null> {
+    const result = await this.pool.query<LPKeyRecord>(
+      "SELECT * FROM lp_keys WHERE id = $1 LIMIT 1",
+      [id]
+    );
+
+    return result.rows[0] ?? null;
+  }
+
   public async listByLP(lpId: string, limit = 100): Promise<LPKeyRecord[]> {
     const safeLimit = Math.max(1, Math.min(limit, 500));
     const result = await this.pool.query<LPKeyRecord>(

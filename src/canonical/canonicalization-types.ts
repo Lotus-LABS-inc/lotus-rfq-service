@@ -145,6 +145,7 @@ export interface PropositionFingerprint {
 
 export interface CanonicalEvent {
     id: string;
+    canonicalFixtureEventId: string | null;
     propositionKey: string;
     title: string;
     normalizedPropositionText: string;
@@ -156,6 +157,16 @@ export interface CanonicalEvent {
     resolvesAt: Date | null;
     sourceHints: Readonly<Record<string, unknown>>;
     metadata: Readonly<Record<string, unknown>>;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+export interface CanonicalFixtureEvent {
+    id: string;
+    fixtureKey: string;
+    displayTitle: string;
+    category: CanonicalCategory;
+    scheduledAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
 }

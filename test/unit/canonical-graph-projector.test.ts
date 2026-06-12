@@ -15,6 +15,8 @@ describe("CanonicalGraphProjector", () => {
         const projector = new CanonicalGraphProjector(repository as never, compatibilityProjector as never);
         const snapshot: CanonicalGraphSnapshot = {
             canonicalEvents: [],
+            canonicalFixtureEvents: [],
+            canonicalEventFixtureLinks: new Map(),
             venueMarketProfiles: [],
             propositionFingerprints: [],
             resolutionProfiles: [],

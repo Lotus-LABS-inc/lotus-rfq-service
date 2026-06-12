@@ -10,6 +10,7 @@ import type {
 } from "./canonicalization-types.js";
 import { clampRatioString, normalizeCategory, normalizeMarketClass } from "./canonicalization-types.js";
 import { CanonicalEventClusteringService } from "./canonical-event-clustering.js";
+import { CanonicalFixtureClusteringService } from "./canonical-fixture-clustering.js";
 import { CompatibilityEdgeScorer } from "./compatibility-edge-scorer.js";
 import { PropositionFingerprintBuilder } from "./proposition-fingerprint.js";
 import { CanonicalResolutionProfileNormalizer } from "./resolution-profile-normalizer.js";
@@ -98,16 +99,24 @@ export class CuratedCanonicalGraphSnapshotBuilder {
     private readonly settlementNormalizer = new CanonicalSettlementProfileNormalizer();
     private readonly fingerprintBuilder = new PropositionFingerprintBuilder();
     private readonly clusteringService = new CanonicalEventClusteringService();
+    private readonly fixtureClusteringService = new CanonicalFixtureClusteringService();
     private readonly edgeScorer = new CompatibilityEdgeScorer();
 
     public build(seeds: readonly CuratedCanonicalGraphSeed[]): CanonicalGraphSnapshot {
         const contexts = seeds.map((seed) => this.buildSeedContext(seed));
-        const canonicalEvents = this.buildCanonicalEvents(contexts);
+        const canonicalEventClusters = this.buildCanonicalEventClusters(contexts);
+        const fixtureClustering = this.fixtureClusteringService.cluster(canonicalEventClusters);
+        const canonicalEvents = canonicalEventClusters.map((cluster) => ({
+            ...cluster.event,
+            canonicalFixtureEventId: fixtureClustering.canonicalEventFixtureLinks.get(cluster.event.id) ?? null
+        }));
         const executableMarkets = this.buildExecutableMarkets(contexts);
         const compatibilityEdges = this.buildCompatibilityEdges(contexts, executableMarkets);
 
         return {
             canonicalEvents,
+            canonicalFixtureEvents: fixtureClustering.canonicalFixtureEvents,
+            canonicalEventFixtureLinks: fixtureClustering.canonicalEventFixtureLinks,
             venueMarketProfiles: contexts.map((context) => context.profile),
             propositionFingerprints: contexts.map((context) => context.fingerprint),
             resolutionProfiles: contexts.map((context) => context.resolutionProfile),
@@ -207,7 +216,7 @@ export class CuratedCanonicalGraphSnapshotBuilder {
         };
     }
 
-    private buildCanonicalEvents(contexts: readonly NormalizedSeedContext[]): readonly CanonicalEvent[] {
+    private buildCanonicalEventClusters(contexts: readonly NormalizedSeedContext[]) {
         const eventsById = new Map<string, NormalizedSeedContext[]>();
 
         for (const context of contexts) {
@@ -221,7 +230,13 @@ export class CuratedCanonicalGraphSnapshotBuilder {
 
         return [...eventsById.entries()]
             .sort(([left], [right]) => left.localeCompare(right))
-            .map(([eventId, members]) => this.buildCanonicalEvent(eventId, members));
+            .map(([eventId, members]) => ({
+                event: this.buildCanonicalEvent(eventId, members),
+                members: members.map((member) => ({
+                    market: member.profile,
+                    fingerprint: member.fingerprint
+                }))
+            }));
     }
 
     private buildCanonicalEvent(eventId: string, members: readonly NormalizedSeedContext[]): CanonicalEvent {
@@ -240,6 +255,7 @@ export class CuratedCanonicalGraphSnapshotBuilder {
 
         return {
             id: eventId,
+            canonicalFixtureEventId: null,
             propositionKey: first.seed.eventPropositionKey ?? prototype?.propositionKey ?? `curated:${eventId}`,
             title:
                 first.seed.eventTitle

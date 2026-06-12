@@ -17,6 +17,9 @@ tmp-*.html
 # Generated local evidence and operator scratch files
 artifacts/
 docs/*
+!docs/runbooks/
+docs/runbooks/*
+!docs/runbooks/vps-migration-runbook.md
 !docs/legal/
 !docs/legal/**
 docs/generated/

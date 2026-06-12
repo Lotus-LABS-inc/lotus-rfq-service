@@ -65,6 +65,7 @@ export class CanonicalEventClusteringService {
 
         return {
             id: buildStableUuid(`canonical-event:${propositionKey}`),
+            canonicalFixtureEventId: null,
             propositionKey,
             title: first.fingerprint.normalizedPropositionText || first.market.title,
             normalizedPropositionText: first.fingerprint.normalizedPropositionText,

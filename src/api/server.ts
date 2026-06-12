@@ -10,8 +10,8 @@ import { InMemoryRFQEventEmitter } from "../core/rfq-engine/rfq-domain-events.js
 import { RFQSessionManager } from "../core/rfq-engine/rfq-session-manager.js";
 import { RFQEventRepository } from "../db/repositories/rfq-event-repository.js";
 import { LPKeyRepository } from "../db/repositories/lp-key-repository.js";
-import { RFQQuoteRepository } from "../db/repositories/rfq-quote-repository.js";
-import { RFQSessionRepository } from "../db/repositories/rfq-session-repository.js";
+import { RFQQuoteRepository, type RFQQuoteRecord } from "../db/repositories/rfq-quote-repository.js";
+import { RFQSessionRepository, type RFQSessionRecord } from "../db/repositories/rfq-session-repository.js";
 import { RFQExecutionRepository } from "../db/repositories/rfq-execution-repository.js";
 import { registerHealthRoute } from "./routes/health.js";
 import { registerMetricsRoute } from "./routes/metrics.js";
@@ -280,6 +280,14 @@ import { CryptoExecutionScopeAuthority } from "../execution-control/crypto-execu
 import { PoliticsNomineeExecutionScopeAuthority } from "../execution-control/politics-nominee-execution-scope-authority.js";
 import { SportsExecutionScopeAuthority } from "../execution-control/sports-execution-scope-authority.js";
 import {
+  assertMakerCanQuoteFlowSegment,
+  FlowSegmentValidationError,
+  readFlowSegment,
+  readFlowSegmentInputHash,
+  readFlowSegmentVersion,
+  type FlowSegment
+} from "../core/rfq-engine/flow-segmentation.js";
+import {
   AccountingUpdateService,
   ApprovedLaneExecutionGate,
   buildFrontendExecutionStatus,
@@ -498,6 +506,60 @@ export interface ServerDependencies {
   executionScopeAuthorities?: ExecutionScopeAuthorityRegistry;
   runtimeMode?: "api" | "worker";
 }
+
+const readSessionFlowSegment = (session: RFQSessionRecord): FlowSegment | null => {
+  if (session.flow_segment === "soft" || session.flow_segment === "standard") {
+    return session.flow_segment;
+  }
+  return readFlowSegment(session.metadata);
+};
+
+const readSessionFlowSegmentVersion = (session: RFQSessionRecord): string | null =>
+  session.flow_segment_version ?? readFlowSegmentVersion(session.metadata);
+
+const readSessionFlowSegmentInputHash = (session: RFQSessionRecord): string | null =>
+  session.flow_segment_input_hash ?? readFlowSegmentInputHash(session.metadata);
+
+const validateAcceptedQuoteFlowSegment = async (
+  session: RFQSessionRecord,
+  quote: RFQQuoteRecord,
+  lpKeyRepository: LPKeyRepository
+): Promise<{
+  flowSegment: FlowSegment;
+  flowSegmentVersion: string | null;
+  flowSegmentInputHash: string | null;
+}> => {
+  const flowSegment = readSessionFlowSegment(session);
+  if (!flowSegment) {
+    throw new FlowSegmentValidationError(
+      "flow_segment_invalid",
+      "RFQ session is missing flow segment metadata."
+    );
+  }
+
+  const quoteFlowSegment = readFlowSegment(quote.quote_payload);
+  if (quoteFlowSegment !== flowSegment) {
+    throw new FlowSegmentValidationError(
+      "flow_segment_invalid",
+      "Accepted quote flow segment does not match the RFQ session."
+    );
+  }
+
+  const lpKey = await lpKeyRepository.findById(quote.lp_key_id);
+  if (!lpKey) {
+    throw new FlowSegmentValidationError(
+      "maker_not_subscribed_to_flow_segment",
+      "Accepted quote LP key was not found for flow segment revalidation."
+    );
+  }
+  assertMakerCanQuoteFlowSegment(flowSegment, lpKey.metadata);
+
+  return {
+    flowSegment,
+    flowSegmentVersion: readSessionFlowSegmentVersion(session),
+    flowSegmentInputHash: readSessionFlowSegmentInputHash(session)
+  };
+};
 
 const parseAdminJwtTtlSeconds = (value: string | undefined): number => {
   const parsed = Number(value ?? "3600");
@@ -1057,6 +1119,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     redisClient: dependencies.redisClient,
     eventEmitter: domainEventEmitter,
     lpStatsRepository,
+    lpKeyRepository,
     logger: dependencies.logger
   });
 
@@ -2478,6 +2541,13 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       if (!snapshot.operatorApprovedToOffer) {
         throw new ExecutionScopeAuthorityError(`Execution scope ${request.scopeId} is not currently operator-approved.`);
       }
+      const flowSegment = readSessionFlowSegment(session);
+      if (!flowSegment) {
+        throw new FlowSegmentValidationError(
+          "flow_segment_invalid",
+          "RFQ session is missing flow segment metadata."
+        );
+      }
 
       const issued = executionScopeTokenService.issue({
         scopeKind: request.scopeKind,
@@ -2486,6 +2556,13 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         sessionId,
         quoteId: request.quoteId,
         canonicalMarketId: session.canonical_market_id,
+        flowSegment,
+        ...(readSessionFlowSegmentVersion(session)
+          ? { flowSegmentVersion: readSessionFlowSegmentVersion(session) as string }
+          : {}),
+        ...(readSessionFlowSegmentInputHash(session)
+          ? { flowSegmentInputHash: readSessionFlowSegmentInputHash(session) as string }
+          : {}),
         ttlSeconds: request.ttlSeconds ?? 120,
         scope: {
           topicKey: snapshot.topicKey,
@@ -2499,6 +2576,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         token: issued.token,
         expiresAt: issued.claims.expiresAt,
         singleUse: true as const,
+        flowSegment,
+        ...(readSessionFlowSegmentVersion(session)
+          ? { flowSegmentVersion: readSessionFlowSegmentVersion(session) as string }
+          : {}),
         scope: {
           scopeKind: snapshot.scopeKind,
           scopeId: snapshot.scopeId,
@@ -2520,6 +2601,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         canonicalMarketId: session.canonical_market_id
       }, () => quoteRepository.findByExternalQuoteId(sessionId, request.quoteId));
       if (!quote) throw new Error("Quote not found");
+      const flowSegmentValidation = await withLatencyStage("rfq_accept_flow_segment_validation", {
+        endpoint: "POST /rfq/:id/accept",
+        canonicalMarketId: session.canonical_market_id
+      }, () => validateAcceptedQuoteFlowSegment(session, quote, lpKeyRepository));
 
       const acceptancePolicy = readAcceptancePolicy(session.metadata);
 
@@ -2538,6 +2623,13 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         takerId: session.taker_id,
         metadata: {
           reservation_token: reservationToken,
+          flow_segment: flowSegmentValidation.flowSegment,
+          ...(flowSegmentValidation.flowSegmentVersion
+            ? { flow_segment_version: flowSegmentValidation.flowSegmentVersion }
+            : {}),
+          ...(flowSegmentValidation.flowSegmentInputHash
+            ? { flow_segment_input_hash: flowSegmentValidation.flowSegmentInputHash }
+            : {}),
           legs: [
             {
               leg_id: "00000000-0000-0000-0000-000000000000",
@@ -2870,6 +2962,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
             quoteId: request.quoteId,
             canonicalMarketId: session.canonical_market_id,
             actualVenueTargets: executionRequest.venueTargets,
+            expectedFlowSegment: flowSegmentValidation.flowSegment,
             authorities: executionScopeAuthorities
           }))
         : null;
@@ -2879,6 +2972,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
         executionRequest.metadata = {
           ...(executionRequest.metadata ?? {}),
           executionScopeTokenRef: `${validatedScope.binding.scopeKind}:${validatedScope.binding.scopeId}`,
+          executionScopeFlowSegment: flowSegmentValidation.flowSegment,
           executionScopeTopicKey: validatedScope.binding.topicKey,
           executionScopeLaneType: validatedScope.binding.laneType,
           executionScopeVenueSet: validatedScope.binding.venueSet,

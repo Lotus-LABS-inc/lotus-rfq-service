@@ -26,6 +26,11 @@ import type {
   IQualificationRuntimeHook,
   QualificationDomainHookConfig
 } from "../qualification/runtime-qualification-hook.js";
+import {
+  FlowSegmentationService,
+  type FlowSegmentationDecision,
+  type RoutingPath
+} from "./flow-segmentation.js";
 
 export interface CreateRFQCommand {
   canonicalMarketId: string;
@@ -34,12 +39,14 @@ export interface CreateRFQCommand {
   quantity: string;
   idempotencyKey: string;
   ttlSeconds: number;
+  routingPath?: RoutingPath | undefined;
 }
 
 export interface CreateRFQResult {
   sessionId: string;
   state: "BROADCAST";
   expiresAt: string;
+  flowSegment: FlowSegmentationDecision["flowSegment"];
 }
 
 export interface CreateRFQServiceDependencies {
@@ -58,6 +65,7 @@ export interface CreateRFQServiceDependencies {
   replayCaptureConfig?: ReplayCaptureConfig;
   qualificationHook?: IQualificationRuntimeHook;
   qualificationConfig?: QualificationDomainHookConfig;
+  flowSegmentationService?: FlowSegmentationService;
 }
 
 export class MarketInactiveError extends Error {
@@ -78,10 +86,12 @@ export class CreateRFQService {
   private readonly now: () => Date;
   private readonly createRequestId: () => string;
   private readonly replaySnapshotBuilder = new RFQGroupingSnapshotBuilder();
+  private readonly flowSegmentationService: FlowSegmentationService;
 
   public constructor(private readonly deps: CreateRFQServiceDependencies) {
     this.now = deps.now ?? (() => new Date());
     this.createRequestId = deps.createRequestId ?? (() => randomUUID());
+    this.flowSegmentationService = deps.flowSegmentationService ?? new FlowSegmentationService();
   }
 
   public async execute(
@@ -121,6 +131,17 @@ export class CreateRFQService {
         );
         const resolutionRiskGrouping = resolutionRiskPolicy?.grouping ?? rawResolutionRiskGrouping;
         const resolutionRiskShadowGrouping = resolutionRiskPolicy?.shadowGrouping;
+        const flowSegmentationDecision = this.flowSegmentationService.segment({
+          canonicalMarketId: command.canonicalMarketId,
+          canonicalEventId,
+          canonicalFamily: market.canonicalFamily ?? null,
+          category: market.category ?? null,
+          side: command.side,
+          quantity: command.quantity,
+          routingPath: command.routingPath ?? "UI",
+          marketLiquidity: market.marketLiquidity ?? null,
+          timestamp: this.now()
+        });
 
         const replayEnvelope: ReplayEnvelope | null =
           this.deps.replayDecisionCaptureService && this.deps.replayCaptureConfig
@@ -184,6 +205,11 @@ export class CreateRFQService {
           expiresAt,
           metadata: {
             source: "post_rfq_endpoint",
+            flow_segment: flowSegmentationDecision.flowSegment,
+            flow_segment_version: flowSegmentationDecision.version,
+            flow_segment_input_hash: flowSegmentationDecision.inputHash,
+            flow_segment_score: flowSegmentationDecision.score,
+            flow_segment_reasons: flowSegmentationDecision.reasonCodes,
             resolution_risk_grouping: resolutionRiskGrouping,
             ...(resolutionRiskShadowGrouping ? { resolution_risk_shadow_grouping: resolutionRiskShadowGrouping } : {}),
             ...(resolutionRiskPolicy
@@ -191,10 +217,14 @@ export class CreateRFQService {
                   resolution_risk_policy: {
                     mode: resolutionRiskPolicy.mode,
                     enforcement_active: resolutionRiskPolicy.enforcementActive
-                  }
                 }
-              : {})
-          }
+              }
+            : {})
+          },
+          flowSegment: flowSegmentationDecision.flowSegment,
+          flowSegmentVersion: flowSegmentationDecision.version,
+          flowSegmentInputHash: flowSegmentationDecision.inputHash,
+          flowSegmentReasons: flowSegmentationDecision.reasonCodes
         }));
 
         await this.deps.sessionManager.setSessionMetadata(
@@ -206,6 +236,11 @@ export class CreateRFQService {
             metadata: {
               canonicalMarketId: command.canonicalMarketId,
               takerId: command.takerId,
+              flow_segment: flowSegmentationDecision.flowSegment,
+              flow_segment_version: flowSegmentationDecision.version,
+              flow_segment_input_hash: flowSegmentationDecision.inputHash,
+              flow_segment_score: flowSegmentationDecision.score,
+              flow_segment_reasons: flowSegmentationDecision.reasonCodes,
               resolution_risk_grouping: resolutionRiskGrouping,
               ...(resolutionRiskShadowGrouping ? { resolution_risk_shadow_grouping: resolutionRiskShadowGrouping } : {}),
               ...(resolutionRiskPolicy
@@ -247,6 +282,11 @@ export class CreateRFQService {
             metadata: {
               canonicalMarketId: command.canonicalMarketId,
               takerId: command.takerId,
+              flow_segment: flowSegmentationDecision.flowSegment,
+              flow_segment_version: flowSegmentationDecision.version,
+              flow_segment_input_hash: flowSegmentationDecision.inputHash,
+              flow_segment_score: flowSegmentationDecision.score,
+              flow_segment_reasons: flowSegmentationDecision.reasonCodes,
               resolution_risk_grouping: resolutionRiskGrouping,
               ...(resolutionRiskShadowGrouping ? { resolution_risk_shadow_grouping: resolutionRiskShadowGrouping } : {}),
               ...(resolutionRiskPolicy
@@ -268,6 +308,11 @@ export class CreateRFQService {
           takerId: command.takerId,
           side: command.side,
           quantity: command.quantity,
+          flow_segment: flowSegmentationDecision.flowSegment,
+          flow_segment_version: flowSegmentationDecision.version,
+          flow_segment_input_hash: flowSegmentationDecision.inputHash,
+          flow_segment_score: flowSegmentationDecision.score,
+          flow_segment_reasons: flowSegmentationDecision.reasonCodes,
           resolution_risk_grouping: resolutionRiskGrouping,
           ...(resolutionRiskShadowGrouping ? { resolution_risk_shadow_grouping: resolutionRiskShadowGrouping } : {}),
           ...(resolutionRiskPolicy
@@ -279,6 +324,27 @@ export class CreateRFQService {
               }
             : {})
         };
+
+        const flowSegmentEventPayload = {
+          flowSegment: flowSegmentationDecision.flowSegment,
+          version: flowSegmentationDecision.version,
+          score: flowSegmentationDecision.score,
+          reasonCodes: flowSegmentationDecision.reasonCodes,
+          inputHash: flowSegmentationDecision.inputHash
+        };
+
+        await this.deps.eventRepository.append({
+          sessionId: session.id,
+          eventType: "RFQ_FLOW_SEGMENTED",
+          eventPayload: flowSegmentEventPayload
+        });
+
+        this.deps.eventEmitter.emitEvent({
+          type: "RFQ_FLOW_SEGMENTED",
+          sessionId: session.id,
+          occurredAt: this.now().toISOString(),
+          payload: flowSegmentEventPayload
+        });
 
         await this.deps.eventRepository.append({
           sessionId: session.id,
@@ -333,7 +399,8 @@ export class CreateRFQService {
         return {
           sessionId: session.id,
           state: "BROADCAST",
-          expiresAt: expiresAt.toISOString()
+          expiresAt: expiresAt.toISOString(),
+          flowSegment: flowSegmentationDecision.flowSegment
         };
       }
     );

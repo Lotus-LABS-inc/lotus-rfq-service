@@ -16,7 +16,8 @@ describe("RFQ Route JWT Integration", () => {
             createRFQ: vi.fn(async () => ({
                 sessionId: "session-1",
                 state: "BROADCAST" as const,
-                expiresAt: new Date().toISOString()
+                expiresAt: new Date().toISOString(),
+                flowSegment: "standard" as const
             })),
             createExecutionScopeToken: vi.fn(async () => ({
                 token: "scope-token",

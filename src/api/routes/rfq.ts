@@ -6,6 +6,7 @@ import {
   MarketInactiveError,
   type CreateRFQResult
 } from "../../core/rfq-engine/create-rfq-service.js";
+import { FlowSegmentValidationError, RFQLaneNotPromotedError } from "../../core/rfq-engine/flow-segmentation.js";
 import { ResolutionRiskGroupingError } from "../../core/rfq-engine/resolution-risk-grouping-service.js";
 import { RiskRejectedError } from "../../core/risk-engine.js";
 import { InsufficientLiquidityError } from "../../core/sor/splitter.js";
@@ -23,7 +24,8 @@ const createRFQRequestSchema = z.object({
   side: z.enum(["buy", "sell"]),
   quantity: z.string().regex(/^\d+(\.\d+)?$/),
   idempotencyKey: z.string().min(1),
-  ttlSeconds: z.number().int().min(1).max(300)
+  ttlSeconds: z.number().int().min(1).max(300),
+  routingPath: z.enum(["UI", "API", "PARTNER"]).optional()
 });
 
 type CreateRFQRequest = z.infer<typeof createRFQRequestSchema>;
@@ -48,6 +50,8 @@ interface CreateExecutionScopeTokenResponse {
   token: string;
   expiresAt: string;
   singleUse: true;
+  flowSegment?: "soft" | "standard";
+  flowSegmentVersion?: string;
   scope: {
     scopeKind: string;
     scopeId: string;
@@ -119,6 +123,13 @@ export const registerRFQRoute = async (
           });
         }
 
+        if (error instanceof RFQLaneNotPromotedError) {
+          return reply.status(409).send({
+            code: "RFQ_LANE_NOT_PROMOTED",
+            message: error.message
+          });
+        }
+
         if (
           error instanceof CanonicalMarketResolutionMetadataError ||
           error instanceof ResolutionRiskGroupingError
@@ -154,6 +165,13 @@ export const registerRFQRoute = async (
         if (error instanceof ExecutionScopeTokenError || error instanceof ExecutionScopeAuthorityError) {
           return reply.status(409).send({
             code: "EXECUTION_SCOPE_NOT_AVAILABLE",
+            message: error.message
+          });
+        }
+        if (error instanceof FlowSegmentValidationError) {
+          return reply.status(409).send({
+            code: "EXECUTION_SCOPE_NOT_AVAILABLE",
+            reason: error.code,
             message: error.message
           });
         }
@@ -210,6 +228,13 @@ export const registerRFQRoute = async (
           return reply.status(409).send({
             code: "PLAN_REJECTED",
             reason: "execution_scope_invalid",
+            message: error.message
+          });
+        }
+        if (error instanceof FlowSegmentValidationError) {
+          return reply.status(409).send({
+            code: "PLAN_REJECTED",
+            reason: error.code,
             message: error.message
           });
         }

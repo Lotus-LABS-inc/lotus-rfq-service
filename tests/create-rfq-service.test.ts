@@ -54,7 +54,9 @@ describe("CreateRFQService", () => {
       fetchMarketById: vi.fn(async () => ({
         id: "mkt-1",
         canonicalEventId: "event-1",
-        isActive: true
+        isActive: true,
+        canonicalFamily: "NOMINEE",
+        marketLiquidity: "100"
       }))
     } as CanonicalMarketClient;
 
@@ -114,12 +116,24 @@ describe("CreateRFQService", () => {
     });
 
     expect(result.state).toBe("BROADCAST");
+    expect(result.flowSegment).toBe("soft");
     expect(canonicalMarketClient.fetchMarketById).toHaveBeenCalledWith("mkt-1");
+    expect(eventRepository.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "session-1",
+        eventType: "RFQ_FLOW_SEGMENTED",
+        eventPayload: expect.objectContaining({
+          flowSegment: "soft",
+          version: "flow-segmentation-v1"
+        })
+      })
+    );
     expect(eventRepository.append).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: "session-1",
         eventType: "RFQ_CREATED",
         eventPayload: expect.objectContaining({
+          flow_segment: "soft",
           canonicalEventId: "event-1",
           resolution_risk_grouping: expect.objectContaining({
             safePools: [["profile-a", "profile-b"]]
@@ -141,7 +155,8 @@ describe("CreateRFQService", () => {
         metadata: expect.objectContaining({
           resolution_risk_grouping: expect.objectContaining({
             safePools: [["profile-a", "profile-b"]]
-          })
+          }),
+          flow_segment: "soft"
         })
       }),
       60

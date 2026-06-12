@@ -3,6 +3,7 @@ import type { Pool } from "pg";
 import type {
     CanonicalEvent,
     CanonicalExecutableMarket,
+    CanonicalFixtureEvent,
     CompatibilityEdge,
     PropositionFingerprint,
     ResolutionProfile,
@@ -15,6 +16,8 @@ const asJson = (value: Record<string, unknown> | readonly unknown[] | null | und
 
 export interface CanonicalGraphSnapshot {
     canonicalEvents: readonly CanonicalEvent[];
+    canonicalFixtureEvents: readonly CanonicalFixtureEvent[];
+    canonicalEventFixtureLinks: ReadonlyMap<string, string>;
     venueMarketProfiles: readonly VenueMarketProfile[];
     propositionFingerprints: readonly PropositionFingerprint[];
     resolutionProfiles: readonly ResolutionProfile[];
@@ -38,6 +41,17 @@ export class CanonicalGraphRepository {
         try {
             for (const event of snapshot.canonicalEvents) {
                 await this.upsertCanonicalEvent(event);
+            }
+            for (const fixture of snapshot.canonicalFixtureEvents) {
+                await this.upsertCanonicalFixtureEvent(fixture);
+            }
+            for (const event of snapshot.canonicalEvents) {
+                if (!snapshot.canonicalEventFixtureLinks.has(event.id)) {
+                    await this.clearCanonicalEventFixture(event.id);
+                }
+            }
+            for (const [canonicalEventId, fixtureId] of snapshot.canonicalEventFixtureLinks.entries()) {
+                await this.linkCanonicalEventToFixture(canonicalEventId, fixtureId);
             }
             for (const profile of snapshot.venueMarketProfiles) {
                 await this.upsertVenueMarketProfile(profile);
@@ -286,6 +300,57 @@ export class CanonicalGraphRepository {
                 asJson(event.sourceHints),
                 asJson(event.metadata)
             ]
+        );
+    }
+
+    public async upsertCanonicalFixtureEvent(fixture: CanonicalFixtureEvent): Promise<void> {
+        await this.pool.query(
+            `INSERT INTO canonical_fixture_events (
+                id,
+                fixture_key,
+                display_title,
+                category,
+                scheduled_at,
+                created_at,
+                updated_at
+            ) VALUES (
+                $1::uuid, $2, $3, $4, $5, $6, $7
+            )
+            ON CONFLICT (fixture_key) DO UPDATE SET
+                display_title = EXCLUDED.display_title,
+                category = EXCLUDED.category,
+                scheduled_at = EXCLUDED.scheduled_at,
+                updated_at = now()`,
+            [
+                fixture.id,
+                fixture.fixtureKey,
+                fixture.displayTitle,
+                fixture.category,
+                fixture.scheduledAt,
+                fixture.createdAt,
+                fixture.updatedAt
+            ]
+        );
+    }
+
+    public async linkCanonicalEventToFixture(canonicalEventId: string, fixtureId: string): Promise<void> {
+        await this.pool.query(
+            `UPDATE canonical_events
+                SET canonical_fixture_event_id = $2::uuid,
+                    updated_at = now()
+              WHERE id = $1::uuid`,
+            [canonicalEventId, fixtureId]
+        );
+    }
+
+    private async clearCanonicalEventFixture(canonicalEventId: string): Promise<void> {
+        await this.pool.query(
+            `UPDATE canonical_events
+                SET canonical_fixture_event_id = NULL,
+                    updated_at = now()
+              WHERE id = $1::uuid
+                AND canonical_fixture_event_id IS NOT NULL`,
+            [canonicalEventId]
         );
     }
 

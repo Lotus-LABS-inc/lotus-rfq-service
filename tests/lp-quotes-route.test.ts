@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   DuplicateQuoteIdError,
   InvalidRFQSessionStateError,
+  LPFlowSegmentNotSubscribedError,
   LPIdentityMismatchError,
   ReceiveLPQuoteService,
   RFQSessionNotFoundError,
@@ -82,7 +83,8 @@ describe("POST /lp/:id/quotes", () => {
       .mockRejectedValueOnce(new RFQSessionNotFoundError("s1"))
       .mockRejectedValueOnce(new InvalidRFQSessionStateError("s2", "BROADCAST"))
       .mockRejectedValueOnce(new DuplicateQuoteIdError("q1"))
-      .mockRejectedValueOnce(new ResolutionRiskQuoteRejectedError("blocked"));
+      .mockRejectedValueOnce(new ResolutionRiskQuoteRejectedError("blocked"))
+      .mockRejectedValueOnce(new LPFlowSegmentNotSubscribedError("not subscribed"));
 
     await registerLPQuotesRoute(
       app,
@@ -106,12 +108,15 @@ describe("POST /lp/:id/quotes", () => {
     const r3 = await app.inject({ method: "POST", url: "/lp/lp-1/quotes", payload });
     const r4 = await app.inject({ method: "POST", url: "/lp/lp-1/quotes", payload });
     const r5 = await app.inject({ method: "POST", url: "/lp/lp-1/quotes", payload });
+    const r6 = await app.inject({ method: "POST", url: "/lp/lp-1/quotes", payload });
 
     expect(r1.statusCode).toBe(403);
     expect(r2.statusCode).toBe(404);
     expect(r3.statusCode).toBe(409);
     expect(r4.statusCode).toBe(409);
     expect(r5.statusCode).toBe(409);
+    expect(r6.statusCode).toBe(409);
+    expect(r6.json()).toMatchObject({ code: "LP_FLOW_SEGMENT_NOT_SUBSCRIBED" });
     await app.close();
   });
 });

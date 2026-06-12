@@ -1,4 +1,5 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import type { FlowSegment } from "../core/rfq-engine/flow-segmentation.js";
 
 export const executionScopeKinds = [
   "CRYPTO_LANE",
@@ -23,6 +24,9 @@ export interface ExecutionScopeTokenClaims {
   sessionId: string;
   quoteId: string;
   canonicalMarketId: string;
+  flowSegment?: FlowSegment;
+  flowSegmentVersion?: string;
+  flowSegmentInputHash?: string;
   singleUse: true;
   issuedAt: string;
   expiresAt: string;
@@ -107,6 +111,9 @@ export class ExecutionScopeTokenService {
     sessionId: string;
     quoteId: string;
     canonicalMarketId: string;
+    flowSegment?: FlowSegment;
+    flowSegmentVersion?: string;
+    flowSegmentInputHash?: string;
     ttlSeconds: number;
     scope: ExecutionScopeTokenScopeSnapshot;
     now?: Date;
@@ -121,6 +128,9 @@ export class ExecutionScopeTokenService {
       sessionId: input.sessionId,
       quoteId: input.quoteId,
       canonicalMarketId: input.canonicalMarketId,
+      ...(input.flowSegment ? { flowSegment: input.flowSegment } : {}),
+      ...(input.flowSegmentVersion ? { flowSegmentVersion: input.flowSegmentVersion } : {}),
+      ...(input.flowSegmentInputHash ? { flowSegmentInputHash: input.flowSegmentInputHash } : {}),
       singleUse: true,
       issuedAt: now.toISOString(),
       expiresAt: expiresAt.toISOString(),
@@ -189,6 +199,7 @@ export class ExecutionScopeTokenService {
     quoteId: string;
     canonicalMarketId: string;
     actualVenueTargets?: readonly string[];
+    expectedFlowSegment?: FlowSegment;
     authorities: ExecutionScopeAuthorityRegistry;
     now?: Date;
   }): Promise<{
@@ -209,6 +220,9 @@ export class ExecutionScopeTokenService {
     }
     if (claims.canonicalMarketId !== input.canonicalMarketId) {
       throw new ExecutionScopeTokenError("Execution scope token market does not match the request.");
+    }
+    if (input.expectedFlowSegment && claims.flowSegment !== input.expectedFlowSegment) {
+      throw new ExecutionScopeTokenError("Execution scope token flow segment does not match the request.");
     }
     if (new Date(claims.expiresAt).getTime() <= now.getTime()) {
       throw new ExecutionScopeTokenError("Execution scope token has expired.");

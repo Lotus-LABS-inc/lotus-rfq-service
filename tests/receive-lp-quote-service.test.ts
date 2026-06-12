@@ -8,6 +8,7 @@ import type { RFQSessionRepository } from "../src/db/repositories/rfq-session-re
 import {
   DuplicateQuoteIdError,
   InvalidRFQSessionStateError,
+  LPFlowSegmentNotSubscribedError,
   ReceiveLPQuoteService,
   ResolutionRiskQuoteRejectedError
 } from "../src/lp/receive-lp-quote-service.js";
@@ -185,6 +186,143 @@ describe("ReceiveLPQuoteService", () => {
             resolution_lane: "caution:0",
             resolution_lane_type: "CAUTION",
             resolution_lane_reason: expect.stringContaining("caution lane")
+          })
+        })
+      }),
+      120
+    );
+  });
+
+  it("rejects soft flow quotes from LP keys that are not subscribed to soft flow", async () => {
+    const addQuote = vi.fn(async () => {});
+    const quoteCreate = vi.fn(async () => ({ id: "db-quote-soft" }));
+    const service = new ReceiveLPQuoteService({
+      sessionRepository: {
+        findById: vi.fn(async () => ({
+          id: "session-soft",
+          status: "COLLECTING_QUOTES",
+          flow_segment: "soft",
+          flow_segment_version: "flow-segmentation-v1",
+          flow_segment_input_hash: "hash-1"
+        }))
+      } as unknown as RFQSessionRepository,
+      quoteRepository: {
+        create: quoteCreate
+      } as unknown as RFQQuoteRepository,
+      eventRepository: {
+        append: vi.fn()
+      } as unknown as RFQEventRepository,
+      sessionManager: {
+        getSessionTtl: vi.fn(async () => 120),
+        getSessionMetadata: vi.fn(async () => ({ metadata: {} })),
+        addQuote
+      } as unknown as RFQSessionManager,
+      redisClient: {
+        set: vi.fn(async () => "OK")
+      } as unknown as RedisClient,
+      eventEmitter: {
+        emitEvent: vi.fn()
+      } as RFQEventEmitter,
+      lpKeyRepository: {
+        findByKeyId: vi.fn(async () => ({
+          id: "lp-key-db-1",
+          lp_id: "lp-1",
+          key_id: "api-key-1",
+          public_key: "public",
+          secret_hash: "secret",
+          status: "ACTIVE",
+          metadata: { flow_segments: ["standard"] },
+          created_at: new Date(),
+          updated_at: new Date()
+        }))
+      },
+      logger: { error: vi.fn() }
+    });
+
+    await expect(
+      service.execute({
+        routeLpId: "lp-1",
+        authenticatedLpId: "lp-1",
+        authenticatedLpKeyId: "api-key-1",
+        authenticatedLpKeyDbId: "lp-key-db-1",
+        sessionId: "session-soft",
+        quoteId: "quote-soft",
+        price: "1.00",
+        quantity: "10",
+        feeBps: 5,
+        validUntil: "2026-02-25T15:05:00.000Z"
+      })
+    ).rejects.toBeInstanceOf(LPFlowSegmentNotSubscribedError);
+    expect(addQuote).not.toHaveBeenCalled();
+    expect(quoteCreate).not.toHaveBeenCalled();
+  });
+
+  it("accepts soft flow quotes from LP keys subscribed to soft flow", async () => {
+    const addQuote = vi.fn(async () => {});
+    const service = new ReceiveLPQuoteService({
+      sessionRepository: {
+        findById: vi.fn(async () => ({
+          id: "session-soft-ok",
+          status: "COLLECTING_QUOTES",
+          flow_segment: "soft",
+          flow_segment_version: "flow-segmentation-v1",
+          flow_segment_input_hash: "hash-1"
+        }))
+      } as unknown as RFQSessionRepository,
+      quoteRepository: {
+        create: vi.fn(async () => ({ id: "db-quote-soft-ok" }))
+      } as unknown as RFQQuoteRepository,
+      eventRepository: {
+        append: vi.fn(async () => ({ id: "evt-soft-ok" }))
+      } as unknown as RFQEventRepository,
+      sessionManager: {
+        getSessionTtl: vi.fn(async () => 120),
+        getSessionMetadata: vi.fn(async () => ({ metadata: {} })),
+        addQuote
+      } as unknown as RFQSessionManager,
+      redisClient: {
+        set: vi.fn(async () => "OK")
+      } as unknown as RedisClient,
+      eventEmitter: {
+        emitEvent: vi.fn()
+      } as RFQEventEmitter,
+      lpKeyRepository: {
+        findByKeyId: vi.fn(async () => ({
+          id: "lp-key-db-1",
+          lp_id: "lp-1",
+          key_id: "api-key-1",
+          public_key: "public",
+          secret_hash: "secret",
+          status: "ACTIVE",
+          metadata: { flow_segments: ["soft"] },
+          created_at: new Date(),
+          updated_at: new Date()
+        }))
+      },
+      logger: { error: vi.fn() }
+    });
+
+    await service.execute({
+      routeLpId: "lp-1",
+      authenticatedLpId: "lp-1",
+      authenticatedLpKeyId: "api-key-1",
+      authenticatedLpKeyDbId: "lp-key-db-1",
+      sessionId: "session-soft-ok",
+      quoteId: "quote-soft-ok",
+      price: "1.00",
+      quantity: "10",
+      feeBps: 5,
+      validUntil: "2026-02-25T15:05:00.000Z"
+    });
+
+    expect(addQuote).toHaveBeenCalledWith(
+      "session-soft-ok",
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          payload: expect.objectContaining({
+            flow_segment: "soft",
+            flow_segment_version: "flow-segmentation-v1",
+            flow_segment_input_hash: "hash-1"
           })
         })
       }),

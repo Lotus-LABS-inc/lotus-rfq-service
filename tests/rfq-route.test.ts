@@ -34,7 +34,8 @@ describe("POST /rfq", () => {
     const createRFQ = vi.fn(async () => ({
       sessionId: "session-1",
       state: "BROADCAST" as const,
-      expiresAt: "2026-02-25T12:00:00.000Z"
+      expiresAt: "2026-02-25T12:00:00.000Z",
+      flowSegment: "standard" as const
     }));
 
     const passThroughAuth: preHandlerHookHandler = async () => { };
@@ -131,6 +132,8 @@ describe("POST /rfq/:id/accept", () => {
       token: "signed-token",
       expiresAt: "2026-04-04T12:00:00.000Z",
       singleUse: true as const,
+      flowSegment: "soft" as const,
+      flowSegmentVersion: "flow-segmentation-v1",
       scope: {
         scopeKind: "POLITICS_NOMINEE_LANE",
         scopeId: "POLITICS_NOMINEE_REPUBLICAN_TRI_LIMITLESS_OPINION_POLYMARKET",

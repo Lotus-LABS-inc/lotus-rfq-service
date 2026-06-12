@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 
 export type RFQDomainEventType =
   | "RFQ_CREATED"
+  | "RFQ_FLOW_SEGMENTED"
   | "QUOTE_RECEIVED"
   | "STATE_TRANSITION"
   | "EXECUTION_UPDATE"
