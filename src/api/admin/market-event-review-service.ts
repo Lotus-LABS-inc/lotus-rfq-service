@@ -8,6 +8,12 @@ import {
   type EventReviewFilter,
   type EventReviewVenueRuleRow
 } from "../../repositories/market-event-review.repository.js";
+import {
+  readArtifact,
+  type CrossVenueMatchReport
+} from "../../operations/semantic-expansion/shared.js";
+
+const MATCH_REPORT_PATH = "docs/cross-venue-match-report.json";
 
 export class MarketEventReviewServiceError extends Error {
   constructor(message: string) {
@@ -33,6 +39,17 @@ export interface EventReviewOutcomeVenue {
   resolutionTitle: string | null;
 }
 
+export interface EventReviewNearExactCandidate {
+  matchId: string;
+  venue: string;
+  venueMarketId: string;
+  title: string;
+  // Raw matcher signals for the operator to judge against the rules. Note: the matcher's
+  // dimension flags are not authoritative for parameter safety — read the rules before declining.
+  failedDimensions: readonly string[];
+  finalConfidence: number;
+}
+
 export interface EventReviewOutcome {
   outcomeKey: string;
   label: string;
@@ -41,6 +58,7 @@ export interface EventReviewOutcome {
   venues: string[];
   perVenue: EventReviewOutcomeVenue[];
   missingVenues: string[];
+  nearExactCandidates: EventReviewNearExactCandidate[];
 }
 
 export interface EventReviewSummary {
@@ -71,6 +89,7 @@ interface OutcomeAccumulator {
   outcomeKey: string;
   label: string;
   canonicalEventId: string;
+  canonicalEventIds: Set<string>;
   status: CatalogStatus;
   venueMarkets: Map<string, EventReviewOutcomeVenue>;
 }
@@ -132,7 +151,10 @@ const deriveOutcome = (row: EventReviewCanonicalRow): { outcomeKey: string; labe
  * matcher near-exact overlay are a later stage.
  */
 export class MarketEventReviewService {
-  constructor(private readonly repository: MarketEventReviewRepository) {}
+  constructor(
+    private readonly repository: MarketEventReviewRepository,
+    private readonly repoRoot: string = process.cwd()
+  ) {}
 
   private async buildEvents(filter: EventReviewFilter): Promise<Map<string, EventAccumulator>> {
     const rows = await this.repository.listCanonicalEvents(filter);
@@ -158,9 +180,11 @@ export class MarketEventReviewService {
         outcomeKey: outcome.outcomeKey,
         label: outcome.label,
         canonicalEventId: row.canonicalEventId,
+        canonicalEventIds: new Set<string>(),
         status: DB_TO_FRIENDLY[row.status],
         venueMarkets: new Map<string, EventReviewOutcomeVenue>()
       };
+      acc.canonicalEventIds.add(row.canonicalEventId);
       for (const rule of rulesByEvent.get(row.canonicalEventId) ?? []) {
         acc.venueMarkets.set(rule.venue, {
           venue: rule.venue,
@@ -224,11 +248,23 @@ export class MarketEventReviewService {
     }
     const summary = this.toSummary(event);
     const eventVenues = summary.venues;
+    const nearExactByEventId = this.loadNearExactOverlay();
 
     const outcomes: EventReviewOutcome[] = [...event.outcomes.values()]
       .map((outcome) => {
         const perVenue = [...outcome.venueMarkets.values()].sort((a, b) => a.venue.localeCompare(b.venue));
         const present = new Set(perVenue.map((entry) => entry.venue));
+        const nearExactCandidates: EventReviewNearExactCandidate[] = [];
+        const seen = new Set<string>();
+        for (const canonicalEventId of outcome.canonicalEventIds) {
+          for (const candidate of nearExactByEventId.get(canonicalEventId) ?? []) {
+            if (seen.has(candidate.matchId)) {
+              continue;
+            }
+            seen.add(candidate.matchId);
+            nearExactCandidates.push(candidate);
+          }
+        }
         return {
           outcomeKey: outcome.outcomeKey,
           label: outcome.label,
@@ -236,7 +272,8 @@ export class MarketEventReviewService {
           status: outcome.status,
           venues: [...present].sort(),
           perVenue,
-          missingVenues: eventVenues.filter((venue) => !present.has(venue))
+          missingVenues: eventVenues.filter((venue) => !present.has(venue)),
+          nearExactCandidates
         };
       })
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -267,5 +304,43 @@ export class MarketEventReviewService {
     });
 
     return { ...summary, venueRules, outcomes };
+  }
+
+  /**
+   * Best-effort matcher overlay: maps each canonical event id to the near-exact candidates the
+   * matcher proposes for it (the other side of the pair). Empty if no match report exists yet.
+   */
+  private loadNearExactOverlay(): Map<string, EventReviewNearExactCandidate[]> {
+    const map = new Map<string, EventReviewNearExactCandidate[]>();
+    let report: CrossVenueMatchReport;
+    try {
+      report = readArtifact<CrossVenueMatchReport>(this.repoRoot, MATCH_REPORT_PATH);
+    } catch {
+      return map;
+    }
+    const attach = (
+      eventId: string,
+      other: CrossVenueMatchReport["matches"][number]["seed"],
+      match: CrossVenueMatchReport["matches"][number]
+    ): void => {
+      const bucket = map.get(eventId) ?? [];
+      bucket.push({
+        matchId: match.matchId,
+        venue: other.venue === "PREDICT" ? "PREDICT_FUN" : other.venue,
+        venueMarketId: other.venueMarketId,
+        title: other.title,
+        failedDimensions: match.failedDimensions,
+        finalConfidence: match.finalConfidence
+      });
+      map.set(eventId, bucket);
+    };
+    for (const match of report.matches) {
+      if (match.matchClass !== "semantic_near_exact") {
+        continue;
+      }
+      attach(match.seed.canonicalEventId, match.candidate, match);
+      attach(match.candidate.canonicalEventId, match.seed, match);
+    }
+    return map;
   }
 }
