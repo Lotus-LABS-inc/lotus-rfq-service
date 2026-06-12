@@ -132,8 +132,18 @@ jobs:
           sudo chown -R "$(id -u):$(id -g)" "$VPS_BACKEND_DIR/artifacts"
 
           if [ "$DEPLOY_BRANCH" = "main" ]; then
-            npm run report:vps-runtime-smoke -- production
+            SMOKE_TARGET="production"
           else
-            npm run report:vps-runtime-smoke -- staging
+            SMOKE_TARGET="staging"
           fi
+
+          for attempt in 1 2 3 4 5; do
+            if npm run report:vps-runtime-smoke -- "$SMOKE_TARGET"; then
+              exit 0
+            fi
+            echo "VPS runtime smoke failed on attempt $attempt; retrying after service warmup..."
+            sleep 5
+          done
+
+          npm run report:vps-runtime-smoke -- "$SMOKE_TARGET"
           REMOTE
