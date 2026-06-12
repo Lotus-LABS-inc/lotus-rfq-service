@@ -116,4 +116,4 @@ jobs:
           else
             npm run report:vps-runtime-smoke -- staging
           fi
-REMOTE
+          REMOTE
