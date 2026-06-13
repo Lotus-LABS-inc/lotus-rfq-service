@@ -12,6 +12,26 @@ export interface PolymarketGammaMarket {
   raw: Record<string, unknown>;
 }
 
+export interface PolymarketGammaEvent {
+  eventId: string | null;
+  eventSlug: string | null;
+  title: string;
+  markets: PolymarketGammaMarket[];
+  raw: Record<string, unknown>;
+}
+
+export interface PolymarketGammaListMarketsInput {
+  limit?: number;
+  offset?: number;
+  active?: boolean;
+  closed?: boolean;
+  archived?: boolean;
+  order?: string;
+  ascending?: boolean;
+}
+
+export type PolymarketGammaListEventsInput = PolymarketGammaListMarketsInput;
+
 export class PolymarketGammaClient {
   private readonly baseUrl: string;
   private readonly clobHost: string;
@@ -71,12 +91,60 @@ export class PolymarketGammaClient {
     return asRecord(await this.getJson(`/events/slug/${encodeURIComponent(trimmed)}`));
   }
 
+  public async listEvents(input: PolymarketGammaListEventsInput = {}): Promise<PolymarketGammaEvent[]> {
+    const query: Record<string, string> = {
+      limit: String(input.limit ?? 100),
+      offset: String(input.offset ?? 0)
+    };
+    if (input.active !== undefined) {
+      query.active = String(input.active);
+    }
+    if (input.closed !== undefined) {
+      query.closed = String(input.closed);
+    }
+    if (input.archived !== undefined) {
+      query.archived = String(input.archived);
+    }
+    if (input.order) {
+      query.order = input.order;
+    }
+    if (input.ascending !== undefined) {
+      query.ascending = String(input.ascending);
+    }
+    const events = await this.getJson("/events", query);
+    return normalizeGammaEventList(events);
+  }
+
   public async searchMarkets(query: string): Promise<PolymarketGammaMarket[]> {
     const trimmed = query.trim();
     if (!trimmed) {
       return [];
     }
     const markets = await this.getJson("/markets", { search: trimmed, limit: "20" });
+    return normalizeGammaMarketList(markets);
+  }
+
+  public async listMarkets(input: PolymarketGammaListMarketsInput = {}): Promise<PolymarketGammaMarket[]> {
+    const query: Record<string, string> = {
+      limit: String(input.limit ?? 100),
+      offset: String(input.offset ?? 0)
+    };
+    if (input.active !== undefined) {
+      query.active = String(input.active);
+    }
+    if (input.closed !== undefined) {
+      query.closed = String(input.closed);
+    }
+    if (input.archived !== undefined) {
+      query.archived = String(input.archived);
+    }
+    if (input.order) {
+      query.order = input.order;
+    }
+    if (input.ascending !== undefined) {
+      query.ascending = String(input.ascending);
+    }
+    const markets = await this.getJson("/markets", query);
     return normalizeGammaMarketList(markets);
   }
 
@@ -105,14 +173,15 @@ export const normalizeGammaMarketList = (value: unknown): PolymarketGammaMarket[
     const outcomes = parseStringArray(record.outcomes);
     const clobTokenIds = parseStringArray(record.clobTokenIds, record.clob_token_ids);
     const clobTokens = parseClobTokens(record.tokens);
+    const normalizedOutcomes = outcomes.map((label, index) => ({
+      label,
+      token_id: clobTokenIds[index]
+    })).filter((outcome) => typeof outcome.label === "string" && outcome.label.length > 0);
     const normalizedRaw = {
       ...record,
       outcomes: clobTokens.length > 0
         ? clobTokens
-        : outcomes.map((label, index) => ({
-          label,
-          token_id: clobTokenIds[index]
-        })).filter((outcome) => typeof outcome.token_id === "string" && outcome.token_id.length > 0)
+        : normalizedOutcomes
     };
     return [{
       marketId: firstString(record.id),
@@ -120,6 +189,31 @@ export const normalizeGammaMarketList = (value: unknown): PolymarketGammaMarket[
       marketSlug: firstString(record.slug, record.market_slug),
       title,
       raw: normalizedRaw
+    }];
+  });
+};
+
+export const normalizeGammaEventList = (value: unknown): PolymarketGammaEvent[] => {
+  const record = asRecord(value);
+  const entries = Array.isArray(value)
+    ? value
+    : Array.isArray(record.events)
+      ? record.events
+      : Array.isArray(record.data)
+        ? record.data
+        : [value];
+  return entries.flatMap((entry) => {
+    const event = asRecord(entry);
+    const title = firstString(event.title, event.name);
+    if (!title) {
+      return [];
+    }
+    return [{
+      eventId: firstString(event.id),
+      eventSlug: firstString(event.slug, event.event_slug),
+      title,
+      markets: normalizeGammaMarketList(event.markets),
+      raw: event
     }];
   });
 };

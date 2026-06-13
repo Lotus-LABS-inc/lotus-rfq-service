@@ -4,6 +4,7 @@ import type { OpinionNormalizedMarket } from "./opinion-types.js";
 
 export interface OpinionCurrentDiscoveryClientConfig {
   apiKey: string | null;
+  apiKeys?: readonly string[];
   baseUrl?: string;
   fallbackBaseUrl?: string | null;
   pageSize?: number;
@@ -41,6 +42,20 @@ const normalizeBaseUrl = (baseUrl: string): string => (baseUrl.endsWith("/") ? b
 
 const toErrorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
 
+const uniqueStrings = (values: readonly (string | null | undefined)[]): string[] => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+  return result;
+};
+
 export class OpinionCurrentDiscoveryClient {
   private readonly fetchImpl: typeof fetch;
 
@@ -70,7 +85,12 @@ export class OpinionCurrentDiscoveryClient {
     maxPages?: number;
     pageSize?: number;
   }): Promise<OpinionCurrentDiscoveryResult> {
-    if (!this.config.apiKey) {
+    const apiKeys = uniqueStrings([
+      ...(this.config.apiKeys ?? []),
+      this.config.apiKey
+    ]);
+
+    if (apiKeys.length === 0) {
       return {
         status: "NOT_CONFIGURED",
         rows: [],
@@ -82,81 +102,96 @@ export class OpinionCurrentDiscoveryClient {
       };
     }
 
-    try {
-      const scannedRows = await this.fetchMarketsFromBase(
-        this.config.baseUrl ?? process.env.OPINION_CLOB_BASE_URL ?? DEFAULT_PRIMARY_BASE_URL,
-        input.metadataVersion,
-        input.maxPages,
-        input.pageSize
-      );
-      const rows = input.matcher ? scannedRows.filter(input.matcher) : scannedRows;
-      return {
-        status: rows.length > 0 ? "SUCCESS" : "EMPTY",
-        rows,
-        primaryDiscoveryPath: PRIMARY_DISCOVERY_PATH,
-        fallbackDiscoveryPathUsed: null,
-        primaryPathFailure: null,
-        warnings: [],
-        scannedRowCount: scannedRows.length
-      };
-    } catch (primaryError) {
-      const fallbackBaseUrl = this.config.fallbackBaseUrl
-        ?? process.env.OPINION_OPENAPI_BASE_URL
-        ?? DEFAULT_FALLBACK_BASE_URL;
+    const fallbackBaseUrl = this.config.fallbackBaseUrl
+      ?? process.env.OPINION_OPENAPI_BASE_URL
+      ?? DEFAULT_FALLBACK_BASE_URL;
+    const warnings: string[] = [];
+    let primaryPathFailure: string | null = null;
+    let fallbackDiscoveryPathUsed: string | null = null;
 
-      if (!fallbackBaseUrl) {
-        return {
-          status: "UNAVAILABLE",
-          rows: [],
-          primaryDiscoveryPath: PRIMARY_DISCOVERY_PATH,
-          fallbackDiscoveryPathUsed: null,
-          primaryPathFailure: toErrorMessage(primaryError),
-          warnings: [toErrorMessage(primaryError)],
-          scannedRowCount: 0
-        };
-      }
-
+    for (let keyIndex = 0; keyIndex < apiKeys.length; keyIndex += 1) {
+      const apiKey = apiKeys[keyIndex]!;
       try {
-        const scannedRows = await this.fetchMarketsFromBase(
-          fallbackBaseUrl,
+        const primary = await this.fetchMarketsFromBase(
+          this.config.baseUrl ?? process.env.OPINION_CLOB_BASE_URL ?? DEFAULT_PRIMARY_BASE_URL,
+          apiKey,
           input.metadataVersion,
           input.maxPages,
           input.pageSize
         );
-        const rows = input.matcher ? scannedRows.filter(input.matcher) : scannedRows;
+        const rows = input.matcher ? primary.rows.filter(input.matcher) : primary.rows;
+        return {
+          status: rows.length > 0
+            ? (primary.warnings.length > 0 ? "DEGRADED" : "SUCCESS")
+            : "EMPTY",
+          rows,
+          primaryDiscoveryPath: PRIMARY_DISCOVERY_PATH,
+          fallbackDiscoveryPathUsed: null,
+          primaryPathFailure: null,
+          warnings: [
+            ...warnings,
+            ...primary.warnings
+          ],
+          scannedRowCount: primary.rows.length
+        };
+      } catch (primaryError) {
+        const primaryMessage = toErrorMessage(primaryError);
+        primaryPathFailure ??= primaryMessage;
+        warnings.push(`Primary discovery path failed for key ${keyIndex + 1}: ${primaryMessage}`);
+      }
+
+      if (!fallbackBaseUrl) {
+        continue;
+      }
+
+      try {
+        const fallback = await this.fetchMarketsFromBase(
+          fallbackBaseUrl,
+          apiKey,
+          input.metadataVersion,
+          input.maxPages,
+          input.pageSize
+        );
+        const rows = input.matcher ? fallback.rows.filter(input.matcher) : fallback.rows;
+        fallbackDiscoveryPathUsed = FALLBACK_DISCOVERY_PATH;
         return {
           status: rows.length > 0 ? "DEGRADED" : "EMPTY",
           rows,
           primaryDiscoveryPath: PRIMARY_DISCOVERY_PATH,
           fallbackDiscoveryPathUsed: FALLBACK_DISCOVERY_PATH,
-          primaryPathFailure: toErrorMessage(primaryError),
-          warnings: [`Primary discovery path failed: ${toErrorMessage(primaryError)}`],
-          scannedRowCount: scannedRows.length
+          primaryPathFailure,
+          warnings: [
+            ...warnings,
+            ...fallback.warnings
+          ],
+          scannedRowCount: fallback.rows.length
         };
       } catch (fallbackError) {
-        return {
-          status: "UNAVAILABLE",
-          rows: [],
-          primaryDiscoveryPath: PRIMARY_DISCOVERY_PATH,
-          fallbackDiscoveryPathUsed: FALLBACK_DISCOVERY_PATH,
-          primaryPathFailure: toErrorMessage(primaryError),
-          warnings: [
-            `Primary discovery path failed: ${toErrorMessage(primaryError)}`,
-            `Fallback discovery path failed: ${toErrorMessage(fallbackError)}`
-          ],
-          scannedRowCount: 0
-        };
+        fallbackDiscoveryPathUsed = FALLBACK_DISCOVERY_PATH;
+        warnings.push(`Fallback discovery path failed for key ${keyIndex + 1}: ${toErrorMessage(fallbackError)}`);
       }
     }
+
+    return {
+      status: "UNAVAILABLE",
+      rows: [],
+      primaryDiscoveryPath: PRIMARY_DISCOVERY_PATH,
+      fallbackDiscoveryPathUsed,
+      primaryPathFailure,
+      warnings,
+      scannedRowCount: 0
+    };
   }
 
   private async fetchMarketsFromBase(
     baseUrl: string,
+    apiKey: string,
     metadataVersion: string,
     overrideMaxPages?: number,
     overridePageSize?: number
-  ): Promise<readonly OpinionNormalizedMarket[]> {
+  ): Promise<{ rows: readonly OpinionNormalizedMarket[]; warnings: readonly string[] }> {
     const rows = new Map<string, OpinionNormalizedMarket>();
+    const warnings: string[] = [];
     const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
     const pageSize = overridePageSize ?? this.config.pageSize ?? 20;
     const maxPages = overrideMaxPages ?? this.config.maxPages ?? 20;
@@ -166,32 +201,43 @@ export class OpinionCurrentDiscoveryClient {
       const url = new URL("market", normalizedBaseUrl);
       url.searchParams.set("page", String(page));
       url.searchParams.set("limit", String(pageSize));
+      url.searchParams.set("status", "activated");
+      url.searchParams.set("marketType", "2");
 
-      const response = await this.fetchImpl(url, {
-        headers: {
-          apikey: this.config.apiKey!
-        },
-        signal: AbortSignal.timeout(requestTimeoutMs)
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(`Opinion current discovery failed with HTTP ${response.status}.`);
-      }
+      try {
+        const response = await this.fetchImpl(url, {
+          headers: {
+            apikey: apiKey
+          },
+          signal: AbortSignal.timeout(requestTimeoutMs)
+        });
+        if (!response.ok) {
+          throw new Error(`Opinion current discovery failed with HTTP ${response.status}.`);
+        }
+        const payload = await response.json();
 
-      const parsed = parseOpinionMarketList(payload);
-      const markets = parsed.map((market) => normalizeOpinionMarketRecord(
-        typeof market === "object" && market !== null ? market as Record<string, unknown> : {},
-        metadataVersion
-      ));
-      for (const market of markets.filter(isActivatedMarket)) {
-        rows.set(market.venueMarketId, market);
-      }
+        const parsed = parseOpinionMarketList(payload);
+        const markets = parsed.map((market) => normalizeOpinionMarketRecord(
+          typeof market === "object" && market !== null ? market as Record<string, unknown> : {},
+          metadataVersion
+        ));
+        for (const market of markets.filter(isActivatedMarket)) {
+          rows.set(market.venueMarketId, market);
+        }
 
-      if (markets.length === 0 || markets.length < pageSize) {
+        if (markets.length === 0 || markets.length < pageSize) {
+          break;
+        }
+      } catch (error) {
+        const message = `Opinion current discovery page ${page} failed for ${normalizedBaseUrl}: ${toErrorMessage(error)}`;
+        if (rows.size === 0) {
+          throw new Error(message);
+        }
+        warnings.push(message);
         break;
       }
     }
 
-    return [...rows.values()];
+    return { rows: [...rows.values()], warnings };
   }
 }
