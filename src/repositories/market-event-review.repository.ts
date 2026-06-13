@@ -65,7 +65,10 @@ export class MarketEventReviewRepository {
     ];
     const params: unknown[] = [];
     if (!filter.includeExpired) {
-      conditions.push(`(ce.resolves_at IS NULL OR ce.resolves_at > NOW())`);
+      conditions.push(`(
+        (ce.resolves_at IS NULL OR ce.resolves_at > NOW())
+        AND (ce.expires_at IS NULL OR ce.expires_at > NOW())
+      )`);
     }
     if (filter.status) {
       params.push(filter.status);

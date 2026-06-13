@@ -212,7 +212,8 @@ export const registerMarketCatalogRoutes = async (
         const markets = await deps.marketCatalogRepository.listMarkets({
           ...(cacheQuery.category !== undefined ? { category: cacheQuery.category } : {}),
           ...(cacheQuery.search !== undefined ? { search: cacheQuery.search } : {}),
-          ...(marketLimit !== undefined ? { limit: marketLimit } : {})
+          ...(marketLimit !== undefined ? { limit: marketLimit } : {}),
+          ...(cacheQuery.includeInactive !== undefined ? { includeInactive: cacheQuery.includeInactive } : {})
         });
         const publicMarkets = cacheQuery.includeInactive
           ? markets

@@ -69,6 +69,7 @@ export interface MarketCatalogFilter {
   search?: string;
   limit?: number;
   offset?: number;
+  includeInactive?: boolean;
   includeUnapproved?: boolean;
 }
 
@@ -246,6 +247,22 @@ const MAX_LIMIT = 1000;
 const MAX_EVENT_SOURCE_LIMIT = 1000;
 const FRONTEND_SHARED_CORE_APPROVAL_SOURCE = "frontend-curated-catalog";
 const QUOTE_ENABLED_VENUE_PROFILE_CONDITION = "COALESCE(vmp.normalized_payload->>'quoteDisabled', 'false') <> 'true'";
+const ACTIVE_CANONICAL_EVENT_CONDITION = `(
+  (ce.resolves_at IS NULL OR ce.resolves_at > NOW())
+  AND (ce.expires_at IS NULL OR ce.expires_at > NOW())
+)`;
+const ACTIVE_VENUE_MARKET_CONDITION = `(
+  (vmp.resolves_at IS NULL OR vmp.resolves_at > NOW())
+  AND (vmp.expires_at IS NULL OR vmp.expires_at > NOW())
+)`;
+const ACTIVE_QUOTE_ENABLED_VENUE_EXISTS_CONDITION = `EXISTS (
+  SELECT 1
+    FROM venue_market_profiles vmp_active
+   WHERE vmp_active.canonical_event_id = ce.id
+     AND COALESCE(vmp_active.normalized_payload->>'quoteDisabled', 'false') <> 'true'
+     AND (vmp_active.resolves_at IS NULL OR vmp_active.resolves_at > NOW())
+     AND (vmp_active.expires_at IS NULL OR vmp_active.expires_at > NOW())
+)`;
 
 export class MarketCatalogRepository {
   public constructor(private readonly pool: Pool) {}
@@ -278,7 +295,9 @@ export class MarketCatalogRepository {
          LEFT JOIN venue_market_profiles vmp
            ON vmp.canonical_event_id = ce.id
           AND ${QUOTE_ENABLED_VENUE_PROFILE_CONDITION}
-        WHERE cem.id IS NOT NULL OR vmp.id IS NOT NULL
+        WHERE (cem.id IS NOT NULL OR vmp.id IS NOT NULL)
+          AND ${ACTIVE_CANONICAL_EVENT_CONDITION}
+          AND ${ACTIVE_QUOTE_ENABLED_VENUE_EXISTS_CONDITION}
           AND NOT EXISTS (
             SELECT 1
              FROM unnest($1::text[]) excluded(prefix)
@@ -312,6 +331,10 @@ export class MarketCatalogRepository {
     if (!filter.includeUnapproved) {
       conditions.push(`fma.status = 'APPROVED'`);
       conditions.push(`fma.metadata->>'source' = '${FRONTEND_SHARED_CORE_APPROVAL_SOURCE}'`);
+    }
+    if (!filter.includeInactive) {
+      conditions.push(ACTIVE_CANONICAL_EVENT_CONDITION);
+      conditions.push(ACTIVE_QUOTE_ENABLED_VENUE_EXISTS_CONDITION);
     }
     addFrontendCatalogExclusionCondition(conditions, params);
     if (filter.category?.trim()) {
@@ -370,6 +393,7 @@ export class MarketCatalogRepository {
          LEFT JOIN venue_market_profiles vmp
            ON (vmp.id = mem.venue_market_profile_id OR vmp.canonical_event_id = ce.id)
           AND ${QUOTE_ENABLED_VENUE_PROFILE_CONDITION}
+          ${filter.includeInactive ? "" : `AND ${ACTIVE_VENUE_MARKET_CONDITION}`}
          ${where}
           ${where ? "AND" : "WHERE"} (cem.id IS NOT NULL OR vmp.id IS NOT NULL)
         GROUP BY ce.id
@@ -435,7 +459,10 @@ export class MarketCatalogRepository {
          LEFT JOIN venue_market_profiles vmp
            ON (vmp.id = mem.venue_market_profile_id OR vmp.canonical_event_id = ce.id)
           AND ${QUOTE_ENABLED_VENUE_PROFILE_CONDITION}
+          AND ${ACTIVE_VENUE_MARKET_CONDITION}
         WHERE (ce.id::text = ANY($1::text[]) OR cem.id = ANY($1::text[]) OR ce.proposition_key = ANY($1::text[]))
+          AND ${ACTIVE_CANONICAL_EVENT_CONDITION}
+          AND ${ACTIVE_QUOTE_ENABLED_VENUE_EXISTS_CONDITION}
           AND NOT EXISTS (
             SELECT 1
              FROM unnest($2::text[]) excluded(prefix)
@@ -545,6 +572,7 @@ export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingL
              OR cem.id = $1
              OR regexp_replace(cem.id, ':(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$', '') =
                 regexp_replace($1, ':(POLYMARKET|LIMITLESS|PREDICT|PREDICT_FUN|OPINION|MYRIAD)$', ''))
+            AND ${ACTIVE_CANONICAL_EVENT_CONDITION}
             AND NOT EXISTS (
               SELECT 1
                FROM unnest($3::text[]) excluded(prefix)
@@ -584,6 +612,7 @@ export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingL
        JOIN venue_market_profiles vmp
           ON vmp.canonical_event_id = se.id
          AND ${QUOTE_ENABLED_VENUE_PROFILE_CONDITION}
+         AND ${ACTIVE_VENUE_MARKET_CONDITION}
         LEFT JOIN canonical_executable_market_members mem
           ON mem.venue_market_profile_id = vmp.id
         WHERE (
@@ -629,7 +658,8 @@ export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingL
                 requested.requested_market_core
            JOIN canonical_events ce
              ON ce.id = cem.canonical_event_id
-          WHERE NOT EXISTS (
+          WHERE ${ACTIVE_CANONICAL_EVENT_CONDITION}
+            AND NOT EXISTS (
             SELECT 1
              FROM unnest($3::text[]) excluded(prefix)
              WHERE upper(ce.proposition_key) = upper(excluded.prefix)
@@ -658,6 +688,7 @@ export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingL
         JOIN venue_market_profiles vmp
           ON vmp.id = mem.venue_market_profile_id
          AND ${QUOTE_ENABLED_VENUE_PROFILE_CONDITION}
+         AND ${ACTIVE_VENUE_MARKET_CONDITION}
        ORDER BY selected_markets.requested_canonical_market_id, vmp.venue`,
       [
         canonicalMarketIds,
@@ -679,7 +710,8 @@ export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingL
              ON fma.canonical_event_id = ce.id
             AND fma.status = 'APPROVED'
             AND fma.metadata->>'source' = $2
-          WHERE NOT EXISTS (
+          WHERE ${ACTIVE_CANONICAL_EVENT_CONDITION}
+            AND NOT EXISTS (
             SELECT 1
              FROM unnest($3::text[]) excluded(prefix)
              WHERE upper(ce.proposition_key) = upper(excluded.prefix)
@@ -716,6 +748,7 @@ export class SharedCoreQuoteMappingRepository implements SharedCoreQuoteMappingL
         JOIN venue_market_profiles vmp
           ON vmp.id = mem.venue_market_profile_id
          AND ${QUOTE_ENABLED_VENUE_PROFILE_CONDITION}
+         AND ${ACTIVE_VENUE_MARKET_CONDITION}
        ORDER BY ce.title, vmp.venue`,
       [
         Math.max(1, Math.min(1000, Math.floor(input.limit))),
