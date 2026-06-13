@@ -8,18 +8,62 @@ export interface LimitlessCurrentDiscoveryClientConfig {
   baseUrl?: string;
   maxPages?: number;
   pageSize?: number;
+  maxMissingSlugDetails?: number;
   requestTimeoutMs?: number;
 }
 
 export interface LimitlessCurrentDiscoveryResult {
-  status: "SUCCESS" | "EMPTY" | "UNAVAILABLE" | "NOT_CONFIGURED";
+  status: "SUCCESS" | "EMPTY" | "DEGRADED" | "UNAVAILABLE" | "NOT_CONFIGURED";
   rows: readonly LimitlessLiveMarket[];
   primaryDiscoveryPath: string;
   warnings: readonly string[];
 }
 
 const DEFAULT_BASE_URL = "https://api.limitless.exchange";
-const PRIMARY_DISCOVERY_PATH = "limitless_sdk_active_markets";
+const PRIMARY_DISCOVERY_PATH = "limitless_sdk_active_markets_with_active_slugs";
+const MAX_LIMITLESS_PAGE_SIZE = 25;
+
+interface LimitlessActiveSlug {
+  slug: string;
+  strikePrice?: string | number | null;
+  ticker?: string | null;
+  deadline?: string | null;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const normalizeLimitlessActiveSlugs = (payload: unknown): LimitlessActiveSlug[] => {
+  const rows = Array.isArray(payload)
+    ? payload
+    : isRecord(payload) && Array.isArray(payload.data)
+      ? payload.data
+      : [];
+  return rows.flatMap((row) => {
+    if (!isRecord(row) || typeof row.slug !== "string" || row.slug.trim().length === 0) {
+      return [];
+    }
+    const normalized: LimitlessActiveSlug = { slug: row.slug.trim() };
+    if (typeof row.strikePrice === "string" || typeof row.strikePrice === "number" || row.strikePrice === null) {
+      normalized.strikePrice = row.strikePrice;
+    }
+    if (typeof row.ticker === "string" || row.ticker === null) {
+      normalized.ticker = row.ticker;
+    }
+    if (typeof row.deadline === "string" || row.deadline === null) {
+      normalized.deadline = row.deadline;
+    }
+    return [normalized];
+  });
+};
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> =>
+  Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(message)), timeoutMs);
+    })
+  ]);
 
 const inferCategory = (input: {
   title: string;
@@ -55,7 +99,11 @@ const toDateOrNull = (value: string | number | null | undefined): Date | null =>
   return null;
 };
 
-const toLimitlessLiveMarket = (market: MarketInterface, fetchedAt: Date): LimitlessLiveMarket => {
+const toLimitlessLiveMarket = (
+  market: MarketInterface,
+  fetchedAt: Date,
+  sourceRef: string = PRIMARY_DISCOVERY_PATH
+): LimitlessLiveMarket => {
   const description = typeof market.description === "string" ? market.description : market.proxyTitle ?? null;
   const categories = Array.isArray(market.categories) ? market.categories : [];
   const tags = Array.isArray(market.tags) ? market.tags : [];
@@ -88,7 +136,7 @@ const toLimitlessLiveMarket = (market: MarketInterface, fetchedAt: Date): Limitl
     volume: market.volume ?? null,
     liquidity: market.liquidity ?? null,
     marketType: market.marketType ?? null,
-    sourceRef: PRIMARY_DISCOVERY_PATH,
+    sourceRef,
     fetchedAt,
     canonicalCategory,
     family: family.familyBucket,
@@ -103,6 +151,12 @@ export class LimitlessCurrentDiscoveryClient {
   public constructor(private readonly config: LimitlessCurrentDiscoveryClientConfig = {}) {}
 
   public async listCurrentMarkets(): Promise<LimitlessCurrentDiscoveryResult> {
+    const warnings: string[] = [];
+    const fetchedAt = new Date();
+    const rows = new Map<string, LimitlessLiveMarket>();
+    const seenSlugs = new Set<string>();
+    let degraded = false;
+
     try {
       const resolvedApiKey = this.config.apiKey ?? process.env.LIMITLESS_API_KEY ?? null;
       const httpClient = new HttpClient(
@@ -116,39 +170,100 @@ export class LimitlessCurrentDiscoveryClient {
             }
       );
       const marketFetcher = new MarketFetcher(httpClient);
-      const pageSize = this.config.pageSize ?? 25;
-      const maxPages = this.config.maxPages ?? 20;
+      const pageSize = Math.min(this.config.pageSize ?? MAX_LIMITLESS_PAGE_SIZE, MAX_LIMITLESS_PAGE_SIZE);
+      const maxPages = this.config.maxPages ?? 120;
+      const maxMissingSlugDetails = this.config.maxMissingSlugDetails ?? pageSize * maxPages;
       const requestTimeoutMs = this.config.requestTimeoutMs ?? 10_000;
-      const fetchedAt = new Date();
-      const rows = new Map<string, LimitlessLiveMarket>();
+      let expectedActiveMarketCount: number | null = null;
 
       for (let page = 1; page <= maxPages; page += 1) {
-        const response = await Promise.race([
+        const response = await withTimeout(
           marketFetcher.getActiveMarkets({
             page,
             limit: pageSize,
             sortBy: "newest"
           }),
-          new Promise<never>((_, reject) => {
-            setTimeout(() => reject(new Error(`Limitless active markets request timed out after ${requestTimeoutMs}ms.`)), requestTimeoutMs);
-          })
-        ]);
+          requestTimeoutMs,
+          `Limitless active markets request timed out after ${requestTimeoutMs}ms.`
+        );
+        if (typeof response.totalMarketsCount === "number" && Number.isFinite(response.totalMarketsCount)) {
+          expectedActiveMarketCount = response.totalMarketsCount;
+        }
         for (const market of response.data) {
-          const row = toLimitlessLiveMarket(market, fetchedAt);
+          const row = toLimitlessLiveMarket(market, fetchedAt, "limitless_sdk_active_markets");
           rows.set(row.venueMarketId, row);
+          if (row.slug) seenSlugs.add(row.slug);
         }
         if (response.data.length < pageSize) {
           break;
         }
+        if (expectedActiveMarketCount !== null && page * pageSize >= expectedActiveMarketCount) {
+          break;
+        }
+        if (page === maxPages && expectedActiveMarketCount !== null && rows.size < expectedActiveMarketCount) {
+          warnings.push(`Limitless active market scan reached maxPages=${maxPages} before expected total ${expectedActiveMarketCount}.`);
+          degraded = true;
+        }
       }
 
+      let activeSlugs: LimitlessActiveSlug[] = [];
+      try {
+        activeSlugs = normalizeLimitlessActiveSlugs(await withTimeout(
+          httpClient.get<unknown>("/markets/active/slugs"),
+          requestTimeoutMs,
+          `Limitless active slugs request timed out after ${requestTimeoutMs}ms.`
+        ));
+        if (expectedActiveMarketCount !== null && activeSlugs.length > 0 && activeSlugs.length !== expectedActiveMarketCount) {
+          warnings.push(`Limitless active slugs count ${activeSlugs.length} differs from active market total ${expectedActiveMarketCount}.`);
+        }
+      } catch (error) {
+        warnings.push(`Limitless active slugs unavailable: ${error instanceof Error ? error.message : String(error)}`);
+        if (rows.size === 0) {
+          degraded = true;
+        }
+      }
+
+      const allMissingSlugs = activeSlugs
+        .map((entry) => entry.slug)
+        .filter((slug) => !seenSlugs.has(slug));
+      const missingSlugs = allMissingSlugs.slice(0, maxMissingSlugDetails);
+      for (const slug of missingSlugs) {
+        try {
+          const market = await withTimeout(
+            marketFetcher.getMarket(slug),
+            requestTimeoutMs,
+            `Limitless market detail request timed out after ${requestTimeoutMs}ms.`
+          );
+          const row = toLimitlessLiveMarket(market, fetchedAt, "limitless_active_slug_detail");
+          rows.set(row.venueMarketId, row);
+          if (row.slug) seenSlugs.add(row.slug);
+        } catch (error) {
+          warnings.push(`Limitless market detail unavailable for ${slug}: ${error instanceof Error ? error.message : String(error)}`);
+          degraded = true;
+        }
+      }
+      if (missingSlugs.length < allMissingSlugs.length) {
+        warnings.push(`Limitless active slug detail scan capped at ${maxMissingSlugDetails} of ${allMissingSlugs.length} missing slugs.`);
+        degraded = true;
+      }
+
+      const expectedCount = expectedActiveMarketCount ?? activeSlugs.length;
+      degraded = degraded || (expectedCount > 0 && rows.size < expectedCount);
       return {
-        status: rows.size > 0 ? "SUCCESS" : "EMPTY",
+        status: rows.size > 0 ? (degraded ? "DEGRADED" : "SUCCESS") : "EMPTY",
         rows: [...rows.values()],
         primaryDiscoveryPath: PRIMARY_DISCOVERY_PATH,
-        warnings: []
+        warnings
       };
     } catch (error) {
+      if (rows.size > 0) {
+        return {
+          status: "DEGRADED",
+          rows: [...rows.values()],
+          primaryDiscoveryPath: PRIMARY_DISCOVERY_PATH,
+          warnings: [...warnings, error instanceof Error ? error.message : String(error)]
+        };
+      }
       return {
         status: "UNAVAILABLE",
         rows: [],

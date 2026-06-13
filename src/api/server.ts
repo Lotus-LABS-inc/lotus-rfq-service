@@ -255,6 +255,8 @@ import { TriMatchReviewService } from "./admin/tri-match-review-service.js";
 import { MarketMatchingService } from "./admin/market-matching-service.js";
 import { MarketEventReviewService } from "./admin/market-event-review-service.js";
 import { MarketEventAcceptService } from "./admin/market-event-accept-service.js";
+import { MarketDiscoveryService } from "../market-discovery/market-discovery-service.js";
+import { MarketDiscoveryRepository } from "../repositories/market-discovery.repository.js";
 import { MarketEventReviewRepository } from "../repositories/market-event-review.repository.js";
 import { MarketCatalogAdminService } from "./admin/market-catalog-admin-service.js";
 import { CuratedMarketAdminService } from "./admin/curated-market-admin-service.js";
@@ -3349,6 +3351,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     marketEventAcceptService: new MarketEventAcceptService(
       dependencies.pgPool,
       new MarketEventReviewRepository(dependencies.pgPool)
+    ),
+    marketDiscoveryService: new MarketDiscoveryService(
+      dependencies.pgPool,
+      new MarketDiscoveryRepository(dependencies.pgPool)
     )
   });
   await registerAdminMarketCatalogRoutes(app, adminAuthMiddleware, {

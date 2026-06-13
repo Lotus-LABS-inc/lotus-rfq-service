@@ -45,9 +45,26 @@ export interface PredictMarketsQuery {
   category?: string;
   tag?: string;
   state?: string;
+  status?: string;
   search?: string;
   page?: number;
   limit?: number;
+  first?: number;
+  after?: string;
+  isBoosted?: boolean;
+  tagIds?: string;
+  marketVariant?: string;
+  sort?: string;
+  hasActiveRewards?: boolean;
+}
+
+export interface PredictCategoriesQuery {
+  first?: number;
+  after?: string;
+  status?: string;
+  sort?: string;
+  tagIds?: string;
+  marketVariant?: string;
 }
 
 export interface PredictOrdersQuery {
@@ -103,6 +120,8 @@ export class PredictResponseValidationError extends Error {
 }
 
 export const PREDICT_ENDPOINTS = Object.freeze({
+  categories: "/v1/categories",
+  categoryBySlug: (slug: string) => `/v1/categories/${encodeURIComponent(slug)}`,
   markets: "/v1/markets",
   marketById: (id: string) => `/v1/markets/${encodeURIComponent(id)}`,
   marketStats: (id: string) => `/v1/markets/${encodeURIComponent(id)}/stats`,
@@ -153,6 +172,16 @@ const resolveBaseUrl = (config: PredictClientConfig): string =>
   config.baseUrl ?? (config.environment === "mainnet" ? PREDICT_MAINNET_BASE_URL : PREDICT_TESTNET_BASE_URL);
 
 export type PredictMarketsResponse = ReturnType<typeof parsePredictMarketsResponse>;
+export interface PredictMarketsPageResponse {
+  success: boolean | null;
+  cursor: string | null;
+  data: PredictMarketsResponse;
+}
+export interface PredictCategoriesPageResponse {
+  success: boolean | null;
+  cursor: string | null;
+  data: readonly Record<string, unknown>[];
+}
 export type PredictMarketResponse = ReturnType<typeof parsePredictMarketResponse>;
 export type PredictMarketStatisticsResponse = ReturnType<typeof parsePredictMarketStatisticsResponse>;
 export type PredictMarketLastSaleResponse = ReturnType<typeof parsePredictMarketLastSaleResponse>;
@@ -165,6 +194,38 @@ export type PredictAccountActivityResponse = ReturnType<typeof parsePredictAccou
 export type PredictPositionsResponse = ReturnType<typeof parsePredictPositionsResponse>;
 export type PredictAuthMessageResponse = ReturnType<typeof parsePredictAuthMessageResponse>;
 export type PredictJwtResponse = ReturnType<typeof parsePredictJwtResponse>;
+
+const parsePredictMarketsPageResponse = (payload: unknown): PredictMarketsPageResponse => {
+  const record = typeof payload === "object" && payload !== null && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : {};
+  return {
+    success: typeof record.success === "boolean" ? record.success : null,
+    cursor: typeof record.cursor === "string" && record.cursor.trim().length > 0 ? record.cursor : null,
+    data: parsePredictMarketsResponse(payload)
+  };
+};
+
+const parseObjectArrayPageResponse = (payload: unknown): PredictCategoriesPageResponse => {
+  const record = typeof payload === "object" && payload !== null && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : {};
+  const rows = Array.isArray(payload)
+    ? payload
+    : Array.isArray(record.data)
+      ? record.data
+      : Array.isArray(record.items)
+        ? record.items
+        : Array.isArray(record.categories)
+          ? record.categories
+          : [];
+  return {
+    success: typeof record.success === "boolean" ? record.success : null,
+    cursor: typeof record.cursor === "string" && record.cursor.trim().length > 0 ? record.cursor : null,
+    data: rows
+      .filter((row): row is Record<string, unknown> => typeof row === "object" && row !== null && !Array.isArray(row))
+  };
+};
 
 export class PredictClient {
   private readonly fetchImpl: typeof fetch;
@@ -185,6 +246,25 @@ export class PredictClient {
 
   public getMarkets(query: PredictMarketsQuery = {}): Promise<PredictMarketsResponse> {
     return this.request("getMarkets", "GET", PREDICT_ENDPOINTS.markets, query as QueryParams, undefined, parsePredictMarketsResponse);
+  }
+
+  public getMarketsPage(query: PredictMarketsQuery = {}): Promise<PredictMarketsPageResponse> {
+    return this.request("getMarketsPage", "GET", PREDICT_ENDPOINTS.markets, query as QueryParams, undefined, parsePredictMarketsPageResponse);
+  }
+
+  public getCategoriesPage(query: PredictCategoriesQuery = {}): Promise<PredictCategoriesPageResponse> {
+    return this.request("getCategoriesPage", "GET", PREDICT_ENDPOINTS.categories, query as QueryParams, undefined, parseObjectArrayPageResponse);
+  }
+
+  public getCategoryBySlug(slug: string): Promise<Record<string, unknown>> {
+    return this.request("getCategoryBySlug", "GET", PREDICT_ENDPOINTS.categoryBySlug(slug), undefined, undefined, (payload) => {
+      if (typeof payload === "object" && payload !== null && !Array.isArray(payload)) {
+        const record = payload as Record<string, unknown>;
+        const data = record.data;
+        return typeof data === "object" && data !== null && !Array.isArray(data) ? data as Record<string, unknown> : record;
+      }
+      return {};
+    });
   }
 
   public getMarketById(marketId: string): Promise<PredictMarketResponse> {

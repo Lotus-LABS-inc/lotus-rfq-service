@@ -10,11 +10,16 @@ import {
   MarketEventAcceptService,
   MarketEventAcceptServiceError
 } from "./market-event-accept-service.js";
+import {
+  MarketDiscoveryService,
+  MarketDiscoveryServiceError
+} from "../../market-discovery/market-discovery-service.js";
 
 export interface AdminMarketMatchingRouteDeps {
   marketMatchingService: MarketMatchingService;
   marketEventReviewService: MarketEventReviewService;
   marketEventAcceptService: MarketEventAcceptService;
+  marketDiscoveryService: MarketDiscoveryService;
 }
 
 const acceptEventBodySchema = z.object({
@@ -48,6 +53,24 @@ const approveBodySchema = z.object({
 const rejectBodySchema = z.object({
   twoFactorToken: z.string().min(6),
   matchId: z.string().min(1),
+  reason: z.string().min(1)
+});
+
+const discoveryCandidateListQuerySchema = z.object({
+  state: z.enum(["DISCOVERED", "INGESTED", "APPROVED", "REJECTED", "SUPPRESSED"]).optional(),
+  candidateType: z.enum(["NEW_DISCOVERY", "MERGE_SUGGESTION", "ENRICHMENT_ONLY", "LOW_CONFIDENCE"]).optional()
+});
+
+const discoveryCandidateParamsSchema = z.object({ candidateId: z.string().uuid() });
+
+const approveDiscoveryBodySchema = z.object({
+  twoFactorToken: z.string().min(6),
+  reason: z.string().min(1),
+  makeLive: z.boolean().optional()
+});
+
+const rejectDiscoveryBodySchema = z.object({
+  twoFactorToken: z.string().min(6),
   reason: z.string().min(1)
 });
 
@@ -133,6 +156,113 @@ export const registerAdminMarketMatchingRoutes = async (
       }
       app.log.error({ err: error }, "Failed to fetch market matching event.");
       return reply.status(500).send({ code: "MARKET_MATCHING_ERROR", message: "Failed to fetch market matching event." });
+    }
+  });
+
+  app.get("/admin/market-matching/discovery-candidates", { preHandler: adminMiddleware }, async (request, reply) => {
+    const parsed = discoveryCandidateListQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: parsed.error.flatten() });
+    }
+    try {
+      const result = await deps.marketDiscoveryService.listCandidates(parsed.data);
+      return reply.send(result);
+    } catch (error) {
+      app.log.error({ err: error }, "Failed to list market discovery candidates.");
+      return reply.status(500).send({ code: "MARKET_DISCOVERY_ERROR", message: "Failed to list market discovery candidates." });
+    }
+  });
+
+  app.get("/admin/market-matching/discovery-topic-bundles", { preHandler: adminMiddleware }, async (request, reply) => {
+    const parsed = discoveryCandidateListQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: parsed.error.flatten() });
+    }
+    try {
+      const result = await deps.marketDiscoveryService.listTopicBundles(parsed.data);
+      return reply.send(result);
+    } catch (error) {
+      app.log.error({ err: error }, "Failed to list market discovery topic bundles.");
+      return reply.status(500).send({ code: "MARKET_DISCOVERY_ERROR", message: "Failed to list market discovery topic bundles." });
+    }
+  });
+
+  app.post("/admin/market-matching/discovery/run", { preHandler: adminMiddleware }, async (_request, reply) => {
+    try {
+      const summary = await deps.marketDiscoveryService.runOnce();
+      return reply.send({ summary });
+    } catch (error) {
+      app.log.error({ err: error }, "Failed to run market discovery.");
+      return reply.status(500).send({ code: "MARKET_DISCOVERY_ERROR", message: "Failed to run market discovery." });
+    }
+  });
+
+  app.post("/admin/market-matching/discovery-candidates/:candidateId/approve", { preHandler: adminMiddleware }, async (request, reply) => {
+    const params = discoveryCandidateParamsSchema.safeParse(request.params);
+    if (!params.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: params.error.flatten() });
+    }
+    const body = approveDiscoveryBodySchema.safeParse(request.body);
+    if (!body.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: body.error.flatten() });
+    }
+    if (!validateTwoFactorToken(body.data.twoFactorToken)) {
+      return reply.status(403).send({ code: "FORBIDDEN", message: "ADMIN+2FA required." });
+    }
+    try {
+      const result = await deps.marketDiscoveryService.approve({
+        candidateId: params.data.candidateId,
+        approvedBy: request.user.userId,
+        reason: body.data.reason,
+        makeLive: body.data.makeLive
+      });
+      app.log.info(
+        {
+          candidateId: params.data.candidateId,
+          approvedBy: request.user.userId,
+          makeLive: body.data.makeLive === true
+        },
+        "Market discovery candidate approved by operator."
+      );
+      return reply.send({ result });
+    } catch (error) {
+      if (error instanceof MarketDiscoveryServiceError) {
+        return reply.status(409).send({ code: "MARKET_DISCOVERY_APPROVAL_FAILED", message: error.message });
+      }
+      app.log.error({ err: error }, "Failed to approve market discovery candidate.");
+      return reply.status(500).send({ code: "MARKET_DISCOVERY_ERROR", message: "Failed to approve market discovery candidate." });
+    }
+  });
+
+  app.post("/admin/market-matching/discovery-candidates/:candidateId/reject", { preHandler: adminMiddleware }, async (request, reply) => {
+    const params = discoveryCandidateParamsSchema.safeParse(request.params);
+    if (!params.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: params.error.flatten() });
+    }
+    const body = rejectDiscoveryBodySchema.safeParse(request.body);
+    if (!body.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: body.error.flatten() });
+    }
+    if (!validateTwoFactorToken(body.data.twoFactorToken)) {
+      return reply.status(403).send({ code: "FORBIDDEN", message: "ADMIN+2FA required." });
+    }
+    try {
+      const result = await deps.marketDiscoveryService.reject({
+        candidateId: params.data.candidateId,
+        rejectedBy: request.user.userId,
+        reason: body.data.reason
+      });
+      app.log.info(
+        { candidateId: params.data.candidateId, rejectedBy: request.user.userId, reason: body.data.reason },
+        "Market discovery candidate rejected by operator."
+      );
+      return reply.send({ result });
+    } catch (error) {
+      if (error instanceof MarketDiscoveryServiceError) {
+        return reply.status(409).send({ code: "MARKET_DISCOVERY_REJECTION_FAILED", message: error.message });
+      }
+      app.log.error({ err: error }, "Failed to reject market discovery candidate.");
+      return reply.status(500).send({ code: "MARKET_DISCOVERY_ERROR", message: "Failed to reject market discovery candidate." });
     }
   });
 
