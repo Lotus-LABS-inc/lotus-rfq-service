@@ -537,6 +537,37 @@ describe("market discovery clustering", () => {
     expect(hints.contractKey).toBe("OPENAI");
   });
 
+  it("extracts competition subjects for season-winner markets", () => {
+    expect(extractMarketSemanticHints({
+      eventTitle: "NHL Stanley Cup 2025 2026 Winner", title: "Florida Panthers", category: "SPORTS"
+    }).subject).toBe("NHL_STANLEY_CUP");
+    expect(extractMarketSemanticHints({
+      eventTitle: "F1 Drivers Championship 2026 Winner", title: "Max Verstappen", category: "SPORTS"
+    }).subject).toBe("F1_DRIVERS_CHAMPIONSHIP");
+    expect(extractMarketSemanticHints({
+      eventTitle: "Will Top Esports win the LPL 2026 season?", title: "Top Esports", category: "ESPORTS"
+    }).subject).toBe("LPL");
+  });
+
+  it("extracts mayor and IPO subjects", () => {
+    expect(extractMarketSemanticHints({
+      eventTitle: "Seoul Mayor 2026 Winner", title: "Oh Se Hoon", category: "POLITICS"
+    }).subject).toBe("SEOUL_MAYOR_2026");
+    const ipo = extractMarketSemanticHints({ eventTitle: "OKX IPO in 2026", title: "OKX", category: "OTHER" });
+    expect(ipo.marketFamily).toBe("IPO_BY_DATE");
+    expect(ipo.subject).toBe("OKX");
+  });
+
+  it("records a typed outcomeOverlap reason instead of an unknown low-confidence bucket", () => {
+    const result = buildMarketDiscoveryCandidates([
+      baseRow({ venue: "POLYMARKET", venueMarketId: "pm-1", outcomes: [{ label: "Chelsea" }, { label: "Draw" }, { label: "Crystal Palace" }] }),
+      baseRow({ venue: "LIMITLESS", venueMarketId: "lim-1", outcomes: [{ label: "Chelsea win by 2+" }, { label: "Any other result" }] })
+    ], new Date("2026-06-01T00:00:00.000Z"));
+
+    expect(result.candidates[0]?.candidateType).toBe("LOW_CONFIDENCE");
+    expect(result.candidates[0]?.draftSemanticCore?.missingFields).toContain("outcomeOverlap");
+  });
+
   it("extracts World Cup stat leader contracts", () => {
     const hints = extractMarketSemanticHints({
       eventTitle: "World Cup: Most Assists",
