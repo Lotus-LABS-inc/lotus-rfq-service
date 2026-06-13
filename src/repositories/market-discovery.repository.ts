@@ -6,6 +6,7 @@ import type {
   MarketDiscoveryVenueEvidence,
   VenueMarketDiscoverySnapshot
 } from "../market-discovery/market-discovery-types.js";
+import { FRONTEND_CURATED_CATALOG_SOURCE } from "./frontend-market-approval.repository.js";
 
 const asJson = (value: unknown): string => JSON.stringify(value ?? null);
 
@@ -494,11 +495,24 @@ export class MarketDiscoveryRepository {
         input.makeLive ? "APPROVED" : "HIDDEN",
         input.approvedBy,
         input.reason,
-        JSON.stringify({
-          source: "market-discovery-v2",
-          discoveryCandidateId: input.candidateId,
-          defaultVisibility: input.makeLive ? "APPROVED" : "HIDDEN"
-        })
+        // When making it live, stamp the source tag the public catalog filters on
+        // (FRONTEND_CURATED_CATALOG_SOURCE) so the market actually surfaces to users. Discovery
+        // provenance is preserved under discoverySource. Hidden approvals omit the curated tag
+        // (status HIDDEN keeps them invisible; a later catalog resume stamps the tag).
+        JSON.stringify(
+          input.makeLive
+            ? {
+                source: FRONTEND_CURATED_CATALOG_SOURCE,
+                discoverySource: "market-discovery-v2",
+                discoveryCandidateId: input.candidateId,
+                defaultVisibility: "APPROVED"
+              }
+            : {
+                discoverySource: "market-discovery-v2",
+                discoveryCandidateId: input.candidateId,
+                defaultVisibility: "HIDDEN"
+              }
+        )
       ]
     );
   }
