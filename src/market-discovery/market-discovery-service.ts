@@ -23,7 +23,9 @@ import type {
 } from "./market-discovery-types.js";
 import { buildMarketDiscoveryTopicBundles } from "./market-discovery-topic-bundles.js";
 import { MarketDiscoveryRepository } from "../repositories/market-discovery.repository.js";
+import { CuratedMarketAdminService } from "../api/admin/curated-market-admin-service.js";
 import type { SemanticDiscoveryCategory } from "../simulation/semantic-rulepack.js";
+import type { CanonicalCategory } from "../canonical/canonicalization-types.js";
 import {
   UpstreamMarketDiscoveryCollector,
   type UpstreamMarketDiscoveryCollectorResult
@@ -38,7 +40,11 @@ export class MarketDiscoveryServiceError extends Error {
 
 export interface MarketDiscoveryApprovalResult {
   candidate: MarketDiscoveryCandidate;
-  summary: SemanticExactSyncSummary;
+  canonicalEventId: string;
+  // Present for MERGE_SUGGESTION/ENRICHMENT_ONLY (exact-overlap sync path); absent for
+  // NEW_DISCOVERY (projected as a fresh cross-venue canonical event).
+  summary?: SemanticExactSyncSummary;
+  createdMarketIds?: string[];
 }
 
 export interface MarketDiscoveryReviewSummary {
@@ -65,7 +71,8 @@ export class MarketDiscoveryService {
     private readonly repository: MarketDiscoveryRepository = new MarketDiscoveryRepository(pool),
     private readonly repoRoot: string = process.cwd(),
     private readonly upstreamCollector: { collect: () => Promise<UpstreamMarketDiscoveryCollectorResult> } =
-      new UpstreamMarketDiscoveryCollector()
+      new UpstreamMarketDiscoveryCollector(),
+    private readonly curatedAdmin: CuratedMarketAdminService = new CuratedMarketAdminService(pool)
   ) {}
 
   public async runOnce(): Promise<MarketDiscoveryRunSummary> {
@@ -196,10 +203,13 @@ export class MarketDiscoveryService {
     if (candidate.state !== "INGESTED") {
       throw new MarketDiscoveryServiceError(`Only INGESTED discovery candidates can be approved. Current state: ${candidate.state}.`);
     }
+
+    // NEW_DISCOVERY members are upstream-only (no canonical event yet), so they can't go through
+    // the exact-overlap sync (which extends existing canonical inventory). Project them as a
+    // fresh cross-venue canonical event instead, then stamp the frontend approval via markApproved
+    // so the source tag is applied consistently with every other approval path.
     if (candidate.candidateType === "NEW_DISCOVERY") {
-      throw new MarketDiscoveryServiceError(
-        "NEW_DISCOVERY approval requires the create-canonical-market review action; it is intentionally not routed through the existing merge approval path."
-      );
+      return this.approveNewDiscovery(candidate, input);
     }
 
     const inventory = await loadSemanticExpansionInventory(this.pool);
@@ -255,7 +265,58 @@ export class MarketDiscoveryService {
       reason: input.reason
     });
 
-    return { candidate, summary };
+    return { candidate, canonicalEventId: promoted.targetCanonicalEventId, summary };
+  }
+
+  private async approveNewDiscovery(
+    candidate: MarketDiscoveryCandidate,
+    input: { candidateId: string; approvedBy: string; reason: string; makeLive?: boolean | undefined }
+  ): Promise<MarketDiscoveryApprovalResult> {
+    const members = candidate.venueEvidence
+      .filter((entry) => entry.venue && entry.venueMarketId)
+      .map((entry) => ({
+        venue: entry.venue,
+        venueMarketId: entry.venueMarketId,
+        title: entry.title,
+        ...(entry.outcomes.length > 0
+          ? { outcomes: entry.outcomes.map((label) => ({ id: label.toUpperCase(), label })) }
+          : {})
+      }));
+    if (members.length < 2) {
+      throw new MarketDiscoveryServiceError("Discovery candidate no longer has two venue members to project.");
+    }
+
+    const core = candidate.draftSemanticCore;
+    const boundary = candidate.semanticBoundaryKey ?? core?.timeBoundary ?? null;
+    const eventPropositionKey = core?.marketFamily && core?.subject
+      ? `frontend-curated:${candidate.category}|${core.marketFamily}|${core.subject}|${core.condition ?? "NA"}`
+      : undefined;
+
+    const projected = await this.curatedAdmin.projectCrossVenueMarket(
+      {
+        eventTitle: candidate.eventTitle,
+        category: candidate.category as CanonicalCategory,
+        marketClass: candidate.marketClass,
+        ...(eventPropositionKey ? { eventPropositionKey } : {}),
+        ...(boundary ? { resolvesAt: boundary, expiresAt: boundary } : {}),
+        members
+      },
+      input.approvedBy
+    );
+
+    await this.repository.markApproved({
+      candidateId: candidate.id,
+      canonicalEventId: projected.canonicalEventId,
+      makeLive: input.makeLive === true,
+      approvedBy: input.approvedBy,
+      reason: input.reason
+    });
+
+    return {
+      candidate,
+      canonicalEventId: projected.canonicalEventId,
+      createdMarketIds: projected.canonicalMarketIds
+    };
   }
 
   private toSemanticCategory(category: string): SemanticDiscoveryCategory {

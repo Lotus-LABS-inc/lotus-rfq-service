@@ -43,6 +43,30 @@ export interface CreateMarketResult {
   event: AdminCatalogEventRow;
 }
 
+export interface CrossVenueMarketMember {
+  venue: CanonicalVenue;
+  venueMarketId: string;
+  title: string;
+  outcomes?: ReadonlyArray<{ id: string; label: string }> | undefined;
+  resolutionRulesText?: string | undefined;
+  resolutionSource?: string | undefined;
+}
+
+export interface ProjectCrossVenueMarketInput {
+  eventTitle: string;
+  category: CanonicalCategory;
+  marketClass?: string | undefined;
+  eventPropositionKey?: string | undefined;
+  expiresAt?: string | undefined;
+  resolvesAt?: string | undefined;
+  members: ReadonlyArray<CrossVenueMarketMember>;
+}
+
+export interface ProjectCrossVenueMarketResult {
+  canonicalEventId: string;
+  canonicalMarketIds: string[];
+}
+
 const toDate = (value: string | undefined): Date | null => {
   if (!value) {
     return null;
@@ -131,6 +155,68 @@ export class CuratedMarketAdminService {
       canonicalMarketId,
       status: input.makeLive ? "LIVE" : "PENDING",
       event
+    };
+  }
+
+  /**
+   * Project a cross-venue NEW_DISCOVERY candidate into the canonical graph: one shared
+   * canonical event with each venue as its OWN single-member executable market. We do NOT pool
+   * the venues into a single executable market here — that requires an EQUIVALENT compatibility
+   * edge and stays gated by pair-match review. This only makes the event exist (and become
+   * visible once approved); it does not assert cross-venue routeability. Projection only — the
+   * caller writes the frontend approval (so the source tag is stamped consistently).
+   */
+  async projectCrossVenueMarket(input: ProjectCrossVenueMarketInput, actor: string): Promise<ProjectCrossVenueMarketResult> {
+    const members = input.members.filter((member) => member.venue && member.venueMarketId);
+    if (members.length < 2) {
+      throw new CuratedMarketAdminServiceError("A cross-venue market needs at least two venue members.");
+    }
+    const eventKey = members.map((member) => `${member.venue}:${member.venueMarketId}`).sort().join("|");
+    const canonicalEventId = buildStableUuid(`discovery-curated-event:${eventKey}`);
+    const expiresAt = toDate(input.expiresAt);
+    const resolvesAt = toDate(input.resolvesAt);
+
+    const seeds: CuratedCanonicalGraphSeed[] = members.map((member) => {
+      const memberKey = `${member.venue}:${member.venueMarketId}`;
+      const outcomes: CanonicalOutcomeDefinition[] | undefined = member.outcomes?.map((outcome) => ({
+        id: outcome.id,
+        label: outcome.label
+      }));
+      return {
+        canonicalEventId,
+        // Distinct executable market per venue → no cross-venue EQUIVALENT edge is required.
+        canonicalMarketId: buildStableTextId("discovery-curated-market-", memberKey),
+        canonicalCategory: input.category,
+        venue: member.venue,
+        venueMarketId: member.venueMarketId,
+        title: member.title,
+        marketClass: input.marketClass ?? "BINARY",
+        ...(outcomes ? { outcomes } : {}),
+        publishedAt: new Date(),
+        expiresAt,
+        resolvesAt,
+        resolutionSource: member.resolutionSource ?? null,
+        resolutionTitle: member.title,
+        resolutionRulesText: member.resolutionRulesText ?? null,
+        sourceMetadataVersion: "discovery-curated-v1",
+        mappingLineage: ["market-discovery-approve"],
+        eventTitle: input.eventTitle,
+        ...(input.eventPropositionKey ? { eventPropositionKey: input.eventPropositionKey } : {}),
+        eventMetadata: { source: "market-discovery-approve", createdBy: actor }
+      };
+    });
+
+    const snapshot = this.snapshotBuilder.build(seeds);
+    if (snapshot.canonicalEvents.length === 0 || snapshot.venueMarketProfiles.length < 2) {
+      throw new CuratedMarketAdminServiceError(
+        "The discovery candidate could not be normalized into a cross-venue canonical seed."
+      );
+    }
+    await this.projector.persistAndProject(snapshot);
+
+    return {
+      canonicalEventId,
+      canonicalMarketIds: snapshot.executableMarkets.map((market) => market.id)
     };
   }
 }
