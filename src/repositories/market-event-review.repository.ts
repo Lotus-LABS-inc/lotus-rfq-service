@@ -2,8 +2,6 @@ import type { Pool } from "pg";
 
 export interface EventReviewCanonicalRow {
   canonicalEventId: string;
-  canonicalFixtureEventId: string | null;
-  fixtureTitle: string | null;
   propositionKey: string;
   title: string;
   frontendDisplayTitle: string | null;
@@ -35,8 +33,6 @@ export interface EventReviewFilter {
 
 interface CanonicalRow {
   canonical_event_id: string;
-  canonical_fixture_event_id: string | null;
-  fixture_title: string | null;
   proposition_key: string;
   title: string;
   frontend_display_title: string | null;
@@ -82,8 +78,6 @@ export class MarketEventReviewRepository {
     const result = await this.pool.query<CanonicalRow>(
       `SELECT
           ce.id::text AS canonical_event_id,
-          ce.canonical_fixture_event_id::text AS canonical_fixture_event_id,
-          cfe.display_title AS fixture_title,
           ce.proposition_key,
           ce.title,
           fma.display_title AS frontend_display_title,
@@ -95,20 +89,17 @@ export class MarketEventReviewRepository {
           ce.resolves_at::text AS resolves_at,
           ce.updated_at::text AS updated_at
          FROM canonical_events ce
-         LEFT JOIN canonical_fixture_events cfe ON cfe.id = ce.canonical_fixture_event_id
          LEFT JOIN frontend_market_approvals fma ON fma.canonical_event_id = ce.id
          LEFT JOIN canonical_executable_markets cem ON cem.canonical_event_id = ce.id
          LEFT JOIN venue_market_profiles vmp ON vmp.canonical_event_id = ce.id
         WHERE ${conditions.join(" AND ")}
-        GROUP BY ce.id, cfe.id, cfe.display_title, fma.status, fma.display_title
+        GROUP BY ce.id, fma.status, fma.display_title
         ORDER BY ce.canonical_category ASC, ce.title ASC
         LIMIT ${MAX_EVENTS}`,
       params
     );
     return result.rows.map((row) => ({
       canonicalEventId: row.canonical_event_id,
-      canonicalFixtureEventId: row.canonical_fixture_event_id,
-      fixtureTitle: row.fixture_title,
       propositionKey: row.proposition_key,
       title: row.title,
       frontendDisplayTitle: row.frontend_display_title,

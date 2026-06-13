@@ -64,8 +64,6 @@ export interface EventReviewOutcome {
 export interface EventReviewSummary {
   eventKey: string;
   eventTitle: string;
-  canonicalFixtureEventId: string | null;
-  fixtureTitle: string | null;
   category: string;
   venues: string[];
   outcomeCount: number;
@@ -100,8 +98,6 @@ interface OutcomeAccumulator {
 interface EventAccumulator {
   eventKey: string;
   eventTitle: string;
-  canonicalFixtureEventId: string | null;
-  fixtureTitle: string | null;
   category: string;
   outcomes: Map<string, OutcomeAccumulator>;
   resolvesAt: string | null;
@@ -180,8 +176,6 @@ export class MarketEventReviewService {
       const event = events.get(identity.eventKey) ?? {
         eventKey: identity.eventKey,
         eventTitle: identity.eventTitle,
-        canonicalFixtureEventId: row.canonicalFixtureEventId,
-        fixtureTitle: row.fixtureTitle,
         category: row.category,
         outcomes: new Map<string, OutcomeAccumulator>(),
         resolvesAt: row.resolvesAt,
@@ -232,8 +226,6 @@ export class MarketEventReviewService {
     return {
       eventKey: event.eventKey,
       eventTitle: event.eventTitle,
-      canonicalFixtureEventId: event.canonicalFixtureEventId,
-      fixtureTitle: event.fixtureTitle,
       category: event.category,
       venues: [...eventVenues].sort(),
       outcomeCount: event.outcomes.size,
