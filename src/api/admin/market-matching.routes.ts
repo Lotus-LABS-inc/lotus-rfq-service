@@ -58,7 +58,9 @@ const rejectBodySchema = z.object({
 
 const discoveryCandidateListQuerySchema = z.object({
   state: z.enum(["DISCOVERED", "INGESTED", "APPROVED", "REJECTED", "SUPPRESSED"]).optional(),
-  candidateType: z.enum(["NEW_DISCOVERY", "MERGE_SUGGESTION", "ENRICHMENT_ONLY", "LOW_CONFIDENCE"]).optional()
+  candidateType: z.enum(["NEW_DISCOVERY", "MERGE_SUGGESTION", "ENRICHMENT_ONLY", "LOW_CONFIDENCE"]).optional(),
+  category: z.enum(["SPORTS", "CRYPTO", "POLITICS", "ESPORTS", "POP_CULTURE", "ECONOMICS", "OTHER"]).optional(),
+  search: z.string().min(1).max(200).optional()
 });
 
 const discoveryCandidateParamsSchema = z.object({ candidateId: z.string().uuid() });
@@ -156,6 +158,17 @@ export const registerAdminMarketMatchingRoutes = async (
       }
       app.log.error({ err: error }, "Failed to fetch market matching event.");
       return reply.status(500).send({ code: "MARKET_MATCHING_ERROR", message: "Failed to fetch market matching event." });
+    }
+  });
+
+  // Read-only lane counts + grouped low-confidence reasons for the discovery review UI. Pollable.
+  app.get("/admin/market-matching/discovery/summary", { preHandler: adminMiddleware }, async (_request, reply) => {
+    try {
+      const summary = await deps.marketDiscoveryService.getReviewSummary();
+      return reply.send({ summary });
+    } catch (error) {
+      app.log.error({ err: error }, "Failed to summarize market discovery candidates.");
+      return reply.status(500).send({ code: "MARKET_DISCOVERY_ERROR", message: "Failed to summarize market discovery candidates." });
     }
   });
 

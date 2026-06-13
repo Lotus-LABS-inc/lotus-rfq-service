@@ -41,6 +41,24 @@ export interface MarketDiscoveryApprovalResult {
   summary: SemanticExactSyncSummary;
 }
 
+export interface MarketDiscoveryReviewSummary {
+  observedAt: string;
+  totalCandidates: number;
+  lanes: {
+    topicBundles: number;
+    newDiscoveries: number;
+    mergeSuggestions: number;
+    metadataEnrichment: number;
+    lowConfidence: number;
+    approved: number;
+    rejected: number;
+  };
+  byState: Readonly<Record<MarketDiscoveryState, number>>;
+  byCandidateType: Readonly<Record<MarketDiscoveryCandidateType, number>>;
+  lowConfidenceMissingFieldCounts: Readonly<Record<string, number>>;
+  lowConfidenceReasonCounts: Readonly<Record<string, number>>;
+}
+
 export class MarketDiscoveryService {
   public constructor(
     private readonly pool: Pool,
@@ -89,6 +107,8 @@ export class MarketDiscoveryService {
   public async listCandidates(filter: {
     state?: MarketDiscoveryState | undefined;
     candidateType?: MarketDiscoveryCandidateType | undefined;
+    category?: MarketDiscoveryCandidate["category"] | undefined;
+    search?: string | undefined;
   } = {}): Promise<{
     candidates: readonly MarketDiscoveryCandidate[];
     topicBundles: readonly MarketDiscoveryTopicBundle[];
@@ -103,11 +123,47 @@ export class MarketDiscoveryService {
   public async listTopicBundles(filter: {
     state?: MarketDiscoveryState | undefined;
     candidateType?: MarketDiscoveryCandidateType | undefined;
+    category?: MarketDiscoveryCandidate["category"] | undefined;
+    search?: string | undefined;
   } = {}): Promise<{
     topicBundles: readonly MarketDiscoveryTopicBundle[];
   }> {
     const candidates = await this.repository.listCandidates(filter);
     return { topicBundles: buildMarketDiscoveryTopicBundles(candidates) };
+  }
+
+  // Read-only lane counts for the admin review surface, derived from persisted candidates
+  // (no matcher run). Safe to poll. Groups low-confidence causes so they are readable.
+  public async getReviewSummary(): Promise<MarketDiscoveryReviewSummary> {
+    const candidates = await this.repository.listCandidates({});
+    const bundles = buildMarketDiscoveryTopicBundles(candidates);
+    const byState: Record<MarketDiscoveryState, number> = {
+      DISCOVERED: 0, INGESTED: 0, APPROVED: 0, REJECTED: 0, SUPPRESSED: 0
+    };
+    const byCandidateType: Record<MarketDiscoveryCandidateType, number> = {
+      NEW_DISCOVERY: 0, MERGE_SUGGESTION: 0, ENRICHMENT_ONLY: 0, LOW_CONFIDENCE: 0
+    };
+    for (const candidate of candidates) {
+      byState[candidate.state] += 1;
+      byCandidateType[candidate.candidateType] += 1;
+    }
+    return {
+      observedAt: new Date().toISOString(),
+      totalCandidates: candidates.length,
+      lanes: {
+        topicBundles: bundles.length,
+        newDiscoveries: byCandidateType.NEW_DISCOVERY,
+        mergeSuggestions: byCandidateType.MERGE_SUGGESTION,
+        metadataEnrichment: byCandidateType.ENRICHMENT_ONLY,
+        lowConfidence: byCandidateType.LOW_CONFIDENCE,
+        approved: byState.APPROVED,
+        rejected: byState.REJECTED
+      },
+      byState,
+      byCandidateType,
+      lowConfidenceMissingFieldCounts: this.lowConfidenceMissingFieldCounts(candidates),
+      lowConfidenceReasonCounts: this.lowConfidenceReasonCounts(candidates)
+    };
   }
 
   public async reject(input: {
@@ -262,5 +318,21 @@ export class MarketDiscoveryService {
       }
     }
     return Object.fromEntries(Object.entries(counts).sort(([left], [right]) => left.localeCompare(right)));
+  }
+
+  // Groups the human-readable review-required reason codes carried on each low-confidence
+  // candidate (e.g. OUTCOME_REVIEW_REQUIRED, RULES_SOURCE_REVIEW_REQUIRED) so the frontend
+  // can show why a candidate needs review without re-deriving it.
+  private lowConfidenceReasonCounts(candidates: readonly MarketDiscoveryCandidate[]): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const candidate of candidates) {
+      if (candidate.candidateType !== "LOW_CONFIDENCE") continue;
+      for (const code of candidate.reasonCodes) {
+        if (code.endsWith("_REVIEW_REQUIRED") || code.endsWith("_UNKNOWN")) {
+          counts[code] = (counts[code] ?? 0) + 1;
+        }
+      }
+    }
+    return Object.fromEntries(Object.entries(counts).sort(([, left], [, right]) => right - left));
   }
 }

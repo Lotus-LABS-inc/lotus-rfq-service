@@ -61,6 +61,8 @@ interface LinkRow {
 export interface MarketDiscoveryCandidateFilter {
   state?: MarketDiscoveryState | undefined;
   candidateType?: MarketDiscoveryCandidate["candidateType"] | undefined;
+  category?: MarketDiscoveryCandidate["category"] | undefined;
+  search?: string | undefined;
 }
 
 export interface ApproveDiscoveryCandidateInput {
@@ -341,6 +343,14 @@ export class MarketDiscoveryRepository {
     if (filter.candidateType) {
       params.push(filter.candidateType);
       conditions.push(`candidate.candidate_type = $${params.length}`);
+    }
+    if (filter.category) {
+      params.push(filter.category);
+      conditions.push(`candidate.category = $${params.length}`);
+    }
+    if (filter.search && filter.search.trim().length > 0) {
+      params.push(`%${filter.search.trim()}%`);
+      conditions.push(`candidate.event_title ILIKE $${params.length}`);
     }
     const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
     const result = await this.pool.query<CandidateRow & Partial<LinkRow>>(

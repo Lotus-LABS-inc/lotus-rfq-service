@@ -218,11 +218,37 @@ const extractWorldCupGroupSubject = (text: string): string | null => {
     : `WORLD_CUP_GROUP_${group.toUpperCase()}`;
 };
 
-const extractSeasonWinnerSubject = (text: string): string | null => {
-  const match = text.match(/\b(epl|nba|nfl|nhl|mlb|lck|lpl|uefa champions league|fifa world cup|la liga|f1 constructors championship)\s+(?:20\d{2}\s+)?(?:20\d{2}\s+)?(?:winner|champion)\b/i);
-  if (!match?.[1]) return null;
-  return normalizeSubjectText(match[1]);
-};
+// Canonical competition identities, matched on keywords anywhere in the title so cross-venue
+// phrasing differences ("NHL Stanley Cup Winner" vs "Stanley Cup 2026") still resolve to the
+// same subject. Multi-word/most-specific patterns come first. Season separation is handled by
+// the date boundary bucket, so the subject is competition-only (no year) to stay consistent.
+const competitionSubjects: Array<[RegExp, string]> = [
+  [/\bstanley cup\b/, "NHL_STANLEY_CUP"],
+  [/\bsuper bowl\b/, "NFL_SUPER_BOWL"],
+  [/\bworld series\b/, "MLB_WORLD_SERIES"],
+  [/\bf1 constructors\b|\bformula 1 constructors\b/, "F1_CONSTRUCTORS_CHAMPIONSHIP"],
+  [/\bf1 drivers\b|\bformula 1 drivers\b/, "F1_DRIVERS_CHAMPIONSHIP"],
+  [/\bnba finals\b/, "NBA_FINALS"],
+  [/\bchampions league\b|\bucl\b/, "UEFA_CHAMPIONS_LEAGUE"],
+  [/\beuropa league\b/, "UEFA_EUROPA_LEAGUE"],
+  [/\bpremier league\b|\bepl\b/, "EPL"],
+  [/\bla liga\b/, "LA_LIGA"],
+  [/\bserie a\b/, "SERIE_A"],
+  [/\bbundesliga\b/, "BUNDESLIGA"],
+  [/\bligue 1\b/, "LIGUE_1"],
+  [/\blck\b/, "LCK"],
+  [/\blpl\b/, "LPL"],
+  [/\blec\b/, "LEC"],
+  [/\blcs\b/, "LCS"],
+  [/\bmls\b/, "MLS"],
+  [/\bnhl\b/, "NHL"],
+  [/\bnba\b/, "NBA"],
+  [/\bnfl\b/, "NFL"],
+  [/\bmlb\b/, "MLB"]
+];
+
+const extractSeasonWinnerSubject = (text: string): string | null =>
+  firstMatch(text, competitionSubjects);
 
 const extractTokenLaunchSubject = (eventText: string, fullText: string): string | null => {
   const launch = eventText.match(/\bwill\s+([a-z0-9][a-z0-9 .,'()&-]{1,80}?)\s+launch\s+a\s+token\b/i)
@@ -237,6 +263,10 @@ const extractElectionSubject = (text: string): string | null => {
   if (/\bbalance of power\b|\bparty_control\b|\bcongress\b/.test(text)) return `US_CONGRESS_${year ?? "UNKNOWN"}`;
   if (/\bsenate\b/.test(text)) return `US_SENATE_${year ?? "UNKNOWN"}`;
   if (/\bhouse\b/.test(text)) return `US_HOUSE_${year ?? "UNKNOWN"}`;
+  const mayor = text.match(/\b([a-z][a-z ]{1,40}?)\s+mayor(?:al)?\b/);
+  if (mayor?.[1]) return `${normalizeSubjectText(mayor[1])}_MAYOR_${year ?? "UNKNOWN"}`;
+  const governor = text.match(/\b([a-z][a-z ]{1,40}?)\s+governor(?:ship)?\b|\bgubernatorial\b.*?\b([a-z][a-z ]{1,40}?)\b/);
+  if (governor?.[1]) return `${normalizeSubjectText(governor[1])}_GOVERNOR_${year ?? "UNKNOWN"}`;
   const presidentCountry = text.match(/\b([a-z][a-z ]{2,40})\s+presidential\b|\bpresidential\b.*\b([a-z][a-z ]{2,40})\b/i);
   const country = presidentCountry?.[1] ?? presidentCountry?.[2];
   if (country) return `${normalizeSubjectText(country)}_PRESIDENT_${year ?? "UNKNOWN"}`;
@@ -276,6 +306,11 @@ const extractDynamicSubject = (eventText: string, fullText: string): string | nu
   const ipoMarketCap = eventText.match(/\b([a-z0-9][a-z0-9 .'-]{1,60}?)\s+ipo\s+(?:closing\s+)?market\s+cap\b/i)
     ?? fullText.match(/\b([a-z0-9][a-z0-9 .'-]{1,60}?)\s+ipo\s+(?:closing\s+)?market\s+cap\b/i);
   if (ipoMarketCap?.[1]) return normalizeSubjectText(ipoMarketCap[1]);
+
+  // "<Company> IPO in 2026" / "<Company> IPO by ..." — company-specific listing markets.
+  const ipoCompany = eventText.match(/\b([a-z0-9][a-z0-9 .'&-]{1,40}?)\s+ipo\b/i)
+    ?? fullText.match(/\b([a-z0-9][a-z0-9 .'&-]{1,40}?)\s+ipo\b/i);
+  if (ipoCompany?.[1] && !/^ipos?$/i.test(ipoCompany[1].trim())) return normalizeSubjectText(ipoCompany[1]);
 
   const monthlyHit = eventText.match(/\bwhat\s+will\s+([a-z0-9][a-z0-9 .,'()&-]{1,80}?)\s+hit\s+in\s+/i)
     ?? fullText.match(/\bwhat\s+will\s+([a-z0-9][a-z0-9 .,'()&-]{1,80}?)\s+hit\s+in\s+/i);
@@ -425,6 +460,9 @@ export const extractMarketSemanticHints = (input: MarketSemanticInput): MarketSe
     marketFamily = "IPO_MARKET_CAP_THRESHOLD";
     condition = "MARKET_CAP_THRESHOLD";
   } else if (/\bipos?\s+before\b|\bipo\s+before\b/.test(text)) {
+    marketFamily = "IPO_BY_DATE";
+    condition = "IPO_BY_DATE";
+  } else if (/\bipo\b/.test(text)) {
     marketFamily = "IPO_BY_DATE";
     condition = "IPO_BY_DATE";
   } else if (/\b(fdv|fully diluted valuation|token launch|one day after launch)\b/.test(text)) {

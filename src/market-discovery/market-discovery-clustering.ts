@@ -526,7 +526,11 @@ const buildCandidate = (rows: readonly NormalizedVenueMarketCandidate[]): Market
             knownConditions.length === 0 ? "condition" : null,
             knownConditions.length > 1 ? "conditionMismatch" : null,
             boundary === null ? "timeBoundary" : null,
-            allOutcomes.length === 0 ? "outcomes" : null
+            allOutcomes.length === 0 ? "outcomes" : null,
+            // Outcomes exist on the venues but none overlap across them, and the event
+            // titles disagree — typed reasons so neither lands in the "unknown" bucket.
+            allOutcomes.length > 0 && !outcomeMatch ? "outcomeOverlap" : null,
+            !eventTitleMatch ? "eventTitle" : null
           ].filter((entry): entry is string => entry !== null)
         }
       : null,
