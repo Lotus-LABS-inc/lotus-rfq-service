@@ -3,6 +3,7 @@ import {
   type AdminCatalogEventRow,
   type FrontendApprovalStatus
 } from "../../repositories/frontend-market-approval.repository.js";
+import { deriveCuratedEventGroup } from "../../repositories/market-catalog.repository.js";
 
 export class MarketCatalogAdminServiceError extends Error {
   constructor(message: string) {
@@ -35,6 +36,8 @@ export interface MarketCatalogAdminEvent {
   canonicalEventId: string;
   title: string;
   propositionKey: string;
+  eventGroupKey: string | null;
+  eventGroupTitle: string | null;
   category: string;
   status: MarketCatalogStatus;
   displayTitle: string | null;
@@ -69,10 +72,19 @@ export interface MarketCatalogListInput {
   offset?: number | undefined;
 }
 
-const toFriendlyEvent = (row: AdminCatalogEventRow): MarketCatalogAdminEvent => ({
+const stripSourcePrefix = (key: string): string => {
+  const colon = key.indexOf(":");
+  return colon >= 0 ? key.slice(colon + 1) : key;
+};
+
+const toFriendlyEvent = (row: AdminCatalogEventRow): MarketCatalogAdminEvent => {
+  const group = deriveCuratedEventGroup(stripSourcePrefix(row.propositionKey));
+  return {
   canonicalEventId: row.canonicalEventId,
   title: row.displayTitle?.trim() || row.title,
   propositionKey: row.propositionKey,
+  eventGroupKey: group?.eventId ?? null,
+  eventGroupTitle: group?.title ?? null,
   category: row.category,
   status: DB_TO_FRIENDLY[row.status],
   displayTitle: row.displayTitle,
@@ -87,7 +99,8 @@ const toFriendlyEvent = (row: AdminCatalogEventRow): MarketCatalogAdminEvent => 
   expiresAt: row.expiresAt,
   resolvesAt: row.resolvesAt,
   updatedAt: row.updatedAt
-});
+  };
+};
 
 /**
  * Operator surface for the live-events catalog: list events with their LIVE/PAUSED/
