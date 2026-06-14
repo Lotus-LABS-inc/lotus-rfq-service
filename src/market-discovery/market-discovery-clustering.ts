@@ -484,6 +484,7 @@ const buildCandidate = (rows: readonly NormalizedVenueMarketCandidate[]): Market
     id: buildStableUuid(`market-discovery:${candidateKey}`),
     candidateKey,
     state,
+    lifecycleState: "OPEN",
     candidateType,
     sourceKind,
     eventTitle,
@@ -547,6 +548,12 @@ const buildCandidate = (rows: readonly NormalizedVenueMarketCandidate[]): Market
     },
     unsafeGroupingWarnings,
     approvalActions: approvalActionsForType(candidateType),
+    routingReview: { exactPromotionIds: [], nearExactMatchIds: [] },
+    archiveEligibility: {
+      eligible: false,
+      reason: "non_terminal_candidate",
+      eligibleAfter: null
+    },
     venues,
     sharedOutcomes: shared,
     missingOutcomes,

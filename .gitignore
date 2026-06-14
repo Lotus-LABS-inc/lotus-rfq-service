@@ -19,6 +19,9 @@ artifacts/
 docs/*
 !docs/legal/
 !docs/legal/**
+!docs/runbooks/
+docs/runbooks/*
+!docs/runbooks/market-discovery-prod-rollout-plan.md
 docs/generated/
 docs/historical-route-candidates.json
 SESSION.md

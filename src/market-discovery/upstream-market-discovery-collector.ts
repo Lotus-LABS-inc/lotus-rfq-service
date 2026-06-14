@@ -12,7 +12,6 @@ import {
 import { LimitlessCurrentDiscoveryClient } from "../integrations/limitless/limitless-current-discovery-client.js";
 import type { LimitlessLiveMarket } from "../integrations/limitless/limitless-live-market-loader.js";
 import { OpinionCurrentDiscoveryClient } from "../integrations/opinion/opinion-current-discovery-client.js";
-import { resolveOpinionOrderbookApiKeys } from "../integrations/opinion/opinion-orderbook-client.js";
 import type { OpinionNormalizedMarket } from "../integrations/opinion/opinion-types.js";
 import { PolymarketGammaClient, type PolymarketGammaEvent, type PolymarketGammaMarket } from "../integrations/polymarket/polymarket-gamma-client.js";
 import { PredictClient, type PredictMarketsResponse } from "../integrations/predict/predict-client.js";
@@ -590,7 +589,9 @@ export class UpstreamMarketDiscoveryCollector {
 
   private async collectOpinion(): Promise<{ snapshots: VenueMarketDiscoverySnapshot[]; status: VenueStatus }> {
     const apiKeys = [
-      ...resolveOpinionOrderbookApiKeys(process.env),
+      process.env.OPINION_API_KEY,
+      process.env.OPINION_OPENAPI_API_KEY,
+      process.env.OPINION_ORDERBOOK_API_KEY,
       process.env.OPINION_CLOB_API_KEY
     ].filter((key): key is string => typeof key === "string" && key.trim().length > 0);
     const client = this.config.opinion?.client ?? new OpinionCurrentDiscoveryClient({

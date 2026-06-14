@@ -7,6 +7,7 @@ import type {
 export type MarketDiscoveryState = "DISCOVERED" | "INGESTED" | "APPROVED" | "REJECTED" | "SUPPRESSED";
 export type MarketDiscoveryCandidateType = "NEW_DISCOVERY" | "MERGE_SUGGESTION" | "ENRICHMENT_ONLY" | "LOW_CONFIDENCE";
 export type MarketDiscoverySourceKind = "UPSTREAM_VENUE" | "EXISTING_INVENTORY" | "MIXED";
+export type MarketDiscoveryLifecycleState = "OPEN" | "CLOSED";
 
 export interface MarketDiscoveryDraftSemanticCore {
   category: CanonicalCategory;
@@ -112,6 +113,7 @@ export interface MarketDiscoveryCandidate {
   id: string;
   candidateKey: string;
   state: MarketDiscoveryState;
+  lifecycleState: MarketDiscoveryLifecycleState;
   candidateType: MarketDiscoveryCandidateType;
   sourceKind: MarketDiscoverySourceKind;
   eventTitle: string;
@@ -128,6 +130,15 @@ export interface MarketDiscoveryCandidate {
   matchDimensions: MarketDiscoveryMatchDimensions;
   unsafeGroupingWarnings: readonly string[];
   approvalActions: readonly string[];
+  routingReview: {
+    exactPromotionIds: readonly string[];
+    nearExactMatchIds: readonly string[];
+  };
+  archiveEligibility: {
+    eligible: boolean;
+    reason: string;
+    eligibleAfter: string | null;
+  };
   venues: readonly CanonicalVenue[];
   sharedOutcomes: readonly string[];
   missingOutcomes: readonly {
@@ -144,6 +155,7 @@ export interface MarketDiscoveryTopicBundleChild {
   candidateId: string;
   candidateKey: string;
   state: MarketDiscoveryState;
+  lifecycleState: MarketDiscoveryLifecycleState;
   candidateType: MarketDiscoveryCandidateType;
   eventTitle: string;
   contractLabel: string | null;
@@ -155,6 +167,15 @@ export interface MarketDiscoveryTopicBundleChild {
   sharedOutcomes: readonly string[];
   missingVenueEvidence: readonly string[];
   approvalActions: readonly string[];
+  routingReview: {
+    exactPromotionIds: readonly string[];
+    nearExactMatchIds: readonly string[];
+  };
+  archiveEligibility: {
+    eligible: boolean;
+    reason: string;
+    eligibleAfter: string | null;
+  };
 }
 
 export interface MarketDiscoveryTopicBundle {

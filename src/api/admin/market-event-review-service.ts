@@ -22,13 +22,14 @@ export class MarketEventReviewServiceError extends Error {
   }
 }
 
-type CatalogStatus = "LIVE" | "PAUSED" | "DISABLED" | "PENDING";
+type CatalogStatus = "LIVE" | "PAUSED" | "DISABLED" | "PENDING" | "CLOSED";
 
 const DB_TO_FRIENDLY: Record<EventReviewCanonicalRow["status"], CatalogStatus> = {
   APPROVED: "LIVE",
   HIDDEN: "PAUSED",
   DISABLED: "DISABLED",
-  PENDING: "PENDING"
+  PENDING: "PENDING",
+  CLOSED: "CLOSED"
 };
 
 export interface EventReviewOutcomeVenue {
@@ -67,7 +68,7 @@ export interface EventReviewSummary {
   category: string;
   venues: string[];
   outcomeCount: number;
-  statusRollup: { live: number; paused: number; pending: number; disabled: number };
+  statusRollup: { live: number; paused: number; pending: number; disabled: number; closed: number };
   gapOutcomeCount: number;
   resolvesAt: string | null;
   expiresAt: string | null;
@@ -207,7 +208,7 @@ export class MarketEventReviewService {
 
   private toSummary(event: EventAccumulator): EventReviewSummary {
     const eventVenues = new Set<string>();
-    const statusRollup = { live: 0, paused: 0, pending: 0, disabled: 0 };
+    const statusRollup = { live: 0, paused: 0, pending: 0, disabled: 0, closed: 0 };
     for (const outcome of event.outcomes.values()) {
       for (const venue of outcome.venueMarkets.keys()) {
         eventVenues.add(venue);
@@ -215,6 +216,7 @@ export class MarketEventReviewService {
       if (outcome.status === "LIVE") statusRollup.live += 1;
       else if (outcome.status === "PAUSED") statusRollup.paused += 1;
       else if (outcome.status === "DISABLED") statusRollup.disabled += 1;
+      else if (outcome.status === "CLOSED") statusRollup.closed += 1;
       else statusRollup.pending += 1;
     }
     let gapOutcomeCount = 0;
@@ -248,7 +250,7 @@ export class MarketEventReviewService {
 
   async getEvent(eventKey: string): Promise<EventReviewDetail> {
     // Detail isn't filtered, so group everything then pick the one event.
-    const events = await this.buildEvents({});
+    const events = await this.buildEvents({ includeExpired: true });
     const event = events.get(eventKey);
     if (!event) {
       throw new MarketEventReviewServiceError(`Event '${eventKey}' not found.`);
