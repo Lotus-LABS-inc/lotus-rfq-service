@@ -184,6 +184,16 @@ export const registerAdminMarketMatchingRoutes = async (
     }
   });
 
+  app.get("/admin/market-matching/discovery/quality-report", { preHandler: adminMiddleware }, async (_request, reply) => {
+    try {
+      const qualityReport = await deps.marketDiscoveryService.getQualityReport();
+      return reply.send({ qualityReport });
+    } catch (error) {
+      app.log.error({ err: error }, "Failed to build market discovery quality report.");
+      return reply.status(500).send({ code: "MARKET_DISCOVERY_ERROR", message: "Failed to build market discovery quality report." });
+    }
+  });
+
   app.get("/admin/market-matching/discovery-candidates", { preHandler: adminMiddleware }, async (request, reply) => {
     const parsed = discoveryCandidateListQuerySchema.safeParse(request.query);
     if (!parsed.success) {
@@ -215,7 +225,7 @@ export const registerAdminMarketMatchingRoutes = async (
   app.post("/admin/market-matching/discovery/run", { preHandler: adminMiddleware }, async (_request, reply) => {
     try {
       const summary = await deps.marketDiscoveryService.runOnce();
-      return reply.send({ summary });
+      return reply.send({ summary, qualityReport: summary.qualityReport });
     } catch (error) {
       app.log.error({ err: error }, "Failed to run market discovery.");
       return reply.status(500).send({ code: "MARKET_DISCOVERY_ERROR", message: "Failed to run market discovery." });

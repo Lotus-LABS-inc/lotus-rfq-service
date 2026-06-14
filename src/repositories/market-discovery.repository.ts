@@ -85,6 +85,7 @@ export interface MarketDiscoveryArchivePreview {
   cutoffIso: string;
   eligibleCandidateCount: number;
   eligibleSnapshotCount: number;
+  reasonCounts: Readonly<Record<string, number>>;
   candidates: readonly {
     id: string;
     candidateKey: string;
@@ -97,6 +98,18 @@ export interface MarketDiscoveryArchivePreview {
 export interface MarketDiscoveryArchiveApplyResult extends MarketDiscoveryArchivePreview {
   deletedCandidateCount: number;
   deletedSnapshotCount: number;
+}
+
+export interface MarketDiscoverySnapshotHealthRow {
+  venue: string;
+  venueMarketId: string;
+  title: string;
+  active: boolean;
+  outcomeCount: number;
+  hasEventTitle: boolean;
+  hasTokenSlugOrOrderbookKey: boolean;
+  quoteReady: boolean;
+  executionReady: boolean;
 }
 
 export class MarketDiscoveryRepository {
@@ -463,6 +476,71 @@ export class MarketDiscoveryRepository {
     return this.mapJoinedRows(result.rows);
   }
 
+  public async listSnapshotHealthRows(): Promise<readonly MarketDiscoverySnapshotHealthRow[]> {
+    const result = await this.pool.query<{
+      venue: string;
+      venue_market_id: string;
+      title: string;
+      active: boolean;
+      outcome_count: string;
+      has_event_title: boolean;
+      has_token_slug_or_orderbook_key: boolean;
+      quote_ready: boolean;
+      execution_ready: boolean;
+    }>(
+      `SELECT
+          venue,
+          venue_market_id,
+          title,
+          active,
+          COALESCE(jsonb_array_length(outcomes), 0)::text AS outcome_count,
+          (
+            COALESCE(NULLIF(raw_summary->>'eventTitle', ''), NULLIF(raw_summary->>'eventSlug', ''), NULLIF(title, '')) IS NOT NULL
+          ) AS has_event_title,
+          (
+            COALESCE(jsonb_array_length(token_ids), 0) > 0
+            OR NULLIF(slug, '') IS NOT NULL
+            OR NULLIF(raw_summary->>'orderbookTopic', '') IS NOT NULL
+            OR NULLIF(raw_summary->>'tokenId', '') IS NOT NULL
+            OR NULLIF(raw_summary->>'conditionId', '') IS NOT NULL
+          ) AS has_token_slug_or_orderbook_key,
+          quote_ready,
+          execution_ready
+        FROM venue_market_discovery_snapshots
+       ORDER BY venue ASC, last_seen_at DESC
+       LIMIT 5000`
+    );
+    return result.rows.map((row) => ({
+      venue: row.venue,
+      venueMarketId: row.venue_market_id,
+      title: row.title,
+      active: row.active,
+      outcomeCount: Number(row.outcome_count),
+      hasEventTitle: row.has_event_title,
+      hasTokenSlugOrOrderbookKey: row.has_token_slug_or_orderbook_key,
+      quoteReady: row.quote_ready,
+      executionReady: row.execution_ready
+    }));
+  }
+
+  public async listPooledApprovedCanonicalEventIds(canonicalEventIds: readonly string[]): Promise<ReadonlySet<string>> {
+    const ids = [...new Set(canonicalEventIds.filter((id) => id.length > 0))];
+    if (ids.length === 0) {
+      return new Set();
+    }
+    const result = await this.pool.query<{ canonical_event_id: string }>(
+      `SELECT cem.canonical_event_id::text
+         FROM canonical_executable_markets cem
+         JOIN canonical_executable_market_members mem
+           ON mem.canonical_executable_market_id = cem.id
+        WHERE cem.canonical_event_id = ANY($1::uuid[])
+        GROUP BY cem.id, cem.canonical_event_id
+       HAVING COUNT(DISTINCT mem.venue_market_profile_id) >= 2`,
+      [ids]
+    );
+    return new Set(result.rows.map((row) => row.canonical_event_id));
+  }
+
   public async getCandidate(candidateId: string): Promise<MarketDiscoveryCandidate | null> {
     const result = await this.pool.query<CandidateRow & Partial<LinkRow>>(
       `SELECT
@@ -624,12 +702,14 @@ export class MarketDiscoveryRepository {
       [retentionDays]
     );
     const snapshots = await this.pool.query<{ count: string }>(this.archiveSnapshotCountSql(), [retentionDays]);
+    const reasonCounts = await this.archiveReasonCounts(retentionDays);
     const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
     return {
       retentionDays,
       cutoffIso: cutoff.toISOString(),
       eligibleCandidateCount: result.rows.length,
       eligibleSnapshotCount: Number(snapshots.rows[0]?.count ?? 0),
+      reasonCounts,
       candidates: result.rows.map((row) => ({
         id: row.id,
         candidateKey: row.candidate_key,
@@ -684,6 +764,7 @@ export class MarketDiscoveryRepository {
         candidateKey: row.candidate_key,
         state: row.state,
         lifecycleState: this.lifecycleState(row),
+        approvedCanonicalEventId: row.approved_canonical_event_id,
         candidateType: row.candidate_type,
         sourceKind: row.source_kind,
         eventTitle: row.event_title,
@@ -714,6 +795,8 @@ export class MarketDiscoveryRepository {
             },
         unsafeGroupingWarnings: asStringArray(row.unsafe_grouping_warnings),
         approvalActions: asStringArray(row.approval_actions),
+        routingStatus: row.state === "APPROVED" ? "APPROVED_SINGLE_VENUE" : "NOT_APPROVED",
+        nextRoutingAction: row.state === "APPROVED" ? "RUN_MATCHER" : "NONE",
         routingReview: { exactPromotionIds: [], nearExactMatchIds: [] },
         archiveEligibility: this.archiveEligibility(row),
         venues: asStringArray(row.venues) as MarketDiscoveryCandidate["venues"],
@@ -817,6 +900,41 @@ export class MarketDiscoveryRepository {
         LEFT JOIN canonical_events approved_event ON approved_event.id = candidate.approved_canonical_event_id
        ORDER BY candidate.updated_at ASC
        LIMIT 200`;
+  }
+
+  private async archiveReasonCounts(retentionDays: number): Promise<Record<string, number>> {
+    const result = await this.pool.query<{ reason: string; count: string }>(
+      `WITH annotated AS (
+         SELECT
+            candidate.id,
+            CASE
+              WHEN candidate.state NOT IN ('APPROVED', 'REJECTED', 'SUPPRESSED') THEN 'not_terminal'
+              WHEN candidate.updated_at >= NOW() - ($1::int * interval '1 day') THEN 'retention_window_not_elapsed'
+              WHEN approved_event.resolves_at IS NOT NULL AND approved_event.resolves_at >= NOW() THEN 'unresolved_live_blocked'
+              WHEN approved_event.resolves_at IS NOT NULL AND approved_event.resolves_at < NOW() - ($1::int * interval '1 day') THEN 'closed_canonical_event_retention_elapsed'
+              WHEN EXISTS (
+                SELECT 1
+                  FROM market_discovery_candidate_venue_profiles link
+                  JOIN venue_market_discovery_snapshots snapshot
+                    ON snapshot.venue = link.venue
+                   AND snapshot.venue_market_id = link.venue_market_id
+                 WHERE link.candidate_id = candidate.id
+                   AND snapshot.active = true
+                   AND COALESCE(snapshot.resolves_at, snapshot.expires_at, snapshot.last_seen_at) >= NOW() - ($1::int * interval '1 day')
+              ) THEN 'active_or_recent_snapshot_evidence'
+              ELSE 'inactive_snapshot_retention_elapsed'
+            END AS reason
+           FROM market_discovery_candidates candidate
+           LEFT JOIN canonical_events approved_event
+             ON approved_event.id = candidate.approved_canonical_event_id
+       )
+       SELECT reason, COUNT(*)::text AS count
+         FROM annotated
+        GROUP BY reason
+        ORDER BY reason ASC`,
+      [retentionDays]
+    );
+    return Object.fromEntries(result.rows.map((row) => [row.reason, Number(row.count)]));
   }
 
   private archiveSnapshotCountSql(): string {

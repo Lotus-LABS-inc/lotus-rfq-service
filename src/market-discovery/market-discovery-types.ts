@@ -8,6 +8,16 @@ export type MarketDiscoveryState = "DISCOVERED" | "INGESTED" | "APPROVED" | "REJ
 export type MarketDiscoveryCandidateType = "NEW_DISCOVERY" | "MERGE_SUGGESTION" | "ENRICHMENT_ONLY" | "LOW_CONFIDENCE";
 export type MarketDiscoverySourceKind = "UPSTREAM_VENUE" | "EXISTING_INVENTORY" | "MIXED";
 export type MarketDiscoveryLifecycleState = "OPEN" | "CLOSED";
+export type MarketDiscoveryRoutingStatus =
+  | "NOT_APPROVED"
+  | "APPROVED_SINGLE_VENUE"
+  | "PAIR_TRI_REVIEW_AVAILABLE"
+  | "POOLED_ROUTE_APPROVED";
+export type MarketDiscoveryNextRoutingAction =
+  | "NONE"
+  | "RUN_MATCHER"
+  | "OPEN_PAIR_TRI_REVIEW"
+  | "ALREADY_POOLED";
 
 export interface MarketDiscoveryDraftSemanticCore {
   category: CanonicalCategory;
@@ -114,6 +124,7 @@ export interface MarketDiscoveryCandidate {
   candidateKey: string;
   state: MarketDiscoveryState;
   lifecycleState: MarketDiscoveryLifecycleState;
+  approvedCanonicalEventId: string | null;
   candidateType: MarketDiscoveryCandidateType;
   sourceKind: MarketDiscoverySourceKind;
   eventTitle: string;
@@ -130,6 +141,8 @@ export interface MarketDiscoveryCandidate {
   matchDimensions: MarketDiscoveryMatchDimensions;
   unsafeGroupingWarnings: readonly string[];
   approvalActions: readonly string[];
+  routingStatus: MarketDiscoveryRoutingStatus;
+  nextRoutingAction: MarketDiscoveryNextRoutingAction;
   routingReview: {
     exactPromotionIds: readonly string[];
     nearExactMatchIds: readonly string[];
@@ -167,6 +180,8 @@ export interface MarketDiscoveryTopicBundleChild {
   sharedOutcomes: readonly string[];
   missingVenueEvidence: readonly string[];
   approvalActions: readonly string[];
+  routingStatus: MarketDiscoveryRoutingStatus;
+  nextRoutingAction: MarketDiscoveryNextRoutingAction;
   routingReview: {
     exactPromotionIds: readonly string[];
     nearExactMatchIds: readonly string[];
@@ -220,4 +235,53 @@ export interface MarketDiscoveryRunSummary {
     rowCount: number;
     warningCount: number;
   }>>;
+  qualityReport: MarketDiscoveryQualityReport;
+}
+
+export interface MarketDiscoveryQualityReport {
+  observedAt: string;
+  counts: {
+    totalCandidates: number;
+    topicBundles: number;
+    childContracts: number;
+    newDiscoveries: number;
+    mergeSuggestions: number;
+    metadataEnrichment: number;
+    lowConfidence: number;
+    singleCoverage: number;
+    pairCoverage: number;
+    triCoverage: number;
+    multiCoverage: number;
+  };
+  venueCoverage: Readonly<Record<string, {
+    candidateCount: number;
+    childContractCount: number;
+    missingFromBundleCount: number;
+  }>>;
+  missingVenueEvidence: Readonly<Record<string, number>>;
+  extractionHealth: Readonly<Record<string, {
+    snapshotCount: number;
+    activeSnapshotCount: number;
+    eventTitlePresent: number;
+    topicKeyPresent: number;
+    contractLabelPresent: number;
+    contractKeyPresent: number;
+    rowsWithOutcomes: number;
+    totalOutcomeCount: number;
+    rowsWithTokenSlugOrOrderbookKey: number;
+    quoteReadyCount: number;
+    executionReadyCount: number;
+    sampleMissingRows: readonly {
+      venueMarketId: string;
+      title: string;
+      missing: readonly string[];
+    }[];
+  }>>;
+  lowConfidenceSamples: Readonly<Record<string, readonly {
+    candidateId: string;
+    eventTitle: string;
+    venues: readonly CanonicalVenue[];
+    missingFields: readonly string[];
+    reasonCodes: readonly string[];
+  }[]>>;
 }

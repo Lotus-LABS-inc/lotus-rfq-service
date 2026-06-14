@@ -17,6 +17,7 @@ import {
 import type {
   MarketDiscoveryCandidate,
   MarketDiscoveryCandidateType,
+  MarketDiscoveryQualityReport,
   MarketDiscoveryRunSummary,
   MarketDiscoveryState,
   MarketDiscoveryTopicBundle
@@ -25,7 +26,8 @@ import { buildMarketDiscoveryTopicBundles } from "./market-discovery-topic-bundl
 import { MarketDiscoveryRepository } from "../repositories/market-discovery.repository.js";
 import type {
   MarketDiscoveryArchiveApplyResult,
-  MarketDiscoveryArchivePreview
+  MarketDiscoveryArchivePreview,
+  MarketDiscoverySnapshotHealthRow
 } from "../repositories/market-discovery.repository.js";
 import { CuratedMarketAdminService } from "../api/admin/curated-market-admin-service.js";
 import type { SemanticDiscoveryCategory } from "../simulation/semantic-rulepack.js";
@@ -96,6 +98,7 @@ export class MarketDiscoveryService {
     const staleRetiredCount = activeRows.length >= 100 && candidates.length > 0
       ? await this.repository.retireStaleNonTerminalCandidates(candidates.map((candidate) => candidate.candidateKey))
       : 0;
+    const qualityReport = await this.getQualityReport();
     return {
       observedAt,
       inventoryRows: inventory.length,
@@ -113,7 +116,8 @@ export class MarketDiscoveryService {
       staleRetiredCount,
       upstreamRowsByVenueCategory: this.upstreamRowsByVenueCategory(upstream.snapshots),
       lowConfidenceMissingFieldCounts: this.lowConfidenceMissingFieldCounts(candidates),
-      venueStatuses: upstream.venueStatuses
+      venueStatuses: upstream.venueStatuses,
+      qualityReport
     };
   }
 
@@ -127,7 +131,9 @@ export class MarketDiscoveryService {
     candidates: readonly MarketDiscoveryCandidate[];
     topicBundles: readonly MarketDiscoveryTopicBundle[];
   }> {
-    const candidates = this.enrichCandidatesWithRoutingReview(await this.repository.listCandidates(filter));
+    const candidates = await this.enrichCandidatesWithRoutingReview(
+      await this.repository.listCandidates(this.withDefaultOpenLifecycle(filter))
+    );
     return {
       candidates,
       topicBundles: buildMarketDiscoveryTopicBundles(candidates)
@@ -143,14 +149,16 @@ export class MarketDiscoveryService {
   } = {}): Promise<{
     topicBundles: readonly MarketDiscoveryTopicBundle[];
   }> {
-    const candidates = this.enrichCandidatesWithRoutingReview(await this.repository.listCandidates(filter));
+    const candidates = await this.enrichCandidatesWithRoutingReview(
+      await this.repository.listCandidates(this.withDefaultOpenLifecycle(filter))
+    );
     return { topicBundles: buildMarketDiscoveryTopicBundles(candidates) };
   }
 
   // Read-only lane counts for the admin review surface, derived from persisted candidates
   // (no matcher run). Safe to poll. Groups low-confidence causes so they are readable.
   public async getReviewSummary(): Promise<MarketDiscoveryReviewSummary> {
-    const candidates = await this.repository.listCandidates({});
+    const candidates = await this.repository.listCandidates({ lifecycleState: "OPEN" });
     const bundles = buildMarketDiscoveryTopicBundles(candidates);
     const byState: Record<MarketDiscoveryState, number> = {
       DISCOVERED: 0, INGESTED: 0, APPROVED: 0, REJECTED: 0, SUPPRESSED: 0
@@ -178,6 +186,44 @@ export class MarketDiscoveryService {
       byCandidateType,
       lowConfidenceMissingFieldCounts: this.lowConfidenceMissingFieldCounts(candidates),
       lowConfidenceReasonCounts: this.lowConfidenceReasonCounts(candidates)
+    };
+  }
+
+  public async getQualityReport(): Promise<MarketDiscoveryQualityReport> {
+    const candidates = await this.enrichCandidatesWithRoutingReview(
+      await this.repository.listCandidates({ lifecycleState: "OPEN" })
+    );
+    const bundles = buildMarketDiscoveryTopicBundles(candidates);
+    const snapshotRows = await this.repository.listSnapshotHealthRows();
+    const candidateTypeCounts: Record<MarketDiscoveryCandidateType, number> = {
+      NEW_DISCOVERY: 0, MERGE_SUGGESTION: 0, ENRICHMENT_ONLY: 0, LOW_CONFIDENCE: 0
+    };
+    for (const candidate of candidates) {
+      candidateTypeCounts[candidate.candidateType] += 1;
+    }
+    const childContracts = bundles.flatMap((bundle) => bundle.children);
+    const coverageCounts = {
+      singleCoverage: childContracts.filter((child) => child.coverageKind === "SINGLE").length,
+      pairCoverage: childContracts.filter((child) => child.coverageKind === "PAIR").length,
+      triCoverage: childContracts.filter((child) => child.coverageKind === "TRI").length,
+      multiCoverage: childContracts.filter((child) => child.coverageKind === "MULTI").length
+    };
+    return {
+      observedAt: new Date().toISOString(),
+      counts: {
+        totalCandidates: candidates.length,
+        topicBundles: bundles.length,
+        childContracts: childContracts.length,
+        newDiscoveries: candidateTypeCounts.NEW_DISCOVERY,
+        mergeSuggestions: candidateTypeCounts.MERGE_SUGGESTION,
+        metadataEnrichment: candidateTypeCounts.ENRICHMENT_ONLY,
+        lowConfidence: candidateTypeCounts.LOW_CONFIDENCE,
+        ...coverageCounts
+      },
+      venueCoverage: this.venueCoverage(candidates, childContracts),
+      missingVenueEvidence: this.missingVenueEvidenceCounts(bundles),
+      extractionHealth: this.extractionHealth(snapshotRows, candidates),
+      lowConfidenceSamples: this.lowConfidenceSamples(candidates)
     };
   }
 
@@ -428,20 +474,48 @@ export class MarketDiscoveryService {
     return Math.max(7, Math.floor(value));
   }
 
-  private enrichCandidatesWithRoutingReview(
+  private withDefaultOpenLifecycle<T extends { lifecycleState?: "OPEN" | "CLOSED" | undefined }>(filter: T): T {
+    return filter.lifecycleState ? filter : { ...filter, lifecycleState: "OPEN" };
+  }
+
+  private async enrichCandidatesWithRoutingReview(
     candidates: readonly MarketDiscoveryCandidate[]
-  ): readonly MarketDiscoveryCandidate[] {
+  ): Promise<readonly MarketDiscoveryCandidate[]> {
     if (candidates.length === 0) {
       return candidates;
     }
     const report = this.readLastMatchReport();
-    if (!report) {
-      return candidates;
-    }
-    return candidates.map((candidate) => ({
-      ...candidate,
-      routingReview: this.routingReviewForCandidate(candidate, report)
-    }));
+    const pooledEventIds = await this.repository.listPooledApprovedCanonicalEventIds(
+      candidates
+        .map((candidate) => candidate.approvedCanonicalEventId)
+        .filter((id): id is string => id !== null)
+    );
+    return candidates.map((candidate) => {
+      const routingReview = report
+        ? this.routingReviewForCandidate(candidate, report)
+        : { exactPromotionIds: [], nearExactMatchIds: [] };
+      const pooled = candidate.approvedCanonicalEventId !== null && pooledEventIds.has(candidate.approvedCanonicalEventId);
+      const routingStatus = pooled
+        ? "POOLED_ROUTE_APPROVED"
+        : routingReview.exactPromotionIds.length > 0
+          ? "PAIR_TRI_REVIEW_AVAILABLE"
+          : candidate.state === "APPROVED"
+            ? "APPROVED_SINGLE_VENUE"
+            : "NOT_APPROVED";
+      const nextRoutingAction = pooled
+        ? "ALREADY_POOLED"
+        : routingReview.exactPromotionIds.length > 0
+          ? "OPEN_PAIR_TRI_REVIEW"
+          : candidate.state === "APPROVED"
+            ? "RUN_MATCHER"
+            : "NONE";
+      return {
+        ...candidate,
+        routingStatus,
+        nextRoutingAction,
+        routingReview
+      };
+    });
   }
 
   private readLastMatchReport(): CrossVenueMatchReport | null {
@@ -477,5 +551,165 @@ export class MarketDiscoveryService {
         .map((match) => match.matchId)
         .sort((left, right) => left.localeCompare(right))
     };
+  }
+
+  private venueCoverage(
+    candidates: readonly MarketDiscoveryCandidate[],
+    children: readonly { venues: readonly string[]; missingVenueEvidence: readonly string[] }[]
+  ): MarketDiscoveryQualityReport["venueCoverage"] {
+    const venues = new Set<string>();
+    for (const candidate of candidates) {
+      for (const venue of candidate.venues) venues.add(venue);
+    }
+    for (const child of children) {
+      for (const venue of child.venues) venues.add(venue);
+      for (const missing of child.missingVenueEvidence) {
+        const match = /^NO_MATCHED_(.+)_(TOPIC|CONTRACT)$/.exec(missing);
+        if (match?.[1]) venues.add(match[1]);
+      }
+    }
+    const output: Record<string, { candidateCount: number; childContractCount: number; missingFromBundleCount: number }> = {};
+    for (const venue of [...venues].sort((left, right) => left.localeCompare(right))) {
+      output[venue] = {
+        candidateCount: candidates.filter((candidate) => candidate.venues.includes(venue as never)).length,
+        childContractCount: children.filter((child) => child.venues.includes(venue)).length,
+        missingFromBundleCount: children.filter((child) =>
+          child.missingVenueEvidence.some((reason) => reason.includes(`_${venue}_`))
+        ).length
+      };
+    }
+    return output;
+  }
+
+  private missingVenueEvidenceCounts(bundles: readonly MarketDiscoveryTopicBundle[]): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const bundle of bundles) {
+      for (const reason of bundle.missingVenueEvidence) {
+        counts[reason] = (counts[reason] ?? 0) + 1;
+      }
+      for (const child of bundle.children) {
+        for (const reason of child.missingVenueEvidence) {
+          counts[reason] = (counts[reason] ?? 0) + 1;
+        }
+      }
+    }
+    return Object.fromEntries(Object.entries(counts).sort(([left], [right]) => left.localeCompare(right)));
+  }
+
+  private extractionHealth(
+    snapshots: readonly MarketDiscoverySnapshotHealthRow[],
+    candidates: readonly MarketDiscoveryCandidate[]
+  ): MarketDiscoveryQualityReport["extractionHealth"] {
+    const semanticByVenueMarket = new Map<string, {
+      topicKey: boolean;
+      contractLabel: boolean;
+      contractKey: boolean;
+    }>();
+    for (const candidate of candidates) {
+      for (const entry of this.semanticEvidence(candidate)) {
+        semanticByVenueMarket.set(`${entry.venue}:${entry.venueMarketId}`, {
+          topicKey: Boolean(entry.topicKey),
+          contractLabel: Boolean(entry.contractLabel),
+          contractKey: Boolean(entry.contractKey)
+        });
+      }
+    }
+    const byVenue = new Map<string, typeof snapshots>();
+    for (const row of snapshots) {
+      const rows = byVenue.get(row.venue) ?? [];
+      byVenue.set(row.venue, [...rows, row]);
+    }
+    const output: Record<string, MarketDiscoveryQualityReport["extractionHealth"][string]> = {};
+    for (const [venue, rows] of [...byVenue.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+      const sampleMissingRows: {
+        venueMarketId: string;
+        title: string;
+        missing: readonly string[];
+      }[] = [];
+      let topicKeyPresent = 0;
+      let contractLabelPresent = 0;
+      let contractKeyPresent = 0;
+      for (const row of rows) {
+        const semantic = semanticByVenueMarket.get(`${row.venue}:${row.venueMarketId}`);
+        if (semantic?.topicKey) topicKeyPresent += 1;
+        if (semantic?.contractLabel) contractLabelPresent += 1;
+        if (semantic?.contractKey) contractKeyPresent += 1;
+        const missing = [
+          row.hasEventTitle ? null : "eventTitle",
+          semantic?.topicKey ? null : "topicKey",
+          semantic?.contractLabel ? null : "contractLabel",
+          semantic?.contractKey ? null : "contractKey",
+          row.outcomeCount > 0 ? null : "outcomes",
+          row.hasTokenSlugOrOrderbookKey ? null : "tokenSlugOrOrderbookKey"
+        ].filter((entry): entry is string => entry !== null);
+        if (missing.length > 0 && sampleMissingRows.length < 5) {
+          sampleMissingRows.push({
+            venueMarketId: row.venueMarketId,
+            title: row.title,
+            missing
+          });
+        }
+      }
+      output[venue] = {
+        snapshotCount: rows.length,
+        activeSnapshotCount: rows.filter((row) => row.active).length,
+        eventTitlePresent: rows.filter((row) => row.hasEventTitle).length,
+        topicKeyPresent,
+        contractLabelPresent,
+        contractKeyPresent,
+        rowsWithOutcomes: rows.filter((row) => row.outcomeCount > 0).length,
+        totalOutcomeCount: rows.reduce((sum, row) => sum + row.outcomeCount, 0),
+        rowsWithTokenSlugOrOrderbookKey: rows.filter((row) => row.hasTokenSlugOrOrderbookKey).length,
+        quoteReadyCount: rows.filter((row) => row.quoteReady).length,
+        executionReadyCount: rows.filter((row) => row.executionReady).length,
+        sampleMissingRows
+      };
+    }
+    return output;
+  }
+
+  private lowConfidenceSamples(candidates: readonly MarketDiscoveryCandidate[]): MarketDiscoveryQualityReport["lowConfidenceSamples"] {
+    const output: Record<string, MarketDiscoveryQualityReport["lowConfidenceSamples"][string]> = {};
+    for (const candidate of candidates) {
+      if (candidate.candidateType !== "LOW_CONFIDENCE") continue;
+      const fields = candidate.draftSemanticCore?.missingFields ?? ["unknown"];
+      for (const field of fields.length > 0 ? fields : ["unknown"]) {
+        const bucket = output[field] ?? [];
+        if (bucket.length >= 5) continue;
+        output[field] = [
+          ...bucket,
+          {
+            candidateId: candidate.id,
+            eventTitle: candidate.eventTitle,
+            venues: candidate.venues,
+            missingFields: fields,
+            reasonCodes: candidate.reasonCodes
+          }
+        ];
+      }
+    }
+    return output;
+  }
+
+  private semanticEvidence(candidate: MarketDiscoveryCandidate): readonly {
+    venue: string;
+    venueMarketId: string;
+    topicKey: string | null;
+    contractLabel: string | null;
+    contractKey: string | null;
+  }[] {
+    const entries = Array.isArray(candidate.metadata.semanticEvidence)
+      ? candidate.metadata.semanticEvidence
+      : [];
+    return entries
+      .filter((entry): entry is Record<string, unknown> => typeof entry === "object" && entry !== null && !Array.isArray(entry))
+      .map((entry) => ({
+        venue: typeof entry.venue === "string" ? entry.venue : "",
+        venueMarketId: typeof entry.venueMarketId === "string" ? entry.venueMarketId : "",
+        topicKey: typeof entry.topicKey === "string" && entry.topicKey.length > 0 ? entry.topicKey : null,
+        contractLabel: typeof entry.contractLabel === "string" && entry.contractLabel.length > 0 ? entry.contractLabel : null,
+        contractKey: typeof entry.contractKey === "string" && entry.contractKey.length > 0 ? entry.contractKey : null
+      }))
+      .filter((entry) => entry.venue.length > 0 && entry.venueMarketId.length > 0);
   }
 }
