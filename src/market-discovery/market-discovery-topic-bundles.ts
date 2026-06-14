@@ -111,6 +111,8 @@ const childFromCandidate = (candidate: MarketDiscoveryCandidate): MarketDiscover
     sharedOutcomes: candidate.sharedOutcomes,
     missingVenueEvidence: missingVenueEvidence(venues, "CONTRACT"),
     approvalActions: candidate.approvalActions,
+    routingStatus: candidate.routingStatus,
+    nextRoutingAction: candidate.nextRoutingAction,
     routingReview: candidate.routingReview,
     archiveEligibility: candidate.archiveEligibility
   };

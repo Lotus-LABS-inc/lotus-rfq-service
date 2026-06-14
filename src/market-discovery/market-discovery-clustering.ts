@@ -485,6 +485,7 @@ const buildCandidate = (rows: readonly NormalizedVenueMarketCandidate[]): Market
     candidateKey,
     state,
     lifecycleState: "OPEN",
+    approvedCanonicalEventId: null,
     candidateType,
     sourceKind,
     eventTitle,
@@ -548,6 +549,8 @@ const buildCandidate = (rows: readonly NormalizedVenueMarketCandidate[]): Market
     },
     unsafeGroupingWarnings,
     approvalActions: approvalActionsForType(candidateType),
+    routingStatus: "NOT_APPROVED",
+    nextRoutingAction: "NONE",
     routingReview: { exactPromotionIds: [], nearExactMatchIds: [] },
     archiveEligibility: {
       eligible: false,

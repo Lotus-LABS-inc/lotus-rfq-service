@@ -12,6 +12,27 @@ const logger = () => ({
   error: vi.fn()
 });
 
+const emptyQualityReport = (): MarketDiscoveryRunSummary["qualityReport"] => ({
+  observedAt: "2026-06-14T00:00:00.000Z",
+  counts: {
+    totalCandidates: 0,
+    topicBundles: 0,
+    childContracts: 0,
+    newDiscoveries: 0,
+    mergeSuggestions: 0,
+    metadataEnrichment: 0,
+    lowConfidence: 0,
+    singleCoverage: 0,
+    pairCoverage: 0,
+    triCoverage: 0,
+    multiCoverage: 0
+  },
+  venueCoverage: {},
+  missingVenueEvidence: {},
+  extractionHealth: {},
+  lowConfidenceSamples: {}
+});
+
 describe("market discovery scheduler", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -59,7 +80,8 @@ describe("market discovery scheduler", () => {
       staleRetiredCount: 0,
       upstreamRowsByVenueCategory: {},
       lowConfidenceMissingFieldCounts: {},
-      venueStatuses: {}
+      venueStatuses: {},
+      qualityReport: emptyQualityReport()
     };
     const runOnce = vi.fn<() => Promise<MarketDiscoveryRunSummary>>(async () => new Promise((resolve) => {
       resolveRun = () => resolve({
