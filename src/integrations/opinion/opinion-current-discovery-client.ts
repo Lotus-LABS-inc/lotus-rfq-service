@@ -10,6 +10,9 @@ export interface OpinionCurrentDiscoveryClientConfig {
   pageSize?: number;
   maxPages?: number;
   requestTimeoutMs?: number;
+  retryAttempts?: number;
+  retryBaseDelayMs?: number;
+  retryMaxDelayMs?: number;
   fetchImpl?: typeof fetch;
 }
 
@@ -41,6 +44,34 @@ const isActivatedMarket = (market: OpinionNormalizedMarket): boolean =>
 const normalizeBaseUrl = (baseUrl: string): string => (baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
 
 const toErrorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isTransientDiscoveryError = (error: unknown): boolean => {
+  if (error instanceof Error && error.name === "AbortError") return true;
+  const message = toErrorMessage(error).toLowerCase();
+  if (
+    message.includes("timeout")
+    || message.includes("aborted")
+    || message.includes("network")
+    || message.includes("fetch failed")
+    || message.includes("socket")
+    || message.includes("econnreset")
+    || message.includes("etimedout")
+  ) {
+    return true;
+  }
+  const status = message.match(/\bhttp\s+(\d{3})\b/);
+  if (!status) return false;
+  const code = Number(status[1]);
+  return code === 408 || code === 429 || code >= 500;
+};
+
+const retryDelayMs = (attempt: number, baseDelayMs: number, maxDelayMs: number): number => {
+  const exponential = Math.min(maxDelayMs, baseDelayMs * 2 ** Math.max(0, attempt - 1));
+  const jitter = Math.floor(Math.random() * Math.max(1, Math.floor(exponential * 0.25)));
+  return exponential + jitter;
+};
 
 const uniqueStrings = (values: readonly (string | null | undefined)[]): string[] => {
   const seen = new Set<string>();
@@ -196,6 +227,9 @@ export class OpinionCurrentDiscoveryClient {
     const pageSize = overridePageSize ?? this.config.pageSize ?? 20;
     const maxPages = overrideMaxPages ?? this.config.maxPages ?? 20;
     const requestTimeoutMs = this.config.requestTimeoutMs ?? 10_000;
+    const retryAttempts = Math.max(1, Math.floor(this.config.retryAttempts ?? (Number(process.env.OPINION_DISCOVERY_RETRY_ATTEMPTS) || 3)));
+    const retryBaseDelayMs = Math.max(50, Math.floor(this.config.retryBaseDelayMs ?? (Number(process.env.OPINION_DISCOVERY_RETRY_BASE_MS) || 500)));
+    const retryMaxDelayMs = Math.max(retryBaseDelayMs, Math.floor(this.config.retryMaxDelayMs ?? (Number(process.env.OPINION_DISCOVERY_RETRY_MAX_MS) || 2_500)));
 
     for (let page = 1; page <= maxPages; page += 1) {
       const url = new URL("market", normalizedBaseUrl);
@@ -205,11 +239,11 @@ export class OpinionCurrentDiscoveryClient {
       url.searchParams.set("marketType", "2");
 
       try {
-        const response = await this.fetchImpl(url, {
-          headers: {
-            apikey: apiKey
-          },
-          signal: AbortSignal.timeout(requestTimeoutMs)
+        const response = await this.fetchPageWithRetry(url, apiKey, {
+          requestTimeoutMs,
+          retryAttempts,
+          retryBaseDelayMs,
+          retryMaxDelayMs
         });
         if (!response.ok) {
           throw new Error(`Opinion current discovery failed with HTTP ${response.status}.`);
@@ -239,5 +273,39 @@ export class OpinionCurrentDiscoveryClient {
     }
 
     return { rows: [...rows.values()], warnings };
+  }
+
+  private async fetchPageWithRetry(
+    url: URL,
+    apiKey: string,
+    options: {
+      requestTimeoutMs: number;
+      retryAttempts: number;
+      retryBaseDelayMs: number;
+      retryMaxDelayMs: number;
+    }
+  ): Promise<Response> {
+    let lastError: unknown = null;
+    for (let attempt = 1; attempt <= options.retryAttempts; attempt += 1) {
+      try {
+        const response = await this.fetchImpl(url, {
+          headers: {
+            apikey: apiKey
+          },
+          signal: AbortSignal.timeout(options.requestTimeoutMs)
+        });
+        if (response.ok || !isTransientDiscoveryError(new Error(`HTTP ${response.status}`)) || attempt === options.retryAttempts) {
+          return response;
+        }
+        lastError = new Error(`HTTP ${response.status}`);
+      } catch (error) {
+        lastError = error;
+        if (!isTransientDiscoveryError(error) || attempt === options.retryAttempts) {
+          throw error;
+        }
+      }
+      await sleep(retryDelayMs(attempt, options.retryBaseDelayMs, options.retryMaxDelayMs));
+    }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError ?? "Opinion discovery request failed."));
   }
 }

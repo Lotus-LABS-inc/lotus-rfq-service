@@ -10,6 +10,9 @@ export interface LimitlessCurrentDiscoveryClientConfig {
   pageSize?: number;
   maxMissingSlugDetails?: number;
   requestTimeoutMs?: number;
+  retryAttempts?: number;
+  retryBaseDelayMs?: number;
+  retryMaxDelayMs?: number;
 }
 
 export interface LimitlessCurrentDiscoveryResult {
@@ -39,22 +42,43 @@ const normalizeLimitlessActiveSlugs = (payload: unknown): LimitlessActiveSlug[] 
     : isRecord(payload) && Array.isArray(payload.data)
       ? payload.data
       : [];
-  return rows.flatMap((row) => {
-    if (!isRecord(row) || typeof row.slug !== "string" || row.slug.trim().length === 0) {
-      return [];
+  const normalized: LimitlessActiveSlug[] = [];
+  const visit = (row: unknown): void => {
+    if (!isRecord(row)) {
+      if (typeof row === "string" && row.trim().length > 0) {
+        normalized.push({ slug: row.trim() });
+      }
+      return;
     }
-    const normalized: LimitlessActiveSlug = { slug: row.slug.trim() };
+    if (typeof row.slug !== "string" || row.slug.trim().length === 0) {
+      for (const childKey of ["markets", "children", "childMarkets", "items"]) {
+        const children = row[childKey];
+        if (Array.isArray(children)) {
+          children.forEach(visit);
+        }
+      }
+      return;
+    }
+    const entry: LimitlessActiveSlug = { slug: row.slug.trim() };
     if (typeof row.strikePrice === "string" || typeof row.strikePrice === "number" || row.strikePrice === null) {
-      normalized.strikePrice = row.strikePrice;
+      entry.strikePrice = row.strikePrice;
     }
     if (typeof row.ticker === "string" || row.ticker === null) {
-      normalized.ticker = row.ticker;
+      entry.ticker = row.ticker;
     }
     if (typeof row.deadline === "string" || row.deadline === null) {
-      normalized.deadline = row.deadline;
+      entry.deadline = row.deadline;
     }
-    return [normalized];
-  });
+    normalized.push(entry);
+    for (const childKey of ["markets", "children", "childMarkets", "items"]) {
+      const children = row[childKey];
+      if (Array.isArray(children)) {
+        children.forEach(visit);
+      }
+    }
+  };
+  rows.forEach(visit);
+  return normalized;
 };
 
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> =>
@@ -64,6 +88,50 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, message: s
       setTimeout(() => reject(new Error(message)), timeoutMs);
     })
   ]);
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+const errorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
+
+const isTransientDiscoveryError = (error: unknown): boolean => {
+  const message = errorMessage(error).toLowerCase();
+  if (
+    message.includes("timeout")
+    || message.includes("aborted")
+    || message.includes("network")
+    || message.includes("fetch failed")
+    || message.includes("socket")
+    || message.includes("econnreset")
+    || message.includes("etimedout")
+  ) {
+    return true;
+  }
+  const status = message.match(/\b(?:http|status)\s*[:=]?\s*(\d{3})\b/);
+  if (!status) return false;
+  const code = Number(status[1]);
+  return code === 408 || code === 429 || code >= 500;
+};
+
+const retryDelayMs = (attempt: number, baseDelayMs: number, maxDelayMs: number): number => {
+  const exponential = Math.min(maxDelayMs, baseDelayMs * 2 ** Math.max(0, attempt - 1));
+  const jitter = Math.floor(Math.random() * Math.max(1, Math.floor(exponential * 0.25)));
+  return exponential + jitter;
+};
+
+const retryOptionsFromConfig = (config: LimitlessCurrentDiscoveryClientConfig): {
+  retryAttempts: number;
+  retryBaseDelayMs: number;
+  retryMaxDelayMs: number;
+} => {
+  const retryAttempts = config.retryAttempts ?? (Number(process.env.LIMITLESS_DISCOVERY_RETRY_ATTEMPTS) || 3);
+  const retryBaseDelayMs = config.retryBaseDelayMs ?? (Number(process.env.LIMITLESS_DISCOVERY_RETRY_BASE_MS) || 500);
+  const retryMaxDelayMs = config.retryMaxDelayMs ?? (Number(process.env.LIMITLESS_DISCOVERY_RETRY_MAX_MS) || 2_500);
+  return {
+    retryAttempts: Math.max(1, Math.floor(retryAttempts)),
+    retryBaseDelayMs: Math.max(50, Math.floor(retryBaseDelayMs)),
+    retryMaxDelayMs: Math.max(Math.max(50, Math.floor(retryBaseDelayMs)), Math.floor(retryMaxDelayMs))
+  };
+};
 
 const inferCategory = (input: {
   title: string;
@@ -174,17 +242,21 @@ export class LimitlessCurrentDiscoveryClient {
       const maxPages = this.config.maxPages ?? 120;
       const maxMissingSlugDetails = this.config.maxMissingSlugDetails ?? pageSize * maxPages;
       const requestTimeoutMs = this.config.requestTimeoutMs ?? 10_000;
+      const retryOptions = retryOptionsFromConfig(this.config);
       let expectedActiveMarketCount: number | null = null;
 
       for (let page = 1; page <= maxPages; page += 1) {
-        const response = await withTimeout(
-          marketFetcher.getActiveMarkets({
-            page,
-            limit: pageSize,
-            sortBy: "newest"
-          }),
-          requestTimeoutMs,
-          `Limitless active markets request timed out after ${requestTimeoutMs}ms.`
+        const response = await this.withRetry(
+          () => withTimeout(
+            marketFetcher.getActiveMarkets({
+              page,
+              limit: pageSize,
+              sortBy: "newest"
+            }),
+            requestTimeoutMs,
+            `Limitless active markets request timed out after ${requestTimeoutMs}ms.`
+          ),
+          retryOptions
         );
         if (typeof response.totalMarketsCount === "number" && Number.isFinite(response.totalMarketsCount)) {
           expectedActiveMarketCount = response.totalMarketsCount;
@@ -208,10 +280,13 @@ export class LimitlessCurrentDiscoveryClient {
 
       let activeSlugs: LimitlessActiveSlug[] = [];
       try {
-        activeSlugs = normalizeLimitlessActiveSlugs(await withTimeout(
-          httpClient.get<unknown>("/markets/active/slugs"),
-          requestTimeoutMs,
-          `Limitless active slugs request timed out after ${requestTimeoutMs}ms.`
+        activeSlugs = normalizeLimitlessActiveSlugs(await this.withRetry(
+          () => withTimeout(
+            httpClient.get<unknown>("/markets/active/slugs"),
+            requestTimeoutMs,
+            `Limitless active slugs request timed out after ${requestTimeoutMs}ms.`
+          ),
+          retryOptions
         ));
         if (expectedActiveMarketCount !== null && activeSlugs.length > 0 && activeSlugs.length !== expectedActiveMarketCount) {
           warnings.push(`Limitless active slugs count ${activeSlugs.length} differs from active market total ${expectedActiveMarketCount}.`);
@@ -229,10 +304,13 @@ export class LimitlessCurrentDiscoveryClient {
       const missingSlugs = allMissingSlugs.slice(0, maxMissingSlugDetails);
       for (const slug of missingSlugs) {
         try {
-          const market = await withTimeout(
-            marketFetcher.getMarket(slug),
-            requestTimeoutMs,
-            `Limitless market detail request timed out after ${requestTimeoutMs}ms.`
+          const market = await this.withRetry(
+            () => withTimeout(
+              marketFetcher.getMarket(slug),
+              requestTimeoutMs,
+              `Limitless market detail request timed out after ${requestTimeoutMs}ms.`
+            ),
+            retryOptions
           );
           const row = toLimitlessLiveMarket(market, fetchedAt, "limitless_active_slug_detail");
           rows.set(row.venueMarketId, row);
@@ -271,5 +349,28 @@ export class LimitlessCurrentDiscoveryClient {
         warnings: [error instanceof Error ? error.message : String(error)]
       };
     }
+  }
+
+  private async withRetry<T>(
+    operation: () => Promise<T>,
+    options: {
+      retryAttempts: number;
+      retryBaseDelayMs: number;
+      retryMaxDelayMs: number;
+    }
+  ): Promise<T> {
+    let lastError: unknown = null;
+    for (let attempt = 1; attempt <= options.retryAttempts; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+        if (!isTransientDiscoveryError(error) || attempt === options.retryAttempts) {
+          throw error;
+        }
+        await sleep(retryDelayMs(attempt, options.retryBaseDelayMs, options.retryMaxDelayMs));
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(errorMessage(lastError));
   }
 }

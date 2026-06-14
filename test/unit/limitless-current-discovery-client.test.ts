@@ -125,4 +125,78 @@ describe("LimitlessCurrentDiscoveryClient", () => {
     expect(result.rows.map((row) => row.slug).sort()).toEqual(markets.map((entry) => entry.slug).sort());
     expect(result.rows.filter((row) => row.sourceRef === "limitless_active_slug_detail")).toHaveLength(2);
   });
+
+  it("flattens active slug group children using market detail", async () => {
+    const markets = [
+      market(1, "delta-fdv-above-dollar20m-one-day-after-launch", "Delta FDV above $20M one day after launch?"),
+      market(2, "delta-fdv-above-dollar50m-one-day-after-launch", "Delta FDV above $50M one day after launch?")
+    ];
+    const bySlug = new Map(markets.map((entry) => [entry.slug, entry]));
+    const fixture = await startLimitlessServer((url) => {
+      if (url.pathname === "/markets/active/slugs") {
+        return [
+          {
+            slug: "delta-fdv-above-one-day-after-launch",
+            deadline: "2027-01-01T00:00:00.000Z",
+            markets: markets.map((entry) => ({ slug: entry.slug, deadline: "2027-01-01T00:00:00.000Z" }))
+          }
+        ];
+      }
+      if (url.pathname === "/markets/active") {
+        return {
+          data: [],
+          totalMarketsCount: markets.length
+        };
+      }
+      const detailSlug = decodeURIComponent(url.pathname.replace(/^\/markets\//, ""));
+      const detail = bySlug.get(detailSlug);
+      if (detail) return detail;
+      throw new Error(`Unexpected path ${url.pathname}`);
+    });
+    server = fixture.server;
+
+    const result = await new LimitlessCurrentDiscoveryClient({
+      baseUrl: fixture.baseUrl,
+      pageSize: 1,
+      maxPages: 1,
+      maxMissingSlugDetails: 10,
+      requestTimeoutMs: 5_000
+    }).listCurrentMarkets();
+
+    expect(result.rows.map((row) => row.slug).sort()).toEqual(markets.map((entry) => entry.slug).sort());
+    expect(result.rows.every((row) => row.sourceRef === "limitless_active_slug_detail")).toBe(true);
+  });
+
+  it("retries transient operations before returning rows", async () => {
+    let attempts = 0;
+    const client = new LimitlessCurrentDiscoveryClient({
+      retryAttempts: 3,
+      retryBaseDelayMs: 1,
+      retryMaxDelayMs: 2
+    });
+
+    const result = await (client as unknown as {
+      withRetry<T>(
+        operation: () => Promise<T>,
+        options: { retryAttempts: number; retryBaseDelayMs: number; retryMaxDelayMs: number }
+      ): Promise<T>;
+    }).withRetry(async () => {
+      attempts += 1;
+      if (attempts < 3) {
+        throw new Error("HTTP 500 temporary upstream failure");
+      }
+      return marketsFixture;
+    }, {
+      retryAttempts: 3,
+      retryBaseDelayMs: 1,
+      retryMaxDelayMs: 2
+    });
+
+    expect(attempts).toBe(3);
+    expect(result).toBe(marketsFixture);
+  });
 });
+
+const marketsFixture = [
+  market(1, "gamma-fdv-above-dollar20m-one-day-after-launch", "Gamma FDV above $20M one day after launch?")
+];

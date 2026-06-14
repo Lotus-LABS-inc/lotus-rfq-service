@@ -27,6 +27,15 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
 const asString = (value: unknown): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 
+const asDate = (value: Date | string | null): Date | null => {
+  if (value instanceof Date) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = new Date(value);
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  }
+  return null;
+};
+
 interface CandidateRow {
   id: string;
   candidate_key: string;
@@ -70,6 +79,31 @@ interface LinkRow {
   execution_ready: boolean;
   evidence_label: string;
   historical_row_count: number;
+}
+
+interface VenueMarketDiscoverySnapshotRow {
+  id: string;
+  venue: VenueMarketDiscoverySnapshot["venue"];
+  venue_market_id: string;
+  active: boolean;
+  title: string;
+  normalized_title: string;
+  category: VenueMarketDiscoverySnapshot["category"];
+  market_class: VenueMarketDiscoverySnapshot["marketClass"];
+  outcomes: unknown;
+  semantic_boundary_key: string | null;
+  expires_at: Date | string | null;
+  resolves_at: Date | string | null;
+  rules_text: string | null;
+  resolution_source: string | null;
+  slug: string | null;
+  source_url: string | null;
+  token_ids: unknown;
+  quote_ready: boolean;
+  execution_ready: boolean;
+  source_hash: string;
+  source_kind: VenueMarketDiscoverySnapshot["sourceKind"];
+  raw_summary: unknown;
 }
 
 export interface MarketDiscoveryCandidateFilter {
@@ -233,6 +267,69 @@ export class MarketDiscoveryRepository {
       );
     }
     return snapshots.length;
+  }
+
+  public async listActiveVenueSnapshots(venues: readonly string[]): Promise<readonly VenueMarketDiscoverySnapshot[]> {
+    const uniqueVenues = [...new Set(venues.map((venue) => venue.trim()).filter((venue) => venue.length > 0))];
+    if (uniqueVenues.length === 0) {
+      return [];
+    }
+    const result = await this.pool.query<VenueMarketDiscoverySnapshotRow>(
+      `SELECT
+          id,
+          venue,
+          venue_market_id,
+          active,
+          title,
+          normalized_title,
+          category,
+          market_class,
+          outcomes,
+          semantic_boundary_key,
+          expires_at,
+          resolves_at,
+          rules_text,
+          resolution_source,
+          slug,
+          source_url,
+          token_ids,
+          quote_ready,
+          execution_ready,
+          source_hash,
+          source_kind,
+          raw_summary
+        FROM venue_market_discovery_snapshots
+       WHERE venue = ANY($1::text[])
+         AND active = true
+         AND COALESCE(resolves_at, expires_at, now() + interval '1 day') > now()
+       ORDER BY venue ASC, last_seen_at DESC
+       LIMIT 5000`,
+      [uniqueVenues]
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      venue: row.venue,
+      venueMarketId: row.venue_market_id,
+      active: row.active,
+      title: row.title,
+      normalizedTitle: row.normalized_title,
+      category: row.category,
+      marketClass: row.market_class,
+      outcomes: asStringArray(row.outcomes),
+      semanticBoundaryKey: row.semantic_boundary_key,
+      expiresAt: asDate(row.expires_at),
+      resolvesAt: asDate(row.resolves_at),
+      rulesText: row.rules_text,
+      resolutionSource: row.resolution_source,
+      slug: row.slug,
+      sourceUrl: row.source_url,
+      tokenIds: asStringArray(row.token_ids),
+      quoteReady: row.quote_ready,
+      executionReady: row.execution_ready,
+      sourceHash: row.source_hash,
+      sourceKind: row.source_kind,
+      rawSummary: asRecord(row.raw_summary) ?? {}
+    }));
   }
 
   public async upsertCandidates(candidates: readonly MarketDiscoveryCandidate[]): Promise<number> {

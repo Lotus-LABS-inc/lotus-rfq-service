@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
 import { MarketDiscoveryService } from "../../src/market-discovery/market-discovery-service.js";
 import type {
   MarketDiscoveryCandidate,
-  MarketDiscoveryQualityReport
+  MarketDiscoveryQualityReport,
+  VenueMarketDiscoverySnapshot
 } from "../../src/market-discovery/market-discovery-types.js";
 import type { MarketDiscoveryRepository } from "../../src/repositories/market-discovery.repository.js";
 import type { CrossVenueMatchReport } from "../../src/operations/semantic-expansion/shared.js";
@@ -277,6 +278,59 @@ describe("market discovery quality reporting", () => {
     expect(report.counts.totalCandidates).toBe(1);
     expect(report.counts.newDiscoveries).toBe(1);
     expect(report.extractionHealth).toEqual({});
+  });
+
+  it("uses last good active snapshots when a venue is temporarily unavailable", async () => {
+    const fallbackSnapshot: VenueMarketDiscoverySnapshot = {
+      id: "00000000-0000-4000-8000-000000000301",
+      venue: "OPINION",
+      venueMarketId: "opinion-last-good",
+      active: true,
+      title: "Will Gamma launch a token by 2027?",
+      normalizedTitle: "will gamma launch a token by 2027",
+      category: "CRYPTO",
+      marketClass: "BINARY",
+      outcomes: ["Yes", "No"],
+      semanticBoundaryKey: "2027-01-01",
+      expiresAt: new Date("2027-01-01T00:00:00.000Z"),
+      resolvesAt: new Date("2027-01-01T00:00:00.000Z"),
+      rulesText: "Resolves from venue rules.",
+      resolutionSource: "Opinion",
+      slug: "gamma-token-2027",
+      sourceUrl: "https://opinion.trade/market/gamma-token-2027",
+      tokenIds: ["yes-token", "no-token"],
+      quoteReady: true,
+      executionReady: true,
+      sourceHash: "last-good-hash",
+      sourceKind: "UPSTREAM_VENUE",
+      rawSummary: {}
+    };
+    let capturedVenues: readonly string[] = [];
+    const service = new MarketDiscoveryService(
+      qualitylessPool,
+      fakeRepository({
+        listActiveVenueSnapshots: async (venues: readonly string[]) => {
+          capturedVenues = venues;
+          return [fallbackSnapshot];
+        }
+      }),
+      process.cwd()
+    );
+
+    const result = await (service as unknown as {
+      snapshotsWithUnavailableVenueFallback(input: {
+        snapshots: readonly VenueMarketDiscoverySnapshot[];
+        venueStatuses: Record<string, { status: string; rowCount: number; warningCount: number }>;
+      }): Promise<readonly VenueMarketDiscoverySnapshot[]>;
+    }).snapshotsWithUnavailableVenueFallback({
+      snapshots: [],
+      venueStatuses: {
+        OPINION: { status: "UNAVAILABLE", rowCount: 0, warningCount: 1 }
+      }
+    });
+
+    expect(capturedVenues).toEqual(["OPINION"]);
+    expect(result).toEqual([fallbackSnapshot]);
   });
 
   it("derives pair/tri routing status from match reports and pooled canonical events", async () => {
