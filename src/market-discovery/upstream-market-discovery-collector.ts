@@ -27,6 +27,7 @@ export interface UpstreamMarketDiscoveryCollectorResult {
 }
 
 export interface UpstreamMarketDiscoveryCollectorConfig {
+  maxConcurrentVenueFetches?: number;
   polymarket?: {
     gammaClient?: PolymarketGammaClient;
     pageSize?: number;
@@ -59,6 +60,28 @@ const status = (
   rowCount: number,
   warningCount = 0
 ): VenueStatus => ({ status: state, rowCount, warningCount });
+
+const venueFetchConcurrency = (configured?: number): number =>
+  Math.max(1, Math.min(4, Math.floor(
+    configured ?? (Number(process.env.MARKET_DISCOVERY_MAX_CONCURRENT_VENUE_FETCHES) || 2)
+  )));
+
+const runVenueTasks = async <T>(
+  tasks: readonly (() => Promise<T>)[],
+  concurrency: number
+): Promise<T[]> => {
+  const results: T[] = [];
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, async () => {
+    while (nextIndex < tasks.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await tasks[index]!();
+    }
+  });
+  await Promise.all(workers);
+  return results;
+};
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -273,12 +296,22 @@ export class UpstreamMarketDiscoveryCollector {
   public constructor(private readonly config: UpstreamMarketDiscoveryCollectorConfig = {}) {}
 
   public async collect(): Promise<UpstreamMarketDiscoveryCollectorResult> {
-    const [polymarket, limitless, opinion, predict] = await Promise.all([
-      this.collectPolymarket(),
-      this.collectLimitless(),
-      this.collectOpinion(),
-      this.collectPredict()
-    ]);
+    const venueResults = await runVenueTasks(
+      [
+        () => this.collectPolymarket(),
+        () => this.collectLimitless(),
+        () => this.collectOpinion(),
+        () => this.collectPredict()
+      ],
+      venueFetchConcurrency(this.config.maxConcurrentVenueFetches)
+    );
+    const polymarket = venueResults[0];
+    const limitless = venueResults[1];
+    const opinion = venueResults[2];
+    const predict = venueResults[3];
+    if (!polymarket || !limitless || !opinion || !predict) {
+      throw new Error("Market discovery venue collector did not return all venue results.");
+    }
     const augmentedPolymarketSnapshots = await this.collectPolymarketDerivedEventSlugs([
       ...limitless.snapshots,
       ...opinion.snapshots,

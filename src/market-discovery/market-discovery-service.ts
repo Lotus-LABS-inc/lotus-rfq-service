@@ -22,7 +22,8 @@ import type {
   MarketDiscoveryQualityReport,
   MarketDiscoveryRunSummary,
   MarketDiscoveryState,
-  MarketDiscoveryTopicBundle
+  MarketDiscoveryTopicBundle,
+  VenueMarketDiscoverySnapshot
 } from "./market-discovery-types.js";
 import { buildMarketDiscoveryTopicBundles } from "./market-discovery-topic-bundles.js";
 import { MarketDiscoveryRepository } from "../repositories/market-discovery.repository.js";
@@ -90,11 +91,12 @@ export class MarketDiscoveryService {
     const inventory = await loadSemanticExpansionInventory(this.pool);
     const { activeRows, candidates: inventoryCandidates } = buildMarketDiscoveryCandidates(inventory);
     const upstream = await this.upstreamCollector.collect();
+    const discoverySnapshots = await this.snapshotsWithUnavailableVenueFallback(upstream);
     const snapshotPersistedCount = await this.repository.upsertVenueSnapshots(upstream.snapshots);
     const {
       activeRows: upstreamActiveRows,
       candidates: upstreamCandidates
-    } = buildMarketDiscoveryCandidatesFromSnapshots(upstream.snapshots, inventory);
+    } = buildMarketDiscoveryCandidatesFromSnapshots(discoverySnapshots, inventory);
     const candidates = this.mergeCandidates([...upstreamCandidates, ...inventoryCandidates]);
     const persistedCount = await this.repository.upsertCandidates(candidates);
     const staleRetiredCount = activeRows.length >= 100 && candidates.length > 0
@@ -116,7 +118,7 @@ export class MarketDiscoveryService {
       persistedCount,
       snapshotPersistedCount,
       staleRetiredCount,
-      upstreamRowsByVenueCategory: this.upstreamRowsByVenueCategory(upstream.snapshots),
+      upstreamRowsByVenueCategory: this.upstreamRowsByVenueCategory(discoverySnapshots),
       lowConfidenceMissingFieldCounts: this.lowConfidenceMissingFieldCounts(candidates),
       venueStatuses: upstream.venueStatuses,
       qualityReport
@@ -848,6 +850,27 @@ export class MarketDiscoveryService {
       throw new MarketDiscoveryServiceError(`Discovery candidate '${candidateId}' was not found.`);
     }
     return candidate;
+  }
+
+  private async snapshotsWithUnavailableVenueFallback(
+    upstream: UpstreamMarketDiscoveryCollectorResult
+  ): Promise<readonly VenueMarketDiscoverySnapshot[]> {
+    const failedVenues = Object.entries(upstream.venueStatuses)
+      .filter(([, venueStatus]) => venueStatus.status === "UNAVAILABLE")
+      .map(([venue]) => venue === "PREDICT_FUN" ? "PREDICT" : venue);
+    if (failedVenues.length === 0) {
+      return upstream.snapshots;
+    }
+    const currentVenues = new Set<string>(upstream.snapshots.map((snapshot) => snapshot.venue));
+    const fallbackVenues = failedVenues.filter((venue) => !currentVenues.has(venue));
+    if (fallbackVenues.length === 0) {
+      return upstream.snapshots;
+    }
+    const fallbackSnapshots = await this.repository.listActiveVenueSnapshots(fallbackVenues);
+    if (fallbackSnapshots.length === 0) {
+      return upstream.snapshots;
+    }
+    return [...upstream.snapshots, ...fallbackSnapshots];
   }
 
   private async candidatesForReviewGroup(reviewGroupKey: string): Promise<readonly MarketDiscoveryCandidate[]> {
