@@ -128,6 +128,14 @@ Use separate env files:
 /etc/lotus/prod/polymarket-relay.env
 ```
 
+Backend env files must include an admin approval token:
+
+```text
+ADMIN_2FA_TOKEN=<operator-approved 6+ digit code>
+```
+
+Admin mutation routes fail closed when this value is missing. Do not commit the token. The GitHub VPS deploy workflow can write it from the `ADMIN_2FA_TOKEN` repository secret into the target backend env file during deployment.
+
 Use separate local ports:
 
 ```text

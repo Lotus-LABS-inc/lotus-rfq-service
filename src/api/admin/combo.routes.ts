@@ -25,6 +25,14 @@ export interface AdminComboRouteDeps {
   exposureCache: ExposureRedisCache;
 }
 
+const validateTwoFactorToken = (token: string): boolean => {
+  const configuredToken = process.env.ADMIN_2FA_TOKEN;
+  if (typeof configuredToken === "string" && configuredToken.length > 0) {
+    return token === configuredToken;
+  }
+  return false;
+};
+
 export const registerAdminComboRoutes = async (
   app: FastifyInstance,
   adminMiddleware: preHandlerHookHandler,
@@ -154,7 +162,7 @@ export const registerAdminComboRoutes = async (
       const comboId = parsedParams.data.id;
       const { reason, correlationId, twoFactorToken } = parsedBody.data;
 
-      if (!twoFactorToken || twoFactorToken.length < 6) {
+      if (!validateTwoFactorToken(twoFactorToken)) {
         return reply.status(403).send({ error: "ADMIN+2FA required" });
       }
 
