@@ -8,7 +8,7 @@ export interface EventReviewCanonicalRow {
   title: string;
   frontendDisplayTitle: string | null;
   category: string;
-  status: "APPROVED" | "HIDDEN" | "DISABLED" | "PENDING";
+  status: "APPROVED" | "HIDDEN" | "DISABLED" | "PENDING" | "CLOSED";
   canonicalMarketIds: string[];
   venues: string[];
   expiresAt: string | null;
@@ -29,7 +29,7 @@ export interface EventReviewVenueRuleRow {
 export interface EventReviewFilter {
   category?: string | undefined;
   search?: string | undefined;
-  status?: "APPROVED" | "HIDDEN" | "DISABLED" | "PENDING" | undefined;
+  status?: "APPROVED" | "HIDDEN" | "DISABLED" | "PENDING" | "CLOSED" | undefined;
   includeExpired?: boolean | undefined;
 }
 
@@ -64,13 +64,15 @@ export class MarketEventReviewRepository {
       `EXISTS (SELECT 1 FROM venue_market_profiles v WHERE v.canonical_event_id = ce.id)`
     ];
     const params: unknown[] = [];
-    if (!filter.includeExpired) {
+    if (filter.status === "CLOSED") {
+      conditions.push(`ce.resolves_at IS NOT NULL AND ce.resolves_at < NOW()`);
+    } else if (!filter.includeExpired) {
       conditions.push(`(
         (ce.resolves_at IS NULL OR ce.resolves_at > NOW())
         AND (ce.expires_at IS NULL OR ce.expires_at > NOW())
       )`);
     }
-    if (filter.status) {
+    if (filter.status && filter.status !== "CLOSED") {
       params.push(filter.status);
       conditions.push(`COALESCE(fma.status, 'PENDING') = $${params.length}`);
     }
@@ -91,7 +93,10 @@ export class MarketEventReviewRepository {
           ce.title,
           fma.display_title AS frontend_display_title,
           ce.canonical_category AS category,
-          COALESCE(fma.status, 'PENDING') AS status,
+          CASE
+            WHEN ce.resolves_at IS NOT NULL AND ce.resolves_at < NOW() THEN 'CLOSED'
+            ELSE COALESCE(fma.status, 'PENDING')
+          END AS status,
           COALESCE(array_agg(DISTINCT cem.id) FILTER (WHERE cem.id IS NOT NULL), '{}') AS canonical_market_ids,
           COALESCE(array_agg(DISTINCT vmp.venue) FILTER (WHERE vmp.venue IS NOT NULL), '{}') AS venues,
           ce.expires_at::text AS expires_at,

@@ -99,6 +99,7 @@ const childFromCandidate = (candidate: MarketDiscoveryCandidate): MarketDiscover
     candidateId: candidate.id,
     candidateKey: candidate.candidateKey,
     state: candidate.state,
+    lifecycleState: candidate.lifecycleState,
     candidateType: candidate.candidateType,
     eventTitle: candidate.eventTitle,
     contractLabel: contractLabels[0] ?? candidate.sharedOutcomes[0] ?? null,
@@ -109,7 +110,9 @@ const childFromCandidate = (candidate: MarketDiscoveryCandidate): MarketDiscover
     confidenceScore: candidate.confidenceScore,
     sharedOutcomes: candidate.sharedOutcomes,
     missingVenueEvidence: missingVenueEvidence(venues, "CONTRACT"),
-    approvalActions: candidate.approvalActions
+    approvalActions: candidate.approvalActions,
+    routingReview: candidate.routingReview,
+    archiveEligibility: candidate.archiveEligibility
   };
 };
 

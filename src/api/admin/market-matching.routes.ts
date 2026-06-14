@@ -29,7 +29,7 @@ const acceptEventBodySchema = z.object({
 });
 
 const eventListQuerySchema = z.object({
-  status: z.enum(["LIVE", "PAUSED", "DISABLED", "PENDING"]).optional(),
+  status: z.enum(["LIVE", "PAUSED", "DISABLED", "PENDING", "CLOSED"]).optional(),
   category: z.string().min(1).optional(),
   search: z.string().min(1).optional(),
   includeExpired: z.enum(["true", "false"]).optional()
@@ -41,7 +41,8 @@ const FRIENDLY_TO_DB = {
   LIVE: "APPROVED",
   PAUSED: "HIDDEN",
   DISABLED: "DISABLED",
-  PENDING: "PENDING"
+  PENDING: "PENDING",
+  CLOSED: "CLOSED"
 } as const;
 
 const approveBodySchema = z.object({
@@ -58,6 +59,7 @@ const rejectBodySchema = z.object({
 
 const discoveryCandidateListQuerySchema = z.object({
   state: z.enum(["DISCOVERED", "INGESTED", "APPROVED", "REJECTED", "SUPPRESSED"]).optional(),
+  lifecycleState: z.enum(["OPEN", "CLOSED"]).optional(),
   candidateType: z.enum(["NEW_DISCOVERY", "MERGE_SUGGESTION", "ENRICHMENT_ONLY", "LOW_CONFIDENCE"]).optional(),
   category: z.enum(["SPORTS", "CRYPTO", "POLITICS", "ESPORTS", "POP_CULTURE", "ECONOMICS", "OTHER"]).optional(),
   search: z.string().min(1).max(200).optional()
@@ -74,6 +76,16 @@ const approveDiscoveryBodySchema = z.object({
 const rejectDiscoveryBodySchema = z.object({
   twoFactorToken: z.string().min(6),
   reason: z.string().min(1)
+});
+
+const archiveDiscoveryPreviewQuerySchema = z.object({
+  retentionDays: z.coerce.number().int().min(7).max(365).optional()
+});
+
+const archiveDiscoveryApplyBodySchema = z.object({
+  twoFactorToken: z.string().min(6),
+  retentionDays: z.number().int().min(7).max(365).optional(),
+  confirmPhrase: z.literal("ARCHIVE_CLOSED_DISCOVERY")
 });
 
 const validateTwoFactorToken = (token: string): boolean => {
@@ -207,6 +219,50 @@ export const registerAdminMarketMatchingRoutes = async (
     } catch (error) {
       app.log.error({ err: error }, "Failed to run market discovery.");
       return reply.status(500).send({ code: "MARKET_DISCOVERY_ERROR", message: "Failed to run market discovery." });
+    }
+  });
+
+  app.get("/admin/market-matching/discovery/archive/preview", { preHandler: adminMiddleware }, async (request, reply) => {
+    const parsed = archiveDiscoveryPreviewQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: parsed.error.flatten() });
+    }
+    try {
+      const preview = await deps.marketDiscoveryService.previewArchiveClosed({
+        retentionDays: parsed.data.retentionDays
+      });
+      return reply.send({ preview });
+    } catch (error) {
+      app.log.error({ err: error }, "Failed to preview closed discovery archive.");
+      return reply.status(500).send({ code: "MARKET_DISCOVERY_ERROR", message: "Failed to preview closed discovery archive." });
+    }
+  });
+
+  app.post("/admin/market-matching/discovery/archive/apply", { preHandler: adminMiddleware }, async (request, reply) => {
+    const body = archiveDiscoveryApplyBodySchema.safeParse(request.body);
+    if (!body.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: body.error.flatten() });
+    }
+    if (!validateTwoFactorToken(body.data.twoFactorToken)) {
+      return reply.status(403).send({ code: "FORBIDDEN", message: "ADMIN+2FA required." });
+    }
+    try {
+      const result = await deps.marketDiscoveryService.applyArchiveClosed({
+        retentionDays: body.data.retentionDays
+      });
+      app.log.info(
+        {
+          archivedBy: request.user.userId,
+          deletedCandidateCount: result.deletedCandidateCount,
+          deletedSnapshotCount: result.deletedSnapshotCount,
+          retentionDays: result.retentionDays
+        },
+        "Closed discovery archive applied by operator."
+      );
+      return reply.send({ result });
+    } catch (error) {
+      app.log.error({ err: error }, "Failed to apply closed discovery archive.");
+      return reply.status(500).send({ code: "MARKET_DISCOVERY_ERROR", message: "Failed to apply closed discovery archive." });
     }
   });
 

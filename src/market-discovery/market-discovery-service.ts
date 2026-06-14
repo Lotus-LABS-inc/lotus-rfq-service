@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
 
-import { buildStablePromotionIds } from "../operations/semantic-expansion/shared.js";
+import { buildStablePromotionIds, readArtifact, type CrossVenueMatchReport } from "../operations/semantic-expansion/shared.js";
 import {
   loadSemanticExpansionInventory,
   type SemanticExpansionInventoryRow,
@@ -23,6 +23,10 @@ import type {
 } from "./market-discovery-types.js";
 import { buildMarketDiscoveryTopicBundles } from "./market-discovery-topic-bundles.js";
 import { MarketDiscoveryRepository } from "../repositories/market-discovery.repository.js";
+import type {
+  MarketDiscoveryArchiveApplyResult,
+  MarketDiscoveryArchivePreview
+} from "../repositories/market-discovery.repository.js";
 import { CuratedMarketAdminService } from "../api/admin/curated-market-admin-service.js";
 import type { SemanticDiscoveryCategory } from "../simulation/semantic-rulepack.js";
 import type { CanonicalCategory } from "../canonical/canonicalization-types.js";
@@ -66,6 +70,8 @@ export interface MarketDiscoveryReviewSummary {
 }
 
 export class MarketDiscoveryService {
+  private static readonly MATCH_REPORT_PATH = "docs/cross-venue-match-report.json";
+
   public constructor(
     private readonly pool: Pool,
     private readonly repository: MarketDiscoveryRepository = new MarketDiscoveryRepository(pool),
@@ -113,6 +119,7 @@ export class MarketDiscoveryService {
 
   public async listCandidates(filter: {
     state?: MarketDiscoveryState | undefined;
+    lifecycleState?: "OPEN" | "CLOSED" | undefined;
     candidateType?: MarketDiscoveryCandidateType | undefined;
     category?: MarketDiscoveryCandidate["category"] | undefined;
     search?: string | undefined;
@@ -120,7 +127,7 @@ export class MarketDiscoveryService {
     candidates: readonly MarketDiscoveryCandidate[];
     topicBundles: readonly MarketDiscoveryTopicBundle[];
   }> {
-    const candidates = await this.repository.listCandidates(filter);
+    const candidates = this.enrichCandidatesWithRoutingReview(await this.repository.listCandidates(filter));
     return {
       candidates,
       topicBundles: buildMarketDiscoveryTopicBundles(candidates)
@@ -129,13 +136,14 @@ export class MarketDiscoveryService {
 
   public async listTopicBundles(filter: {
     state?: MarketDiscoveryState | undefined;
+    lifecycleState?: "OPEN" | "CLOSED" | undefined;
     candidateType?: MarketDiscoveryCandidateType | undefined;
     category?: MarketDiscoveryCandidate["category"] | undefined;
     search?: string | undefined;
   } = {}): Promise<{
     topicBundles: readonly MarketDiscoveryTopicBundle[];
   }> {
-    const candidates = await this.repository.listCandidates(filter);
+    const candidates = this.enrichCandidatesWithRoutingReview(await this.repository.listCandidates(filter));
     return { topicBundles: buildMarketDiscoveryTopicBundles(candidates) };
   }
 
@@ -188,6 +196,22 @@ export class MarketDiscoveryService {
     }
     await this.repository.markRejected(input);
     return { candidateId, state: "REJECTED" };
+  }
+
+  public async previewArchiveClosed(input: {
+    retentionDays?: number | undefined;
+  } = {}): Promise<MarketDiscoveryArchivePreview> {
+    return this.repository.previewArchiveClosed({
+      retentionDays: this.normalizeRetentionDays(input.retentionDays)
+    });
+  }
+
+  public async applyArchiveClosed(input: {
+    retentionDays?: number | undefined;
+  } = {}): Promise<MarketDiscoveryArchiveApplyResult> {
+    return this.repository.applyArchiveClosed({
+      retentionDays: this.normalizeRetentionDays(input.retentionDays)
+    });
   }
 
   public async approve(input: {
@@ -395,5 +419,63 @@ export class MarketDiscoveryService {
       }
     }
     return Object.fromEntries(Object.entries(counts).sort(([, left], [, right]) => right - left));
+  }
+
+  private normalizeRetentionDays(value: number | undefined): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return 7;
+    }
+    return Math.max(7, Math.floor(value));
+  }
+
+  private enrichCandidatesWithRoutingReview(
+    candidates: readonly MarketDiscoveryCandidate[]
+  ): readonly MarketDiscoveryCandidate[] {
+    if (candidates.length === 0) {
+      return candidates;
+    }
+    const report = this.readLastMatchReport();
+    if (!report) {
+      return candidates;
+    }
+    return candidates.map((candidate) => ({
+      ...candidate,
+      routingReview: this.routingReviewForCandidate(candidate, report)
+    }));
+  }
+
+  private readLastMatchReport(): CrossVenueMatchReport | null {
+    try {
+      return readArtifact<CrossVenueMatchReport>(this.repoRoot, MarketDiscoveryService.MATCH_REPORT_PATH);
+    } catch {
+      return null;
+    }
+  }
+
+  private routingReviewForCandidate(
+    candidate: MarketDiscoveryCandidate,
+    report: CrossVenueMatchReport
+  ): MarketDiscoveryCandidate["routingReview"] {
+    const candidateKeys = new Set(
+      candidate.venueEvidence.map((entry) => `${entry.venue}:${entry.venueMarketId}`)
+    );
+    if (candidateKeys.size === 0) {
+      return { exactPromotionIds: [], nearExactMatchIds: [] };
+    }
+    const hasCandidateMember = (members: readonly { venue: string; venueMarketId: string }[]): boolean =>
+      members.some((member) => candidateKeys.has(`${member.venue}:${member.venueMarketId}`));
+    return {
+      exactPromotionIds: report.promotionCandidates
+        .filter((promotion) => hasCandidateMember(promotion.memberRefs))
+        .map((promotion) => promotion.promotionId)
+        .sort((left, right) => left.localeCompare(right)),
+      nearExactMatchIds: report.matches
+        .filter((match) =>
+          match.matchClass === "semantic_near_exact"
+          && hasCandidateMember([match.seed, match.candidate])
+        )
+        .map((match) => match.matchId)
+        .sort((left, right) => left.localeCompare(right))
+    };
   }
 }

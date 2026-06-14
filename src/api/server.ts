@@ -256,6 +256,7 @@ import { MarketMatchingService } from "./admin/market-matching-service.js";
 import { MarketEventReviewService } from "./admin/market-event-review-service.js";
 import { MarketEventAcceptService } from "./admin/market-event-accept-service.js";
 import { MarketDiscoveryService } from "../market-discovery/market-discovery-service.js";
+import { startMarketDiscoveryScheduler } from "../market-discovery/market-discovery-scheduler.js";
 import { MarketDiscoveryRepository } from "../repositories/market-discovery.repository.js";
 import { MarketEventReviewRepository } from "../repositories/market-event-review.repository.js";
 import { MarketCatalogAdminService } from "./admin/market-catalog-admin-service.js";
@@ -658,6 +659,10 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
   const signedTradeExecutionStatusRepository = new PgSignedTradeExecutionStatusRepository(dependencies.pgPool);
   const signedTradePositionRecorder = new PgSignedTradePositionRecorder(dependencies.pgPool);
   const marketCatalogRepository = new MarketCatalogRepository(dependencies.pgPool);
+  const marketDiscoveryService = new MarketDiscoveryService(
+    dependencies.pgPool,
+    new MarketDiscoveryRepository(dependencies.pgPool)
+  );
   const executionVenuesAdminService = new ExecutionVenuesAdminService({
     env: process.env,
     repoRoot: process.cwd(),
@@ -1336,6 +1341,26 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
     app.addHook("onClose", async () => {
       await Promise.all(marketCatalogSnapshotMaterializers.map((materializer) => materializer.stop()));
     });
+
+    const marketDiscoveryScheduler = startMarketDiscoveryScheduler(
+      marketDiscoveryService,
+      dependencies.logger,
+      {
+        intervalMs: 30 * 60 * 1000,
+        runImmediately: false,
+        env: {
+          LOTUS_DEPLOY_ENV: process.env.LOTUS_DEPLOY_ENV,
+          LOTUS_ENV: process.env.LOTUS_ENV,
+          APP_ENV: process.env.APP_ENV,
+          NODE_ENV: process.env.NODE_ENV
+        }
+      }
+    );
+    if (marketDiscoveryScheduler) {
+      app.addHook("onClose", async () => {
+        marketDiscoveryScheduler.stop();
+      });
+    }
   }
 
   const sorRouteScout = new RouteScout({
@@ -3352,10 +3377,7 @@ export const buildServer = async (dependencies: ServerDependencies): Promise<Fas
       dependencies.pgPool,
       new MarketEventReviewRepository(dependencies.pgPool)
     ),
-    marketDiscoveryService: new MarketDiscoveryService(
-      dependencies.pgPool,
-      new MarketDiscoveryRepository(dependencies.pgPool)
-    )
+    marketDiscoveryService
   });
   await registerAdminMarketCatalogRoutes(app, adminAuthMiddleware, {
     marketCatalogAdminService: new MarketCatalogAdminService(

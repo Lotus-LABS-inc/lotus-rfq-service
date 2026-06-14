@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 
 import type {
   MarketDiscoveryCandidate,
+  MarketDiscoveryLifecycleState,
   MarketDiscoveryState,
   MarketDiscoveryVenueEvidence,
   VenueMarketDiscoverySnapshot
@@ -42,6 +43,10 @@ interface CandidateRow {
   unsafe_grouping_warnings: unknown;
   approval_actions: unknown;
   metadata: unknown;
+  approved_canonical_event_id: string | null;
+  approved_resolves_at: string | null;
+  archive_eligible_after: string | null;
+  archive_snapshot_candidate: boolean;
 }
 
 interface LinkRow {
@@ -61,6 +66,7 @@ interface LinkRow {
 
 export interface MarketDiscoveryCandidateFilter {
   state?: MarketDiscoveryState | undefined;
+  lifecycleState?: MarketDiscoveryLifecycleState | undefined;
   candidateType?: MarketDiscoveryCandidate["candidateType"] | undefined;
   category?: MarketDiscoveryCandidate["category"] | undefined;
   search?: string | undefined;
@@ -72,6 +78,25 @@ export interface ApproveDiscoveryCandidateInput {
   makeLive: boolean;
   approvedBy: string;
   reason: string;
+}
+
+export interface MarketDiscoveryArchivePreview {
+  retentionDays: number;
+  cutoffIso: string;
+  eligibleCandidateCount: number;
+  eligibleSnapshotCount: number;
+  candidates: readonly {
+    id: string;
+    candidateKey: string;
+    state: MarketDiscoveryState;
+    eventTitle: string;
+    reason: string;
+  }[];
+}
+
+export interface MarketDiscoveryArchiveApplyResult extends MarketDiscoveryArchivePreview {
+  deletedCandidateCount: number;
+  deletedSnapshotCount: number;
 }
 
 export class MarketDiscoveryRepository {
@@ -341,6 +366,11 @@ export class MarketDiscoveryRepository {
       params.push(filter.state);
       conditions.push(`candidate.state = $${params.length}`);
     }
+    if (filter.lifecycleState === "CLOSED") {
+      conditions.push(`approved_event.resolves_at IS NOT NULL AND approved_event.resolves_at < NOW()`);
+    } else if (filter.lifecycleState === "OPEN") {
+      conditions.push(`(approved_event.resolves_at IS NULL OR approved_event.resolves_at >= NOW())`);
+    }
     if (filter.candidateType) {
       params.push(filter.candidateType);
       conditions.push(`candidate.candidate_type = $${params.length}`);
@@ -379,6 +409,36 @@ export class MarketDiscoveryRepository {
           candidate.unsafe_grouping_warnings,
           candidate.approval_actions,
           candidate.metadata,
+          candidate.approved_canonical_event_id::text,
+          approved_event.resolves_at::text AS approved_resolves_at,
+          CASE
+            WHEN candidate.state IN ('APPROVED', 'REJECTED', 'SUPPRESSED')
+             AND candidate.updated_at < NOW() - interval '7 days'
+             AND (
+               (approved_event.resolves_at IS NOT NULL AND approved_event.resolves_at < NOW() - interval '7 days')
+               OR NOT EXISTS (
+                 SELECT 1
+                   FROM market_discovery_candidate_venue_profiles archive_link
+                   JOIN venue_market_discovery_snapshots archive_snapshot
+                     ON archive_snapshot.venue = archive_link.venue
+                    AND archive_snapshot.venue_market_id = archive_link.venue_market_id
+                  WHERE archive_link.candidate_id = candidate.id
+                    AND archive_snapshot.active = true
+                    AND COALESCE(archive_snapshot.resolves_at, archive_snapshot.expires_at, archive_snapshot.last_seen_at) >= NOW() - interval '7 days'
+               )
+             )
+            THEN (candidate.updated_at + interval '7 days')::text
+            ELSE NULL
+          END AS archive_eligible_after,
+          EXISTS (
+            SELECT 1
+              FROM market_discovery_candidate_venue_profiles archive_link
+              JOIN venue_market_discovery_snapshots archive_snapshot
+                ON archive_snapshot.venue = archive_link.venue
+               AND archive_snapshot.venue_market_id = archive_link.venue_market_id
+             WHERE archive_link.candidate_id = candidate.id
+               AND archive_snapshot.active = false
+          ) AS archive_snapshot_candidate,
           link.candidate_id::text,
           link.venue_market_profile_id,
           link.canonical_event_id::text,
@@ -392,6 +452,8 @@ export class MarketDiscoveryRepository {
           link.evidence_label,
           link.historical_row_count
         FROM market_discovery_candidates candidate
+        LEFT JOIN canonical_events approved_event
+          ON approved_event.id = candidate.approved_canonical_event_id
         LEFT JOIN market_discovery_candidate_venue_profiles link
           ON link.candidate_id = candidate.id
         ${where}
@@ -427,6 +489,36 @@ export class MarketDiscoveryRepository {
           candidate.unsafe_grouping_warnings,
           candidate.approval_actions,
           candidate.metadata,
+          candidate.approved_canonical_event_id::text,
+          approved_event.resolves_at::text AS approved_resolves_at,
+          CASE
+            WHEN candidate.state IN ('APPROVED', 'REJECTED', 'SUPPRESSED')
+             AND candidate.updated_at < NOW() - interval '7 days'
+             AND (
+               (approved_event.resolves_at IS NOT NULL AND approved_event.resolves_at < NOW() - interval '7 days')
+               OR NOT EXISTS (
+                 SELECT 1
+                   FROM market_discovery_candidate_venue_profiles archive_link
+                   JOIN venue_market_discovery_snapshots archive_snapshot
+                     ON archive_snapshot.venue = archive_link.venue
+                    AND archive_snapshot.venue_market_id = archive_link.venue_market_id
+                  WHERE archive_link.candidate_id = candidate.id
+                    AND archive_snapshot.active = true
+                    AND COALESCE(archive_snapshot.resolves_at, archive_snapshot.expires_at, archive_snapshot.last_seen_at) >= NOW() - interval '7 days'
+               )
+             )
+            THEN (candidate.updated_at + interval '7 days')::text
+            ELSE NULL
+          END AS archive_eligible_after,
+          EXISTS (
+            SELECT 1
+              FROM market_discovery_candidate_venue_profiles archive_link
+              JOIN venue_market_discovery_snapshots archive_snapshot
+                ON archive_snapshot.venue = archive_link.venue
+               AND archive_snapshot.venue_market_id = archive_link.venue_market_id
+             WHERE archive_link.candidate_id = candidate.id
+               AND archive_snapshot.active = false
+          ) AS archive_snapshot_candidate,
           link.candidate_id::text,
           link.venue_market_profile_id,
           link.canonical_event_id::text,
@@ -440,6 +532,8 @@ export class MarketDiscoveryRepository {
           link.evidence_label,
           link.historical_row_count
         FROM market_discovery_candidates candidate
+        LEFT JOIN canonical_events approved_event
+          ON approved_event.id = candidate.approved_canonical_event_id
         LEFT JOIN market_discovery_candidate_venue_profiles link
           ON link.candidate_id = candidate.id
        WHERE candidate.id = $1::uuid`,
@@ -517,6 +611,71 @@ export class MarketDiscoveryRepository {
     );
   }
 
+  public async previewArchiveClosed(input: { retentionDays: number }): Promise<MarketDiscoveryArchivePreview> {
+    const retentionDays = Math.max(1, Math.floor(input.retentionDays));
+    const result = await this.pool.query<{
+      id: string;
+      candidate_key: string;
+      state: MarketDiscoveryState;
+      event_title: string;
+      reason: string;
+    }>(
+      this.archiveCandidatePreviewSql(),
+      [retentionDays]
+    );
+    const snapshots = await this.pool.query<{ count: string }>(this.archiveSnapshotCountSql(), [retentionDays]);
+    const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+    return {
+      retentionDays,
+      cutoffIso: cutoff.toISOString(),
+      eligibleCandidateCount: result.rows.length,
+      eligibleSnapshotCount: Number(snapshots.rows[0]?.count ?? 0),
+      candidates: result.rows.map((row) => ({
+        id: row.id,
+        candidateKey: row.candidate_key,
+        state: row.state,
+        eventTitle: row.event_title,
+        reason: row.reason
+      }))
+    };
+  }
+
+  public async applyArchiveClosed(input: { retentionDays: number }): Promise<MarketDiscoveryArchiveApplyResult> {
+    const preview = await this.previewArchiveClosed(input);
+    await this.pool.query("BEGIN");
+    try {
+      const deleteLinks = await this.pool.query<{ id: string }>(
+        `WITH eligible AS (${this.archiveCandidateIdsSql()})
+         DELETE FROM market_discovery_candidate_venue_profiles link
+          USING eligible
+          WHERE link.candidate_id = eligible.id
+          RETURNING eligible.id::text AS id`,
+        [preview.retentionDays]
+      );
+      const deleteCandidates = await this.pool.query<{ id: string }>(
+        `WITH eligible AS (${this.archiveCandidateIdsSql()})
+         DELETE FROM market_discovery_candidates candidate
+          USING eligible
+          WHERE candidate.id = eligible.id
+          RETURNING candidate.id::text AS id`,
+        [preview.retentionDays]
+      );
+      const deleteSnapshots = await this.pool.query<{ id: string }>(
+        `${this.archiveSnapshotDeleteSql()}`,
+        [preview.retentionDays]
+      );
+      await this.pool.query("COMMIT");
+      return {
+        ...preview,
+        deletedCandidateCount: deleteCandidates.rowCount ?? deleteLinks.rowCount ?? 0,
+        deletedSnapshotCount: deleteSnapshots.rowCount ?? 0
+      };
+    } catch (error) {
+      await this.pool.query("ROLLBACK");
+      throw error;
+    }
+  }
+
   private mapJoinedRows(rows: readonly (CandidateRow & Partial<LinkRow>)[]): readonly MarketDiscoveryCandidate[] {
     const byId = new Map<string, MarketDiscoveryCandidate & { venueEvidence: MarketDiscoveryVenueEvidence[] }>();
     for (const row of rows) {
@@ -524,6 +683,7 @@ export class MarketDiscoveryRepository {
         id: row.id,
         candidateKey: row.candidate_key,
         state: row.state,
+        lifecycleState: this.lifecycleState(row),
         candidateType: row.candidate_type,
         sourceKind: row.source_kind,
         eventTitle: row.event_title,
@@ -554,6 +714,8 @@ export class MarketDiscoveryRepository {
             },
         unsafeGroupingWarnings: asStringArray(row.unsafe_grouping_warnings),
         approvalActions: asStringArray(row.approval_actions),
+        routingReview: { exactPromotionIds: [], nearExactMatchIds: [] },
+        archiveEligibility: this.archiveEligibility(row),
         venues: asStringArray(row.venues) as MarketDiscoveryCandidate["venues"],
         sharedOutcomes: asStringArray(row.shared_outcomes),
         missingOutcomes: asRecordArray(row.missing_outcomes) as MarketDiscoveryCandidate["missingOutcomes"],
@@ -578,6 +740,117 @@ export class MarketDiscoveryRepository {
       byId.set(row.id, existing);
     }
     return [...byId.values()];
+  }
+
+  private lifecycleState(row: CandidateRow): MarketDiscoveryLifecycleState {
+    if (!row.approved_resolves_at) {
+      return "OPEN";
+    }
+    const resolvesAt = new Date(row.approved_resolves_at);
+    return !Number.isNaN(resolvesAt.getTime()) && resolvesAt.getTime() < Date.now() ? "CLOSED" : "OPEN";
+  }
+
+  private archiveEligibility(row: CandidateRow): MarketDiscoveryCandidate["archiveEligibility"] {
+    const terminal = row.state === "APPROVED" || row.state === "REJECTED" || row.state === "SUPPRESSED";
+    if (!terminal) {
+      return {
+        eligible: false,
+        reason: "non_terminal_candidate",
+        eligibleAfter: null
+      };
+    }
+    if (!row.archive_eligible_after) {
+      return {
+        eligible: false,
+        reason: row.approved_resolves_at ? "retention_window_not_elapsed" : "active_or_recent_snapshot_evidence",
+        eligibleAfter: null
+      };
+    }
+    const eligibleAfter = new Date(row.archive_eligible_after);
+    const eligible = !Number.isNaN(eligibleAfter.getTime()) && eligibleAfter.getTime() <= Date.now();
+    return {
+      eligible,
+      reason: eligible
+        ? row.approved_resolves_at ? "closed_canonical_event_retention_elapsed" : "inactive_snapshot_retention_elapsed"
+        : "retention_window_not_elapsed",
+      eligibleAfter: row.archive_eligible_after
+    };
+  }
+
+  private archiveCandidateIdsSql(): string {
+    return `
+      SELECT candidate.id
+        FROM market_discovery_candidates candidate
+        LEFT JOIN canonical_events approved_event
+          ON approved_event.id = candidate.approved_canonical_event_id
+       WHERE candidate.state IN ('APPROVED', 'REJECTED', 'SUPPRESSED')
+         AND candidate.updated_at < NOW() - ($1::int * interval '1 day')
+         AND (
+           (approved_event.resolves_at IS NOT NULL AND approved_event.resolves_at < NOW() - ($1::int * interval '1 day'))
+           OR NOT EXISTS (
+             SELECT 1
+               FROM market_discovery_candidate_venue_profiles link
+               JOIN venue_market_discovery_snapshots snapshot
+                 ON snapshot.venue = link.venue
+                AND snapshot.venue_market_id = link.venue_market_id
+              WHERE link.candidate_id = candidate.id
+                AND snapshot.active = true
+                AND COALESCE(snapshot.resolves_at, snapshot.expires_at, snapshot.last_seen_at) >= NOW() - ($1::int * interval '1 day')
+           )
+         )`;
+  }
+
+  private archiveCandidatePreviewSql(): string {
+    return `
+      WITH eligible AS (${this.archiveCandidateIdsSql()})
+      SELECT
+          candidate.id::text,
+          candidate.candidate_key,
+          candidate.state,
+          candidate.event_title,
+          CASE
+            WHEN approved_event.resolves_at IS NOT NULL THEN 'closed_canonical_event_retention_elapsed'
+            ELSE 'inactive_snapshot_retention_elapsed'
+          END AS reason
+        FROM eligible
+        JOIN market_discovery_candidates candidate ON candidate.id = eligible.id
+        LEFT JOIN canonical_events approved_event ON approved_event.id = candidate.approved_canonical_event_id
+       ORDER BY candidate.updated_at ASC
+       LIMIT 200`;
+  }
+
+  private archiveSnapshotCountSql(): string {
+    return `
+      SELECT COUNT(*)::text AS count
+        FROM venue_market_discovery_snapshots snapshot
+       WHERE (
+          snapshot.active = false
+          OR COALESCE(snapshot.resolves_at, snapshot.expires_at) < NOW() - ($1::int * interval '1 day')
+        )
+         AND snapshot.last_seen_at < NOW() - ($1::int * interval '1 day')
+         AND NOT EXISTS (
+          SELECT 1
+            FROM market_discovery_candidate_venue_profiles link
+           WHERE link.venue = snapshot.venue
+             AND link.venue_market_id = snapshot.venue_market_id
+        )`;
+  }
+
+  private archiveSnapshotDeleteSql(): string {
+    return `
+      DELETE FROM venue_market_discovery_snapshots snapshot
+       WHERE (
+          snapshot.active = false
+          OR COALESCE(snapshot.resolves_at, snapshot.expires_at) < NOW() - ($1::int * interval '1 day')
+        )
+         AND snapshot.last_seen_at < NOW() - ($1::int * interval '1 day')
+         AND NOT EXISTS (
+          SELECT 1
+            FROM market_discovery_candidate_venue_profiles link
+           WHERE link.venue = snapshot.venue
+             AND link.venue_market_id = snapshot.venue_market_id
+        )
+      RETURNING snapshot.id::text`;
   }
 }
 
