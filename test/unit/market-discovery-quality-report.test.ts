@@ -365,4 +365,36 @@ describe("market discovery quality reporting", () => {
     expect(candidates[0]?.nextRoutingAction).toBe("RUN_MATCHER");
     expect(candidates[0]?.routingReview).toEqual({ exactPromotionIds: [], nearExactMatchIds: [] });
   });
+
+  it("keeps discovery lists available when the match report artifact is stale", async () => {
+    const approved = baseCandidate({
+      state: "APPROVED",
+      approvedCanonicalEventId: "00000000-0000-4000-8000-000000000099"
+    });
+    const repoRoot = mkdtempSync(path.join(tmpdir(), "lotus-discovery-stale-report-"));
+    mkdirSync(path.join(repoRoot, "docs"));
+    writeFileSync(
+      path.join(repoRoot, "docs", "cross-venue-match-report.json"),
+      `${JSON.stringify({ observedAt: "2026-06-14T00:00:00.000Z" })}\n`,
+      "utf8"
+    );
+    try {
+      const service = new MarketDiscoveryService(
+        qualitylessPool,
+        fakeRepository({
+          listCandidates: async () => [approved],
+          listPooledApprovedCanonicalEventIds: async () => new Set<string>()
+        }),
+        repoRoot
+      );
+
+      const { candidates } = await service.listCandidates({ lifecycleState: "OPEN" });
+
+      expect(candidates[0]?.routingStatus).toBe("APPROVED_SINGLE_VENUE");
+      expect(candidates[0]?.nextRoutingAction).toBe("RUN_MATCHER");
+      expect(candidates[0]?.routingReview).toEqual({ exactPromotionIds: [], nearExactMatchIds: [] });
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
 });
