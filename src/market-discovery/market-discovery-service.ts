@@ -558,17 +558,29 @@ export class MarketDiscoveryService {
     }
     const hasCandidateMember = (members: readonly { venue: string; venueMarketId: string }[]): boolean =>
       members.some((member) => candidateKeys.has(`${member.venue}:${member.venueMarketId}`));
+    const promotionCandidates = Array.isArray(report.promotionCandidates)
+      ? report.promotionCandidates
+      : [];
+    const matches = Array.isArray(report.matches)
+      ? report.matches
+      : [];
     return {
-      exactPromotionIds: report.promotionCandidates
-        .filter((promotion) => hasCandidateMember(promotion.memberRefs))
+      exactPromotionIds: promotionCandidates
+        .filter((promotion) =>
+          Array.isArray(promotion.memberRefs) && hasCandidateMember(promotion.memberRefs)
+        )
         .map((promotion) => promotion.promotionId)
+        .filter((promotionId): promotionId is string => typeof promotionId === "string")
         .sort((left, right) => left.localeCompare(right)),
-      nearExactMatchIds: report.matches
+      nearExactMatchIds: matches
         .filter((match) =>
           match.matchClass === "semantic_near_exact"
+          && match.seed
+          && match.candidate
           && hasCandidateMember([match.seed, match.candidate])
         )
         .map((match) => match.matchId)
+        .filter((matchId): matchId is string => typeof matchId === "string")
         .sort((left, right) => left.localeCompare(right))
     };
   }
