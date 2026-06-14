@@ -255,6 +255,8 @@ describe("market discovery quality reporting", () => {
     expect(report.missingVenueEvidence.NO_MATCHED_LIMITLESS_CONTRACT).toBe(1);
     expect(report.extractionHealth.POLYMARKET?.topicKeyPresent).toBe(1);
     expect(report.extractionHealth.LIMITLESS?.eventTitlePresent).toBe(0);
+    expect(report.extractionHealth.OPINION?.snapshotCount).toBe(0);
+    expect(report.extractionHealth.PREDICT?.snapshotCount).toBe(0);
     expect(report.extractionHealth.LIMITLESS?.sampleMissingRows[0]?.missing).toEqual(
       expect.arrayContaining(["eventTitle", "contractKey", "outcomes", "tokenSlugOrOrderbookKey"])
     );
@@ -277,7 +279,8 @@ describe("market discovery quality reporting", () => {
 
     expect(report.counts.totalCandidates).toBe(1);
     expect(report.counts.newDiscoveries).toBe(1);
-    expect(report.extractionHealth).toEqual({});
+    expect(Object.keys(report.extractionHealth).sort()).toEqual(["LIMITLESS", "OPINION", "POLYMARKET", "PREDICT"]);
+    expect(report.extractionHealth.OPINION?.snapshotCount).toBe(0);
   });
 
   it("uses last good active snapshots when a venue is temporarily unavailable", async () => {

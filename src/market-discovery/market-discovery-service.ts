@@ -753,6 +753,7 @@ export class MarketDiscoveryService {
     snapshots: readonly MarketDiscoverySnapshotHealthRow[],
     candidates: readonly MarketDiscoveryCandidate[]
   ): MarketDiscoveryQualityReport["extractionHealth"] {
+    const expectedVenues = ["LIMITLESS", "OPINION", "POLYMARKET", "PREDICT"];
     const semanticByVenueMarket = new Map<string, {
       topicKey: boolean;
       contractLabel: boolean;
@@ -816,6 +817,22 @@ export class MarketDiscoveryService {
         quoteReadyCount: rows.filter((row) => row.quoteReady).length,
         executionReadyCount: rows.filter((row) => row.executionReady).length,
         sampleMissingRows
+      };
+    }
+    for (const venue of expectedVenues) {
+      output[venue] ??= {
+        snapshotCount: 0,
+        activeSnapshotCount: 0,
+        eventTitlePresent: 0,
+        topicKeyPresent: 0,
+        contractLabelPresent: 0,
+        contractKeyPresent: 0,
+        rowsWithOutcomes: 0,
+        totalOutcomeCount: 0,
+        rowsWithTokenSlugOrOrderbookKey: 0,
+        quoteReadyCount: 0,
+        executionReadyCount: 0,
+        sampleMissingRows: []
       };
     }
     return output;
