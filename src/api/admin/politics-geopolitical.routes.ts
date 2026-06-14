@@ -26,7 +26,7 @@ const validateTwoFactorToken = (token: string): boolean => {
   if (typeof configuredToken === "string" && configuredToken.length > 0) {
     return token === configuredToken;
   }
-  return token.length >= 6;
+  return false;
 };
 
 export interface AdminPoliticsGeopoliticalRouteDeps {

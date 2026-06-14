@@ -68,6 +68,154 @@ If access must be removed later, remove the `codex` SSH key from:
 
 or remove the user if it is no longer needed:
 
+## Production And Staging Separation
+
+Use separate service names:
+
+```text
+lotus-staging-backend
+lotus-staging-read-service
+lotus-staging-orderbook-stream
+lotus-staging-polymarket-relay
+
+lotus-prod-backend
+lotus-prod-read-service
+lotus-prod-orderbook-stream
+lotus-prod-polymarket-relay
+```
+
+Use separate env files:
+
+```text
+/etc/lotus/staging/backend.env
+/etc/lotus/staging/read-service.env
+/etc/lotus/staging/orderbook-stream.env
+/etc/lotus/staging/polymarket-relay.env
+
+/etc/lotus/prod/backend.env
+/etc/lotus/prod/read-service.env
+/etc/lotus/prod/orderbook-stream.env
+/etc/lotus/prod/polymarket-relay.env
+```
+
+Backend env files must include an admin approval token:
+
+```text
+ADMIN_2FA_TOKEN=<operator-approved 6+ digit code>
+```
+
+Admin mutation routes fail closed when this value is missing. Do not commit the token. The GitHub VPS deploy workflow can write it from the `ADMIN_2FA_TOKEN` repository secret into the target backend env file during deployment.
+
+Use separate local ports:
+
+```text
+staging backend: 3100
+staging read: 3101
+staging orderbook: 3102
+staging polymarket relay: 3103
+
+prod backend: 3000
+prod read: 3001
+prod orderbook: 3002
+prod polymarket relay: 3003
+```
+
+Use separate logs:
+
+```text
+/var/log/lotus/staging/*.log
+/var/log/lotus/prod/*.log
+```
+
+Use separate Redis key prefixes where supported:
+
+```text
+LOTUS_REDIS_KEY_PREFIX=staging:
+LOTUS_REDIS_KEY_PREFIX=prod:
+```
+
+If Redis key prefix is not supported everywhere yet, use separate Redis DB indexes:
+
+```text
+staging REDIS_URL=redis://127.0.0.1:6379/1
+prod REDIS_URL=redis://127.0.0.1:6379/0
+```
+
+Do not share staging and production relay callback URLs, frontend origins, CORS origins, or execution relay URLs unless explicitly approved.
+
+## Recommended VPS Shape
+
+For one VPS running all Lotus backend services:
+
+```text
+Ubuntu 24.04 LTS
+CPU Optimized
+4 vCPU minimum
+8 GB RAM minimum
+80+ GB disk
+Automatic backups enabled
+DDoS protection enabled
+Public IPv4 enabled
+Limited user login enabled
+```
+
+For heavier orderbook traffic:
+
+```text
+8 vCPU
+16 GB RAM
+```
+
+## DNS Layout
+
+Use staging subdomains first:
+
+```text
+api-staging-vps.uselotus.xyz        -> VPS public IP
+read-staging-vps.uselotus.xyz       -> VPS public IP
+orderbook-staging-vps.uselotus.xyz  -> VPS public IP
+poly-relay-staging-vps.uselotus.xyz -> VPS public IP
+```
+
+Production cutover happens later:
+
+```text
+api.uselotus.xyz
+read.uselotus.xyz
+poly-relay.uselotus.xyz
+```
+
+Do not overwrite production DNS until staging VPS checks pass.
+
+Current preferred relay layout:
+
+```text
+relayer.uselotus.xyz/polymarket/health
+relayer.uselotus.xyz/predictfun/health
+relayer.uselotus.xyz/polymarket/internal/*
+relayer.uselotus.xyz/predictfun/internal/*
+
+staging-relayer.uselotus.xyz/polymarket/health
+staging-relayer.uselotus.xyz/predictfun/health
+staging-relayer.uselotus.xyz/polymarket/internal/*
+staging-relayer.uselotus.xyz/predictfun/internal/*
+```
+
+The health routes are public. The `/internal/*` routes must be IP-allowlisted at Nginx and still require the relay HMAC headers inside the Node relay. Do not expose relay readiness publicly; it can reveal configuration state. Allow it only from localhost/VPS/operator IPs.
+
+For DNS cutover:
+
+```text
+relayer.uselotus.xyz         A -> 198.13.44.245
+staging-relayer.uselotus.xyz A -> 198.13.44.245
+```
+
+As of the first relayer VPS setup, `api.uselotus.xyz` and `ops.uselotus.xyz` remain on Render. Do not repoint them until the backend/read service cutover is separately approved.
+
+## Server Bootstrap
+
+SSH into the VPS as the limited sudo user.
+
 ```bash
 sudo deluser --remove-home codex
 ```
