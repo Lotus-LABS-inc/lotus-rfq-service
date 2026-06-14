@@ -594,9 +594,15 @@ export class UpstreamMarketDiscoveryCollector {
       process.env.OPINION_ORDERBOOK_API_KEY,
       process.env.OPINION_CLOB_API_KEY
     ].filter((key): key is string => typeof key === "string" && key.trim().length > 0);
+    // Opinion's primary CLOB-SDK endpoint frequently times out, so it relies on the openapi
+    // fallback. Under the full concurrent run (alongside the large Polymarket pull) the default
+    // 10s per-page timeout starves the fallback too, yielding 0 snapshots. Give it more headroom
+    // (env-tunable) so the fallback can complete under load.
+    const requestTimeoutMs = Number(process.env.OPINION_DISCOVERY_TIMEOUT_MS) || 25_000;
     const client = this.config.opinion?.client ?? new OpinionCurrentDiscoveryClient({
       apiKey: apiKeys[0] ?? null,
-      apiKeys
+      apiKeys,
+      requestTimeoutMs
     });
     const result = await client.listCurrentMarkets(this.config.opinion?.metadataVersion ?? "market-discovery-v2");
     const now = this.config.now?.() ?? new Date();
