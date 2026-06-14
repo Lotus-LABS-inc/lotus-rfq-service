@@ -2,12 +2,14 @@ import type { Pool } from "pg";
 
 import type {
   MarketDiscoveryCandidate,
+  MarketDiscoveryCorrectionPatch,
   MarketDiscoveryLifecycleState,
   MarketDiscoveryState,
   MarketDiscoveryVenueEvidence,
   VenueMarketDiscoverySnapshot
 } from "../market-discovery/market-discovery-types.js";
 import { FRONTEND_CURATED_CATALOG_SOURCE } from "./frontend-market-approval.repository.js";
+import { buildStableTextId } from "../canonical/canonicalization-types.js";
 
 const asJson = (value: unknown): string => JSON.stringify(value ?? null);
 
@@ -18,6 +20,12 @@ const asRecordArray = <T extends Record<string, unknown>>(value: unknown): reado
   Array.isArray(value)
     ? value.filter((entry): entry is T => typeof entry === "object" && entry !== null && !Array.isArray(entry))
     : [];
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
+
+const asString = (value: unknown): string | null =>
+  typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 
 interface CandidateRow {
   id: string;
@@ -110,6 +118,34 @@ export interface MarketDiscoverySnapshotHealthRow {
   hasTokenSlugOrOrderbookKey: boolean;
   quoteReady: boolean;
   executionReady: boolean;
+}
+
+export interface InsertMarketDiscoveryCorrectionInput {
+  target: "CANDIDATE" | "GROUP";
+  candidateId?: string | null;
+  candidateKey?: string | null;
+  reviewGroupKey?: string | null;
+  patch: MarketDiscoveryCorrectionPatch;
+  reason: string;
+  correctedBy: string;
+}
+
+export interface UpdateMarketDiscoveryCandidateReviewInput {
+  candidateId: string;
+  state: MarketDiscoveryCandidate["state"];
+  candidateType: MarketDiscoveryCandidate["candidateType"];
+  eventTitle: string;
+  normalizedEventTitle: string;
+  category: MarketDiscoveryCandidate["category"];
+  semanticBoundaryKey: string | null;
+  sharedOutcomes: readonly string[];
+  sharedOutcomeCount: number;
+  confidenceScore: number;
+  reasonCodes: readonly string[];
+  draftSemanticCore: MarketDiscoveryCandidate["draftSemanticCore"];
+  matchDimensions: MarketDiscoveryCandidate["matchDimensions"];
+  approvalActions: readonly string[];
+  metadata: Readonly<Record<string, unknown>>;
 }
 
 export class MarketDiscoveryRepository {
@@ -370,6 +406,70 @@ export class MarketDiscoveryRepository {
       [[...observedCandidateKeys]]
     );
     return result.rowCount ?? 0;
+  }
+
+  public async insertCorrection(input: InsertMarketDiscoveryCorrectionInput): Promise<string> {
+    const result = await this.pool.query<{ id: string }>(
+      `INSERT INTO market_discovery_operator_corrections (
+          target,
+          candidate_id,
+          candidate_key,
+          review_group_key,
+          patch,
+          reason,
+          corrected_by
+       ) VALUES ($1, $2::uuid, $3, $4, $5::jsonb, $6, $7)
+       RETURNING id::text`,
+      [
+        input.target,
+        input.candidateId ?? null,
+        input.candidateKey ?? null,
+        input.reviewGroupKey ?? null,
+        asJson(input.patch),
+        input.reason,
+        input.correctedBy
+      ]
+    );
+    return result.rows[0]?.id ?? "";
+  }
+
+  public async updateCandidateReviewFields(input: UpdateMarketDiscoveryCandidateReviewInput): Promise<void> {
+    await this.pool.query(
+      `UPDATE market_discovery_candidates
+          SET state = $2,
+              candidate_type = $3,
+              event_title = $4,
+              normalized_event_title = $5,
+              category = $6,
+              semantic_boundary_key = $7,
+              shared_outcomes = $8::jsonb,
+              shared_outcome_count = $9,
+              confidence_score = $10::numeric,
+              reason_codes = $11::jsonb,
+              draft_semantic_core = $12::jsonb,
+              match_dimensions = $13::jsonb,
+              approval_actions = $14::jsonb,
+              metadata = $15::jsonb,
+              updated_at = now()
+        WHERE id = $1::uuid`,
+      [
+        input.candidateId,
+        input.state,
+        input.candidateType,
+        input.eventTitle,
+        input.normalizedEventTitle,
+        input.category,
+        input.semanticBoundaryKey,
+        asJson(input.sharedOutcomes),
+        input.sharedOutcomeCount,
+        input.confidenceScore.toString(),
+        asJson(input.reasonCodes),
+        asJson(input.draftSemanticCore),
+        asJson(input.matchDimensions),
+        asJson(input.approvalActions),
+        asJson(input.metadata)
+      ]
+    );
   }
 
   public async listCandidates(filter: MarketDiscoveryCandidateFilter = {}): Promise<readonly MarketDiscoveryCandidate[]> {
@@ -768,6 +868,7 @@ export class MarketDiscoveryRepository {
       const existing = byId.get(row.id) ?? {
         id: row.id,
         candidateKey: row.candidate_key,
+        ...this.reviewGroupFromRow(row),
         state: row.state,
         lifecycleState: this.lifecycleState(row),
         approvedCanonicalEventId: row.approved_canonical_event_id,
@@ -829,6 +930,37 @@ export class MarketDiscoveryRepository {
       byId.set(row.id, existing);
     }
     return [...byId.values()];
+  }
+
+  private reviewGroupFromRow(row: CandidateRow): Pick<MarketDiscoveryCandidate, "reviewGroupKey" | "reviewGroupTitle"> {
+    const metadata = asRecord(row.metadata);
+    const evidence = Array.isArray(metadata?.semanticEvidence)
+      ? metadata.semanticEvidence.filter((entry): entry is Record<string, unknown> => typeof entry === "object" && entry !== null && !Array.isArray(entry))
+      : [];
+    const topicKeys = evidence
+      .map((entry) => asString(entry.topicKey))
+      .filter((entry): entry is string => entry !== null)
+      .sort((left, right) => left.localeCompare(right));
+    const topicTitles = evidence
+      .map((entry) => asString(entry.topicTitle))
+      .filter((entry): entry is string => entry !== null)
+      .sort((left, right) => left.length - right.length || left.localeCompare(right));
+    const draft = asRecord(row.draft_semantic_core);
+    const draftTitle = asString(draft?.proposedEventTitle);
+    const topicKey = topicKeys[0] ?? row.normalized_event_title ?? row.event_title;
+    const reviewGroupTitle = topicTitles[0] ?? draftTitle ?? row.event_title;
+    const rawKey = [
+      "market-discovery-v1",
+      "review-group",
+      row.category,
+      row.semantic_boundary_key ?? "no-date",
+      topicKey,
+      [...asStringArray(row.venues)].sort((left: string, right: string) => left.localeCompare(right)).join("|")
+    ].join(":");
+    return {
+      reviewGroupKey: buildStableTextId("market-discovery-review-", rawKey),
+      reviewGroupTitle
+    };
   }
 
   private lifecycleState(row: CandidateRow): MarketDiscoveryLifecycleState {
