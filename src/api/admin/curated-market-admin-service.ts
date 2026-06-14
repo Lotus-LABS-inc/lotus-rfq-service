@@ -172,7 +172,7 @@ export class CuratedMarketAdminService {
       throw new CuratedMarketAdminServiceError("A cross-venue market needs at least two venue members.");
     }
     const eventKey = members.map((member) => `${member.venue}:${member.venueMarketId}`).sort().join("|");
-    const canonicalEventId = buildStableUuid(`discovery-curated-event:${eventKey}`);
+    const canonicalEventId = await this.resolveDiscoveryCanonicalEventId(input.eventPropositionKey, eventKey);
     const expiresAt = toDate(input.expiresAt);
     const resolvesAt = toDate(input.resolvesAt);
 
@@ -218,5 +218,20 @@ export class CuratedMarketAdminService {
       canonicalEventId,
       canonicalMarketIds: snapshot.executableMarkets.map((market) => market.id)
     };
+  }
+
+  private async resolveDiscoveryCanonicalEventId(eventPropositionKey: string | undefined, eventKey: string): Promise<string> {
+    const normalizedKey = eventPropositionKey?.trim();
+    if (!normalizedKey) {
+      return buildStableUuid(`discovery-curated-event:${eventKey}`);
+    }
+    const existing = await this.pool.query<{ id: string }>(
+      `SELECT id::text AS id
+         FROM canonical_events
+        WHERE proposition_key = $1
+        LIMIT 1`,
+      [normalizedKey]
+    );
+    return existing.rows[0]?.id ?? buildStableUuid(`discovery-curated-event:${normalizedKey}`);
   }
 }
