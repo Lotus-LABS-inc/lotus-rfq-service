@@ -674,6 +674,7 @@ export class MarketDiscoveryRepository {
   }
 
   public async listSnapshotHealthRows(): Promise<readonly MarketDiscoverySnapshotHealthRow[]> {
+    const perVenueLimit = 5_000;
     const result = await this.pool.query<{
       venue: string;
       venue_market_id: string;
@@ -685,7 +686,8 @@ export class MarketDiscoveryRepository {
       quote_ready: boolean;
       execution_ready: boolean;
     }>(
-      `SELECT
+      `WITH ranked_snapshots AS (
+        SELECT
           venue,
           venue_market_id,
           title,
@@ -708,10 +710,24 @@ export class MarketDiscoveryRepository {
             OR NULLIF(raw_summary->>'conditionId', '') IS NOT NULL
           ) AS has_token_slug_or_orderbook_key,
           quote_ready,
-          execution_ready
+          execution_ready,
+          row_number() OVER (PARTITION BY venue ORDER BY last_seen_at DESC) AS venue_rank
         FROM venue_market_discovery_snapshots
-       ORDER BY venue ASC, last_seen_at DESC
-       LIMIT 5000`
+      )
+      SELECT
+        venue,
+        venue_market_id,
+        title,
+        active,
+        outcome_count,
+        has_event_title,
+        has_token_slug_or_orderbook_key,
+        quote_ready,
+        execution_ready
+      FROM ranked_snapshots
+      WHERE venue_rank <= $1
+      ORDER BY venue ASC, venue_rank ASC`,
+      [perVenueLimit]
     );
     return result.rows.map((row) => ({
       venue: row.venue,
