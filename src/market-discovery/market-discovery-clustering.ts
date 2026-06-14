@@ -479,10 +479,22 @@ const buildCandidate = (rows: readonly NormalizedVenueMarketCandidate[]): Market
     rows.map((row) => `${row.venue}:${row.venueMarketId}`).sort().join("|")
   ].join(":");
   const candidateKey = buildStableTextId("market-discovery-", rawCandidateKey);
+  const firstTopicKey = rows.map((row) => row.topicKey).filter((entry) => entry.length > 0).sort()[0] ?? normalizedEventTitle;
+  const reviewGroupRawKey = [
+    DISCOVERY_VERSION,
+    "review-group",
+    category,
+    boundary ?? "no-date",
+    firstTopicKey,
+    rows.map((row) => row.venue).sort().join("|")
+  ].join(":");
+  const reviewGroupKey = buildStableTextId("market-discovery-review-", reviewGroupRawKey);
 
   return {
     id: buildStableUuid(`market-discovery:${candidateKey}`),
     candidateKey,
+    reviewGroupKey,
+    reviewGroupTitle: eventTitle,
     state,
     lifecycleState: "OPEN",
     approvedCanonicalEventId: null,

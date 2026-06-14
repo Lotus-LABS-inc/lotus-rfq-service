@@ -17,6 +17,8 @@ import {
 import type {
   MarketDiscoveryCandidate,
   MarketDiscoveryCandidateType,
+  MarketDiscoveryCorrectionPatch,
+  MarketDiscoveryGroupApprovalResult,
   MarketDiscoveryQualityReport,
   MarketDiscoveryRunSummary,
   MarketDiscoveryState,
@@ -31,7 +33,7 @@ import type {
 } from "../repositories/market-discovery.repository.js";
 import { CuratedMarketAdminService } from "../api/admin/curated-market-admin-service.js";
 import type { SemanticDiscoveryCategory } from "../simulation/semantic-rulepack.js";
-import type { CanonicalCategory } from "../canonical/canonicalization-types.js";
+import { normalizeFreeText, type CanonicalCategory } from "../canonical/canonicalization-types.js";
 import {
   UpstreamMarketDiscoveryCollector,
   type UpstreamMarketDiscoveryCollectorResult
@@ -242,6 +244,123 @@ export class MarketDiscoveryService {
     }
     await this.repository.markRejected(input);
     return { candidateId, state: "REJECTED" };
+  }
+
+  public async correctCandidate(input: {
+    candidateId: string;
+    patch: MarketDiscoveryCorrectionPatch;
+    reason: string;
+    correctedBy: string;
+  }): Promise<{ correctionId: string; candidate: MarketDiscoveryCandidate }> {
+    const candidate = await this.requireCandidate(input.candidateId);
+    const patch = this.normalizeCorrectionPatch(input.patch);
+    const correctionId = await this.repository.insertCorrection({
+      target: "CANDIDATE",
+      candidateId: candidate.id,
+      candidateKey: candidate.candidateKey,
+      reviewGroupKey: candidate.reviewGroupKey,
+      patch,
+      reason: input.reason,
+      correctedBy: input.correctedBy
+    });
+    const updated = await this.applyCorrectionToCandidate(candidate, patch);
+    return { correctionId, candidate: updated };
+  }
+
+  public async correctGroup(input: {
+    reviewGroupKey: string;
+    patch: MarketDiscoveryCorrectionPatch;
+    reason: string;
+    correctedBy: string;
+  }): Promise<{ correctionId: string; candidates: readonly MarketDiscoveryCandidate[] }> {
+    const candidates = await this.candidatesForReviewGroup(input.reviewGroupKey);
+    if (candidates.length === 0) {
+      throw new MarketDiscoveryServiceError(`Discovery review group '${input.reviewGroupKey}' was not found.`);
+    }
+    const patch = this.normalizeCorrectionPatch(input.patch, { group: true });
+    const correctionId = await this.repository.insertCorrection({
+      target: "GROUP",
+      reviewGroupKey: input.reviewGroupKey,
+      patch,
+      reason: input.reason,
+      correctedBy: input.correctedBy
+    });
+    const updated: MarketDiscoveryCandidate[] = [];
+    for (const candidate of candidates) {
+      updated.push(await this.applyCorrectionToCandidate(candidate, patch));
+    }
+    return { correctionId, candidates: updated };
+  }
+
+  public async reclassifyCandidate(input: {
+    candidateId: string;
+  }): Promise<{ candidate: MarketDiscoveryCandidate }> {
+    const candidate = await this.requireCandidate(input.candidateId);
+    const patch = this.patchFromCandidate(candidate);
+    if (Object.keys(patch).length === 0) {
+      return { candidate };
+    }
+    return { candidate: await this.applyCorrectionToCandidate(candidate, patch) };
+  }
+
+  public async reclassifyGroup(input: {
+    reviewGroupKey: string;
+  }): Promise<{ candidates: readonly MarketDiscoveryCandidate[] }> {
+    const candidates = await this.candidatesForReviewGroup(input.reviewGroupKey);
+    if (candidates.length === 0) {
+      throw new MarketDiscoveryServiceError(`Discovery review group '${input.reviewGroupKey}' was not found.`);
+    }
+    const updated: MarketDiscoveryCandidate[] = [];
+    for (const candidate of candidates) {
+      const patch = this.patchFromCandidate(candidate);
+      updated.push(Object.keys(patch).length === 0 ? candidate : await this.applyCorrectionToCandidate(candidate, patch));
+    }
+    return { candidates: updated };
+  }
+
+  public async approveGroupHidden(input: {
+    reviewGroupKey: string;
+    approvedBy: string;
+    reason: string;
+  }): Promise<MarketDiscoveryGroupApprovalResult> {
+    const candidates = await this.candidatesForReviewGroup(input.reviewGroupKey);
+    if (candidates.length === 0) {
+      throw new MarketDiscoveryServiceError(`Discovery review group '${input.reviewGroupKey}' was not found.`);
+    }
+    const result: {
+      approved: MarketDiscoveryGroupApprovalResult["approved"][number][];
+      skipped: MarketDiscoveryGroupApprovalResult["skipped"][number][];
+      failed: MarketDiscoveryGroupApprovalResult["failed"][number][];
+    } = { approved: [], skipped: [], failed: [] };
+    for (const candidate of candidates) {
+      if (candidate.state !== "INGESTED") {
+        result.skipped.push({
+          candidateId: candidate.id,
+          state: candidate.state,
+          candidateType: candidate.candidateType,
+          reason: "candidate_not_ingested"
+        });
+        continue;
+      }
+      try {
+        const approved = await this.approve({
+          candidateId: candidate.id,
+          approvedBy: input.approvedBy,
+          reason: input.reason,
+          makeLive: false
+        });
+        result.approved.push({
+          candidateId: candidate.id,
+          canonicalEventId: approved.canonicalEventId
+        });
+      } catch (error) {
+        result.failed.push({
+          candidateId: candidate.id,
+          reason: error instanceof Error ? error.message : "approval_failed"
+        });
+      }
+    }
+    return { reviewGroupKey: input.reviewGroupKey, ...result };
   }
 
   public async previewArchiveClosed(input: {
@@ -721,6 +840,221 @@ export class MarketDiscoveryService {
       }
     }
     return output;
+  }
+
+  private async requireCandidate(candidateId: string): Promise<MarketDiscoveryCandidate> {
+    const candidate = await this.repository.getCandidate(candidateId);
+    if (!candidate) {
+      throw new MarketDiscoveryServiceError(`Discovery candidate '${candidateId}' was not found.`);
+    }
+    return candidate;
+  }
+
+  private async candidatesForReviewGroup(reviewGroupKey: string): Promise<readonly MarketDiscoveryCandidate[]> {
+    const candidates = await this.enrichCandidatesWithRoutingReview(
+      await this.repository.listCandidates({ lifecycleState: "OPEN" })
+    );
+    return candidates.filter((candidate) => candidate.reviewGroupKey === reviewGroupKey);
+  }
+
+  private normalizeCorrectionPatch(
+    patch: MarketDiscoveryCorrectionPatch,
+    options: { group?: boolean } = {}
+  ): MarketDiscoveryCorrectionPatch {
+    const cleaned: MarketDiscoveryCorrectionPatch = {};
+    const textFields: (keyof Omit<MarketDiscoveryCorrectionPatch, "category" | "outcomes">)[] = [
+      "topicTitle",
+      "marketFamily",
+      "subject",
+      "condition",
+      "contractLabel",
+      "timeBoundary",
+      "sourceUrl",
+      "rulesText"
+    ];
+    for (const key of textFields) {
+      const value = patch[key];
+      if (typeof value === "string" && value.trim().length > 0) {
+        if (options.group && key === "contractLabel") continue;
+        cleaned[key] = value.trim();
+      }
+    }
+    if (typeof patch.category === "string" && patch.category.trim().length > 0) {
+      cleaned.category = patch.category;
+    }
+    if (Array.isArray(patch.outcomes)) {
+      const outcomes = [...new Set(patch.outcomes.map((entry) => entry.trim()).filter((entry) => entry.length > 0))];
+      if (outcomes.length > 0) cleaned.outcomes = outcomes;
+    }
+    return cleaned;
+  }
+
+  private patchFromCandidate(candidate: MarketDiscoveryCandidate): MarketDiscoveryCorrectionPatch {
+    const correction = this.recordValue(candidate.metadata.operatorCorrectionPatch);
+    if (!correction) return {};
+    return this.normalizeCorrectionPatch(correction as MarketDiscoveryCorrectionPatch);
+  }
+
+  private async applyCorrectionToCandidate(
+    candidate: MarketDiscoveryCandidate,
+    patch: MarketDiscoveryCorrectionPatch
+  ): Promise<MarketDiscoveryCandidate> {
+    const eventTitle = patch.topicTitle ?? candidate.draftSemanticCore?.proposedEventTitle ?? candidate.eventTitle;
+    const normalizedEventTitle = normalizeFreeText(eventTitle);
+    const category = patch.category ?? candidate.category;
+    const semanticBoundaryKey = patch.timeBoundary ?? candidate.semanticBoundaryKey;
+    const sharedOutcomes = patch.outcomes ?? candidate.sharedOutcomes;
+    const draftSemanticCore = this.correctedDraftSemanticCore(candidate, patch, eventTitle, category, semanticBoundaryKey, sharedOutcomes);
+    const metadata = this.correctedMetadata(candidate, patch, eventTitle);
+    const hasSemanticCore = Boolean(
+      draftSemanticCore?.marketFamily
+      && draftSemanticCore.subject
+      && draftSemanticCore.condition
+      && draftSemanticCore.timeBoundary
+    );
+    const hasOutcomes = sharedOutcomes.length > 0;
+    const candidateType = hasSemanticCore && hasOutcomes && candidate.venueCount >= 2
+      ? candidate.candidateType === "LOW_CONFIDENCE" ? "NEW_DISCOVERY" : candidate.candidateType
+      : "LOW_CONFIDENCE";
+    const state = candidateType !== "LOW_CONFIDENCE" && hasSemanticCore && hasOutcomes ? "INGESTED" : "DISCOVERED";
+    const missingFields = [
+      draftSemanticCore?.marketFamily ? null : "marketFamily",
+      draftSemanticCore?.subject ? null : "subject",
+      draftSemanticCore?.condition ? null : "condition",
+      draftSemanticCore?.timeBoundary ? null : "timeBoundary",
+      hasOutcomes ? null : "outcomes"
+    ].filter((entry): entry is string => entry !== null);
+    const reasonCodes = [
+      ...candidate.reasonCodes.filter((code) => !code.startsWith("OPERATOR_CORRECTED")),
+      "OPERATOR_CORRECTED",
+      hasSemanticCore ? "OPERATOR_SEMANTIC_CORE_COMPLETE" : "OPERATOR_SEMANTIC_CORE_INCOMPLETE",
+      hasOutcomes ? "OPERATOR_OUTCOME_EVIDENCE_PRESENT" : "OPERATOR_OUTCOME_EVIDENCE_MISSING"
+    ];
+    const matchDimensions = {
+      ...candidate.matchDimensions,
+      eventTitle: normalizedEventTitle.length > 0,
+      category: true,
+      marketFamily: Boolean(draftSemanticCore?.marketFamily),
+      subject: Boolean(draftSemanticCore?.subject),
+      condition: Boolean(draftSemanticCore?.condition),
+      timeBoundary: Boolean(draftSemanticCore?.timeBoundary),
+      outcomes: hasOutcomes,
+      venueCount: candidate.venueCount >= 2
+    };
+    await this.repository.updateCandidateReviewFields({
+      candidateId: candidate.id,
+      state,
+      candidateType,
+      eventTitle,
+      normalizedEventTitle,
+      category,
+      semanticBoundaryKey,
+      sharedOutcomes,
+      sharedOutcomeCount: sharedOutcomes.length,
+      confidenceScore: Number(Math.max(candidate.confidenceScore, hasSemanticCore && hasOutcomes ? 0.93 : candidate.confidenceScore).toFixed(6)),
+      reasonCodes,
+      draftSemanticCore: draftSemanticCore ? { ...draftSemanticCore, missingFields } : null,
+      matchDimensions,
+      approvalActions: this.approvalActionsForType(candidateType),
+      metadata
+    });
+    return this.requireCandidate(candidate.id);
+  }
+
+  private correctedDraftSemanticCore(
+    candidate: MarketDiscoveryCandidate,
+    patch: MarketDiscoveryCorrectionPatch,
+    eventTitle: string,
+    category: CanonicalCategory,
+    semanticBoundaryKey: string | null,
+    sharedOutcomes: readonly string[]
+  ): MarketDiscoveryCandidate["draftSemanticCore"] {
+    const current = candidate.draftSemanticCore ?? {
+      category,
+      proposedEventTitle: eventTitle,
+      marketFamily: null,
+      subject: null,
+      condition: null,
+      timeBoundary: semanticBoundaryKey,
+      marketClass: candidate.marketClass,
+      normalizedOutcomes: sharedOutcomes,
+      venueMembers: candidate.venueEvidence.map((entry) => ({
+        venue: entry.venue,
+        venueMarketId: entry.venueMarketId,
+        title: entry.title,
+        sourceUrl: null
+      })),
+      missingFields: []
+    };
+    return {
+      ...current,
+      category,
+      proposedEventTitle: eventTitle,
+      marketFamily: patch.marketFamily ?? current.marketFamily,
+      subject: patch.subject ?? current.subject,
+      condition: patch.condition ?? current.condition,
+      timeBoundary: patch.timeBoundary ?? current.timeBoundary ?? semanticBoundaryKey,
+      normalizedOutcomes: sharedOutcomes
+    };
+  }
+
+  private correctedMetadata(
+    candidate: MarketDiscoveryCandidate,
+    patch: MarketDiscoveryCorrectionPatch,
+    eventTitle: string
+  ): Readonly<Record<string, unknown>> {
+    const metadata = { ...candidate.metadata };
+    const previousPatch = this.recordValue(metadata.operatorCorrectionPatch) ?? {};
+    metadata.operatorCorrectionPatch = { ...previousPatch, ...patch };
+    metadata.operatorCorrectedAt = new Date().toISOString();
+    const entries = Array.isArray(metadata.semanticEvidence) ? metadata.semanticEvidence : [];
+    const topicKey = patch.topicTitle ? normalizeFreeText(patch.topicTitle).replace(/\s/g, "_").toUpperCase() : null;
+    const contractKey = patch.contractLabel ? normalizeFreeText(patch.contractLabel).replace(/\s/g, "_").toUpperCase() : null;
+    metadata.semanticEvidence = entries
+      .filter((entry): entry is Record<string, unknown> => typeof entry === "object" && entry !== null && !Array.isArray(entry))
+      .map((entry) => ({
+        ...entry,
+        topicTitle: patch.topicTitle ?? entry.topicTitle ?? eventTitle,
+        topicKey: topicKey ?? entry.topicKey,
+        contractLabel: patch.contractLabel ?? entry.contractLabel,
+        contractKey: contractKey ?? entry.contractKey
+      }));
+    if (Array.isArray(metadata.semanticEvidence) && metadata.semanticEvidence.length === 0) {
+      metadata.semanticEvidence = candidate.venues.map((venue) => ({
+        venue,
+        venueMarketId: "",
+        topicTitle: patch.topicTitle ?? eventTitle,
+        topicKey: topicKey ?? normalizeFreeText(eventTitle).replace(/\s/g, "_").toUpperCase(),
+        contractLabel: patch.contractLabel ?? null,
+        contractKey: contractKey
+      }));
+    }
+    if (patch.sourceUrl || patch.rulesText) {
+      metadata.operatorCorrectionSource = {
+        sourceUrl: patch.sourceUrl ?? null,
+        rulesText: patch.rulesText ?? null
+      };
+    }
+    return metadata;
+  }
+
+  private approvalActionsForType(candidateType: MarketDiscoveryCandidateType): readonly string[] {
+    switch (candidateType) {
+      case "NEW_DISCOVERY":
+        return ["CREATE_CANONICAL_MARKET_HIDDEN", "CREATE_CANONICAL_MARKET_LIVE", "ATTACH_TO_EXISTING_CANONICAL_MARKET", "SPLIT_CANDIDATE", "REJECT", "SUPPRESS"];
+      case "MERGE_SUGGESTION":
+        return ["MERGE_EXISTING_CANONICAL_MARKETS", "REJECT", "SUPPRESS"];
+      case "ENRICHMENT_ONLY":
+        return ["APPLY_METADATA_ENRICHMENT", "REJECT", "SUPPRESS"];
+      case "LOW_CONFIDENCE":
+        return ["SPLIT_CANDIDATE", "REJECT", "SUPPRESS"];
+    }
+  }
+
+  private recordValue(value: unknown): Record<string, unknown> | null {
+    return typeof value === "object" && value !== null && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null;
   }
 
   private semanticEvidence(candidate: MarketDiscoveryCandidate): readonly {

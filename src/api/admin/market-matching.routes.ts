@@ -66,6 +66,31 @@ const discoveryCandidateListQuerySchema = z.object({
 });
 
 const discoveryCandidateParamsSchema = z.object({ candidateId: z.string().uuid() });
+const discoveryGroupParamsSchema = z.object({ reviewGroupKey: z.string().min(1).max(240) });
+
+const discoveryCorrectionPatchSchema = z.object({
+  topicTitle: z.string().min(1).max(500).optional(),
+  category: z.enum(["SPORTS", "CRYPTO", "POLITICS", "ESPORTS", "POP_CULTURE", "ECONOMICS", "OTHER"]).optional(),
+  marketFamily: z.string().min(1).max(120).optional(),
+  subject: z.string().min(1).max(200).optional(),
+  condition: z.string().min(1).max(240).optional(),
+  contractLabel: z.string().min(1).max(120).optional(),
+  outcomes: z.array(z.string().min(1).max(120)).max(50).optional(),
+  timeBoundary: z.string().min(1).max(120).optional(),
+  sourceUrl: z.string().min(1).max(1000).optional(),
+  rulesText: z.string().min(1).max(5000).optional()
+}).strict();
+
+const discoveryCorrectionBodySchema = z.object({
+  twoFactorToken: z.string().min(6),
+  reason: z.string().min(1),
+  patch: discoveryCorrectionPatchSchema
+});
+
+const approveDiscoveryGroupBodySchema = z.object({
+  twoFactorToken: z.string().min(6),
+  reason: z.string().min(1)
+});
 
 const approveDiscoveryBodySchema = z.object({
   twoFactorToken: z.string().min(6),
@@ -310,6 +335,130 @@ export const registerAdminMarketMatchingRoutes = async (
       }
       app.log.error({ err: error }, "Failed to approve market discovery candidate.");
       return reply.status(500).send({ code: "MARKET_DISCOVERY_ERROR", message: "Failed to approve market discovery candidate." });
+    }
+  });
+
+  app.post("/admin/market-matching/discovery-candidates/:candidateId/corrections", { preHandler: adminMiddleware }, async (request, reply) => {
+    const params = discoveryCandidateParamsSchema.safeParse(request.params);
+    if (!params.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: params.error.flatten() });
+    }
+    const body = discoveryCorrectionBodySchema.safeParse(request.body);
+    if (!body.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: body.error.flatten() });
+    }
+    if (!validateTwoFactorToken(body.data.twoFactorToken)) {
+      return reply.status(403).send({ code: "FORBIDDEN", message: "ADMIN+2FA required." });
+    }
+    try {
+      const result = await deps.marketDiscoveryService.correctCandidate({
+        candidateId: params.data.candidateId,
+        patch: body.data.patch,
+        reason: body.data.reason,
+        correctedBy: request.user.userId
+      });
+      return reply.send({ result });
+    } catch (error) {
+      if (error instanceof MarketDiscoveryServiceError) {
+        return reply.status(409).send({ code: "MARKET_DISCOVERY_CORRECTION_FAILED", message: error.message });
+      }
+      app.log.error({ err: error }, "Failed to correct market discovery candidate.");
+      return reply.status(500).send({ code: "MARKET_DISCOVERY_ERROR", message: "Failed to correct market discovery candidate." });
+    }
+  });
+
+  app.post("/admin/market-matching/discovery-candidates/:candidateId/reclassify", { preHandler: adminMiddleware }, async (request, reply) => {
+    const params = discoveryCandidateParamsSchema.safeParse(request.params);
+    if (!params.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: params.error.flatten() });
+    }
+    try {
+      const result = await deps.marketDiscoveryService.reclassifyCandidate({
+        candidateId: params.data.candidateId
+      });
+      return reply.send({ result });
+    } catch (error) {
+      if (error instanceof MarketDiscoveryServiceError) {
+        return reply.status(409).send({ code: "MARKET_DISCOVERY_RECLASSIFY_FAILED", message: error.message });
+      }
+      app.log.error({ err: error }, "Failed to reclassify market discovery candidate.");
+      return reply.status(500).send({ code: "MARKET_DISCOVERY_ERROR", message: "Failed to reclassify market discovery candidate." });
+    }
+  });
+
+  app.post("/admin/market-matching/discovery-groups/:reviewGroupKey/corrections", { preHandler: adminMiddleware }, async (request, reply) => {
+    const params = discoveryGroupParamsSchema.safeParse(request.params);
+    if (!params.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: params.error.flatten() });
+    }
+    const body = discoveryCorrectionBodySchema.safeParse(request.body);
+    if (!body.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: body.error.flatten() });
+    }
+    if (!validateTwoFactorToken(body.data.twoFactorToken)) {
+      return reply.status(403).send({ code: "FORBIDDEN", message: "ADMIN+2FA required." });
+    }
+    try {
+      const result = await deps.marketDiscoveryService.correctGroup({
+        reviewGroupKey: params.data.reviewGroupKey,
+        patch: body.data.patch,
+        reason: body.data.reason,
+        correctedBy: request.user.userId
+      });
+      return reply.send({ result });
+    } catch (error) {
+      if (error instanceof MarketDiscoveryServiceError) {
+        return reply.status(409).send({ code: "MARKET_DISCOVERY_CORRECTION_FAILED", message: error.message });
+      }
+      app.log.error({ err: error }, "Failed to correct market discovery group.");
+      return reply.status(500).send({ code: "MARKET_DISCOVERY_ERROR", message: "Failed to correct market discovery group." });
+    }
+  });
+
+  app.post("/admin/market-matching/discovery-groups/:reviewGroupKey/reclassify", { preHandler: adminMiddleware }, async (request, reply) => {
+    const params = discoveryGroupParamsSchema.safeParse(request.params);
+    if (!params.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: params.error.flatten() });
+    }
+    try {
+      const result = await deps.marketDiscoveryService.reclassifyGroup({
+        reviewGroupKey: params.data.reviewGroupKey
+      });
+      return reply.send({ result });
+    } catch (error) {
+      if (error instanceof MarketDiscoveryServiceError) {
+        return reply.status(409).send({ code: "MARKET_DISCOVERY_RECLASSIFY_FAILED", message: error.message });
+      }
+      app.log.error({ err: error }, "Failed to reclassify market discovery group.");
+      return reply.status(500).send({ code: "MARKET_DISCOVERY_ERROR", message: "Failed to reclassify market discovery group." });
+    }
+  });
+
+  app.post("/admin/market-matching/discovery-groups/:reviewGroupKey/approve-hidden", { preHandler: adminMiddleware }, async (request, reply) => {
+    const params = discoveryGroupParamsSchema.safeParse(request.params);
+    if (!params.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: params.error.flatten() });
+    }
+    const body = approveDiscoveryGroupBodySchema.safeParse(request.body);
+    if (!body.success) {
+      return reply.status(400).send({ code: "INVALID_REQUEST", details: body.error.flatten() });
+    }
+    if (!validateTwoFactorToken(body.data.twoFactorToken)) {
+      return reply.status(403).send({ code: "FORBIDDEN", message: "ADMIN+2FA required." });
+    }
+    try {
+      const result = await deps.marketDiscoveryService.approveGroupHidden({
+        reviewGroupKey: params.data.reviewGroupKey,
+        approvedBy: request.user.userId,
+        reason: body.data.reason
+      });
+      return reply.send({ result });
+    } catch (error) {
+      if (error instanceof MarketDiscoveryServiceError) {
+        return reply.status(409).send({ code: "MARKET_DISCOVERY_GROUP_APPROVAL_FAILED", message: error.message });
+      }
+      app.log.error({ err: error }, "Failed to approve market discovery group.");
+      return reply.status(500).send({ code: "MARKET_DISCOVERY_ERROR", message: "Failed to approve market discovery group." });
     }
   });
 

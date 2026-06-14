@@ -122,6 +122,8 @@ export interface MarketDiscoveryVenueEvidence {
 export interface MarketDiscoveryCandidate {
   id: string;
   candidateKey: string;
+  reviewGroupKey: string;
+  reviewGroupTitle: string;
   state: MarketDiscoveryState;
   lifecycleState: MarketDiscoveryLifecycleState;
   approvedCanonicalEventId: string | null;
@@ -167,6 +169,8 @@ export type MarketDiscoveryCoverageKind = "SINGLE" | "PAIR" | "TRI" | "MULTI";
 export interface MarketDiscoveryTopicBundleChild {
   candidateId: string;
   candidateKey: string;
+  reviewGroupKey: string;
+  reviewGroupTitle: string;
   state: MarketDiscoveryState;
   lifecycleState: MarketDiscoveryLifecycleState;
   candidateType: MarketDiscoveryCandidateType;
@@ -195,6 +199,8 @@ export interface MarketDiscoveryTopicBundleChild {
 
 export interface MarketDiscoveryTopicBundle {
   bundleKey: string;
+  reviewGroupKey: string;
+  reviewGroupTitle: string;
   topicTitle: string;
   topicKey: string;
   category: CanonicalCategory;
@@ -236,6 +242,37 @@ export interface MarketDiscoveryRunSummary {
     warningCount: number;
   }>>;
   qualityReport: MarketDiscoveryQualityReport;
+}
+
+export interface MarketDiscoveryCorrectionPatch {
+  topicTitle?: string | undefined;
+  category?: CanonicalCategory | undefined;
+  marketFamily?: string | undefined;
+  subject?: string | undefined;
+  condition?: string | undefined;
+  contractLabel?: string | undefined;
+  outcomes?: readonly string[] | undefined;
+  timeBoundary?: string | undefined;
+  sourceUrl?: string | undefined;
+  rulesText?: string | undefined;
+}
+
+export interface MarketDiscoveryGroupApprovalResult {
+  reviewGroupKey: string;
+  approved: readonly {
+    candidateId: string;
+    canonicalEventId: string;
+  }[];
+  skipped: readonly {
+    candidateId: string;
+    state: MarketDiscoveryState;
+    candidateType: MarketDiscoveryCandidateType;
+    reason: string;
+  }[];
+  failed: readonly {
+    candidateId: string;
+    reason: string;
+  }[];
 }
 
 export interface MarketDiscoveryQualityReport {

@@ -98,6 +98,8 @@ const childFromCandidate = (candidate: MarketDiscoveryCandidate): MarketDiscover
   return {
     candidateId: candidate.id,
     candidateKey: candidate.candidateKey,
+    reviewGroupKey: candidate.reviewGroupKey,
+    reviewGroupTitle: candidate.reviewGroupTitle,
     state: candidate.state,
     lifecycleState: candidate.lifecycleState,
     candidateType: candidate.candidateType,
@@ -188,6 +190,15 @@ export const buildMarketDiscoveryTopicBundles = (
       const venues = sortedUnique(children.flatMap((child) => child.venues));
       return {
         bundleKey,
+        reviewGroupKey: buildStableTextId("market-discovery-review-", [
+          "market-discovery-v1",
+          "review-group",
+          group.category,
+          group.timeBoundary ?? "no-date",
+          group.topicKey,
+          venues.join("|")
+        ].join(":")),
+        reviewGroupTitle: group.topicTitle,
         topicTitle: group.topicTitle,
         topicKey: group.topicKey,
         category: group.category,

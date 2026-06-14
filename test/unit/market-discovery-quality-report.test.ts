@@ -17,6 +17,8 @@ const qualitylessPool = {} as never;
 const baseCandidate = (overrides: Partial<MarketDiscoveryCandidate> = {}): MarketDiscoveryCandidate => ({
   id: "00000000-0000-4000-8000-000000000001",
   candidateKey: "candidate-one",
+  reviewGroupKey: "review-group-one",
+  reviewGroupTitle: "Decibel FDV above ___ one day after launch?",
   state: "INGESTED",
   lifecycleState: "OPEN",
   approvedCanonicalEventId: null,
@@ -396,5 +398,137 @@ describe("market discovery quality reporting", () => {
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
+  });
+
+  it("persists candidate corrections and reclassifies when operator evidence completes the core", async () => {
+    let candidate = baseCandidate({
+      state: "DISCOVERED",
+      candidateType: "LOW_CONFIDENCE",
+      sharedOutcomes: [],
+      sharedOutcomeCount: 0,
+      draftSemanticCore: {
+        ...baseCandidate().draftSemanticCore!,
+        subject: null,
+        normalizedOutcomes: [],
+        missingFields: ["subject", "outcomes"]
+      }
+    });
+    const insertedCorrections: unknown[] = [];
+    const service = new MarketDiscoveryService(
+      qualitylessPool,
+      fakeRepository({
+        getCandidate: async () => candidate,
+        insertCorrection: async (input: unknown) => {
+          insertedCorrections.push(input);
+          return "correction-one";
+        },
+        updateCandidateReviewFields: async (input: Partial<MarketDiscoveryCandidate>) => {
+          candidate = {
+            ...candidate,
+            ...input,
+            draftSemanticCore: input.draftSemanticCore ?? candidate.draftSemanticCore,
+            metadata: input.metadata ?? candidate.metadata
+          };
+        }
+      }),
+      process.cwd()
+    );
+
+    const result = await service.correctCandidate({
+      candidateId: candidate.id,
+      correctedBy: "operator@example.com",
+      reason: "Predict child contract exposed the missing threshold.",
+      patch: {
+        topicTitle: "Decibel FDV above ___ one day after launch?",
+        marketFamily: "FDV_AFTER_LAUNCH",
+        subject: "DECIBEL",
+        condition: "FDV_AFTER_LAUNCH",
+        timeBoundary: "2028-01-01",
+        contractLabel: "$20M",
+        outcomes: ["ABOVE_20000000"]
+      }
+    });
+
+    expect(result.correctionId).toBe("correction-one");
+    expect(insertedCorrections).toHaveLength(1);
+    expect(result.candidate.state).toBe("INGESTED");
+    expect(result.candidate.candidateType).toBe("NEW_DISCOVERY");
+    expect(result.candidate.sharedOutcomes).toEqual(["ABOVE_20000000"]);
+    expect(result.candidate.reasonCodes).toContain("OPERATOR_CORRECTED");
+  });
+
+  it("group corrections persist shared evidence without accepting child contract labels", async () => {
+    const rows = [
+      baseCandidate({ id: "00000000-0000-4000-8000-000000000101", candidateKey: "candidate-a" }),
+      baseCandidate({ id: "00000000-0000-4000-8000-000000000102", candidateKey: "candidate-b" })
+    ];
+    const insertedCorrections: Array<{ patch?: unknown }> = [];
+    const updatedIds: string[] = [];
+    const service = new MarketDiscoveryService(
+      qualitylessPool,
+      fakeRepository({
+        listCandidates: async () => rows,
+        insertCorrection: async (input: { patch?: unknown }) => {
+          insertedCorrections.push(input);
+          return "group-correction";
+        },
+        getCandidate: async (candidateId: string) => rows.find((row) => row.id === candidateId) ?? null,
+        updateCandidateReviewFields: async (input: { candidateId: string }) => {
+          updatedIds.push(input.candidateId);
+        }
+      }),
+      process.cwd()
+    );
+
+    const result = await service.correctGroup({
+      reviewGroupKey: "review-group-one",
+      correctedBy: "operator@example.com",
+      reason: "Shared title normalized from venue payloads.",
+      patch: {
+        topicTitle: "Kraken IPO Closing Market Cap Above",
+        contractLabel: "$20B",
+        subject: "KRAKEN"
+      }
+    });
+
+    expect(result.correctionId).toBe("group-correction");
+    expect(insertedCorrections[0]?.patch).toMatchObject({
+      topicTitle: "Kraken IPO Closing Market Cap Above",
+      subject: "KRAKEN"
+    });
+    expect(insertedCorrections[0]?.patch).not.toHaveProperty("contractLabel");
+    expect(updatedIds).toEqual(rows.map((row) => row.id));
+  });
+
+  it("batch hidden approval skips non-ingested rows instead of approving them", async () => {
+    const rows = [
+      baseCandidate({
+        id: "00000000-0000-4000-8000-000000000201",
+        state: "DISCOVERED",
+        candidateType: "LOW_CONFIDENCE"
+      }),
+      baseCandidate({
+        id: "00000000-0000-4000-8000-000000000202",
+        state: "REJECTED",
+        candidateType: "NEW_DISCOVERY"
+      })
+    ];
+    const service = new MarketDiscoveryService(
+      qualitylessPool,
+      fakeRepository({
+        listCandidates: async () => rows
+      }),
+      process.cwd()
+    );
+
+    const result = await service.approveGroupHidden({
+      reviewGroupKey: "review-group-one",
+      approvedBy: "operator@example.com",
+      reason: "Approve coherent hidden contracts."
+    });
+
+    expect(result.approved).toEqual([]);
+    expect(result.failed).toEqual([]);
+    expect(result.skipped.map((entry) => entry.reason)).toEqual(["candidate_not_ingested", "candidate_not_ingested"]);
   });
 });
