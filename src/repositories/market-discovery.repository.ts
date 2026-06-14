@@ -493,12 +493,18 @@ export class MarketDiscoveryRepository {
           venue_market_id,
           title,
           active,
-          COALESCE(jsonb_array_length(outcomes), 0)::text AS outcome_count,
+          CASE
+            WHEN jsonb_typeof(outcomes) = 'array' THEN jsonb_array_length(outcomes)
+            ELSE 0
+          END::text AS outcome_count,
           (
             COALESCE(NULLIF(raw_summary->>'eventTitle', ''), NULLIF(raw_summary->>'eventSlug', ''), NULLIF(title, '')) IS NOT NULL
           ) AS has_event_title,
           (
-            COALESCE(jsonb_array_length(token_ids), 0) > 0
+            (CASE
+              WHEN jsonb_typeof(token_ids) = 'array' THEN jsonb_array_length(token_ids)
+              ELSE 0
+            END) > 0
             OR NULLIF(slug, '') IS NOT NULL
             OR NULLIF(raw_summary->>'orderbookTopic', '') IS NOT NULL
             OR NULLIF(raw_summary->>'tokenId', '') IS NOT NULL

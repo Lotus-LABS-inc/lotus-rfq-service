@@ -258,6 +258,25 @@ describe("market discovery quality reporting", () => {
     expect(report.lowConfidenceSamples.subject?.[0]?.candidateId).toBe(lowConfidence.id);
   });
 
+  it("keeps the quality report available when snapshot health is unavailable", async () => {
+    const service = new MarketDiscoveryService(
+      qualitylessPool,
+      fakeRepository({
+        listCandidates: async () => [baseCandidate()],
+        listSnapshotHealthRows: async () => {
+          throw new Error("snapshot health read model unavailable");
+        }
+      }),
+      process.cwd()
+    );
+
+    const report = await service.getQualityReport();
+
+    expect(report.counts.totalCandidates).toBe(1);
+    expect(report.counts.newDiscoveries).toBe(1);
+    expect(report.extractionHealth).toEqual({});
+  });
+
   it("derives pair/tri routing status from match reports and pooled canonical events", async () => {
     const approvedEventId = "00000000-0000-4000-8000-000000000099";
     const approved = baseCandidate({
@@ -322,5 +341,28 @@ describe("market discovery quality reporting", () => {
 
     expect(candidates[0]?.routingStatus).toBe("POOLED_ROUTE_APPROVED");
     expect(candidates[0]?.nextRoutingAction).toBe("ALREADY_POOLED");
+  });
+
+  it("keeps discovery lists available when pooled route state is unavailable", async () => {
+    const approved = baseCandidate({
+      state: "APPROVED",
+      approvedCanonicalEventId: "00000000-0000-4000-8000-000000000099"
+    });
+    const service = new MarketDiscoveryService(
+      qualitylessPool,
+      fakeRepository({
+        listCandidates: async () => [approved],
+        listPooledApprovedCanonicalEventIds: async () => {
+          throw new Error("missing pooled route read model");
+        }
+      }),
+      process.cwd()
+    );
+
+    const { candidates } = await service.listCandidates({ lifecycleState: "OPEN" });
+
+    expect(candidates[0]?.routingStatus).toBe("APPROVED_SINGLE_VENUE");
+    expect(candidates[0]?.nextRoutingAction).toBe("RUN_MATCHER");
+    expect(candidates[0]?.routingReview).toEqual({ exactPromotionIds: [], nearExactMatchIds: [] });
   });
 });

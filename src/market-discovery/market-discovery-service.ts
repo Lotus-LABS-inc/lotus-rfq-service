@@ -194,7 +194,7 @@ export class MarketDiscoveryService {
       await this.repository.listCandidates({ lifecycleState: "OPEN" })
     );
     const bundles = buildMarketDiscoveryTopicBundles(candidates);
-    const snapshotRows = await this.repository.listSnapshotHealthRows();
+    const snapshotRows = await this.safeListSnapshotHealthRows();
     const candidateTypeCounts: Record<MarketDiscoveryCandidateType, number> = {
       NEW_DISCOVERY: 0, MERGE_SUGGESTION: 0, ENRICHMENT_ONLY: 0, LOW_CONFIDENCE: 0
     };
@@ -485,11 +485,7 @@ export class MarketDiscoveryService {
       return candidates;
     }
     const report = this.readLastMatchReport();
-    const pooledEventIds = await this.repository.listPooledApprovedCanonicalEventIds(
-      candidates
-        .map((candidate) => candidate.approvedCanonicalEventId)
-        .filter((id): id is string => id !== null)
-    );
+    const pooledEventIds = await this.safeListPooledApprovedCanonicalEventIds(candidates);
     return candidates.map((candidate) => {
       const routingReview = report
         ? this.routingReviewForCandidate(candidate, report)
@@ -523,6 +519,30 @@ export class MarketDiscoveryService {
       return readArtifact<CrossVenueMatchReport>(this.repoRoot, MarketDiscoveryService.MATCH_REPORT_PATH);
     } catch {
       return null;
+    }
+  }
+
+  private async safeListPooledApprovedCanonicalEventIds(
+    candidates: readonly MarketDiscoveryCandidate[]
+  ): Promise<ReadonlySet<string>> {
+    const canonicalEventIds = candidates
+      .map((candidate) => candidate.approvedCanonicalEventId)
+      .filter((id): id is string => id !== null);
+    if (canonicalEventIds.length === 0) {
+      return new Set();
+    }
+    try {
+      return await this.repository.listPooledApprovedCanonicalEventIds(canonicalEventIds);
+    } catch {
+      return new Set();
+    }
+  }
+
+  private async safeListSnapshotHealthRows(): Promise<readonly MarketDiscoverySnapshotHealthRow[]> {
+    try {
+      return await this.repository.listSnapshotHealthRows();
+    } catch {
+      return [];
     }
   }
 
